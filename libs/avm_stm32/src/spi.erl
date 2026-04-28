@@ -57,6 +57,7 @@
 %% Low-level API (STM32 HAL)
 -export([
     init/2,
+    apply_device_config/2,
     deinit/1,
     transmit/3,
     receive_/3,
@@ -143,11 +144,16 @@
 %%          Device configuration (keyed by device name atom):
 %%          <ul>
 %%              <li>`{cs, Pin}' - the CS pin</li>
-%%              <li>`{clock_speed_hz, Hz}' - clock speed (default: 1000000)</li>
+%%              <li>`{clock_speed_hz, Hz}' - clock speed (default: 1000000).
+%%              Rounded down to the nearest power-of-2 prescaler of the
+%%              SPI peripheral input clock.</li>
 %%              <li>`{mode, 0..3}' - SPI mode (default: 0)</li>
 %%              <li>`{address_len_bits, Bits}' - address width (default: 8)</li>
 %%              <li>`{command_len_bits, Bits}' - command width (default: 0)</li>
 %%          </ul>
+%%
+%%          Per-device `clock_speed_hz' and `mode' are applied by
+%%          reconfiguring the SPI peripheral before each transaction.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec open(Params :: [{atom(), term()}]) -> spi().
@@ -312,6 +318,26 @@ init(_Peripheral, _Config) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Resource SPI resource returned by `init/2'
+%% @param   Config map with optional `clock_speed_hz' (Hz) and `mode' (0..3)
+%% @returns `ok' or `{error, Reason}'
+%% @doc     Reconfigure the SPI peripheral with per-device baud and mode.
+%%
+%%          The peripheral is briefly disabled to update the baud-rate
+%%          prescaler (rounded down to the nearest available divider) and
+%%          CPOL/CPHA, then re-enabled. Other init parameters are preserved.
+%%          Used by the high-level API to switch parameters between devices
+%%          sharing a bus.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec apply_device_config(
+    Resource :: spi_resource(),
+    Config :: #{clock_speed_hz => freq_hz(), mode => 0..3, _ => _}
+) -> ok | {error, term()}.
+apply_device_config(_Resource, _Config) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Resource SPI resource returned by `init/2'
 %% @returns `ok'
 %% @doc     Disable the SPI HW block (HAL_SPI_DeInit).
 %% @end
@@ -443,6 +469,7 @@ setup_device({Name, Config}, Acc) ->
     AddressLenBits = get_value(address_len_bits, Config, ?DEFAULT_ADDRESS_LEN_BITS),
     CommandLenBits = get_value(command_len_bits, Config, ?DEFAULT_COMMAND_LEN_BITS),
     if
+        Mode < 0 orelse Mode > 3 -> erlang:error({invalid_mode, Mode});
         AddressLenBits rem 8 =/= 0 -> erlang:error({invalid_address_len_bits, AddressLenBits});
         CommandLenBits rem 8 =/= 0 -> erlang:error({invalid_command_len_bits, CommandLenBits});
         true -> ok
@@ -582,7 +609,8 @@ handle_request(Resource, Devices, SendTimeoutMs, {write_read, DeviceName, Transa
     end.
 
 %% @private
-select_device(_Resource, DeviceInfo) ->
+select_device(Resource, DeviceInfo) ->
+    ?MODULE:apply_device_config(Resource, DeviceInfo),
     case maps:get(cs, DeviceInfo) of
         undefined -> ok;
         CS -> gpio:digital_write(CS, 0)
