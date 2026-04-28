@@ -1128,6 +1128,174 @@ call_primitive_last_test() ->
     ?assertEqual([], ?BACKEND:used_regs(State3)),
     ok.
 
+unreachable_test_state() ->
+    State0 = ?BACKEND:new(0, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 1),
+    ?BACKEND:add_label(State1, 0).
+
+setup_cached_x_reg0(State0) ->
+    {State1, CondReg} = ?BACKEND:move_to_native_register(State0, 1),
+    {State2, CachedReg} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
+    {?BACKEND:free_native_registers(State2, [CachedReg]), CondReg}.
+
+setup_cached_x_reg0_with_offset(State0) ->
+    {State1, OffsetReg} = ?BACKEND:move_to_native_register(State0, 16#100),
+    {State2, CondReg} = ?BACKEND:move_to_native_register(State1, 1),
+    {State3, CachedReg} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    {?BACKEND:free_native_registers(State3, [CachedReg]), CondReg, OffsetReg, CachedReg}.
+
+terminal_if_preserves_cached_x_reg0(State0, TerminalFun) ->
+    {State1, CondReg} = setup_cached_x_reg0(State0),
+    State2 = ?BACKEND:if_block(State1, {{free, CondReg}, '==', 0}, TerminalFun),
+    {State3, _} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    State3.
+
+call_primitive_last_if_block_preserves_cache_test() ->
+    State0 = terminal_if_preserves_cached_x_reg0(unreachable_test_state(), fun(BSt0) ->
+        ?BACKEND:call_primitive_last(BSt0, 0, [ctx, jit_state])
+    end),
+    Stream = ?BACKEND:stream(?BACKEND:return_labels_and_lines(State0, [])),
+    Dump = <<
+        " 0000b3:	08 7f                     	local[3..10] type=i32\n"
+        " 0000b5:	41 01                     	i32.const 1\n"
+        " 0000b7:	21 03                     	local.set 3\n"
+        " 0000b9:	20 00                     	local.get 0\n"
+        " 0000bb:	28 02 18                  	i32.load 2 24\n"
+        " 0000be:	21 04                     	local.set 4\n"
+        " 0000c0:	20 03                     	local.get 3\n"
+        " 0000c2:	41 00                     	i32.const 0\n"
+        " 0000c4:	46                        	i32.eq\n"
+        " 0000c5:	04 40                     	if\n"
+        " 0000c7:	20 00                     	  local.get 0\n"
+        " 0000c9:	20 01                     	  local.get 1\n"
+        " 0000cb:	20 02                     	  local.get 2\n"
+        " 0000cd:	28 02 00                  	  i32.load 2 0\n"
+        " 0000d0:	11 01 00                  	  call_indirect 0 <env.__indirect_function_table> (type 1)\n"
+        " 0000d3:	0f                        	  return\n"
+        " 0000d4:	0b                        	end\n"
+        " 0000d5:	20 00                     	local.get 0\n"
+        " 0000d7:	28 02 18                  	i32.load 2 24\n"
+        " 0000da:	21 03                     	local.set 3\n"
+        " 0000dc:	20 00                     	local.get 0\n"
+        " 0000de:	0f                        	return\n"
+        " 0000df:	0b                        	end\n"
+        " 0000e2:	08 7f                     	local[3..10] type=i32\n"
+        " 0000e4:	20 00                     	local.get 0\n"
+        " 0000e6:	0b                        	end"
+    >>,
+    ?assertStream(wasm32, Dump, Stream).
+
+jump_to_label_if_block_preserves_cache_test() ->
+    State0 = terminal_if_preserves_cached_x_reg0(unreachable_test_state(), fun(BSt0) ->
+        ?BACKEND:jump_to_label(BSt0, 42)
+    end),
+    Stream = ?BACKEND:stream(?BACKEND:return_labels_and_lines(State0, [])),
+    Dump = <<
+        " 0000b3:	08 7f                     	local[3..10] type=i32\n"
+        " 0000b5:	41 01                     	i32.const 1\n"
+        " 0000b7:	21 03                     	local.set 3\n"
+        " 0000b9:	20 00                     	local.get 0\n"
+        " 0000bb:	28 02 18                  	i32.load 2 24\n"
+        " 0000be:	21 04                     	local.set 4\n"
+        " 0000c0:	20 03                     	local.get 3\n"
+        " 0000c2:	41 00                     	i32.const 0\n"
+        " 0000c4:	46                        	i32.eq\n"
+        " 0000c5:	04 40                     	if\n"
+        " 0000c7:	20 01                     	  local.get 1\n"
+        " 0000c9:	41 2b                     	  i32.const 43\n"
+        " 0000cb:	36 02 04                  	  i32.store 2 4\n"
+        " 0000ce:	20 00                     	  local.get 0\n"
+        " 0000d0:	0f                        	  return\n"
+        " 0000d1:	0b                        	end\n"
+        " 0000d2:	20 00                     	local.get 0\n"
+        " 0000d4:	28 02 18                  	i32.load 2 24\n"
+        " 0000d7:	21 03                     	local.set 3\n"
+        " 0000d9:	20 00                     	local.get 0\n"
+        " 0000db:	0f                        	return\n"
+        " 0000dc:	0b                        	end\n"
+        " 0000df:	08 7f                     	local[3..10] type=i32\n"
+        " 0000e1:	20 00                     	local.get 0\n"
+        " 0000e3:	0b                        	end"
+    >>,
+    ?assertStream(wasm32, Dump, Stream).
+
+jump_to_offset_if_block_preserves_cache_test() ->
+    State0 = terminal_if_preserves_cached_x_reg0(unreachable_test_state(), fun(BSt0) ->
+        ?BACKEND:jump_to_offset(BSt0, 16#100)
+    end),
+    Stream = ?BACKEND:stream(?BACKEND:return_labels_and_lines(State0, [])),
+    Dump = <<
+        " 0000b3:	08 7f                     	local[3..10] type=i32\n"
+        " 0000b5:	41 01                     	i32.const 1\n"
+        " 0000b7:	21 03                     	local.set 3\n"
+        " 0000b9:	20 00                     	local.get 0\n"
+        " 0000bb:	28 02 18                  	i32.load 2 24\n"
+        " 0000be:	21 04                     	local.set 4\n"
+        " 0000c0:	20 03                     	local.get 3\n"
+        " 0000c2:	41 00                     	i32.const 0\n"
+        " 0000c4:	46                        	i32.eq\n"
+        " 0000c5:	04 40                     	if\n"
+        " 0000c7:	20 01                     	  local.get 1\n"
+        " 0000c9:	41 3e                     	  i32.const 62\n"
+        " 0000cb:	36 02 04                  	  i32.store 2 4\n"
+        " 0000ce:	20 00                     	  local.get 0\n"
+        " 0000d0:	0f                        	  return\n"
+        " 0000d1:	0b                        	end\n"
+        " 0000d2:	20 00                     	local.get 0\n"
+        " 0000d4:	28 02 18                  	i32.load 2 24\n"
+        " 0000d7:	21 03                     	local.set 3\n"
+        " 0000d9:	20 00                     	local.get 0\n"
+        " 0000db:	0f                        	return\n"
+        " 0000dc:	0b                        	end\n"
+        " 0000df:	08 7f                     	local[3..10] type=i32\n"
+        " 0000e1:	20 00                     	local.get 0\n"
+        " 0000e3:	0b                        	end"
+    >>,
+    ?assertStream(wasm32, Dump, Stream).
+
+jump_to_continuation_if_block_preserves_cache_test() ->
+    State0 = unreachable_test_state(),
+    {State1, CondReg, OffsetReg, _CachedReg} = setup_cached_x_reg0_with_offset(State0),
+    State2 = ?BACKEND:if_block(State1, {{free, CondReg}, '==', 0}, fun(BSt0) ->
+        ?BACKEND:jump_to_continuation(BSt0, {free, OffsetReg})
+    end),
+    {State3, _Reg} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    Stream = ?BACKEND:stream(?BACKEND:return_labels_and_lines(State3, [])),
+    Dump = <<
+        " 0000b3:	08 7f                     	local[3..10] type=i32\n"
+        " 0000b5:	41 80 02                  	i32.const 256\n"
+        " 0000b8:	21 03                     	local.set 3\n"
+        " 0000ba:	41 01                     	i32.const 1\n"
+        " 0000bc:	21 04                     	local.set 4\n"
+        " 0000be:	20 00                     	local.get 0\n"
+        " 0000c0:	28 02 18                  	i32.load 2 24\n"
+        " 0000c3:	21 05                     	local.set 5\n"
+        " 0000c5:	20 04                     	local.get 4\n"
+        " 0000c7:	41 00                     	i32.const 0\n"
+        " 0000c9:	46                        	i32.eq\n"
+        " 0000ca:	04 40                     	if\n"
+        " 0000cc:	20 01                     	  local.get 1\n"
+        " 0000ce:	20 03                     	  local.get 3\n"
+        " 0000d0:	41 04                     	  i32.const 4\n"
+        " 0000d2:	6e                        	  i32.div_u\n"
+        " 0000d3:	41 01                     	  i32.const 1\n"
+        " 0000d5:	6a                        	  i32.add\n"
+        " 0000d6:	36 02 04                  	  i32.store 2 4\n"
+        " 0000d9:	20 00                     	  local.get 0\n"
+        " 0000db:	0f                        	  return\n"
+        " 0000dc:	0b                        	end\n"
+        " 0000dd:	20 00                     	local.get 0\n"
+        " 0000df:	28 02 18                  	i32.load 2 24\n"
+        " 0000e2:	21 04                     	local.set 4\n"
+        " 0000e4:	20 00                     	local.get 0\n"
+        " 0000e6:	0f                        	return\n"
+        " 0000e7:	0b                        	end\n"
+        " 0000ea:	08 7f                     	local[3..10] type=i32\n"
+        " 0000ec:	20 00                     	local.get 0\n"
+        " 0000ee:	0b                        	end"
+    >>,
+    ?assertStream(wasm32, Dump, Stream).
+
 %%=============================================================================
 %% Scheduling
 %%=============================================================================
@@ -1175,6 +1343,61 @@ decrement_reductions_test() ->
         " 000129:	20 00                     	local.get 0\n"
         " 00012b:	0f                        	return\n"
         " 00012c:	0b                        	end"
+    >>,
+    ?assertStream(wasm32, Dump, Stream).
+
+decrement_reductions_invalidates_cache_test() ->
+    State0 = ?BACKEND:new(0, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 1),
+    State2 = ?BACKEND:add_label(State1, 0),
+    {State3, Reg} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    State4 = ?BACKEND:free_native_registers(State3, [Reg]),
+    State5 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State4),
+    {State6, Reg} = ?BACKEND:move_to_native_register(State5, {x_reg, 0}),
+    State7 = ?BACKEND:return_labels_and_lines(State6, []),
+    Stream = ?BACKEND:stream(State7),
+    Dump = <<
+        " 0000b9:	08 7f                     	local[3..10] type=i32\n"
+        " 0000bb:	20 00                     	local.get 0\n"
+        " 0000bd:	28 02 18                  	i32.load 2 24\n"
+        " 0000c0:	21 03                     	local.set 3\n"
+        " 0000c2:	20 01                     	local.get 1\n"
+        " 0000c4:	28 02 08                  	i32.load 2 8\n"
+        " 0000c7:	41 01                     	i32.const 1\n"
+        " 0000c9:	6b                        	i32.sub\n"
+        " 0000ca:	21 03                     	local.set 3\n"
+        " 0000cc:	20 01                     	local.get 1\n"
+        " 0000ce:	20 03                     	local.get 3\n"
+        " 0000d0:	36 02 08                  	i32.store 2 8\n"
+        " 0000d3:	20 03                     	local.get 3\n"
+        " 0000d5:	45                        	i32.eqz\n"
+        " 0000d6:	04 40                     	if\n"
+        " 0000d8:	20 01                     	  local.get 1\n"
+        " 0000da:	41 03                     	  i32.const 3\n"
+        " 0000dc:	36 02 04                  	  i32.store 2 4\n"
+        " 0000df:	20 00                     	  local.get 0\n"
+        " 0000e1:	20 01                     	  local.get 1\n"
+        " 0000e3:	20 02                     	  local.get 2\n"
+        " 0000e5:	28 02 08                  	  i32.load 2 8\n"
+        " 0000e8:	11 01 00                  	  call_indirect 0 <env.__indirect_function_table> (type 1)\n"
+        " 0000eb:	0f                        	  return\n"
+        " 0000ec:	0b                        	end\n"
+        " 0000ed:	20 01                     	local.get 1\n"
+        " 0000ef:	41 03                     	i32.const 3\n"
+        " 0000f1:	36 02 04                  	i32.store 2 4\n"
+        " 0000f4:	20 00                     	local.get 0\n"
+        " 0000f6:	0f                        	return\n"
+        " 0000f7:	0b                        	end\n"
+        " 0000fa:	08 7f                     	local[3..10] type=i32\n"
+        " 0000fc:	20 00                     	local.get 0\n"
+        " 0000fe:	0b                        	end\n"
+        " 000101:	08 7f                     	local[3..10] type=i32\n"
+        " 000103:	20 00                     	local.get 0\n"
+        " 000105:	28 02 18                  	i32.load 2 24\n"
+        " 000108:	21 03                     	local.set 3\n"
+        " 00010a:	20 00                     	local.get 0\n"
+        " 00010c:	0f                        	return\n"
+        " 00010d:	0b                        	end"
     >>,
     ?assertStream(wasm32, Dump, Stream).
 

@@ -560,7 +560,7 @@ call_primitive_last(
         stream = Stream1,
         available_regs = ?AVAILABLE_REGS_MASK,
         used_regs = 0,
-        regs = jit_regs:invalidate_all(State0#state.regs)
+        regs = jit_regs:unreachable(State0#state.regs)
     };
 call_primitive_last(
     #state{
@@ -611,7 +611,7 @@ call_primitive_last(
         stream = Stream3,
         available_regs = ?AVAILABLE_REGS_MASK,
         used_regs = 0,
-        regs = jit_regs:invalidate_all(State1#state.regs)
+        regs = jit_regs:unreachable(State1#state.regs)
     }.
 
 %%-----------------------------------------------------------------------------
@@ -642,12 +642,11 @@ return_if_not_equal_to_ctx(
     I2 = jit_x86_64_asm:jz(byte_size(I3) + byte_size(I4) + 2),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary, I4/binary>>),
     RegBit = reg_bit(Reg),
-    Regs1 = jit_regs:invalidate_reg(State#state.regs, Reg),
     State#state{
         stream = Stream1,
         available_regs = AvailableRegs0 bor RegBit,
         used_regs = UsedRegs0 band (bnot RegBit),
-        regs = Regs1
+        regs = State#state.regs
     }.
 
 %%-----------------------------------------------------------------------------
@@ -673,7 +672,7 @@ jump_to_label(
             I1 = jit_x86_64_asm:jmp(RelOffset),
             Stream1 = StreamModule:append(Stream0, I1),
             %% After unconditional jump, register tracking is dead until next label
-            State#state{stream = Stream1, regs = jit_regs:invalidate_all(State#state.regs)};
+            State#state{stream = Stream1, regs = jit_regs:unreachable(State#state.regs)};
         false ->
             % Label not yet known, emit placeholder and add relocation
             {RelocOffset, I1} = jit_x86_64_asm:jmp_rel32(1),
@@ -682,7 +681,7 @@ jump_to_label(
             State#state{
                 stream = Stream1,
                 branches = [Reloc | AccBranches],
-                regs = jit_regs:invalidate_all(State#state.regs)
+                regs = jit_regs:unreachable(State#state.regs)
             }
     end.
 
@@ -691,7 +690,7 @@ jump_to_offset(#state{stream_module = StreamModule, stream = Stream0} = State, T
     RelOffset = TargetOffset - Offset,
     I1 = jit_x86_64_asm:jmp(RelOffset),
     Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1, regs = jit_regs:invalidate_all(State#state.regs)}.
+    State#state{stream = Stream1, regs = jit_regs:unreachable(State#state.regs)}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Jump to a continuation address stored in a register.
@@ -732,7 +731,7 @@ jump_to_continuation(
         stream = Stream1,
         available_regs = ?AVAILABLE_REGS_MASK,
         used_regs = 0,
-        regs = jit_regs:invalidate_all(State#state.regs)
+        regs = jit_regs:unreachable(State#state.regs)
     }.
 
 %%-----------------------------------------------------------------------------
@@ -876,7 +875,7 @@ if_block_cond0(State0, {Value, '<', RegOrTuple}) when ?IS_SINT32_T(Value) ->
     {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJLEOffset};
 % Catch-all for large values outside SINT32_T range
 if_block_cond0(
-    #state{available_regs = Avail} = State0, {Value, '<', RegOrTuple}
+    #state{available_regs = Avail, regs = Regs0} = State0, {Value, '<', RegOrTuple}
 ) when is_integer(Value) ->
     Temp = first_avail(Avail),
     Reg =
@@ -887,7 +886,8 @@ if_block_cond0(
     I1 = jit_x86_64_asm:movabsq(Value, Temp),
     I2 = jit_x86_64_asm:cmpq(Temp, Reg),
     {RelocJLEOffset, I3} = jit_x86_64_asm:jle_rel8(1),
-    State1 = if_block_free_reg(RegOrTuple, State0),
+    Regs1 = jit_regs:set_contents(Regs0, Temp, {imm, Value}),
+    State1 = if_block_free_reg(RegOrTuple, State0#state{regs = Regs1}),
     {State1, <<I1/binary, I2/binary, I3/binary>>, byte_size(I1) + byte_size(I2) + RelocJLEOffset};
 if_block_cond0(State0, {RegOrTuple, '<', Value}) when ?IS_SINT32_T(Value) ->
     Reg =
@@ -911,7 +911,7 @@ if_block_cond0(State0, {RegOrTuple, '<', RegB}) when is_atom(RegB) ->
     {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJGEOffset};
 % Catch-all for large values outside SINT32_T range
 if_block_cond0(
-    #state{available_regs = Avail} = State0, {RegOrTuple, '<', Value}
+    #state{available_regs = Avail, regs = Regs0} = State0, {RegOrTuple, '<', Value}
 ) when is_integer(Value) ->
     Temp = first_avail(Avail),
     Reg =
@@ -922,7 +922,8 @@ if_block_cond0(
     I1 = jit_x86_64_asm:movabsq(Value, Temp),
     I2 = jit_x86_64_asm:cmpq(Temp, Reg),
     {RelocJGEOffset, I3} = jit_x86_64_asm:jge_rel8(1),
-    State1 = if_block_free_reg(RegOrTuple, State0),
+    Regs1 = jit_regs:set_contents(Regs0, Temp, {imm, Value}),
+    State1 = if_block_free_reg(RegOrTuple, State0#state{regs = Regs1}),
     {State1, <<I1/binary, I2/binary, I3/binary>>, byte_size(I1) + byte_size(I2) + RelocJGEOffset};
 if_block_cond0(State0, {RegOrTuple, '==', 0}) ->
     Reg =
@@ -958,7 +959,7 @@ if_block_cond0(
     State1 = if_block_free_reg(RegOrTuple, State0),
     {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJZOffset};
 if_block_cond0(
-    #state{available_regs = Avail} = State0,
+    #state{available_regs = Avail, regs = Regs0} = State0,
     {RegOrTuple, '!=', Val}
 ) when is_integer(Val) orelse ?IS_GPR(Val) ->
     Temp = first_avail(Avail),
@@ -970,7 +971,8 @@ if_block_cond0(
     I1 = jit_x86_64_asm:movabsq(Val, Temp),
     I2 = jit_x86_64_asm:cmpq(Temp, Reg),
     {RelocJZOffset, I3} = jit_x86_64_asm:jz_rel8(1),
-    State1 = if_block_free_reg(RegOrTuple, State0),
+    Regs1 = jit_regs:set_contents(Regs0, Temp, {imm, Val}),
+    State1 = if_block_free_reg(RegOrTuple, State0#state{regs = Regs1}),
     {State1, <<I1/binary, I2/binary, I3/binary>>, byte_size(I1) + byte_size(I2) + RelocJZOffset};
 if_block_cond0(
     State0,
@@ -999,7 +1001,7 @@ if_block_cond0(
     State1 = if_block_free_reg(RegOrTuple, State0),
     {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJZOffset};
 if_block_cond0(
-    #state{available_regs = Avail} = State0,
+    #state{available_regs = Avail, regs = Regs0} = State0,
     {RegOrTuple, '==', Val}
 ) when is_integer(Val) orelse ?IS_GPR(Val) ->
     Temp = first_avail(Avail),
@@ -1011,7 +1013,8 @@ if_block_cond0(
     I1 = jit_x86_64_asm:movabsq(Val, Temp),
     I2 = jit_x86_64_asm:cmpq(Temp, Reg),
     {RelocJZOffset, I3} = jit_x86_64_asm:jnz_rel8(1),
-    State1 = if_block_free_reg(RegOrTuple, State0),
+    Regs1 = jit_regs:set_contents(Regs0, Temp, {imm, Val}),
+    State1 = if_block_free_reg(RegOrTuple, State0#state{regs = Regs1}),
     {State1, <<I1/binary, I2/binary, I3/binary>>, byte_size(I1) + byte_size(I2) + RelocJZOffset};
 if_block_cond0(State0, {{free, Reg1}, '==', {free, Reg2}}) ->
     % Compare two free registers
@@ -1079,14 +1082,18 @@ if_block_cond0(#state{regs = Regs0} = State0, {{free, Reg} = RegTuple, '&', Mask
     Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
     State1 = if_block_free_reg(RegTuple, State0#state{regs = Regs1}),
     {State1, <<I1/binary, I2/binary, I3/binary>>, byte_size(I1) + byte_size(I2) + RelocJZOffset};
-if_block_cond0(State0, {Reg, '&', Mask, '!=', Val}) when ?IS_UINT8_T(Mask) ->
+if_block_cond0(#state{regs = Regs0} = State0, {Reg, '&', Mask, '!=', Val}) when ?IS_UINT8_T(Mask) ->
     Temp = first_avail(State0#state.available_regs),
     I1 = jit_x86_64_asm:movq(Reg, Temp),
     I2 = jit_x86_64_asm:andb(Mask, Temp),
     I3 = jit_x86_64_asm:cmpb(Val, Temp),
     {RelocJZOffset, I4} = jit_x86_64_asm:jz_rel8(1),
-    {State0, <<I1/binary, I2/binary, I3/binary, I4/binary>>,
-        byte_size(I1) + byte_size(I2) + byte_size(I3) + RelocJZOffset}.
+    Regs1 = jit_regs:invalidate_reg(Regs0, Temp),
+    {
+        State0#state{regs = Regs1},
+        <<I1/binary, I2/binary, I3/binary, I4/binary>>,
+        byte_size(I1) + byte_size(I2) + byte_size(I3) + RelocJZOffset
+    }.
 
 -spec if_block_free_reg(x86_64_register() | {free, x86_64_register()}, state()) -> state().
 if_block_free_reg({free, Reg}, #state{available_regs = AvR0, used_regs = UR0} = State0) ->
@@ -1600,7 +1607,7 @@ move_to_vm_register_emit(#state{available_regs = Avail, regs = Regs0} = State, N
     I1 = jit_x86_64_asm:movabsq(N, Temp),
     I2 = jit_x86_64_asm:movq(Temp, ?X_REG(X)),
     Stream1 = (State#state.stream_module):append(State#state.stream, <<I1/binary, I2/binary>>),
-    Regs1 = jit_regs:invalidate_reg(Regs0, Temp),
+    Regs1 = jit_regs:set_contents(Regs0, Temp, {imm, N}),
     State#state{stream = Stream1, regs = Regs1};
 move_to_vm_register_emit(
     #state{available_regs = Avail, regs = Regs0} = State, N, {x_reg, extra}
@@ -1611,7 +1618,7 @@ move_to_vm_register_emit(
     I1 = jit_x86_64_asm:movabsq(N, Temp),
     I2 = jit_x86_64_asm:movq(Temp, ?X_REG(?MAX_REG)),
     Stream1 = (State#state.stream_module):append(State#state.stream, <<I1/binary, I2/binary>>),
-    Regs1 = jit_regs:invalidate_reg(Regs0, Temp),
+    Regs1 = jit_regs:set_contents(Regs0, Temp, {imm, N}),
     State#state{stream = Stream1, regs = Regs1};
 move_to_vm_register_emit(#state{available_regs = Avail, regs = Regs0} = State, N, {ptr, Reg}) when
     is_integer(N)
@@ -1620,7 +1627,7 @@ move_to_vm_register_emit(#state{available_regs = Avail, regs = Regs0} = State, N
     I1 = jit_x86_64_asm:movabsq(N, Temp),
     I2 = jit_x86_64_asm:movq(Temp, {0, Reg}),
     Stream1 = (State#state.stream_module):append(State#state.stream, <<I1/binary, I2/binary>>),
-    Regs1 = jit_regs:invalidate_reg(Regs0, Temp),
+    Regs1 = jit_regs:set_contents(Regs0, Temp, {imm, N}),
     State#state{stream = Stream1, regs = Regs1};
 move_to_vm_register_emit(#state{available_regs = Avail, regs = Regs0} = State, N, {y_reg, Y}) when
     is_integer(N)
@@ -1633,7 +1640,7 @@ move_to_vm_register_emit(#state{available_regs = Avail, regs = Regs0} = State, N
     Stream1 = (State#state.stream_module):append(
         State#state.stream, <<I1/binary, I2/binary, I3/binary>>
     ),
-    Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, Temp1), Temp2),
+    Regs1 = jit_regs:set_contents(jit_regs:invalidate_reg(Regs0, Temp1), Temp2, {imm, N}),
     State#state{stream = Stream1, regs = Regs1};
 % is_atom(Src) (native register)
 move_to_vm_register_emit(State, Reg, {x_reg, X}) when is_atom(Reg) andalso X < ?MAX_REG ->
@@ -1668,7 +1675,7 @@ move_to_vm_register_emit(
     TempBit = reg_bit(Temp),
     I1 = jit_x86_64_asm:movq(?X_REG(X), Temp),
     Stream1 = (State0#state.stream_module):append(State0#state.stream, I1),
-    Regs1 = jit_regs:invalidate_reg(Regs0, Temp),
+    Regs1 = jit_regs:set_contents(Regs0, Temp, {x_reg, X}),
     State1 = move_to_vm_register_emit(
         State0#state{stream = Stream1, available_regs = Avail band (bnot TempBit), regs = Regs1},
         Temp,
@@ -1682,7 +1689,7 @@ move_to_vm_register_emit(
     TempBit = reg_bit(Temp),
     I1 = jit_x86_64_asm:movq(?X_REG(?MAX_REG), Temp),
     Stream1 = (State0#state.stream_module):append(State0#state.stream, I1),
-    Regs1 = jit_regs:invalidate_reg(Regs0, Temp),
+    Regs1 = jit_regs:set_contents(Regs0, Temp, {x_reg, ?MAX_REG}),
     State1 = move_to_vm_register_emit(
         State0#state{stream = Stream1, available_regs = Avail band (bnot TempBit), regs = Regs1},
         Temp,
@@ -1707,7 +1714,7 @@ move_to_vm_register_emit(#state{available_regs = Avail, regs = Regs0} = State0, 
     I1 = jit_x86_64_asm:movq(?Y_REGS, Temp),
     I2 = jit_x86_64_asm:movq({Y * 8, Temp}, Temp),
     Stream1 = (State0#state.stream_module):append(State0#state.stream, <<I1/binary, I2/binary>>),
-    Regs1 = jit_regs:invalidate_reg(Regs0, Temp),
+    Regs1 = jit_regs:set_contents(Regs0, Temp, {y_reg, Y}),
     State1 = move_to_vm_register_emit(
         State0#state{stream = Stream1, available_regs = Avail band (bnot TempBit), regs = Regs1},
         Temp,
@@ -1758,7 +1765,7 @@ move_array_element(
     I2 = jit_x86_64_asm:movq(Temp, ?X_REG(X)),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     Regs1 = jit_regs:invalidate_vm_loc(Regs0, {x_reg, X}),
-    Regs2 = jit_regs:invalidate_reg(Regs1, Temp),
+    Regs2 = jit_regs:set_contents(Regs1, Temp, {x_reg, X}),
     State#state{stream = Stream1, regs = Regs2};
 move_array_element(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = Avail, regs = Regs0} =
@@ -1961,7 +1968,7 @@ move_to_array_element(
     I1 = jit_x86_64_asm:movq(?X_REG(X), Temp),
     I2 = jit_x86_64_asm:movq(Temp, {Index * 8, Reg}),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    Regs1 = jit_regs:invalidate_reg(Regs0, Temp),
+    Regs1 = jit_regs:set_contents(Regs0, Temp, {x_reg, X}),
     State#state{stream = Stream1, regs = Regs1};
 move_to_array_element(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = Avail, regs = Regs0} =
@@ -1989,7 +1996,7 @@ move_to_array_element(
     I3 = jit_x86_64_asm:movq(Temp, {Index * 8, Reg}),
     Code = <<I1/binary, I2/binary, I3/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
-    Regs1 = jit_regs:invalidate_reg(Regs0, Temp),
+    Regs1 = jit_regs:set_contents(Regs0, Temp, {y_reg, Y}),
     State#state{stream = Stream1, regs = Regs1};
 move_to_array_element(
     #state{stream_module = StreamModule, stream = Stream0} = State, Source, Reg, Index
@@ -2014,7 +2021,7 @@ move_to_array_element(
     I1 = jit_x86_64_asm:movabsq(Source, Temp),
     I2 = jit_x86_64_asm:movq(Temp, {Index * 8, Reg}),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    Regs1 = jit_regs:invalidate_reg(Regs0, Temp),
+    Regs1 = jit_regs:set_contents(Regs0, Temp, {imm, Source}),
     State#state{stream = Stream1, regs = Regs1}.
 
 %%-----------------------------------------------------------------------------
@@ -2048,7 +2055,7 @@ move_to_array_element(
     I1 = jit_x86_64_asm:movq(?X_REG(X), Temp),
     I2 = jit_x86_64_asm:movq(Temp, {Offset * ?WORD_SIZE, BaseReg, IndexReg, 8}),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    Regs1 = jit_regs:invalidate_reg(Regs0, Temp),
+    Regs1 = jit_regs:set_contents(Regs0, Temp, {x_reg, X}),
     State#state{stream = Stream1, regs = Regs1};
 move_to_array_element(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = Avail, regs = Regs0} =
@@ -2063,7 +2070,7 @@ move_to_array_element(
     I2 = jit_x86_64_asm:movq({Y * 8, Temp}, Temp),
     I3 = jit_x86_64_asm:movq(Temp, {Offset * ?WORD_SIZE, BaseReg, IndexReg, 8}),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
-    Regs1 = jit_regs:invalidate_reg(Regs0, Temp),
+    Regs1 = jit_regs:set_contents(Regs0, Temp, {y_reg, Y}),
     State#state{stream = Stream1, regs = Regs1};
 move_to_array_element(
     #state{stream_module = StreamModule, stream = Stream0} = State,
@@ -2356,7 +2363,7 @@ move_to_cp(
     I3 = jit_x86_64_asm:movq(Reg, ?CP),
     Code = <<I1/binary, I2/binary, I3/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
-    Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    Regs1 = jit_regs:set_contents(Regs0, Reg, {y_reg, Y}),
     State#state{stream = Stream1, regs = Regs1}.
 
 increment_sp(
@@ -2825,9 +2832,8 @@ decrement_reductions_and_maybe_schedule_next(
         >>
     ),
     State3 = merge_used_regs(State2#state{stream = Stream4}, State1#state.used_regs),
-    %% The schedule_next path is a tail call (dead end), so the register tracking
-    %% from the non-taken path (State1) is what matters at the continuation.
-    State3#state{regs = State1#state.regs}.
+    %% schedule_next clobbers caller-saved regs; invalidate cache at continuation.
+    State3#state{regs = jit_regs:invalidate_all(State1#state.regs)}.
 
 -spec call_or_schedule_next(state(), non_neg_integer()) -> state().
 call_or_schedule_next(State0, Label) ->

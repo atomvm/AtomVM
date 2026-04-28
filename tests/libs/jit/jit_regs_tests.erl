@@ -94,6 +94,20 @@ merge_test() ->
     %% r11 differs: invalidated
     ?assertEqual(unknown, jit_regs:get_contents(Merged, r11)).
 
+merge_with_unreachable_test() ->
+    Regs0 = jit_regs:new(),
+    Regs1 = jit_regs:set_contents(Regs0, rax, {x_reg, 0}),
+    Regs2 = jit_regs:set_contents(Regs1, r11, {imm, 42}),
+    Unreachable = jit_regs:unreachable(Regs0),
+    ?assertEqual({x_reg, 0}, jit_regs:get_contents(jit_regs:merge(Regs2, Unreachable), rax)),
+    ?assertEqual({imm, 42}, jit_regs:get_contents(jit_regs:merge(Regs2, Unreachable), r11)),
+    ?assertEqual({x_reg, 0}, jit_regs:get_contents(jit_regs:merge(Unreachable, Regs2), rax)),
+    ?assertEqual({imm, 42}, jit_regs:get_contents(jit_regs:merge(Unreachable, Regs2), r11)),
+    ?assertEqual(
+        unknown,
+        jit_regs:get_contents(jit_regs:merge(Unreachable, jit_regs:unreachable(Regs0)), rax)
+    ).
+
 stack_test() ->
     Regs0 = jit_regs:new(),
     Regs1 = jit_regs:stack_push(Regs0, rdi),

@@ -705,6 +705,32 @@ call_ext_only_test() ->
         >>,
     ?assertStream(arm32, Dump, Stream).
 
+decrement_reductions_invalidates_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    State2 = ?BACKEND:free_native_registers(State1, [Reg]),
+    State3 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State2),
+    {State4, Reg} = ?BACKEND:move_to_native_register(State3, {x_reg, 0}),
+    Stream = ?BACKEND:stream(State4),
+    Dump = <<
+        "   0:	e590b018 	ldr	fp, [r0, #24]\n"
+        "   4:	e59da000 	ldr	sl, [sp]\n"
+        "   8:	e59ab008 	ldr	fp, [sl, #8]\n"
+        "   c:	e25bb001 	subs	fp, fp, #1\n"
+        "  10:	e58ab008 	str	fp, [sl, #8]\n"
+        "  14:	1a000007 	bne	0x38\n"
+        "  18:	e28fb014 	add	fp, pc, #20\n"
+        "  1c:	e58ab004 	str	fp, [sl, #4]\n"
+        "  20:	e592b008 	ldr	fp, [r2, #8]\n"
+        "  24:	e59d7024 	ldr	r7, [sp, #36]	@ 0x24\n"
+        "  28:	e58db024 	str	fp, [sp, #36]	@ 0x24\n"
+        "  2c:	e1a0e007 	mov	lr, r7\n"
+        "  30:	e8bd8ff2 	pop	{r1, r4, r5, r6, r7, r8, r9, sl, fp, pc}\n"
+        "  34:	e92d4ff2 	push	{r1, r4, r5, r6, r7, r8, r9, sl, fp, lr}\n"
+        "  38:	e590b018 	ldr	fp, [r0, #24]"
+    >>,
+    ?assertStream(arm32, Dump, Stream).
+
 call_only_or_schedule_next_and_label_relocation_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:jump_table(State0, 2),
@@ -1253,6 +1279,33 @@ cached_load_after_free_test() ->
     >>,
     ?assertStream(arm32, Dump, Stream).
 
+fixed_dst_x_reg_load_preserves_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_native_register(State0, {x_reg, 2}, r3),
+    Offset1 = ?BACKEND:offset(State1),
+    {State2, Reg} = ?BACKEND:move_to_native_register(State1, {x_reg, 2}),
+    ?assertEqual(r3, Reg),
+    ?assertEqual(Offset1, ?BACKEND:offset(State2)),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	e5903020 	ldr	r3, [r0, #32]"
+    >>,
+    ?assertStream(arm32, Dump, Stream).
+
+fixed_dst_y_reg_load_preserves_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_native_register(State0, {y_reg, 2}, r1),
+    Offset1 = ?BACKEND:offset(State1),
+    {State2, Reg} = ?BACKEND:move_to_native_register(State1, {y_reg, 2}),
+    ?assertEqual(r1, Reg),
+    ?assertEqual(Offset1, ?BACKEND:offset(State2)),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	e590b014 	ldr	fp, [r0, #20]\n"
+        "   4:	e59b1008 	ldr	r1, [fp, #8]"
+    >>,
+    ?assertStream(arm32, Dump, Stream).
+
 %% and_ with negative immediate should invalidate temp register cache
 and_negative_imm_invalidates_temp_cache_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -1304,13 +1357,108 @@ jump_to_label_invalidates_cache_test() ->
     >>,
     ?assertStream(arm32, Dump, Stream).
 
+unreachable_test_state() ->
+    ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)).
+
+setup_cached_x_reg0(State0) ->
+    {State1, CondReg} = ?BACKEND:move_to_native_register(State0, 1),
+    {State2, CachedReg} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
+    {?BACKEND:free_native_registers(State2, [CachedReg]), CondReg}.
+
+setup_cached_x_reg0_with_offset(State0) ->
+    {State1, OffsetReg} = ?BACKEND:move_to_native_register(State0, 16#100),
+    {State2, CondReg} = ?BACKEND:move_to_native_register(State1, 1),
+    {State3, CachedReg} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    {?BACKEND:free_native_registers(State3, [CachedReg]), CondReg, OffsetReg, CachedReg}.
+
+terminal_if_preserves_cached_x_reg0(State0, TerminalFun) ->
+    {State1, CondReg} = setup_cached_x_reg0(State0),
+    State2 = ?BACKEND:if_block(State1, {{free, CondReg}, '==', 0}, TerminalFun),
+    {State3, _} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    State3.
+
+call_primitive_last_if_block_preserves_cache_test() ->
+    State0 = terminal_if_preserves_cached_x_reg0(unreachable_test_state(), fun(BSt0) ->
+        ?BACKEND:call_primitive_last(BSt0, 0, [ctx, jit_state])
+    end),
+    Stream = ?BACKEND:stream(State0),
+    Dump = <<
+        "   0:	e3a0b001 	mov	fp, #1\n"
+        "   4:	e590a018 	ldr	sl, [r0, #24]\n"
+        "   8:	e35b0000 	cmp	fp, #0\n"
+        "   c:	1a000004 	bne	0x24\n"
+        "  10:	e592b000 	ldr	fp, [r2]\n"
+        "  14:	e59d7024 	ldr	r7, [sp, #36]	@ 0x24\n"
+        "  18:	e58db024 	str	fp, [sp, #36]	@ 0x24\n"
+        "  1c:	e1a0e007 	mov	lr, r7\n"
+        "  20:	e8bd8ff2 	pop	{r1, r4, r5, r6, r7, r8, r9, sl, fp, pc}"
+    >>,
+    ?assertStream(arm32, Dump, Stream).
+
+jump_to_label_if_block_preserves_cache_test() ->
+    State0 = terminal_if_preserves_cached_x_reg0(unreachable_test_state(), fun(BSt0) ->
+        ?BACKEND:jump_to_label(BSt0, 42)
+    end),
+    Stream = ?BACKEND:stream(State0),
+    Dump = <<
+        "   0:	e3a0b001 	mov	fp, #1\n"
+        "   4:	e590a018 	ldr	sl, [r0, #24]\n"
+        "   8:	e35b0000 	cmp	fp, #0\n"
+        "   c:	1a000000 	bne	0x14\n"
+        "  10:	ffffffff 			@ <UNDEFINED> instruction: 0xffffffff"
+    >>,
+    ?assertStream(arm32, Dump, Stream).
+
+jump_to_offset_if_block_preserves_cache_test() ->
+    State0 = terminal_if_preserves_cached_x_reg0(unreachable_test_state(), fun(BSt0) ->
+        ?BACKEND:jump_to_offset(BSt0, 16#100)
+    end),
+    Stream = ?BACKEND:stream(State0),
+    Dump = <<
+        "   0:	e3a0b001 	mov	fp, #1\n"
+        "   4:	e590a018 	ldr	sl, [r0, #24]\n"
+        "   8:	e35b0000 	cmp	fp, #0\n"
+        "   c:	1a000000 	bne	0x14\n"
+        "  10:	ea00003a 	b	0x100"
+    >>,
+    ?assertStream(arm32, Dump, Stream).
+
+jump_to_continuation_if_block_preserves_cache_test() ->
+    State0 = unreachable_test_state(),
+    {State1, CondReg, OffsetReg, CachedReg} = setup_cached_x_reg0_with_offset(State0),
+    State2 = ?BACKEND:if_block(State1, {{free, CondReg}, '==', 0}, fun(BSt0) ->
+        ?BACKEND:jump_to_continuation(BSt0, {free, OffsetReg})
+    end),
+    Offset2 = ?BACKEND:offset(State2),
+    {State3, Reg} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    ?assertEqual(CachedReg, Reg),
+    Offset3 = ?BACKEND:offset(State3),
+    ?assertEqual(Offset2, Offset3),
+    Stream = ?BACKEND:stream(State3),
+    Dump = <<
+        "   0:	e3a0bc01 	mov	fp, #256	@ 0x100\n"
+        "   4:	e3a0a001 	mov	sl, #1\n"
+        "   8:	e5909018 	ldr	r9, [r0, #24]\n"
+        "   c:	e35a0000 	cmp	sl, #0\n"
+        "  10:	1a000007 	bne	0x34\n"
+        "  14:	e1a0a00f 	mov	sl, pc\n"
+        "  18:	e08bb00a 	add	fp, fp, sl\n"
+        "  1c:	e3e0a01b 	mvn	sl, #27\n"
+        "  20:	e08bb00a 	add	fp, fp, sl\n"
+        "  24:	e59da024 	ldr	sl, [sp, #36]	@ 0x24\n"
+        "  28:	e58db024 	str	fp, [sp, #36]	@ 0x24\n"
+        "  2c:	e1a0e00a 	mov	lr, sl\n"
+        "  30:	e8bd8ff2 	pop	{r1, r4, r5, r6, r7, r8, r9, sl, fp, pc}"
+    >>,
+    ?assertStream(arm32, Dump, Stream).
+
 %% move_array_element to x_reg should invalidate vm_loc cache
 move_array_element_x_reg_invalidates_vm_loc_cache_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, r11} = ?BACKEND:move_to_native_register(State0, {x_reg, 5}),
     {State2, r10} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
     S3 = ?BACKEND:move_array_element(State2, r10, 0, {x_reg, 5}),
-    {S4, _} = ?BACKEND:move_to_native_register(S3, {x_reg, 5}),
+    {S4, _Reg} = ?BACKEND:move_to_native_register(S3, {x_reg, 5}),
     Stream = ?BACKEND:stream(S4),
     Dump = <<
         "   0:	e590b02c 	ldr	fp, [r0, #44]	@ 0x2c\n"

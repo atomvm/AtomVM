@@ -2478,6 +2478,33 @@ call_fun_test() ->
     >>,
     ?assertStream(arm, Dump, Stream).
 
+decrement_reductions_invalidates_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    State2 = ?BACKEND:free_native_registers(State1, [Reg]),
+    State3 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State2),
+    {State4, Reg} = ?BACKEND:move_to_native_register(State3, {x_reg, 0}),
+    Stream = ?BACKEND:stream(State4),
+    Dump = <<
+        "   0:	6987      	ldr	r7, [r0, #24]\n"
+        "   2:	9e00      	ldr	r6, [sp, #0]\n"
+        "   4:	68b7      	ldr	r7, [r6, #8]\n"
+        "   6:	3f01      	subs	r7, #1\n"
+        "   8:	60b7      	str	r7, [r6, #8]\n"
+        "   a:	d108      	bne.n	0x1e\n"
+        "   c:	a703      	add	r7, pc, #12	@ (adr r7, 0x1c)\n"
+        "   e:	3701      	adds	r7, #1\n"
+        "  10:	6077      	str	r7, [r6, #4]\n"
+        "  12:	6897      	ldr	r7, [r2, #8]\n"
+        "  14:	9e05      	ldr	r6, [sp, #20]\n"
+        "  16:	9705      	str	r7, [sp, #20]\n"
+        "  18:	46b6      	mov	lr, r6\n"
+        "  1a:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+        "  1c:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+        "  1e:	6987      	ldr	r7, [r0, #24]"
+    >>,
+    ?assertStream(arm, Dump, Stream).
+
 move_to_vm_register_test0(State, Source, Dest, Dump) ->
     State1 = ?BACKEND:move_to_vm_register(State, Source, Dest),
     State2 = ?BACKEND:jump_to_offset(State1, 16#100),
@@ -4076,6 +4103,33 @@ cached_load_after_free_test() ->
         >>,
     ?assertStream(arm, Dump, Stream).
 
+fixed_dst_x_reg_load_preserves_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_native_register(State0, {x_reg, 2}, r3),
+    Offset1 = ?BACKEND:offset(State1),
+    {State2, Reg} = ?BACKEND:move_to_native_register(State1, {x_reg, 2}),
+    ?assertEqual(r3, Reg),
+    ?assertEqual(Offset1, ?BACKEND:offset(State2)),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	6a03      	ldr	r3, [r0, #32]"
+    >>,
+    ?assertStream(arm, Dump, Stream).
+
+fixed_dst_y_reg_load_preserves_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_native_register(State0, {y_reg, 2}, r1),
+    Offset1 = ?BACKEND:offset(State1),
+    {State2, Reg} = ?BACKEND:move_to_native_register(State1, {y_reg, 2}),
+    ?assertEqual(r1, Reg),
+    ?assertEqual(Offset1, ?BACKEND:offset(State2)),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	6947      	ldr	r7, [r0, #20]\n"
+        "   2:	68b9      	ldr	r1, [r7, #8]"
+    >>,
+    ?assertStream(arm, Dump, Stream).
+
 %% Verify that and_ with a negative immediate invalidates the Temp register
 %% cache entry. Before the fix, the Temp register (used to hold the bics mask)
 %% kept a stale cache entry, causing a subsequent move_to_native_register for
@@ -4164,23 +4218,119 @@ jump_to_label_invalidates_cache_test() ->
         >>,
     ?assertStream(arm, Dump, Stream).
 
+unreachable_test_state() ->
+    ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)).
+
+setup_cached_x_reg0(State0) ->
+    {State1, CondReg} = ?BACKEND:move_to_native_register(State0, 1),
+    {State2, CachedReg} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
+    {?BACKEND:free_native_registers(State2, [CachedReg]), CondReg}.
+
+setup_cached_x_reg0_with_offset(State0) ->
+    {State1, OffsetReg} = ?BACKEND:move_to_native_register(State0, 16#100),
+    {State2, CondReg} = ?BACKEND:move_to_native_register(State1, 1),
+    {State3, CachedReg} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    {?BACKEND:free_native_registers(State3, [CachedReg]), CondReg, OffsetReg, CachedReg}.
+
+terminal_if_preserves_cached_x_reg0(State0, TerminalFun) ->
+    {State1, CondReg} = setup_cached_x_reg0(State0),
+    State2 = ?BACKEND:if_block(State1, {{free, CondReg}, '==', 0}, TerminalFun),
+    {State3, _} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    State3.
+
+call_primitive_last_if_block_preserves_cache_test() ->
+    State0 = terminal_if_preserves_cached_x_reg0(unreachable_test_state(), fun(BSt0) ->
+        ?BACKEND:call_primitive_last(BSt0, 0, [ctx, jit_state])
+    end),
+    Stream = ?BACKEND:stream(State0),
+    Dump = <<
+        "   0:	2701      	movs	r7, #1\n"
+        "   2:	6986      	ldr	r6, [r0, #24]\n"
+        "   4:	2f00      	cmp	r7, #0\n"
+        "   6:	d104      	bne.n	0x12\n"
+        "   8:	6817      	ldr	r7, [r2, #0]\n"
+        "   a:	9e05      	ldr	r6, [sp, #20]\n"
+        "   c:	9705      	str	r7, [sp, #20]\n"
+        "   e:	46b6      	mov	lr, r6\n"
+        "  10:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
+    >>,
+    ?assertStream(arm, Dump, Stream).
+
+jump_to_label_if_block_preserves_cache_test() ->
+    State0 = terminal_if_preserves_cached_x_reg0(unreachable_test_state(), fun(BSt0) ->
+        ?BACKEND:jump_to_label(BSt0, 42)
+    end),
+    Stream = ?BACKEND:stream(State0),
+    Dump = <<
+        "   0:	2701      	movs	r7, #1\n"
+        "   2:	6986      	ldr	r6, [r0, #24]\n"
+        "   4:	2f00      	cmp	r7, #0\n"
+        "   6:	d105      	bne.n	0x14\n"
+        "   8:	ffff ffff 			@ <UNDEFINED> instruction: 0xffffffff\n"
+        "   c:	ffff ffff 			@ <UNDEFINED> instruction: 0xffffffff\n"
+        "  10:	ffff ffff 			@ <UNDEFINED> instruction: 0xffffffff"
+    >>,
+    ?assertStream(arm, Dump, Stream).
+
+jump_to_offset_if_block_preserves_cache_test() ->
+    State0 = terminal_if_preserves_cached_x_reg0(unreachable_test_state(), fun(BSt0) ->
+        ?BACKEND:jump_to_offset(BSt0, 16#100)
+    end),
+    Stream = ?BACKEND:stream(State0),
+    Dump = <<
+        "   0:	2701      	movs	r7, #1\n"
+        "   2:	6986      	ldr	r6, [r0, #24]\n"
+        "   4:	2f00      	cmp	r7, #0\n"
+        "   6:	d100      	bne.n	0xa\n"
+        "   8:	e07a      	b.n	0x100"
+    >>,
+    ?assertStream(arm, Dump, Stream).
+
+jump_to_continuation_if_block_preserves_cache_test() ->
+    State0 = unreachable_test_state(),
+    {State1, CondReg, OffsetReg, CachedReg} = setup_cached_x_reg0_with_offset(State0),
+    State2 = ?BACKEND:if_block(State1, {{free, CondReg}, '==', 0}, fun(BSt0) ->
+        ?BACKEND:jump_to_continuation(BSt0, {free, OffsetReg})
+    end),
+    Offset2 = ?BACKEND:offset(State2),
+    {State3, Reg} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    ?assertEqual(CachedReg, Reg),
+    Offset3 = ?BACKEND:offset(State3),
+    ?assertEqual(Offset2, Offset3),
+    Stream = ?BACKEND:stream(State3),
+    Dump = <<
+        "   0:	27ff      	movs	r7, #255	@ 0xff\n"
+        "   2:	3701      	adds	r7, #1\n"
+        "   4:	2601      	movs	r6, #1\n"
+        "   6:	6985      	ldr	r5, [r0, #24]\n"
+        "   8:	2e00      	cmp	r6, #0\n"
+        "   a:	d108      	bne.n	0x1e\n"
+        "   c:	a600      	add	r6, pc, #0	@ (adr r6, 0x10)\n"
+        "   e:	19bf      	adds	r7, r7, r6\n"
+        "  10:	260f      	movs	r6, #15\n"
+        "  12:	4276      	negs	r6, r6\n"
+        "  14:	19bf      	adds	r7, r7, r6\n"
+        "  16:	9e05      	ldr	r6, [sp, #20]\n"
+        "  18:	9705      	str	r7, [sp, #20]\n"
+        "  1a:	46b6      	mov	lr, r6\n"
+        "  1c:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
+    >>,
+    ?assertStream(arm, Dump, Stream).
+
 %% Verify move_array_element to {x_reg, X} invalidates the vm_loc cache entry.
-%% Before the fix, a register caching {x_reg, X} would still be considered
-%% valid after move_array_element overwrote {x_reg, X} in memory.
 move_array_element_x_reg_invalidates_vm_loc_cache_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, r7} = ?BACKEND:move_to_native_register(State0, {x_reg, 5}),
     {State2, r6} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
     S3 = ?BACKEND:move_array_element(State2, r6, 0, {x_reg, 5}),
-    {S4, _} = ?BACKEND:move_to_native_register(S3, {x_reg, 5}),
+    {S4, _Reg} = ?BACKEND:move_to_native_register(S3, {x_reg, 5}),
     Stream = ?BACKEND:stream(S4),
     Dump =
         <<
             "   0:	6ac7      	ldr	r7, [r0, #44]	; 0x2c\n"
             "   2:	6986      	ldr	r6, [r0, #24]\n"
             "   4:	6835      	ldr	r5, [r6, #0]\n"
-            "   6:	62c5      	str	r5, [r0, #44]	; 0x2c\n"
-            "   8:	6ac5      	ldr	r5, [r0, #44]	; 0x2c"
+            "   6:	62c5      	str	r5, [r0, #44]	; 0x2c"
         >>,
     ?assertStream(arm, Dump, Stream).
 
@@ -4207,6 +4357,46 @@ ldr_y_reg_invalidates_hidden_temp_cache_test() ->
             "   8:	682e      	ldr	r6, [r5, #0]\n"
             "   a:	6a05      	ldr	r5, [r0, #32]"
         >>,
+    ?assertStream(arm, Dump, Stream).
+
+cached_move_to_vm_x_reg_reuse_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_vm_register(State0, {x_reg, 1}, {x_reg, 0}),
+    Offset1 = ?BACKEND:offset(State1),
+    {State2, r7} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    ?assertEqual(Offset1, ?BACKEND:offset(State2)),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	69c7      	ldr	r7, [r0, #28]\n"
+        "   2:	6187      	str	r7, [r0, #24]"
+    >>,
+    ?assertStream(arm, Dump, Stream).
+
+cached_move_to_vm_y_reg_reuse_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_vm_register(State0, {y_reg, 0}, {x_reg, 0}),
+    Offset1 = ?BACKEND:offset(State1),
+    {State2, r7} = ?BACKEND:move_to_native_register(State1, {y_reg, 0}),
+    ?assertEqual(Offset1, ?BACKEND:offset(State2)),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	6946      	ldr	r6, [r0, #20]\n"
+        "   2:	6837      	ldr	r7, [r6, #0]\n"
+        "   4:	6187      	str	r7, [r0, #24]"
+    >>,
+    ?assertStream(arm, Dump, Stream).
+
+cached_move_to_vm_imm_reuse_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_vm_register(State0, 42, {x_reg, 0}),
+    Offset1 = ?BACKEND:offset(State1),
+    {State2, r7} = ?BACKEND:move_to_native_register(State1, 42),
+    ?assertEqual(Offset1, ?BACKEND:offset(State2)),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	272a      	movs	r7, #42\n"
+        "   2:	6187      	str	r7, [r0, #24]"
+    >>,
     ?assertStream(arm, Dump, Stream).
 
 %% Verify move_to_native_register for y_reg does not crash with function_clause

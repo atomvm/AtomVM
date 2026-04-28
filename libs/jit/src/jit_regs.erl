@@ -39,6 +39,7 @@
     get_contents/2,
     get_all_contents/1,
     set_contents/3,
+    unreachable/1,
     invalidate_reg/2,
     invalidate_all/1,
     invalidate_volatile/2,
@@ -75,7 +76,8 @@
 
 -record(regs, {
     contents = #{} :: #{atom() => contents()},
-    stack = [] :: [atom() | contents()]
+    stack = [] :: [atom() | contents()],
+    unreachable = false :: boolean()
 }).
 
 -opaque regs() :: #regs{}.
@@ -99,6 +101,11 @@ get_all_contents(#regs{contents = C}) -> C.
 set_contents(#regs{contents = C} = Regs, Reg, Contents) ->
     Regs#regs{contents = C#{Reg => Contents}}.
 
+%% @doc Mark register tracking as unreachable after terminal control flow.
+-spec unreachable(regs()) -> regs().
+unreachable(Regs) ->
+    Regs#regs{contents = #{}, stack = [], unreachable = true}.
+
 %% @doc Invalidate tracking for a single CPU register (e.g. it was clobbered).
 -spec invalidate_reg(regs(), atom()) -> regs().
 invalidate_reg(#regs{contents = C} = Regs, Reg) ->
@@ -107,7 +114,7 @@ invalidate_reg(#regs{contents = C} = Regs, Reg) ->
 %% @doc Invalidate all register tracking (e.g. at a label or unknown branch target).
 -spec invalidate_all(regs()) -> regs().
 invalidate_all(Regs) ->
-    Regs#regs{contents = #{}, stack = []}.
+    Regs#regs{contents = #{}, stack = [], unreachable = false}.
 
 %% @doc Invalidate registers that are volatile across a C function call.
 %% On x86-64 System V ABI, all our scratch registers (rax, rcx, rdx, rsi, rdi,
@@ -143,6 +150,12 @@ find_in_map(Iterator, Contents) ->
 %% @doc Merge two register tracking states (for control flow merge points).
 %% Only keeps information that is consistent in both states.
 -spec merge(regs(), regs()) -> regs().
+merge(#regs{unreachable = true}, #regs{unreachable = true}) ->
+    unreachable(new());
+merge(#regs{unreachable = true}, #regs{} = Regs) ->
+    Regs#regs{stack = []};
+merge(#regs{} = Regs, #regs{unreachable = true}) ->
+    Regs#regs{stack = []};
 merge(#regs{contents = C1}, #regs{contents = C2}) ->
     %% Keep only entries that match in both maps
     MergedContents = maps:filter(

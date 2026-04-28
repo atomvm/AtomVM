@@ -593,7 +593,7 @@ call_primitive_last(
         stream = Stream3,
         available_regs = ?AVAILABLE_REGS_MASK,
         used_regs = 0,
-        regs = jit_regs:invalidate_all(State1#state.regs)
+        regs = jit_regs:unreachable(State1#state.regs)
     }.
 
 %%-----------------------------------------------------------------------------
@@ -656,13 +656,17 @@ jump_to_label(
             Rel = LabelOffset - Offset,
             I1 = jit_aarch64_asm:b(Rel),
             Stream1 = StreamModule:append(Stream0, I1),
-            State#state{stream = Stream1};
+            State#state{stream = Stream1, regs = jit_regs:unreachable(State#state.regs)};
         false ->
             % Label not yet known, emit placeholder and add relocation
             I1 = jit_aarch64_asm:b(0),
             Reloc = {Label, Offset, b},
             Stream1 = StreamModule:append(Stream0, I1),
-            State#state{stream = Stream1, branches = [Reloc | AccBranches]}
+            State#state{
+                stream = Stream1,
+                branches = [Reloc | AccBranches],
+                regs = jit_regs:unreachable(State#state.regs)
+            }
     end.
 
 jump_to_offset(#state{stream_module = StreamModule, stream = Stream0} = State, TargetOffset) ->
@@ -670,7 +674,7 @@ jump_to_offset(#state{stream_module = StreamModule, stream = Stream0} = State, T
     Rel = TargetOffset - Offset,
     I1 = jit_aarch64_asm:b(Rel),
     Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1}.
+    State#state{stream = Stream1, regs = jit_regs:unreachable(State#state.regs)}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Jump to a continuation address stored in a register.
@@ -709,7 +713,7 @@ jump_to_continuation(
         stream = Stream1,
         available_regs = ?AVAILABLE_REGS_MASK,
         used_regs = 0,
-        regs = jit_regs:invalidate_all(State#state.regs)
+        regs = jit_regs:unreachable(State#state.regs)
     }.
 
 %% @private
@@ -1605,7 +1609,7 @@ move_to_vm_register_emit(#state{available_regs = AR0} = State0, N, Dest) when
     State1 = move_to_vm_register_emit(
         State0#state{stream = Stream1, available_regs = AT}, Temp, Dest
     ),
-    Regs1 = jit_regs:invalidate_reg(State1#state.regs, Temp),
+    Regs1 = jit_regs:set_contents(State1#state.regs, Temp, {imm, N}),
     State1#state{available_regs = AR0, regs = Regs1};
 % Source is a VM register
 move_to_vm_register_emit(#state{available_regs = AR0} = State0, {x_reg, extra}, Dest) ->
@@ -1617,7 +1621,7 @@ move_to_vm_register_emit(#state{available_regs = AR0} = State0, {x_reg, extra}, 
     State1 = move_to_vm_register_emit(
         State0#state{stream = Stream1, available_regs = AT}, Temp, Dest
     ),
-    Regs1 = jit_regs:invalidate_reg(State1#state.regs, Temp),
+    Regs1 = jit_regs:set_contents(State1#state.regs, Temp, {x_reg, ?MAX_REG}),
     State1#state{available_regs = AR0, regs = Regs1};
 move_to_vm_register_emit(#state{available_regs = AR0} = State0, {x_reg, X}, Dest) ->
     Temp = first_avail(AR0),
@@ -1628,7 +1632,7 @@ move_to_vm_register_emit(#state{available_regs = AR0} = State0, {x_reg, X}, Dest
     State1 = move_to_vm_register_emit(
         State0#state{stream = Stream1, available_regs = AT}, Temp, Dest
     ),
-    Regs1 = jit_regs:invalidate_reg(State1#state.regs, Temp),
+    Regs1 = jit_regs:set_contents(State1#state.regs, Temp, {x_reg, X}),
     State1#state{available_regs = AR0, regs = Regs1};
 move_to_vm_register_emit(#state{available_regs = AR0} = State0, {ptr, Reg}, Dest) ->
     Temp = first_avail(AR0),
@@ -1651,7 +1655,7 @@ move_to_vm_register_emit(#state{available_regs = AR0} = State0, {y_reg, Y}, Dest
     State1 = move_to_vm_register_emit(
         State0#state{stream = Stream1, available_regs = AT}, Temp, Dest
     ),
-    Regs1 = jit_regs:invalidate_reg(State1#state.regs, Temp),
+    Regs1 = jit_regs:set_contents(State1#state.regs, Temp, {y_reg, Y}),
     State1#state{available_regs = AR0, regs = Regs1};
 % term_to_float
 move_to_vm_register_emit(
@@ -1696,7 +1700,7 @@ move_array_element(
     I2 = jit_aarch64_asm:str(Temp, ?X_REG(X)),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     Regs1 = jit_regs:invalidate_vm_loc(Regs0, {x_reg, X}),
-    Regs2 = jit_regs:invalidate_reg(Regs1, Temp),
+    Regs2 = jit_regs:set_contents(Regs1, Temp, {x_reg, X}),
     State#state{stream = Stream1, regs = Regs2};
 move_array_element(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = Available, regs = Regs0} =
@@ -2187,33 +2191,39 @@ move_to_native_register(
     Regs1 = jit_regs:set_contents(Regs0, RegDst, {imm, RegSrc}),
     State#state{stream = Stream1, regs = Regs1};
 move_to_native_register(
-    #state{stream_module = StreamModule, stream = Stream0} = State, {ptr, Reg}, RegDst
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, {ptr, Reg}, RegDst
 ) when ?IS_GPR(Reg) ->
     I1 = jit_aarch64_asm:ldr(RegDst, {Reg, 0}),
     Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1};
+    Regs1 = jit_regs:invalidate_reg(Regs0, RegDst),
+    State#state{stream = Stream1, regs = Regs1};
 move_to_native_register(
-    #state{stream_module = StreamModule, stream = Stream0} = State, {x_reg, extra}, RegDst
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State,
+    {x_reg, extra},
+    RegDst
 ) ->
     I1 = jit_aarch64_asm:ldr(RegDst, ?X_REG(?MAX_REG)),
     Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1};
+    Regs1 = jit_regs:set_contents(Regs0, RegDst, {x_reg, extra}),
+    State#state{stream = Stream1, regs = Regs1};
 move_to_native_register(
-    #state{stream_module = StreamModule, stream = Stream0} = State, {x_reg, X}, RegDst
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, {x_reg, X}, RegDst
 ) when
     X < ?MAX_REG
 ->
     I1 = jit_aarch64_asm:ldr(RegDst, ?X_REG(X)),
     Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1};
+    Regs1 = jit_regs:set_contents(Regs0, RegDst, {x_reg, X}),
+    State#state{stream = Stream1, regs = Regs1};
 move_to_native_register(
-    #state{stream_module = StreamModule, stream = Stream0} = State, {y_reg, Y}, RegDst
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, {y_reg, Y}, RegDst
 ) ->
     I1 = jit_aarch64_asm:ldr(RegDst, ?Y_REGS),
     I2 = jit_aarch64_asm:ldr(RegDst, {RegDst, Y * ?WORD_SIZE}),
     Code = <<I1/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1}.
+    Regs1 = jit_regs:set_contents(Regs0, RegDst, {y_reg, Y}),
+    State#state{stream = Stream1, regs = Regs1}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Copy a value to a native register, allocating a new register from the
@@ -2296,7 +2306,7 @@ move_to_cp(
     I3 = jit_aarch64_asm:str(Reg, ?CP),
     Code = <<I1/binary, I2/binary, I3/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
-    Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    Regs1 = jit_regs:set_contents(Regs0, Reg, {y_reg, Y}),
     State#state{stream = Stream1, regs = Regs1}.
 
 %%-----------------------------------------------------------------------------
@@ -2424,7 +2434,7 @@ get_module_index(
     I2 = jit_aarch64_asm:ldr_w(Reg, ?MODULE_INDEX(Reg)),
     Code = <<I1/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
-    Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    Regs1 = jit_regs:set_contents(Regs0, Reg, module_index),
     {
         State#state{
             stream = Stream1,
@@ -2725,9 +2735,8 @@ decrement_reductions_and_maybe_schedule_next(
         Stream3, BNEOffset, <<NewI4/binary, NewI5/binary>>
     ),
     State3 = merge_used_regs(State2#state{stream = Stream4}, State1#state.used_regs),
-    %% The schedule_next path is a tail call (dead end), so the register tracking
-    %% from the non-taken path (State1) is what matters at the continuation.
-    State3#state{regs = State1#state.regs}.
+    %% schedule_next clobbers caller-saved regs; invalidate cache at continuation.
+    State3#state{regs = jit_regs:invalidate_all(State1#state.regs)}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a call to a label with automatic scheduling. Decrements reductions
