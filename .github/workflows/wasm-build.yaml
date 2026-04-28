@@ -222,7 +222,7 @@ jobs:
         sha256sum "${ATOMVM_WASM}" > "${ATOMVM_WASM}.sha256"
 
     - name: "Release (node)"
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v3.0.0
       if: startsWith(github.ref, 'refs/tags/') && matrix.jit == ''
       with:
         draft: true
@@ -349,7 +349,7 @@ jobs:
         sha256sum "${ATOMVM_WASM}" > "${ATOMVM_WASM}.sha256"
 
     - name: "Release (web)"
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v3.0.0
       if: startsWith(github.ref, 'refs/tags/')
       with:
         draft: true
