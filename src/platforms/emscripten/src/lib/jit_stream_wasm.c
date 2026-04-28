@@ -57,6 +57,7 @@ static uint32_t jit_next_module_id = 1;
 #define JIT_INVALIDATION_RING_SIZE 64
 struct JITInvalidation
 {
+    uint32_t seq;
     uint32_t module_id;
     uint32_t num_entries;
 };
@@ -95,17 +96,17 @@ EM_JS(void, jit_release_module, (uint32_t module_id, int num_entries, int ring_p
     }
 
     // Notify other threads via ring (SMP only).
-    // Use a CAS loop so the write index is only advanced after the entry is written.
+    // Reserve a slot via fetch-and-add, then write the payload, then publish by
+    // storing seq = oldIdx + 1. Consumers must check seq to detect a slot that
+    // has been reserved but not yet published.
     if (ring_ptr) {
         var int32View = new Int32Array(HEAPU8.buffer);
-        var oldIdx;
-        do {
-            oldIdx = Atomics.load(int32View, write_idx_ptr >> 2);
-            var slot = oldIdx % ring_size;
-            var entryBase = (ring_ptr + slot * 8) >> 2;
-            Atomics.store(int32View, entryBase, module_id);
-            Atomics.store(int32View, entryBase + 1, num_entries);
-        } while (Atomics.compareExchange(int32View, write_idx_ptr >> 2, oldIdx, oldIdx + 1) !== oldIdx);
+        var oldIdx = Atomics.add(int32View, write_idx_ptr >> 2, 1);
+        var slot = oldIdx % ring_size;
+        var entryBase = (ring_ptr + slot * 12) >> 2;
+        Atomics.store(int32View, entryBase + 1, module_id);
+        Atomics.store(int32View, entryBase + 2, num_entries);
+        Atomics.store(int32View, entryBase, oldIdx + 1);
     }
 })
 // clang-format on
@@ -128,9 +129,19 @@ EM_JS(int, jit_get_thread_func_ptr, (uint32_t module_id, const uint8_t *wasm_bin
         var writeIdx = Atomics.load(int32View, write_idx_ptr >> 2);
         while (Module._jitReadIdx < writeIdx) {
             var slot = Module._jitReadIdx % ring_size;
-            var entryBase = (ring_ptr + slot * 8) >> 2;
-            var entryModuleId = Atomics.load(int32View, entryBase);
-            var entryNumEntries = Atomics.load(int32View, entryBase + 1);
+            var entryBase = (ring_ptr + slot * 12) >> 2;
+            var expectedSeq = Module._jitReadIdx + 1;
+            var seq = Atomics.load(int32View, entryBase);
+            if (seq < expectedSeq) {
+                // Slot reserved but payload not yet published; defer remainder.
+                break;
+            }
+            if (seq > expectedSeq) {
+                // Ring wrapped past this thread; older entries are lost.
+                Module._jitReadIdx = seq - 1;
+            }
+            var entryModuleId = Atomics.load(int32View, entryBase + 1);
+            var entryNumEntries = Atomics.load(int32View, entryBase + 2);
             var staleCache = Module._jitCache.get(entryModuleId);
             if (staleCache) {
                 for (var j = 0; j < entryNumEntries; j++) {
