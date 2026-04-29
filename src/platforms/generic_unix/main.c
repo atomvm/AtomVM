@@ -27,9 +27,16 @@
 #include <unistd.h>
 
 #ifdef __APPLE__
+#include <Availability.h>
+// getsectiondata() was introduced in the macOS 10.7 SDK; on older deployment
+// targets (e.g. PowerPC builds targeting 10.6) embedded AVM is unsupported.
+#if defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 1070
+#define ATOMVM_HAS_EMBEDDED_AVM 1
 #include <mach-o/getsect.h>
 #include <mach-o/ldsyms.h>
+#endif
 #elif defined(__linux__)
+#define ATOMVM_HAS_EMBEDDED_AVM 1
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -50,7 +57,7 @@
 #include "term.h"
 #include "utils.h"
 
-#ifdef __linux__
+#if defined(ATOMVM_HAS_EMBEDDED_AVM) && defined(__linux__)
 // On Linux (using ELF), the embedded avm binary is added as a section
 // and the following symbols are patched.
 uint64_t __atomvm_avm_offset __attribute__((section(".atomvm_avm_info")));
@@ -102,7 +109,7 @@ void print_help(const char *program_name)
  */
 bool get_embedded_avm(const void **data, size_t *size)
 {
-#ifdef __APPLE__
+#if defined(ATOMVM_HAS_EMBEDDED_AVM) && defined(__APPLE__)
     // On macOS, look for the __ATOMVM,__avm_data section
     unsigned long section_size = 0;
     const void *section_data = getsectiondata(&_mh_execute_header, "__ATOMVM", "__avm_data", &section_size);
@@ -112,7 +119,7 @@ bool get_embedded_avm(const void **data, size_t *size)
         *size = (size_t) section_size;
         return true;
     }
-#elif defined(__linux__)
+#elif defined(ATOMVM_HAS_EMBEDDED_AVM) && defined(__linux__)
     // On Linux, check if symbols were added by objcopy during escriptize
     if (__atomvm_avm_offset != 0 && __atomvm_avm_length != 0) {
         int fd = open("/proc/self/exe", O_RDONLY);
@@ -140,7 +147,8 @@ bool get_embedded_avm(const void **data, size_t *size)
         return true;
     }
 #else
-    // embedded avm not supported yet on this target (e.g. FreeBSD)
+    // embedded avm not supported yet on this target (e.g. FreeBSD,
+    // pre-10.7 macOS deployment targets such as PowerPC)
     UNUSED(data);
     UNUSED(size);
 #endif
