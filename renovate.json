@@ -4,7 +4,7 @@
   "requireConfig": "ignored",
   "platform": "github",
   "repositories": ["atomvm/AtomVM"],
-  "extends": ["config:recommended"],
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigestsToSemver"],
   "labels": ["dependencies"],
   "configMigration": true,
 
