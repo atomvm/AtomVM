@@ -185,7 +185,7 @@ jobs:
         sha256sum "${ATOMVM_IMG}" > "${ATOMVM_IMG}.sha256"
 
     - name: Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v3.0.0
       if: startsWith(github.ref, 'refs/tags/')
       with:
         draft: true

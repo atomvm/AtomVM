@@ -253,7 +253,7 @@ jobs:
         path: ${{ env.ATOMVM_COMBINED_FILE }}
 
     - name: Release (Pico & Pico2)
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v3.0.0
       if: startsWith(github.ref, 'refs/tags/') && matrix.board != 'pico_w' && matrix.board != 'pico2_w' && matrix.platform == '' && matrix.jit == ''
       with:
         draft: true
@@ -267,7 +267,7 @@ jobs:
           ${{ env.ATOMVM_COMBINED_FILE }}.sha256
 
     - name: Release (PicoW & Pico2W)
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v3.0.0
       if: startsWith(github.ref, 'refs/tags/') && (matrix.board == 'pico_w' || matrix.board == 'pico2_w') && matrix.platform == '' && matrix.jit == ''
       with:
         draft: true

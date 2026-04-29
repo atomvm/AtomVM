@@ -129,7 +129,7 @@ jobs:
         sha256sum "examples/erlang/${HELLO_WORLD_FILE}" > "examples/erlang/${HELLO_WORLD_FILE}.sha256"
 
     - name: Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v3.0.0
       if: startsWith(github.ref, 'refs/tags/')
       with:
         draft: true
