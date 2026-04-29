@@ -101,14 +101,18 @@ jobs:
 
       - name: Track all branches
         shell: bash
+        env:
+          REF_NAME: ${{ github.ref_name }}
         run: |
           git config --global --add safe.directory /__w/AtomVM/AtomVM
-          for branch in `git branch -a | grep "remotes/origin" | grep -v HEAD | grep -v "${{ github.ref_name }}" `; do
+          for branch in `git branch -a | grep "remotes/origin" | grep -v HEAD | grep -v "${REF_NAME}" `; do
             git branch --track ${branch#remotes/origin/} $branch
           done
 
       - name: Build Site
         shell: bash
+        env:
+          REF_NAME: ${{ github.ref_name }}
         run: |
           . /home/runner/python-env/sphinx/bin/activate
           mkdir build
@@ -116,20 +120,22 @@ jobs:
           cmake ..
           cd doc
           make GitHub_CI_Publish_Docs
-          rm -frv "/__w/AtomVM/AtomVM/www/${{ github.ref_name }}"
-          cp -av html "/__w/AtomVM/AtomVM/www/${{ github.ref_name }}"
+          rm -frv "/__w/AtomVM/AtomVM/www/${REF_NAME}"
+          cp -av html "/__w/AtomVM/AtomVM/www/${REF_NAME}"
       - name: Commit files
         id: commit_files
         if: github.repository == 'atomvm/AtomVM'
         working-directory: /home/runner/work/AtomVM/AtomVM/www
+        env:
+          REF_NAME: ${{ github.ref_name }}
         run: |
           git config --local user.email "atomvm-doc-bot@users.noreply.github.com"
           git config --local user.name "AtomVM Doc Bot"
-          git status "${{ github.ref_name }}"
-          git add "${{ github.ref_name }}"
+          git status "${REF_NAME}"
+          git add "${REF_NAME}"
           git add .
           git diff --exit-code main || echo "Going to commit"
-          git diff --exit-code main || git commit -m "Update Documentation for ${{ github.ref_name }}"
+          git diff --exit-code main || git commit -m "Update Documentation for ${REF_NAME}"
           git log -1
       - name: Push changes
         if: github.repository == 'atomvm/AtomVM'

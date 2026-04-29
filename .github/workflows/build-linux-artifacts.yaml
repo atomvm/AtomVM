@@ -199,9 +199,12 @@ jobs:
 
     - name: Build AtomVM using docker
       timeout-minutes: 15
+      env:
+        REF_NAME: ${{ github.ref_name }}
       run: |
         docker run --platform linux/${{ matrix.platform }} --rm -v $PWD:/atomvm -w /atomvm \
         -e CFLAGS="${{ matrix.cflags }}" -e CXXFLAGS="${{ matrix.cflags }}" \
+        -e REF_NAME="${REF_NAME}" \
         ${{ matrix.docker_image }}:${{ matrix.tag }} /bin/bash -c '
         ([ -n "${{ matrix.sources }}" ] && echo "${{ matrix.sources }}" > /etc/apt/sources.list || true) &&
         cat /etc/apt/sources.list &&
@@ -251,8 +254,8 @@ jobs:
         ./src/AtomVM tests/libs/estdlib/test_estdlib.avm &&
         ./src/AtomVM tests/libs/eavmlib/test_eavmlib.avm &&
         ./src/AtomVM tests/libs/alisp/test_alisp.avm &&
-        cp ./src/AtomVM ./AtomVM-${{ matrix.build_name }}-${{ github.ref_name }} &&
-        sha256sum ./src/AtomVM > ./AtomVM-${{ matrix.build_name }}-${{ github.ref_name }}.sha256
+        cp ./src/AtomVM ./AtomVM-${{ matrix.build_name }}-${REF_NAME} &&
+        sha256sum ./src/AtomVM > ./AtomVM-${{ matrix.build_name }}-${REF_NAME}.sha256
         '
 
     - name: Release

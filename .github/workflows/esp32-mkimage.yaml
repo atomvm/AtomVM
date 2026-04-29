@@ -179,8 +179,10 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/')
       shell: bash
       working-directory: src/platforms/esp32/build
+      env:
+        REF_NAME: ${{ github.ref_name }}
       run: |
-        ATOMVM_IMG="AtomVM-${{ matrix.soc }}${{ matrix.flavor }}-${{ github.ref_name }}.img"
+        ATOMVM_IMG="AtomVM-${{ matrix.soc }}${{ matrix.flavor }}-${REF_NAME}.img"
         mv atomvm-${{ matrix.soc }}${{ matrix.flavor }}.img "${ATOMVM_IMG}"
         sha256sum "${ATOMVM_IMG}" > "${ATOMVM_IMG}.sha256"
 
