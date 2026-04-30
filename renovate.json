@@ -1,13 +1,20 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
+  "onboarding": false,
+  "requireConfig": "ignored",
+  "platform": "github",
+  "repositories": ["atomvm/AtomVM"],
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigestsToSemver"],
   "labels": ["dependencies"],
+  "configMigration": true,
 
   "customManagers": [
     {
       "description": "mbedtls fetched via FetchContent",
       "customType": "regex",
-      "fileMatch": ["^CMakeModules/FetchMbedTLS\\.cmake$"],
+      "managerFilePatterns": [
+        "/^CMakeModules/FetchMbedTLS\\.cmake$/"
+      ],
       "matchStrings": ["GIT_TAG\\s+v(?<currentValue>[^\\s\\n]+)"],
       "depNameTemplate": "mbed-TLS/mbedtls",
       "datasourceTemplate": "github-tags",
@@ -16,7 +23,9 @@
     {
       "description": "Unity test framework fetched via FetchContent",
       "customType": "regex",
-      "fileMatch": ["^CMakeModules/FetchUnity\\.cmake$"],
+      "managerFilePatterns": [
+        "/^CMakeModules/FetchUnity\\.cmake$/"
+      ],
       "matchStrings": ["GIT_TAG\\s+v(?<currentValue>[^\\s\\n]+)"],
       "depNameTemplate": "ThrowTheSwitch/Unity",
       "datasourceTemplate": "github-tags",
@@ -25,7 +34,9 @@
     {
       "description": "ARM CMSIS Core fetched via FetchContent",
       "customType": "regex",
-      "fileMatch": ["^src/platforms/stm32/cmake/stm32_sdk\\.cmake$"],
+      "managerFilePatterns": [
+        "/^src/platforms/stm32/cmake/stm32_sdk\\.cmake$/"
+      ],
       "matchStrings": ["cmsis_core\\.git\\s+GIT_TAG\\s+v(?<currentValue>[^\\s\\n]+)"],
       "depNameTemplate": "STMicroelectronics/cmsis_core",
       "datasourceTemplate": "github-tags",
@@ -34,7 +45,9 @@
     {
       "description": "STM32 family CMSIS device headers (first version in each _SDK_<family> pair). The dep name is derived from the family key: STMicroelectronics/cmsis_device_<family>. Exception: u3 uses hyphens (cmsis-device-u3) — overridden in packageRules.",
       "customType": "regex",
-      "fileMatch": ["^src/platforms/stm32/cmake/stm32_sdk\\.cmake$"],
+      "managerFilePatterns": [
+        "/^src/platforms/stm32/cmake/stm32_sdk\\.cmake$/"
+      ],
       "matchStrings": [
         "set\\(_SDK_(?<family>[a-z0-9]+)\\s+\"v(?<currentValue>[^;\"]+);[^\"]+\"\\)"
       ],
@@ -45,7 +58,9 @@
     {
       "description": "STM32 family HAL drivers (second version in each _SDK_<family> pair). The dep name is derived from the family key: STMicroelectronics/stm32<family>xx_hal_driver. Exception: u3 uses hyphens (stm32u3xx-hal-driver) — overridden in packageRules.",
       "customType": "regex",
-      "fileMatch": ["^src/platforms/stm32/cmake/stm32_sdk\\.cmake$"],
+      "managerFilePatterns": [
+        "/^src/platforms/stm32/cmake/stm32_sdk\\.cmake$/"
+      ],
       "matchStrings": [
         "set\\(_SDK_(?<family>[a-z0-9]+)\\s+\"[^;]+;v(?<currentValue>[^\"]+)\"\\)"
       ],
@@ -56,7 +71,9 @@
     {
       "description": "picolibc built from a release tarball by ExternalProject_Add",
       "customType": "regex",
-      "fileMatch": ["^src/platforms/stm32/cmake/picolibc\\.cmake$"],
+      "managerFilePatterns": [
+        "/^src/platforms/stm32/cmake/picolibc\\.cmake$/"
+      ],
       "matchStrings": ["set\\(PICOLIBC_VERSION \"(?<currentValue>[^\"]+)\"\\)"],
       "depNameTemplate": "picolibc/picolibc",
       "datasourceTemplate": "github-releases",
@@ -65,7 +82,9 @@
     {
       "description": "esp-idf Docker image versions in esp32-build.yaml (semver-pinned entries only; release-v5.4 is intentionally left as a floating branch reference)",
       "customType": "regex",
-      "fileMatch": ["^\\.github/workflows/esp32-build\\.yaml$"],
+      "managerFilePatterns": [
+        "/^\\.github/workflows/esp32-build\\.yaml$/"
+      ],
       "matchStrings": ["idf-version: 'v(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)'"],
       "depNameTemplate": "espressif/idf",
       "datasourceTemplate": "docker",
@@ -74,7 +93,9 @@
     {
       "description": "esp-idf Docker image version in esp32-mkimage.yaml (uses bare semver without v prefix)",
       "customType": "regex",
-      "fileMatch": ["^\\.github/workflows/esp32-mkimage\\.yaml$"],
+      "managerFilePatterns": [
+        "/^\\.github/workflows/esp32-mkimage\\.yaml$/"
+      ],
       "matchStrings": ["idf-version: \\[\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\"\\]"],
       "depNameTemplate": "espressif/idf",
       "datasourceTemplate": "docker",
@@ -83,7 +104,9 @@
     {
       "description": "esp-idf Docker image versions in esp32-simtest.yaml (only the explicit idf-version entries in include/exclude blocks; the inline fromJSON array on the conditional line must be updated manually)",
       "customType": "regex",
-      "fileMatch": ["^\\.github/workflows/esp32-simtest\\.yaml$"],
+      "managerFilePatterns": [
+        "/^\\.github/workflows/esp32-simtest\\.yaml$/"
+      ],
       "matchStrings": ["idf-version: \"v(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""],
       "depNameTemplate": "espressif/idf",
       "datasourceTemplate": "docker",
@@ -100,19 +123,19 @@
     },
     {
       "description": "Group all STM32 CMSIS device + HAL driver updates together",
-      "matchPackagePatterns": ["^STMicroelectronics/(cmsis_device_|cmsis-device-|stm32.*_hal_driver|stm32.*-hal-driver)"],
       "groupName": "STM32 SDK (CMSIS device + HAL drivers)",
-      "groupSlug": "stm32-sdk"
+      "groupSlug": "stm32-sdk",
+      "matchPackageNames": [
+        "/^STMicroelectronics/(cmsis_device_|cmsis-device-|stm32.*_hal_driver|stm32.*-hal-driver)/"
+      ]
     },
     {
       "description": "u3 CMSIS device uses hyphens in the actual GitHub repo name",
-      "matchPackageNames": ["STMicroelectronics/cmsis_device_u3"],
-      "packageName": "STMicroelectronics/cmsis-device-u3"
+      "matchPackageNames": ["STMicroelectronics/cmsis-device-u3"]
     },
     {
       "description": "u3 HAL driver uses hyphens in the actual GitHub repo name",
-      "matchPackageNames": ["STMicroelectronics/stm32u3xx_hal_driver"],
-      "packageName": "STMicroelectronics/stm32u3xx-hal-driver"
+      "matchPackageNames": ["STMicroelectronics/stm32u3xx-hal-driver"]
     },
     {
       "description": "mbedtls is a security dependency — label prominently",
