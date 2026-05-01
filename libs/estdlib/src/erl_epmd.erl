@@ -63,6 +63,12 @@
 -define(ERLANG_NODE_TYPE, 77).
 -define(VERSION, 6).
 
+%% There is a race in EPMD protocol, one can unregister and reregister
+%% faster than EPMD would process it.
+%% See: https://github.com/erlang/otp/issues/11083
+-define(REGISTER_RETRY_ATTEMPTS, 4).
+-define(REGISTER_RETRY_INITIAL_MS, 5).
+
 -record(receive_port2_resp, {
     port_no :: non_neg_integer(),
     highest_version :: non_neg_integer(),
@@ -201,6 +207,17 @@ handle_call({register_node, _Name, _Port}, _From, #state{socket = Socket} = Stat
 ->
     {reply, {error, already_registered}, State};
 handle_call({register_node, Name, Port}, _From, #state{} = State) ->
+    case do_register_node(Name, Port, ?REGISTER_RETRY_ATTEMPTS, ?REGISTER_RETRY_INITIAL_MS) of
+        {ok, Socket, Creation} ->
+            {reply, {ok, Creation}, State#state{socket = Socket}};
+        {error, _} = Error ->
+            {reply, Error, State}
+    end;
+handle_call(stop, _From, State) ->
+    {stop, shutdown, ok, State}.
+
+%% @private
+do_register_node(Name, Port, AttemptsLeft, BackoffMs) ->
     {ok, Socket} = socket:open(inet, stream, tcp),
     case socket:connect(Socket, #{addr => {127, 0, 0, 1}, port => ?EPMD_PORT, family => inet}) of
         ok ->
@@ -211,17 +228,21 @@ handle_call({register_node, Name, Port}, _From, #state{} = State) ->
                     ?VERSION:16, NameLen:16, NameBin/binary, 0:16>>,
             case send_request(Socket, Packet) of
                 {ok, #alive2_resp{creation = Creation}} ->
-                    {reply, {ok, Creation}, State#state{socket = Socket}};
+                    {ok, Socket, Creation};
+                {error, 1} when AttemptsLeft > 0 ->
+                    socket:close(Socket),
+                    receive
+                    after BackoffMs -> ok
+                    end,
+                    do_register_node(Name, Port, AttemptsLeft - 1, BackoffMs * 2);
                 {error, _} = RequestErr ->
                     socket:close(Socket),
-                    {reply, RequestErr, State}
+                    RequestErr
             end;
         {error, _} = ConnectErr ->
             socket:close(Socket),
-            {reply, ConnectErr, State}
-    end;
-handle_call(stop, _From, State) ->
-    {stop, shutdown, ok, State}.
+            ConnectErr
+    end.
 
 %% @hidden
 handle_cast(_Message, State) ->

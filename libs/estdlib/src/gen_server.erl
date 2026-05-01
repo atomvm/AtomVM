@@ -144,54 +144,52 @@ init_it(Starter, Name, Module, Args, Options) ->
     end.
 
 init_it(Starter, Module, Args, Options) ->
-    StateT =
-        try
-            case Module:init(Args) of
-                {ok, ModState} ->
-                    proc_lib:init_ack(Starter, {ok, self()}),
-                    #state{
-                        name = proplists:get_value(name, Options),
-                        mod = Module,
-                        mod_state = ModState,
-                        timeout = infinity
-                    };
-                {ok, ModState, {continue, NewContinue}} ->
-                    proc_lib:init_ack(Starter, {ok, self()}),
-                    #state{
-                        name = proplists:get_value(name, Options),
-                        mod = Module,
-                        mod_state = ModState,
-                        timeout = {continue, NewContinue}
-                    };
-                {ok, ModState, InitTimeout} ->
-                    proc_lib:init_ack(Starter, {ok, self()}),
-                    #state{
-                        name = proplists:get_value(name, Options),
-                        mod = Module,
-                        mod_state = ModState,
-                        timeout = InitTimeout
-                    };
-                {stop, Reason} ->
-                    proc_lib:init_ack(Starter, {error, {init_stopped, Reason}}),
-                    undefined;
-                Reply ->
-                    proc_lib:init_ack(Starter, {error, {unexpected_reply_from_init, Reply}}),
-                    undefined
-            end
+    Outcome =
+        try Module:init(Args) of
+            {ok, ModState} ->
+                {ok, #state{
+                    name = proplists:get_value(name, Options),
+                    mod = Module,
+                    mod_state = ModState,
+                    timeout = infinity
+                }};
+            {ok, ModState, {continue, NewContinue}} ->
+                {ok, #state{
+                    name = proplists:get_value(name, Options),
+                    mod = Module,
+                    mod_state = ModState,
+                    timeout = {continue, NewContinue}
+                }};
+            {ok, ModState, InitTimeout} ->
+                {ok, #state{
+                    name = proplists:get_value(name, Options),
+                    mod = Module,
+                    mod_state = ModState,
+                    timeout = InitTimeout
+                }};
+            {stop, Reason} ->
+                {fail, {error, {init_stopped, Reason}}, {exit, Reason}};
+            Reply ->
+                {fail, {error, {unexpected_reply_from_init, Reply}},
+                    {exit, {bad_return_value, Reply}}}
         catch
-            _:E:S ->
+            Class:E:S ->
                 crash_report(
-                    io_lib:format("gen_server:init_it/4: Error initializing module ~p", [Module]),
+                    io_lib:format(
+                        "gen_server:init_it/4: Error initializing module ~p", [Module]
+                    ),
                     Starter,
                     E,
                     S
                 ),
-                proc_lib:init_ack(Starter, {error, {bad_return_value, E}}),
-                undefined
+                {fail, {error, {bad_return_value, E}}, {Class, E, S}}
         end,
-    case StateT of
-        undefined -> ok;
-        #state{} = State -> system_continue(Starter, [], State)
+    case Outcome of
+        {ok, State} ->
+            proc_lib:init_ack(Starter, {ok, self()}),
+            system_continue(Starter, [], State);
+        {fail, Return, Exception} ->
+            proc_lib:init_fail(Starter, Return, Exception)
     end.
 
 crash_report(ErrStr, Parent, E, S) ->
