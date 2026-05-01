@@ -379,6 +379,75 @@ static term nif_spi_init(Context *ctx, int argc, term argv[])
     return create_pair(ctx, OK_ATOM, inner);
 }
 
+static term nif_spi_apply_device_config(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    struct SPIResource *rsrc_obj;
+    if (UNLIKELY(!get_spi_resource(ctx, argv[0], &rsrc_obj))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (IS_NULL_PTR(rsrc_obj->handle.Instance)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    VALIDATE_VALUE(argv[1], term_is_map);
+
+    term config = argv[1];
+    term clock_speed_hz_term = term_get_map_assoc(config, globalcontext_make_atom(ctx->global, ATOM_STR("\xE", "clock_speed_hz")), ctx->global);
+    term mode_term = term_get_map_assoc(config, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "mode")), ctx->global);
+
+    bool changed = false;
+
+    if (!term_is_invalid_term(clock_speed_hz_term)) {
+        if (UNLIKELY(!term_is_integer(clock_speed_hz_term))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        avm_int_t clock_speed_hz = term_to_int(clock_speed_hz_term);
+        if (UNLIKELY(clock_speed_hz <= 0)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        uint32_t apb_freq = get_spi_apb_freq(rsrc_obj->handle.Instance);
+        int presc_idx = compute_spi_prescaler_index(apb_freq, (uint32_t) clock_speed_hz);
+        uint32_t new_prescaler = spi_prescaler_table[presc_idx];
+        if (rsrc_obj->handle.Init.BaudRatePrescaler != new_prescaler) {
+            rsrc_obj->handle.Init.BaudRatePrescaler = new_prescaler;
+            changed = true;
+        }
+    }
+
+    if (!term_is_invalid_term(mode_term)) {
+        if (UNLIKELY(!term_is_integer(mode_term))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        avm_int_t mode = term_to_int(mode_term);
+        if (UNLIKELY(mode < 0 || mode > 3)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        uint32_t new_cpol = (mode & 2) ? SPI_POLARITY_HIGH : SPI_POLARITY_LOW;
+        uint32_t new_cpha = (mode & 1) ? SPI_PHASE_2EDGE : SPI_PHASE_1EDGE;
+        if (rsrc_obj->handle.Init.CLKPolarity != new_cpol
+            || rsrc_obj->handle.Init.CLKPhase != new_cpha) {
+            rsrc_obj->handle.Init.CLKPolarity = new_cpol;
+            rsrc_obj->handle.Init.CLKPhase = new_cpha;
+            changed = true;
+        }
+    }
+
+    if (!changed) {
+        return OK_ATOM;
+    }
+
+    HAL_StatusTypeDef status = HAL_SPI_Init(&rsrc_obj->handle);
+    if (UNLIKELY(status != HAL_OK)) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return hal_status_to_error(ctx, status);
+    }
+
+    return OK_ATOM;
+}
+
 static term nif_spi_deinit(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -620,6 +689,10 @@ static const struct Nif spi_init_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_spi_init
 };
+static const struct Nif spi_apply_device_config_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_spi_apply_device_config
+};
 static const struct Nif spi_deinit_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_spi_deinit
@@ -665,6 +738,10 @@ static const struct Nif *spi_nif_get_nif(const char *nifname)
     if (strcmp("init/2", rest) == 0) {
         TRACE("Resolved spi nif %s ...\n", nifname);
         return &spi_init_nif;
+    }
+    if (strcmp("apply_device_config/2", rest) == 0) {
+        TRACE("Resolved spi nif %s ...\n", nifname);
+        return &spi_apply_device_config_nif;
     }
     if (strcmp("deinit/1", rest) == 0) {
         TRACE("Resolved spi nif %s ...\n", nifname);
