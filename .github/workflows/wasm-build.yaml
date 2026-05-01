@@ -213,11 +213,13 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/') && matrix.jit == ''
       shell: bash
       working-directory: src/platforms/emscripten/build/src
+      env:
+        REF_NAME: ${{ github.ref_name }}
       run: |
-        ATOMVM_JS=AtomVM-node-${{ github.ref_name }}.mjs
+        ATOMVM_JS=AtomVM-node-${REF_NAME}.mjs
         mv AtomVM.mjs "${ATOMVM_JS}"
         sha256sum "${ATOMVM_JS}" > "${ATOMVM_JS}.sha256"
-        ATOMVM_WASM=AtomVM-node-${{ github.ref_name }}.wasm
+        ATOMVM_WASM=AtomVM-node-${REF_NAME}.wasm
         mv AtomVM.wasm "${ATOMVM_WASM}"
         sha256sum "${ATOMVM_WASM}" > "${ATOMVM_WASM}.sha256"
 
@@ -340,11 +342,13 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/')
       shell: bash
       working-directory: src/platforms/emscripten/build/src
+      env:
+        REF_NAME: ${{ github.ref_name }}
       run: |
-        ATOMVM_JS=AtomVM-web-${{ github.ref_name }}.mjs
+        ATOMVM_JS=AtomVM-web-${REF_NAME}.mjs
         mv AtomVM.mjs "${ATOMVM_JS}"
         sha256sum "${ATOMVM_JS}" > "${ATOMVM_JS}.sha256"
-        ATOMVM_WASM=AtomVM-web-${{ github.ref_name }}.wasm
+        ATOMVM_WASM=AtomVM-web-${REF_NAME}.wasm
         mv AtomVM.wasm "${ATOMVM_WASM}"
         sha256sum "${ATOMVM_WASM}" > "${ATOMVM_WASM}.sha256"
 

@@ -118,13 +118,15 @@ jobs:
 
     - name: "Rename and write sha256sum"
       working-directory: build
+      env:
+        REF_NAME: ${{ github.ref_name }}
       run: |
         for variant in atomvmlib atomvmlib-esp32 atomvmlib-rp2 atomvmlib-stm32 atomvmlib-emscripten; do
-          VARIANT_FILE="${variant}-${{ github.ref_name }}.avm"
+          VARIANT_FILE="${variant}-${REF_NAME}.avm"
           mv "libs/${variant}.avm" "libs/${VARIANT_FILE}" &&
           sha256sum "libs/${VARIANT_FILE}" > "libs/${VARIANT_FILE}.sha256"
         done
-        HELLO_WORLD_FILE=hello_world-${{ github.ref_name }}.avm
+        HELLO_WORLD_FILE=hello_world-${REF_NAME}.avm
         mv examples/erlang/hello_world.avm "examples/erlang/${HELLO_WORLD_FILE}"
         sha256sum "examples/erlang/${HELLO_WORLD_FILE}" > "examples/erlang/${HELLO_WORLD_FILE}.sha256"
 
