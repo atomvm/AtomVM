@@ -168,7 +168,7 @@ init_it(Starter, Module, Args, Options) ->
                     timeout = InitTimeout
                 }};
             {stop, Reason} ->
-                {fail, {error, {init_stopped, Reason}}, {exit, Reason}};
+                {fail, {error, Reason}, {exit, Reason}};
             Reply ->
                 {fail, {error, {unexpected_reply_from_init, Reply}},
                     {exit, {bad_return_value, Reply}}}
