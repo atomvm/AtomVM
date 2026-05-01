@@ -148,8 +148,10 @@ handle_cast({handshake_complete, DHandle}, State0) ->
     ok = erlang:dist_ctrl_get_data_notification(DHandle),
     % We now need to get messages when data is coming.
     State1 = State0#state{dhandle = DHandle},
-    State2 = recv_data_loop(State1),
-    {noreply, State2}.
+    case recv_data_loop(State1) of
+        {ok, State2} -> {noreply, State2};
+        {stop, Reason, State2} -> {stop, Reason, State2}
+    end.
 
 handle_info(dist_data, State0) ->
     State1 = send_data_loop(State0),
@@ -158,8 +160,10 @@ handle_info(
     {'$socket', Socket, select, SelectHandle},
     #state{socket = Socket, select_handle = SelectHandle} = State0
 ) ->
-    State1 = recv_data_loop(State0),
-    {noreply, State1}.
+    case recv_data_loop(State0) of
+        {ok, State1} -> {noreply, State1};
+        {stop, Reason, State1} -> {stop, Reason, State1}
+    end.
 
 terminate(_Reason, _State) ->
     ok.
@@ -180,9 +184,15 @@ recv_data_loop(
             {NewBuffer, NewReceived} = process_recv_buffer(
                 DHandle, <<Buffer/binary, Data/binary>>, Received
             ),
-            State#state{buffer = NewBuffer, select_handle = SelectHandle, received = NewReceived};
+            {ok, State#state{
+                buffer = NewBuffer, select_handle = SelectHandle, received = NewReceived
+            }};
         {select, {select_info, recv, SelectHandle}} when is_reference(SelectHandle) ->
-            State#state{select_handle = SelectHandle}
+            {ok, State#state{select_handle = SelectHandle}};
+        {error, closed} ->
+            {stop, normal, State};
+        {error, Reason} ->
+            {stop, {recv_error, Reason}, State}
     end.
 
 process_recv_buffer(DHandle, <<Size:32, Rest/binary>>, Received) when byte_size(Rest) >= Size ->
