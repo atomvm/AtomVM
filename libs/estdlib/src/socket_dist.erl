@@ -120,6 +120,8 @@ accept_loop(Kernel, LSock) ->
                     exit(unsupported_protocol)
             end,
             accept_loop(Kernel, LSock);
+        {error, closed} ->
+            exit(normal);
         {error, _} = Error ->
             exit(Error)
     end.

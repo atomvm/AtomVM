@@ -50,6 +50,8 @@
     start_monitor/5,
     init_ack/1,
     init_ack/2,
+    init_fail/2,
+    init_fail/3,
 
     initial_call/1,
     translate_initial_call/1
@@ -60,7 +62,8 @@
 ]).
 
 -export_type([
-    start_spawn_option/0
+    start_spawn_option/0,
+    exception/0
 ]).
 
 -compile({no_auto_import, [spawn/3, spawn_link/3]}).
@@ -73,6 +76,11 @@
     | {max_heap_size, pos_integer()}
     | {atomvm_heap_growth, erlang:atomvm_heap_growth_strategy()}
     | link.
+
+%% Exception specification accepted by `init_fail/2,3'.
+-type exception() ::
+    {error | exit | throw, Reason :: term()}
+    | {Class :: error | exit | throw, Reason :: term(), Stacktrace :: list()}.
 
 %% @equiv spawn(erlang, apply, [Fun, []])
 -spec spawn(fun(() -> any())) -> pid().
@@ -199,6 +207,21 @@ start0(Module, Function, Args, Timeout, SpawnOpts, Link, Monitor) ->
         {ack, Pid, Result} ->
             erlang:demonitor(MonitorRef, [flush]),
             Result;
+        %% Nack from init_fail: wait for the child to die before returning,
+        %% so its registered name is freed and linked children have got their
+        %% EXIT signal.
+        {nack, Pid, Result} when Monitor ->
+            receive
+                {'DOWN', MonitorRef, process, Pid, _} -> ok
+            end,
+            flush_exit(Pid, Link),
+            {Result, MonitorRef};
+        {nack, Pid, Result} ->
+            receive
+                {'DOWN', MonitorRef, process, Pid, _} -> ok
+            end,
+            flush_exit(Pid, Link),
+            Result;
         {'DOWN', MonitorRef, process, Pid, Reason} when Link ->
             receive
                 {'EXIT', Pid, _} -> ok
@@ -236,6 +259,15 @@ start0(Module, Function, Args, Timeout, SpawnOpts, Link, Monitor) ->
     end.
 
 %% @private
+flush_exit(_Pid, false) ->
+    ok;
+flush_exit(Pid, true) ->
+    receive
+        {'EXIT', Pid, _} -> ok
+    after 0 -> ok
+    end.
+
+%% @private
 get_ancestors() ->
     case get('$ancestors') of
         A when is_list(A) -> A;
@@ -262,6 +294,32 @@ init_ack(Result) ->
 init_ack(Parent, Result) ->
     Parent ! {ack, self(), Result},
     ok.
+
+%% @equiv init_fail(Parent, Return, Exception)
+-spec init_fail(Return :: term(), Exception :: exception()) -> no_return().
+init_fail(Return, Exception) ->
+    [Parent | _] = get('$ancestors'),
+    init_fail(Parent, Return, Exception).
+
+%%-----------------------------------------------------------------------------
+%% @doc     Signal init failure: nack the starter with Return and raise
+%%          Exception. Starter blocks until this process is dead, so any
+%%          registered name is released before the starter sees the failure.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec init_fail(Parent :: pid(), Return :: term(), Exception :: exception()) -> no_return().
+init_fail(Parent, Return, Exception) ->
+    _ = Parent ! {nack, self(), Return},
+    case Exception of
+        {error, Reason} ->
+            erlang:error(Reason);
+        {exit, Reason} ->
+            erlang:exit(Reason);
+        {throw, Reason} ->
+            erlang:throw(Reason);
+        {Class, Reason, Stacktrace} ->
+            erlang:raise(Class, Reason, Stacktrace)
+    end.
 
 %% @private
 -spec init_p(pid(), [pid()], atom(), atom(), [any()]) -> any().

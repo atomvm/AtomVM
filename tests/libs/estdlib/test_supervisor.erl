@@ -40,6 +40,7 @@ test() ->
     ok = try_again_restart(),
     ok = try_again_restart_shutdown(),
     ok = try_again_one_for_all(),
+    ok = test_failed_child_cleanup_releases_names(),
     ok.
 
 test_basic_supervisor() ->
@@ -222,6 +223,14 @@ child_start(error) ->
     {error, child_error};
 child_start(fail) ->
     fail;
+child_start({register_then_idle, Name}) ->
+    Pid = spawn_link(fun() ->
+        true = register(Name, self()),
+        receive
+            ok -> ok
+        end
+    end),
+    {ok, Pid};
 child_start({trap_exit, Parent}) ->
     Pid = spawn_link(fun() ->
         process_flag(trap_exit, true),
@@ -403,6 +412,27 @@ init({test_try_again, Arbitrator, Parent, Ref}) ->
         }
     ],
     {ok, {#{strategy => one_for_one, intensity => 5, period => 10}, ChildSpec}};
+init({test_failed_child_cleanup, RegisterName}) ->
+    %% First child registers a name and idles. Second child returns {error,_}
+    %% so start_children fails. The supervisor must terminate the first child
+    %% before stopping, otherwise its registered name leaks past init failure.
+    ChildSpecs = [
+        #{
+            id => good_child,
+            start => {?MODULE, child_start, [{register_then_idle, RegisterName}]},
+            restart => permanent,
+            shutdown => brutal_kill,
+            type => worker
+        },
+        #{
+            id => bad_child,
+            start => {?MODULE, child_start, [error]},
+            restart => permanent,
+            shutdown => brutal_kill,
+            type => worker
+        }
+    ],
+    {ok, {#{strategy => one_for_one, intensity => 1, period => 5}, ChildSpecs}};
 init({test_retry_one_for_all, Arbitrator, Parent, Ref}) ->
     ChildSpec = [
         #{
@@ -540,6 +570,18 @@ test_one_for_all() ->
 
     unlink(SupPid),
     exit(SupPid, shutdown),
+    ok.
+
+test_failed_child_cleanup_releases_names() ->
+    process_flag(trap_exit, true),
+    Name = test_failed_child_cleanup_good,
+    undefined = whereis(Name),
+    %% Bad child returns {error, _}; good child registers Name. Supervisor
+    %% start must fail AND release the registered name before returning.
+    Result = supervisor:start_link(?MODULE, {test_failed_child_cleanup, Name}),
+    {error, {shutdown, {failed_to_start_child, bad_child, _}}} = Result,
+    undefined = whereis(Name),
+    process_flag(trap_exit, false),
     ok.
 
 test_crash_limits() ->
