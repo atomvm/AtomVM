@@ -20,6 +20,7 @@ Supported Platforms
 * STM32 MCUs (with official ST HAL/LL SDK, see [stm32](https://doc.atomvm.org/main/getting-started-guide.html#getting-started-on-the-stm32-platform))
 * Raspberry Pi Pico and Pico 2 (see [rp2](https://doc.atomvm.org/main/getting-started-guide.html#getting-started-on-the-raspberry-pi-pico-platform))
 * Browsers and NodeJS with WebAssembly (see [emscripten](https://doc.atomvm.org/main/getting-started-guide.html#getting-started-with-atomvm-webassembly))
+* Standalone WebAssembly runtimes such as wasmtime (see [wasi](https://doc.atomvm.org/main/build-instructions.html#building-for-wasi))
 
 AtomVM aims to be easily portable to new platforms with a minimum effort, so additional platforms
 might be supported in a near future.
@@ -72,8 +73,9 @@ available in the documentation for
 [ESP32](https://doc.atomvm.org/main/build-instructions.html#building-for-esp32),
 [STM32](https://doc.atomvm.org/main/build-instructions.html#building-for-stm32),
 [Raspberry Pi Pico and Pico 2](https://doc.atomvm.org/main/build-instructions.html#building-for-raspberry-pi-pico)
-(rp2), and
-[WASM](https://doc.atomvm.org/main/build-instructions.html#building-for-nodejs-web) (NodeJS/Web).
+(rp2),
+[WASM](https://doc.atomvm.org/main/build-instructions.html#building-for-nodejs-web) (NodeJS/Web), and
+[WASI](https://doc.atomvm.org/main/build-instructions.html#building-for-wasi) (standalone WebAssembly).
 
 Project Status
 ==============

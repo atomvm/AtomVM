@@ -25,24 +25,26 @@
 start() ->
     OTPVersion = get_otp_version(),
     NonNetworkingTests = get_non_networking_tests(OTPVersion),
-    Networking =
+    NetworkingTests =
         case OTPVersion of
             atomvm ->
                 case atomvm:platform() of
                     emscripten ->
-                        false;
+                        [];
                     stm32 ->
-                        false;
+                        [];
+                    wasi ->
+                        %% Only wasm32-wasip2 ships BSD sockets via
+                        %% wasi:sockets@0.2.x; wasip1/wasip1-threads do not.
+                        case erlang:system_info(system_architecture) of
+                            <<"wasm32-wasip2">> -> get_wasip2_networking_tests();
+                            _ -> []
+                        end;
                     _ ->
-                        true
+                        get_networking_tests()
                 end;
             _ ->
-                true
-        end,
-    NetworkingTests =
-        if
-            Networking -> get_networking_tests();
-            true -> []
+                get_networking_tests()
         end,
     ok = etest:test(NonNetworkingTests ++ NetworkingTests).
 
@@ -98,4 +100,20 @@ get_networking_tests() ->
         test_gen_tcp,
         test_inet,
         test_net_kernel
+    ].
+
+%% Subset of get_networking_tests/0 that runs on wasm32-wasip2. Excluded:
+%%   - test_epmd, test_net_kernel: need fork/exec (atomvm:subprocess), unavailable on WASI
+%%
+%% test_gen_tcp / test_gen_udp gate their inet-port-driver subtests on
+%% test_inet:is_inet_driver_available/0 and run only the socket backend on WASI.
+get_wasip2_networking_tests() ->
+    [
+        test_tcp_socket,
+        test_udp_socket,
+        test_net,
+        test_inet,
+        test_ssl,
+        test_gen_tcp,
+        test_gen_udp
     ].

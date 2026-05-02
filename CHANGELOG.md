@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `console:print_err/1` to write to standard error
 - Added `erlang:term_to_binary/2`, `erlang:is_builtin/3` and `erlang:bitstring_to_list/1`
 - Added `lists:mapfoldr/3`
+- Added WASI platform, with `wasm32-wasip1` (no SMP, no networking),
+  `wasm32-wasip1-threads` (SMP, no networking) and `wasm32-wasip2` (no SMP,
+  networking via `wasi:sockets@0.2.x`) target triples
 
 ### Changed
 - Updated network type db() to dbm() to reflect the actual representation of the type

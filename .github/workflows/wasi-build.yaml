@@ -1,0 +1,183 @@
+#
+#  Copyright 2026 Paul Guyot <pguyot@kallisys.net>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: WASI Build
+
+on:
+  push:
+    paths:
+      - '.github/workflows/wasi-build.yaml'
+      - 'CMakeLists.txt'
+      - 'CMakeModules/**'
+      - 'libs/**'
+      - 'src/platforms/wasi/**'
+      - 'src/libAtomVM/**'
+  pull_request:
+    paths:
+      - '.github/workflows/wasi-build.yaml'
+      - 'CMakeLists.txt'
+      - 'CMakeModules/**'
+      - 'libs/**'
+      - 'src/platforms/wasi/**'
+      - 'src/libAtomVM/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+
+  compile_tests:
+
+    runs-on: ubuntu-24.04
+    container: erlang:28
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["c-cpp"]
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+    - name: Install required packages
+      run: apt update && apt install -y gperf zlib1g-dev cmake ninja-build
+
+    - name: "Git config safe.directory for codeql"
+      run: git config --global --add safe.directory /__w/AtomVM/AtomVM
+
+    - name: "Initialize CodeQL"
+      uses: github/codeql-action/init@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4
+      with:
+        languages: ${{matrix.language}}
+        build-mode: manual
+        queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql,./code-queries/mismatched-atom-string-length.ql,./code-queries/mismatched-free-type.ql,./code-queries/term-use-after-gc.ql,./code-queries/allocations-exceeding-ensure-free.ql,./code-queries/allocations-without-ensure-free.ql
+
+    - name: Compile AtomVM and test modules
+      run: |
+        set -e
+        mkdir build
+        cd build
+        cmake .. -G Ninja -DAVM_WARNINGS_ARE_ERRORS=ON
+        ninja AtomVM atomvmlib erlang_test_modules test_etest test_alisp test_estdlib test_eavmlib
+
+    - name: "Perform CodeQL Analysis"
+      uses: github/codeql-action/analyze@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4
+
+    - name: Upload AtomVM and test modules
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: atomvm-and-test-modules
+        path: |
+            build/**/*.avm
+            build/**/*.beam
+            build/src/AtomVM
+        retention-days: 1
+
+  wasi_build_and_test:
+    needs: compile_tests
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # No SMP, no networking - minimal stable target.
+          - target: wasm32-wasip1
+            disable_smp: ON
+            wasmtime_flags: ""
+          # SMP via wasi-threads, no networking. Needs shared-memory in wasmtime.
+          - target: wasm32-wasip1-threads
+            disable_smp: OFF
+            wasmtime_flags: "-W threads -W shared-memory -S threads"
+          # No SMP, networking via wasi:sockets@0.2.x - exercises BSD sockets and SSL.
+          - target: wasm32-wasip2
+            disable_smp: ON
+            wasmtime_flags: "-S inherit-network -S allow-ip-name-lookup"
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+    - name: Install required packages
+      run: sudo apt-get update -y && sudo apt-get install -y cmake ninja-build gperf
+
+    - name: Install WASI SDK
+      run: |
+        set -euo pipefail
+        WASI_SDK_VERSION=33
+        wget -q "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
+        sudo mkdir -p /opt/wasi-sdk
+        sudo tar xzf "wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz" --strip-components=1 -C /opt/wasi-sdk
+
+    - name: Install wasmtime
+      run: |
+        set -euo pipefail
+        WASMTIME_VERSION=44.0.1
+        WASMTIME_TARBALL="wasmtime-v${WASMTIME_VERSION}-x86_64-linux.tar.xz"
+        WASMTIME_SHA256="afd58715f105e3a7f454169daed22168c5736ec5f225fb04c4ac62c54c9508a3"
+        wget -q "https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/${WASMTIME_TARBALL}"
+        echo "${WASMTIME_SHA256}  ${WASMTIME_TARBALL}" | sha256sum -c -
+        sudo mkdir -p /opt/wasmtime
+        sudo tar xf "${WASMTIME_TARBALL}" --strip-components=1 -C /opt/wasmtime
+        echo "/opt/wasmtime" >> $GITHUB_PATH
+
+    - name: Build (${{ matrix.target }})
+      working-directory: ./src/platforms/wasi/
+      run: |
+        set -euo pipefail
+        mkdir build
+        cd build
+        cmake -G Ninja \
+              -DCMAKE_TOOLCHAIN_FILE=../wasi-sdk.cmake \
+              -DAVM_DISABLE_JIT=ON \
+              -DAVM_DISABLE_SMP=${{ matrix.disable_smp }} \
+              -DWASI_TARGET=${{ matrix.target }} \
+              ..
+        ninja
+
+    - name: Download AtomVM and test modules
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        name: atomvm-and-test-modules
+        path: build
+
+    - name: Test (${{ matrix.target }})
+      working-directory: ./build
+      run: |
+        set -euxo pipefail
+        WASM=../src/platforms/wasi/build/src/AtomVM.wasm
+        FLAGS="${{ matrix.wasmtime_flags }}"
+        wasmtime run ${FLAGS} --dir=. ${WASM} tests/libs/alisp/test_alisp.avm
+        wasmtime run ${FLAGS} --dir=. ${WASM} tests/libs/estdlib/test_estdlib.avm
+        wasmtime run ${FLAGS} --dir=. ${WASM} tests/libs/etest/test_etest.avm
+        wasmtime run ${FLAGS} --dir=. ${WASM} tests/libs/eavmlib/test_eavmlib.avm
+
+    - name: "Rename and write sha256sum"
+      if: startsWith(github.ref, 'refs/tags/')
+      working-directory: src/platforms/wasi/build/src
+      run: |
+        ATOMVM_WASM=AtomVM-${{ matrix.target }}-${{ github.ref_name }}.wasm
+        mv AtomVM.wasm "${ATOMVM_WASM}"
+        sha256sum "${ATOMVM_WASM}" > "${ATOMVM_WASM}.sha256"
+
+    - name: "Release"
+      uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        draft: true
+        fail_on_unmatched_files: true
+        files: |
+          src/platforms/wasi/build/src/AtomVM-${{ matrix.target }}-${{ github.ref_name }}.wasm
+          src/platforms/wasi/build/src/AtomVM-${{ matrix.target }}-${{ github.ref_name }}.wasm.sha256
