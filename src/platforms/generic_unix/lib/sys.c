@@ -698,6 +698,12 @@ void sys_unregister_listener(GlobalContext *global, struct EventListener *listen
     synclist_remove(&global->listeners, &listener->listeners_list_head);
 }
 
+void sys_unregister_listener_nolock(GlobalContext *global, struct EventListener *listener)
+{
+    listener_event_remove_from_polling_set(listener->fd, global);
+    list_remove(&listener->listeners_list_head);
+}
+
 void sys_register_select_event(GlobalContext *global, ErlNifEvent event, bool is_write)
 {
     struct GenericUnixPlatformData *platform = global->platform_data;
