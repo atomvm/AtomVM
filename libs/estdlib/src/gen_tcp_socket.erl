@@ -350,12 +350,12 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 %% @hidden
-handle_info({'$socket', _Socket, select, Ref}, State) ->
+handle_info({'$socket', Socket, select, Ref}, State) ->
     %% TODO cancel timer
     case maps:get(Ref, State#state.pending_selects, undefined) of
         undefined ->
             ?LOG_WARNING("Unable to find select ref ~p in pending selects", [Ref]),
-            %% select_stop?
+            socket:nif_select_stop(Socket),
             {noreply, State};
         {accept, From, AcceptingProc, _Timeout} ->
             ?LOG_INFO("Select ready for read on accept"),
@@ -365,14 +365,11 @@ handle_info({'$socket', _Socket, select, Ref}, State) ->
             }};
         active ->
             ?LOG_INFO("Select ready for read on active recv"),
-            NewState = handle_active_recv(State),
+            NewState = handle_active_recv(State, Ref),
             {noreply, NewState};
         {passive, From, Length, Timeout} ->
             ?LOG_INFO("Select ready for read on passive recv"),
-            NewState = handle_passive_recv(State, From, Length, Timeout),
-            {noreply, NewState#state{
-                pending_selects = maps:remove(Ref, State#state.pending_selects)
-            }}
+            {noreply, handle_passive_recv(State, Ref, From, Length, Timeout)}
     end;
 handle_info({'$socket', Socket, abort, {Ref, closed}}, State) ->
     %% TODO cancel timer
@@ -406,6 +403,7 @@ handle_info({timeout, Ref, From}, State) ->
             {noreply, State};
         _ ->
             ?LOG_INFO("Select ref ~p in pending selects has timed out.", [Ref]),
+            socket:nif_select_stop(State#state.socket),
             gen_server:reply(From, {error, timeout}),
             {noreply, State#state{pending_selects = maps:remove(Ref, State#state.pending_selects)}}
     end;
@@ -471,7 +469,7 @@ handle_accept(State, From, AcceptingProc) ->
     end.
 
 %% @private
-handle_active_recv(State) ->
+handle_active_recv(State, OldRef) ->
     Socket = State#state.socket,
     Length = maps:get(buffer, State#state.options, 0),
     WrappedSocket = {?GEN_TCP_MONIKER, self(), ?MODULE},
@@ -486,16 +484,17 @@ handle_active_recv(State) ->
             State#state.controlling_process ! {tcp, WrappedSocket, BinaryOrList},
 
             %% start a new select
-            Ref = erlang:make_ref(),
-            case socket:nif_select_read(Socket, Ref) of
+            NewRef = erlang:make_ref(),
+            case socket:nif_select_read(Socket, NewRef) of
                 ok ->
-                    ?LOG_INFO("Started read select on ref=~p", [Ref]),
-                    PendingSelects = State#state.pending_selects,
-                    NewPendingSelects = maps:remove(Ref, PendingSelects),
-                    State#state{pending_selects = NewPendingSelects#{Ref => active}};
+                    ?LOG_INFO("Started read select on ref=~p", [NewRef]),
+                    PendingSelects = maps:remove(OldRef, State#state.pending_selects),
+                    State#state{pending_selects = PendingSelects#{NewRef => active}};
                 Error ->
-                    ?LOG_ERROR("Unable to start select on new ref=~p Error=~p", [Ref, Error]),
-                    State
+                    ?LOG_ERROR("Unable to start select on new ref=~p Error=~p", [NewRef, Error]),
+                    State#state{
+                        pending_selects = maps:remove(OldRef, State#state.pending_selects)
+                    }
             end;
         {closed, OtherRef} ->
             ?LOG_INFO("Socket was closed other ref=~p", [OtherRef]),
@@ -515,6 +514,23 @@ handle_active_recv(State) ->
             WrappedSocket = {?GEN_TCP_MONIKER, self(), ?MODULE},
             State#state.controlling_process ! {tcp_closed, WrappedSocket},
             State;
+        {error, timeout} ->
+            %% Spurious select wakeup - re-arm and stay in active mode.
+            NewRef = erlang:make_ref(),
+            case socket:nif_select_read(Socket, NewRef) of
+                ok ->
+                    PendingSelects = maps:remove(OldRef, State#state.pending_selects),
+                    State#state{pending_selects = PendingSelects#{NewRef => active}};
+                {error, _} = SelectError ->
+                    socket:nif_select_stop(Socket),
+                    ?LOG_ERROR("Unable to re-arm select after spurious wakeup Error=~p", [
+                        SelectError
+                    ]),
+                    State#state.controlling_process ! {tcp_error, WrappedSocket, SelectError},
+                    State#state{
+                        pending_selects = maps:remove(OldRef, State#state.pending_selects)
+                    }
+            end;
         {error, _} = Error ->
             ?LOG_ERROR("Error on receive on pending select Error=~p", [Error]),
             %% CAUTION: internal API
@@ -526,15 +542,16 @@ handle_active_recv(State) ->
     end.
 
 %% @private
-handle_passive_recv(State, From, Length, _Timeout) ->
+handle_passive_recv(State, Ref, From, Length, _Timeout) ->
     Socket = State#state.socket,
+    Pending = State#state.pending_selects,
     %% CAUTION: internal API
     case socket:nif_recv(Socket, Length) of
         {ok, Data} ->
             ?LOG_INFO("Received data len=~p", [erlang:byte_size(Data)]),
             BinaryOrList = maybe_encode_binary(State#state.options, Data),
             gen_server:reply(From, {ok, BinaryOrList}),
-            State;
+            State#state{pending_selects = maps:remove(Ref, Pending)};
         {closed, OtherRef} ->
             ?LOG_INFO("Socket was closed other ref=~p", [OtherRef]),
             % socket was closed by another process
@@ -544,13 +561,23 @@ handle_passive_recv(State, From, Length, _Timeout) ->
             % {closed, Ref} and {select, _, Ref, _} in the
             % queue
             gen_server:reply(From, {error, closed}),
-            State;
+            State#state{pending_selects = maps:remove(Ref, Pending)};
+        {error, timeout} ->
+            %% Spurious select wakeup
+            case socket:nif_select_read(Socket, Ref) of
+                ok ->
+                    State;
+                {error, _} = SelectError ->
+                    socket:nif_select_stop(Socket),
+                    gen_server:reply(From, SelectError),
+                    State#state{pending_selects = maps:remove(Ref, Pending)}
+            end;
         {error, _} = Error ->
             ?LOG_ERROR("Error on receive from socket:nif_recv Error=~p", [Error]),
             socket:nif_select_stop(Socket),
             ?LOG_INFO("unable to receive on pending select~n"),
             gen_server:reply(From, Error),
-            State
+            State#state{pending_selects = maps:remove(Ref, Pending)}
     end.
 
 %% @private

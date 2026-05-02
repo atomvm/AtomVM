@@ -25,19 +25,42 @@
 -include("etest.hrl").
 
 test() ->
-    ok = test_echo_server(),
-    ok = test_echo_server(true),
-    ok = test_listen_connect_parameters(),
-    ok = test_connect_parameters(),
-    ok = test_connect_bad_address(),
-    ok = test_tcp_double_close(),
+    HasInetDriver = test_inet:is_inet_driver_available(),
+    Backends =
+        case HasInetDriver of
+            true ->
+                [inet, socket];
+            false ->
+                io:format(
+                    "Warning: inet port driver not available, skipping inet backend cases in test_gen_tcp~n"
+                ),
+                [socket]
+        end,
+    lists:foreach(
+        fun(Backend) ->
+            ok = test_echo_server(Backend),
+            ok = test_echo_server(Backend, true)
+        end,
+        Backends
+    ),
+    %% test_tcp_double_close is only meaningful for the inet (port driver)
+    %% backend: closing a socket-backend gen_tcp socket stops the underlying
+    %% gen_server, so subsequent gen_tcp:close/1 or gen_tcp:recv/3 calls would
+    %% hit a dead process rather than returning {error, closed}.
+    case HasInetDriver of
+        true -> ok = test_tcp_double_close();
+        false -> ok
+    end,
+    ok = test_listen_connect_parameters(HasInetDriver),
+    ok = test_connect_parameters(HasInetDriver),
+    ok = test_connect_bad_address(HasInetDriver),
     ok.
 
-test_echo_server() ->
-    test_echo_server(false).
+test_echo_server(Backend) ->
+    test_echo_server(Backend, false).
 
-test_echo_server(SpawnControllingProcess) ->
-    {ok, ListenSocket} = gen_tcp:listen(0, []),
+test_echo_server(Backend, SpawnControllingProcess) ->
+    {ok, ListenSocket} = gen_tcp:listen(0, [{inet_backend, Backend}]),
     {ok, {_Address, Port}} = inet:sockname(ListenSocket),
 
     Self = self(),
@@ -53,7 +76,7 @@ test_echo_server(SpawnControllingProcess) ->
     after 5000 -> throw({timeout, test_echo_server, ?LINE})
     end,
 
-    test_send_receive(Port, 10, SpawnControllingProcess),
+    test_send_receive(Backend, Port, 10, SpawnControllingProcess),
 
     %% TODO bug closing listening socket
     % gen_tcp:close(ListenSocket),
@@ -92,8 +115,8 @@ echo(Pid, Socket) ->
     after 5000 -> throw({timeout, echo, ?LINE})
     end.
 
-test_send_receive(Port, N, SpawnControllingProcess) ->
-    {ok, Socket} = gen_tcp:connect({127, 0, 0, 1}, Port, [{active, true}]),
+test_send_receive(Backend, Port, N, SpawnControllingProcess) ->
+    {ok, Socket} = gen_tcp:connect({127, 0, 0, 1}, Port, [{inet_backend, Backend}, {active, true}]),
     case SpawnControllingProcess of
         false ->
             loop(Socket, N);
@@ -137,9 +160,12 @@ loop(Socket, I) ->
     after 5000 -> throw({timeout, loop, ?LINE})
     end.
 
-test_listen_connect_parameters() ->
+test_listen_connect_parameters(HasInetDriver) ->
     ok = test_listen_connect_parameters(socket, socket),
-    ok = test_listen_connect_parameters(inet, inet),
+    case HasInetDriver of
+        true -> ok = test_listen_connect_parameters(inet, inet);
+        false -> ok
+    end,
     ok.
 
 test_listen_connect_parameters(InetClientBackend, InetServerBackend) ->
@@ -352,7 +378,7 @@ test_listen_connect_parameters_server_loop(ListenMode, false = ListenActive, Soc
             {error, {unexpected_result, server, passive_receive, Other}}
     end.
 
-test_connect_parameters() ->
+test_connect_parameters(HasInetDriver) ->
     IP =
         case inet:getaddr("www.github.com", inet) of
             {ok, IPAddress} ->
@@ -366,12 +392,17 @@ test_connect_parameters() ->
         end,
     Hostname = "www.atomvm.org",
     Port = 80,
-    OptTests = [
-        [{active, true}],
-        [{active, false}],
-        [{inet_backend, socket}, {active, true}],
-        [{inet_backend, socket}, {active, false}]
-    ],
+    InetOptTests =
+        case HasInetDriver of
+            true -> [[{active, true}], [{active, false}]];
+            false -> []
+        end,
+    OptTests =
+        InetOptTests ++
+            [
+                [{inet_backend, socket}, {active, true}],
+                [{inet_backend, socket}, {active, false}]
+            ],
     test_connect_parameters(OptTests, IP, Hostname, Port, []).
 
 test_connect_parameters([], _IP, _Host, _Port, Results) ->
@@ -404,15 +435,16 @@ test_connect_parameters([Test | TestOpts], IP, Host, Port, Results) ->
         end,
     test_connect_parameters(TestOpts, IP, Host, Port, [Results, IpResult, HostResult]).
 
-test_connect_bad_address() ->
-    InetTest = test_connect_bad_address(inet_backend, []),
+test_connect_bad_address(HasInetDriver) ->
     SocketTest = test_connect_bad_address(socket_backend, [{inet_backend, socket}]),
-    Result = [InetTest, SocketTest],
-    case Result of
-        [ok, ok] ->
-            ok;
-        _ ->
-            Result
+    Result =
+        case HasInetDriver of
+            true -> [test_connect_bad_address(inet_backend, []), SocketTest];
+            false -> [SocketTest]
+        end,
+    case lists:all(fun(R) -> R =:= ok end, Result) of
+        true -> ok;
+        false -> Result
     end.
 
 test_connect_bad_address(Tag, Opts) ->
@@ -500,7 +532,7 @@ test_connect_bad_address(Tag, Opts) ->
     end.
 
 test_tcp_double_close() ->
-    {ok, Socket} = gen_tcp:listen(10543, [{active, false}]),
+    {ok, Socket} = gen_tcp:listen(10543, [{inet_backend, inet}, {active, false}]),
     ok = gen_tcp:close(Socket),
     ok = gen_tcp:close(Socket),
     {error, closed} = gen_tcp:recv(Socket, 512, 5000),

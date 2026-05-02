@@ -255,6 +255,16 @@ int enif_select_read(ErlNifEnv *env, ErlNifEvent event, void *obj, const ErlNifP
     return enif_select_common(env, event, mode, obj, pid, term_nil(), message);
 }
 
+int enif_select_write(ErlNifEnv *env, ErlNifEvent event, void *obj, const ErlNifPid *pid, ERL_NIF_TERM msg, ErlNifEnv *msg_env)
+{
+    if (UNLIKELY(msg_env != NULL)) {
+        return ERL_NIF_SELECT_BADARG;
+    }
+    Message *message = mailbox_message_create_normal_message_from_term(msg);
+    enum ErlNifSelectFlags mode = ERL_NIF_SELECT_WRITE;
+    return enif_select_common(env, event, mode, obj, pid, term_nil(), message);
+}
+
 term select_event_make_notification(void *rsrc_obj, uint64_t ref_ticks, bool is_write, Heap *heap)
 {
     term notification = term_alloc_tuple(4, heap);

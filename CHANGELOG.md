@@ -59,6 +59,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from ref ticks, `TERM_BOXED_REFERENCE_PROCESS_SIZE` for process references (aliases), or
   `TERM_BOXED_REFERENCE_MAX_SIZE` to fit any reference. `REF_SIZE` still expands to the short
   reference size, but now emits a compiler warning
+- `socket:setopt(Socket, {socket, reuseaddr}, _Value)` and
+  `socket:setopt(Socket, {socket, linger}, _Value)` are accepted on platforms
+  that do not implement the options
 
 ### Removed
 - Removed `ahttp_client` support for obsolete line folding (RFC 9112 §5.2); folded header and
@@ -93,6 +96,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `term_is_uint32` accepting big integers whose low 64 bits are within range on 32-bit
   builds, which made `erlang:crc32/2`, `erlang:crc32_combine/3` and `crypto:pbkdf2_hmac/5`
   silently truncate huge integer arguments instead of raising `badarg`
+- `socket:recv/3` and `socket:recvfrom/3` now tolerate spurious select wakeups
+- `gen_tcp_socket` and `gen_udp_socket` no longer leak `pending_selects` entries
+- `socket:send/2` and `socket:sendto/3` now wait via select
+- `socket:bind`, `socket:listen`, `socket:accept`, `socket:connect`,
+  `socket:shutdown`, `socket:sockname`, `socket:peername`, `socket:recv`,
+  `socket:recvfrom`, `socket:send` and `socket:sendto` operating on a fd
+  that was already closed by another process now return `{error, closed}`
+  rather than `{error, ebadf}`
 
 ## [0.7.0-alpha.1] - 2026-04-06
 
