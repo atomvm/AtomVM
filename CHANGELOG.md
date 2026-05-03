@@ -104,6 +104,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `socket:recvfrom`, `socket:send` and `socket:sendto` operating on a fd
   that was already closed by another process now return `{error, closed}`
   rather than `{error, ebadf}`
+- `gen_tcp_socket` and `gen_udp_socket` now return proper result (`ok` or
+  `{error, closed}`) when the underlying process exited.
 
 ## [0.7.0-alpha.1] - 2026-04-06
 

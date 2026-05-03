@@ -582,7 +582,22 @@ handle_passive_recv(State, Ref, From, Length, _Timeout) ->
 
 %% @private
 call(Pid, Request) ->
-    gen_server:call(Pid, Request, infinity).
+    try
+        gen_server:call(Pid, Request, infinity)
+    catch
+        exit:{Reason, _} when
+            Reason =:= normal;
+            Reason =:= noproc;
+            Reason =:= shutdown
+        ->
+            dead_reply(Request);
+        exit:{{shutdown, _}, _} ->
+            dead_reply(Request)
+    end.
+
+%% @private
+dead_reply(close) -> ok;
+dead_reply(_) -> {error, closed}.
 
 %% @private
 maybe_encode_binary(Options, Data) ->
