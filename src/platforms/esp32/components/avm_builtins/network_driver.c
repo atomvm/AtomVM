@@ -74,6 +74,14 @@
 #define SSID_MAX_SIZE 33
 #define BSSID_SIZE 6
 
+#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0))
+#define AVM_IP_EVENT_AP_STAIPASSIGNED IP_EVENT_ASSIGNED_IP_TO_CLIENT
+#define AVM_IP_EVENT_AP_STAIPASSIGNED_T ip_event_assigned_ip_to_client_t
+#else
+#define AVM_IP_EVENT_AP_STAIPASSIGNED IP_EVENT_AP_STAIPASSIGNED
+#define AVM_IP_EVENT_AP_STAIPASSIGNED_T ip_event_ap_staipassigned_t
+#endif
+
 #define TAG "network_driver"
 #define PORT_REPLY_SIZE (TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_SHORT_SIZE)
 
@@ -215,7 +223,7 @@ static inline term authmode_to_atom_term(GlobalContext *global, wifi_auth_mode_t
 #endif
 #endif
 #endif
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0))
+#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0) && ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(6, 0, 0) )
         case WIFI_AUTH_WPA3_EXT_PSK:
             authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\xC", "wpa3_ext_psk"));
             break;
@@ -241,6 +249,8 @@ static inline term authmode_to_atom_term(GlobalContext *global, wifi_auth_mode_t
             break;
         case WIFI_AUTH_MAX:
             authmode = ERROR_ATOM;
+            break;
+        default:
             break;
     }
     return authmode;
@@ -837,8 +847,8 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
                 break;
             }
 
-            case IP_EVENT_AP_STAIPASSIGNED: {
-                ip_event_ap_staipassigned_t *event = (ip_event_ap_staipassigned_t *) event_data;
+            case AVM_IP_EVENT_AP_STAIPASSIGNED: {
+                AVM_IP_EVENT_AP_STAIPASSIGNED_T *event = (AVM_IP_EVENT_AP_STAIPASSIGNED_T *) event_data;
                 ESP_LOGI(TAG, "IP_EVENT_AP_STAIPASSIGNED: %s", inet_ntoa(event->ip));
                 send_ap_sta_ip_assigned(data, (esp_ip4_addr_t *) &event->ip);
                 break;
@@ -1279,7 +1289,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         port_send_reply(ctx, pid, ref, error);
         goto cleanup;
     }
-    if ((err = esp_event_handler_register(IP_EVENT, IP_EVENT_AP_STAIPASSIGNED, &event_handler, data)) != ESP_OK) {
+    if ((err = esp_event_handler_register(IP_EVENT, AVM_IP_EVENT_AP_STAIPASSIGNED, &event_handler, data)) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to register staipassigned event handler");
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
@@ -1388,7 +1398,7 @@ static void stop_network(void)
     // Stop unregister event callbacks so they dont trigger during shutdown.
     esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler);
     esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler);
-    esp_event_handler_unregister(IP_EVENT, IP_EVENT_AP_STAIPASSIGNED, &event_handler);
+    esp_event_handler_unregister(IP_EVENT, AVM_IP_EVENT_AP_STAIPASSIGNED, &event_handler);
     esp_event_handler_unregister(sntp_event_base, SNTP_EVENT_BASE_SYNC, &event_handler);
 
     esp_netif_t *sta_wifi_interface = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
