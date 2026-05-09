@@ -74,6 +74,12 @@ option(AVM_WAIT_BOOTSEL_ON_EXIT "Wait in BOOTSEL rather than shutdown on exit" O
 option(AVM_REBOOT_ON_NOT_OK "Reboot Pico if result is not ok" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 option(AVM_DISABLE_JIT "Disable just in time compilation." ON)
+option(AVM_USB_CDC_PORT_DRIVER_ENABLED "Enable USB CDC port driver." OFF)
+set(AVM_USB_CDC_VID "0x2E8A" CACHE STRING "USB CDC vendor ID (default: Raspberry Pi VID)")
+set(AVM_USB_CDC_PID "0x0009" CACHE STRING "USB CDC product ID (default: Pi standard Pico SDK CDC UART, chip-agnostic)")
+set(AVM_USB_CDC_MANUFACTURER "AtomVM" CACHE STRING "USB CDC iManufacturer string descriptor")
+set(AVM_USB_CDC_PRODUCT "AtomVM CDC" CACHE STRING "USB CDC iProduct string descriptor")
+set(AVM_USB_CDC_INTERFACE_NAME "AtomVM CDC ACM" CACHE STRING "USB CDC interface string descriptor")
 option(AVM_PRINT_PROCESS_CRASH_DUMPS "Print crash reports when processes die with non-standard reasons" ON)
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^cortex-m0")
     # Cortex-M0/M0+ (e.g. RP2040): ARMv6-M, Thumb-1 only

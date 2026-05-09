@@ -37,6 +37,10 @@
 #include <pico/cyw43_arch.h>
 #endif
 
+#ifdef AVM_USB_CDC_PORT_DRIVER_ENABLED
+#include <tusb.h>
+#endif
+
 #pragma GCC diagnostic pop
 
 #ifdef LIB_PICO_CYW43_ARCH
@@ -82,6 +86,10 @@ void sys_init_platform(GlobalContext *glb)
     cond_init(&platform->event_poll_cond);
 #endif
     queue_init(&platform->event_queue, sizeof(queue_t *), EVENT_QUEUE_LEN);
+
+#if defined(AVM_USB_CDC_PORT_DRIVER_ENABLED) && !defined(AVM_NO_SMP)
+    mutex_init(&platform->tinyusb_mutex);
+#endif
 
 #ifdef HAVE_PLATFORM_ATOMIC_H
     atomic_init();
@@ -186,6 +194,13 @@ bool sys_try_post_listener_event_from_isr(GlobalContext *glb, listener_event_t l
 void sys_poll_events(GlobalContext *glb, int timeout_ms)
 {
     struct RP2PlatformData *platform = glb->platform_data;
+#ifdef AVM_USB_CDC_PORT_DRIVER_ENABLED
+    sys_tinyusb_lock(glb);
+    if (tud_inited()) {
+        tud_task();
+    }
+    sys_tinyusb_unlock(glb);
+#endif
 #ifndef AVM_NO_SMP
     if (timeout_ms != 0) {
         mutex_enter_blocking(&platform->event_poll_mutex);
@@ -405,6 +420,28 @@ void sys_unregister_listener_from_event(GlobalContext *global, listener_event_t 
     }
     synclist_unlock(&global->listeners);
 }
+
+#ifdef AVM_USB_CDC_PORT_DRIVER_ENABLED
+void sys_tinyusb_lock(GlobalContext *global)
+{
+#ifndef AVM_NO_SMP
+    struct RP2PlatformData *platform = global->platform_data;
+    mutex_enter_blocking(&platform->tinyusb_mutex);
+#else
+    (void) global;
+#endif
+}
+
+void sys_tinyusb_unlock(GlobalContext *global)
+{
+#ifndef AVM_NO_SMP
+    struct RP2PlatformData *platform = global->platform_data;
+    mutex_exit(&platform->tinyusb_mutex);
+#else
+    (void) global;
+#endif
+}
+#endif
 
 // TODO: enable mbedtls threading support by defining MBEDTLS_THREADING_ALT
 // and remove this function.

@@ -61,7 +61,7 @@ if (AVM_DISABLE_SMP)
     target_compile_definitions(AtomVM PRIVATE PICO_FLASH_ASSUME_CORE1_SAFE)
 endif()
 
-if (AVM_WAIT_BOOTSEL_ON_EXIT)
+if (AVM_WAIT_BOOTSEL_ON_EXIT AND NOT AVM_USB_CDC_PORT_DRIVER_ENABLED)
     target_compile_definitions(AtomVM PRIVATE WAIT_BOOTSEL_ON_EXIT)
 endif()
 
@@ -73,9 +73,15 @@ set(
 add_subdirectory(lib)
 target_link_libraries(AtomVM PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX})
 
-# enable usb output, disable uart output
-pico_enable_stdio_usb(AtomVM 1)
-pico_enable_stdio_uart(AtomVM 0)
+# Console routing: when our USB CDC port driver owns the TinyUSB device,
+# the Pico SDK's stdio_usb cannot share it -- send stdio to UART instead.
+if (AVM_USB_CDC_PORT_DRIVER_ENABLED)
+    pico_enable_stdio_usb(AtomVM 0)
+    pico_enable_stdio_uart(AtomVM 1)
+else()
+    pico_enable_stdio_usb(AtomVM 1)
+    pico_enable_stdio_uart(AtomVM 0)
+endif()
 
 # create map/bin/hex/uf2 file in addition to ELF.
 pico_add_extra_outputs(AtomVM)

@@ -31,6 +31,7 @@ set(ERLANG_MODULES
     ledc
     spi
     uart
+    usb_cdc
 )
 
 pack_precompiled_archive(avm_esp32 DEPENDS_ON eavmlib ERLC_FLAGS +warnings_as_errors MODULES ${ERLANG_MODULES})

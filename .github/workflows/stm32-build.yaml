@@ -87,6 +87,10 @@ jobs:
             max_size: 524288
           - device: stm32h562rgt6
             max_size: 524288
+            usb-cdc: "OFF"
+          - device: stm32h562rgt6
+            max_size: 524288
+            usb-cdc: "ON"
           - device: stm32f746zgt6
             max_size: 524288
             renode_platform: stm32f746.repl
@@ -162,7 +166,7 @@ jobs:
         set -euo pipefail
         mkdir build
         cd build
-        cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/arm-toolchain.cmake -DDEVICE=${{ matrix.device }}
+        cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/arm-toolchain.cmake -DDEVICE=${{ matrix.device }} ${{ matrix.usb-cdc == 'ON' && '-DAVM_USB_CDC_PORT_DRIVER_ENABLED=ON' || '' }}
         cmake --build .
 
     - name: "Perform CodeQL Analysis"
