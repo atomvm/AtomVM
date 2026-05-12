@@ -23,6 +23,13 @@
       "top": 33.8,
       "left": 162.2,
       "attrs": { "travelLength": "30", "value": "512" }
+    },
+    {
+      "type": "board-bmp180",
+      "id": "bmp180",
+      "top": 42.42,
+      "left": 142.94,
+      "attrs": {}
     }
   ],
   "connections": [
@@ -36,7 +43,11 @@
     ["sd1:DI", "esp:23", "magenta", ["h38.4", "v-96.09", "h-139.93", "v77.03"]],
     ["pot1:VCC", "esp:3V3", "red", ["h-19.2", "v-105.6", "h-139.39"]],
     ["pot1:GND", "esp:GND.2", "black", ["v0"]],
-    ["pot1:SIG", "esp:4", "green", ["h-38.4", "v47.2"]]
+    ["pot1:SIG", "esp:4", "green", ["h-38.4", "v47.2"]],
+    ["bmp180:VCC", "esp:3V3", "red", ["h0", "v-105.6", "h-119.74"]],
+    ["bmp180:GND", "esp:GND.2", "black", ["h0", "v-19.2", "h-89.74"]],
+    ["bmp180:SCL", "esp:22", "yellow", ["h0", "v86.4", "h-128.14"]],
+    ["bmp180:SDA", "esp:21", "green", ["h0", "v105.6", "h-137.74"]]
   ],
   "dependencies": {}
 }
