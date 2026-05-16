@@ -278,6 +278,7 @@ static term nif_code_server_atom_resolver(Context *ctx, int argc, term argv[]);
 static term nif_code_server_literal_resolver(Context *ctx, int argc, term argv[]);
 static term nif_code_server_type_resolver(Context *ctx, int argc, term argv[]);
 static term nif_code_server_import_resolver(Context *ctx, int argc, term argv[]);
+static term nif_code_server_record_resolver(Context *ctx, int argc, term argv[]);
 static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[]);
 #endif
 static term nif_erlang_loaded(Context *ctx, int argc, term argv[]);
@@ -916,6 +917,10 @@ static const struct Nif code_server_type_resolver_nif = {
 static const struct Nif code_server_import_resolver_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_server_import_resolver
+};
+static const struct Nif code_server_record_resolver_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_server_record_resolver
 };
 static const struct Nif code_server_set_native_code_nif = {
     .base.type = NIFFunctionType,
@@ -6940,6 +6945,56 @@ static term nif_code_server_import_resolver(Context *ctx, int argc, term argv[])
     term_put_tuple_element(result, 2, arity_term);
 
     return result;
+}
+
+static term nif_code_server_record_resolver(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    VALIDATE_VALUE(argv[0], term_is_atom);
+    VALIDATE_VALUE(argv[1], term_is_atom);
+
+    term module_name = argv[0];
+    term record_name = argv[1];
+    Module *mod = globalcontext_get_module(ctx->global, term_to_atom_index(module_name));
+    if (IS_NULL_PTR(mod)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    size_t idx = 0;
+    bool found = false;
+    for (size_t i = 0; i < mod->records_count; i++) {
+        if (mod->records_table[i].name == record_name) {
+            idx = i;
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        return UNDEFINED_ATOM;
+    }
+    const struct RecordDef *def = &mod->records_table[idx];
+    size_t num_fields = def->num_fields;
+
+    size_t heap_needed = TERM_MAP_SIZE(3) + CONS_SIZE * num_fields
+        + term_boxed_integer_size((avm_int64_t) idx);
+    if (UNLIKELY(memory_ensure_free_opt(ctx, heap_needed, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term fields_list = term_nil();
+    for (size_t i = num_fields; i > 0; i--) {
+        fields_list = term_list_prepend(def->fields[i - 1].name, fields_list, &ctx->heap);
+    }
+
+    term index_key = globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "index"));
+    term fields_key = globalcontext_make_atom(ctx->global, ATOM_STR("\x6", "fields"));
+    term is_exported_key = globalcontext_make_atom(ctx->global, ATOM_STR("\xB", "is_exported"));
+
+    term map = term_alloc_map(3, &ctx->heap);
+    term_set_map_assoc(map, 0, index_key, term_make_maybe_boxed_int64((avm_int64_t) idx, &ctx->heap));
+    term_set_map_assoc(map, 1, fields_key, fields_list);
+    term_set_map_assoc(map, 2, is_exported_key, def->is_exported ? TRUE_ATOM : FALSE_ATOM);
+    return map;
 }
 
 static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[])

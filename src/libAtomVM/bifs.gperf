@@ -64,7 +64,15 @@ erlang:is_pid/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_i
 erlang:is_port/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_port_1}
 erlang:is_reference/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_reference_1}
 erlang:is_tuple/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_tuple_1}
+erlang:is_record/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_record_1}
 erlang:is_record/2,{.bif.base.type = BIFFunctionType, .bif.bif2_ptr = bif_erlang_is_record_2}
+erlang:get_record_field/3, {.bif.base.type = BIFFunctionType, .bif.bif3_ptr = bif_erlang_get_record_field_3}
+records:get/2, {.bif.base.type = BIFFunctionType, .bif.bif2_ptr = bif_records_get_2}
+records:get_module/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_records_get_module_1}
+records:get_name/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_records_get_name_1}
+records:get_field_names/1, {.gcbif.base.type = GCBIFFunctionType, .gcbif.gcbif1_ptr = bif_records_get_field_names_1}
+records:is_exported/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_records_is_exported_1}
+records:get_definition/2, {.gcbif.base.type = GCBIFFunctionType, .gcbif.gcbif2_ptr = bif_records_get_definition_2}
 erlang:is_map/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_map_1}
 erlang:is_map_key/2, {.bif.base.type = BIFFunctionType, .bif.bif2_ptr = bif_erlang_is_map_key_2}
 erlang:not/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_not_1}

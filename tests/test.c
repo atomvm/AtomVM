@@ -593,6 +593,9 @@ struct Test tests[] = {
     TEST_CASE(test_module_info),
     TEST_CASE(test_executable_line),
     TEST_CASE(test_debug_line),
+#ifdef AVM_ERLANG_VERSION_GE_29
+    TEST_CASE(test_native_records),
+#endif
     TEST_CASE(erlang_module_loaded),
     TEST_CASE(test_erlang_loaded),
 

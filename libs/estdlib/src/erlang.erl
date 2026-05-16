@@ -38,7 +38,9 @@
     md5/1,
     is_map/1,
     is_map_key/2,
+    is_record/1,
     is_record/2,
+    get_record_field/3,
     map_size/1,
     map_get/2,
     monotonic_time/0,
@@ -606,6 +608,16 @@ is_map(_Map) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   Term    term to test
+%%
+%% @doc     Returns true if Term is a native record (OTP 29), false otherwise.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_record(Term :: term()) -> boolean().
+is_record(_Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @param   Term
 %% @param   RecordTag    atom representing tuple tag
 %%
@@ -614,6 +626,21 @@ is_map(_Map) ->
 %%-----------------------------------------------------------------------------
 -spec is_record(Term :: term(), RecordTag :: atom()) -> boolean().
 is_record(_Term, _RecordTag) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Record  native record (OTP 29)
+%% @param   Id      record name, or `{Module, Name}'
+%% @param   Field   field name
+%% @returns the value of Field in Record
+%% @doc     Get a field of a native record. Raises `{badrecord, Record}' if
+%%          Record is not a native record named Id, and `badarg' if the record
+%%          has no field named Field.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_record_field(Record :: term(), Id :: atom() | {module(), atom()}, Field :: atom()) ->
+    term().
+get_record_field(_Record, _Id, _Field) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

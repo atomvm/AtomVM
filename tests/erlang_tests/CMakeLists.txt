@@ -625,6 +625,11 @@ compile_erlang(test_code_get_object_code DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/cod
 compile_erlang(test_module_info)
 compile_erlang(test_executable_line)
 compile_erlang(test_debug_line)
+
+if(Erlang_VERSION VERSION_GREATER_EQUAL "29")
+    compile_erlang(test_native_records_ext)
+    compile_erlang(test_native_records)
+endif()
 compile_erlang(erlang_module_loaded)
 compile_erlang(test_erlang_loaded)
 
@@ -1274,6 +1279,14 @@ if(NOT AVM_DISABLE_JIT)
     set(erlang_test_beams_${AVM_JIT_TARGET_ARCH} ${erlang_test_beams})
     list(TRANSFORM erlang_test_beams_${AVM_JIT_TARGET_ARCH} PREPEND ${AVM_JIT_TARGET_ARCH}/)
     list(APPEND erlang_test_beams ${erlang_test_beams_${AVM_JIT_TARGET_ARCH}})
+endif()
+
+if(Erlang_VERSION VERSION_GREATER_EQUAL "29")
+    list(APPEND erlang_test_beams test_native_records.beam test_native_records_ext.beam)
+    if(NOT AVM_DISABLE_JIT)
+        list(APPEND erlang_test_beams ${AVM_JIT_TARGET_ARCH}/test_native_records.beam
+            ${AVM_JIT_TARGET_ARCH}/test_native_records_ext.beam)
+    endif()
 endif()
 
 add_custom_target(erlang_test_modules DEPENDS

@@ -255,6 +255,13 @@ struct ModuleNativeInterface
     size_t (*bitstring_slice_heap_size)(term *bs_bin_ptr, size_t offset, size_t len_bits);
     term (*bitstring_slice)(Context *ctx, term bs_bin, size_t offset, size_t len_bits);
     bool (*bitstring_is_multiple_of)(size_t bits, size_t unit);
+    uint32_t (*record_def_arity)(Context *ctx, JITState *jit_state, term id);
+    uint32_t (*record_field_pos)(term src, term field_name);
+    term (*put_record)(Context *ctx, JITState *jit_state, term id, term src, uint32_t num_pairs, term *kv);
+    uint32_t (*is_record_of)(term src, term mod_atom, term name_atom);
+    uint32_t (*is_record_accessible)(Context *ctx, JITState *jit_state, term src, term scope);
+    term (*get_record_field)(Context *ctx, uint32_t fail_label, term src, term id, term field);
+    term (*put_record_resolved)(Context *ctx, JITState *jit_state, uint32_t record_index, term src, uint32_t num_pairs, term *kv);
 };
 
 extern const ModuleNativeInterface module_native_interface;

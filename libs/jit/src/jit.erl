@@ -24,7 +24,7 @@
     stream/1,
     backend/2,
     beam_chunk_header/3,
-    compile/8,
+    compile/9,
     decode_value64/1
 ]).
 
@@ -96,6 +96,23 @@
     debug_info_resolver :: fun(
         (integer()) -> [{binary(), {x, integer()} | {y, integer()} | {value, any()}}] | false
     ),
+    record_resolver ::
+        fun(
+            (atom()) ->
+                #{
+                    index := non_neg_integer(),
+                    fields := [atom()],
+                    is_exported := boolean()
+                }
+                | undefined
+        ),
+    %% Per-VM-register "this register holds a record of known type" tracking
+    %% lives in the backend's `jit_regs' state, keyed by VM x/y reg. It is set
+    %% by OP_IS_NATIVE_RECORD via `MMod:set_vm_record_type/3' and consumed by
+    %% OP_GET_RECORD_FIELD/ELEMENTS and OP_IS_RECORD_ACCESSIBLE via
+    %% `MMod:get_vm_record_type/2'. Invalidation is automatic: the backend
+    %% drops the entry alongside its `regs' tracking on any write to the VM
+    %% register, on C calls that clobber x regs, and at labels.
     tail_cache :: tail_cache()
 }).
 
@@ -143,6 +160,7 @@ compile(
     TypeResolver,
     ImportResolver,
     DebugInfoResolver,
+    RecordResolver,
     MMod,
     MSt0
 ) when OpcodeMax =< ?OPCODE_MAX ->
@@ -155,6 +173,7 @@ compile(
         type_resolver = TypeResolver,
         import_resolver = ImportResolver,
         debug_info_resolver = DebugInfoResolver,
+        record_resolver = RecordResolver,
         tail_cache =
             case erlang:function_exported(MMod, supports_tail_cache, 0) of
                 true ->
@@ -178,6 +197,7 @@ compile(
     _TypeResolver,
     _ImportResolver,
     _DebugInfoResolver,
+    _RecordResolver,
     _MMod,
     _MSt
 ) ->
@@ -189,6 +209,7 @@ compile(
     _TypeResolver,
     _ImportResolver,
     _DebugInfoResolver,
+    _RecordResolver,
     _MMod,
     _MSt
 ) ->
@@ -204,6 +225,8 @@ first_pass(
     MSt1 = ?DWARF_LABEL(MMod, MSt0, Label),
     MSt2 = MMod:add_label(MSt1, Label),
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
+    %% Record-type tracking lives in the backend's jit_regs state; the
+    %% add_label above already cleared it alongside other per-register info.
     first_pass(Rest1, MMod, MSt2, State0);
 % 2
 first_pass(<<?OP_FUNC_INFO, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} = State0) ->
@@ -2670,7 +2693,222 @@ first_pass(<<?OP_BIF3, Rest0/binary>>, MMod, MSt0, State0) ->
     ]),
     MSt7 = bif_faillabel_test(FailLabel, MMod, MSt6, {free, ResultReg}, {free, Dest}),
     ?ASSERT_ALL_NATIVE_FREE(MSt7),
-    first_pass(Rest6, MMod, MSt7, State0).
+    first_pass(Rest6, MMod, MSt7, State0);
+% 186
+first_pass(<<?OP_IS_ANY_NATIVE_RECORD, Rest0/binary>>, MMod, MSt0, State0) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    {Label, Rest1} = decode_label(Rest0),
+    {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
+    ?TRACE("OP_IS_ANY_NATIVE_RECORD ~p, ~p\n", [Label, Src]),
+    {MSt2, Reg} = MMod:move_to_native_register(MSt1, Src),
+    MSt3 = cond_jump_to_label(
+        {Reg, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, Label, MMod, MSt2
+    ),
+    {MSt4, Reg} = MMod:and_(MSt3, {free, Reg}, ?TERM_PRIMARY_CLEAR_MASK),
+    {MSt5, TagReg} = MMod:get_array_element(MSt4, Reg, 0),
+    MSt6 = cond_jump_to_label(
+        {TagReg, '&', ?TERM_BOXED_TAG_MASK, '!=', ?TERM_BOXED_RECORD}, Label, MMod, MSt5
+    ),
+    MSt7 = MMod:free_native_registers(MSt6, [Reg, TagReg]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt7),
+    first_pass(Rest2, MMod, MSt7, State0);
+% 187
+first_pass(
+    <<?OP_IS_NATIVE_RECORD, Rest0/binary>>,
+    MMod,
+    MSt0,
+    #state{atom_resolver = AtomResolver, record_resolver = RecordResolver} = State0
+) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    {Label, Rest1} = decode_label(Rest0),
+    {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
+    {ModAtomIndex, Rest3} = decode_atom(Rest2),
+    {NameAtomIndex, Rest4} = decode_atom(Rest3),
+    ?TRACE("OP_IS_NATIVE_RECORD ~p, ~p, ~p, ~p\n", [Label, Src, ModAtomIndex, NameAtomIndex]),
+    {MSt2, ModAtom} =
+        case maps:find(AtomResolver(ModAtomIndex), ?DEFAULT_ATOMS) of
+            error ->
+                MMod:call_primitive(
+                    MSt1, ?PRIM_MODULE_GET_ATOM_TERM_BY_ID, [jit_state, ModAtomIndex]
+                );
+            {ok, ModVal} ->
+                {MSt1, ModVal}
+        end,
+    {MSt3, NameAtom} =
+        case maps:find(AtomResolver(NameAtomIndex), ?DEFAULT_ATOMS) of
+            error ->
+                MMod:call_primitive(
+                    MSt2, ?PRIM_MODULE_GET_ATOM_TERM_BY_ID, [jit_state, NameAtomIndex]
+                );
+            {ok, NameVal} ->
+                {MSt2, NameVal}
+        end,
+    {MSt4, ResultReg} = MMod:call_primitive(MSt3, ?PRIM_IS_RECORD_OF, [
+        {free, Src}, {free, ModAtom}, {free, NameAtom}
+    ]),
+    MSt5 = cond_jump_to_label({{free, ResultReg}, '==', 0}, Label, MMod, MSt4),
+    ?ASSERT_ALL_NATIVE_FREE(MSt5),
+    %% On the fall-through edge, src is proven to be a record of (Mod, Name).
+    %% If the record is module-local, mark src so subsequent GET_RECORD_* /
+    %% IS_RECORD_ACCESSIBLE opcodes can specialize via JIT-time offsets. The
+    %% backend's `set_vm_record_type' overwrites any prior assertion for src.
+    MSt6 = maybe_track_record_type(
+        Src, ModAtomIndex, NameAtomIndex, AtomResolver, RecordResolver, MMod, MSt5
+    ),
+    first_pass(Rest4, MMod, MSt6, State0);
+% 188
+first_pass(
+    <<?OP_GET_RECORD_ELEMENTS, Rest0/binary>>,
+    MMod,
+    MSt0,
+    State0
+) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    {Fail, Rest1} = decode_label(Rest0),
+    {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
+    {ListLen, Rest3} = decode_extended_list_header(Rest2),
+    ?TRACE("OP_GET_RECORD_ELEMENTS ~p, ~p, ~p\n", [Fail, Src, ListLen]),
+    NumPairs = ListLen div 2,
+    case MMod:get_vm_record_type(MSt1, Src) of
+        #{fields := FieldAtoms} ->
+            get_record_elements_resolved(
+                Src, FieldAtoms, Fail, NumPairs, Rest3, MMod, MSt1, State0
+            );
+        undefined ->
+            get_record_elements_generic(
+                Src, Fail, NumPairs, Rest3, MMod, MSt1, State0
+            )
+    end;
+% 189
+first_pass(<<?OP_PUT_RECORD, Rest0/binary>>, MMod, MSt0, State0) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    {_Fail, Rest1} = decode_label(Rest0),
+    case peek_local_record_id(Rest1, State0) of
+        {ok, RecInfo, Rest2Local} ->
+            put_record_resolved(Rest2Local, RecInfo, MMod, MSt0, State0);
+        not_local ->
+            put_record_generic(Rest1, MMod, MSt0, State0)
+    end;
+% 190
+first_pass(
+    <<?OP_IS_RECORD_ACCESSIBLE, Rest0/binary>>,
+    MMod,
+    MSt0,
+    #state{atom_resolver = AtomResolver} = State0
+) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    {Label, Rest1} = decode_label(Rest0),
+    {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
+    {ScopeAtomIndex, Rest3} = decode_atom(Rest2),
+    ?TRACE("OP_IS_RECORD_ACCESSIBLE ~p, ~p, ~p\n", [Label, Src, ScopeAtomIndex]),
+    case MMod:get_vm_record_type(MSt1, Src) of
+        #{is_exported := IsExported} ->
+            %% Flow-proven module-local record: def->module is the current
+            %% module, so jit_is_record_accessible passes iff the record is
+            %% exported OR scope is not 'external'. Both inputs are known at
+            %% JIT time — constant-fold.
+            ScopeAtom = AtomResolver(ScopeAtomIndex),
+            case IsExported orelse ScopeAtom =/= external of
+                true ->
+                    %% Statically passes — no code, no jump.
+                    ?ASSERT_ALL_NATIVE_FREE(MSt1),
+                    first_pass(Rest3, MMod, MSt1, State0);
+                false ->
+                    %% Statically fails — unconditional jump to Label.
+                    MSt2 = MMod:jump_to_label(MSt1, Label),
+                    ?ASSERT_ALL_NATIVE_FREE(MSt2),
+                    first_pass(Rest3, MMod, MSt2, State0)
+            end;
+        undefined ->
+            {MSt2, ScopeAtom} =
+                case maps:find(AtomResolver(ScopeAtomIndex), ?DEFAULT_ATOMS) of
+                    error ->
+                        MMod:call_primitive(
+                            MSt1, ?PRIM_MODULE_GET_ATOM_TERM_BY_ID, [jit_state, ScopeAtomIndex]
+                        );
+                    {ok, ScopeVal} ->
+                        {MSt1, ScopeVal}
+                end,
+            {MSt3, ResultReg} = MMod:call_primitive(MSt2, ?PRIM_IS_RECORD_ACCESSIBLE, [
+                ctx, jit_state, {free, Src}, {free, ScopeAtom}
+            ]),
+            MSt4 = cond_jump_to_label({{free, ResultReg}, '==', 0}, Label, MMod, MSt3),
+            ?ASSERT_ALL_NATIVE_FREE(MSt4),
+            first_pass(Rest3, MMod, MSt4, State0)
+    end;
+% 191
+first_pass(
+    <<?OP_GET_RECORD_FIELD, Rest0/binary>>,
+    MMod,
+    MSt0,
+    #state{atom_resolver = AtomResolver} = State0
+) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    {FailLabel, Rest1} = decode_label(Rest0),
+    {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
+    case MMod:get_vm_record_type(MSt1, Src) of
+        #{fields := FieldAtoms} ->
+            %% Flow-proven type — skip the runtime record check and the
+            %% per-field name lookup. Discard Id and FailLabel (the
+            %% record-type guard is statically satisfied; no field can be
+            %% missing because the JIT verified the layout at compile time).
+            Rest3 = skip_compact_term(Rest2),
+            {FieldAtomIndex, Rest4} = decode_atom(Rest3),
+            {MSt2, Dest, Rest5} = decode_dest(Rest4, MMod, MSt1),
+            FieldAtom = AtomResolver(FieldAtomIndex),
+            case maps:find(FieldAtom, field_position_map(FieldAtoms)) of
+                {ok, Position} ->
+                    {MSt3, SrcReg} = MMod:move_to_native_register(MSt2, Src),
+                    {MSt4, SrcReg} = MMod:and_(MSt3, {free, SrcReg}, ?TERM_PRIMARY_CLEAR_MASK),
+                    MSt5 = MMod:move_array_element(MSt4, SrcReg, Position, Dest),
+                    MSt6 = MMod:free_native_registers(MSt5, [SrcReg, Dest]),
+                    ?ASSERT_ALL_NATIVE_FREE(MSt6),
+                    first_pass(Rest5, MMod, MSt6, State0);
+                error ->
+                    %% Field name not present in the tracked layout — fall back
+                    %% to the generic primitive path, which does its own runtime
+                    %% type check. Re-decode from Rest2 (Id, FieldAtomIndex,
+                    %% Dest) using the generic decoder.
+                    get_record_field_generic(
+                        FailLabel, Src, Rest2, MMod, MSt1, State0
+                    )
+            end;
+        undefined ->
+            get_record_field_generic(FailLabel, Src, Rest2, MMod, MSt1, State0)
+    end.
+
+%% @doc Generic OP_GET_RECORD_FIELD path: src isn't tracked (or tracking was
+%% stale), so the runtime PRIM_GET_RECORD_FIELD primitive does its own type
+%% check against `Id' and resolves the field offset by name.
+get_record_field_generic(
+    FailLabel,
+    Src,
+    Rest2,
+    MMod,
+    MSt1,
+    #state{atom_resolver = AtomResolver} = State0
+) ->
+    {MSt2, Id, Rest3} = decode_compact_term(Rest2, MMod, MSt1, State0),
+    {FieldAtomIndex, Rest4} = decode_atom(Rest3),
+    {MSt3, Dest, Rest5} = decode_dest(Rest4, MMod, MSt2),
+    ?TRACE("OP_GET_RECORD_FIELD ~p, ~p, ~p, ~p, ~p\n", [
+        FailLabel, Src, Id, FieldAtomIndex, Dest
+    ]),
+    {MSt4, FieldAtom} =
+        case maps:find(AtomResolver(FieldAtomIndex), ?DEFAULT_ATOMS) of
+            error ->
+                MMod:call_primitive(
+                    MSt3, ?PRIM_MODULE_GET_ATOM_TERM_BY_ID, [jit_state, FieldAtomIndex]
+                );
+            {ok, FieldVal} ->
+                {MSt3, FieldVal}
+        end,
+    {MSt5, ResultReg} = MMod:call_primitive(MSt4, ?PRIM_GET_RECORD_FIELD, [
+        ctx, FailLabel, {free, Src}, {free, Id}, {free, FieldAtom}
+    ]),
+    MSt6 = bif_faillabel_test(FailLabel, MMod, MSt5, {free, ResultReg}, {free, Dest}),
+    ?ASSERT_ALL_NATIVE_FREE(MSt6),
+    first_pass(Rest5, MMod, MSt6, State0).
 
 first_pass_bs_create_bin_compute_size(
     AtomType, Src, _Size, _SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt0, State0
@@ -4508,6 +4746,367 @@ term_to_int(Term, FailLabel, MMod, MSt0) ->
     {MSt3, IntReg} = MMod:shift_right_arith(MSt2, {free, Reg}, 4),
     {MSt3, IntReg}.
 
+%% @doc Peek at the OP_PUT_RECORD `Id' argument and try to resolve it to a
+%% record defined in the current module. Returns `{ok, RecInfo, Rest}' on
+%% success, where `Rest' points past the consumed Id bytes, or `not_local' if
+%% the id is unresolvable or points to a record defined elsewhere.
+peek_local_record_id(<<0:4, ?COMPACT_ATOM:4, _/binary>>, _State) ->
+    %% Atom index 0 is NIL — never a record id.
+    not_local;
+peek_local_record_id(<<_:4, ?COMPACT_ATOM:4, _/binary>> = Bin, #state{
+    atom_resolver = AR, record_resolver = RR
+}) ->
+    {AtomIndex, Rest} = decode_atom(Bin),
+    case RR(AR(AtomIndex)) of
+        undefined -> not_local;
+        Info -> {ok, Info, Rest}
+    end;
+peek_local_record_id(<<_:4, ?COMPACT_LARGE_ATOM:4, _/binary>> = Bin, #state{
+    atom_resolver = AR, record_resolver = RR
+}) ->
+    {AtomIndex, Rest} = decode_atom(Bin),
+    case RR(AR(AtomIndex)) of
+        undefined -> not_local;
+        Info -> {ok, Info, Rest}
+    end;
+peek_local_record_id(<<?COMPACT_EXTENDED_LITERAL, Rest0/binary>>, #state{
+    atom_resolver = AR, literal_resolver = LR, record_resolver = RR
+}) ->
+    {LitIndex, Rest} = decode_literal(Rest0),
+    case LR(LitIndex) of
+        Atom when is_atom(Atom) ->
+            case RR(Atom) of
+                undefined -> not_local;
+                Info -> {ok, Info, Rest}
+            end;
+        {Mod, Name} when is_atom(Mod), is_atom(Name) ->
+            case AR(1) of
+                Mod ->
+                    case RR(Name) of
+                        undefined -> not_local;
+                        Info -> {ok, Info, Rest}
+                    end;
+                _ ->
+                    not_local
+            end;
+        _ ->
+            not_local
+    end;
+peek_local_record_id(_Bin, _State) ->
+    not_local.
+
+%% @doc Specialized OP_PUT_RECORD path for records defined in the current
+%% module. The record-def lookup and per-field name-scan are resolved at JIT
+%% compile time; the runtime only sees a primitive call that takes the record
+%% index and a (position, value) array.
+put_record_resolved(Rest2, #{index := RecIdx, fields := FieldAtoms}, MMod, MSt0, State0) ->
+    NumFields = length(FieldAtoms),
+    HeapNeed = NumFields + 2,
+    FieldPos = field_position_map(FieldAtoms),
+
+    {MSt1, Src, Rest3} = decode_compact_term(Rest2, MMod, MSt0, State0),
+    {MSt2, Dest, Rest4} = decode_dest(Rest3, MMod, MSt1),
+    {Live, Rest5} = decode_literal(Rest4),
+    {ListLen, Rest6} = decode_extended_list_header(Rest5),
+    ?TRACE("OP_PUT_RECORD (resolved idx=~p) Src=~p Dest=~p Live=~p\n", [RecIdx, Src, Dest, Live]),
+    NumPairs = ListLen div 2,
+
+    {MSt3, TrimReg} = MMod:call_primitive(MSt2, ?PRIM_TRIM_LIVE_REGS, [ctx, Live]),
+    MSt4 = MMod:free_native_registers(MSt3, [TrimReg]),
+    {MSt5, NewSrc} = memory_ensure_free_with_extra_root(Src, Live, HeapNeed, MMod, MSt4),
+    {MSt6, KVReg} =
+        if
+            NumPairs > 0 ->
+                MMod:call_primitive(MSt5, ?PRIM_MALLOC, [
+                    ctx, jit_state, NumPairs * 2 * MMod:word_size()
+                ]);
+            true ->
+                MMod:move_to_native_register(MSt5, 0)
+        end,
+    MSt7 =
+        if
+            NumPairs > 0 -> handle_error_if({KVReg, '==', 0}, MMod, MSt6);
+            true -> MSt6
+        end,
+    {MSt8, Rest7} = lists:foldl(
+        fun(Index, {ASt0, ARest0}) ->
+            {KeyAtomIndex, ARest1} = decode_atom(ARest0),
+            #state{atom_resolver = AR} = State0,
+            KeyAtom = AR(KeyAtomIndex),
+            Position =
+                case maps:find(KeyAtom, FieldPos) of
+                    {ok, Pos} -> Pos;
+                    error -> error({jit, unknown_record_field, KeyAtom})
+                end,
+            {ASt1, Value, ARest2} = decode_compact_term(ARest1, MMod, ASt0, State0),
+            ASt2 = MMod:move_to_array_element(ASt1, Position, KVReg, Index * 2),
+            ASt3 = MMod:move_to_array_element(ASt2, Value, KVReg, (Index * 2) + 1),
+            ASt4 = MMod:free_native_registers(ASt3, [Value]),
+            {ASt4, ARest2}
+        end,
+        {MSt7, Rest6},
+        lists:seq(0, NumPairs - 1)
+    ),
+    {MSt9, ResultReg} = MMod:call_primitive(MSt8, ?PRIM_PUT_RECORD_RESOLVED, [
+        ctx, jit_state, RecIdx, {free, NewSrc}, NumPairs, KVReg
+    ]),
+    MSt10 =
+        if
+            NumPairs > 0 ->
+                {Ms, FreeReg} = MMod:call_primitive(MSt9, ?PRIM_FREE, [{free, KVReg}]),
+                MMod:free_native_registers(Ms, [FreeReg]);
+            true ->
+                MMod:free_native_registers(MSt9, [KVReg])
+        end,
+    MSt11 = handle_error_if({ResultReg, '==', 0}, MMod, MSt10),
+    MSt12 = MMod:move_to_vm_register(MSt11, ResultReg, Dest),
+    MSt13 = MMod:free_native_registers(MSt12, [ResultReg, Dest]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt13),
+    first_pass(Rest7, MMod, MSt13, State0).
+
+%% @doc Specialized OP_GET_RECORD_ELEMENTS — src is known to be a record of a
+%% module-local type, so every field name resolves to a JIT-time-known boxed
+%% offset and the per-field PRIM_RECORD_FIELD_POS call is eliminated.
+%%
+%% A pre-pass validates that every requested field exists in the tracked
+%% record's layout. If any doesn't (the tracking was stale — src was rewritten
+%% with a different record type between IS_NATIVE_RECORD and here), fall back
+%% to the generic primitive path which does its own runtime type check.
+get_record_elements_resolved(
+    Src,
+    FieldAtoms,
+    Fail,
+    NumPairs,
+    Rest3,
+    MMod,
+    MSt0,
+    #state{atom_resolver = AR} = State0
+) ->
+    FieldPos = field_position_map(FieldAtoms),
+    case resolve_field_positions(NumPairs, Rest3, AR, FieldPos, []) of
+        {ok, Positions, RestAfterList} ->
+            emit_get_record_elements_resolved(
+                Src, NumPairs, Rest3, Positions, RestAfterList, MMod, MSt0, State0
+            );
+        stale ->
+            get_record_elements_generic(
+                Src, Fail, NumPairs, Rest3, MMod, MSt0, State0
+            )
+    end.
+
+%% Walk the field-name list at JIT time, resolving each to its boxed position
+%% via the tracked record's layout. Returns `{ok, [Pos], RestAfterList}' on
+%% success, or `stale' if any field isn't in the tracked layout.
+resolve_field_positions(0, Rest, _AR, _FieldPos, Acc) ->
+    {ok, lists:reverse(Acc), Rest};
+resolve_field_positions(N, Bin0, AR, FieldPos, Acc) ->
+    {AtomIndex, Bin1} = decode_atom(Bin0),
+    %% Skip the dest register slot — we'll re-decode it during emission.
+    Bin2 = skip_dest(Bin1),
+    case maps:find(AR(AtomIndex), FieldPos) of
+        {ok, P} ->
+            resolve_field_positions(N - 1, Bin2, AR, FieldPos, [P | Acc]);
+        error ->
+            stale
+    end.
+
+%% Skip past one DEST register encoding.
+skip_dest(<<_RegIndex:4, ?COMPACT_XREG:4, Rest/binary>>) -> Rest;
+skip_dest(<<_RegIndex:4, ?COMPACT_YREG:4, Rest/binary>>) -> Rest;
+skip_dest(<<_:3, 0:1, ?COMPACT_LARGE_XREG:4, _, Rest/binary>>) -> Rest;
+skip_dest(<<_:3, 0:1, ?COMPACT_LARGE_YREG:4, _, Rest/binary>>) -> Rest.
+
+emit_get_record_elements_resolved(
+    Src,
+    NumPairs,
+    Rest3,
+    Positions,
+    RestAfterList,
+    MMod,
+    MSt0,
+    State0
+) ->
+    {MSt1, SrcReg} = MMod:move_to_native_register(MSt0, Src),
+    {MSt2, SrcPtrReg} = MMod:copy_to_native_register(MSt1, SrcReg),
+    {MSt3, SrcPtrReg} = MMod:and_(MSt2, {free, SrcPtrReg}, ?TERM_PRIMARY_CLEAR_MASK),
+    {MSt4, _} = lists:foldl(
+        fun({_Idx, Position}, {ASt0, ARest0}) ->
+            {_AtomIndex, ARest1} = decode_atom(ARest0),
+            {ASt1, Dest, ARest2} = decode_dest(ARest1, MMod, ASt0),
+            ASt2 = MMod:move_array_element(ASt1, SrcPtrReg, Position, Dest),
+            ASt3 = MMod:free_native_registers(ASt2, [Dest]),
+            {ASt3, ARest2}
+        end,
+        {MSt3, Rest3},
+        lists:zip(lists:seq(1, NumPairs), Positions)
+    ),
+    MSt5 = MMod:free_native_registers(MSt4, [SrcReg, SrcPtrReg]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt5),
+    first_pass(RestAfterList, MMod, MSt5, State0).
+
+%% @doc Generic OP_GET_RECORD_ELEMENTS — src record type isn't tracked, so
+%% each field name is resolved at runtime via PRIM_RECORD_FIELD_POS and the
+%% bytecode-supplied fail label is used for missing-field errors.
+get_record_elements_generic(
+    Src,
+    Fail,
+    NumPairs,
+    Rest3,
+    MMod,
+    MSt0,
+    #state{atom_resolver = AtomResolver} = State0
+) ->
+    {MSt1, SrcReg} = MMod:move_to_native_register(MSt0, Src),
+    {MSt2, SrcPtrReg} = MMod:copy_to_native_register(MSt1, SrcReg),
+    {MSt3, SrcPtrReg} = MMod:and_(MSt2, {free, SrcPtrReg}, ?TERM_PRIMARY_CLEAR_MASK),
+    {MSt4, Rest4} = lists:foldl(
+        fun(_Idx, {ASt0, ARest0}) ->
+            {AtomIndex, ARest1} = decode_atom(ARest0),
+            {ASt1, Dest, ARest2} = decode_dest(ARest1, MMod, ASt0),
+            ASt2 = MMod:free_native_registers(ASt1, [Dest]),
+            {ASt3, FieldName} =
+                case maps:find(AtomResolver(AtomIndex), ?DEFAULT_ATOMS) of
+                    error ->
+                        MMod:call_primitive(
+                            ASt2, ?PRIM_MODULE_GET_ATOM_TERM_BY_ID, [jit_state, AtomIndex]
+                        );
+                    {ok, Val} ->
+                        {ASt2, Val}
+                end,
+            {ASt4, PosReg} = MMod:call_primitive(ASt3, ?PRIM_RECORD_FIELD_POS, [
+                SrcReg, {free, FieldName}
+            ]),
+            ASt5 = cond_jump_to_label({{free, PosReg}, '==', 0}, Fail, MMod, ASt4),
+            {ASt5, ARest2}
+        end,
+        {MSt3, Rest3},
+        lists:seq(1, NumPairs)
+    ),
+    {MSt5, _} = lists:foldl(
+        fun(_Idx, {ASt0, ARest0}) ->
+            {AtomIndex, ARest1} = decode_atom(ARest0),
+            {ASt1, Dest, ARest2} = decode_dest(ARest1, MMod, ASt0),
+            {ASt2, FieldName} =
+                case maps:find(AtomResolver(AtomIndex), ?DEFAULT_ATOMS) of
+                    error ->
+                        MMod:call_primitive(
+                            ASt1, ?PRIM_MODULE_GET_ATOM_TERM_BY_ID, [jit_state, AtomIndex]
+                        );
+                    {ok, Val} ->
+                        {ASt1, Val}
+                end,
+            {ASt3, PosReg} = MMod:call_primitive(ASt2, ?PRIM_RECORD_FIELD_POS, [
+                SrcReg, {free, FieldName}
+            ]),
+            ASt4 = MMod:move_array_element(ASt3, SrcPtrReg, {free, PosReg}, Dest),
+            ASt5 = MMod:free_native_registers(ASt4, [Dest]),
+            {ASt5, ARest2}
+        end,
+        {MSt4, Rest3},
+        lists:seq(1, NumPairs)
+    ),
+    MSt6 = MMod:free_native_registers(MSt5, [SrcReg, SrcPtrReg]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt6),
+    first_pass(Rest4, MMod, MSt6, State0).
+
+%% Record the assertion that `Src' holds a value of the module-local record
+%% type identified by `(ModAtomIndex, NameAtomIndex)'. The backend's jit_regs
+%% state holds the assertion and invalidates it on writes to Src, on C calls
+%% clobbering x regs, and at labels.
+maybe_track_record_type({x_reg, _} = Src, ModAtomIndex, NameAtomIndex, AR, RR, MMod, MSt) ->
+    track_if_local(Src, ModAtomIndex, NameAtomIndex, AR, RR, MMod, MSt);
+maybe_track_record_type({y_reg, _} = Src, ModAtomIndex, NameAtomIndex, AR, RR, MMod, MSt) ->
+    track_if_local(Src, ModAtomIndex, NameAtomIndex, AR, RR, MMod, MSt);
+maybe_track_record_type(_Src, _ModAtomIndex, _NameAtomIndex, _AR, _RR, _MMod, MSt) ->
+    MSt.
+
+track_if_local(Src, ModAtomIndex, NameAtomIndex, AR, RR, MMod, MSt) ->
+    ModAtom = AR(ModAtomIndex),
+    case AR(1) of
+        ModAtom ->
+            case RR(AR(NameAtomIndex)) of
+                undefined ->
+                    MSt;
+                Info ->
+                    MMod:set_vm_record_type(MSt, Src, Info)
+            end;
+        _ ->
+            MSt
+    end.
+
+%% Build {FieldAtom => Position} where Position is the 1-based boxed-array
+%% index (counting the def-pointer slot), matching jit_record_field_pos return
+%% values: first declared field is position 2.
+field_position_map(FieldAtoms) ->
+    {Map, _} = lists:foldl(
+        fun(Atom, {Acc, Pos}) -> {Acc#{Atom => Pos}, Pos + 1} end,
+        {#{}, 2},
+        FieldAtoms
+    ),
+    Map.
+
+%% @doc Generic OP_PUT_RECORD path (cross-module records or records not
+%% resolvable at JIT compile time). Falls back to runtime def lookup via
+%% PRIM_RECORD_DEF_ARITY + PRIM_PUT_RECORD.
+put_record_generic(Rest1, MMod, MSt0, State0) ->
+    {MSt1, Id, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
+    {MSt2, Src, Rest3} = decode_compact_term(Rest2, MMod, MSt1, State0),
+    {MSt3, Dest, Rest4} = decode_dest(Rest3, MMod, MSt2),
+    {Live, Rest5} = decode_literal(Rest4),
+    {ListLen, Rest6} = decode_extended_list_header(Rest5),
+    ?TRACE("OP_PUT_RECORD ~p, ~p, ~p, ~p\n", [Id, Src, Dest, Live]),
+    NumPairs = ListLen div 2,
+    {MSt4, ArityReg} = MMod:call_primitive(MSt3, ?PRIM_RECORD_DEF_ARITY, [
+        ctx, jit_state, {free, Id}
+    ]),
+    MSt6 = MMod:add(MSt4, ArityReg, 2),
+    {MSt7, TrimReg} = MMod:call_primitive(MSt6, ?PRIM_TRIM_LIVE_REGS, [ctx, Live]),
+    MSt8 = MMod:free_native_registers(MSt7, [TrimReg]),
+    {MSt8a, NewSrc} = memory_ensure_free_with_extra_root(Src, Live, {free, ArityReg}, MMod, MSt8),
+    {MSt9, NewId, _} = decode_compact_term(Rest1, MMod, MSt8a, State0),
+    {MSt10, KVReg} =
+        if
+            NumPairs > 0 ->
+                MMod:call_primitive(MSt9, ?PRIM_MALLOC, [
+                    ctx, jit_state, NumPairs * 2 * MMod:word_size()
+                ]);
+            true ->
+                MMod:move_to_native_register(MSt9, 0)
+        end,
+    MSt11 =
+        if
+            NumPairs > 0 -> handle_error_if({KVReg, '==', 0}, MMod, MSt10);
+            true -> MSt10
+        end,
+    {MSt12, Rest7} = lists:foldl(
+        fun(Index, {ASt0, ARest0}) ->
+            {ASt1, Key, ARest1} = decode_compact_term(ARest0, MMod, ASt0, State0),
+            {ASt2, Value, ARest2} = decode_compact_term(ARest1, MMod, ASt1, State0),
+            ASt3 = MMod:move_to_array_element(ASt2, Key, KVReg, Index * 2),
+            ASt4 = MMod:move_to_array_element(ASt3, Value, KVReg, (Index * 2) + 1),
+            ASt5 = MMod:free_native_registers(ASt4, [Key, Value]),
+            {ASt5, ARest2}
+        end,
+        {MSt11, Rest6},
+        lists:seq(0, NumPairs - 1)
+    ),
+    {MSt13, ResultReg} = MMod:call_primitive(MSt12, ?PRIM_PUT_RECORD, [
+        ctx, jit_state, {free, NewId}, {free, NewSrc}, NumPairs, KVReg
+    ]),
+    MSt14 =
+        if
+            NumPairs > 0 ->
+                {Ms, FreeReg} = MMod:call_primitive(MSt13, ?PRIM_FREE, [{free, KVReg}]),
+                MMod:free_native_registers(Ms, [FreeReg]);
+            true ->
+                MMod:free_native_registers(MSt13, [KVReg])
+        end,
+    MSt15 = handle_error_if({ResultReg, '==', 0}, MMod, MSt14),
+    MSt16 = MMod:move_to_vm_register(MSt15, ResultReg, Dest),
+    MSt17 = MMod:free_native_registers(MSt16, [ResultReg, Dest]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt17),
+    first_pass(Rest7, MMod, MSt17, State0).
+
 first_pass_float3(Primitive, Rest0, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
     {{fp_reg, FPRegIndex1}, Rest2} = decode_fp_register(Rest1),
@@ -4565,6 +5164,12 @@ memory_ensure_free_with_extra_root(ExtraRoot, Live, Size, MMod, MSt0) when is_at
     ]),
     MSt4 = handle_error_if({'(bool)', {free, MemoryEnsureFreeReg}, '==', false}, MMod, MSt3),
     MMod:move_to_native_register(MSt4, ExtraRootXReg);
+memory_ensure_free_with_extra_root(ExtraRoot, Live, Size, MMod, MSt0) when is_integer(ExtraRoot) ->
+    {MSt1, MemoryEnsureFreeReg} = MMod:call_primitive(MSt0, ?PRIM_MEMORY_ENSURE_FREE_WITH_ROOTS, [
+        ctx, jit_state, Size, Live, ?MEMORY_CAN_SHRINK
+    ]),
+    MSt2 = handle_error_if({'(bool)', {free, MemoryEnsureFreeReg}, '==', false}, MMod, MSt1),
+    {MSt2, ExtraRoot};
 memory_ensure_free_with_extra_root(ExtraRoot, Live, Size, MMod, MSt0) when is_tuple(ExtraRoot) ->
     ExtraRootXReg =
         if

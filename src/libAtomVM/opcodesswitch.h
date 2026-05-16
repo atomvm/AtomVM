@@ -6380,6 +6380,314 @@ schedule_in:
 
                     break;
                 }
+
+                case OP_IS_ANY_NATIVE_RECORD: {
+                    uint32_t fail_label;
+                    DECODE_LABEL(fail_label, pc);
+                    term src;
+                    DECODE_COMPACT_TERM(src, pc);
+                    TRACE("is_any_native_record/2 fail=%u\n", (unsigned) fail_label);
+                    if (!term_is_record(src)) {
+                        pc = mod->labels[fail_label];
+                    }
+                    break;
+                }
+
+                case OP_IS_NATIVE_RECORD: {
+                    uint32_t fail_label;
+                    DECODE_LABEL(fail_label, pc);
+                    term src;
+                    DECODE_COMPACT_TERM(src, pc);
+                    term mod_atom;
+                    DECODE_ATOM(mod_atom, pc);
+                    term rec_name;
+                    DECODE_ATOM(rec_name, pc);
+
+                    TRACE("is_native_record/4 fail=%u, mod=0x%" TERM_X_FMT ", name=0x%" TERM_X_FMT "\n",
+                        (unsigned) fail_label, mod_atom, rec_name);
+
+                    bool matches = false;
+                    if (term_is_record(src)) {
+                        const struct RecordDef *def = term_get_record_def(src);
+                        matches = (def->module == mod_atom) && (def->name == rec_name);
+                    }
+                    if (!matches) {
+                        pc = mod->labels[fail_label];
+                    }
+                    break;
+                }
+
+                case OP_GET_RECORD_ELEMENTS: {
+                    uint32_t fail_label;
+                    DECODE_LABEL(fail_label, pc);
+                    DEST_REGISTER(src_reg);
+                    DECODE_DEST_REGISTER(src_reg, pc);
+                    DECODE_EXTENDED_LIST_TAG(pc);
+                    uint32_t list_len;
+                    DECODE_LITERAL(list_len, pc);
+
+                    TRACE("get_record_elements/3 fail=%u, list_len=%u\n", (unsigned) fail_label, list_len);
+
+                    term src = READ_DEST_REGISTER(src_reg);
+                    const struct RecordDef *def = term_is_record(src)
+                        ? term_get_record_def(src) : NULL;
+
+                    // Two-pass to validate without writing dest
+                    const uint8_t *list_pc = pc;
+                    bool any_missing = (def == NULL);
+                    for (uint32_t j = 0; j < list_len; j += 2) {
+                        term field_name;
+                        DECODE_ATOM(field_name, pc);
+                        DEST_REGISTER(dreg);
+                        DECODE_DEST_REGISTER(dreg, pc);
+                        UNUSED(dreg);
+
+                        if (def != NULL && !any_missing) {
+                            bool found = false;
+                            for (size_t k = 0; k < def->num_fields; k++) {
+                                if (def->fields[k].name == field_name) {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            if (!found) {
+                                any_missing = true;
+                            }
+                        }
+                    }
+
+                    if (any_missing) {
+                        pc = mod->labels[fail_label];
+                        break;
+                    }
+
+                    const uint8_t *end_pc = pc;
+                    pc = list_pc;
+                    for (uint32_t j = 0; j < list_len; j += 2) {
+                        term field_name;
+                        DECODE_ATOM(field_name, pc);
+                        DEST_REGISTER(dreg);
+                        DECODE_DEST_REGISTER(dreg, pc);
+                        for (size_t k = 0; k < def->num_fields; k++) {
+                            if (def->fields[k].name == field_name) {
+                                WRITE_REGISTER(dreg, term_get_record_value(src, k));
+                                break;
+                            }
+                        }
+                    }
+                    pc = end_pc;
+                    break;
+                }
+
+                case OP_PUT_RECORD: {
+                    uint32_t fail_label;
+                    DECODE_LABEL(fail_label, pc);
+                    UNUSED(fail_label);
+                    // The compiler emits id as either an atom literal or a
+                    // 2-tuple literal {Module, Name}. Both live in the
+                    // module's literal table, not on the context heap, so
+                    // id is immune to GC moves and need not be re-decoded
+                    // after memory_ensure_free_with_roots below.
+                    term id;
+                    DECODE_COMPACT_TERM(id, pc);
+
+                    // src may decode to a value living on the context heap
+                    // (X/Y register reference), so remember its position to
+                    // re-decode after a possible GC.
+                    const uint8_t *src_pc = pc;
+                    term src;
+                    DECODE_COMPACT_TERM(src, pc);
+
+                    // GC-safe form: the upcoming memory_ensure_free_with_roots
+                    // can move ctx->e, which would invalidate a raw dreg_t
+                    // pointing into the Y register stack.
+                    GC_SAFE_DEST_REGISTER(dreg);
+                    DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
+                    uint32_t live;
+                    DECODE_LITERAL(live, pc);
+                    DECODE_EXTENDED_LIST_TAG(pc);
+                    uint32_t list_len;
+                    DECODE_LITERAL(list_len, pc);
+
+                    TRACE("put_record/6 id=0x%" TERM_X_FMT ", live=%u, list_len=%u\n", id, live, list_len);
+
+                    const struct RecordDef *def = NULL;
+                    if (term_is_atom(id)) {
+                        // Local record: name atom only, resolve against current module.
+                        def = module_find_record_def(mod, id);
+                    } else if (term_is_tuple(id) && term_get_tuple_arity(id) == 2) {
+                        // Cross-module record: literal {Module, Name}.
+                        def = module_find_record_def_global(ctx->global,
+                            term_get_tuple_element(id, 0),
+                            term_get_tuple_element(id, 1));
+                    }
+                    if (UNLIKELY(def == NULL)) {
+                        (void) raise_badrecord(ctx, id);
+                        HANDLE_ERROR();
+                    }
+
+                    size_t num_fields = def->num_fields;
+                    // A record instance occupies num_fields + 2 heap words
+                    // (header + def pointer + values).
+                    size_t heap_need = num_fields + 2;
+
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need,
+                            MINI(MAX_REG, (int) live), x_regs, MEMORY_CAN_SHRINK)
+                                != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
+
+                    // src may have been a register reference; re-read post-GC.
+                    {
+                        const uint8_t *redec_pc = src_pc;
+                        DECODE_COMPACT_TERM(src, redec_pc);
+                    }
+
+                    if (UNLIKELY(!term_is_nil(src) && !term_is_record(src))) {
+                        (void) raise_badrecord(ctx, src);
+                        HANDLE_ERROR();
+                    }
+                    // When updating an existing record, its definition must
+                    // match the target's: otherwise reading num_fields slots
+                    // from a smaller record would walk off the end.
+                    if (!term_is_nil(src) && term_get_record_def(src) != def) {
+                        (void) raise_badrecord(ctx, src);
+                        HANDLE_ERROR();
+                    }
+
+                    term dst_record = term_alloc_record(def, num_fields, &ctx->heap);
+
+                    if (term_is_nil(src)) {
+                        for (size_t i = 0; i < num_fields; i++) {
+                            term_put_record_value(dst_record, i, term_nil());
+                        }
+                        // Defaults must resolve against the defining module's
+                        // atom/literal tables, not the executing module's.
+                        Module *owning_mod = globalcontext_get_module(
+                            ctx->global, term_to_atom_index(def->module));
+                        if (UNLIKELY(owning_mod == NULL)) {
+                            (void) raise_badrecord(ctx, id);
+                            HANDLE_ERROR();
+                        }
+                        for (size_t i = 0; i < num_fields; i++) {
+                            if (def->fields[i].default_encoded == NULL) {
+                                continue;
+                            }
+                            term default_val = module_decode_record_default(
+                                owning_mod, ctx, def->fields[i].default_encoded);
+                            if (UNLIKELY(term_is_invalid_term(default_val))) {
+                                (void) raise_badrecord(ctx, id);
+                                HANDLE_ERROR();
+                            }
+                            term_put_record_value(dst_record, i, default_val);
+                        }
+                    } else {
+                        for (size_t i = 0; i < num_fields; i++) {
+                            term_put_record_value(dst_record, i, term_get_record_value(src, i));
+                        }
+                    }
+
+                    for (uint32_t j = 0; j < list_len; j += 2) {
+                        term field_name;
+                        DECODE_ATOM(field_name, pc);
+                        term value;
+                        DECODE_COMPACT_TERM(value, pc);
+
+                        for (size_t k = 0; k < num_fields; k++) {
+                            if (def->fields[k].name == field_name) {
+                                term_put_record_value(dst_record, k, value);
+                                break;
+                            }
+                        }
+                    }
+
+                    WRITE_REGISTER_GC_SAFE(dreg, dst_record);
+                    break;
+                }
+
+                case OP_IS_RECORD_ACCESSIBLE: {
+                    uint32_t fail_label;
+                    DECODE_LABEL(fail_label, pc);
+                    term src;
+                    DECODE_COMPACT_TERM(src, pc);
+                    term scope;
+                    DECODE_ATOM(scope, pc);
+
+                    TRACE("is_record_accessible/3 fail=%u, scope=0x%" TERM_X_FMT "\n",
+                        (unsigned) fail_label, scope);
+
+                    bool accessible = false;
+                    if (term_is_record(src)) {
+                        const struct RecordDef *def = term_get_record_def(src);
+                        if (def->is_exported || (scope != EXTERNAL_ATOM && module_get_name(mod) == def->module)) {
+                            accessible = true;
+                        }
+                    }
+                    if (!accessible) {
+                        pc = mod->labels[fail_label];
+                    }
+                    break;
+                }
+
+                case OP_GET_RECORD_FIELD: {
+                    uint32_t fail_label;
+                    DECODE_LABEL(fail_label, pc);
+                    term src;
+                    DECODE_COMPACT_TERM(src, pc);
+                    term id;
+                    DECODE_COMPACT_TERM(id, pc);
+                    term field;
+                    DECODE_ATOM(field, pc);
+                    DEST_REGISTER(dreg);
+                    DECODE_DEST_REGISTER(dreg, pc);
+
+                    TRACE("get_record_field/5 fail=%u, field=0x%" TERM_X_FMT "\n",
+                        (unsigned) fail_label, field);
+
+                    if (UNLIKELY(!term_is_record(src))) {
+                        if (fail_label) {
+                            pc = mod->labels[fail_label];
+                            break;
+                        }
+                        (void) raise_badrecord(ctx, src);
+                        HANDLE_ERROR();
+                    }
+
+                    const struct RecordDef *def = term_get_record_def(src);
+                    bool id_matches = false;
+                    if (term_is_atom(id)) {
+                        id_matches = (id == def->name);
+                    } else if (term_is_tuple(id) && term_get_tuple_arity(id) == 2) {
+                        id_matches = (def->module == term_get_tuple_element(id, 0))
+                            && (def->name == term_get_tuple_element(id, 1));
+                    }
+                    if (UNLIKELY(!id_matches)) {
+                        if (fail_label) {
+                            pc = mod->labels[fail_label];
+                            break;
+                        }
+                        (void) raise_badrecord(ctx, src);
+                        HANDLE_ERROR();
+                    }
+
+                    term value = term_invalid_term();
+                    for (size_t k = 0; k < def->num_fields; k++) {
+                        if (def->fields[k].name == field) {
+                            value = term_get_record_value(src, k);
+                            break;
+                        }
+                    }
+                    if (UNLIKELY(term_is_invalid_term(value))) {
+                        if (fail_label) {
+                            pc = mod->labels[fail_label];
+                            break;
+                        }
+                        RAISE_ERROR(BADARG_ATOM);
+                    }
+
+                    WRITE_REGISTER(dreg, value);
+                    break;
+                }
 #endif
 
                 case OP_NIF_START: {

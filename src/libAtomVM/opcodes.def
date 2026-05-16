@@ -261,5 +261,11 @@ X_OPCODE_HANDLER(OP_BS_MATCH, 182, bs_match, "fs-")
 X_OPCODE(OP_EXECUTABLE_LINE, 183, executable_line, "ct")
 X_OPCODE(OP_DEBUG_LINE, 184, debug_line, "cttt")
 X_OPCODE(OP_BIF3, 185, bif3, "jbsssd")
+X_OPCODE(OP_IS_ANY_NATIVE_RECORD, 186, is_any_native_record, "fs")
+X_OPCODE(OP_IS_NATIVE_RECORD, 187, is_native_record, "fsaa")
+X_OPCODE(OP_GET_RECORD_ELEMENTS, 188, get_record_elements, "fS[ad]")
+X_OPCODE(OP_PUT_RECORD, 189, put_record, "jssdt[as]")
+X_OPCODE(OP_IS_RECORD_ACCESSIBLE, 190, is_record_accessible, "fsa")
+X_OPCODE(OP_GET_RECORD_FIELD, 191, get_record_field, "fssad")
 
 // Remember to keep this list in sync with libs/jit/src/opcodes.hrl

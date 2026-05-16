@@ -50,6 +50,8 @@
 extern "C" {
 #endif
 
+struct RecordDef;
+
 // Remember to keep in sync with libs/jit/src/*term.hrl
 
 #define COMPACT_LITERAL 0
@@ -113,6 +115,7 @@ extern "C" {
 #define TERM_BOXED_EXTERNAL_PID 0x30
 #define TERM_BOXED_EXTERNAL_PORT 0x34
 #define TERM_BOXED_EXTERNAL_REF 0x38
+#define TERM_BOXED_RECORD 0x3C
 
 #define TERM_BOXED_INTEGER_SIGN_BIT_POS 2 // 3rd bit
 #define TERM_BOXED_INTEGER_SIGN_BIT (1 << TERM_BOXED_INTEGER_SIGN_BIT_POS)
@@ -2616,6 +2619,113 @@ static inline int term_get_tuple_arity(term t)
 
     const term *boxed_value = term_to_const_term_ptr(t);
     return term_get_size_from_boxed_header(boxed_value[0]);
+}
+
+/*
+ * Native records.
+ *
+ * Layout of an instance on the heap:
+ *
+ *   [0] thing_word: (((num_fields + 1) << 6) | TERM_BOXED_RECORD)
+ *   [1] raw pointer to const struct RecordDef (NOT a tagged term; GC skips this slot)
+ *   [2..num_fields+1] field values, in declaration order (each a normal term)
+ *
+ * Total words: num_fields + 2. Header-encoded arity is num_fields + 1 so a record
+ * instance can be skipped/walked using the usual boxed_size machinery.
+ *
+ * The definition is shared, lives in module memory (or in a global registry slot)
+ * and is treated as immutable. Records carry the def pointer only; module/name/
+ * exported-flag/field names are read through it.
+ *
+ * Lifetime constraint: the RecordDef pointer is captured by every record
+ * instance and stored raw in boxed[1]. It points into the owning Module's
+ * records_table, which lives as long as the Module does. AtomVM has no
+ * per-module unload today, so the pointer cannot dangle in practice. Any
+ * future module-unload or hot-code-reload feature MUST either keep
+ * RecordDef storage alive for the life of every existing record term, or
+ * walk all heaps and rewrite each record's boxed[1] to a relocated def.
+ * Reusing the slot to point at freed memory would break GC walks and term
+ * comparison silently.
+ */
+
+/**
+ * @brief Returns \c true if a term is a native record.
+ */
+static inline bool term_is_record(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        return (boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_RECORD;
+    }
+    return false;
+}
+
+/**
+ * @brief Returns the number of fields of a native record.
+ */
+static inline size_t term_get_record_num_fields(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_record(t));
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return term_get_size_from_boxed_header(boxed_value[0]) - 1;
+}
+
+/**
+ * @brief Returns the (immutable) definition pointer of a native record.
+ */
+static inline const struct RecordDef *term_get_record_def(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_record(t));
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return (const struct RecordDef *) (uintptr_t) boxed_value[1];
+}
+
+/**
+ * @brief Returns the i-th field value (0-based, declaration order).
+ */
+static inline term term_get_record_value(term t, size_t index)
+{
+    TERM_DEBUG_ASSERT(term_is_record(t));
+    const term *boxed_value = term_to_const_term_ptr(t);
+    TERM_DEBUG_ASSERT(index < term_get_record_num_fields(t));
+    return boxed_value[index + 2];
+}
+
+/**
+ * @brief Replaces the i-th field value (destructive; use only on a freshly allocated instance).
+ */
+static inline void term_put_record_value(term t, size_t index, term value)
+{
+    TERM_DEBUG_ASSERT(term_is_record(t));
+    term *boxed_value = term_to_term_ptr(t);
+    TERM_DEBUG_ASSERT(index < term_get_record_num_fields(t));
+    boxed_value[index + 2] = value;
+}
+
+/**
+ * @brief Allocates an uninitialized native record instance on the heap.
+ *
+ * @details Reserves @c num_fields + 2 heap words, writes the boxed header and
+ * the definition pointer; field slots are left uninitialized.
+ *
+ * @warning The returned term is not safe to leave on the heap across any
+ * allocation that can trigger GC, because the GC will walk the uninitialized
+ * field slots as terms. Callers MUST initialize every field via
+ * @c term_put_record_value (e.g. with @c term_nil() as a placeholder) before
+ * making any other heap allocation. After full initialization the record can
+ * be treated as a normal root.
+ *
+ * @param def the record definition (must outlive the instance).
+ * @param num_fields the number of declared fields in @c def.
+ * @param heap the heap to allocate in.
+ * @return the new record term.
+ */
+static inline term term_alloc_record(const struct RecordDef *def, size_t num_fields, Heap *heap)
+{
+    term *boxed_value = memory_heap_alloc(heap, 2 + num_fields);
+    boxed_value[0] = ((num_fields + 1) << 6) | TERM_BOXED_RECORD;
+    boxed_value[1] = (term) (uintptr_t) def;
+    return ((term) boxed_value) | TERM_PRIMARY_BOXED;
 }
 
 /**

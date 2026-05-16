@@ -171,7 +171,13 @@
 -define(OP_EXECUTABLE_LINE, 183).
 -define(OP_DEBUG_LINE, 184).
 -define(OP_BIF3, 185).
+-define(OP_IS_ANY_NATIVE_RECORD, 186).
+-define(OP_IS_NATIVE_RECORD, 187).
+-define(OP_GET_RECORD_ELEMENTS, 188).
+-define(OP_PUT_RECORD, 189).
+-define(OP_IS_RECORD_ACCESSIBLE, 190).
+-define(OP_GET_RECORD_FIELD, 191).
 
--define(OPCODE_MAX, 185).
+-define(OPCODE_MAX, 191).
 
 % Remember to keep this list in sync with src/libAtomVM/opcodes.h

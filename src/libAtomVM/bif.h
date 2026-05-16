@@ -64,7 +64,29 @@ term bif_erlang_is_pid_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_port_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_reference_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_tuple_1(Context *ctx, uint32_t fail_label, term arg1);
+term bif_erlang_is_record_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_record_2(Context *ctx, uint32_t fail_label, term arg1, term record_tag);
+term bif_erlang_get_record_field_3(Context *ctx, uint32_t fail_label, term src, term id, term field);
+
+term bif_records_get_2(Context *ctx, uint32_t fail_label, term key, term record);
+term bif_records_get_module_1(Context *ctx, uint32_t fail_label, term record);
+term bif_records_get_name_1(Context *ctx, uint32_t fail_label, term record);
+term bif_records_get_field_names_1(Context *ctx, uint32_t fail_label, int live, term record);
+term bif_records_is_exported_1(Context *ctx, uint32_t fail_label, term record);
+term bif_records_get_definition_2(Context *ctx, uint32_t fail_label, int live, term module, term name);
+
+/**
+ * @brief Set ctx->exception to {badrecord, Src}, or to out_of_memory on alloc
+ * failure.
+ *
+ * Used by native-record opcodes and BIFs to raise badrecord when Src is not a
+ * valid record (wrong type or wrong record id). Always returns
+ * @c term_invalid_term() so callers can write @c return raise_badrecord(...);
+ * directly. When called from an opcode handler the caller still needs to
+ * branch through @c HANDLE_ERROR() to propagate the exception.
+ */
+term raise_badrecord(Context *ctx, term src);
+
 term bif_erlang_is_map_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_map_key_2(Context *ctx, uint32_t fail_label, term arg1, term arg2);
 

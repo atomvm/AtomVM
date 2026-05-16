@@ -27,8 +27,10 @@
 #include "bitstring.h"
 #include "defaultatoms.h"
 #include "dictionary.h"
+#include "globalcontext.h"
 #include "interop.h"
 #include "intn.h"
+#include "module.h"
 #include "overflow_helpers.h"
 #include "smp.h"
 #include "term.h"
@@ -367,16 +369,275 @@ term bif_erlang_is_tuple_1(Context *ctx, uint32_t fail_label, term arg1)
     return term_is_tuple(arg1) ? TRUE_ATOM : FALSE_ATOM;
 }
 
+term bif_erlang_is_record_1(Context *ctx, uint32_t fail_label, term arg1)
+{
+    UNUSED(ctx);
+    UNUSED(fail_label);
+
+    return term_is_record(arg1) ? TRUE_ATOM : FALSE_ATOM;
+}
+
+term raise_badrecord(Context *ctx, term src)
+{
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &src, MEMORY_CAN_SHRINK)
+            != MEMORY_GC_OK)) {
+        context_set_exception_class(ctx, ERROR_ATOM);
+        ctx->exception_reason = OUT_OF_MEMORY_ATOM;
+        return term_invalid_term();
+    }
+    term err = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(err, 0, BADRECORD_ATOM);
+    term_put_tuple_element(err, 1, src);
+    context_set_exception_class(ctx, ERROR_ATOM);
+    ctx->exception_reason = err;
+    return term_invalid_term();
+}
+
+term bif_erlang_get_record_field_3(Context *ctx, uint32_t fail_label, term src, term id, term field)
+{
+    if (UNLIKELY(!term_is_record(src))) {
+        if (fail_label == 0) {
+            return raise_badrecord(ctx, src);
+        }
+        return term_invalid_term();
+    }
+
+    const struct RecordDef *def = term_get_record_def(src);
+    bool id_matches = false;
+    if (term_is_atom(id)) {
+        id_matches = (id == def->name);
+    } else if (term_is_tuple(id) && term_get_tuple_arity(id) == 2) {
+        id_matches = (def->module == term_get_tuple_element(id, 0))
+            && (def->name == term_get_tuple_element(id, 1));
+    }
+    if (UNLIKELY(!id_matches)) {
+        if (fail_label == 0) {
+            return raise_badrecord(ctx, src);
+        }
+        return term_invalid_term();
+    }
+
+    for (size_t k = 0; k < def->num_fields; k++) {
+        if (def->fields[k].name == field) {
+            return term_get_record_value(src, k);
+        }
+    }
+
+    // Field not found in the record's definition.
+    RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+}
+
+term bif_records_get_2(Context *ctx, uint32_t fail_label, term key, term record)
+{
+    VALIDATE_VALUE_BIF(fail_label, key, term_is_atom);
+    if (UNLIKELY(!term_is_record(record))) {
+        RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+    }
+    const struct RecordDef *def = term_get_record_def(record);
+    for (size_t k = 0; k < def->num_fields; k++) {
+        if (def->fields[k].name == key) {
+            return term_get_record_value(record, k);
+        }
+    }
+    RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+}
+
+term bif_records_get_module_1(Context *ctx, uint32_t fail_label, term record)
+{
+    UNUSED(ctx);
+    if (UNLIKELY(!term_is_record(record))) {
+        RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+    }
+    return term_get_record_def(record)->module;
+}
+
+term bif_records_get_name_1(Context *ctx, uint32_t fail_label, term record)
+{
+    UNUSED(ctx);
+    if (UNLIKELY(!term_is_record(record))) {
+        RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+    }
+    return term_get_record_def(record)->name;
+}
+
+term bif_records_get_field_names_1(Context *ctx, uint32_t fail_label, int live, term record)
+{
+    if (UNLIKELY(!term_is_record(record))) {
+        if (fail_label == 0) {
+            return raise_badrecord(ctx, record);
+        }
+        return term_invalid_term();
+    }
+    const struct RecordDef *def = term_get_record_def(record);
+    size_t num_fields = def->num_fields;
+
+    TERM_DEBUG_ASSERT((sizeof(ctx->x) / sizeof(ctx->x[0])) >= MAX_REG + 1);
+    ctx->x[live] = record;
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, num_fields * CONS_SIZE,
+                     live + 1, ctx->x, MEMORY_CAN_SHRINK)
+            != MEMORY_GC_OK)) {
+        RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
+    }
+    record = ctx->x[live];
+    def = term_get_record_def(record);
+
+    term result = term_nil();
+    for (size_t i = num_fields; i > 0; i--) {
+        result = term_list_prepend(def->fields[i - 1].name, result, &ctx->heap);
+    }
+    return result;
+}
+
+term bif_records_is_exported_1(Context *ctx, uint32_t fail_label, term record)
+{
+    if (UNLIKELY(!term_is_record(record))) {
+        if (fail_label == 0) {
+            return raise_badrecord(ctx, record);
+        }
+        return term_invalid_term();
+    }
+    return term_get_record_def(record)->is_exported ? TRUE_ATOM : FALSE_ATOM;
+}
+
+term bif_records_get_definition_2(Context *ctx, uint32_t fail_label, int live, term module, term name)
+{
+    UNUSED(live);
+    if (UNLIKELY(!term_is_atom(module) || !term_is_atom(name))) {
+        RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+    }
+    const struct RecordDef *def = module_find_record_def_global(ctx->global, module, name);
+    if (UNLIKELY(def == NULL)) {
+        RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+    }
+
+    size_t num_fields = def->num_fields;
+    Module *owning = globalcontext_get_module(ctx->global, term_to_atom_index(module));
+    if (UNLIKELY(owning == NULL)) {
+        RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+    }
+    term *defaults = NULL;
+    if (num_fields > 0) {
+        defaults = malloc(num_fields * sizeof(term));
+        if (IS_NULL_PTR(defaults)) {
+            RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
+        }
+        for (size_t i = 0; i < num_fields; i++) {
+            if (def->fields[i].default_encoded == NULL) {
+                defaults[i] = term_invalid_term();
+            } else {
+                defaults[i] = module_decode_record_default(
+                    owning, ctx, def->fields[i].default_encoded);
+                // term_invalid_term() is also our sentinel for
+                // "no default", so a failed decode would silently
+                // promote the field to "no default". Treat it as OOM
+                // instead — module_decode_record_default's failure
+                // modes (boxed-int alloc, oversized encodings on a
+                // valid Recs chunk) are dominated by alloc failure.
+                if (UNLIKELY(term_is_invalid_term(defaults[i]))) {
+                    free(defaults);
+                    RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
+                }
+            }
+        }
+    }
+
+    size_t fields_heap = 0;
+    for (size_t i = 0; i < num_fields; i++) {
+        if (term_is_invalid_term(defaults[i])) {
+            fields_heap += CONS_SIZE;
+        } else {
+            fields_heap += CONS_SIZE + TUPLE_SIZE(2);
+        }
+    }
+    size_t total = TUPLE_SIZE(2) + TERM_MAP_SIZE(1) + fields_heap;
+
+    // Build a roots array large enough to hold ctx->x[0..live-1] plus every
+    // non-invalid default, so all decoded defaults survive the upcoming GC.
+    // Using ctx->x directly (which holds at most MAX_REG slots) would drop
+    // any default that doesn't fit, leaving its slot in `defaults[]` stale.
+    size_t valid_defaults = 0;
+    for (size_t i = 0; i < num_fields; i++) {
+        if (!term_is_invalid_term(defaults[i])) {
+            valid_defaults++;
+        }
+    }
+    size_t roots_count = (size_t) live + valid_defaults;
+    term *roots = NULL;
+    if (roots_count > 0) {
+        roots = malloc(roots_count * sizeof(term));
+        if (IS_NULL_PTR(roots)) {
+            free(defaults);
+            RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
+        }
+        for (int i = 0; i < live; i++) {
+            roots[i] = ctx->x[i];
+        }
+        size_t ri = (size_t) live;
+        for (size_t i = 0; i < num_fields; i++) {
+            if (!term_is_invalid_term(defaults[i])) {
+                roots[ri++] = defaults[i];
+            }
+        }
+    }
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, total,
+                     roots_count, roots, MEMORY_CAN_SHRINK)
+            != MEMORY_GC_OK)) {
+        free(roots);
+        free(defaults);
+        RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
+    }
+    for (int i = 0; i < live; i++) {
+        ctx->x[i] = roots[i];
+    }
+    size_t read_idx = (size_t) live;
+    for (size_t i = 0; i < num_fields; i++) {
+        if (!term_is_invalid_term(defaults[i])) {
+            defaults[i] = roots[read_idx++];
+        }
+    }
+    free(roots);
+
+    term field_list = term_nil();
+    for (size_t i = num_fields; i > 0; i--) {
+        size_t k = i - 1;
+        term entry;
+        if (term_is_invalid_term(defaults[k])) {
+            entry = def->fields[k].name;
+        } else {
+            entry = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(entry, 0, def->fields[k].name);
+            term_put_tuple_element(entry, 1, defaults[k]);
+        }
+        field_list = term_list_prepend(entry, field_list, &ctx->heap);
+    }
+    free(defaults);
+
+    term opts = term_alloc_map(1, &ctx->heap);
+    term is_exported_atom = globalcontext_make_atom(
+        ctx->global, ATOM_STR("\xB", "is_exported"));
+    term_set_map_assoc(opts, 0, is_exported_atom,
+        def->is_exported ? TRUE_ATOM : FALSE_ATOM);
+
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, opts);
+    term_put_tuple_element(result, 1, field_list);
+    return result;
+}
+
 term bif_erlang_is_record_2(Context *ctx, uint32_t fail_label, term arg1, term arg2)
 {
     UNUSED(ctx);
     VALIDATE_VALUE_BIF(fail_label, arg2, term_is_atom);
-    if (!term_is_tuple(arg1) || term_get_tuple_arity(arg1) == 0) {
-        return FALSE_ATOM;
-    }
 
-    term tag = term_get_tuple_element(arg1, 0);
-    return tag == arg2 ? TRUE_ATOM : FALSE_ATOM;
+    if (term_is_record(arg1)) {
+        const struct RecordDef *def = term_get_record_def(arg1);
+        return def->name == arg2 ? TRUE_ATOM : FALSE_ATOM;
+    }
+    if (term_is_tuple(arg1) && term_get_tuple_arity(arg1) >= 1) {
+        term tag = term_get_tuple_element(arg1, 0);
+        return tag == arg2 ? TRUE_ATOM : FALSE_ATOM;
+    }
+    return FALSE_ATOM;
 }
 
 term bif_erlang_is_map_1(Context *ctx, uint32_t fail_label, term arg1)
