@@ -210,12 +210,12 @@ jobs:
           cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
           jit_target_arch: "x86_64"
 
-        # JIT build with OTP-29.0-rc1
+        # JIT build with OTP-29.0
         - os: "ubuntu-24.04"
           cc: "cc"
           cxx: "c++"
           cflags: ""
-          otp: "29.0-rc1"
+          otp: "29.0"
           version_type: "strict"
           elixir_version: "1.19.5"
           rebar3_version: "3.27.0"
