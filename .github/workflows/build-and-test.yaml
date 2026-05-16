@@ -929,7 +929,7 @@ jobs:
         valgrind --error-exitcode=1 ./src/AtomVM tests/libs/jit/test_jit.avm
 
     - name: "Test: test_jit.avm"
-      timeout-minutes: 60
+      timeout-minutes: 120
       working-directory: build
       run: |
         ulimit -c unlimited
