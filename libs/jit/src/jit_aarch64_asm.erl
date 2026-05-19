@@ -32,6 +32,8 @@
     brk/1,
     cbnz/2,
     cbnz_w/2,
+    cbz/2,
+    cbz_w/2,
     tbz/3,
     tbnz/3,
     cmp/2,
@@ -760,6 +762,19 @@ bcc(Cond, Offset) when is_atom(Cond), is_integer(Offset) ->
         end,
     Offset19 = Offset div 4,
     <<(16#54000000 bor ((Offset19 band 16#7FFFF) bsl 5) bor CondNum):32/little>>.
+
+%% Emit a compare and branch on zero
+-spec cbz(aarch64_gpr_register(), integer()) -> binary().
+cbz(Rt, Offset) when is_integer(Offset) ->
+    RtNum = reg_to_num(Rt),
+    Offset19 = Offset div 4,
+    <<(16#B4000000 bor ((Offset19 band 16#7FFFF) bsl 5) bor RtNum):32/little>>.
+
+-spec cbz_w(aarch64_gpr_register(), integer()) -> binary().
+cbz_w(Rt, Offset) when is_integer(Offset) ->
+    RtNum = reg_to_num(Rt),
+    Offset19 = Offset div 4,
+    <<(16#34000000 bor ((Offset19 band 16#7FFFF) bsl 5) bor RtNum):32/little>>.
 
 %% Emit a compare and branch on non-zero
 -spec cbnz(aarch64_gpr_register(), integer()) -> binary().
