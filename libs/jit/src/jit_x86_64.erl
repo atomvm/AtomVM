@@ -135,11 +135,11 @@
     stream_module :: module(),
     stream :: stream(),
     offset :: non_neg_integer(),
-    branches :: [{non_neg_integer(), non_neg_integer(), non_neg_integer()}],
+    branches :: #{integer() | reference() => [{non_neg_integer(), non_neg_integer()}]},
     jump_table_start :: non_neg_integer(),
     available_regs :: non_neg_integer(),
     used_regs :: non_neg_integer(),
-    labels :: [{integer() | reference(), integer()}],
+    labels :: #{integer() | reference() => integer()},
     variant :: non_neg_integer(),
     regs :: jit_regs:regs()
 }).
@@ -260,12 +260,12 @@ new(Variant, StreamModule, Stream) ->
     #state{
         stream_module = StreamModule,
         stream = Stream,
-        branches = [],
+        branches = #{},
         jump_table_start = 0,
         offset = StreamModule:offset(Stream),
         available_regs = ?AVAILABLE_REGS_MASK,
         used_regs = 0,
-        labels = [],
+        labels = #{},
         variant = Variant,
         regs = jit_regs:new()
     }.
@@ -434,27 +434,25 @@ patch_branch(StreamModule, Stream, Offset, Size, LabelOffset) ->
 -spec patch_branches_for_label(
     module(),
     stream(),
-    integer(),
+    integer() | reference(),
     non_neg_integer(),
-    [{integer(), non_neg_integer(), non_neg_integer()}]
-) -> {stream(), [{integer(), non_neg_integer(), non_neg_integer()}]}.
+    #{integer() | reference() => [{non_neg_integer(), non_neg_integer()}]}
+) ->
+    {stream(), #{integer() | reference() => [{non_neg_integer(), non_neg_integer()}]}}.
 patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Branches) ->
-    patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Branches, []).
-
-patch_branches_for_label(_StreamModule, Stream, _TargetLabel, _LabelOffset, [], Acc) ->
-    {Stream, lists:reverse(Acc)};
-patch_branches_for_label(
-    StreamModule,
-    Stream0,
-    TargetLabel,
-    LabelOffset,
-    [{Label, Offset, Size} | Rest],
-    Acc
-) when Label =:= TargetLabel ->
-    Stream1 = patch_branch(StreamModule, Stream0, Offset, Size, LabelOffset),
-    patch_branches_for_label(StreamModule, Stream1, TargetLabel, LabelOffset, Rest, Acc);
-patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, [Branch | Rest], Acc) ->
-    patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Rest, [Branch | Acc]).
+    case Branches of
+        #{TargetLabel := BrList} ->
+            Stream1 = lists:foldl(
+                fun({Offset, Size}, AccStream) ->
+                    patch_branch(StreamModule, AccStream, Offset, Size, LabelOffset)
+                end,
+                Stream,
+                BrList
+            ),
+            {Stream1, maps:remove(TargetLabel, Branches)};
+        _ ->
+            {Stream, Branches}
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @doc Rewrite stream to update all branches for labels.
@@ -463,19 +461,29 @@ patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, [Branch
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
 -spec update_branches(state()) -> state().
-update_branches(#state{branches = []} = State) ->
-    State;
 update_branches(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
-        branches = [{Label, Offset, Size} | BranchesT],
+        branches = Branches,
         labels = Labels
     } = State
 ) ->
-    {Label, LabelOffset} = lists:keyfind(Label, 1, Labels),
-    Stream1 = patch_branch(StreamModule, Stream0, Offset, Size, LabelOffset),
-    update_branches(State#state{stream = Stream1, branches = BranchesT}).
+    Stream1 = maps:fold(
+        fun(Label, BrList, AccStream) ->
+            #{Label := LabelOffset} = Labels,
+            lists:foldl(
+                fun({Offset, Size}, AccStream2) ->
+                    patch_branch(StreamModule, AccStream2, Offset, Size, LabelOffset)
+                end,
+                AccStream,
+                BrList
+            )
+        end,
+        Stream0,
+        Branches
+    ),
+    State#state{stream = Stream1, branches = #{}}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a call (call with return) to a primitive with arguments. This
@@ -663,8 +671,8 @@ jump_to_label(
     Label
 ) ->
     Offset = StreamModule:offset(Stream0),
-    case lists:keyfind(Label, 1, Labels) of
-        {Label, LabelOffset} ->
+    case Labels of
+        #{Label := LabelOffset} ->
             % Label is already known, emit direct branch without relocation
 
             % Calculate relative offset (assembler will adjust for instruction size)
@@ -673,14 +681,15 @@ jump_to_label(
             Stream1 = StreamModule:append(Stream0, I1),
             %% After unconditional jump, register tracking is dead until next label
             State#state{stream = Stream1, regs = jit_regs:unreachable(State#state.regs)};
-        false ->
+        _ ->
             % Label not yet known, emit placeholder and add relocation
             {RelocOffset, I1} = jit_x86_64_asm:jmp_rel32(1),
-            Reloc = {Label, Offset + RelocOffset, 32},
             Stream1 = StreamModule:append(Stream0, I1),
+            BrEntry = {Offset + RelocOffset, 32},
+            ExistingBrs = maps:get(Label, AccBranches, []),
             State#state{
                 stream = Stream1,
-                branches = [Reloc | AccBranches],
+                branches = AccBranches#{Label => [BrEntry | ExistingBrs]},
                 regs = jit_regs:unreachable(State#state.regs)
             }
     end.
@@ -1256,18 +1265,25 @@ call_func_ptr(
     ),
     UsedRegs1 = UsedRegs0 band (bnot FreeMask),
     SavedRegs = [?CTX_REG, ?JITSTATE_REG, ?NATIVE_INTERFACE_REG | mask_to_list(UsedRegs1)],
-    Stream1 = lists:foldl(
-        fun(Reg, AccStream) ->
-            StreamModule:append(AccStream, jit_x86_64_asm:pushq(Reg))
-        end,
-        Stream0,
-        SavedRegs
-    ),
+    PushBin = iolist_to_binary([jit_x86_64_asm:pushq(R) || R <- SavedRegs]),
+    Stream1 = StreamModule:append(Stream0, PushBin),
     PushOdds = length(SavedRegs) rem 2,
-    Stream3 =
+    % x86 64 stack should be aligned to 16 bytes when running callq instruction
+    % It is therefore unaligned and we need to always push an odd number of
+    % registers.
+    % Align stack by pushing ?NATIVE_INTERFACE_REG
+    % ?NATIVE_INTERFACE_REG may have been pushed as the function pointer
+    AlignBin =
+        case PushOdds of
+            1 -> <<>>;
+            0 -> jit_x86_64_asm:pushq(?NATIVE_INTERFACE_REG)
+        end,
+    Stream4 =
         case FuncPtrTuple of
-            {free, _} ->
+            {free, _} when PushOdds =:= 1 ->
                 Stream1;
+            {free, _} ->
+                StreamModule:append(Stream1, AlignBin);
             {primitive, Primitive} ->
                 PrepCall0 =
                     case Primitive of
@@ -1277,20 +1293,9 @@ call_func_ptr(
                             jit_x86_64_asm:movq(?PRIMITIVE(N), ?NATIVE_INTERFACE_REG)
                     end,
                 PrepCall1 = jit_x86_64_asm:pushq(?NATIVE_INTERFACE_REG),
-                StreamModule:append(Stream1, <<PrepCall0/binary, PrepCall1/binary>>)
-        end,
-    % x86 64 stack should be aligned to 16 bytes when running callq instruction
-    % It is therefore unaligned and we need to always push an odd number of
-    % registers.
-    % Align stack by pushing ?NATIVE_INTERFACE_REG
-    % ?NATIVE_INTERFACE_REG may have been pushed as the function pointer
-    Stream4 =
-        case PushOdds of
-            1 ->
-                Stream3;
-            0 ->
-                PrepCall2 = jit_x86_64_asm:pushq(?NATIVE_INTERFACE_REG),
-                StreamModule:append(Stream3, PrepCall2)
+                StreamModule:append(
+                    Stream1, <<PrepCall0/binary, PrepCall1/binary, AlignBin/binary>>
+                )
         end,
     State1 = set_args(State0#state{stream = Stream4}, Args),
     #state{stream = Stream5} = State1,
@@ -1303,16 +1308,13 @@ call_func_ptr(
                 Call1 = jit_x86_64_asm:callq({rax}),
                 <<Call0/binary, Call1/binary>>
         end,
-    Stream6 = StreamModule:append(Stream5, Call),
-    % Unalign stack
-    Stream7 =
+    % Unalign stack: combine call + unalign-pop into one append when needed
+    CallAndUnalign =
         case PushOdds of
-            1 ->
-                Stream6;
-            0 ->
-                PostCall1 = jit_x86_64_asm:popq(?NATIVE_INTERFACE_REG),
-                StreamModule:append(Stream6, PostCall1)
+            1 -> Call;
+            0 -> <<Call/binary, (jit_x86_64_asm:popq(?NATIVE_INTERFACE_REG))/binary>>
         end,
+    Stream7 = StreamModule:append(Stream5, CallAndUnalign),
     % If rax is in used regs, save it to another temporary register
     AvailableRegs1 = AvailableRegs0 bor FreeMask,
     {Stream8, ResultReg} =
@@ -1323,13 +1325,8 @@ call_func_ptr(
                 Temp = first_avail(AvailableRegs1),
                 {StreamModule:append(Stream7, jit_x86_64_asm:movq(rax, Temp)), Temp}
         end,
-    Stream9 = lists:foldl(
-        fun(Reg, AccStream) ->
-            StreamModule:append(AccStream, jit_x86_64_asm:popq(Reg))
-        end,
-        Stream8,
-        lists:reverse(SavedRegs)
-    ),
+    PopBin = iolist_to_binary([jit_x86_64_asm:popq(R) || R <- lists:reverse(SavedRegs)]),
+    Stream9 = StreamModule:append(Stream8, PopBin),
     ResultBit = reg_bit(ResultReg),
     AvailableRegs2 = (AvailableRegs1 band (bnot ResultBit)) band ?AVAILABLE_REGS_MASK,
     UsedRegs2 = UsedRegs1 bor ResultBit,
@@ -2394,8 +2391,8 @@ set_continuation_to_label(
     Temp = first_avail(Avail),
     Offset = StreamModule:offset(Stream0),
     Regs1 = jit_regs:invalidate_reg(Regs0, Temp),
-    case lists:keyfind(Label, 1, Labels) of
-        {Label, LabelOffset} ->
+    case Labels of
+        #{Label := LabelOffset} ->
             % Label is already known, emit direct leaq without relocation
             % leaq instruction is 7 bytes, RIP points to next instruction
             RelOffset = LabelOffset - (Offset + 7),
@@ -2404,14 +2401,19 @@ set_continuation_to_label(
             Code = <<I1/binary, I2/binary>>,
             Stream1 = StreamModule:append(Stream0, Code),
             State#state{stream = Stream1, regs = Regs1};
-        false ->
+        _ ->
             % Label not yet known, emit placeholder and add relocation
             {RewriteLEAOffset, I1} = jit_x86_64_asm:leaq_rel32({-4, rip}, Temp),
-            Reloc = {Label, Offset + RewriteLEAOffset, 32},
+            BrEntry = {Offset + RewriteLEAOffset, 32},
             I2 = jit_x86_64_asm:movq(Temp, ?JITSTATE_CONTINUATION),
             Code = <<I1/binary, I2/binary>>,
             Stream1 = StreamModule:append(Stream0, Code),
-            State#state{stream = Stream1, branches = [Reloc | Branches], regs = Regs1}
+            ExistingBrs = maps:get(Label, Branches, []),
+            State#state{
+                stream = Stream1,
+                branches = Branches#{Label => [BrEntry | ExistingBrs]},
+                regs = Regs1
+            }
     end.
 
 set_continuation_to_offset(
@@ -2427,12 +2429,19 @@ set_continuation_to_offset(
     OffsetRef = make_ref(),
     Offset = StreamModule:offset(Stream0),
     {RewriteLEAOffset, I1} = jit_x86_64_asm:leaq_rel32({-4, rip}, Temp),
-    Reloc = {OffsetRef, Offset + RewriteLEAOffset, 32},
+    BrEntry = {Offset + RewriteLEAOffset, 32},
     I2 = jit_x86_64_asm:movq(Temp, ?JITSTATE_CONTINUATION),
     Code = <<I1/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     Regs1 = jit_regs:invalidate_reg(Regs0, Temp),
-    {State#state{stream = Stream1, branches = [Reloc | Branches], regs = Regs1}, OffsetRef}.
+    {
+        State#state{
+            stream = Stream1,
+            branches = Branches#{OffsetRef => [BrEntry]},
+            regs = Regs1
+        },
+        OffsetRef
+    }.
 
 %% @doc Implement a continuation entry point. On x86-64 this is a nop
 %% as we don't need to save any register.
@@ -2488,10 +2497,9 @@ and_(
     TempReg = first_avail(Avail),
     I1 = jit_x86_64_asm:movabsq(Val, TempReg),
     I2 = jit_x86_64_asm:andq(TempReg, Reg),
-    Stream1 = StreamModule:append(Stream0, I1),
-    Stream2 = StreamModule:append(Stream1, I2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, TempReg), Reg),
-    {State#state{stream = Stream2, regs = Regs1}, Reg};
+    {State#state{stream = Stream1, regs = Regs1}, Reg};
 and_(
     #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, {free, Reg}, Val
 ) when
@@ -2524,12 +2532,11 @@ and_(
     Bit = reg_bit(ResultReg),
     I1 = jit_x86_64_asm:movabsq(Val, ResultReg),
     I2 = jit_x86_64_asm:andq(Reg, ResultReg),
-    Stream1 = StreamModule:append(Stream0, I1),
-    Stream2 = StreamModule:append(Stream1, I2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     Regs1 = jit_regs:invalidate_reg(Regs0, ResultReg),
     {
         State#state{
-            stream = Stream2,
+            stream = Stream1,
             available_regs = Avail band (bnot Bit),
             used_regs = UR bor Bit,
             regs = Regs1
@@ -2557,12 +2564,11 @@ and_(
             Val >= 0, Val =< 16#FFFFFFFF -> jit_x86_64_asm:andl(Val, ResultReg);
             true -> jit_x86_64_asm:andq(Val, ResultReg)
         end,
-    Stream1 = StreamModule:append(Stream0, I1),
-    Stream2 = StreamModule:append(Stream1, I2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     Regs1 = jit_regs:invalidate_reg(Regs0, ResultReg),
     {
         State#state{
-            stream = Stream2,
+            stream = Stream1,
             available_regs = Avail band (bnot Bit),
             used_regs = UR bor Bit,
             regs = Regs1
@@ -2586,10 +2592,9 @@ or_(
     TempReg = first_avail(Avail),
     I1 = jit_x86_64_asm:movabsq(Val, TempReg),
     I2 = jit_x86_64_asm:orq(TempReg, Reg),
-    Stream1 = StreamModule:append(Stream0, I1),
-    Stream2 = StreamModule:append(Stream1, I2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, TempReg), Reg),
-    State#state{stream = Stream2, regs = Regs1};
+    State#state{stream = Stream1, regs = Regs1};
 or_(#state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, Reg, Val) ->
     I1 = jit_x86_64_asm:orq(Val, Reg),
     Stream1 = StreamModule:append(Stream0, I1),
@@ -2612,10 +2617,9 @@ xor_(
     TempReg = first_avail(Avail),
     I1 = jit_x86_64_asm:movabsq(Val, TempReg),
     I2 = jit_x86_64_asm:xorq(TempReg, Reg),
-    Stream1 = StreamModule:append(Stream0, I1),
-    Stream2 = StreamModule:append(Stream1, I2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, TempReg), Reg),
-    State#state{stream = Stream2, regs = Regs1};
+    State#state{stream = Stream1, regs = Regs1};
 xor_(#state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, Reg, Val) ->
     I1 = jit_x86_64_asm:xorq(Val, Reg),
     Stream1 = StreamModule:append(Stream0, I1),
@@ -2635,10 +2639,9 @@ add(
     TempReg = first_avail(Avail),
     I1 = jit_x86_64_asm:movabsq(Val, TempReg),
     I2 = jit_x86_64_asm:addq(TempReg, Reg),
-    Stream1 = StreamModule:append(Stream0, I1),
-    Stream2 = StreamModule:append(Stream1, I2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, TempReg), Reg),
-    State#state{stream = Stream2, regs = Regs1};
+    State#state{stream = Stream1, regs = Regs1};
 add(#state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, Reg, Val) ->
     I1 = jit_x86_64_asm:addq(Val, Reg),
     Stream1 = StreamModule:append(Stream0, I1),
@@ -2658,10 +2661,9 @@ sub(
     TempReg = first_avail(Avail),
     I1 = jit_x86_64_asm:movabsq(Val, TempReg),
     I2 = jit_x86_64_asm:subq(TempReg, Reg),
-    Stream1 = StreamModule:append(Stream0, I1),
-    Stream2 = StreamModule:append(Stream1, I2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, TempReg), Reg),
-    State#state{stream = Stream2, regs = Regs1};
+    State#state{stream = Stream1, regs = Regs1};
 sub(#state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, Reg, Val) ->
     I1 = jit_x86_64_asm:subq(Val, Reg),
     Stream1 = StreamModule:append(Stream0, I1),
@@ -2854,8 +2856,8 @@ call_only_or_schedule_next(
     I1 = jit_x86_64_asm:decl(?JITSTATE_REMAINING_REDUCTIONS),
     I1Size = byte_size(I1),
 
-    case lists:keyfind(Label, 1, Labels) of
-        {Label, LabelOffset} ->
+    case Labels of
+        #{Label := LabelOffset} ->
             % Label is already known, emit direct jmp with calculated offset
             % jz is 2 bytes, jmp_rel32 is 5 bytes
             JmpSize = 5,
@@ -2867,15 +2869,19 @@ call_only_or_schedule_next(
             Code = <<I1/binary, I2/binary, I3/binary>>,
             Stream1 = StreamModule:append(Stream0, Code),
             State1 = State0#state{stream = Stream1};
-        false ->
+        _ ->
             % Label not yet known, emit placeholder and add relocation
             {RewriteJMPOffset, I3} = jit_x86_64_asm:jmp_rel32(1),
             I2 = jit_x86_64_asm:jz(byte_size(I3) + 2),
             Sz = I1Size + byte_size(I2),
-            Reloc1 = {Label, Offset + Sz + RewriteJMPOffset, 32},
+            BrEntry = {Offset + Sz + RewriteJMPOffset, 32},
             Code = <<I1/binary, I2/binary, I3/binary>>,
             Stream1 = StreamModule:append(Stream0, Code),
-            State1 = State0#state{stream = Stream1, branches = [Reloc1 | Branches]}
+            ExistingBrs = maps:get(Label, Branches, []),
+            State1 = State0#state{
+                stream = Stream1,
+                branches = Branches#{Label => [BrEntry | ExistingBrs]}
+            }
     end,
     State2 = set_continuation_to_label(State1, Label),
     call_primitive_last(State2, ?PRIM_SCHEDULE_NEXT_CP, [ctx, jit_state]).
@@ -2939,7 +2945,7 @@ return_labels_and_lines(
 ) ->
     SortedLabels = lists:keysort(2, [
         {Label, LabelOffset}
-     || {Label, LabelOffset} <- Labels, is_integer(Label), Label /= 0
+     || {Label, LabelOffset} <- maps:to_list(Labels), is_integer(Label), Label /= 0
     ]),
 
     I2 = jit_x86_64_asm:retq(),
@@ -3060,11 +3066,11 @@ add_label(
     State#state{
         stream = Stream2,
         branches = RemainingBranches,
-        labels = [{Label, LabelOffset} | Labels],
+        labels = Labels#{Label => LabelOffset},
         regs = jit_regs:invalidate_all(State#state.regs)
     };
 add_label(#state{labels = Labels, regs = Regs0} = State, Label, Offset) ->
-    State#state{labels = [{Label, Offset} | Labels], regs = jit_regs:invalidate_all(Regs0)}.
+    State#state{labels = Labels#{Label => Offset}, regs = jit_regs:invalidate_all(Regs0)}.
 
 -ifdef(JIT_DWARF).
 %%-----------------------------------------------------------------------------

@@ -99,17 +99,22 @@
     tail_cache :: tail_cache()
 }).
 
--type tail_cache() :: [{tuple(), non_neg_integer()}] | disabled.
+-type tail_cache() :: #{tuple() => non_neg_integer()} | disabled.
 -type stream() :: any().
 
 %%-define(TRACE(Fmt, Args), io:format(Fmt, Args)).
 -define(TRACE(Fmt, Args), ok).
 
-tail_cache_find(_Key, disabled) -> false;
-tail_cache_find(Key, TC) -> lists:keyfind(Key, 1, TC).
+tail_cache_find(_Key, disabled) ->
+    false;
+tail_cache_find(Key, TC) ->
+    case TC of
+        #{Key := Value} -> {Key, Value};
+        _ -> false
+    end.
 
 tail_cache_store(_Key, _Value, disabled) -> disabled;
-tail_cache_store(Key, Value, TC) -> [{Key, Value} | TC].
+tail_cache_store(Key, Value, TC) -> TC#{Key => Value}.
 
 %%-define(ASSERT_ALL_NATIVE_FREE(St), MMod:assert_all_native_free(St)).
 %%-define(ASSERT(Expr), true = Expr).
@@ -154,11 +159,11 @@ compile(
             case erlang:function_exported(MMod, supports_tail_cache, 0) of
                 true ->
                     case MMod:supports_tail_cache() of
-                        true -> [];
+                        true -> #{};
                         false -> disabled
                     end;
                 false ->
-                    []
+                    #{}
             end
     },
     MSt1 = MMod:jump_table(MSt0, LabelsCount),

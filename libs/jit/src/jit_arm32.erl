@@ -141,11 +141,11 @@
     stream_module :: module(),
     stream :: stream(),
     offset :: non_neg_integer(),
-    branches :: [{non_neg_integer(), non_neg_integer(), non_neg_integer()}],
+    branches :: #{integer() | reference() => [{non_neg_integer(), non_neg_integer()}]},
     jump_table_start :: non_neg_integer(),
     available_regs :: non_neg_integer(),
     used_regs :: non_neg_integer(),
-    labels :: [{integer() | reference(), integer()}],
+    labels :: #{integer() | reference() => integer()},
     variant :: non_neg_integer(),
     literal_pool :: [{non_neg_integer(), arm32_register(), non_neg_integer()}],
     %% Register value tracking for optimization
@@ -289,12 +289,12 @@ new(Variant, StreamModule, Stream) ->
     #state{
         stream_module = StreamModule,
         stream = Stream,
-        branches = [],
+        branches = #{},
         jump_table_start = 0,
         offset = StreamModule:offset(Stream),
         available_regs = ?AVAILABLE_REGS_MASK,
         used_regs = 0,
-        labels = [],
+        labels = #{},
         variant = Variant,
         literal_pool = [],
         regs = jit_regs:new()
@@ -484,27 +484,25 @@ patch_branch(StreamModule, Stream, Offset, Type, LabelOffset) ->
 -spec patch_branches_for_label(
     module(),
     stream(),
-    integer(),
+    integer() | reference(),
     non_neg_integer(),
-    [{integer(), non_neg_integer(), any()}]
-) -> {stream(), [{integer(), non_neg_integer(), any()}]}.
+    #{integer() | reference() => [{non_neg_integer(), non_neg_integer()}]}
+) ->
+    {stream(), #{integer() | reference() => [{non_neg_integer(), non_neg_integer()}]}}.
 patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Branches) ->
-    patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Branches, []).
-
-patch_branches_for_label(_StreamModule, Stream, _TargetLabel, _LabelOffset, [], Acc) ->
-    {Stream, lists:reverse(Acc)};
-patch_branches_for_label(
-    StreamModule,
-    Stream0,
-    TargetLabel,
-    LabelOffset,
-    [{Label, Offset, Type} | Rest],
-    Acc
-) when Label =:= TargetLabel ->
-    Stream1 = patch_branch(StreamModule, Stream0, Offset, Type, LabelOffset),
-    patch_branches_for_label(StreamModule, Stream1, TargetLabel, LabelOffset, Rest, Acc);
-patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, [Branch | Rest], Acc) ->
-    patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Rest, [Branch | Acc]).
+    case Branches of
+        #{TargetLabel := BrList} ->
+            Stream1 = lists:foldl(
+                fun({Offset, Type}, AccStream) ->
+                    patch_branch(StreamModule, AccStream, Offset, Type, LabelOffset)
+                end,
+                Stream,
+                BrList
+            ),
+            {Stream1, maps:remove(TargetLabel, Branches)};
+        _ ->
+            {Stream, Branches}
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @doc Rewrite stream to update all branches for labels.
@@ -513,19 +511,29 @@ patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, [Branch
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
 -spec update_branches(state()) -> state().
-update_branches(#state{branches = []} = State) ->
-    State;
 update_branches(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
-        branches = [{Label, Offset, Type} | BranchesT],
+        branches = Branches,
         labels = Labels
     } = State
 ) ->
-    {Label, LabelOffset} = lists:keyfind(Label, 1, Labels),
-    Stream1 = patch_branch(StreamModule, Stream0, Offset, Type, LabelOffset),
-    update_branches(State#state{stream = Stream1, branches = BranchesT}).
+    Stream1 = maps:fold(
+        fun(Label, BrList, AccStream) ->
+            #{Label := LabelOffset} = Labels,
+            lists:foldl(
+                fun({Offset, Type}, AccStream2) ->
+                    patch_branch(StreamModule, AccStream2, Offset, Type, LabelOffset)
+                end,
+                AccStream,
+                BrList
+            )
+        end,
+        Stream0,
+        Branches
+    ),
+    State#state{stream = Stream1, branches = #{}}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Generate code to load a primitive function pointer into a register
@@ -778,7 +786,11 @@ return_if_not_equal_to_ctx(
 jump_to_label(
     #state{stream_module = StreamModule, stream = Stream0, labels = Labels} = State0, Label
 ) ->
-    LabelLookupResult = lists:keyfind(Label, 1, Labels),
+    LabelLookupResult =
+        case Labels of
+            #{Label := LabelOffset} -> {Label, LabelOffset};
+            _ -> false
+        end,
     Offset = StreamModule:offset(Stream0),
     {State1, CodeBlock} = branch_to_label_code(State0, Offset, Label, LabelLookupResult),
     Stream1 = StreamModule:append(Stream0, CodeBlock),
@@ -874,8 +886,8 @@ branch_to_label_code(
 ) ->
     % ARM32 b has +/-32MB range, emit a placeholder and add relocation
     CodeBlock = <<16#FFFFFFFF:32>>,
-    Reloc = {Label, Offset, branch},
-    State1 = State0#state{branches = [Reloc | Branches]},
+    ExistingBrs = maps:get(Label, Branches, []),
+    State1 = State0#state{branches = Branches#{Label => [{Offset, branch} | ExistingBrs]}},
     {State1, CodeBlock}.
 
 %%-----------------------------------------------------------------------------
@@ -2972,14 +2984,17 @@ set_continuation_to_offset(
     % We need to patch this to add(al, Temp, pc, TargetOffset - Offset - 8)
     ?ASSERT(byte_size(jit_arm32_asm:add(al, Temp, pc, 0)) =:= 4),
     I1 = <<16#FFFFFFFF:32>>,
-    Reloc = {OffsetRef, Offset, {add_pc, Temp}},
+    BrEntry = {Offset, {add_pc, Temp}},
     % Load jit_state pointer from stack, then store continuation
     I2 = jit_arm32_asm:ldr(al, TempJitState, {sp, ?STACK_OFFSET_JITSTATE}),
     I3 = jit_arm32_asm:str(al, Temp, ?JITSTATE_CONTINUATION(TempJitState)),
     Code = <<I1/binary, I2/binary, I3/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, Temp), TempJitState),
-    {State#state{stream = Stream1, branches = [Reloc | Branches], regs = Regs1}, OffsetRef}.
+    {
+        State#state{stream = Stream1, branches = Branches#{OffsetRef => [BrEntry]}, regs = Regs1},
+        OffsetRef
+    }.
 
 %% @doc Implement a continuation entry point.
 -spec continuation_entry_point(#state{}) -> #state{}.
@@ -3503,25 +3518,26 @@ call_only_or_schedule_next(
     % If not zero, we want to continue execution at Label
     % If zero, we want to fall through to scheduling code
 
-    % Look up label once to avoid duplicate lookup in helper
-    LabelLookupResult = lists:keyfind(Label, 1, State0#state.labels),
-
     BccOffset = StreamModule:offset(Stream1),
 
     State4 =
-        case LabelLookupResult of
-            {Label, LabelOffset} ->
+        case State0#state.labels of
+            #{Label := LabelOffset} ->
                 % Label is known, use direct conditional branch (ARM32 has +/-32MB range)
                 Rel = LabelOffset - BccOffset,
                 I4 = jit_arm32_asm:b(ne, Rel),
                 Stream2 = StreamModule:append(Stream1, I4),
                 State0#state{stream = Stream2};
-            false ->
+            _ ->
                 % Label not known, emit placeholder and add relocation
                 I4 = <<16#FFFFFFFF:32>>,
                 Stream2 = StreamModule:append(Stream1, I4),
-                Reloc = {Label, BccOffset, {cond_branch, ne}},
-                State0#state{stream = Stream2, branches = [Reloc | State0#state.branches]}
+                Branches = State0#state.branches,
+                ExistingBrs = maps:get(Label, Branches, []),
+                State0#state{
+                    stream = Stream2,
+                    branches = Branches#{Label => [{BccOffset, {cond_branch, ne}} | ExistingBrs]}
+                }
         end,
     State5 = set_continuation_to_label(State4, Label),
     call_primitive_last(State5, ?PRIM_SCHEDULE_NEXT_CP, [ctx, jit_state]).
@@ -3629,7 +3645,7 @@ return_labels_and_lines(
 ) ->
     SortedLabels = lists:keysort(2, [
         {Label, LabelOffset}
-     || {Label, LabelOffset} <- Labels, is_integer(Label)
+     || {Label, LabelOffset} <- maps:to_list(Labels), is_integer(Label)
     ]),
 
     % add r0, pc, #0 sets r0 to instruction_address + 8 = address of data after pop
@@ -3862,10 +3878,10 @@ add_label(
     ),
 
     State#state{
-        stream = Stream2, branches = RemainingBranches, labels = [{Label, LabelOffset} | Labels]
+        stream = Stream2, branches = RemainingBranches, labels = Labels#{Label => LabelOffset}
     };
 add_label(#state{labels = Labels} = State, Label, Offset) ->
-    State#state{labels = [{Label, Offset} | Labels]}.
+    State#state{labels = Labels#{Label => Offset}}.
 
 %% Convert a value to a contents descriptor for tracking.
 value_to_contents(Value) -> jit_regs:value_to_contents(Value, ?MAX_REG).
