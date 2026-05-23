@@ -1737,6 +1737,7 @@ primitive_returns_void(?PRIM_TERM_CONV_TO_FLOAT) -> true;
 primitive_returns_void(?PRIM_FNEGATE) -> true;
 primitive_returns_void(?PRIM_BITSTRING_COPY_MODULE_STR) -> true;
 primitive_returns_void(?PRIM_FREE) -> true;
+primitive_returns_void(?PRIM_TRY_CASE) -> true;
 primitive_returns_void(_) -> false.
 
 %% Must be kept in sync with ModuleNativeInterface in jit.h.

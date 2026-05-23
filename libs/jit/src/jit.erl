@@ -1182,8 +1182,10 @@ first_pass(<<?OP_TRY_CASE, Rest0/binary>>, MMod, MSt0, State0) ->
     ?TRACE("OP_TRY_CASE ~p\n", [Dest]),
     MSt2 = MMod:move_to_vm_register(MSt1, ?TERM_NIL, Dest),
     MSt3 = MMod:free_native_registers(MSt2, [Dest]),
-    ?ASSERT_ALL_NATIVE_FREE(MSt3),
-    first_pass(Rest1, MMod, MSt3, State0);
+    {MSt4, ResultReg} = MMod:call_primitive(MSt3, ?PRIM_TRY_CASE, [ctx]),
+    MSt5 = MMod:free_native_registers(MSt4, [ResultReg]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt5),
+    first_pass(Rest1, MMod, MSt5, State0);
 % 107
 first_pass(<<?OP_TRY_CASE_END, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
