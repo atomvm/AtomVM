@@ -93,6 +93,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `term_is_uint32` accepting big integers whose low 64 bits are within range on 32-bit
   builds, which made `erlang:crc32/2`, `erlang:crc32_combine/3` and `crypto:pbkdf2_hmac/5`
   silently truncate huge integer arguments instead of raising `badarg`
+- `erlang:term_to_binary/1,2` and `erlang:binary_to_term/1,2` now encode and decode terms
+  iteratively instead of with unbounded C recursion, so a deeply nested term no longer risks
+  exhausting the C stack
+- `erlang:binary_to_term/1,2` now rejects a `LIST_EXT` with no tail (raising `badarg`), matching OTP
 
 ## [0.7.0-alpha.1] - 2026-04-06
 
