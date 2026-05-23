@@ -22,8 +22,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "context.h"
+#include "external_term.h"
 #include "globalcontext.h"
 #include "intn.h"
 #include "memory.h"
@@ -260,6 +262,38 @@ static void test_bigint_range_checks(void)
     globalcontext_destroy(glb);
 }
 
+// Encoded size beyond INT_MAX with one shared binary: no large allocation
+static void test_external_size_over_int_max(void)
+{
+#if SIZE_MAX > UINT32_MAX
+    GlobalContext *glb = globalcontext_new();
+    Context *ctx = context_new(glb);
+
+    const size_t bin_size = 1024 * 1024;
+    const size_t arities[] = { 2048, 4096 };
+    for (size_t i = 0; i < sizeof(arities) / sizeof(arities[0]); i++) {
+        size_t arity = arities[i];
+        enum MemoryGCResult res = memory_ensure_free(
+            ctx, term_binary_heap_size(bin_size) + TUPLE_SIZE(arity));
+        assert(res == MEMORY_GC_OK);
+        term bin = term_create_uninitialized_binary(bin_size, &ctx->heap, glb);
+        memset((void *) term_binary_data(bin), 0, bin_size);
+        term t = term_alloc_tuple(arity, &ctx->heap);
+        for (size_t j = 0; j < arity; j++) {
+            term_put_tuple_element(t, j, bin);
+        }
+
+        size_t size;
+        assert(external_term_compute_external_size_raw(t, &size, glb) == ExternalTermWriteOk);
+        // LARGE_TUPLE_EXT header + arity * BINARY_EXT
+        assert(size == 5 + arity * (5 + bin_size));
+    }
+
+    context_destroy(ctx);
+    globalcontext_destroy(glb);
+#endif
+}
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
@@ -267,6 +301,7 @@ int main(int argc, char **argv)
 
     test_int64_range_checks();
     test_bigint_range_checks();
+    test_external_size_over_int_max();
 
     return EXIT_SUCCESS;
 }
