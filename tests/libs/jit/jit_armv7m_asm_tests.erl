@@ -100,6 +100,36 @@ b_w_test_() ->
         )
     ].
 
+%% CBZ (compare and branch on zero) tests
+cbz_test_() ->
+    [
+        % cbz r0, .+4 (minimum forward offset)
+        ?_assertAsmEqual(<<16#B100:16/little>>, "cbz r0, .+4", jit_armv7m_asm:cbz(r0, 4)),
+        % cbz r7, .+64
+        ?_assertAsmEqual(<<16#B1F7:16/little>>, "cbz r7, .+64", jit_armv7m_asm:cbz(r7, 64)),
+        % cbz r3, .+130 (maximum forward offset)
+        ?_assertAsmEqual(<<16#B3FB:16/little>>, "cbz r3, .+130", jit_armv7m_asm:cbz(r3, 130)),
+        % out of range (too far)
+        ?_assertError({unencodable_offset, 132}, jit_armv7m_asm:cbz(r0, 132)),
+        % out of range (backward not allowed)
+        ?_assertError({unencodable_offset, 2}, jit_armv7m_asm:cbz(r0, 2)),
+        % odd offset
+        ?_assertError({unencodable_offset, 5}, jit_armv7m_asm:cbz(r0, 5))
+    ].
+
+%% CBNZ (compare and branch on nonzero) tests
+cbnz_test_() ->
+    [
+        % cbnz r1, .+4
+        ?_assertAsmEqual(<<16#B901:16/little>>, "cbnz r1, .+4", jit_armv7m_asm:cbnz(r1, 4)),
+        % cbnz r7, .+64
+        ?_assertAsmEqual(<<16#B9F7:16/little>>, "cbnz r7, .+64", jit_armv7m_asm:cbnz(r7, 64)),
+        % cbnz r3, .+130 (maximum forward offset)
+        ?_assertAsmEqual(<<16#BBFB:16/little>>, "cbnz r3, .+130", jit_armv7m_asm:cbnz(r3, 130)),
+        % out of range (too far)
+        ?_assertError({unencodable_offset, 132}, jit_armv7m_asm:cbnz(r0, 132))
+    ].
+
 %% MOVW (move 16-bit immediate to lower half) tests
 movw_test_() ->
     [

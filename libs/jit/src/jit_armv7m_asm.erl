@@ -32,6 +32,8 @@
 
 -export([
     b_w/1,
+    cbz/2,
+    cbnz/2,
     movw/2,
     movt/2
 ]).
@@ -77,6 +79,41 @@ b_w(Offset) when
     <<HW1:16/little, HW2:16/little>>;
 b_w(Offset) ->
     error({unencodable_branch_offset, Offset}).
+
+%%-----------------------------------------------------------------------------
+%% Compare and Branch on Zero / Nonzero (CBZ / CBNZ)
+%%
+%% Encoding T1 (16-bit, ARMv7-M / ARMv8-M; not available on ARMv6-M):
+%%   1011 op 0 i 1 imm5[4:0] Rn[2:0]
+%%
+%% Where op is 0 for CBZ, 1 for CBNZ, and the branch is forward only:
+%%   target = (instruction address + 4) + ZeroExtend(i:imm5:'0', 32)
+%%
+%% Rn must be a low register (r0-r7). As for bcc/2, the Offset argument is
+%% the distance from the instruction to the target (target - instruction
+%% address); the encodable range is therefore 4..130, 2-byte aligned.
+%%-----------------------------------------------------------------------------
+-spec cbz(arm_gpr_register(), integer()) -> binary().
+cbz(Rn, Offset) ->
+    encode_cb(0, Rn, Offset).
+
+-spec cbnz(arm_gpr_register(), integer()) -> binary().
+cbnz(Rn, Offset) ->
+    encode_cb(1, Rn, Offset).
+
+encode_cb(Op, Rn, Offset) when
+    is_integer(Offset), Offset >= 4, Offset =< 130, (Offset rem 2) =:= 0
+->
+    RnNum = jit_armv6m_asm:reg_to_num(Rn),
+    true = RnNum =< 7,
+    %% target = PC + imm6*2 with PC = instruction + 4, so imm6*2 = Offset - 4
+    Imm6 = (Offset - 4) bsr 1,
+    I = (Imm6 bsr 5) band 1,
+    Imm5 = Imm6 band 16#1F,
+    Base = 16#B100 bor (Op bsl 11),
+    <<(Base bor (I bsl 9) bor (Imm5 bsl 3) bor RnNum):16/little>>;
+encode_cb(_Op, _Rn, Offset) ->
+    error({unencodable_offset, Offset}).
 
 %%-----------------------------------------------------------------------------
 %% Thumb-2 MOVW (Move Wide) - loads 16-bit immediate into lower half of register
