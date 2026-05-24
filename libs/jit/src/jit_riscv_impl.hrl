@@ -850,6 +850,21 @@ if_block_cond(
     State2 = State1#state{stream = Stream1},
     {State2, {bne, Reg, zero}, 0};
 if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0, {RegOrTuple, '!=', 0}
+) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    %% RISC-V: beq Reg, zero, offset (branch if Reg == 0, i.e., NOT not-equal to 0).
+    %% Using the hardwired zero register avoids materializing 0 in a temporary.
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
+    Stream1 = StreamModule:append(Stream0, BranchInstr),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, {beq, Reg, zero}, 0};
+if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '==', RegB}
 ) when is_atom(RegB) ->
