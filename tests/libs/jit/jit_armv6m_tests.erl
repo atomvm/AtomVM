@@ -3034,10 +3034,16 @@ move_to_array_element_test_() ->
                 end),
                 %% move_to_array_element/5: x_reg to reg[x+offset]
                 ?_test(begin
-                    State1 = setelement(
-                        7, State0, element(7, State0) band (bnot ((1 bsl 3) bor (1 bsl 4)))
+                    %% State record now stores masks inside the regs field
+                    %% (position 10). Update the masks via jit_regs:set_masks.
+                    Regs0 = element(10, State0),
+                    UsedMask = (1 bsl 3) bor (1 bsl 4),
+                    Regs1 = jit_regs:set_masks(
+                        Regs0,
+                        jit_regs:available_regs(Regs0) band (bnot UsedMask),
+                        UsedMask
                     ),
-                    State2 = setelement(8, State1, (1 bsl 3) bor (1 bsl 4)),
+                    State2 = setelement(10, State0, Regs1),
                     [r4, r3] = ?BACKEND:used_regs(State2),
                     State3 = ?BACKEND:move_to_array_element(State2, {x_reg, 0}, r3, r4, 1),
                     Stream = ?BACKEND:stream(State3),
@@ -3051,10 +3057,14 @@ move_to_array_element_test_() ->
                 end),
                 %% move_to_array_element/5: imm to reg[x+offset]
                 ?_test(begin
-                    State1 = setelement(
-                        7, State0, element(7, State0) band (bnot ((1 bsl 3) bor (1 bsl 4)))
+                    Regs0 = element(10, State0),
+                    UsedMask = (1 bsl 3) bor (1 bsl 4),
+                    Regs1 = jit_regs:set_masks(
+                        Regs0,
+                        jit_regs:available_regs(Regs0) band (bnot UsedMask),
+                        UsedMask
                     ),
-                    State2 = setelement(8, State1, (1 bsl 3) bor (1 bsl 4)),
+                    State2 = setelement(10, State0, Regs1),
                     [r4, r3] = ?BACKEND:used_regs(State2),
                     State3 = ?BACKEND:move_to_array_element(State2, 42, r3, r4, 1),
                     Stream = ?BACKEND:stream(State3),

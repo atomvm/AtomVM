@@ -28,6 +28,7 @@ start() ->
     "BEAM" = erlang:system_info(machine),
     Result = etest:test([
         jit_tests,
+        jit_regs_tests,
         jit_dwarf_tests,
         jit_aarch64_tests,
         jit_aarch64_asm_tests,

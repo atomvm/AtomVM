@@ -176,11 +176,9 @@
     offset :: non_neg_integer(),
     branches :: #{integer() | reference() => [{non_neg_integer(), tuple()}]},
     jump_table_start :: non_neg_integer(),
-    available_regs :: non_neg_integer(),
-    used_regs :: non_neg_integer(),
     labels :: #{integer() | reference() => integer()},
     variant :: non_neg_integer(),
-    %% Register value tracking for optimization
+    %% Register value tracking and native-register mask bookkeeping
     regs :: jit_regs:regs()
 }).
 
@@ -191,6 +189,7 @@
     | {y_reg, non_neg_integer()}
     | {fp_reg, non_neg_integer()}
     | {ptr, riscv64_register()}.
+-type native_register() :: riscv64_register().
 -type value() :: immediate() | vm_register() | riscv64_register() | {ptr, riscv64_register()}.
 -type arg() :: ctx | jit_state | offset | value() | {free, value()} | {avm_int64_t, integer()}.
 
@@ -296,6 +295,13 @@
 -define(ARRAY_OFFSET_FOLD(IndexReg, Offset), IndexReg + Offset).
 
 -include("jit_riscv_impl.hrl").
+
+%% Native-register allocation bookkeeping (used_regs/1, available_regs/1,
+%% free_native_registers/2, free_native_register/2, assert_all_native_free/1)
+%% is shared across the register-based backends and flows through jit_regs.
+%% Must be included after jit_riscv_impl.hrl, on whose register primitives it
+%% depends.
+-include("jit_backend_regs_impl.hrl").
 
 -spec word_size() -> 4 | 8.
 word_size() -> 8.
