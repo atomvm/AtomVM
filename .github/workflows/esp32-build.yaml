@@ -47,10 +47,10 @@ jobs:
       matrix:
         esp-idf-target: ["esp32", "esp32c3"]
         idf-version:
-         - 'v5.2.6'
-         - 'v5.3.4'
-         - 'v5.4.3'
-         - 'v5.5.3'
+         - 'v5.2.7'
+         - 'v5.3.5'
+         - 'v5.4.4'
+         - 'v5.5.4'
         jit: [false]
 
         include:
@@ -58,32 +58,32 @@ jobs:
           idf-version: 'v5.4.4'
           jit: false
         - esp-idf-target: "esp32p4"
-          idf-version: 'v5.5.3'
+          idf-version: 'v5.5.4'
           jit: false
         - esp-idf-target: "esp32s3"
-          idf-version: 'v5.5.3'
+          idf-version: 'v5.5.4'
           jit: false
         - esp-idf-target: "esp32s3"
-          idf-version: 'v5.5.3'
+          idf-version: 'v5.5.4'
           usb-serial: 'ON'
           jit: false
         - esp-idf-target: "esp32s3"
-          idf-version: 'v5.5.3'
+          idf-version: 'v5.5.4'
           usb-cdc: 'ON'
           jit: false
         - esp-idf-target: "esp32"
-          idf-version: 'v5.4.3'
+          idf-version: 'v5.4.4'
           libsodium: 'ON'
           jit: false
-        # JIT builds (v5.5.3 only)
+        # JIT builds (v5.5.4 only)
         - esp-idf-target: "esp32c3"
-          idf-version: 'v5.5.3'
+          idf-version: 'v5.5.4'
           jit: true
         - esp-idf-target: "esp32"
-          idf-version: 'v5.5.3'
+          idf-version: 'v5.5.4'
           jit: true
         - esp-idf-target: "esp32s3"
-          idf-version: 'v5.5.3'
+          idf-version: 'v5.5.4'
           jit: true
 
     steps:
@@ -139,13 +139,14 @@ jobs:
           idf.py set-target ${{matrix.esp-idf-target}}
           idf.py ${{ matrix.libsodium == 'ON' && '-DAVM_USE_LIBSODIUM=ON' || '' }} build
         fi
-        idf.py size
 
-    - name: Print component size info with idf.py
+    - name: Print size info with idf.py
+      if: matrix.idf-version != 'v5.2.7'
       shell: bash
       working-directory: ./src/platforms/esp32/
       run: |
         . $IDF_PATH/export.sh
+        idf.py size
         idf.py size-components
 
     - name: "Perform CodeQL Analysis"

@@ -80,24 +80,24 @@ jobs:
             "esp32c6",
             "esp32h2"
           ]
-        idf-version: ${{ ((contains(github.event.head_commit.message, 'full_sim_test')||contains(github.event.pull_request.title, 'full_sim_test')) &&  fromJSON('["v5.2.6", "v5.3.4", "v5.4.3", "v5.5.3"]')) || fromJSON('["v5.5.3"]') }}
+        idf-version: ${{ ((contains(github.event.head_commit.message, 'full_sim_test')||contains(github.event.pull_request.title, 'full_sim_test')) &&  fromJSON('["v5.2.7", "v5.3.5", "v5.4.4", "v5.5.4"]')) || fromJSON('["v5.5.4"]') }}
         exclude:
           - esp-idf-target: "esp32p4"
-            idf-version: "v5.2.6"
+            idf-version: "v5.2.7"
           - esp-idf-target: "esp32h2"
-            idf-version: "v5.2.6"
+            idf-version: "v5.2.7"
           - esp-idf-target: "esp32c5"
-            idf-version: "v5.2.6"
+            idf-version: "v5.2.7"
           - esp-idf-target: "esp32c5"
-            idf-version: "v5.3.4"
+            idf-version: "v5.3.5"
           - esp-idf-target: "esp32c5"
-            idf-version: "v5.4.3"
+            idf-version: "v5.4.4"
         # CI now uses chip revision 3 that is currently only available since 5.5.2
         include:
           - esp-idf-target: "esp32p4"
-            idf-version: "v5.5.3"
+            idf-version: "v5.5.4"
           - esp-idf-target: "esp32c61"
-            idf-version: "v5.5.3"
+            idf-version: "v5.5.4"
 
     steps:
       - name: Checkout repo
