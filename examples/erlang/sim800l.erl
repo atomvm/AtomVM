@@ -34,6 +34,7 @@
 %% Default pins are auto-detected from the platform and chip model:
 %%
 %% Pico (UART1):            TX=GP4, RX=GP5
+%% STM32 (USART1):          TX=PA9, RX=PA10, AF=7
 %% ESP32/S2/S3 (UART1):     TX=17,  RX=16
 %% ESP32-C2 (UART1):        TX=4,   RX=5
 %% ESP32-C3/C5 (UART1):     TX=4,   RX=5
@@ -46,13 +47,8 @@
 -define(AT_TIMEOUT, 2000).
 
 start() ->
-    {TX, RX} = default_pins(),
-    io:format("Opening UART1 on TX=~B RX=~B~n", [TX, RX]),
-    UART = uart:open("UART1", [
-        {tx, TX},
-        {rx, RX},
-        {speed, 115200}
-    ]),
+    Platform = atomvm:platform(),
+    UART = open_uart(Platform),
     %% SIM800L takes 3-5 seconds to boot after power-on
     case wait_for_module(UART, 5) of
         ok ->
@@ -156,13 +152,33 @@ drain(UART) ->
     end.
 
 %%-----------------------------------------------------------------------------
+%% Platform-specific UART operations
+%%-----------------------------------------------------------------------------
+
+open_uart(stm32) ->
+    {TX, RX} = default_pins(stm32),
+    io:format("Opening USART1 on TX=~p RX=~p~n", [TX, RX]),
+    uart:open([
+        {peripheral, 1},
+        {tx, TX},
+        {rx, RX},
+        {af, 7},
+        {speed, 115200}
+    ]);
+open_uart(Platform) ->
+    {TX, RX} = default_pins(Platform),
+    io:format("Opening UART1 on TX=~p RX=~p~n", [TX, RX]),
+    uart:open("UART1", [
+        {tx, TX},
+        {rx, RX},
+        {speed, 115200}
+    ]).
+
+%%-----------------------------------------------------------------------------
 %% Platform-specific default pins
 %%-----------------------------------------------------------------------------
-default_pins() ->
-    default_pins(atomvm:platform()).
-
-%%         {TX, RX}
 default_pins(pico) -> {4, 5};
+default_pins(stm32) -> {{a, 9}, {a, 10}};
 default_pins(esp32) -> esp32_default_pins().
 
 esp32_default_pins() ->

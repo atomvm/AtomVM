@@ -64,21 +64,21 @@ jobs:
             # FinishTransmission() on the I2C slave when a STOP condition
             # occurs, causing the BME280 sensor to get stuck in Reading
             # state and ignore subsequent writes.
-            skip_i2c_test: true
+            tests: "boot gpio spi crypto uart"
           - device: stm32f411ceu6
             max_size: 393216
             renode_platform: stm32f4.repl
             avm_address: "0x08060000"
-            skip_i2c_test: true
             # No RNG peripheral on F411, so the firmware has no crypto NIFs
             # (mbedTLS is excluded by STM32_HAS_RNG in CMake).
-            skip_crypto_test: true
+            tests: "boot gpio spi uart"
           - device: stm32f429zit6
             max_size: 524288
           - device: stm32h743vit6
             max_size: 524288
             renode_platform: stm32h743.repl
             avm_address: "0x08080000"
+            tests: "boot gpio i2c spi crypto uart"
           - device: stm32h743zit6
             max_size: 524288
           - device: stm32u585ait6q
@@ -91,6 +91,7 @@ jobs:
             max_size: 524288
             renode_platform: stm32f746.repl
             avm_address: "0x08080000"
+            tests: "boot gpio i2c spi crypto uart"
           - device: stm32g474ret6
             max_size: 393216
           - device: stm32l476rgt6
@@ -102,10 +103,9 @@ jobs:
             # Renode's built-in stm32l552.repl uses STM32F4_I2C (legacy I2C
             # register layout) but the L5 HAL uses the newer I2C registers
             # (TIMINGR, ISR, etc.), causing a complete register mismatch.
-            skip_i2c_test: true
             # 512 KB flash with avm_address=0x08060000 leaves only 128 KB,
             # but the crypto AVM is 207 KB and gets truncated.
-            skip_crypto_test: true
+            tests: "boot gpio spi uart"
           - device: stm32f207zgt6
             max_size: 524288
           - device: stm32u375rgt6
@@ -117,7 +117,7 @@ jobs:
             # No RNG peripheral on G0B1 (only G041/G061/G081/G0C1 have one),
             # so the firmware has no crypto NIFs (mbedTLS is excluded by
             # STM32_HAS_RNG in CMake).
-            skip_crypto_test: true
+            tests: "boot gpio i2c spi uart"
 
     steps:
     - uses: erlef/setup-beam@v1
@@ -195,7 +195,7 @@ jobs:
         mkdir build-host
         cd build-host
         cmake .. -G Ninja
-        cmake --build . -t stm32_boot_test stm32_gpio_test stm32_i2c_test stm32_spi_test stm32_crypto_test
+        cmake --build . -t stm32_boot_test stm32_gpio_test stm32_i2c_test stm32_spi_test stm32_crypto_test stm32_uart_test
 
     - name: Install Renode
       if: matrix.renode_platform
@@ -207,7 +207,7 @@ jobs:
         echo "$PWD/renode-portable" >> $GITHUB_PATH
         pip install -r renode-portable/tests/requirements.txt
 
-    - name: Run Renode boot test
+    - name: Run Renode tests
       if: matrix.renode_platform
       run: |
         LOCAL_REPL="src/platforms/stm32/tests/renode/${{ matrix.renode_platform }}"
@@ -216,71 +216,10 @@ jobs:
         else
           PLATFORM="@platforms/cpus/${{ matrix.renode_platform }}"
         fi
-        renode-test src/platforms/stm32/tests/renode/stm32_boot_test.robot \
-          --variable ELF:@$PWD/src/platforms/stm32/build/AtomVM-${{ matrix.device }}.elf \
-          --variable AVM:@$PWD/build-host/src/platforms/stm32/tests/test_erl_sources/stm32_boot_test.avm \
-          --variable AVM_ADDRESS:${{ matrix.avm_address }} \
-          --variable PLATFORM:$PLATFORM
-
-    - name: Run Renode GPIO test
-      if: matrix.renode_platform
-      run: |
-        LOCAL_REPL="src/platforms/stm32/tests/renode/${{ matrix.renode_platform }}"
-        if [ -f "$LOCAL_REPL" ]; then
-          PLATFORM="@$PWD/$LOCAL_REPL"
-        else
-          PLATFORM="@platforms/cpus/${{ matrix.renode_platform }}"
-        fi
-        renode-test src/platforms/stm32/tests/renode/stm32_gpio_test.robot \
-          --variable ELF:@$PWD/src/platforms/stm32/build/AtomVM-${{ matrix.device }}.elf \
-          --variable AVM:@$PWD/build-host/src/platforms/stm32/tests/test_erl_sources/stm32_gpio_test.avm \
-          --variable AVM_ADDRESS:${{ matrix.avm_address }} \
-          --variable PLATFORM:$PLATFORM
-
-    - name: Run Renode I2C test
-      if: matrix.renode_platform && !matrix.skip_i2c_test
-      run: |
-        LOCAL_REPL="src/platforms/stm32/tests/renode/${{ matrix.renode_platform }}"
-        if [ -f "$LOCAL_REPL" ]; then
-          PLATFORM="@$PWD/$LOCAL_REPL"
-        else
-          PLATFORM="@platforms/cpus/${{ matrix.renode_platform }}"
-        fi
-        renode-test src/platforms/stm32/tests/renode/stm32_i2c_test.robot \
-          --variable ELF:@$PWD/src/platforms/stm32/build/AtomVM-${{ matrix.device }}.elf \
-          --variable AVM:@$PWD/build-host/src/platforms/stm32/tests/test_erl_sources/stm32_i2c_test.avm \
-          --variable AVM_ADDRESS:${{ matrix.avm_address }} \
-          --variable PLATFORM:$PLATFORM
-
-    - name: Run Renode SPI test
-      if: matrix.renode_platform
-      run: |
-        LOCAL_REPL="src/platforms/stm32/tests/renode/${{ matrix.renode_platform }}"
-        if [ -f "$LOCAL_REPL" ]; then
-          PLATFORM="@$PWD/$LOCAL_REPL"
-        else
-          PLATFORM="@platforms/cpus/${{ matrix.renode_platform }}"
-        fi
-        renode-test src/platforms/stm32/tests/renode/stm32_spi_test.robot \
-          --variable ELF:@$PWD/src/platforms/stm32/build/AtomVM-${{ matrix.device }}.elf \
-          --variable AVM:@$PWD/build-host/src/platforms/stm32/tests/test_erl_sources/stm32_spi_test.avm \
-          --variable AVM_ADDRESS:${{ matrix.avm_address }} \
-          --variable PLATFORM:$PLATFORM
-
-    - name: Run Renode crypto test
-      # Devices without RNG hardware (F411 / G0) don't ship mbedTLS at all;
-      # L562 has only 512 KB of flash and the 207 KB crypto AVM is truncated
-      # at AVM_ADDRESS=0x08060000, which kills kernel boot.
-      if: matrix.renode_platform && !matrix.skip_crypto_test
-      run: |
-        LOCAL_REPL="src/platforms/stm32/tests/renode/${{ matrix.renode_platform }}"
-        if [ -f "$LOCAL_REPL" ]; then
-          PLATFORM="@$PWD/$LOCAL_REPL"
-        else
-          PLATFORM="@platforms/cpus/${{ matrix.renode_platform }}"
-        fi
-        renode-test src/platforms/stm32/tests/renode/stm32_crypto_test.robot \
-          --variable ELF:@$PWD/src/platforms/stm32/build/AtomVM-${{ matrix.device }}.elf \
-          --variable AVM:@$PWD/build-host/src/platforms/stm32/tests/test_erl_sources/stm32_crypto_test.avm \
-          --variable AVM_ADDRESS:${{ matrix.avm_address }} \
-          --variable PLATFORM:$PLATFORM
+        for TEST in ${{ matrix.tests }}; do
+          renode-test "src/platforms/stm32/tests/renode/stm32_${TEST}_test.robot" \
+            --variable ELF:@$PWD/src/platforms/stm32/build/AtomVM-${{ matrix.device }}.elf \
+            --variable AVM:@$PWD/build-host/src/platforms/stm32/tests/test_erl_sources/stm32_${TEST}_test.avm \
+            --variable AVM_ADDRESS:${{ matrix.avm_address }} \
+            --variable PLATFORM:$PLATFORM
+        done
