@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.7.0-beta.1] - Unreleased
 
+### Added
+- Added `maps:take/2`, `maps:update_with/3`, `maps:update_with/4`, `maps:with/2` and
+  `maps:without/2` to the estdlib `maps` module
+
 ### Fixed
 - Fixed maps decoded by `binary_to_term/1,2` and received over distribution keeping the
   encoder's key order, which broke `==` and made `=>` updates on an existing key produce
