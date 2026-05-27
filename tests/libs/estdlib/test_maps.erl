@@ -77,6 +77,11 @@ test() ->
     ok = test_remove(),
     ok = test_update(),
     ok = test_comprehension(),
+    ok = test_take(),
+    ok = test_update_with_3(),
+    ok = test_update_with_4(),
+    ok = test_with(),
+    ok = test_without(),
     ok.
 
 test_get() ->
@@ -402,6 +407,76 @@ test_comprehension() ->
 test_comprehension() ->
     ok.
 -endif.
+test_take() ->
+    ?ASSERT_EQUALS(maps:take(foo, maps:new()), error),
+    ?ASSERT_EQUALS(maps:take(a, #{a => 1, b => 2, c => 3}), {1, #{b => 2, c => 3}}),
+    ?ASSERT_EQUALS(maps:take(b, #{a => 1, b => 2, c => 3}), {2, #{a => 1, c => 3}}),
+    ?ASSERT_EQUALS(maps:take(c, #{a => 1, b => 2, c => 3}), {3, #{a => 1, b => 2}}),
+    ?ASSERT_EQUALS(maps:take(d, #{a => 1, b => 2, c => 3}), error),
+    %% value happens to be the atom 'error' - must not be confused with missing-key result
+    ?ASSERT_EQUALS(maps:take(a, #{a => error, b => 2}), {error, #{b => 2}}),
+    %% taking the only key leaves an empty map
+    ?ASSERT_EQUALS(maps:take(a, #{a => 1}), {1, #{}}),
+    ok = check_bad_map(fun() -> maps:take(foo, id(not_a_map)) end),
+    ok.
+
+test_update_with_3() ->
+    Inc = fun(V) -> V + 1 end,
+    ?ASSERT_EQUALS(maps:update_with(a, Inc, #{a => 1, b => 2}), #{a => 2, b => 2}),
+    ?ASSERT_EQUALS(maps:update_with(b, Inc, #{a => 1, b => 2}), #{a => 1, b => 3}),
+    ?ASSERT_ERROR(maps:update_with(c, Inc, #{a => 1, b => 2}), {badkey, c}),
+    ok = check_bad_map(fun() -> maps:update_with(a, Inc, id(not_a_map)) end),
+    ?ASSERT_ERROR(maps:update_with(a, not_a_function, maps:new()), badarg),
+    %% wrong-arity fun also yields badarg
+    ?ASSERT_ERROR(maps:update_with(a, fun(_, _) -> ok end, maps:new()), badarg),
+    %% badmap takes precedence over badarg when both args are wrong
+    ok = check_bad_map(fun() -> maps:update_with(a, not_a_function, id(not_a_map)) end),
+    ok.
+
+test_update_with_4() ->
+    Inc = fun(V) -> V + 1 end,
+    ?ASSERT_EQUALS(maps:update_with(a, Inc, 0, #{a => 1, b => 2}), #{a => 2, b => 2}),
+    ?ASSERT_EQUALS(maps:update_with(b, Inc, 0, #{a => 1, b => 2}), #{a => 1, b => 3}),
+    ?ASSERT_EQUALS(maps:update_with(c, Inc, 42, #{a => 1, b => 2}), #{a => 1, b => 2, c => 42}),
+    ?ASSERT_EQUALS(maps:update_with(c, Inc, 42, maps:new()), #{c => 42}),
+    ok = check_bad_map(fun() -> maps:update_with(a, Inc, 0, id(not_a_map)) end),
+    ?ASSERT_ERROR(maps:update_with(a, not_a_function, 0, maps:new()), badarg),
+    %% Fun must NOT be invoked when inserting Init for a missing key
+    Crash = fun(_) -> error(should_not_be_called) end,
+    ?ASSERT_EQUALS(maps:update_with(new_key, Crash, init, #{}), #{new_key => init}),
+    %% wrong-arity fun also yields badarg
+    ?ASSERT_ERROR(maps:update_with(a, fun(_, _) -> ok end, 0, maps:new()), badarg),
+    %% badmap takes precedence over badarg when both args are wrong
+    ok = check_bad_map(fun() -> maps:update_with(a, not_a_function, 0, id(not_a_map)) end),
+    ok.
+
+test_with() ->
+    ?ASSERT_EQUALS(maps:with([], #{a => 1, b => 2, c => 3}), #{}),
+    ?ASSERT_EQUALS(maps:with([a, c], #{a => 1, b => 2, c => 3}), #{a => 1, c => 3}),
+    ?ASSERT_EQUALS(maps:with([a, missing], #{a => 1, b => 2, c => 3}), #{a => 1}),
+    ?ASSERT_EQUALS(maps:with([missing], #{a => 1, b => 2, c => 3}), #{}),
+    ?ASSERT_EQUALS(maps:with([a, b, c], maps:new()), #{}),
+    %% duplicate keys are tolerated
+    ?ASSERT_EQUALS(maps:with([a, a, c], #{a => 1, b => 2, c => 3}), #{a => 1, c => 3}),
+    ok = check_bad_map(fun() -> maps:with([a], id(not_a_map)) end),
+    ?ASSERT_ERROR(maps:with(id(not_a_list), maps:new()), badarg),
+    %% badmap takes precedence over badarg when both args are wrong
+    ok = check_bad_map(fun() -> maps:with(id(not_a_list), id(not_a_map)) end),
+    ok.
+
+test_without() ->
+    ?ASSERT_EQUALS(maps:without([], #{a => 1, b => 2, c => 3}), #{a => 1, b => 2, c => 3}),
+    ?ASSERT_EQUALS(maps:without([a, c], #{a => 1, b => 2, c => 3}), #{b => 2}),
+    ?ASSERT_EQUALS(maps:without([missing], #{a => 1, b => 2, c => 3}), #{a => 1, b => 2, c => 3}),
+    ?ASSERT_EQUALS(maps:without([a, b, c], #{a => 1, b => 2, c => 3}), #{}),
+    ?ASSERT_EQUALS(maps:without([a], maps:new()), #{}),
+    %% duplicate keys are tolerated
+    ?ASSERT_EQUALS(maps:without([a, a, c], #{a => 1, b => 2, c => 3}), #{b => 2}),
+    ok = check_bad_map(fun() -> maps:without([a], id(not_a_map)) end),
+    ?ASSERT_ERROR(maps:without(id(not_a_list), maps:new()), badarg),
+    %% badmap takes precedence over badarg when both args are wrong
+    ok = check_bad_map(fun() -> maps:without(id(not_a_list), id(not_a_map)) end),
+    ok.
 
 id(X) -> X.
 

@@ -57,7 +57,12 @@
     merge/2,
     merge_with/3,
     remove/2,
-    update/3
+    take/2,
+    update/3,
+    update_with/3,
+    update_with/4,
+    with/2,
+    without/2
 ]).
 
 -export_type([
@@ -506,9 +511,133 @@ update(Key, Value, Map) ->
     _ = ?MODULE:get(Key, Map),
     Map#{Key => Value}.
 
+%%-----------------------------------------------------------------------------
+%% @param   Key     the key to take
+%% @param   Map     the map from which to take the key
+%% @returns `{Value, Map2}' if `Key' exists in `Map', where `Value' is the
+%%          value associated with `Key' and `Map2' is the map without `Key'.
+%%          Returns `error' if `Key' is not present in `Map'.
+%% @doc Removes the `Key' from `Map' and returns the associated value together
+%% with the updated map.
+%%
+%% This function raises a `{badmap, Map}' error if `Map' is not a map.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec take(Key, Map1 :: #{Key => Value, _ => _}) -> {Value, Map2 :: #{_ => _}} | error.
+take(Key, Map) when is_map(Map) ->
+    case Map of
+        #{Key := Value} -> {Value, maps:remove(Key, Map)};
+        _ -> error
+    end;
+take(_Key, Map) ->
+    error({badmap, Map}).
+
+%%-----------------------------------------------------------------------------
+%% @param   Key     the key to update
+%% @param   Fun     the function to apply to the existing value
+%% @param   Map     the map to update
+%% @returns a new map with `Key' updated by applying `Fun' to its existing value.
+%% @doc Updates the value in `Map' for `Key' by calling `Fun' with the old value.
+%%
+%% This function raises a `{badmap, Map}' error if `Map' is not a map,
+%% a `{badkey, Key}' error if `Key' is not present in `Map', and a `badarg'
+%% error if `Fun' is not a function of arity 1.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec update_with(Key, Fun :: fun((Value1) -> Value2), Map1 :: #{Key := Value1, _ => _}) ->
+    #{Key := Value2, _ => _}.
+update_with(Key, Fun, Map) when is_function(Fun, 1) andalso is_map(Map) ->
+    case Map of
+        #{Key := Value} -> Map#{Key := Fun(Value)};
+        #{} -> error({badkey, Key})
+    end;
+update_with(_Key, _Fun, Map) when not is_map(Map) ->
+    error({badmap, Map});
+update_with(_Key, _Fun, _Map) ->
+    error(badarg).
+
+%%-----------------------------------------------------------------------------
+%% @param   Key     the key to update
+%% @param   Fun     the function to apply to the existing value
+%% @param   Init    the default value to insert if `Key' is not present
+%% @param   Map     the map to update
+%% @returns a new map with `Key' updated by `Fun', or inserted with `Init'
+%%          if `Key' was not present.
+%% @doc Updates the value in `Map' for `Key' by calling `Fun' on the old value,
+%% or inserts `Init' if `Key' was not previously present.
+%%
+%% This function raises a `{badmap, Map}' error if `Map' is not a map and a
+%% `badarg' error if `Fun' is not a function of arity 1.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec update_with(
+    Key,
+    Fun :: fun((Value1) -> Value2),
+    Init,
+    Map1 :: #{Key => Value1, _ => _}
+) -> #{Key := Value2 | Init, _ => _}.
+update_with(Key, Fun, Init, Map) when is_function(Fun, 1) andalso is_map(Map) ->
+    case Map of
+        #{Key := Value} -> Map#{Key := Fun(Value)};
+        #{} -> Map#{Key => Init}
+    end;
+update_with(_Key, _Fun, _Init, Map) when not is_map(Map) ->
+    error({badmap, Map});
+update_with(_Key, _Fun, _Init, _Map) ->
+    error(badarg).
+
+%%-----------------------------------------------------------------------------
+%% @param   Keys    the list of keys to keep
+%% @param   Map1    the map from which to select entries
+%% @returns a new map containing only those entries from `Map1' whose keys
+%%          appear in `Keys'.
+%% @doc Returns a new map containing only the entries from `Map1' whose key
+%% is present in `Keys'.
+%%
+%% This function raises a `{badmap, Map}' error if `Map1' is not a map, and a
+%% `badarg' error if `Keys' is not a list.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec with(Keys :: [K], Map1 :: #{K => V, _ => _}) -> #{K => V}.
+with(Keys, Map) when is_list(Keys) andalso is_map(Map) ->
+    with_1(Keys, Map, ?MODULE:new());
+with(_Keys, Map) when not is_map(Map) ->
+    error({badmap, Map});
+with(_Keys, _Map) ->
+    error(badarg).
+
+%%-----------------------------------------------------------------------------
+%% @param   Keys    the list of keys to drop
+%% @param   Map1    the map from which to drop entries
+%% @returns a new map containing the entries from `Map1' whose keys are not
+%%          in `Keys'.
+%% @doc Returns a new map containing the entries of `Map1' with the keys in
+%% `Keys' removed.
+%%
+%% This function raises a `{badmap, Map}' error if `Map1' is not a map, and a
+%% `badarg' error if `Keys' is not a list.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec without(Keys :: [K], Map1 :: #{K => _, _ => _}) -> #{_ => _}.
+without(Keys, Map) when is_list(Keys) andalso is_map(Map) ->
+    lists:foldl(fun maps:remove/2, Map, Keys);
+without(_Keys, Map) when not is_map(Map) ->
+    error({badmap, Map});
+without(_Keys, _Map) ->
+    error(badarg).
+
 %%
 %% Internal functions
 %%
+
+%% @private
+with_1([], _Map, Acc) ->
+    Acc;
+with_1([K | Ks], Map, Acc) ->
+    case Map of
+        #{K := V} -> with_1(Ks, Map, Acc#{K => V});
+        #{} -> with_1(Ks, Map, Acc)
+    end.
 
 %% @private
 iterate_keys(none, undefined, Accum) ->
