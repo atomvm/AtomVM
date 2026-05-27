@@ -98,6 +98,7 @@ static const char *const sta_connected_atom = ATOM_STR("\xD", "sta_connected");
 static const char *const sta_beacon_timeout_atom = ATOM_STR("\x12", "sta_beacon_timeout");
 static const char *const sta_disconnected_atom = ATOM_STR("\x10", "sta_disconnected");
 static const char *const sta_got_ip_atom = ATOM_STR("\xA", "sta_got_ip");
+static const char *const timezone_atom = ATOM_STR("\x8", "timezone");
 static const char *const network_down_atom = ATOM_STR("\x0C", "network_down");
 
 ESP_EVENT_DECLARE_BASE(sntp_event_base);
@@ -1147,6 +1148,20 @@ static void maybe_set_sntp(term sntp_config, GlobalContext *global)
             ESP_LOGI(TAG, "SNTP initialized with host set to %s", host);
         } else {
             ESP_LOGE(TAG, "Unable to locate sntp host in configuration");
+        }
+
+        term timezone_term = interop_kv_get_value(sntp_config, timezone_atom, global);
+        if (!term_is_invalid_term(timezone_term)) {
+            int tz_ok;
+            char *tz = interop_term_to_string(timezone_term, &tz_ok);
+            if (LIKELY(tz_ok)) {
+                setenv("TZ", tz, 1);
+                tzset();
+                ESP_LOGI(TAG, "Timezone set to %s", tz);
+                free(tz);
+            } else {
+                ESP_LOGE(TAG, "Unable to parse timezone string in configuration");
+            }
         }
     }
 }
