@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0-beta.1] - Unreleased
 
 ### Added
+- Added `maps:take/2`, `maps:update_with/3`, `maps:update_with/4`, `maps:with/2` and
+  `maps:without/2` to the estdlib `maps` module
 - Added `lists:sum/1`
 - Added the `{scope, {Start, Length}}` option to `binary:split/3`
 - Added `erlang:get_keys/0,1` to query process dictionary keys
