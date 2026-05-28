@@ -648,6 +648,7 @@ compile_erlang(maps_nifs)
 compile_erlang(test_raw_raise)
 
 compile_erlang(test_ets)
+compile_erlang(test_persistent_term)
 compile_erlang(test_node)
 
 compile_erlang(test_code_server_nifs)
@@ -1217,6 +1218,7 @@ set(erlang_test_beams
     test_raw_raise.beam
 
     test_ets.beam
+    test_persistent_term.beam
     test_node.beam
 
     test_list_to_bitstring.beam

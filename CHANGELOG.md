@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added xtensa JIT backend for esp32 platform
 - Added support for configuring pins and width for sdmmc on ESP32
 - Added support for map comprehensions
+- Added `persistent_term` module with `get/0,1,2`, `put/2`, `put_new/2`, `erase/1`, and `info/0`
 - Added USB CDC port drivers for ESP32, RP2, and STM32 platforms
 - Added a Linux `gpio` driver for the generic_unix port (in `avm_unix`) using sysfs
 - Added `console:print_err/1` to write to standard error
