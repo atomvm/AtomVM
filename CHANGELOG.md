@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `"USB_SERIAL_JTAG"` peripheral to the ESP32 `uart` module on chips with a built-in
   USB-Serial-JTAG controller (C3/C5/C6/C61/H2/H21/H4/P4/S3)
 - Added support for the `safe` option in `erlang:binary_to_term/2`
+- Added support for configuring pins and width for sdmmc on ESP32
 
 ### Changed
 - Updated network type db() to dbm() to reflect the actual representation of the type

@@ -134,6 +134,19 @@
 -opaque task_wdt_user_handle() :: binary().
 
 -opaque mounted_fs() :: binary().
+-type sdmmc_mount_option() ::
+    {clk, non_neg_integer()}
+    | {cmd, non_neg_integer()}
+    | {d0, non_neg_integer()}
+    | {d1, non_neg_integer()}
+    | {d2, non_neg_integer()}
+    | {d3, non_neg_integer()}
+    | {width, 1 | 4}.
+-type sdspi_mount_option() ::
+    {spi_host, term()}
+    | {cs, non_neg_integer()}
+    | {cd, non_neg_integer()}.
+-type mount_options() :: [sdmmc_mount_option() | sdspi_mount_option()] | #{atom() => term()}.
 
 -export_type(
     [
@@ -146,6 +159,7 @@
         esp_partition_size/0,
         esp_partition_props/0,
         mounted_fs/0,
+        mount_options/0,
         task_wdt_config/0,
         task_wdt_user_handle/0
     ]
@@ -331,7 +345,14 @@ deep_sleep(_SleepMS) ->
 %% @param   Source the device that will be mounted
 %% @param   Target the path where the filesystem will be mounted
 %% @param   FS the filesystem, only fat is supported now
-%% @param   Opts
+%% @param   Opts mount options.  For `sdmmc', optional pin entries are `clk',
+%%          `cmd', `d0', `d1', `d2', and `d3' (only honored on SoCs whose SDMMC
+%%          peripheral is routed via the GPIO matrix, e.g. ESP32-S3 and
+%%          ESP32-P4 slot 1; on classic ESP32 the SDMMC pins are fixed by
+%%          IOMUX and any pin entries raise `badarg'); `width' may
+%%          be `1' or `4', omit for the ESP-IDF default (widest supported by
+%%          the card).  For `sdspi', required entries are `spi_host' and `cs',
+%%          with optional `cd'.
 %% @returns either a tuple having `ok' and the mounted fs resource, or an error tuple
 %% @doc     Mount a filesystem, and return a resource that can be used later for unmounting it
 %% @end
@@ -340,7 +361,7 @@ deep_sleep(_SleepMS) ->
     Source :: unicode:chardata(),
     Target :: unicode:chardata(),
     FS :: fat,
-    Opts :: proplists:proplist() | #{atom() => term()}
+    Opts :: mount_options()
 ) -> {ok, mounted_fs()} | {error, term()}.
 mount(_Source, _Target, _FS, _Opts) ->
     erlang:nif_error(undefined).
