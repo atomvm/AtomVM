@@ -176,6 +176,13 @@ ets:update_counter/4, &ets_update_counter_nif
 ets:delete/1, &ets_delete_nif
 ets:delete/2, &ets_delete_nif
 ets:delete_object/2, &ets_delete_object_nif
+persistent_term:erase/1, &persistent_term_erase_nif
+persistent_term:get/0, &persistent_term_get_nif
+persistent_term:get/1, &persistent_term_get_nif
+persistent_term:get/2, &persistent_term_get_nif
+persistent_term:info/0, &persistent_term_info_nif
+persistent_term:put/2, &persistent_term_put_nif
+persistent_term:put_new/2, &persistent_term_put_new_nif
 atomvm:add_avm_pack_binary/2, &atomvm_add_avm_pack_binary_nif
 atomvm:add_avm_pack_file/2, &atomvm_add_avm_pack_file_nif
 atomvm:close_avm_pack/2, &atomvm_close_avm_pack_nif
