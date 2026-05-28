@@ -56,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed a bug in `supervisor` handling of failing child
 - Fixed two bugs related to closing fds in `atomvm:subprocess/4`
 - Fixed `erlang:localtime/1` memory leak, use-after-free, and TZ restore bugs on newlib/picolibc
+- Fixed ESP32 I2C driver resource leaks, half-closed state, and close-during-transmission errors
 
 ## [0.7.0-alpha.1] - 2026-04-06
 

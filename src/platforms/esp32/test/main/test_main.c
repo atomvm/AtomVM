@@ -235,6 +235,13 @@ TEST_CASE("test_file", "[test_run]")
 
 // SPI SD CARD, is configured for esp32 simulator in diagram.esp32.json
 #if (!CONFIG_ETH_USE_OPENETH && CONFIG_IDF_TARGET_ESP32)
+
+TEST_CASE("test_i2c", "[test_run]")
+{
+    term ret_value = avm_test_case("test_i2c.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+
 TEST_CASE("test_file", "[test_run]")
 {
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
