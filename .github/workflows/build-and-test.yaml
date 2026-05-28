@@ -891,7 +891,7 @@ jobs:
         ./src/AtomVM ./tests/libs/etest/test_etest.avm
 
     - name: "Test: test_estdlib.avm with valgrind"
-      if: matrix.library-arch == ''
+      if: matrix.library-arch == '' && !contains(matrix.cmake_opts_other, '-DAVM_DISABLE_JIT=OFF')
       timeout-minutes: 45
       working-directory: build
       run: |
@@ -921,7 +921,7 @@ jobs:
         ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 
     - name: "Test: test_jit.avm with valgrind"
-      if: matrix.library-arch == ''
+      if: matrix.library-arch == '' && !contains(matrix.cmake_opts_other, '-DAVM_DISABLE_JIT=OFF')
       timeout-minutes: 60
       working-directory: build
       run: |
