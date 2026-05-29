@@ -29,13 +29,17 @@ macro(jit_precompile module_name)
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_precompile.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_stream_binary.beam
-            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_dwarf.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${_jit_base_arch}.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${_jit_base_arch}_asm.beam
         )
         if("${AVM_JIT_TARGET_ARCH}" MATCHES "thumb2")
             list(APPEND jit_compiler_modules
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_armv7m_asm.beam
+            )
+        endif()
+        if (NOT AVM_DISABLE_JIT_DWARF)
+            list(APPEND jit_compiler_modules
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_dwarf.beam
             )
         endif()
         if (NOT AVM_DISABLE_JIT_DWARF)

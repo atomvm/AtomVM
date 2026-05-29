@@ -63,6 +63,77 @@ struct Module;
 typedef struct Module Module;
 #endif
 
+// Numeric architecture identifiers. These must be defined before the
+// JIT_ARCH_TARGET assignments below so that `JIT_ARCH_TARGET == JIT_ARCH_*`
+// comparisons (including those used in struct JITState) resolve correctly
+// rather than against undefined identifiers.
+#define JIT_ARCH_X86_64 1
+#define JIT_ARCH_AARCH64 2
+#define JIT_ARCH_ARMV6M 3
+#define JIT_ARCH_RISCV32 4
+#define JIT_ARCH_RISCV64 5
+#define JIT_ARCH_ARM32 6
+#define JIT_ARCH_WASM32 7
+#define JIT_ARCH_XTENSA 8
+
+#ifndef AVM_NO_JIT
+
+#ifdef __x86_64__
+#define JIT_ARCH_TARGET JIT_ARCH_X86_64
+#define JIT_JUMPTABLE_ENTRY_SIZE 5
+#define JIT_JUMPTABLE_OFFSET 0
+#endif
+
+#if defined(__arm64__) || defined(__aarch64__)
+#define JIT_ARCH_TARGET JIT_ARCH_AARCH64
+#define JIT_JUMPTABLE_ENTRY_SIZE 4
+#define JIT_JUMPTABLE_OFFSET 0
+#endif
+
+#if defined(__arm__) && defined(AVM_JIT_ARM32)
+#define JIT_ARCH_TARGET JIT_ARCH_ARM32
+#define JIT_JUMPTABLE_ENTRY_SIZE 8
+#define JIT_JUMPTABLE_OFFSET 0
+#elif defined(__arm__)
+#define JIT_ARCH_TARGET JIT_ARCH_ARMV6M
+#ifdef AVM_JIT_THUMB2
+#define JIT_JUMPTABLE_ENTRY_SIZE 6
+#else
+#define JIT_JUMPTABLE_ENTRY_SIZE 12
+#endif
+#define JIT_JUMPTABLE_OFFSET 0
+#endif
+
+#if defined(__riscv) && (__riscv_xlen == 32)
+#define JIT_ARCH_TARGET JIT_ARCH_RISCV32
+#define JIT_JUMPTABLE_ENTRY_SIZE 8
+#define JIT_JUMPTABLE_OFFSET 0
+#endif
+
+#if defined(__riscv) && (__riscv_xlen == 64)
+#define JIT_ARCH_TARGET JIT_ARCH_RISCV64
+#define JIT_JUMPTABLE_ENTRY_SIZE 8
+#define JIT_JUMPTABLE_OFFSET 0
+#endif
+
+#ifdef __wasm__
+#define JIT_ARCH_TARGET JIT_ARCH_WASM32
+#define JIT_JUMPTABLE_ENTRY_SIZE 4
+#define JIT_JUMPTABLE_IS_DATA
+#define JIT_JUMPTABLE_OFFSET 0
+#endif
+
+#ifdef __XTENSA__
+#define JIT_ARCH_TARGET JIT_ARCH_XTENSA
+#define JIT_JUMPTABLE_ENTRY_SIZE 20
+#define JIT_JUMPTABLE_OFFSET 4
+#endif
+
+#ifndef JIT_ARCH_TARGET
+#error Unknown JIT target
+#endif
+#endif
+
 // Interface to native code:
 // Entry point returns the current (or new) context
 // jit_state->remaining_reductions is updated.
@@ -88,6 +159,9 @@ struct JITState
         const void *continuation_pc;
     };
     int remaining_reductions;
+#if JIT_ARCH_TARGET == JIT_ARCH_XTENSA
+    const void *code_base;
+#endif
 };
 
 // Remember to keep this struct in sync with libs/jit/src/primitives.hrl
@@ -191,62 +265,9 @@ enum TrapAndLoadResult
 
 #define JIT_FORMAT_VERSION 1
 
-#define JIT_ARCH_X86_64 1
-#define JIT_ARCH_AARCH64 2
-#define JIT_ARCH_ARMV6M 3
-#define JIT_ARCH_RISCV32 4
-#define JIT_ARCH_RISCV64 5
-#define JIT_ARCH_ARM32 6
-#define JIT_ARCH_WASM32 7
-
 #define JIT_VARIANT_PIC 1
 #define JIT_VARIANT_FLOAT32 2
 #define JIT_VARIANT_THUMB2 4
-
-#ifndef AVM_NO_JIT
-
-#ifdef __x86_64__
-#define JIT_ARCH_TARGET JIT_ARCH_X86_64
-#define JIT_JUMPTABLE_ENTRY_SIZE 5
-#endif
-
-#if defined(__arm64__) || defined(__aarch64__)
-#define JIT_ARCH_TARGET JIT_ARCH_AARCH64
-#define JIT_JUMPTABLE_ENTRY_SIZE 4
-#endif
-
-#if defined(__arm__) && defined(AVM_JIT_ARM32)
-#define JIT_ARCH_TARGET JIT_ARCH_ARM32
-#define JIT_JUMPTABLE_ENTRY_SIZE 8
-#elif defined(__arm__)
-#define JIT_ARCH_TARGET JIT_ARCH_ARMV6M
-#ifdef AVM_JIT_THUMB2
-#define JIT_JUMPTABLE_ENTRY_SIZE 6
-#else
-#define JIT_JUMPTABLE_ENTRY_SIZE 12
-#endif
-#endif
-
-#if defined(__riscv) && (__riscv_xlen == 32)
-#define JIT_ARCH_TARGET JIT_ARCH_RISCV32
-#define JIT_JUMPTABLE_ENTRY_SIZE 8
-#endif
-
-#if defined(__riscv) && (__riscv_xlen == 64)
-#define JIT_ARCH_TARGET JIT_ARCH_RISCV64
-#define JIT_JUMPTABLE_ENTRY_SIZE 8
-#endif
-
-#ifdef __wasm__
-#define JIT_ARCH_TARGET JIT_ARCH_WASM32
-#define JIT_JUMPTABLE_ENTRY_SIZE 4
-#define JIT_JUMPTABLE_IS_DATA
-#endif
-
-#ifndef JIT_ARCH_TARGET
-#error Unknown JIT target
-#endif
-#endif
 
 #ifdef JIT_JUMPTABLE_IS_DATA
 /**

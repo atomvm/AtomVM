@@ -25,6 +25,23 @@ endif()
 idf_component_register(INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../../../../libAtomVM"
     REQUIRES ${LIBSODIUM_REQUIRE})
 
+# CONFIG_* is available after idf_component_register but not before project().
+# AVM_DISABLE_JIT must be set here, before add_subdirectory(libAtomVM), so that
+# libAtomVM/CMakeLists.txt sees the correct value.
+if(CONFIG_JIT_ENABLED)
+    if (${IDF_TARGET} MATCHES "esp32c2|esp32c3|esp32c5|esp32c6|esp32c61|esp32h2|esp32p4")
+        set(AVM_DISABLE_JIT OFF)
+        set(AVM_JIT_TARGET_ARCH riscv32)
+    elseif(${IDF_TARGET} MATCHES "esp32|esp32s2|esp32s3")
+        set(AVM_DISABLE_JIT OFF)
+        set(AVM_JIT_TARGET_ARCH xtensa)
+    else()
+        set(AVM_DISABLE_JIT ON)
+    endif()
+else()
+    set(AVM_DISABLE_JIT ON)
+endif()
+
 # GCC complains about "warning: #include_next is a GCC extension" when using pedantic flag
 # "pedantic" flag should be disabled rather poluting diagnostics with warnings caused from 3rd party
 option(AVM_PEDANTIC_WARNINGS "Pedantic compiler warnings" OFF)

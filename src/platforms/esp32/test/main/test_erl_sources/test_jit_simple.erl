@@ -1,7 +1,7 @@
 %
 % This file is part of AtomVM.
 %
-% Copyright 2025 Paul Guyot <pguyot@kallisys.net>
+% Copyright 2026 Paul Guyot <pguyot@kallisys.net>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -18,23 +18,8 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--define(JIT_FORMAT_VERSION, 1).
+-module(test_jit_simple).
 
-% Before adding any new platform to the list below:
-% Is it 64-bit big endian? if so, `put_digits` function in jit.erl must be updated to support
-% big endian platforms.
+-export([run/0]).
 
--define(JIT_ARCH_X86_64, 1).
--define(JIT_ARCH_AARCH64, 2).
--define(JIT_ARCH_ARMV6M, 3).
--define(JIT_ARCH_RISCV32, 4).
--define(JIT_ARCH_RISCV64, 5).
--define(JIT_ARCH_ARM32, 6).
--define(JIT_ARCH_WASM32, 7).
--define(JIT_ARCH_XTENSA, 8).
-
--define(JIT_VARIANT_PIC, 1).
--define(JIT_VARIANT_FLOAT32, 2).
--define(JIT_VARIANT_THUMB2, 4).
-
--define(MAX_REG, 16).
+run() -> 6 * 7.

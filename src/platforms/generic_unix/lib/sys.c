@@ -825,7 +825,7 @@ struct NativeCodeMmapHeader
 ModuleNativeEntryPoint sys_map_native_code(const uint8_t *code, size_t code_size)
 {
     size_t total = sizeof(struct NativeCodeMmapHeader) + code_size;
-#if defined(__arm__) || defined(__aarch64__)
+#if defined(__arm__) || defined(__aarch64__) || defined(__xtensa__)
 #if defined(__APPLE__)
     struct NativeCodeMmapHeader *header = mmap(0, total, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS | MAP_JIT, -1, 0);
 #else
