@@ -34,6 +34,7 @@ set(ERLANG_MODULES
     erl_epmd
     erpc
     erts_debug
+    erts_internal
     ets
     file
     filename
