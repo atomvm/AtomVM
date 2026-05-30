@@ -35,9 +35,11 @@
 
 #include <stdlib.h>
 
+#include <driver/gpio.h>
 #include <driver/sdmmc_host.h>
 #include <driver/sdspi_host.h>
 #include <esp_vfs_fat.h>
+#include <soc/soc_caps.h>
 
 #include <trace.h>
 
@@ -103,6 +105,116 @@ static void opts_to_fatfs_mount_config(term opts_term, esp_vfs_fat_mount_config_
     mount_config->allocation_unit_size = 512;
     // TODO: make it configurable: disk_status_check_enable = false
 }
+
+#ifdef SDMMC_SLOT_CONFIG_DEFAULT
+#if defined(SOC_SDMMC_USE_GPIO_MATRIX) && SOC_SDMMC_USE_GPIO_MATRIX
+static bool storage_nif_set_sdmmc_slot_pin_if_present(
+    term opts_term, AtomString key, gpio_num_t *pin, GlobalContext *glb)
+{
+    term value_term = interop_kv_get_value(opts_term, key, glb);
+    if (term_is_invalid_term(value_term)) {
+        // Omitted pin options keep the ESP-IDF slot default.
+        return true;
+    }
+    if (UNLIKELY(!term_is_integer(value_term))) {
+        return false;
+    }
+    avm_int_t pin_value = term_to_int(value_term);
+    if (UNLIKELY(pin_value < 0 || pin_value > GPIO_NUM_MAX)) {
+        return false;
+    }
+    *pin = (gpio_num_t) pin_value;
+    return true;
+}
+#else
+static bool storage_nif_has_no_sdmmc_slot_pin(
+    term opts_term, AtomString key, GlobalContext *glb)
+{
+    term value_term = interop_kv_get_value(opts_term, key, glb);
+    return term_is_invalid_term(value_term);
+}
+#endif
+
+static bool storage_nif_configure_sdmmc_slot(
+    term opts_term, sdmmc_slot_config_t *slot_config, GlobalContext *glb)
+{
+#if defined(SOC_SDMMC_USE_GPIO_MATRIX) && SOC_SDMMC_USE_GPIO_MATRIX
+    if (UNLIKELY(!storage_nif_set_sdmmc_slot_pin_if_present(
+            opts_term, ATOM_STR("\x3", "clk"), &slot_config->clk, glb))) {
+        return false;
+    }
+
+    if (UNLIKELY(!storage_nif_set_sdmmc_slot_pin_if_present(
+            opts_term, ATOM_STR("\x3", "cmd"), &slot_config->cmd, glb))) {
+        return false;
+    }
+
+    if (UNLIKELY(!storage_nif_set_sdmmc_slot_pin_if_present(
+            opts_term, ATOM_STR("\x2", "d0"), &slot_config->d0, glb))) {
+        return false;
+    }
+
+    if (UNLIKELY(!storage_nif_set_sdmmc_slot_pin_if_present(
+            opts_term, ATOM_STR("\x2", "d1"), &slot_config->d1, glb))) {
+        return false;
+    }
+
+    if (UNLIKELY(!storage_nif_set_sdmmc_slot_pin_if_present(
+            opts_term, ATOM_STR("\x2", "d2"), &slot_config->d2, glb))) {
+        return false;
+    }
+
+    if (UNLIKELY(!storage_nif_set_sdmmc_slot_pin_if_present(
+            opts_term, ATOM_STR("\x2", "d3"), &slot_config->d3, glb))) {
+        return false;
+    }
+#else
+    if (UNLIKELY(!storage_nif_has_no_sdmmc_slot_pin(
+            opts_term, ATOM_STR("\x3", "clk"), glb))) {
+        return false;
+    }
+
+    if (UNLIKELY(!storage_nif_has_no_sdmmc_slot_pin(
+            opts_term, ATOM_STR("\x3", "cmd"), glb))) {
+        return false;
+    }
+
+    if (UNLIKELY(!storage_nif_has_no_sdmmc_slot_pin(
+            opts_term, ATOM_STR("\x2", "d0"), glb))) {
+        return false;
+    }
+
+    if (UNLIKELY(!storage_nif_has_no_sdmmc_slot_pin(
+            opts_term, ATOM_STR("\x2", "d1"), glb))) {
+        return false;
+    }
+
+    if (UNLIKELY(!storage_nif_has_no_sdmmc_slot_pin(
+            opts_term, ATOM_STR("\x2", "d2"), glb))) {
+        return false;
+    }
+
+    if (UNLIKELY(!storage_nif_has_no_sdmmc_slot_pin(
+            opts_term, ATOM_STR("\x2", "d3"), glb))) {
+        return false;
+    }
+#endif
+
+    term width_term = interop_kv_get_value(opts_term, ATOM_STR("\x5", "width"), glb);
+    if (!term_is_invalid_term(width_term)) {
+        if (UNLIKELY(!term_is_integer(width_term))) {
+            return false;
+        }
+        avm_int_t width = term_to_int(width_term);
+        if (UNLIKELY(width != 1 && width != 4)) {
+            return false;
+        }
+        slot_config->width = (uint8_t) width;
+    }
+
+    return true;
+}
+#endif
 
 static term nif_esp_mount(Context *ctx, int argc, term argv[])
 {
@@ -183,8 +295,16 @@ static term nif_esp_mount(Context *ctx, int argc, term argv[])
         sdmmc_host_t host_config = SDMMC_HOST_DEFAULT();
         sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
 
+        if (UNLIKELY(!storage_nif_configure_sdmmc_slot(opts_term, &slot_config, ctx->global))) {
+            free(source);
+            free(target);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+
         mount = enif_alloc_resource(platform->mounted_fs_resource_type, sizeof(struct MountedFS));
         if (IS_NULL_PTR(mount)) {
+            free(source);
+            free(target);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         SMP_LOCK_INIT(mount);
@@ -202,8 +322,7 @@ static term nif_esp_mount(Context *ctx, int argc, term argv[])
         sdmmc_host_t host_config = SDSPI_HOST_DEFAULT();
         sdspi_device_config_t spi_slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
 
-        term spi_port = interop_kv_get_value_default(
-            opts_term, ATOM_STR("\x8", "spi_host"), term_invalid_term(), ctx->global);
+        term spi_port = interop_kv_get_value(opts_term, ATOM_STR("\x8", "spi_host"), ctx->global);
         spi_host_device_t host_dev;
         // spi_driver_get_peripheral already checks if spi_port is valid
         bool ok = spi_driver_get_peripheral(spi_port, &host_dev, ctx->global);
@@ -214,8 +333,7 @@ static term nif_esp_mount(Context *ctx, int argc, term argv[])
         }
         spi_slot_config.host_id = host_dev;
 
-        term cs_term = interop_kv_get_value_default(
-            opts_term, ATOM_STR("\x2", "cs"), term_invalid_term(), ctx->global);
+        term cs_term = interop_kv_get_value(opts_term, ATOM_STR("\x2", "cs"), ctx->global);
         if (UNLIKELY(!term_is_integer(cs_term))) {
             free(source);
             free(target);
@@ -255,22 +373,22 @@ static term nif_esp_mount(Context *ctx, int argc, term argv[])
 
     free(source);
 
-    term return_term = term_invalid_term();
     if (UNLIKELY(ret != ESP_OK)) {
         mount->mount_type = Unmounted;
-        return_term = make_esp_error_tuple(ret, ctx);
-    } else {
-        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + TERM_BOXED_RESOURCE_SIZE)
-                != MEMORY_GC_OK)) {
-            enif_release_resource(mount);
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-        term mount_term = term_from_resource(mount, &ctx->heap);
-        return_term = term_alloc_tuple(2, &ctx->heap);
-        term_put_tuple_element(return_term, 0, OK_ATOM);
-        term_put_tuple_element(return_term, 1, mount_term);
+        enif_release_resource(mount); // release before raise-capable make_esp_error_tuple
+        return make_esp_error_tuple(ret, ctx);
     }
-    enif_release_resource(mount); // decrement refcount after either enif_alloc_resource
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + TERM_BOXED_RESOURCE_SIZE)
+            != MEMORY_GC_OK)) {
+        enif_release_resource(mount);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term mount_term = term_from_resource(mount, &ctx->heap);
+    term return_term = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(return_term, 0, OK_ATOM);
+    term_put_tuple_element(return_term, 1, mount_term);
+    enif_release_resource(mount); // decrement refcount after enif_alloc_resource
 
     return return_term;
 }

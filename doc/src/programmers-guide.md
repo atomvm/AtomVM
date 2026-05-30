@@ -1300,6 +1300,33 @@ case esp:mount("sdmmc", "/sdcard", fat, []) of
 end.
 ```
 
+The SDMMC slot uses the default ESP-IDF pins unless pin options are supplied.  On SoCs whose SDMMC peripheral
+is routed through the GPIO matrix (for example ESP32-S3, and ESP32-P4 slot 1), boards that route the SD card to
+different GPIOs can configure the SDMMC lines in the mount options.  On the classic ESP32, the SDMMC pins are
+fixed by IOMUX; AtomVM rejects pin overrides on fixed-pin targets by raising `badarg`:
+
+```erlang
+SDMMCOpts = [
+    {clk, 39},
+    {cmd, 38},
+    {d0, 40},
+    {width, 1}
+],
+case esp:mount("sdmmc", "/sdcard", fat, SDMMCOpts) of
+    {ok, MountedRef} ->
+        io:format("SD card mounted successfully~n"),
+        {ok, MountedRef};
+    {error, Reason} ->
+        io:format("Failed to mount SD card: ~p~n", [Reason]),
+        {error, Reason}
+end.
+```
+
+The supported SDMMC options are `clk`, `cmd`, `d0`, `d1`, `d2`, `d3`, and `width`.  Use `{width, 1}` for
+1-bit mode or `{width, 4}` for 4-bit mode; omit `width` for the ESP-IDF default (the widest mode supported
+by the card).  The `d1`, `d2`, and `d3` pins are only required for 4-bit mode.  The `width` option is
+supported on fixed-pin and GPIO-matrix targets.
+
 #### Mounting SPI SD card
 
 To mount a SPI SD card, first create a SPI instance configured for your specific board, then use the `esp:mount/4` function:
