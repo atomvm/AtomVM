@@ -68,7 +68,7 @@ static uint32_t hash_uint32(uint32_t n, uint32_t h, uint32_t prime)
 static uint32_t hash_uint64(uint64_t n, uint32_t h, uint32_t prime)
 {
     while (n) {
-        h = h * prime + (n & 0xFF);
+        h = (uint32_t) ((uint64_t) h * prime + (n & 0xFF));
         n >>= 8;
     }
     return h * prime;
