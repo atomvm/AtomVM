@@ -2148,9 +2148,9 @@ static term nif_socket_recv_with_peek(Context *ctx, term resource_term, struct S
         ssize_t buffer_size = MIN(len == 0 ? (ssize_t) rsrc_obj->buf_size : (ssize_t) len, res);
 
         // {ok, Data :: binary()}
-        // {ok, {Source :: #{addr => Address :: {0..255, 0..255, 0..255, 0..255}, port => Port :: non_neg_integer()}, Data :: binary()}}
+        // {ok, {Source :: #{addr => Address :: {0..255, 0..255, 0..255, 0..255}, family => inet, port => Port :: non_neg_integer()}, Data :: binary()}}
         size_t ensure_packet_avail = term_binary_data_size_in_terms(buffer_size) + BINARY_HEADER_SIZE;
-        size_t requested_size = TUPLE_SIZE(2) + ensure_packet_avail + (is_recvfrom ? (TUPLE_SIZE(2) + INET_ADDR4_TUPLE_SIZE + TERM_MAP_SIZE(2)) : 0);
+        size_t requested_size = TUPLE_SIZE(2) + ensure_packet_avail + (is_recvfrom ? (TUPLE_SIZE(2) + INET_ADDR4_TUPLE_SIZE + TERM_MAP_SIZE(3)) : 0);
 
         // Because resource is locked, we must ensure it's not garbage collected
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &resource_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -2205,7 +2205,7 @@ static term nif_socket_recv_without_peek(Context *ctx, term resource_term, struc
         roots[1] = term_invalid_term();
         if (is_recvfrom) {
             // Because resource is locked, we must ensure it's not garbage collected
-            if (UNLIKELY(memory_ensure_free_with_roots(ctx, INET_ADDR4_TUPLE_SIZE + TERM_MAP_SIZE(2), 1, &resource_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            if (UNLIKELY(memory_ensure_free_with_roots(ctx, INET_ADDR4_TUPLE_SIZE + TERM_MAP_SIZE(3), 1, roots, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                 free(buffer);
                 AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -2216,6 +2216,7 @@ static term nif_socket_recv_without_peek(Context *ctx, term resource_term, struc
 
         if (res < 0) {
             int err = errno;
+            free(buffer);
             if (err == ECONNRESET) {
                 TRACE("Peer closed connection.\n");
                 return make_error_tuple(CLOSED_ATOM, ctx);
@@ -2238,7 +2239,7 @@ static term nif_socket_recv_without_peek(Context *ctx, term resource_term, struc
         TRACE("otp_socket.recv_handler: received data on fd: %i len=%lu\n", rsrc_obj->fd, (unsigned long) len);
 
         // {ok, Data :: binary()}
-        // {ok, {Source :: #{addr => Address :: {0..255, 0..255, 0..255, 0..255}, port => Port :: non_neg_integer()}, Data :: binary()}}
+        // {ok, {Source :: #{addr => Address :: {0..255, 0..255, 0..255, 0..255}, family => inet, port => Port :: non_neg_integer()}, Data :: binary()}}
         size_t ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
         size_t requested_size = TUPLE_SIZE(2) + ensure_packet_avail + (is_recvfrom ? TUPLE_SIZE(2) : 0);
 
@@ -2317,7 +2318,7 @@ static term nif_socket_recv_lwip(Context *ctx, term resource_term, struct Socket
         return make_error_tuple(posix_errno_to_term(EAGAIN, global), ctx);
     }
 
-    size_t ensure_packet_avail = term_binary_data_size_in_terms(len) + BINARY_HEADER_SIZE;
+    size_t ensure_packet_avail = term_binary_heap_size(buffer_size);
     size_t requested_size = REF_SIZE + 2 * TUPLE_SIZE(2) + ensure_packet_avail + (is_recvfrom ? (TUPLE_SIZE(2) + INET_ADDR4_TUPLE_SIZE + TERM_MAP_SIZE(2)) : 0);
     // Because resource is locked, we must ensure it's not garbage collected
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &resource_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
