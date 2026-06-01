@@ -590,6 +590,44 @@ if_block_test_() ->
                 ?_test(begin
                     State1 = ?BACKEND:if_block(
                         State0,
+                        {RegA, '!=', 0},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   8:	48 85 c0             	test   %rax,%rax\n"
+                        "   b:	74 04                	je     0x11\n"
+                        "   d:	49 83 c3 02          	add    $0x2,%r11"
+                    >>,
+                    ?assertStream(x86_64, Dump, Stream),
+                    ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {'(int)', {free, RegA}, '!=', 0},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   8:	85 c0                	test   %eax,%eax\n"
+                        "   a:	74 04                	je     0x10\n"
+                        "   c:	49 83 c3 02          	add    $0x2,%r11"
+                    >>,
+                    ?assertStream(x86_64, Dump, Stream),
+                    ?assertEqual([RegB], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
                         {RegA, '!=', ?TERM_NIL},
                         fun(BSt0) ->
                             ?BACKEND:add(BSt0, RegB, 2)

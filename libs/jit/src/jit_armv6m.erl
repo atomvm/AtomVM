@@ -146,6 +146,13 @@
         Reg =:= r15)
 ).
 
+%% Low registers (r0-r7) are the only ones usable as the operand of the
+%% Thumb-2 cbz/cbnz compare-and-branch instructions.
+-define(IS_LOW_REGISTER(Reg),
+    (Reg =:= r0 orelse Reg =:= r1 orelse Reg =:= r2 orelse Reg =:= r3 orelse Reg =:= r4 orelse
+        Reg =:= r5 orelse Reg =:= r6 orelse Reg =:= r7)
+).
+
 -type stream() :: any().
 -type branch_type() ::
     {adr, armv6m_register()} | b_w | {far_branch, non_neg_integer(), armv6m_register()}.
@@ -1102,7 +1109,7 @@ if_block(
     Stream3 = lists:foldl(
         fun({ReplacementOffset, CC}, AccStream) ->
             BranchOffset = OffsetAfter - ReplacementOffset,
-            NewBranchInstr = jit_armv6m_asm:bcc(CC, BranchOffset),
+            NewBranchInstr = rewrite_cond_branch(CC, BranchOffset),
             StreamModule:replace(AccStream, ReplacementOffset, NewBranchInstr)
         end,
         Stream2,
@@ -1123,7 +1130,7 @@ if_block(
     OffsetAfter = StreamModule:offset(Stream2),
     %% Patch the conditional branch instruction to jump to the end of the block
     BranchOffset = OffsetAfter - (Offset + BranchInstrOffset),
-    NewBranchInstr = jit_armv6m_asm:bcc(CC, BranchOffset),
+    NewBranchInstr = rewrite_cond_branch(CC, BranchOffset),
     Stream3 = StreamModule:replace(Stream2, Offset + BranchInstrOffset, NewBranchInstr),
     State3 = merge_used_regs(State2#state{stream = Stream3}, State1#state.used_regs),
     MergedRegs = jit_regs:merge(State1#state.regs, State2#state.regs),
@@ -1160,7 +1167,7 @@ if_else_block(
     OffsetAfter = StreamModule:offset(Stream3),
     %% Patch the conditional branch to jump to the else block
     ElseBranchOffset = OffsetAfter - (Offset + BranchInstrOffset),
-    NewBranchInstr = jit_armv6m_asm:bcc(CC, ElseBranchOffset),
+    NewBranchInstr = rewrite_cond_branch(CC, ElseBranchOffset),
     Stream4 = StreamModule:replace(Stream3, Offset + BranchInstrOffset, NewBranchInstr),
     %% Build the else block
     StateElse = State2#state{
@@ -1180,10 +1187,24 @@ if_else_block(
     MergedRegs = jit_regs:merge(State2#state.regs, State3#state.regs),
     State4#state{regs = MergedRegs}.
 
+%% @private
+%% Regenerate the conditional branch that skips an if-block, given the patched
+%% offset. Atom conditions use the Thumb-1 bcc; the cbz/cbnz tuples (only
+%% produced for the thumb2 variant) use the fused compare-and-branch.
+-spec rewrite_cond_branch(
+    jit_armv6m_asm:cc() | {cbz | cbnz, armv6m_register()}, integer()
+) -> binary().
+rewrite_cond_branch({cbz, Reg}, Offset) ->
+    jit_armv7m_asm:cbz(Reg, Offset);
+rewrite_cond_branch({cbnz, Reg}, Offset) ->
+    jit_armv7m_asm:cbnz(Reg, Offset);
+rewrite_cond_branch(CC, Offset) when is_atom(CC) ->
+    jit_armv6m_asm:bcc(CC, Offset).
+
 -spec if_block_cond(state(), condition()) ->
     {
         state(),
-        jit_armv6m_asm:cc() | {tbz | tbnz, atom(), 0..63} | {cbz, atom()},
+        jit_armv6m_asm:cc() | {tbz | tbnz, atom(), 0..63} | {cbz | cbnz, armv6m_register()},
         non_neg_integer()
     }.
 %% Handle {Val, '<', Reg} which means "Val < Reg" or "Reg > Val"
@@ -1325,27 +1346,60 @@ if_block_cond(
     State2 = State1#state{stream = Stream1},
     {State2, CC, byte_size(I1)};
 if_block_cond(
-    #state{stream_module = StreamModule, stream = Stream0} = State0, {RegOrTuple, '==', 0}
+    #state{stream_module = StreamModule, stream = Stream0, thumb2 = Thumb2} = State0,
+    {RegOrTuple, '==', 0}
 ) ->
     Reg =
         case RegOrTuple of
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    %% Compare register with 0
-    I1 = jit_armv6m_asm:cmp(Reg, 0),
-    %% Branch if not equal
-    CC = ne,
-    ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, 16#FFFF:16>>),
+    %% Skip the block when Reg is non-zero.
+    {Code, CC, Delta} =
+        case Thumb2 andalso ?IS_LOW_REGISTER(Reg) of
+            true ->
+                %% Fused compare-and-branch (cbnz) replaces cmp #0 + bne
+                ?ASSERT(byte_size(jit_armv7m_asm:cbnz(Reg, 4)) =:= 2),
+                {<<16#FFFF:16>>, {cbnz, Reg}, 0};
+            false ->
+                I1 = jit_armv6m_asm:cmp(Reg, 0),
+                ?ASSERT(byte_size(jit_armv6m_asm:bcc(ne, 0)) =:= 2),
+                {<<I1/binary, 16#FFFF:16>>, ne, byte_size(I1)}
+        end,
+    Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, CC, byte_size(I1)};
+    {State2, CC, Delta};
 %% Delegate (int) forms to regular forms since we only have 32-bit words
 if_block_cond(State, {'(int)', RegOrTuple, '==', 0}) ->
     if_block_cond(State, {RegOrTuple, '==', 0});
 if_block_cond(State, {'(int)', RegOrTuple, '==', Val}) when is_integer(Val) ->
     if_block_cond(State, {RegOrTuple, '==', Val});
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0, thumb2 = Thumb2} = State0,
+    {RegOrTuple, '!=', 0}
+) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    %% Skip the block when Reg is zero.
+    {Code, CC, Delta} =
+        case Thumb2 andalso ?IS_LOW_REGISTER(Reg) of
+            true ->
+                %% Fused compare-and-branch (cbz) replaces cmp #0 + beq
+                ?ASSERT(byte_size(jit_armv7m_asm:cbz(Reg, 4)) =:= 2),
+                {<<16#FFFF:16>>, {cbz, Reg}, 0};
+            false ->
+                I1 = jit_armv6m_asm:cmp(Reg, 0),
+                ?ASSERT(byte_size(jit_armv6m_asm:bcc(eq, 0)) =:= 2),
+                {<<I1/binary, 16#FFFF:16>>, eq, byte_size(I1)}
+        end,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, CC, Delta};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '!=', Val}

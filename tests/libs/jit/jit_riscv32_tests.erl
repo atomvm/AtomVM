@@ -644,6 +644,42 @@ if_block_test_() ->
                 ?_test(begin
                     State1 = ?BACKEND:if_block(
                         State0,
+                        {RegA, '!=', 0},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:  01852f83            lw  t6,24(a0)\n"
+                        "   4:  01c52f03            lw  t5,28(a0)\n"
+                        "   8:  000f8363            beqz    t6,0xe\n"
+                        "   c:  0f09                addi    t5,t5,2"
+                    >>,
+                    ?assertStream(riscv32, Dump, Stream),
+                    ?assertEqual([RegA, RegB], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {'(int)', {free, RegA}, '!=', 0},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:  01852f83            lw  t6,24(a0)\n"
+                        "   4:  01c52f03            lw  t5,28(a0)\n"
+                        "   8:  000f8363            beqz    t6,0xe\n"
+                        "   c:  0f09                addi    t5,t5,2"
+                    >>,
+                    ?assertStream(riscv32, Dump, Stream),
+                    ?assertEqual([RegB], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
                         {RegA, '!=', ?TERM_NIL},
                         fun(BSt0) ->
                             ?BACKEND:add(BSt0, RegB, 2)

@@ -608,6 +608,78 @@ if_block_test_() ->
                 ?_test(begin
                     State1 = ?BACKEND:if_block(
                         State0,
+                        {RegA, '!=', 0},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   8:	b4000047 	cbz	x7, 0x10\n"
+                        "   c:	91000908 	add	x8, x8, #0x2"
+                    >>,
+                    ?assertStream(aarch64, Dump, Stream),
+                    ?assertEqual([RegA, RegB], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {{free, RegA}, '!=', 0},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   8:	b4000047 	cbz	x7, 0x10\n"
+                        "   c:	91000908 	add	x8, x8, #0x2"
+                    >>,
+                    ?assertStream(aarch64, Dump, Stream),
+                    ?assertEqual([RegB], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {'(int)', RegA, '!=', 0},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   8:	34000047 	cbz	w7, 0x10\n"
+                        "   c:	91000908 	add	x8, x8, #0x2"
+                    >>,
+                    ?assertStream(aarch64, Dump, Stream),
+                    ?assertEqual([RegA, RegB], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {'(int)', {free, RegA}, '!=', 0},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   8:	34000047 	cbz	w7, 0x10\n"
+                        "   c:	91000908 	add	x8, x8, #0x2"
+                    >>,
+                    ?assertStream(aarch64, Dump, Stream),
+                    ?assertEqual([RegB], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
                         {RegA, '!=', ?TERM_NIL},
                         fun(BSt0) ->
                             ?BACKEND:add(BSt0, RegB, 2)

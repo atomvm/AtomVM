@@ -945,6 +945,26 @@ if_block_cond0(State0, {'(int)', RegOrTuple, '==', 0}) ->
     {RelocJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(1),
     State1 = if_block_free_reg(RegOrTuple, State0),
     {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJNZOffset};
+if_block_cond0(State0, {RegOrTuple, '!=', 0}) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I1 = jit_x86_64_asm:testq(Reg, Reg),
+    {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(1),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJZOffset};
+if_block_cond0(State0, {'(int)', RegOrTuple, '!=', 0}) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I1 = jit_x86_64_asm:testl(Reg, Reg),
+    {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(1),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJZOffset};
 if_block_cond0(
     State0,
     {RegOrTuple, '!=', Val}

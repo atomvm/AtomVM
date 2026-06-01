@@ -724,6 +724,10 @@ rewrite_branch_instruction({cbnz, Reg}, Offset) ->
     jit_aarch64_asm:cbnz(Reg, Offset);
 rewrite_branch_instruction({cbnz_w, Reg}, Offset) ->
     jit_aarch64_asm:cbnz_w(Reg, Offset);
+rewrite_branch_instruction({cbz, Reg}, Offset) ->
+    jit_aarch64_asm:cbz(Reg, Offset);
+rewrite_branch_instruction({cbz_w, Reg}, Offset) ->
+    jit_aarch64_asm:cbz_w(Reg, Offset);
 rewrite_branch_instruction({tbz, Reg, Bit}, Offset) ->
     jit_aarch64_asm:tbz(Reg, Bit, Offset);
 rewrite_branch_instruction({tbnz, Reg, Bit}, Offset) ->
@@ -966,6 +970,20 @@ if_block_cond(
     {State2, ne, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {RegOrTuple, '!=', 0}
+) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I = jit_aarch64_asm:cbz(Reg, 0),
+    Stream1 = StreamModule:append(Stream0, I),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, {cbz, Reg}, 0};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '!=', Val}
 ) when is_integer(Val) orelse ?IS_GPR(Val) ->
     Reg =
@@ -983,6 +1001,20 @@ if_block_cond(
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
     {State2, eq, byte_size(I1)};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {'(int)', RegOrTuple, '!=', 0}
+) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I = jit_aarch64_asm:cbz_w(Reg, 0),
+    Stream1 = StreamModule:append(Stream0, I),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, {cbz_w, Reg}, 0};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {'(int)', RegOrTuple, '!=', Val}
