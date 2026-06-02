@@ -53,6 +53,7 @@
 #include "mailbox.h"
 #include "memory.h"
 #include "module.h"
+#include "persistent_term.h"
 #include "platform_nifs.h"
 #include "port.h"
 #include "posix_nifs.h"
@@ -236,6 +237,11 @@ static term nif_ets_update_counter(Context *ctx, int argc, term argv[]);
 static term nif_ets_take(Context *ctx, int argc, term argv[]);
 static term nif_ets_delete(Context *ctx, int argc, term argv[]);
 static term nif_ets_delete_object(Context *ctx, int argc, term argv[]);
+static term nif_persistent_term_get(Context *ctx, int argc, term argv[]);
+static term nif_persistent_term_put(Context *ctx, int argc, term argv[]);
+static term nif_persistent_term_put_new(Context *ctx, int argc, term argv[]);
+static term nif_persistent_term_erase(Context *ctx, int argc, term argv[]);
+static term nif_persistent_term_info(Context *ctx, int argc, term argv[]);
 static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_port_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[]);
@@ -797,6 +803,31 @@ static const struct Nif ets_delete_nif = {
 static const struct Nif ets_delete_object_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ets_delete_object
+};
+
+static const struct Nif persistent_term_get_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_persistent_term_get
+};
+
+static const struct Nif persistent_term_put_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_persistent_term_put
+};
+
+static const struct Nif persistent_term_put_new_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_persistent_term_put_new
+};
+
+static const struct Nif persistent_term_erase_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_persistent_term_erase
+};
+
+static const struct Nif persistent_term_info_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_persistent_term_info
 };
 
 static const struct Nif atomvm_add_avm_pack_binary_nif = {
@@ -4487,6 +4518,137 @@ static term nif_ets_delete_object(Context *ctx, int argc, term argv[])
         default:
             UNREACHABLE();
     }
+}
+
+static term nif_persistent_term_get(Context *ctx, int argc, term argv[])
+{
+    PersistentTerm *persistent_term = &ctx->global->persistent_term;
+
+    if (argc == 0) {
+        term ret = term_invalid_term();
+        persistent_term_result_t result = persistent_term_get_all_maybe_gc(persistent_term, &ret, ctx);
+        switch (result) {
+            case PersistentTermOk:
+                return ret;
+            case PersistentTermAllocationError:
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            default:
+                UNREACHABLE();
+        }
+    }
+
+    term value = term_invalid_term();
+    persistent_term_result_t result = persistent_term_get(persistent_term, argv[0], &value, ctx->global);
+
+    switch (result) {
+        case PersistentTermOk:
+            return value;
+        case PersistentTermNotFound:
+            if (argc == 2) {
+                return argv[1];
+            }
+            RAISE_ERROR(BADARG_ATOM);
+        case PersistentTermAllocationError:
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        default:
+            UNREACHABLE();
+    }
+}
+
+static term nif_persistent_term_put(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    persistent_term_result_t result = persistent_term_put(
+        &ctx->global->persistent_term,
+        argv[0],
+        argv[1],
+        false,
+        ctx->global);
+
+    switch (result) {
+        case PersistentTermOk:
+            return OK_ATOM;
+        case PersistentTermAllocationError:
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        default:
+            UNREACHABLE();
+    }
+}
+
+static term nif_persistent_term_put_new(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    persistent_term_result_t result = persistent_term_put(
+        &ctx->global->persistent_term,
+        argv[0],
+        argv[1],
+        true,
+        ctx->global);
+
+    switch (result) {
+        case PersistentTermOk:
+            return OK_ATOM;
+        case PersistentTermExists:
+            RAISE_ERROR(BADARG_ATOM);
+        case PersistentTermAllocationError:
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        default:
+            UNREACHABLE();
+    }
+}
+
+static term nif_persistent_term_erase(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    bool removed;
+    persistent_term_result_t result = persistent_term_erase(
+        &ctx->global->persistent_term,
+        argv[0],
+        &removed,
+        ctx->global);
+
+    switch (result) {
+        case PersistentTermOk:
+            return removed ? TRUE_ATOM : FALSE_ATOM;
+        case PersistentTermAllocationError:
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        default:
+            UNREACHABLE();
+    }
+}
+
+static term nif_persistent_term_info(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    size_t count;
+    size_t memory;
+    persistent_term_info(&ctx->global->persistent_term, &count, &memory);
+
+    avm_int64_t count_i = (avm_int64_t) count;
+    avm_int64_t memory_i = (avm_int64_t) memory;
+    size_t heap_size = TERM_MAP_SIZE(2) + term_boxed_integer_size(count_i) + term_boxed_integer_size(memory_i);
+    if (UNLIKELY(memory_ensure_free_opt(ctx, heap_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term map = term_alloc_map(2, &ctx->heap);
+    term_set_map_assoc(
+        map,
+        0,
+        globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "count")),
+        term_make_maybe_boxed_int64(count_i, &ctx->heap));
+    term_set_map_assoc(
+        map,
+        1,
+        MEMORY_ATOM,
+        term_make_maybe_boxed_int64(memory_i, &ctx->heap));
+
+    return map;
 }
 
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])

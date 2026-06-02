@@ -86,6 +86,7 @@ GlobalContext *globalcontext_new(void)
     synclist_init(&glb->select_events);
 
     ets_init(&glb->ets);
+    persistent_term_init(&glb->persistent_term);
 
     glb->last_process_id = 0;
 
@@ -284,6 +285,7 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
     synclist_destroy(&glb->select_events);
 
     ets_destroy(&glb->ets, glb);
+    persistent_term_destroy(&glb->persistent_term, glb);
 
     // Destroy refc binaries including resources
     // (this list should be empty if resources were properly refcounted)

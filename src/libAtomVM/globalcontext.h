@@ -36,6 +36,7 @@
 #include "ets.h"
 #include "list.h"
 #include "mailbox.h"
+#include "persistent_term.h"
 #include "smp.h"
 #include "synclist.h"
 #include "term.h"
@@ -122,6 +123,7 @@ struct GlobalContext
     struct SyncList select_events;
 
     struct Ets ets;
+    struct PersistentTerm persistent_term;
 
     int32_t last_process_id;
 
