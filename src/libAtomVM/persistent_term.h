@@ -52,7 +52,7 @@ typedef struct PersistentTerm
     struct PersistentTermEntry *buckets[PERSISTENT_TERM_NUM_BUCKETS];
     struct PersistentTermEntry *retired_entries;
 #ifndef AVM_NO_SMP
-    SpinLock lock;
+    RWLock *lock;
 #endif
 } PersistentTerm;
 

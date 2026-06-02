@@ -117,6 +117,8 @@ test_info_and_get_all() ->
     %% OTP may reclaim that memory immediately.
     true = (Memory3 =< Memory2),
     true = persistent_term:erase(Key2),
+    true = lists:member({Key1, {value1, replaced}}, All),
+    true = lists:member({Key2, {value2, [1, 2, 3]}}, All),
     ok.
 
 cleanup() ->
