@@ -252,6 +252,7 @@ lists:reverse/1, &lists_reverse_nif
 lists:reverse/2, &lists_reverse_nif
 maps:from_keys/2, &maps_from_keys_nif
 maps:next/1, &maps_next_nif
+maps:take/2, &maps_take_nif
 unicode:characters_to_list/1, &unicode_characters_to_list_nif
 unicode:characters_to_list/2, &unicode_characters_to_list_nif
 unicode:characters_to_binary/1, &unicode_characters_to_binary_nif
