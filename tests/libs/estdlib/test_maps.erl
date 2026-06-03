@@ -82,6 +82,11 @@ test() ->
     ok = test_update_with_4(),
     ok = test_with(),
     ok = test_without(),
+    ok = test_filtermap(),
+    ok = test_intersect(),
+    ok = test_intersect_with(),
+    ok = test_groups_from_list(),
+    ok = test_is_iterator_valid(),
     ok.
 
 test_get() ->
@@ -476,6 +481,154 @@ test_without() ->
     ?ASSERT_ERROR(maps:without(id(not_a_list), maps:new()), badarg),
     %% badmap takes precedence over badarg when both args are wrong
     ok = check_bad_map(fun() -> maps:without(id(not_a_list), id(not_a_map)) end),
+    ok.
+
+test_filtermap() ->
+    %% Empty map yields empty map
+    ?ASSERT_EQUALS(maps:filtermap(fun(_K, _V) -> true end, maps:new()), #{}),
+    %% Keep all entries
+    ?ASSERT_EQUALS(
+        maps:filtermap(fun(_K, _V) -> true end, #{a => 1, b => 2}),
+        #{a => 1, b => 2}
+    ),
+    %% Drop all entries
+    ?ASSERT_EQUALS(
+        maps:filtermap(fun(_K, _V) -> false end, #{a => 1, b => 2}),
+        #{}
+    ),
+    %% Filter with predicate
+    ?ASSERT_EQUALS(
+        maps:filtermap(fun(_K, V) -> V > 1 end, #{a => 1, b => 2, c => 3}),
+        #{b => 2, c => 3}
+    ),
+    %% Transform values
+    ?ASSERT_EQUALS(
+        maps:filtermap(fun(_K, V) -> {true, V * 10} end, #{a => 1, b => 2}),
+        #{a => 10, b => 20}
+    ),
+    %% Filter and transform
+    ?ASSERT_EQUALS(
+        maps:filtermap(fun(_K, V) -> case V rem 2 of 0 -> {true, V * 10}; _ -> false end end, #{
+            a => 1, b => 2, c => 3, d => 4
+        }),
+        #{b => 20, d => 40}
+    ),
+    %% Works with iterators
+    Iter = maps:iterator(#{a => 1, b => 2, c => 3}),
+    ?ASSERT_EQUALS(
+        maps:filtermap(fun(_K, V) -> V > 1 end, Iter),
+        #{b => 2, c => 3}
+    ),
+    %% Error cases
+    ok = check_bad_map(fun() -> maps:filtermap(fun(_K, _V) -> true end, id(not_a_map)) end),
+    ?ASSERT_ERROR(maps:filtermap(not_a_function, maps:new()), badarg),
+    ok.
+
+test_intersect() ->
+    %% Empty maps
+    ?ASSERT_EQUALS(maps:intersect(maps:new(), maps:new()), #{}),
+    ?ASSERT_EQUALS(maps:intersect(#{a => 1}, maps:new()), #{}),
+    ?ASSERT_EQUALS(maps:intersect(maps:new(), #{a => 1}), #{}),
+    %% No common keys
+    ?ASSERT_EQUALS(maps:intersect(#{a => 1}, #{b => 2}), #{}),
+    %% Some common keys - values from second map
+    ?ASSERT_EQUALS(
+        maps:intersect(#{a => 1, b => 2, c => 3}, #{a => 10, b => 20, d => 40}),
+        #{a => 10, b => 20}
+    ),
+    %% All keys common
+    ?ASSERT_EQUALS(
+        maps:intersect(#{a => 1, b => 2}, #{a => 10, b => 20}),
+        #{a => 10, b => 20}
+    ),
+    %% Error cases
+    ok = check_bad_map(fun() -> maps:intersect(id(not_a_map), #{}) end),
+    ok = check_bad_map(fun() -> maps:intersect(#{}, id(not_a_map)) end),
+    ok.
+
+test_intersect_with() ->
+    %% Empty maps
+    Combiner = fun(_K, V1, V2) -> V1 + V2 end,
+    ?ASSERT_EQUALS(maps:intersect_with(Combiner, maps:new(), maps:new()), #{}),
+    ?ASSERT_EQUALS(maps:intersect_with(Combiner, #{a => 1}, maps:new()), #{}),
+    ?ASSERT_EQUALS(maps:intersect_with(Combiner, maps:new(), #{a => 1}), #{}),
+    %% No common keys
+    ?ASSERT_EQUALS(maps:intersect_with(Combiner, #{a => 1}, #{b => 2}), #{}),
+    %% Some common keys - combine values
+    ?ASSERT_EQUALS(
+        maps:intersect_with(Combiner, #{a => 1, b => 2, c => 3}, #{a => 10, b => 20, d => 40}),
+        #{a => 11, b => 22}
+    ),
+    %% All keys common
+    ?ASSERT_EQUALS(
+        maps:intersect_with(Combiner, #{a => 1, b => 2}, #{a => 10, b => 20}),
+        #{a => 11, b => 22}
+    ),
+    %% Combiner receives key and both values
+    KeyCombiner = fun(K, V1, V2) -> {K, V1, V2} end,
+    ?ASSERT_EQUALS(
+        maps:intersect_with(KeyCombiner, #{a => 1}, #{a => 2}),
+        #{a => {a, 1, 2}}
+    ),
+    %% Map1 larger than Map2 still passes values to Combiner in Map1, Map2 order
+    ?ASSERT_EQUALS(
+        maps:intersect_with(KeyCombiner, #{a => 1, b => 2, c => 3}, #{b => 20}),
+        #{b => {b, 2, 20}}
+    ),
+    %% Error cases
+    ok = check_bad_map(fun() -> maps:intersect_with(Combiner, id(not_a_map), #{}) end),
+    ok = check_bad_map(fun() -> maps:intersect_with(Combiner, #{}, id(not_a_map)) end),
+    ?ASSERT_ERROR(maps:intersect_with(not_a_function, #{}, #{}), badarg),
+    ok.
+
+test_groups_from_list() ->
+    %% Empty list
+    ?ASSERT_EQUALS(maps:groups_from_list(fun(X) -> X end, []), #{}),
+    %% Group by identity
+    ?ASSERT_EQUALS(
+        maps:groups_from_list(fun(X) -> X end, [a, b, a, c, b, a]),
+        #{a => [a, a, a], b => [b, b], c => [c]}
+    ),
+    %% Group by length
+    ?ASSERT_EQUALS(
+        maps:groups_from_list(fun length/1, ["ant", "buffalo", "cat", "dingo"]),
+        #{3 => ["ant", "cat"], 5 => ["dingo"], 7 => ["buffalo"]}
+    ),
+    %% With value transformation
+    ?ASSERT_EQUALS(
+        maps:groups_from_list(fun(X) -> X rem 2 end, fun(X) -> X * 10 end, [1, 2, 3, 4, 5]),
+        #{0 => [20, 40], 1 => [10, 30, 50]}
+    ),
+    %% Preserves order within groups
+    ?ASSERT_EQUALS(
+        maps:groups_from_list(fun(X) -> X rem 3 end, [1, 2, 3, 4, 5, 6]),
+        #{0 => [3, 6], 1 => [1, 4], 2 => [2, 5]}
+    ),
+    %% Error cases
+    ?ASSERT_ERROR(maps:groups_from_list(not_a_function, []), badarg),
+    ?ASSERT_ERROR(maps:groups_from_list(fun(X) -> X end, not_a_list), badarg),
+    ok.
+
+test_is_iterator_valid() ->
+    %% Valid iterator from empty map
+    Iter1 = maps:iterator(maps:new()),
+    ?ASSERT_EQUALS(maps:is_iterator_valid(Iter1), true),
+    %% Valid iterator from non-empty map
+    Iter2 = maps:iterator(#{a => 1, b => 2}),
+    ?ASSERT_EQUALS(maps:is_iterator_valid(Iter2), true),
+    %% Exhausted iterator (none) is valid
+    ?ASSERT_EQUALS(maps:is_iterator_valid(none), true),
+    %% Partially consumed iterator
+    {_, _, Iter3} = maps:next(maps:iterator(#{a => 1, b => 2})),
+    ?ASSERT_EQUALS(maps:is_iterator_valid(Iter3), true),
+    %% Ordered iterator
+    Iter4 = maps:iterator(#{a => 1, b => 2}, ordered),
+    ?ASSERT_EQUALS(maps:is_iterator_valid(Iter4), true),
+    %% Invalid iterators
+    ?ASSERT_EQUALS(maps:is_iterator_valid(not_an_iterator), false),
+    ?ASSERT_EQUALS(maps:is_iterator_valid(42), false),
+    ?ASSERT_EQUALS(maps:is_iterator_valid([]), false),
+    ?ASSERT_EQUALS(maps:is_iterator_valid([not_int | #{}]), false),
     ok.
 
 id(X) -> X.
