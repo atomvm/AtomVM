@@ -112,6 +112,15 @@ config AVM_ENABLE_UART_PORT_DRIVER
     bool "Enable UART port driver"
     default y
 
+config AVM_ENABLE_USB_CDC_PORT_DRIVER
+    bool "Enable USB CDC port driver"
+    depends on TINYUSB_CDC_ENABLED
+    default n
+    help
+        Enable the AtomVM usb_cdc port driver. This requires native USB CDC
+        support through TinyUSB and should be enabled only when the firmware
+        is intended to expose a USB CDC data port.
+
 config AVM_ENABLE_OTP_CRYPTO_NIFS
     bool "Enable OTP Crypto NIFs"
     default y

@@ -67,6 +67,10 @@ jobs:
           idf-version: 'v5.5.3'
           usb-serial: 'ON'
           jit: false
+        - esp-idf-target: "esp32s3"
+          idf-version: 'v5.5.3'
+          usb-cdc: 'ON'
+          jit: false
         - esp-idf-target: "esp32"
           idf-version: 'v5.4.3'
           libsodium: 'ON'
@@ -104,7 +108,7 @@ jobs:
         idf.py add-dependency "espressif/libsodium^1.0.20~4"
 
     - name: Add ESP TinyUSB dependency
-      if: matrix.usb-serial == 'ON'
+      if: matrix.usb-serial == 'ON' || matrix.usb-cdc == 'ON'
       working-directory: ./src/platforms/esp32/
       run: |
         . $IDF_PATH/export.sh
@@ -115,10 +119,17 @@ jobs:
       working-directory: ./src/platforms/esp32/
       env:
         USB_SERIAL: ${{ matrix.usb-serial || 'OFF' }}
+        USB_CDC: ${{ matrix.usb-cdc || 'OFF' }}
       run: |
         . $IDF_PATH/export.sh
         if [[ "${USB_SERIAL}" == "ON" ]]; then
           echo 'CONFIG_USE_USB_SERIAL=y' >> sdkconfig.defaults.in
+        fi
+        if [[ "${USB_CDC}" == "ON" ]]; then
+          printf '%s\n' \
+            'CONFIG_TINYUSB_CDC_ENABLED=y' \
+            'CONFIG_AVM_ENABLE_USB_CDC_PORT_DRIVER=y' \
+            >> sdkconfig.defaults.in
         fi
         export IDF_TARGET=${{matrix.esp-idf-target}}
         if [ "${{ matrix.jit }}" = "true" ]; then

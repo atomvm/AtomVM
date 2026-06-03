@@ -70,6 +70,10 @@ if (STM32_HAS_RNG)
         otp_crypto_platform.c)
 endif()
 
+if (AVM_USB_CDC_PORT_DRIVER_ENABLED)
+    list(APPEND SOURCE_FILES usb_cdc_driver.c usb_descriptors.c usb_irq_handlers.c usb_hw_init.c)
+endif()
+
 set(
     PLATFORM_LIB_SUFFIX
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
@@ -101,3 +105,16 @@ target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} SYSTEM PUBLIC
 target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC
     "${CMAKE_BINARY_DIR}/generated"
 )
+
+if (AVM_USB_CDC_PORT_DRIVER_ENABLED)
+    target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
+        AVM_USB_CDC_PORT_DRIVER_ENABLED
+        USBD_VID=${AVM_USB_CDC_VID}
+        USBD_PID=${AVM_USB_CDC_PID}
+        "USBD_MANUFACTURER=\"${AVM_USB_CDC_MANUFACTURER}\""
+        "USBD_PRODUCT=\"${AVM_USB_CDC_PRODUCT}\""
+        "USBD_INTERFACE_NAME=\"${AVM_USB_CDC_INTERFACE_NAME}\""
+    )
+    target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC tinyusb_device)
+    target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC "SHELL:-Wl,-u -Wl,usb_cdcregister_port_driver")
+endif()

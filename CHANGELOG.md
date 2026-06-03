@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added xtensa JIT backend for esp32 platform
 - Added support for configuring pins and width for sdmmc on ESP32
 - Added support for map comprehensions
+- Added USB CDC port drivers for ESP32, RP2, and STM32 platforms
 
 ### Changed
 - Updated network type db() to dbm() to reflect the actual representation of the type
