@@ -150,7 +150,8 @@ is_key(Key, Map) ->
 %%-----------------------------------------------------------------------------
 -spec is_iterator_valid(Iterator :: iterator()) -> boolean().
 is_iterator_valid(Iterator) ->
-    try is_iterator_valid_1(Iterator)
+    try
+        is_iterator_valid_1(Iterator)
     catch
         error:badarg -> false
     end.
@@ -699,13 +700,8 @@ update(Key, Value, Map) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec take(Key, Map1 :: #{Key => Value, _ => _}) -> {Value, Map2 :: #{_ => _}} | error.
-take(Key, Map) when is_map(Map) ->
-    case Map of
-        #{Key := Value} -> {Value, maps:remove(Key, Map)};
-        _ -> error
-    end;
-take(_Key, Map) ->
-    error({badmap, Map}).
+take(_, _) ->
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Key     the key to update
