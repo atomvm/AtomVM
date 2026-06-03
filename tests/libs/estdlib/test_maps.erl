@@ -423,6 +423,11 @@ test_take() ->
     %% taking the only key leaves an empty map
     ?ASSERT_EQUALS(maps:take(a, #{a => 1}), {1, #{}}),
     ok = check_bad_map(fun() -> maps:take(foo, id(not_a_map)) end),
+    %% heap-term keys must survive GC
+    ?ASSERT_EQUALS(maps:take({complex, key}, #{{complex, key} => v}), {v, #{}}),
+    %% heap-term badmap arguments must not cause stale pointers
+    ok = check_bad_map(fun() -> maps:take(foo, id({this_is, not_a, map})) end),
+    ok = check_bad_map(fun() -> maps:take(foo, id([this_is, not_a, map])) end),
     ok.
 
 test_update_with_3() ->
@@ -508,9 +513,17 @@ test_filtermap() ->
     ),
     %% Filter and transform
     ?ASSERT_EQUALS(
-        maps:filtermap(fun(_K, V) -> case V rem 2 of 0 -> {true, V * 10}; _ -> false end end, #{
-            a => 1, b => 2, c => 3, d => 4
-        }),
+        maps:filtermap(
+            fun(_K, V) ->
+                case V rem 2 of
+                    0 -> {true, V * 10};
+                    _ -> false
+                end
+            end,
+            #{
+                a => 1, b => 2, c => 3, d => 4
+            }
+        ),
         #{b => 20, d => 40}
     ),
     %% Works with iterators
