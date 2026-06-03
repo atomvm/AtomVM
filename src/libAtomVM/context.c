@@ -1129,6 +1129,7 @@ void context_demonitor(Context *ctx, uint64_t ref_ticks)
                     free(resource_monitor);
                     return;
                 }
+                break;
             }
             case CONTEXT_MONITOR_LINK_LOCAL:
             case CONTEXT_MONITOR_LINK_REMOTE:
