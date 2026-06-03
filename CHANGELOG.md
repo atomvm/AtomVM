@@ -7,8 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0-beta.1] - Unreleased
 
 ### Added
-- Added `maps:take/2`, `maps:update_with/3`, `maps:update_with/4`, `maps:with/2` and
-  `maps:without/2` to the estdlib `maps` module
+- Added `maps:take/2`, `maps:update_with/3`, `maps:update_with/4`, `maps:with/2`,
+  `maps:without/2`, `maps:filtermap/2`, `maps:intersect/2`, `maps:intersect_with/3`,
+  `maps:groups_from_list/2` and `maps:groups_from_list/3` to the estdlib `maps` module
 
 ### Fixed
 - Fixed maps decoded by `binary_to_term/1,2` and received over distribution keeping the

@@ -38,6 +38,7 @@
 -export([
     get/2, get/3,
     is_key/2,
+    is_iterator_valid/1,
     put/3,
     iterator/1,
     iterator/2,
@@ -50,9 +51,14 @@
     size/1,
     find/2,
     filter/2,
+    filtermap/2,
     fold/3,
     foreach/2,
     from_keys/2,
+    groups_from_list/2,
+    groups_from_list/3,
+    intersect/2,
+    intersect_with/3,
     map/2,
     merge/2,
     merge_with/3,
@@ -131,8 +137,25 @@ is_key(Key, Map) ->
     erlang:is_map_key(Key, Map).
 
 %%-----------------------------------------------------------------------------
-%% @param   Key     the key
-%% @param   Value   the value
+%% @param   Iterator the iterator to validate
+%% @returns `true' if the iterator is valid, `false' otherwise
+%% @doc Check if an iterator is valid.
+%%
+%% This function checks if an iterator can still be used with `maps:next/1'.
+%% An iterator becomes invalid if it has been exhausted or if the underlying
+%% map has been modified.
+%%
+%% This is an internal function, primarily used by other functions in this module.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_iterator_valid(Iterator :: iterator()) -> boolean().
+is_iterator_valid(Iterator) ->
+    try is_iterator_valid_1(Iterator)
+    catch
+        error:badarg -> false
+    end.
+
+%%-----------------------------------------------------------------------------
 %% @param   Map     the map
 %% @returns A copy of `Map' containing the `{Key, Value}' association.
 %% @doc     Return the map containing the `{Key, Value}' association.
@@ -335,6 +358,38 @@ filter(_Pred, _Map) ->
     error(badarg).
 
 %%-----------------------------------------------------------------------------
+%% @param   Fun     a function that maps and filters entries from the map
+%% @param   MapOrIterator the map or map iterator to filter and map
+%% @returns a map containing all elements in `MapOrIterator' that satisfy `Fun'
+%% @doc Return a map whose entries are filtered and mapped by the supplied function.
+%%
+%% This function returns a new map containing all elements from the input
+%% `MapOrIterator' that satisfy the input `Fun'.
+%%
+%% The supplied function is a function from key-value inputs to either `true'
+%% (keep the entry), `false' (drop the entry), or `{true, NewValue}' (keep the
+%% entry with a new value).
+%%
+%% This function raises a `{badmap, Map}' error if `Map' is not a map or map
+%% iterator, and a `badarg' error if the input function is not a function.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec filtermap(
+    Fun :: fun((Key, Value) -> boolean() | {true, NewValue}),
+    MapOrIterator :: map_or_iterator(Key, Value)
+) -> #{Key => Value | NewValue}.
+filtermap(Fun, Map) when is_function(Fun, 2) andalso is_map(Map) ->
+    maps:from_list(iterate_filtermap(Fun, maps:next(maps:iterator(Map)), []));
+filtermap(Fun, [Pos | Map] = Iterator) when
+    is_function(Fun, 2) andalso is_integer(Pos) andalso is_map(Map)
+->
+    maps:from_list(iterate_filtermap(Fun, maps:next(Iterator), []));
+filtermap(_Fun, Map) when not is_map(Map) ->
+    error({badmap, Map});
+filtermap(_Fun, _Map) ->
+    error(badarg).
+
+%%-----------------------------------------------------------------------------
 %% @param   Fun     function over which to fold values
 %% @param   Init    the initial value of the fold accumulator
 %% @param   MapOrIterator the map or map iterator over which to fold
@@ -402,6 +457,126 @@ foreach(_Fun, _Map) ->
 -spec from_keys(list(), term()) -> map().
 from_keys(List, _Value) when is_list(List) ->
     erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Fun     a function that returns the key for each element
+%% @param   List    the list to group
+%% @returns a map where keys are the results of applying `Fun' to elements
+%%          and values are lists of elements that produced that key
+%% @doc Group elements of a list by a key function.
+%%
+%% This function groups elements of `List' into a map. The key for each element
+%% is computed by applying `Fun' to the element. All elements with the same key
+%% are collected into a list, preserving the order from the original list.
+%%
+%% This function raises a `badarg' error if `Fun' is not a function of arity 1
+%% or if `List' is not a proper list.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec groups_from_list(Fun :: fun((Elem) -> Key), List :: [Elem]) -> #{Key => [Elem]}.
+groups_from_list(Fun, List) when is_function(Fun, 1) ->
+    groups_from_list(Fun, fun(X) -> X end, List);
+groups_from_list(_Fun, _List) ->
+    error(badarg).
+
+%%-----------------------------------------------------------------------------
+%% @param   KeyFun  a function that returns the key for each element
+%% @param   ValueFun a function that returns the value for each element
+%% @param   List    the list to group
+%% @returns a map where keys are the results of applying `KeyFun' to elements
+%%          and values are lists of results of applying `ValueFun' to elements
+%%          that produced that key
+%% @doc Group elements of a list by a key function, with value transformation.
+%%
+%% This function groups elements of `List' into a map. The key for each element
+%% is computed by applying `KeyFun' to the element, and the value is computed
+%% by applying `ValueFun' to the element. All elements with the same key
+%% are collected into a list, preserving the order from the original list.
+%%
+%% This function raises a `badarg' error if `KeyFun' or `ValueFun' are not
+%% functions of arity 1 or if `List' is not a proper list.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec groups_from_list(
+    KeyFun :: fun((Elem) -> Key),
+    ValueFun :: fun((Elem) -> Value),
+    List :: [Elem]
+) -> #{Key => [Value]}.
+groups_from_list(KeyFun, ValueFun, List) when
+    is_function(KeyFun, 1) andalso is_function(ValueFun, 1)
+->
+    try lists:reverse(List) of
+        RevList ->
+            groups_from_list_1(KeyFun, ValueFun, RevList, #{})
+    catch
+        error:_ ->
+            error(badarg)
+    end;
+groups_from_list(_KeyFun, _ValueFun, _List) ->
+    error(badarg).
+
+%%-----------------------------------------------------------------------------
+%% @param   Map1  a map
+%% @param   Map2  a map
+%% @returns a map containing the intersection of `Map1' and `Map2'
+%% @doc Return the intersection of two maps.
+%%
+%% This function returns a new map containing only those keys that exist in
+%% both `Map1' and `Map2'. The values are taken from `Map2'.
+%%
+%% This function raises a `badmap' error if either `Map1' or `Map2' is not a map.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec intersect(Map1 :: #{Key => Value}, Map2 :: #{Key => Value}) -> #{Key => Value}.
+intersect(Map1, Map2) when is_map(Map1) andalso is_map(Map2) ->
+    case map_size(Map1) =< map_size(Map2) of
+        true ->
+            intersect_with_small_map_first(fun(_K, _V1, V2) -> V2 end, Map1, Map2);
+        false ->
+            intersect_with_small_map_first(fun(_K, V1, _V2) -> V1 end, Map2, Map1)
+    end;
+intersect(Map1, _Map2) when not is_map(Map1) ->
+    error({badmap, Map1});
+intersect(_Map1, Map2) when not is_map(Map2) ->
+    error({badmap, Map2}).
+
+%%-----------------------------------------------------------------------------
+%% @param   Combiner  a function to combine values from Map1 and Map2
+%% @param   Map1  a map
+%% @param   Map2  a map
+%% @returns a map containing the intersection of `Map1' and `Map2' with combined values
+%% @doc Return the intersection of two maps with combined values.
+%%
+%% This function returns a new map containing only those keys that exist in
+%% both `Map1' and `Map2'. For each such key, the value is computed by calling
+%% `Combiner(Key, Value1, Value2)' where `Value1' is from `Map1' and `Value2'
+%% is from `Map2'.
+%%
+%% This function raises a `badmap' error if either `Map1' or `Map2' is not a map,
+%% and a `badarg' error if `Combiner' is not a function of arity 3.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec intersect_with(
+    Combiner :: fun((Key, Value, Value) -> Value),
+    Map1 :: #{Key => Value},
+    Map2 :: #{Key => Value}
+) -> #{Key => Value}.
+intersect_with(Combiner, Map1, Map2) when
+    is_map(Map1) andalso is_map(Map2) andalso is_function(Combiner, 3)
+->
+    case map_size(Map1) =< map_size(Map2) of
+        true ->
+            intersect_with_small_map_first(Combiner, Map1, Map2);
+        false ->
+            RCombiner = fun(K, V1, V2) -> Combiner(K, V2, V1) end,
+            intersect_with_small_map_first(RCombiner, Map2, Map1)
+    end;
+intersect_with(_Combiner, Map1, _Map2) when not is_map(Map1) ->
+    error({badmap, Map1});
+intersect_with(_Combiner, _Map1, Map2) when not is_map(Map2) ->
+    error({badmap, Map2});
+intersect_with(_Combiner, _Map1, _Map2) ->
+    error(badarg).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun     the function to apply to every entry in the map
@@ -731,3 +906,67 @@ iterate_from_list([{Key, Value} | T], Accum) ->
     iterate_from_list(T, Accum#{Key => Value});
 iterate_from_list(_List, _Accum) ->
     error(badarg).
+
+%% @private
+iterate_filtermap(_Fun, none, Accum) ->
+    lists:reverse(Accum);
+iterate_filtermap(Fun, {Key, Value, Iterator}, Accum) ->
+    NewAccum =
+        case Fun(Key, Value) of
+            true ->
+                [{Key, Value} | Accum];
+            {true, NewValue} ->
+                [{Key, NewValue} | Accum];
+            false ->
+                Accum
+        end,
+    iterate_filtermap(Fun, maps:next(Iterator), NewAccum).
+
+%% @private
+groups_from_list_1(_KeyFun, _ValueFun, [], Acc) ->
+    Acc;
+groups_from_list_1(KeyFun, ValueFun, [Elem | Rest], Acc) ->
+    Key = KeyFun(Elem),
+    Value = ValueFun(Elem),
+    NewAcc =
+        case Acc of
+            #{Key := Values} ->
+                Acc#{Key := [Value | Values]};
+            #{} ->
+                Acc#{Key => [Value]}
+        end,
+    groups_from_list_1(KeyFun, ValueFun, Rest, NewAcc).
+
+%% @private
+intersect_with_small_map_first(Combiner, SmallMap, BigMap) ->
+    Next = maps:next(maps:iterator(SmallMap)),
+    intersect_with_iterate(Next, [], BigMap, Combiner).
+
+%% @private
+intersect_with_iterate({K, V1, Iterator}, Keep, BigMap, Combiner) ->
+    Next = maps:next(Iterator),
+    case BigMap of
+        #{K := V2} ->
+            V = Combiner(K, V1, V2),
+            intersect_with_iterate(Next, [{K, V} | Keep], BigMap, Combiner);
+        #{} ->
+            intersect_with_iterate(Next, Keep, BigMap, Combiner)
+    end;
+intersect_with_iterate(none, Keep, _BigMap, _Combiner) ->
+    maps:from_list(Keep).
+
+%% @private
+is_iterator_valid_1(none) ->
+    true;
+is_iterator_valid_1({_, _, Iter}) ->
+    is_iterator_valid_1(Iter);
+is_iterator_valid_1([Pos | Map]) when is_integer(Pos), is_map(Map) ->
+    %% Default iterator - try to use it
+    _ = maps:next([Pos | Map]),
+    true;
+is_iterator_valid_1([Keys | Map]) when is_list(Keys), is_map(Map) ->
+    %% Ordered iterator - try to use it
+    _ = maps:next([Keys | Map]),
+    true;
+is_iterator_valid_1(_) ->
+    false.
