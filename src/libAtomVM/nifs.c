@@ -5086,6 +5086,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     }
 
     if ((object_type == PROCESS_ATOM && target->native_handler != NULL) || (object_type == PORT_ATOM && target->native_handler == NULL)) {
+        globalcontext_get_process_unlock(ctx->global, target);
         RAISE_ERROR(BADARG_ATOM);
     }
 
