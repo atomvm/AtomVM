@@ -139,6 +139,14 @@ void context_destroy(Context *ctx)
     // Hold and release the spin lock for timers and cancel any timer
     scheduler_cancel_timeout(ctx);
 
+    // Remove the process from the scheduler queue. A process terminated by the scheduler was
+    // already dequeued (and its queue item was reset, making this a no-op), but a process that
+    // is destroyed before it was ever scheduled -- e.g. on a spawn_opt option error -- is still
+    // on the waiting queue, and destroying it without dequeuing would leave a dangling entry.
+    SMP_SPINLOCK_LOCK(&ctx->global->processes_spinlock);
+    list_remove(&ctx->processes_list_head);
+    SMP_SPINLOCK_UNLOCK(&ctx->global->processes_spinlock);
+
     // Another process can get an access to our mailbox until this point.
     struct ListHead *processes_table_list = synclist_wrlock(&ctx->global->processes_table);
     UNUSED(processes_table_list);

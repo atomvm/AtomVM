@@ -289,6 +289,8 @@ Context *scheduler_run(GlobalContext *global)
             if (UNLIKELY(result->flags & Killed)) {
                 SMP_SPINLOCK_LOCK(&global->processes_spinlock);
                 list_remove(&result->processes_list_head);
+                // Reset the queue item so the dequeue in context_destroy is a no-op.
+                list_init(&result->processes_list_head);
                 SMP_SPINLOCK_UNLOCK(&global->processes_spinlock);
                 context_destroy(result);
             } else {
@@ -429,6 +431,9 @@ void scheduler_terminate(Context *ctx)
     SMP_SPINLOCK_LOCK(&ctx->global->processes_spinlock);
     context_update_flags(ctx, ~NoFlags, Killed);
     list_remove(&ctx->processes_list_head);
+    // Reset the queue item so the dequeue in context_destroy is a no-op. For a leader process,
+    // context_destroy is called after the scheduler loop returns.
+    list_init(&ctx->processes_list_head);
     SMP_SPINLOCK_UNLOCK(&ctx->global->processes_spinlock);
     if (!ctx->leader) {
         context_destroy(ctx);
