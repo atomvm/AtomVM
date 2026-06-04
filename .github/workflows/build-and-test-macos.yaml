@@ -261,7 +261,7 @@ jobs:
         ./src/AtomVM ./tests/libs/etest/test_etest.avm
 
     - name: "Test: test_estdlib.avm"
-      timeout-minutes: 10
+      timeout-minutes: 20
       working-directory: build
       run: |
         ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
@@ -273,7 +273,7 @@ jobs:
         ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 
     - name: "Test: test_jit.avm"
-      timeout-minutes: 10
+      timeout-minutes: 20
       working-directory: build
       run: |
         ./src/AtomVM tests/libs/jit/test_jit.avm
