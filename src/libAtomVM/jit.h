@@ -248,6 +248,7 @@ struct ModuleNativeInterface
     Context *(*raw_raise)(Context *ctx, JITState *jit_state);
     Context *(*raise_error_mfa)(
         Context *ctx, JITState *jit_state, int offset, int function_atom_index, int arity);
+    void (*try_case)(Context *ctx);
 };
 
 extern const ModuleNativeInterface module_native_interface;

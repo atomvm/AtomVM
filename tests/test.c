@@ -149,6 +149,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(catch_badmatch, 1),
     TEST_CASE_EXPECTED(catch_nocasematch, 1),
     TEST_CASE_EXPECTED(catch_noifmatch, 1),
+    TEST_CASE(test_catch_return_atom),
     TEST_CASE_EXPECTED(try_catch_test, 109),
     TEST_CASE_EXPECTED(list_concat, 2270),
     TEST_CASE_EXPECTED(make_ref_test, 130),

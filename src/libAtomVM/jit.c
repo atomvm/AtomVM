@@ -310,13 +310,10 @@ static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
         ctx->exception_stacktrace = stacktrace_create_raw(ctx, jit_state->module, offset);
     }
 
-    // Copy exception fields to x registers and clear them
+    // Copy exception fields to x registers
     ctx->x[0] = context_exception_class(ctx);
     ctx->x[1] = ctx->exception_reason;
     ctx->x[2] = ctx->exception_stacktrace;
-    context_set_exception_class(ctx, term_nil());
-    ctx->exception_reason = term_nil();
-    ctx->exception_stacktrace = term_invalid_term();
 
     int target_label = context_get_catch_label(ctx, &jit_state->module);
     if (target_label) {
@@ -1375,7 +1372,10 @@ static bool jit_catch_end(Context *ctx, JITState *jit_state)
 {
     TRACE("jit_catch_end\n");
     // C.f. https://www.erlang.org/doc/reference_manual/expressions.html#catch-and-throw
-    switch (term_to_atom_index(ctx->x[0])) {
+    if (!context_has_pending_exception(ctx)) {
+        return true;
+    }
+    switch (term_to_atom_index(context_exception_class(ctx))) {
         case THROW_ATOM_INDEX:
             ctx->x[0] = ctx->x[1];
             break;
@@ -1411,7 +1411,14 @@ static bool jit_catch_end(Context *ctx, JITState *jit_state)
             break;
         }
     }
+    context_clear_exception(ctx);
     return true;
+}
+
+static void jit_try_case(Context *ctx)
+{
+    TRACE("jit_try_case\n");
+    context_clear_exception(ctx);
 }
 
 static bool jit_memory_ensure_free_with_roots(Context *ctx, JITState *jit_state, int sz, int live, int flags)
@@ -2059,7 +2066,8 @@ const ModuleNativeInterface module_native_interface = {
     jit_alloc_big_integer_fragment,
     jit_bitstring_insert_float,
     jit_raw_raise,
-    jit_raise_error_mfa
+    jit_raise_error_mfa,
+    jit_try_case
 };
 
 #endif
