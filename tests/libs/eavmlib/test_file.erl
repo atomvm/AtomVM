@@ -166,7 +166,11 @@ test_gc(HasSelect) ->
             ?ASSERT_EQUALS(MemorySize8, MemorySize1),
             call_gc_loop(GCSubPid, close),
             call_gc_loop(GCSubPid, gc),
-            MemorySize9 = erlang:memory(binary),
+            % If select_stop raced the ready_output notification, the stop
+            % was scheduled (ERL_NIF_SELECT_STOP_SCHEDULED) and the resource
+            % is only released once the scheduler polling events retires the
+            % closed select event, so wait for memory to converge.
+            MemorySize9 = wait_memory_binary(MemorySize0, 100),
             ?ASSERT_EQUALS(MemorySize9, MemorySize0);
         true ->
             ok
@@ -180,6 +184,19 @@ call_gc_loop(Pid, Message) ->
     Pid ! {self(), Message},
     receive
         {Pid, Message} -> ok
+    end.
+
+wait_memory_binary(Expected, Retries) ->
+    case erlang:memory(binary) of
+        Expected ->
+            Expected;
+        Other when Retries =:= 0 ->
+            Other;
+        _ ->
+            receive
+            after 10 -> ok
+            end,
+            wait_memory_binary(Expected, Retries - 1)
     end.
 
 gc_loop(Path, File) ->
