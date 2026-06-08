@@ -289,12 +289,14 @@ EventListener *socket_events_handler(GlobalContext *glb, EventListener *listener
     while (xQueueReceive(netconn_events, &event, 1) == pdTRUE) {
         TRACE("Got netconn: %p, len = %d\n", (void *) event.netconn, event.len);
         struct SocketData *socket = NULL;
+        int32_t socket_process_id = 0;
         struct ListHead *socket_head;
         struct ListHead *socket_list = synclist_rdlock(&platform->sockets);
         LIST_FOR_EACH (socket_head, socket_list) {
             struct SocketData *current_socket = GET_LIST_ENTRY(socket_head, struct SocketData, sockets_head);
             if (current_socket->conn == event.netconn) {
                 socket = current_socket;
+                socket_process_id = current_socket->process_id;
                 break;
             }
         }
@@ -307,6 +309,9 @@ EventListener *socket_events_handler(GlobalContext *glb, EventListener *listener
                 // Add it to ready_connections
                 TRACE("Got event for unknown conn: %p, len = %d adding to ready connections list\n", (void *) event.netconn, event.len);
                 struct ReadyConnection *ready = (struct ReadyConnection *) malloc(sizeof (struct ReadyConnection));
+                if (IS_NULL_PTR(ready)) {
+                    AVM_ABORT();
+                }
                 ready->netconn = event.netconn;
                 ready->len = event.len;
                 list_append(&platform->ready_connections, &ready->ready_connection_head);
@@ -319,7 +324,7 @@ EventListener *socket_events_handler(GlobalContext *glb, EventListener *listener
             term message = term_alloc_tuple(2, &heap);
             term_put_tuple_element(message, 0, globalcontext_make_atom(glb, netconn_event_internal));
             term_put_tuple_element(message, 1, term_from_int(event.len));
-            globalcontext_send_message(glb, socket->process_id, message);
+            globalcontext_send_message(glb, socket_process_id, message);
             END_WITH_STACK_HEAP(heap, glb)
         }
     }
@@ -491,7 +496,20 @@ static void do_send_error_reply(Context *ctx, err_t status, uint64_t ref_ticks, 
     do_send_reply(ctx, error_tuple, ref_ticks, pid);
 }
 
-static void accept_conn(Context *ctx, struct TCPServerSocketData *tcp_data, uint64_t ref_ticks, int32_t pid)
+static void purge_ready_connections(struct ESP32PlatformData *platform, struct netconn *conn)
+{
+    struct ListHead *item;
+    struct ListHead *tmp;
+    MUTABLE_LIST_FOR_EACH (item, tmp, &platform->ready_connections) {
+        struct ReadyConnection *ready = GET_LIST_ENTRY(item, struct ReadyConnection, ready_connection_head);
+        if (ready->netconn == conn) {
+            list_remove(item);
+            free(ready);
+        }
+    }
+}
+
+static err_t accept_conn(Context *ctx, struct TCPServerSocketData *tcp_data, uint64_t ref_ticks, int32_t pid)
 {
     TRACE("Going to accept a TCP connection\n");
     GlobalContext *glb = ctx->global;
@@ -499,19 +517,29 @@ static void accept_conn(Context *ctx, struct TCPServerSocketData *tcp_data, uint
 
     struct netconn *accepted_conn;
 
-    // There is a bug in lwIP: the callbacks may be called before
-    // netconn_accept is called. Locking the list of sockets is not going
-    // to help in this case.
-    struct ListHead *sockets = socket_data_preinit(platform);
+    // The accept is non-blocking: a spurious ready event (a stale event
+    // carrying a recycled conn pointer) yields ERR_WOULDBLOCK and the caller
+    // re-registers the accepter instead of blocking forever.
+    // Note there is a bug in lwIP: the callbacks may be called before
+    // netconn_accept is called; events received before the accepted socket
+    // is published are kept in ready_connections and drained below.
+    netconn_set_nonblocking(tcp_data->socket_data.conn, 1);
     err_t status = netconn_accept(tcp_data->socket_data.conn, &accepted_conn);
     if (UNLIKELY(status != ERR_OK)) {
-        socket_data_postinit(platform);
-        do_send_error_reply(ctx, status, ref_ticks, pid);
-        return;
+        if (status != ERR_WOULDBLOCK) {
+            do_send_error_reply(ctx, status, ref_ticks, pid);
+        }
+        return status;
     }
 
     TRACE("accepted conn: %p\n", (void *) accepted_conn);
-    // Check if it's in the list of ready_connections
+
+    Context *new_ctx = context_new(glb);
+    new_ctx->native_handler = socket_consume_mailbox;
+
+    term socket_pid = term_port_from_local_process_id(new_ctx->process_id);
+
+    struct ListHead *sockets = socket_data_preinit(platform);
 
     struct ListHead *ready_connections_head;
     struct ListHead *tmp;
@@ -528,11 +556,6 @@ static void accept_conn(Context *ctx, struct TCPServerSocketData *tcp_data, uint
             free(ready_connection);
         }
     }
-
-    Context *new_ctx = context_new(glb);
-    new_ctx->native_handler = socket_consume_mailbox;
-
-    term socket_pid = term_port_from_local_process_id(new_ctx->process_id);
 
     struct TCPClientSocketData *new_tcp_data = tcp_client_socket_data_new(new_ctx, accepted_conn, sockets, pid);
     socket_data_postinit(platform);
@@ -559,6 +582,7 @@ static void accept_conn(Context *ctx, struct TCPServerSocketData *tcp_data, uint
 
     do_send_reply(ctx, result_tuple, ref_ticks, pid);
 
+    return ERR_OK;
 }
 
 static void do_accept(Context *ctx, const GenMessage *gen_message)
@@ -571,10 +595,18 @@ static void do_accept(Context *ctx, const GenMessage *gen_message)
     if (tcp_data->ready_connections) {
         TRACE("accepting existing connections.\n");
 
-        accept_conn(ctx, tcp_data, ref_ticks, pid);
-        tcp_data->ready_connections--;
-    } else {
+        if (accept_conn(ctx, tcp_data, ref_ticks, pid) == ERR_WOULDBLOCK) {
+            tcp_data->ready_connections = 0;
+        } else {
+            tcp_data->ready_connections--;
+            return;
+        }
+    }
+    {
         struct TCPServerAccepter *accepter = malloc(sizeof(struct TCPServerAccepter));
+        if (IS_NULL_PTR(accepter)) {
+            AVM_ABORT();
+        }
         accepter->accepting_process_pid = pid;
         accepter->ref_ticks = ref_ticks;
         list_append(&tcp_data->accepters_list_head, &accepter->accepter_head);
@@ -646,17 +678,21 @@ static void do_tcp_server_netconn_event(Context *ctx)
     TRACE("do_tcp_server_netconn_event\n");
     struct TCPServerSocketData *tcp_data = ctx->platform_data;
 
-    struct ListHead *accepter_head;
-    struct ListHead *tmp;
     struct TCPServerAccepter *accepter = NULL;
-    MUTABLE_LIST_FOR_EACH (accepter_head, tmp, &tcp_data->accepters_list_head) {
+    if (!list_is_empty(&tcp_data->accepters_list_head)) {
+        struct ListHead *accepter_head = list_first(&tcp_data->accepters_list_head);
         accepter = GET_LIST_ENTRY(accepter_head, struct TCPServerAccepter, accepter_head);
         list_remove(accepter_head);
     }
 
     if (accepter) {
-        accept_conn(ctx, tcp_data, accepter->ref_ticks, accepter->accepting_process_pid);
-        free(accepter);
+        if (accept_conn(ctx, tcp_data, accepter->ref_ticks, accepter->accepting_process_pid)
+            == ERR_WOULDBLOCK) {
+            // Spurious wake-up: keep waiting for a real connection.
+            list_append(&tcp_data->accepters_list_head, &accepter->accepter_head);
+        } else {
+            free(accepter);
+        }
     } else {
         tcp_data->ready_connections++;
     }
@@ -672,17 +708,20 @@ static NativeHandlerResult do_receive_data(Context *ctx)
         if (socket_data->type == TCPClientSocket) {
             // Close socket in case of errors or finish closing if it's closed
             // on the other end.
-            #ifndef AVM_NO_SMP
             struct ESP32PlatformData *platform = ctx->global->platform_data;
-            #endif
-            synclist_remove(&platform->sockets, &socket_data->sockets_head);
-            if (UNLIKELY(netconn_close(socket_data->conn) != ERR_OK)) {
+            struct netconn *closed_conn = socket_data->conn;
+            struct ListHead *sockets_head = synclist_wrlock(&platform->sockets);
+            UNUSED(sockets_head);
+            socket_data->conn = NULL;
+            list_remove(&socket_data->sockets_head);
+            purge_ready_connections(platform, closed_conn);
+            synclist_unlock(&platform->sockets);
+            if (UNLIKELY(netconn_close(closed_conn) != ERR_OK)) {
                 TRACE("do_receive_data: netconn_close failed\n");
             }
-            if (UNLIKELY(netconn_delete(socket_data->conn) != ERR_OK)) {
+            if (UNLIKELY(netconn_delete(closed_conn) != ERR_OK)) {
                 TRACE("do_receive_data: netconn_delete failed\n");
             }
-            socket_data->conn = NULL;
         }
         if (socket_data->type == TCPClientSocket && (status == ERR_CLSD || status == ERR_CONN)) {
             do_send_tcp_closed(ctx);
@@ -701,6 +740,7 @@ static NativeHandlerResult do_receive_data(Context *ctx)
     status = netbuf_data(buf, &data, &data_len);
     if (UNLIKELY(status != ERR_OK)) {
         TRACE("do_receive_data: netbuf_data error: %i\n", status);
+        netbuf_delete(buf);
         do_send_socket_error(ctx, status);
         return NativeContinue;
     }
@@ -745,6 +785,7 @@ static NativeHandlerResult do_receive_data(Context *ctx)
         term addr_term = socket_addr_to_tuple(&ctx->heap, netbuf_fromaddr(buf));
         if (addr_term == term_invalid_term()) {
             TRACE("do_receive_data: socket_addr_to_tuple error\n");
+            netbuf_delete(buf);
             do_send_socket_error(ctx, ERR_BUF);
             return NativeContinue;
         }
@@ -759,6 +800,7 @@ static NativeHandlerResult do_receive_data(Context *ctx)
 
     if (netbuf_next(buf) == 0) {
         TRACE("do_receive_data: netbuf error : got more parts\n");
+        netbuf_delete(buf);
         do_send_socket_error(ctx, ERR_BUF);
         return NativeContinue;
     }
@@ -921,31 +963,38 @@ static void do_connect(Context *ctx, const GenMessage *gen_message)
 
     free(address_string);
 
-    // Lock list of sockets before the event callback is called
-    struct ListHead *sockets = socket_data_preinit(platform);
     struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_TCP, 0, socket_callback);
     if (IS_NULL_PTR(conn)) {
         AVM_ABORT();
     }
 
-    status = netconn_connect(conn, &remote_ip, port);
-    if (UNLIKELY(status != ERR_OK)) {
-        TRACE("tcp: failed connect: %i\n", status);
-        netconn_delete(conn);
-        socket_data_postinit(platform);
-        do_send_error_reply(ctx, status, ref_ticks, pid);
-        return;
-    }
-
-    TRACE("tcp: connected.\n");
-
+    // Publish the socket before the blocking connect
+    struct ListHead *sockets = socket_data_preinit(platform);
     struct TCPClientSocketData *tcp_data = tcp_client_socket_data_new(ctx, conn, sockets, controlling_process_pid);
-    socket_data_postinit(platform);
     if (IS_NULL_PTR(tcp_data)) {
         AVM_ABORT();
     }
     tcp_data->socket_data.active = active;
     tcp_data->socket_data.binary = binary;
+    socket_data_postinit(platform);
+
+    status = netconn_connect(conn, &remote_ip, port);
+    if (UNLIKELY(status != ERR_OK)) {
+        TRACE("tcp: failed connect: %i\n", status);
+        struct ListHead *sockets_head = synclist_wrlock(&platform->sockets);
+        UNUSED(sockets_head);
+        list_remove(&tcp_data->socket_data.sockets_head);
+        purge_ready_connections(platform, conn);
+        synclist_unlock(&platform->sockets);
+        netconn_delete(conn);
+        free(tcp_data);
+        // Mark platform_data as NULL to drop other messages
+        ctx->platform_data = NULL;
+        do_send_error_reply(ctx, status, ref_ticks, pid);
+        return;
+    }
+
+    TRACE("tcp: connected.\n");
 
     do_send_reply(ctx, OK_ATOM, ref_ticks, pid);
 }
@@ -988,9 +1037,14 @@ static void do_listen(Context *ctx, const GenMessage *gen_message)
     // Lock list of sockets before the event callback is called
     struct ListHead *sockets = socket_data_preinit(platform);
     struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_TCP, 0, socket_callback);
+    if (IS_NULL_PTR(conn)) {
+        AVM_ABORT();
+    }
 
     err_t status = netconn_bind(conn, IP_ADDR_ANY, port);
     if (UNLIKELY(status != ERR_OK)) {
+        netconn_delete(conn);
+        socket_data_postinit(platform);
         do_send_error_reply(ctx, status, ref_ticks, pid);
         return;
     }
@@ -999,12 +1053,16 @@ static void do_listen(Context *ctx, const GenMessage *gen_message)
     u16_t nport;
     status = netconn_getaddr(conn, &naddr, &nport, 1);
     if (UNLIKELY(status != ERR_OK)) {
+        netconn_delete(conn);
+        socket_data_postinit(platform);
         do_send_error_reply(ctx, status, ref_ticks, pid);
         return;
     }
 
     status = netconn_listen_with_backlog(conn, backlog);
     if (UNLIKELY(status != ERR_OK)) {
+        netconn_delete(conn);
+        socket_data_postinit(platform);
         do_send_error_reply(ctx, status, ref_ticks, pid);
         return;
     }
@@ -1254,19 +1312,22 @@ static void do_close(Context *ctx, const GenMessage *gen_message)
     if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + REPLY_SIZE) != MEMORY_GC_OK)) {
         AVM_ABORT();
     }
+    struct netconn *closed_conn = socket_data->conn;
+    struct ESP32PlatformData *platform = ctx->global->platform_data;
+    struct ListHead *sockets_head = synclist_wrlock(&platform->sockets);
+    UNUSED(sockets_head);
+    socket_data->conn = NULL;
+    list_remove(&socket_data->sockets_head);
+    purge_ready_connections(platform, closed_conn);
+    synclist_unlock(&platform->sockets);
+
     err_t close_disconnect_res = 0;
     if (socket_data->type == UDPSocket) {
-        close_disconnect_res = netconn_disconnect(socket_data->conn);
+        close_disconnect_res = netconn_disconnect(closed_conn);
     } else if (socket_data->type == TCPClientSocket) {
-        close_disconnect_res = netconn_close(socket_data->conn);
+        close_disconnect_res = netconn_close(closed_conn);
     }
-    err_t delete_res = netconn_delete(socket_data->conn);
-
-    socket_data->conn = NULL;
-    #ifndef AVM_NO_SMP
-    struct ESP32PlatformData *platform = ctx->global->platform_data;
-    #endif
-    synclist_remove(&platform->sockets, &socket_data->sockets_head);
+    err_t delete_res = netconn_delete(closed_conn);
 
     if (UNLIKELY(close_disconnect_res != ERR_OK)) {
         do_send_error_reply(ctx, close_disconnect_res, ref_ticks, pid);
@@ -1430,6 +1491,11 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx)
         TRACE("\n");
 
         if (term_is_tuple(msg) && term_get_tuple_element(msg, 0) == globalcontext_make_atom(glb, netconn_event_internal)) {
+            if (IS_NULL_PTR(ctx->platform_data)) {
+                // Event for a connection whose init failed and was deleted.
+                mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+                continue;
+            }
             int len = term_to_int32(term_get_tuple_element(msg, 1));
             NativeHandlerResult result = do_netconn_event(ctx, len);
             if (result == NativeTerminate) {
@@ -1455,6 +1521,9 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx)
             case INIT_ATOM:
                 TRACE("init\n");
                 do_init(ctx, &gen_message);
+                if (IS_NULL_PTR(ctx->platform_data)) {
+                    return NativeTerminate;
+                }
                 break;
 
             case SENDTO_ATOM:
