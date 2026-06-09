@@ -34,9 +34,16 @@ start() ->
     ok = test_os_system_time(),
     ok = test_time_unit_ratios(),
 
+    ok = test_integer_time_unit(),
+    ok = test_non_power_of_10_integer_time_unit(),
+    ok = test_bad_integer_time_unit(),
+
     ok = expect(fun() -> erlang:system_time(not_a_time_unit) end, badarg),
 
     ok = test_system_time_to_universal_time(),
+    ok = test_negative_year_universal_time(),
+    ok = test_integer_unit_universal_time(),
+    ok = test_bad_integer_unit_universal_time(),
 
     0.
 
@@ -126,11 +133,75 @@ test_system_time_to_universal_time() ->
     {{2023, 7, 8}, {20, 19, 39}} = calendar:system_time_to_universal_time(1688847579, second),
 
     {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, second),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, millisecond),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(
+        -1000, millisecond
+    ),
+    {{1969, 12, 31}, {23, 59, 58}} = calendar:system_time_to_universal_time(-1001, millisecond),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, microsecond),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, nanosecond),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, native),
+
+    ok = expect(
+        fun() -> calendar:system_time_to_universal_time(not_an_integer, second) end, badarg
+    ),
 
     ok = test_nanosecond_universal_time(),
     ok = test_native_universal_time(),
 
     ok.
+
+test_negative_year_universal_time() ->
+    % Moderate negative: 20 years before epoch (fits in both 32-bit and 64-bit time_t)
+    {{1950, 1, 1}, {0, 0, 0}} = calendar:system_time_to_universal_time(-631152000, second),
+
+    % Year 2100 probe (succeeds on 64-bit time_t, badarg on limited range)
+    ok = test_year_2100(),
+
+    % Extreme years: OTP <29 supports positive but not negative extremes.
+    % Separate probes so a failure on one does not skip the others.
+    ok = test_extreme_negative_year(),
+    ok = test_extreme_positive_year(),
+
+    ok.
+
+test_year_2100() ->
+    try
+        {{2100, 1, 1}, {0, 0, 0}} = calendar:system_time_to_universal_time(4102444800, second),
+        ok
+    catch
+        error:badarg ->
+            % Platform with limited time_t range (e.g., 32-bit time_t)
+            ok
+    end.
+
+test_extreme_negative_year() ->
+    try
+        {{-998051, 6, 20}, {0, 0, 0}} = calendar:system_time_to_universal_time(
+            -31557600000000, second
+        ),
+        ok
+    catch
+        error:badarg ->
+            % AtomVM platform with limited time_t range or out-of-range
+            ok;
+        error:function_clause ->
+            % OTP <29 calendar limit on negative extremes (BEAM only)
+            true = is_beam(),
+            ok
+    end.
+
+test_extreme_positive_year() ->
+    try
+        {{1001990, 7, 15}, {0, 0, 0}} = calendar:system_time_to_universal_time(
+            31557600000000, second
+        ),
+        ok
+    catch
+        error:badarg ->
+            % Platform with limited time_t range (e.g., 32-bit time_t)
+            ok
+    end.
 
 test_nanosecond_system_time() ->
     ok = test_system_time(nanosecond, 1).
@@ -163,5 +234,111 @@ test_nanosecond_universal_time() ->
 
 test_native_universal_time() ->
     {{1970, 1, 1}, {0, 0, 0}} = calendar:system_time_to_universal_time(0, native),
-    {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(1000000000, native),
+    ok =
+        case erlang:system_info(machine) of
+            "ATOM" ->
+                {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(
+                    1000000000, native
+                ),
+                ok;
+            _ ->
+                ok
+        end,
     ok.
+
+test_integer_time_unit() ->
+    S = erlang:system_time(second),
+    S1 = erlang:system_time(1),
+    true = abs(S1 - S) =< 1,
+
+    Ms = erlang:system_time(millisecond),
+    Ms1 = erlang:system_time(1000),
+    true = abs(Ms1 - Ms) =< 1,
+
+    Us = erlang:system_time(microsecond),
+    Us1 = erlang:system_time(1000000),
+    true = abs(Us1 - Us) =< 1000,
+
+    Ns = erlang:system_time(nanosecond),
+    Ns1 = erlang:system_time(1000000000),
+    true = abs(Ns1 - Ns) =< 1000000,
+
+    true = S1 > 0,
+    true = Ms1 > 0,
+    true = Us1 > 0,
+    true = Ns1 > 0,
+
+    ok.
+
+test_non_power_of_10_integer_time_unit() ->
+    ok = test_integer_parts_per_second_ratio(256),
+    ok = test_integer_parts_per_second_ratio(48000),
+    ok.
+
+test_integer_unit_universal_time() ->
+    {{1970, 1, 1}, {0, 0, 0}} = calendar:system_time_to_universal_time(0, 1),
+    {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(1, 1),
+    {{2023, 7, 8}, {20, 19, 39}} = calendar:system_time_to_universal_time(1688847579, 1),
+
+    {{1970, 1, 1}, {0, 0, 0}} = calendar:system_time_to_universal_time(0, 1000),
+    {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(1000, 1000),
+    {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(1001, 1000),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, 1000),
+    {{1969, 12, 31}, {23, 59, 58}} = calendar:system_time_to_universal_time(-1001, 1000),
+
+    {{1970, 1, 1}, {0, 0, 0}} = calendar:system_time_to_universal_time(0, 1000000),
+    {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(1000000, 1000000),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, 1000000),
+
+    {{1970, 1, 1}, {0, 0, 0}} = calendar:system_time_to_universal_time(255, 256),
+    {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(256, 256),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, 256),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-255, 256),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-256, 256),
+    {{1969, 12, 31}, {23, 59, 58}} = calendar:system_time_to_universal_time(-257, 256),
+    {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(48000, 48000),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, 48000),
+
+    ok.
+
+test_bad_integer_time_unit() ->
+    ok = expect(fun() -> erlang:system_time(0) end, badarg),
+    ok = expect(fun() -> erlang:system_time(-1) end, badarg),
+    ok.
+
+test_bad_integer_unit_universal_time() ->
+    ok = expect(fun() -> calendar:system_time_to_universal_time(not_an_integer, 1000) end, badarg),
+    ok = expect(fun() -> calendar:system_time_to_universal_time(0, 0) end, badarg),
+    ok = expect(fun() -> calendar:system_time_to_universal_time(0, -1) end, badarg),
+    ok = expect(
+        fun() -> calendar:system_time_to_universal_time(0, not_a_time_unit) end, badarg
+    ),
+    ok = test_atomvm_integer_unit_bounds(),
+    ok.
+
+test_atomvm_integer_unit_bounds() ->
+    case is_beam() of
+        true ->
+            ok;
+        false ->
+            ok = expect(
+                fun() -> calendar:system_time_to_universal_time(9223372036854775807, 1) end,
+                badarg
+            ),
+            ok = expect(
+                fun() -> calendar:system_time_to_universal_time(-9223372036854775808, 1) end,
+                badarg
+            ),
+            ok
+    end.
+
+test_integer_parts_per_second_ratio(PartsPerSecond) ->
+    Seconds = erlang:system_time(second),
+    Parts = erlang:system_time(PartsPerSecond),
+    true = is_integer(Parts) andalso Parts > 0,
+    true = Parts >= Seconds * PartsPerSecond,
+    true = Parts < Seconds * PartsPerSecond + (PartsPerSecond * 2),
+    ok.
+
+is_beam() ->
+    erlang:system_info(machine) =:= "BEAM".

@@ -26,6 +26,7 @@ defmodule System do
           | :millisecond
           | :microsecond
           | :nanosecond
+          | pos_integer()
 
   @doc """
   Returns the current monotonic time in the `:native` time unit.
