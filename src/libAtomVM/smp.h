@@ -207,16 +207,42 @@ static inline void smp_spinlock_init(SpinLock *lock)
     lock->lock = 0;
 }
 
+#if !defined(SMP_SPIN_YIELD) && defined(HAVE_SCHED_YIELD)
+#include <sched.h>
+#define SMP_SPIN_YIELD() ((void) sched_yield())
+#endif
+
+#if defined(SMP_SPIN_YIELD) && !defined(SMP_SPIN_YIELD_INTERVAL)
+/*
+ * Number of failed CAS attempts between two yields. Low enough to let
+ * serialized scheduler threads make progress under Valgrind/CI, while avoiding
+ * a syscall on very short transient contention.
+ */
+#define SMP_SPIN_YIELD_INTERVAL 64U
+#endif
+
 /**
  * @brief Lock a spinlock.
  * @param lock the spin lock to lock
  */
 static inline void smp_spinlock_lock(SpinLock *lock)
 {
+#ifdef SMP_SPIN_YIELD
+    unsigned int spins = 0;
+#endif
     int current;
-    do {
+    while (true) {
         current = 0;
-    } while (!ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&lock->lock, &current, 1));
+        if (ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&lock->lock, &current, 1)) {
+            return;
+        }
+#ifdef SMP_SPIN_YIELD
+        if (++spins >= SMP_SPIN_YIELD_INTERVAL) {
+            spins = 0;
+            SMP_SPIN_YIELD();
+        }
+#endif
+    }
 }
 
 /**
