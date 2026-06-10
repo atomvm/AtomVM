@@ -2957,6 +2957,7 @@ static term nif_erlang_display_1(Context *ctx, int argc, term argv[])
 
     term_display(stdout, argv[0], ctx);
     printf("\n");
+    fflush(stdout);
 
     return TRUE_ATOM;
 }
@@ -5643,6 +5644,7 @@ static term nif_console_print(Context *ctx, int argc, term argv[])
         const char *data = term_binary_data(t);
         unsigned long n = term_binary_size(t);
         fprintf(stdout, "%.*s", (int) n, data);
+        fflush(stdout);
     } else {
         size_t size;
         switch (interop_iolist_size(t, &size)) {
