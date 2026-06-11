@@ -227,6 +227,7 @@ struct Test tests[] = {
     TEST_CASE(test_process_info),
     TEST_CASE(test_min_heap_size),
     TEST_CASE_ATOMVM_ONLY(test_heap_growth, 0),
+    TEST_CASE(test_put_map_exact_shared_keys),
     TEST_CASE(test_system_flag),
     TEST_CASE(test_system_info),
     TEST_CASE_EXPECTED(test_funs0, 20),

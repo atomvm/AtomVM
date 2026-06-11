@@ -5070,7 +5070,10 @@ schedule_in:
                     if (UNLIKELY(pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    term_set_map_assoc(map, pos, key, value);
+                    // The keys tuple is shared with src: only the value may be
+                    // updated. Writing the key operand (equal but not
+                    // necessarily identical) would mutate src's keys in place.
+                    term_set_map_value(map, pos, value);
                 }
                 WRITE_REGISTER_GC_SAFE(dreg, map);
                 break;
