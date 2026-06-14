@@ -162,6 +162,7 @@ test_negative_year_universal_time() ->
     % Separate probes so a failure on one does not skip the others.
     ok = test_extreme_negative_year(),
     ok = test_extreme_positive_year(),
+    ok = test_large_positive_year_beyond_32bit_smallint(),
 
     ok.
 
@@ -200,6 +201,30 @@ test_extreme_positive_year() ->
     catch
         error:badarg ->
             % Platform with limited time_t range (e.g., 32-bit time_t)
+            ok
+    end.
+
+test_large_positive_year_beyond_32bit_smallint() ->
+    % ~150 million years after the Unix epoch. If the platform time_t/gmtime_r
+    % supports this range, the returned year exceeds MAX_NOT_BOXED_INT on 32-bit
+    % AtomVM term builds and must be boxed, not encoded with term_from_int().
+    try
+        {{Year, Month, Day}, {Hour, Minute, Second}} =
+            calendar:system_time_to_universal_time(4730400000000000, second),
+        true = is_integer(Year),
+        true = Year > 134217727,
+        true = Month >= 1 andalso Month =< 12,
+        true = Day >= 1 andalso Day =< 31,
+        true = Hour >= 0 andalso Hour =< 23,
+        true = Minute >= 0 andalso Minute =< 59,
+        true = Second >= 0 andalso Second =< 60,
+        ok
+    catch
+        error:badarg ->
+            % Platform with limited time_t / gmtime_r range.
+            ok;
+        error:function_clause ->
+            true = is_beam(),
             ok
     end.
 

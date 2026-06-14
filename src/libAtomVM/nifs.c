@@ -2025,19 +2025,18 @@ static bool int64_to_time_t_checked(avm_int64_t seconds, time_t *out)
 static term build_datetime_from_tm(Context *ctx, struct tm *broken_down_time)
 {
     avm_int64_t year = (avm_int64_t) broken_down_time->tm_year + 1900;
-    if (UNLIKELY(year < AVM_INT_MIN || year > AVM_INT_MAX)) {
-        RAISE_ERROR(BADARG_ATOM);
-    }
-
-    // 4 = size of date/time tuple, 3 size of date time tuple
-    if (UNLIKELY(memory_ensure_free_opt(ctx, 3 + 4 + 4, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    size_t heap_size
+        = TUPLE_SIZE(3) + TUPLE_SIZE(3) + TUPLE_SIZE(2) + term_boxed_integer_size(year);
+    if (UNLIKELY(memory_ensure_free_opt(ctx, heap_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
+
+    term year_term = term_make_maybe_boxed_int64(year, &ctx->heap);
     term date_tuple = term_alloc_tuple(3, &ctx->heap);
     term time_tuple = term_alloc_tuple(3, &ctx->heap);
     term date_time_tuple = term_alloc_tuple(2, &ctx->heap);
 
-    term_put_tuple_element(date_tuple, 0, term_from_int((avm_int_t) year));
+    term_put_tuple_element(date_tuple, 0, year_term);
     term_put_tuple_element(date_tuple, 1, term_from_int11(broken_down_time->tm_mon + 1));
     term_put_tuple_element(date_tuple, 2, term_from_int11(broken_down_time->tm_mday));
 
