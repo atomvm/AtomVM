@@ -47,6 +47,11 @@
 #include "stm32_device_atoms.h"
 #include "stm_sys.h"
 
+#ifdef AVM_USB_CDC_PORT_DRIVER_ENABLED
+#include "usb_cdc_driver.h"
+#include <tusb.h>
+#endif
+
 #define TAG "sys"
 #define RESERVE_STACK_SIZE 4096U
 
@@ -260,6 +265,11 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
 {
     UNUSED(glb);
     UNUSED(timeout_ms);
+#ifdef AVM_USB_CDC_PORT_DRIVER_ENABLED
+    if (tud_inited()) {
+        usb_cdc_driver_poll();
+    }
+#endif
 }
 
 void sys_listener_destroy(struct ListHead *item)

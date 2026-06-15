@@ -18,11 +18,16 @@ Distribution over serial (UART) is also available for point-to-point
 connections between any two nodes, including microcontrollers without
 networking (e.g. STM32). See [Serial distribution](#serial-distribution).
 
-Three examples are provided:
+Distribution over USB CDC is also supported on ESP32-S2/S3, RP2040/RP2350,
+and STM32, using the same `serial_dist` protocol. On Unix hosts, USB CDC
+devices appear as standard serial ports. See [USB distribution](#usb-distribution).
+
+Four examples are provided:
 
 - disterl in `examples/erlang/disterl.erl`: distribution on Unix systems
 - epmd\_disterl in `examples/erlang/esp32/epmd_disterl.erl`: distribution on ESP32 devices
 - serial\_disterl in `examples/erlang/serial_disterl.erl`: distribution over serial (ESP32 and Unix)
+- usb\_disterl in `examples/erlang/usb_disterl.erl`: distribution over USB CDC (all platforms)
 
 ## Starting and stopping distribution
 
@@ -238,6 +243,73 @@ This creates two pseudo-terminal devices (e.g. `/dev/ttys003` and
 
 %% From Node B, trigger autoconnect:
 {some_registered_name, 'a@serial.local'} ! {self(), hello}.
+```
+
+## USB distribution
+
+AtomVM supports distribution over USB CDC (Communications Device Class)
+connections. USB CDC makes the device appear as a virtual serial port,
+so it reuses the `serial_dist` module with a USB-specific HAL module.
+
+See the [USB CDC](./programmers-guide.md#usb-cdc) section of the Programmer's
+Guide for how to enable the port driver on each platform
+
+### Platform support
+
+| Platform | Module | Notes |
+|----------|--------|-------|
+| ESP32 (S2/S3) | `usb_cdc` | Requires TinyUSB CDC (`CONFIG_AVM_ENABLE_USB_CDC_PORT_DRIVER`) |
+| RP2040/RP2350 | `usb_cdc` | Requires `AVM_USB_CDC_PORT_DRIVER_ENABLED`; disable `pico_enable_stdio_usb` |
+| STM32 | `usb_cdc` | Requires TinyUSB integration and `AVM_USB_CDC_PORT_DRIVER_ENABLED` |
+| Unix | `uart` | USB CDC devices appear as `/dev/ttyACMx` (Linux) or `/dev/cu.usbmodemXXXX` (macOS) |
+
+### Quick start, MCU side (ESP32-S3 example)
+
+```erlang
+{ok, _} = net_kernel:start('sensor@serial.local', #{
+    name_domain => longnames,
+    proto_dist => serial_dist,
+    avm_dist_opts => #{
+        uart_opts => [{peripheral, "CDC0"}],
+        uart_module => usb_cdc
+    }
+}).
+```
+
+### Quick start, Unix host side
+
+On Unix, USB CDC devices are standard serial ports. Use the regular
+`uart` module:
+
+```erlang
+{ok, _} = net_kernel:start('host@serial.local', #{
+    name_domain => longnames,
+    proto_dist => serial_dist,
+    avm_dist_opts => #{
+        uart_opts => [{peripheral, "/dev/ttyACM0"}, {speed, 115200}],
+        uart_module => uart
+    }
+}).
+```
+
+### Multi-device topology
+
+USB uses a star topology: one host connects to multiple devices through
+a USB hub. Each device appears as a separate `/dev/ttyACMx` on the host.
+Use `uart_ports` (list of proplists) to connect to multiple devices:
+
+```erlang
+{ok, _} = net_kernel:start('host@serial.local', #{
+    name_domain => longnames,
+    proto_dist => serial_dist,
+    avm_dist_opts => #{
+        uart_ports => [
+            [{peripheral, "/dev/ttyACM0"}, {speed, 115200}],
+            [{peripheral, "/dev/ttyACM1"}, {speed, 115200}]
+        ],
+        uart_module => uart
+    }
+}).
 ```
 
 ## Distribution features

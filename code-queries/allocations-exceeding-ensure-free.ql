@@ -62,6 +62,26 @@ predicate directlyCallsEnsureFree(Function f) {
 }
 
 /**
+ * Holds if `f` sets up its own local stack heap via `BEGIN_WITH_STACK_HEAP`, so
+ * it allocates into that heap rather than the caller's context heap and must not
+ * be charged to a caller's ensure_free.
+ *
+ * Matches the `BEGIN_WITH_STACK_HEAP` expansion specifically -- a
+ * `memory_init_heap_root_fragment` call whose root fragment is a stack-local
+ * struct. This excludes `memory_init_heap`, which passes a malloc'd fragment and
+ * would misclassify ordinary heap-growing functions as own-heap managers.
+ */
+pragma[noinline]
+predicate directlyInitializesOwnHeap(Function f) {
+    exists(FunctionCall fc, AddressOfExpr fragmentAddr |
+        fc.getEnclosingFunction() = f and
+        fc.getTarget().hasName("memory_init_heap_root_fragment") and
+        fragmentAddr = fc.getArgument(1).getAChild*() and
+        fragmentAddr.getOperand().(VariableAccess).getTarget() instanceof StackVariable
+    )
+}
+
+/**
  * Holds if `caller` directly calls `callee` (cached edge relation for
  * call-graph traversal, avoiding repeated FunctionCall joins).
  */
@@ -74,17 +94,40 @@ predicate callEdge(Function caller, Function callee) {
 }
 
 /**
- * Holds if `f` directly or transitively calls any memory_ensure_free variant.
- * Functions that do this manage their own heap allocation and should not be
- * checked against the caller's ensure_free.
+ * Holds if `f` directly or transitively manages its own heap budget -- either
+ * by calling a memory_ensure_free variant or by setting up its own local stack
+ * heap (`BEGIN_WITH_STACK_HEAP`). Such functions must not be charged to the
+ * caller's ensure_free.
+ *
+ * For detecting a call that resets the *caller's* context budget (the
+ * redundant-ensure_free rule), use `transitivelyCallsEnsureFreeOnly` instead,
+ * which excludes own-heap setup.
  */
 pragma[nomagic]
 predicate callsEnsureFree(Function f) {
     directlyCallsEnsureFree(f)
     or
+    directlyInitializesOwnHeap(f)
+    or
     exists(Function callee |
         callEdge(f, callee) and
         callsEnsureFree(callee)
+    )
+}
+
+/**
+ * Holds if `f` directly or transitively calls a memory_ensure_free variant --
+ * i.e. resets the *caller's* context heap budget. Unlike `callsEnsureFree`, this
+ * excludes functions that merely set up their own stack heap, which leave the
+ * caller's budget untouched. Used by the redundant-ensure_free reset check.
+ */
+pragma[nomagic]
+predicate transitivelyCallsEnsureFreeOnly(Function f) {
+    directlyCallsEnsureFree(f)
+    or
+    exists(Function callee |
+        callEdge(f, callee) and
+        transitivelyCallsEnsureFreeOnly(callee)
     )
 }
 
@@ -316,21 +359,26 @@ predicate mutuallyExclusiveInFunction(FunctionCall call1, FunctionCall call2) {
 }
 
 /**
- * Holds if all reachable leaf allocating calls from `callee` are direct
- * (within the callee itself) and pairwise mutually exclusive. In this case,
- * the worst-case allocation is the max across branches, not the sum.
+ * Holds if all reachable leaf allocating calls from `callee` live in a single
+ * function (`callee` itself, or one helper it calls) and are pairwise mutually
+ * exclusive there. In this case the worst-case allocation is the max across
+ * branches, not the sum.
  *
- * This handles functions like `term_make_maybe_boxed_int64` which call
- * different allocating functions on exclusive branches (e.g.,
- * `term_make_boxed_int64` OR `term_make_boxed_int`, never both).
+ * Handles e.g. `term_make_maybe_boxed_int64` (which calls `term_make_boxed_int64`
+ * OR `term_make_boxed_int`, never both), including when reached through a thin
+ * wrapper -- the exclusive branches sit one level down. Requiring a single
+ * common host keeps it sound: leaves in distinct helpers are never
+ * `mutuallyExclusiveInFunction`, so `leafAllocContribution` falls back to the sum.
  */
 pragma[nomagic]
 predicate allLeafCallsDirectAndExclusive(Function callee) {
-    // All reachable leaf calls must be directly within the callee
-    forex(FunctionCall leaf |
-        reachableLeafAllocCall(callee, leaf)
-    |
-        leaf.getEnclosingFunction() = callee
+    // All reachable leaf calls live in one and the same host function.
+    exists(Function leafHost |
+        forex(FunctionCall leaf |
+            reachableLeafAllocCall(callee, leaf)
+        |
+            leaf.getEnclosingFunction() = leafHost
+        )
     ) and
     // All pairs of distinct leaf calls must be mutually exclusive
     forall(FunctionCall leaf1, FunctionCall leaf2 |
@@ -379,6 +427,131 @@ int leafAllocContribution(FunctionCall call, Function callee) {
         | leafSize)
 }
 
+// ============================================================
+// Multi-level constant propagation: a constant supplied at a wrapper call
+// (e.g. term_alloc_map(3)) flows down through parameter-passthrough wrappers to
+// leaf memory_heap_alloc(heap, const + param) calls. leafAllocSize only resolves
+// the constant at the leaf wrapper's own call site, so multi-level helpers like
+//   term_alloc_map(n) -> term_alloc_map_maybe_shared(n, ..) -> memory_heap_alloc(2 + n)
+//                                                           -> term_alloc_tuple(n) -> memory_heap_alloc(1 + n)
+// were costed as 0. This recovers their real size (TERM_MAP_SIZE(n) = 3 + 2n).
+// ============================================================
+
+/**
+ * Holds if `e` is statically a `term_invalid_term()` call -- the marker
+ * `term_alloc_map_maybe_shared` tests to decide whether to allocate a fresh keys
+ * tuple. Distinguishes a shared-keys map call from `term_alloc_map`.
+ */
+predicate isInvalidTermExpr(Expr e) {
+    e.(FunctionCall).getTarget().hasName("term_invalid_term")
+    or
+    isInvalidTermExpr(e.(Conversion).getExpr())
+}
+
+/**
+ * Holds if `leafCall` only executes when parameter `paramIdx` of its enclosing
+ * function is an invalid term -- it sits on the true branch of a
+ * `term_is_invalid_term(param)` ternary, e.g. the keys-tuple allocation inside
+ * `term_alloc_map_maybe_shared`:
+ *   keys = term_is_invalid_term(keys) ? term_alloc_tuple(size, heap) : keys;
+ */
+pragma[noinline]
+predicate leafGuardedByInvalidTermParam(FunctionCall leafCall, int paramIdx) {
+    exists(Function f, FunctionCall guard, ConditionalExpr ce |
+        f = leafCall.getEnclosingFunction() and
+        ce.getEnclosingFunction() = f and
+        (ce.getCondition() = guard or ce.getCondition().(Conversion).getExpr() = guard) and
+        guard.getTarget().hasName("term_is_invalid_term") and
+        guard.getArgument(0).(VariableAccess).getTarget() = f.getParameter(paramIdx) and
+        ce.getThen() = leafCall.getParent*()
+    )
+}
+
+/**
+ * Gets the size of a single leaf allocator call `leafCall` (whose target
+ * directly calls `memory_heap_alloc(heap, constPart + param)`) when its size
+ * argument is a forwarded parameter whose value is resolved from the constant
+ * passed at the ancestor wrapper call `wc`.
+ *
+ * Only matches leaves whose size argument is not itself constant (those are
+ * handled by `leafAllocSize`), so this never double-counts. Excludes a leaf
+ * guarded by `term_is_invalid_term(param)` when `wc` passes a real value for that
+ * parameter -- the guarded allocation does not happen.
+ */
+pragma[noinline]
+int propagatedLeafAllocSize(FunctionCall wc, FunctionCall leafCall) {
+    exists(
+        Function leafWrapper, int leafParamIdx, int constPart, Function encl, int enclParamIdx
+    |
+        leafWrapper = leafCall.getTarget() and
+        directParamPlusConstAlloc(leafWrapper, leafParamIdx, constPart) and
+        not exists(constExprValue(leafCall.getArgument(leafParamIdx))) and
+        encl = leafCall.getEnclosingFunction() and
+        leafCall.getArgument(leafParamIdx).(VariableAccess).getTarget() =
+            encl.getParameter(enclParamIdx) and
+        result = constPart + resolvedParamValue(wc, encl, enclParamIdx) and
+        not exists(int gIdx |
+            leafGuardedByInvalidTermParam(leafCall, gIdx) and
+            wc.getTarget() = encl and
+            not isInvalidTermExpr(wc.getArgument(gIdx))
+        )
+    )
+}
+
+/**
+ * Gets the total additional allocation triggered by a wrapper call `wc` whose
+ * constant argument resolves otherwise-unresolved leaf allocations beneath it.
+ * Only holds when that total is strictly positive.
+ */
+pragma[noinline]
+int propagatedCallAllocSize(FunctionCall wc) {
+    result =
+        sum(FunctionCall leafCall |
+            reachableLeafAllocCall(wc.getTarget(), leafCall)
+        |
+            propagatedLeafAllocSize(wc, leafCall)
+        ) and
+    result > 0
+}
+
+/**
+ * Holds if function `f` is reachable from `root` through a chain of callees
+ * that do not manage their own heap (none call ensure_free), so all of their
+ * allocations are charged to `root`'s caller's ensure_free budget.
+ */
+pragma[nomagic]
+predicate reachableNoEnsureFreeFunction(Function root, Function f) {
+    f = root
+    or
+    exists(Function mid |
+        reachableNoEnsureFreeFunction(root, mid) and
+        callEdge(mid, f) and
+        not callsEnsureFree(f)
+    )
+}
+
+/**
+ * Gets the constant allocation recovered by multi-level constant propagation
+ * for an allocating call `call`: the propagated size of `call` itself, plus the
+ * propagated size of every wrapper call located in the no-ensure_free subgraph
+ * reachable from `call`'s target (e.g. a `term_alloc_map(3)` call nested inside
+ * a helper reached through `call`).
+ */
+pragma[noinline]
+int subgraphPropagatedAllocSize(FunctionCall call) {
+    result =
+        sum(FunctionCall wc |
+            wc = call
+            or
+            exists(Function f |
+                reachableNoEnsureFreeFunction(call.getTarget(), f) and
+                wc.getEnclosingFunction() = f
+            )
+        |
+            propagatedCallAllocSize(wc)
+        )
+}
+
 /**
  * Computes the total constant allocation size for a call to a function that
  * transitively calls `memory_heap_alloc` without its own ensure_free.
@@ -389,6 +562,8 @@ int leafAllocContribution(FunctionCall call, Function callee) {
  *   a constant for that parameter
  * - All transitive wrapper function contributions (via reachableLeafAllocCall),
  *   using max for mutually exclusive branches, sum otherwise
+ * - Multi-level propagated contributions (subgraphPropagatedAllocSize), which
+ *   recover constants supplied at nested wrapper calls such as term_alloc_map(n)
  */
 pragma[noinline]
 int getConstAllocSize(FunctionCall call) {
@@ -409,6 +584,8 @@ int getConstAllocSize(FunctionCall call) {
                 exists(leafAllocSize(leafCall)) and
                 not leafOnResolvedNotTakenBranch(call, leafCall)
             )
+            or
+            subgraphPropagatedAllocSize(call) > 0
         ) and
         result =
             // Sum all fully-constant direct allocations
@@ -423,12 +600,17 @@ int getConstAllocSize(FunctionCall call) {
             // Transitive wrapper contributions via reachable leaf calls,
             // using max for mutually exclusive branches, sum otherwise
             leafAllocContribution(call, callee)
+            +
+            // Multi-level constants forwarded through parameter-passthrough
+            // wrappers (e.g. term_alloc_map(n) -> ... -> memory_heap_alloc(c + n))
+            subgraphPropagatedAllocSize(call)
     )
 }
 
 /**
  * Holds if the function call `fc` is a call to one of the memory_ensure_free variants.
  */
+pragma[noinline]
 predicate isEnsureFreeCall(FunctionCall fc) {
     fc.getTarget().hasName("memory_ensure_free")
     or
@@ -444,9 +626,26 @@ predicate isEnsureFreeCall(FunctionCall fc) {
  * (i.e., size > 0). Calls with size 0 are GC/shrink operations and don't
  * establish an allocation budget.
  */
+pragma[noinline]
 predicate isReservingEnsureFreeCall(FunctionCall fc) {
     isEnsureFreeCall(fc) and
     not constExprValue(fc.getArgument(1)) = 0
+}
+
+/**
+ * Holds if function `f` contains at least one reserving ensure_free call.
+ *
+ * Gates the whole budget analysis: a report can only fire inside such a function
+ * (the ensure_free and allocation must share an enclosing function). Restricting
+ * `isAllocatingCall` up front prunes the expensive per-call const-size machinery
+ * to the functions that establish a budget, without changing any result.
+ */
+pragma[noinline]
+predicate functionHasReservingEnsureFree(Function f) {
+    exists(FunctionCall ef |
+        ef.getEnclosingFunction() = f and
+        isReservingEnsureFreeCall(ef)
+    )
 }
 
 /**
@@ -454,7 +653,11 @@ predicate isReservingEnsureFreeCall(FunctionCall fc) {
  * `memory_heap_alloc` without its own ensure_free (i.e., it relies on
  * the caller to have ensured enough heap space).
  */
+pragma[noinline]
 predicate isAllocatingCall(FunctionCall allocCall) {
+    // Only allocations in functions that establish a budget can ever be reported
+    // (same-function requirement).
+    functionHasReservingEnsureFree(allocCall.getEnclosingFunction()) and
     transitivelyCallsHeapAllocWithoutEnsureFree(allocCall.getTarget()) and
     // Exclude the ensure_free functions themselves
     not isEnsureFreeCall(allocCall) and
@@ -513,6 +716,40 @@ FunctionCall nearestPrecedingEnsureFree(FunctionCall allocCall) {
 }
 
 /**
+ * Holds if reserving ensure_free `ef` sits in the then-branch of an `if` and the
+ * allocation `allocCall` is a later sibling statement of that `if` in the same
+ * block -- the `if (cond) { ...; ensure_free(B); ... } ...; alloc(...)` pattern.
+ * Pure AST (no CFG), so it is cheap and excludes `switch` cases for free.
+ */
+predicate conditionalGuardThenSibling(FunctionCall ef, FunctionCall allocCall) {
+    exists(IfStmt guardIf, BlockStmt block, int efIdx, int allocIdx, Stmt allocSibling |
+        ef.getEnclosingStmt().getParentStmt*() = guardIf.getThen() and
+        guardIf = block.getStmt(efIdx) and
+        allocSibling = block.getStmt(allocIdx) and
+        efIdx < allocIdx and
+        allocSibling = allocCall.getEnclosingStmt().getParentStmt*()
+    )
+}
+
+/**
+ * Gets a conditionally-executed reserving ensure_free that governs `allocCall`,
+ * for the pattern `if (cond) { ensure_free(B); } ... alloc(...)` where the
+ * ensure_free does not run on the `cond == false` path.
+ *
+ * Only applies when `allocCall` has no dominating reserving ensure_free at all.
+ * Sound for under-allocation detection: on every execution either this
+ * ensure_free ran (the allocation faces its budget) or it was skipped (the
+ * allocation faces no reservation), so an oversized allocation overflows either way.
+ */
+pragma[nomagic]
+FunctionCall conditionalPrecedingEnsureFree(FunctionCall allocCall) {
+    not exists(nearestPrecedingEnsureFree(allocCall)) and
+    isReservingEnsureFreeCall(result) and
+    result.getEnclosingFunction() = allocCall.getEnclosingFunction() and
+    conditionalGuardThenSibling(result, allocCall)
+}
+
+/**
  * Gets the worst-case (maximum) constant allocation size for a single call.
  * When getConstAllocSize returns multiple values (e.g., from multiple
  * allocation paths within the callee), takes the maximum.
@@ -523,14 +760,19 @@ int maxConstAllocSize(FunctionCall call) {
 }
 
 /**
- * Cached mapping from allocating call to its nearest preceding ensure_free.
- * Materializing this relation avoids repeated evaluation of
- * nearestPrecedingEnsureFree inside the sum aggregation.
+ * Cached mapping from allocating call to its preceding ensure_free budget --
+ * a dominating one (nearestPrecedingEnsureFree) or, when none dominates, a
+ * conditionally-executed one (conditionalPrecedingEnsureFree). Mutually
+ * exclusive, so no allocation is charged twice.
  */
 pragma[nomagic]
 predicate allocToBudget(FunctionCall allocCall, FunctionCall ensureFreeCall) {
     isAllocatingCall(allocCall) and
-    ensureFreeCall = nearestPrecedingEnsureFree(allocCall)
+    (
+        ensureFreeCall = nearestPrecedingEnsureFree(allocCall)
+        or
+        ensureFreeCall = conditionalPrecedingEnsureFree(allocCall)
+    )
 }
 
 /**
@@ -678,6 +920,37 @@ int cumulativeEffectiveConstCost(
 // ============================================================
 
 /**
+ * Gets the context (or environment) variable that an ensure_free call reserves
+ * heap on -- the first argument, e.g. `ctx` in `memory_ensure_free_opt(ctx,..)`.
+ * Used to ensure a "superseding" reset acts on the *same* context.
+ */
+pragma[noinline]
+Variable ensureFreeContextVar(FunctionCall efCall) {
+    isEnsureFreeCall(efCall) and
+    result = efCall.getArgument(0).(VariableAccess).getTarget()
+}
+
+/**
+ * Holds if `consumer` consumes the heap budget reserved on `efCall`'s context
+ * without going through `memory_heap_alloc`. `memory_copy_term_tree(&ctx->heap,
+ * t)` bumps the destination heap pointer directly, so it is invisible to
+ * `allocToBudget`, yet it is often the reason such an ensure_free exists (e.g.
+ * spawn reserves then copies the args in). Recognising it stops the
+ * redundant-ensure_free rule from flagging those reservations. `consumer` must
+ * mention the context variable.
+ */
+pragma[noinline]
+predicate consumesContextBudget(FunctionCall efCall, FunctionCall consumer) {
+    consumer.getEnclosingFunction() = efCall.getEnclosingFunction() and
+    (
+        consumer.getTarget().hasName("memory_copy_term_tree") or
+        consumer.getTarget().hasName("memory_copy_term_tree_to_storage")
+    ) and
+    consumer.getAnArgument().getAChild*().(VariableAccess).getTarget() =
+        ensureFreeContextVar(efCall)
+}
+
+/**
  * Holds if `efCall` is a redundant reserving ensure_free: no allocating call
  * uses its budget, and `supersedingCall` is a subsequent call that resets
  * the heap budget (either a direct ensure_free or a function like
@@ -688,19 +961,35 @@ predicate isRedundantEnsureFree(FunctionCall efCall, FunctionCall supersedingCal
     isReservingEnsureFreeCall(efCall) and
     // No allocating call uses this ensure_free's budget
     not exists(FunctionCall a | allocToBudget(a, efCall)) and
+    // ...and no pointer-bumping consumer (memory_copy_term_tree) uses it either
+    not exists(FunctionCall c, BasicBlock efBB0, BasicBlock cBB |
+        consumesContextBudget(efCall, c) and
+        efBB0 = efCall.getBasicBlock() and
+        cBB = c.getBasicBlock() and
+        cfgPrecedes(efCall, efBB0, c, cBB)
+    ) and
     // Find a subsequent call that resets the heap budget
-    exists(BasicBlock efBB, BasicBlock superBB |
+    exists(BasicBlock efBB, BasicBlock superBB, Variable ctxVar |
         efBB = efCall.getBasicBlock() and
         supersedingCall.getEnclosingFunction() = efCall.getEnclosingFunction() and
         superBB = supersedingCall.getBasicBlock() and
+        // The reset must act on the SAME context this ensure_free reserves on:
+        // a reset of a different context (e.g. the spawned `new_ctx` vs the
+        // caller's `ctx`) does not make this reservation redundant.
+        ctxVar = ensureFreeContextVar(efCall) and
         (
-            // Another direct reserving ensure_free call
+            // Another direct reserving ensure_free call on the same context
             isReservingEnsureFreeCall(supersedingCall) and
-            supersedingCall != efCall
+            supersedingCall != efCall and
+            ensureFreeContextVar(supersedingCall) = ctxVar
             or
-            // A function that internally calls ensure_free (e.g., enif_make_resource)
+            // A function that internally calls ensure_free on the caller's
+            // context (e.g., enif_make_resource), passed that same context as an
+            // argument. Uses the ensure_free-only notion: own-heap setup does not
+            // reset this context's budget.
             not isEnsureFreeCall(supersedingCall) and
-            callsEnsureFree(supersedingCall.getTarget())
+            transitivelyCallsEnsureFreeOnly(supersedingCall.getTarget()) and
+            supersedingCall.getAnArgument().(VariableAccess).getTarget() = ctxVar
         ) and
         cfgPrecedes(efCall, efBB, supersedingCall, superBB) and
         // Exclude superseding calls on the error-handling path of the
@@ -715,6 +1004,262 @@ predicate isRedundantEnsureFree(FunctionCall efCall, FunctionCall supersedingCal
             trueBB = efBB.getATrueSuccessor() and
             bbDominates(trueBB, superBB)
         )
+    )
+}
+
+// ============================================================
+// Full affine (symbolic) accounting.
+//
+// Every size (an ensure_free budget or an allocation) is treated as an affine
+// form: a constant plus a sum of symbolic "atoms" keyed by the variable carrying
+// the byte size. A constant shortfall is reported only when the symbolic atoms
+// cancel exactly (same atom, same coefficient on both sides).
+//
+// Soundness: if ANY summand cannot be modelled, the whole comparison for that
+// ensure_free is suppressed -- so unmodelled code yields missed bugs, never
+// false positives. The only modelled atom is binary byte data; everything else
+// must reduce to a compile-time constant.
+// ============================================================
+
+/**
+ * Gets an additive summand of `root`: a non-`+` expression reached through the
+ * operands of a chain of `+` expressions, tracing through non-reassigned local
+ * variables whose initializer is itself a size expression (e.g. the local
+ * `ensure_packet_avail` / `requested_size` accumulators).
+ */
+predicate additiveSummand(Expr root, Expr s) {
+    not root instanceof AddExpr and
+    not isTraceableSizeLocal(root) and
+    s = root
+    or
+    exists(AddExpr a | a = root |
+        additiveSummand(a.getLeftOperand(), s)
+        or
+        additiveSummand(a.getRightOperand(), s)
+    )
+    or
+    exists(LocalVariable lv |
+        isTraceableSizeLocal(root) and
+        root.(VariableAccess).getTarget() = lv and
+        additiveSummand(lv.getInitializer().getExpr(), s)
+    )
+}
+
+/**
+ * Holds if `e` is an access to a non-reassigned local variable that has an
+ * initializer -- a size accumulator that should be traced into rather than
+ * treated as an opaque symbolic summand.
+ */
+predicate isTraceableSizeLocal(Expr e) {
+    exists(LocalVariable lv |
+        e.(VariableAccess).getTarget() = lv and
+        exists(lv.getInitializer().getExpr()) and
+        not exists(Assignment a | a.getLValue().(VariableAccess).getTarget() = lv) and
+        not exists(CrementOperation co | co.getOperand().(VariableAccess).getTarget() = lv)
+    )
+}
+
+/**
+ * Binary-creating allocators and the index of the argument carrying the binary
+ * byte size. The heap-binary worst case allocates
+ * `term_binary_data_size_in_terms(size) + 1` words on the process heap.
+ */
+predicate binaryCreator(string name, int sizeArgIdx) {
+    name = "term_create_uninitialized_binary" and sizeArgIdx = 0
+    or
+    name = "term_create_empty_binary" and sizeArgIdx = 0
+    or
+    name = "term_from_literal_binary" and sizeArgIdx = 1
+    or
+    // term_reuse_binary either reuses an existing refc binary in place (no heap
+    // growth) or, when the source is not a reusable refcount-1 refc binary,
+    // falls back to term_create_empty_binary(size) -- a size-dependent heap
+    // binary. The fallback cannot be ruled out statically, so a correct caller
+    // must reserve for it; model it as a binary creator.
+    // term_from_const_binary is deliberately NOT listed: it always allocates a
+    // fixed TERM_BOXED_REFC_BINARY_SIZE boxed term (const data is never copied
+    // onto the process heap), so its byte-size argument is not a heap-data atom.
+    name = "term_reuse_binary" and sizeArgIdx = 1
+}
+
+/**
+ * Holds if `ac` allocates a binary whose byte size is the variable `v` (a
+ * symbolic binary atom). A constant size is not an atom -- it folds into the
+ * constant part and is handled by the existing constant paths.
+ */
+predicate binaryAllocAtom(FunctionCall ac, Variable v) {
+    exists(string name, int idx |
+        binaryCreator(name, idx) and
+        ac.getTarget().hasName(name) and
+        ac.getArgument(idx).(VariableAccess).getTarget() = v
+    )
+}
+
+/**
+ * Holds if `summand` is a binary-data budget atom over variable `v`, with the
+ * constant words the summand contributes on top of the symbolic byte data:
+ *  - term_binary_data_size_in_terms(v)  reserves the data + size field only (0),
+ *  - term_binary_heap_size(v)           reserves additionally BINARY_HEADER_SIZE (2).
+ * The heap binary itself allocates term_binary_data_size_in_terms(v) + 1, so a
+ * bare term_binary_data_size_in_terms budget is short by one word.
+ */
+predicate budgetBinSummand(FunctionCall ef, Expr summand, Variable v, int constContrib) {
+    isReservingEnsureFreeCall(ef) and
+    additiveSummand(ef.getArgument(1), summand) and
+    summand.(FunctionCall).getArgument(0).(VariableAccess).getTarget() = v and
+    (
+        summand.(FunctionCall).getTarget().hasName("term_binary_data_size_in_terms") and
+        constContrib = 0
+        or
+        // BINARY_HEADER_SIZE
+        summand.(FunctionCall).getTarget().hasName("term_binary_heap_size") and
+        constContrib = 2
+    )
+}
+
+/** Holds if `summand` is a binary-data budget atom over variable `v`. */
+predicate budgetBinAtom(FunctionCall ef, Expr summand, Variable v) {
+    budgetBinSummand(ef, summand, v, _)
+}
+
+/**
+ * Gets the worst-case constant value of a budget summand: its compile-time
+ * value, or, for a `cond ? A : B` conditional with both branches constant, the
+ * larger branch (worst-case budget keeps the comparison sound).
+ */
+int budgetConstSummandValue(Expr s) {
+    result = s.getValue().toInt()
+    or
+    not exists(s.getValue()) and
+    exists(ConditionalExpr ce | ce = s |
+        result = ce.getThen().getValue().toInt().maximum(ce.getElse().getValue().toInt())
+    )
+}
+
+/**
+ * Gets the constant part of an ensure_free budget: the sum of constant summands
+ * plus the constant words contributed by binary-atom summands (e.g. the
+ * BINARY_HEADER_SIZE inside term_binary_heap_size).
+ */
+int budgetConstPart(FunctionCall ef) {
+    isReservingEnsureFreeCall(ef) and
+    result =
+        sum(Expr s | additiveSummand(ef.getArgument(1), s) | budgetConstSummandValue(s)) +
+        sum(Expr s, int c | budgetBinSummand(ef, s, _, c) | c)
+}
+
+/**
+ * Gets the coefficient of binary atom `v` in the budget (count of summands).
+ *
+ * Uses `strictcount` so the predicate is undefined (not `0`) when `v` is not a
+ * budget atom; a plain `count` would materialize the full `FunctionCall x
+ * Variable` cross product, the dominant cost of this query.
+ */
+pragma[noinline]
+int budgetBinCoeff(FunctionCall ef, Variable v) {
+    result = strictcount(Expr s | budgetBinAtom(ef, s, v))
+}
+
+/**
+ * Holds if the budget has a summand that is neither a compile-time constant nor
+ * a modelled binary atom -- an unrecognised symbolic term that forces the
+ * comparison to be suppressed.
+ */
+predicate budgetHasUnmodeledSummand(FunctionCall ef) {
+    isReservingEnsureFreeCall(ef) and
+    exists(Expr s |
+        additiveSummand(ef.getArgument(1), s) and
+        not exists(budgetConstSummandValue(s)) and
+        not budgetBinAtom(ef, s, _)
+    )
+}
+
+/**
+ * Gets the affine constant contribution of an allocation: a binary allocation
+ * contributes its constant header (1 word, the symbolic byte data being an
+ * atom), any other allocation contributes its constant size.
+ */
+int affineAllocConst(FunctionCall a) {
+    binaryAllocAtom(a, _) and result = 1
+    or
+    not binaryAllocAtom(a, _) and result = maxConstAllocSize(a)
+}
+
+/**
+ * Holds if `a` is an allocation charged to `ef` that cannot be modelled (not a
+ * binary atom and with no constant size) -- forces suppression.
+ */
+predicate affineUnmodeledAlloc(FunctionCall a, FunctionCall ef) {
+    allocToBudget(a, ef) and
+    not binaryAllocAtom(a, _) and
+    not exists(maxConstAllocSize(a))
+}
+
+/**
+ * Gets the cumulative affine constant cost at `allocCall`: the sum of the
+ * affine constant contributions of every allocation sharing `ef`'s budget that
+ * precedes (or is) `allocCall` in the CFG.
+ */
+int affineCumulativeConst(FunctionCall allocCall, FunctionCall ef) {
+    exists(BasicBlock allocBB |
+        allocBB = allocCall.getBasicBlock() and
+        result =
+            sum(FunctionCall other, int sz |
+                allocToBudget(other, ef) and
+                sz = affineAllocConst(other) and
+                (
+                    other = allocCall
+                    or
+                    exists(BasicBlock otherBB |
+                        otherBB = other.getBasicBlock() and
+                        cfgPrecedes(other, otherBB, allocCall, allocBB)
+                    )
+                )
+            |
+                sz
+            )
+    )
+}
+
+/**
+ * Gets the binary-atom coefficient for `v` among allocations sharing `ef` up to
+ * `allocCall`. Uses `strictcount` so it is undefined (not `0`) when `v` is not
+ * an allocation atom, avoiding the `(allocCall, ef, v)` cross product.
+ */
+pragma[noinline]
+int allocBinCoeff(FunctionCall allocCall, FunctionCall ef, Variable v) {
+    exists(BasicBlock allocBB |
+        allocBB = allocCall.getBasicBlock() and
+        result =
+            strictcount(FunctionCall other |
+                allocToBudget(other, ef) and
+                binaryAllocAtom(other, v) and
+                (
+                    other = allocCall
+                    or
+                    exists(BasicBlock otherBB |
+                        otherBB = other.getBasicBlock() and
+                        cfgPrecedes(other, otherBB, allocCall, allocBB)
+                    )
+                )
+            )
+    )
+}
+
+/**
+ * Holds if the symbolic atoms of the budget exactly match those of the
+ * allocations charged to it up to `allocCall` (same atom, same coefficient).
+ */
+predicate affineAtomsMatch(FunctionCall allocCall, FunctionCall ef) {
+    // Every budget atom must have a matching allocation coefficient and
+    // vice-versa. budgetBinCoeff/allocBinCoeff are undefined (not 0) for
+    // non-atoms, so each forall ranges only over the atoms present on that side;
+    // a missing counterpart fails the equality and suppresses the comparison.
+    forall(Variable v | exists(budgetBinCoeff(ef, v)) |
+        budgetBinCoeff(ef, v) = allocBinCoeff(allocCall, ef, v)
+    ) and
+    forall(Variable v | exists(allocBinCoeff(allocCall, ef, v)) |
+        allocBinCoeff(allocCall, ef, v) = budgetBinCoeff(ef, v)
     )
 }
 
@@ -738,6 +1283,30 @@ where
                     exists(effectiveConstCost(problemCall, sharedVar)) and
                     cumCost = cumulativeEffectiveConstCost(problemCall, relatedCall, sharedVar)
                 ) and
+                cumCost > budget
+                or
+                // Affine comparison: the budget mixes a constant part with
+                // modelled symbolic atoms (binary byte data). Compare constant
+                // parts only once every symbolic atom cancels exactly and no
+                // summand or charged allocation is unmodelled.
+                exists(maxConstAllocSize(problemCall)) and
+                budgetBinCoeff(relatedCall, _) > 0 and
+                not budgetHasUnmodeledSummand(relatedCall) and
+                not exists(FunctionCall u |
+                    affineUnmodeledAlloc(u, relatedCall) and
+                    (
+                        u = problemCall
+                        or
+                        exists(BasicBlock ub, BasicBlock pb |
+                            ub = u.getBasicBlock() and
+                            pb = problemCall.getBasicBlock() and
+                            cfgPrecedes(u, ub, problemCall, pb)
+                        )
+                    )
+                ) and
+                affineAtomsMatch(problemCall, relatedCall) and
+                cumCost = affineCumulativeConst(problemCall, relatedCall) and
+                budget = budgetConstPart(relatedCall) and
                 cumCost > budget
             ) and
             msg =

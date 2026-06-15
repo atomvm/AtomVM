@@ -26,4 +26,4 @@ if (Elixir_FOUND)
     pack_runnable(elixir_esp32boot esp32init esp32devmode eavmlib estdlib alisp avm_network avm_esp32 exavmlib)
 endif()
 
-pack_runnable(esp32boot esp32init esp32devmode eavmlib estdlib alisp avm_network avm_esp32)
+pack_runnable(esp32boot esp32init esp32devmode eavmlib estdlib alisp avm_network avm_esp32 TARGETS xtensa xtensa+float32 riscv32 JIT_ARCHIVES estdlib eavmlib avm_esp32)

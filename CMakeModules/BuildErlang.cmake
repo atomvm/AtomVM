@@ -20,7 +20,7 @@
 
 macro(pack_archive avm_name)
 
-    set(multiValueArgs ERLC_FLAGS MODULES DEPENDS_ON)
+    set(multiValueArgs ERLC_FLAGS MODULES PRECOMPILED_MODULES DEPENDS_ON)
     cmake_parse_arguments(PACK_ARCHIVE "" "" "${multiValueArgs}" ${ARGN})
 
     # Build -pa flags and file dependencies from DEPENDS_ON
@@ -82,7 +82,7 @@ endmacro()
 macro(pack_precompiled_archive avm_name)
     pack_archive(${avm_name} ${ARGN})
 
-    set(multiValueArgs ERLC_FLAGS MODULES)
+    set(multiValueArgs ERLC_FLAGS MODULES PRECOMPILED_MODULES DEPENDS_ON)
     cmake_parse_arguments(PACK_ARCHIVE "" "" "${multiValueArgs}" ${ARGN})
 
     if(NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED)
@@ -97,15 +97,27 @@ macro(pack_precompiled_archive avm_name)
             string(REGEX REPLACE "\\+.*$" "" jit_target_arch "${jit_target_arch_variant}")
             set(jit_compiler_modules
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit.beam
-                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_dwarf.beam
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_precompile.beam
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_stream_binary.beam
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${jit_target_arch}.beam
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${jit_target_arch}_asm.beam
             )
+            if (NOT AVM_DISABLE_JIT_DWARF)
+                list(APPEND jit_compiler_modules
+                    ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_dwarf.beam
+                )
+            endif()
             if("${jit_target_arch_variant}" MATCHES "thumb2")
                 list(APPEND jit_compiler_modules
                     ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_armv7m_asm.beam
+                )
+            endif()
+            if("${jit_target_arch}" STREQUAL "riscv64")
+                # jit_riscv64_asm delegates many encodings to jit_riscv32_asm;
+                # jit_riscv64:dwarf_register_number/1 calls jit_riscv32 when DWARF is on.
+                list(APPEND jit_compiler_modules
+                    ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_riscv32.beam
+                    ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_riscv32_asm.beam
                 )
             endif()
 
@@ -114,7 +126,22 @@ macro(pack_precompiled_archive avm_name)
             else()
                 set(jit_precompile_dwarf_flag "")
             endif()
-            foreach(module_name IN LISTS ${PACK_ARCHIVE_MODULES} PACK_ARCHIVE_MODULES PACK_ARCHIVE_UNPARSED_ARGUMENTS)
+            if(PACK_ARCHIVE_PRECOMPILED_MODULES)
+                set(_precompile_module_list "")
+                foreach(_mod IN LISTS PACK_ARCHIVE_PRECOMPILED_MODULES)
+                    string(REPLACE "@ARCH@" "${jit_target_arch}" _mod_resolved "${_mod}")
+                    list(APPEND _precompile_module_list "${_mod_resolved}")
+                endforeach()
+                if("${jit_target_arch_variant}" MATCHES "thumb2")
+                    list(APPEND _precompile_module_list jit_armv7m_asm)
+                endif()
+                if("${jit_target_arch}" STREQUAL "riscv64")
+                    list(APPEND _precompile_module_list jit_riscv32 jit_riscv32_asm)
+                endif()
+            else()
+                set(_precompile_module_list ${PACK_ARCHIVE_MODULES} ${PACK_ARCHIVE_UNPARSED_ARGUMENTS})
+            endif()
+            foreach(module_name IN LISTS _precompile_module_list)
                 add_custom_command(
                     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/${jit_target_arch_variant}/${module_name}.beam
                     COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams/${jit_target_arch_variant}/
@@ -153,7 +180,25 @@ endmacro()
 
 macro(pack_lib avm_name)
     set(options UF2)
-    cmake_parse_arguments(PACK_LIB "${options}" "" "" ${ARGN})
+    set(multiValueArgs TARGETS)
+    cmake_parse_arguments(PACK_LIB "${options}" "" "${multiValueArgs}" ${ARGN})
+
+    if(PACK_LIB_TARGETS)
+        set(_pack_lib_targets ${PACK_LIB_TARGETS})
+    else()
+        set(_pack_lib_targets ${AVM_PRECOMPILED_TARGETS})
+    endif()
+
+    # Drop any requested targets that aren't actually being precompiled
+    # (e.g. wasm32 is removed from AVM_PRECOMPILED_TARGETS when DWARF is on),
+    # otherwise the build would reference a non-existent jit-<arch>.avm rule.
+    set(_pack_lib_targets_filtered "")
+    foreach(_t IN LISTS _pack_lib_targets)
+        if("${_t}" IN_LIST AVM_PRECOMPILED_TARGETS)
+            list(APPEND _pack_lib_targets_filtered "${_t}")
+        endif()
+    endforeach()
+    set(_pack_lib_targets ${_pack_lib_targets_filtered})
 
     set(pack_lib_${avm_name}_archive_targets "")
     set(pack_lib_${avm_name}_archives "")
@@ -191,7 +236,7 @@ macro(pack_lib avm_name)
     set(target_deps ${avm_name}.avm)
 
     if(NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED)
-        foreach(jit_target_arch_variant ${AVM_PRECOMPILED_TARGETS})
+        foreach(jit_target_arch_variant ${_pack_lib_targets})
             # Build JIT archives list for this specific target architecture
             set(pack_lib_${avm_name}_jit_archives_${jit_target_arch_variant} ${CMAKE_BINARY_DIR}/libs/jit/src/jit-${jit_target_arch_variant}.avm)
             foreach(archive_name ${PACK_LIB_UNPARSED_ARGUMENTS})
@@ -228,7 +273,7 @@ macro(pack_lib avm_name)
         )
         set(target_deps ${target_deps} ${avm_name}-pico.uf2 ${avm_name}-pico2.uf2)
 
-        if((NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED) AND ("armv6m" IN_LIST AVM_PRECOMPILED_TARGETS))
+        if((NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED) AND ("armv6m" IN_LIST _pack_lib_targets))
             add_custom_command(
                 OUTPUT ${avm_name}-armv6m-pico.uf2
                 DEPENDS ${avm_name}-armv6m.avm UF2Tool
@@ -246,22 +291,26 @@ macro(pack_lib avm_name)
             set(target_deps ${target_deps} ${avm_name}-armv6m-pico.uf2 ${avm_name}-armv6m-pico2.uf2)
         endif()
 
-        if((NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED) AND ("armv6m+float32" IN_LIST AVM_PRECOMPILED_TARGETS))
+        if((NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED) AND ("armv6m+thumb2" IN_LIST _pack_lib_targets))
             add_custom_command(
-                OUTPUT ${avm_name}-armv6m+float32-pico.uf2
-                DEPENDS ${avm_name}-armv6m+float32.avm UF2Tool
-                COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m+float32-pico.uf2 -s 0x10100000 ${avm_name}-armv6m+float32.avm
-                COMMENT "Creating UF2 file ${avm_name}-armv6m+float32-pico.uf2"
+                OUTPUT ${avm_name}-armv6m+thumb2-pico2.uf2
+                DEPENDS ${avm_name}-armv6m+thumb2.avm UF2Tool
+                COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m+thumb2-pico2.uf2 -f data -s 0x10100000 ${avm_name}-armv6m+thumb2.avm
+                COMMENT "Creating UF2 file ${avm_name}-armv6m+thumb2-pico2.uf2"
                 VERBATIM
             )
+            set(target_deps ${target_deps} ${avm_name}-armv6m+thumb2-pico2.uf2)
+        endif()
+
+        if((NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED) AND ("armv6m+thumb2+float32" IN_LIST _pack_lib_targets))
             add_custom_command(
-                OUTPUT ${avm_name}-armv6m+float32-pico2.uf2
-                DEPENDS ${avm_name}-armv6m+float32.avm UF2Tool
-                COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m+float32-pico2.uf2 -f data -s 0x10100000 ${avm_name}-armv6m+float32.avm
-                COMMENT "Creating UF2 file ${avm_name}-armv6m+float32-pico2.uf2"
+                OUTPUT ${avm_name}-armv6m+thumb2+float32-pico2.uf2
+                DEPENDS ${avm_name}-armv6m+thumb2+float32.avm UF2Tool
+                COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m+thumb2+float32-pico2.uf2 -f data -s 0x10100000 ${avm_name}-armv6m+thumb2+float32.avm
+                COMMENT "Creating UF2 file ${avm_name}-armv6m+thumb2+float32-pico2.uf2"
                 VERBATIM
             )
-            set(target_deps ${target_deps} ${avm_name}-armv6m+float32-pico.uf2 ${avm_name}-armv6m+float32-pico2.uf2)
+            set(target_deps ${target_deps} ${avm_name}-armv6m+thumb2+float32-pico2.uf2)
         endif()
     endif()
 
@@ -278,7 +327,7 @@ endmacro()
 
 macro(pack_runnable avm_name main)
 
-    set(multiValueArgs DIALYZE_AGAINST)
+    set(multiValueArgs DIALYZE_AGAINST TARGETS JIT_ARCHIVES)
     cmake_parse_arguments(PACK_RUNNABLE "" "" "${multiValueArgs}" ${ARGN})
 
     add_custom_command(
@@ -371,6 +420,86 @@ macro(pack_runnable avm_name main)
         ${avm_name} ALL
         DEPENDS ${avm_name}.avm
     )
+
+    if(PACK_RUNNABLE_TARGETS AND (NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED))
+        foreach(jit_target_arch_variant IN LISTS PACK_RUNNABLE_TARGETS)
+            string(REGEX REPLACE "\\+.*$" "" jit_target_arch "${jit_target_arch_variant}")
+            set(jit_compiler_modules
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit.beam
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_precompile.beam
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_stream_binary.beam
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${jit_target_arch}.beam
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${jit_target_arch}_asm.beam
+            )
+            if(NOT AVM_DISABLE_JIT_DWARF)
+                list(APPEND jit_compiler_modules ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_dwarf.beam)
+                set(jit_precompile_dwarf_flag "dwarf")
+            else()
+                set(jit_precompile_dwarf_flag "")
+            endif()
+            if("${jit_target_arch_variant}" MATCHES "thumb2")
+                list(APPEND jit_compiler_modules ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_armv7m_asm.beam)
+            endif()
+            if("${jit_target_arch}" STREQUAL "riscv64")
+                list(APPEND jit_compiler_modules
+                    ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_riscv32.beam
+                    ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_riscv32_asm.beam
+                )
+            endif()
+
+            add_custom_command(
+                OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${jit_target_arch_variant}/${main}.beam
+                COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/${jit_target_arch_variant}/
+                    && erl -pa ${CMAKE_BINARY_DIR}/libs/jit/src/beams/ -noshell -s jit_precompile -s init stop
+                        -- ${jit_target_arch_variant} ${CMAKE_CURRENT_BINARY_DIR}/${jit_target_arch_variant}/ ${jit_precompile_dwarf_flag}
+                        ${CMAKE_CURRENT_BINARY_DIR}/${main}.beam
+                DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${main}.beam ${jit_compiler_modules} jit
+                COMMENT "Compiling ${main}.beam to ${jit_target_arch_variant}"
+                VERBATIM
+            )
+
+            # Build esp32boot with fully AOT archives (native code, no bytecode, no JIT compiler).
+            # JIT_ARCHIVES limits which libraries are included in the JIT boot AVM;
+            # defaults to the same set as the non-JIT AVM.
+            if(PACK_RUNNABLE_JIT_ARCHIVES)
+                set(_jit_archive_list "${PACK_RUNNABLE_JIT_ARCHIVES}")
+            else()
+                set(_jit_archive_list "${PACK_RUNNABLE_UNPARSED_ARGUMENTS}")
+            endif()
+            set(pack_runnable_${avm_name}_jit_archives_${jit_target_arch_variant} "")
+            set(pack_runnable_${avm_name}_jit_archive_targets_${jit_target_arch_variant} "")
+            foreach(archive_name ${_jit_archive_list})
+                if(${archive_name} STREQUAL "exavmlib")
+                    list(APPEND pack_runnable_${avm_name}_jit_archives_${jit_target_arch_variant}
+                        ${CMAKE_BINARY_DIR}/libs/${archive_name}/lib/${archive_name}.avm)
+                else()
+                    list(APPEND pack_runnable_${avm_name}_jit_archives_${jit_target_arch_variant}
+                        ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}-${jit_target_arch_variant}.avm)
+                endif()
+                list(APPEND pack_runnable_${avm_name}_jit_archive_targets_${jit_target_arch_variant} ${archive_name})
+            endforeach()
+
+            add_custom_command(
+                OUTPUT ${avm_name}-${jit_target_arch_variant}.avm
+                DEPENDS
+                    ${CMAKE_CURRENT_BINARY_DIR}/${jit_target_arch_variant}/${main}.beam
+                    ${pack_runnable_${avm_name}_jit_archives_${jit_target_arch_variant}}
+                    ${pack_runnable_${avm_name}_jit_archive_targets_${jit_target_arch_variant}}
+                    PackBEAM
+                COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create ${PACKBEAM_PRUNE_ARGS} -s ${main} ${INCLUDE_LINES}
+                    ${avm_name}-${jit_target_arch_variant}.avm
+                    ${CMAKE_CURRENT_BINARY_DIR}/${jit_target_arch_variant}/${main}.beam
+                    ${pack_runnable_${avm_name}_jit_archives_${jit_target_arch_variant}}
+                COMMENT "Packing JIT runnable ${avm_name}-${jit_target_arch_variant}.avm"
+                VERBATIM
+            )
+            add_custom_target(
+                ${avm_name}_${jit_target_arch_variant} ALL
+                DEPENDS ${avm_name}-${jit_target_arch_variant}.avm
+            )
+            add_dependencies(${avm_name} ${avm_name}_${jit_target_arch_variant})
+        endforeach()
+    endif()
 endmacro()
 
 

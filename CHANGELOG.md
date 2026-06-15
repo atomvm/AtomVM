@@ -13,13 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for `nif_start`, `executable_line` and `debug_line` opcodes
 - Added named variable debugging support in DWARF when modules are compiled with `beam_debug_info`
 - Added more reset reasons and ensured `esp:reset_reason/0` doesn't return `undefined`
-- Added I2C and SPI APIs to stm32 platform
+- Added I2C, SPI and UART APIs to stm32 platform
 - Added `Transfer-Encoding: chunked` response support to `ahttp_client`, including HTTP trailers
 - Added `proc_lib:init_fail/2,3`
 - Added UART API to rp2 platform
 - Added `"USB_SERIAL_JTAG"` peripheral to the ESP32 `uart` module on chips with a built-in
   USB-Serial-JTAG controller (C3/C5/C6/C61/H2/H21/H4/P4/S3)
 - Added support for the `safe` option in `erlang:binary_to_term/2`
+- Added xtensa JIT backend for esp32 platform
+- Added support for configuring pins and width for sdmmc on ESP32
+- Added support for map comprehensions
+- Added USB CDC port drivers for ESP32, RP2, and STM32 platforms
 
 ### Changed
 - Updated network type db() to dbm() to reflect the actual representation of the type
@@ -56,6 +60,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed a bug in `supervisor` handling of failing child
 - Fixed two bugs related to closing fds in `atomvm:subprocess/4`
 - Fixed `erlang:localtime/1` memory leak, use-after-free, and TZ restore bugs on newlib/picolibc
+- Fixed ESP32 I2C driver resource leaks, half-closed state, and close-during-transmission errors
+- Fixed several underallocation issues that could trigger data corruption on `binary:replace`, `zlib:compress` and bsd socket recv code.
+- Fixed a bug where `catch` would raise on regular atom results
+- Fixed ESP32 socket driver holding the global socket-list lock across blocking TCP connects, leaking the port on connect failure, losing concurrent `accept` waiters, leaking `netbuf` on receive error paths, and a recycled-`netconn` race between socket close and the event handler
 
 ## [0.7.0-alpha.1] - 2026-04-06
 

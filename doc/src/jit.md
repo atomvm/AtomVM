@@ -28,6 +28,7 @@ The JIT compiler supports the following target architectures:
 | `riscv32`       | 32-bit RISC-V (ESP32Cx, ESP32Hx, ESP32P4)  |
 | `riscv64`       | 64-bit RISC-V (Linux)              |
 | `wasm32`        | WebAssembly (nodeJS, browsers)     |
+| `xtensa`        | ESP32, ESP32Sx                     |
 
 ### Requirements
 
@@ -252,4 +253,4 @@ $ riscv64-elf-objdump -d module.elf
 |--------|---------|-------------|
 | `AVM_DISABLE_JIT` | `ON` | Disable JIT compilation |
 | `AVM_DISABLE_JIT_DWARF` | `ON` | Disable DWARF debug information in JIT |
-| `AVM_JIT_TARGET_ARCH` | auto-detected | Target architecture (`x86_64`, `aarch64`, `arm32`, `armv6m`, `armv6m+thumb2`, `riscv32`, `riscv64`) |
+| `AVM_JIT_TARGET_ARCH` | auto-detected | Target architecture (`x86_64`, `aarch64`, `arm32`, `armv6m`, `armv6m+thumb2`, `riscv32`, `riscv64`, `wasm32`, `xtensa`) |

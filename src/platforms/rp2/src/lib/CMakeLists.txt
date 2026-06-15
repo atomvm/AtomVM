@@ -44,6 +44,10 @@ set(SOURCE_FILES
     ../../../../libAtomVM/portnifloader.c
 )
 
+if (AVM_USB_CDC_PORT_DRIVER_ENABLED)
+    list(APPEND SOURCE_FILES usb_cdc_driver.c usb_descriptors.c)
+endif()
+
 set(
     PLATFORM_LIB_SUFFIX
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
@@ -129,3 +133,16 @@ if (NOT AVM_DISABLE_JIT)
 endif()
 
 target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC "SHELL:-Wl,-u -Wl,gpio_nif -Wl,-u -Wl,i2c_nif -Wl,-u -Wl,spi_nif -Wl,-u -Wl,uart_nif -Wl,-u -Wl,otp_crypto_nif")
+
+if (AVM_USB_CDC_PORT_DRIVER_ENABLED)
+    target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
+        AVM_USB_CDC_PORT_DRIVER_ENABLED
+        USBD_VID=${AVM_USB_CDC_VID}
+        USBD_PID=${AVM_USB_CDC_PID}
+        "USBD_MANUFACTURER=\"${AVM_USB_CDC_MANUFACTURER}\""
+        "USBD_PRODUCT=\"${AVM_USB_CDC_PRODUCT}\""
+        "USBD_INTERFACE_NAME=\"${AVM_USB_CDC_INTERFACE_NAME}\""
+    )
+    target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC tinyusb_device)
+    target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC "SHELL:-Wl,-u -Wl,usb_cdcregister_port_driver")
+endif()

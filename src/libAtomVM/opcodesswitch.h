@@ -1733,10 +1733,13 @@ schedule_in:
         assert(native_pc);
 #endif
             struct JITState jit_state;
-            jit_state.continuation = NULL;
+            jit_state.continuation = (NativeContinuation) 0;
             jit_state.module = mod;
             jit_state.remaining_reductions = remaining_reductions;
             // __asm__ volatile("int $0x03");
+#if JIT_ARCH_TARGET == JIT_ARCH_XTENSA
+            jit_state.code_base = (const void *) mod->native_code;
+#endif
             TRACE("calling native code at %p, ctx = %p\n", (void *) native_pc, (void *) ctx);
             Context *new_ctx = native_pc(ctx, &jit_state, &module_native_interface);
             TRACE("returning from native code at %p, ctx = %p, new_ctx = %p, jit_state.continuation = %p\n", (void *) native_pc, (void *) ctx, (void *) new_ctx, (void *) jit_state.continuation);
@@ -3255,6 +3258,8 @@ schedule_in:
 
                 // clears the catch value on stack
                 WRITE_REGISTER(dreg, term_nil());
+
+                context_clear_exception(ctx);
                 break;
             }
 
@@ -3313,39 +3318,42 @@ schedule_in:
 
                 WRITE_REGISTER(dreg, term_nil());
                 // C.f. https://www.erlang.org/doc/reference_manual/expressions.html#catch-and-throw
-                switch (term_to_atom_index(x_regs[0])) {
-                    case THROW_ATOM_INDEX:
-                        x_regs[0] = x_regs[1];
-                        break;
+                if (context_has_pending_exception(ctx)) {
+                    switch (term_to_atom_index(context_exception_class(ctx))) {
+                        case THROW_ATOM_INDEX:
+                            x_regs[0] = x_regs[1];
+                            break;
 
-                    case ERROR_ATOM_INDEX: {
-                        x_regs[2] = stacktrace_build(ctx, &x_regs[2], 3);
-                        // MEMORY_CAN_SHRINK because catch_end is classified as gc in beam_ssa_codegen.erl
-                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2) * 2, 2, x_regs + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                        case ERROR_ATOM_INDEX: {
+                            x_regs[2] = stacktrace_build(ctx, &x_regs[2], 3);
+                            // MEMORY_CAN_SHRINK because catch_end is classified as gc in beam_ssa_codegen.erl
+                            if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2) * 2, 2, x_regs + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                            }
+                            term reason_tuple = term_alloc_tuple(2, &ctx->heap);
+                            term_put_tuple_element(reason_tuple, 0, x_regs[1]);
+                            term_put_tuple_element(reason_tuple, 1, x_regs[2]);
+                            term exit_tuple = term_alloc_tuple(2, &ctx->heap);
+                            term_put_tuple_element(exit_tuple, 0, EXIT_ATOM);
+                            term_put_tuple_element(exit_tuple, 1, reason_tuple);
+                            x_regs[0] = exit_tuple;
+
+                            break;
                         }
-                        term reason_tuple = term_alloc_tuple(2, &ctx->heap);
-                        term_put_tuple_element(reason_tuple, 0, x_regs[1]);
-                        term_put_tuple_element(reason_tuple, 1, x_regs[2]);
-                        term exit_tuple = term_alloc_tuple(2, &ctx->heap);
-                        term_put_tuple_element(exit_tuple, 0, EXIT_ATOM);
-                        term_put_tuple_element(exit_tuple, 1, reason_tuple);
-                        x_regs[0] = exit_tuple;
+                        case LOWERCASE_EXIT_ATOM_INDEX: {
+                            // MEMORY_CAN_SHRINK because catch_end is classified as gc in beam_ssa_codegen.erl
+                            if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, x_regs + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                            }
+                            term exit_tuple = term_alloc_tuple(2, &ctx->heap);
+                            term_put_tuple_element(exit_tuple, 0, EXIT_ATOM);
+                            term_put_tuple_element(exit_tuple, 1, x_regs[1]);
+                            x_regs[0] = exit_tuple;
 
-                        break;
-                    }
-                    case LOWERCASE_EXIT_ATOM_INDEX: {
-                        // MEMORY_CAN_SHRINK because catch_end is classified as gc in beam_ssa_codegen.erl
-                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, x_regs + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                            break;
                         }
-                        term exit_tuple = term_alloc_tuple(2, &ctx->heap);
-                        term_put_tuple_element(exit_tuple, 0, EXIT_ATOM);
-                        term_put_tuple_element(exit_tuple, 1, x_regs[1]);
-                        x_regs[0] = exit_tuple;
-
-                        break;
                     }
+                    context_clear_exception(ctx);
                 }
                 break;
             }
@@ -6337,9 +6345,6 @@ schedule_in:
         x_regs[0] = context_exception_class(ctx);
         x_regs[1] = ctx->exception_reason;
         x_regs[2] = ctx->exception_stacktrace;
-        context_set_exception_class(ctx, term_nil());
-        ctx->exception_reason = term_nil();
-        ctx->exception_stacktrace = term_invalid_term();
 
         int target_label = context_get_catch_label(ctx, &mod);
         if (target_label) {

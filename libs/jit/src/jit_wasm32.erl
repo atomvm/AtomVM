@@ -158,12 +158,12 @@
     stream_module :: module(),
     stream :: stream(),
     offset :: non_neg_integer(),
-    branches :: [{non_neg_integer(), non_neg_integer(), non_neg_integer()}],
+    branches :: #{integer() | reference() => [{non_neg_integer(), non_neg_integer()}]},
     jump_table_start :: non_neg_integer(),
     available_regs :: non_neg_integer(),
     used_regs :: non_neg_integer(),
     max_scratch :: non_neg_integer(),
-    labels :: [{integer() | reference(), integer()}],
+    labels :: #{integer() | reference() => integer()},
     variant :: non_neg_integer(),
     regs :: jit_regs:regs(),
     func_bodies :: [{integer(), binary()}],
@@ -217,13 +217,13 @@ new(Variant, StreamModule, Stream) ->
     #state{
         stream_module = StreamModule,
         stream = Stream,
-        branches = [],
+        branches = #{},
         jump_table_start = 0,
         offset = StreamModule:offset(Stream),
         available_regs = ?AVAILABLE_REGS_MASK,
         used_regs = 0,
         max_scratch = ?NUM_SCRATCH_LOCALS,
-        labels = [],
+        labels = #{},
         variant = Variant,
         regs = jit_regs:new(),
         func_bodies = [],
@@ -250,9 +250,9 @@ offset(#state{current_label = Label, labels = Labels, jump_table_start = _JTStar
         _ when is_integer(Label) -> Label * ?JUMP_TABLE_ENTRY_SIZE;
         _ ->
             %% Reference labels - find if already registered
-            case lists:keyfind(Label, 1, Labels) of
-                {Label, Offset} -> Offset;
-                false -> 0
+            case Labels of
+                #{Label := Offset} -> Offset;
+                _ -> 0
             end
     end.
 
@@ -338,11 +338,11 @@ emit_n_times(StreamModule, Stream, Binary, N) when N > 0 ->
 %%=============================================================================
 
 -spec update_branches(state()) -> state().
-update_branches(#state{branches = []} = State) ->
+update_branches(#state{branches = Branches} = State) when map_size(Branches) =:= 0 ->
     State;
 update_branches(State) ->
     %% Branches are resolved at label-add time in WASM.
-    State#state{branches = []}.
+    State#state{branches = #{}}.
 
 %%=============================================================================
 %% Primitive calls
@@ -394,7 +394,7 @@ call_primitive_with_cp(State0, Primitive, Args) ->
         func_bodies = NewFuncBodies,
         current_body = <<>>,
         current_label = ContLabel,
-        labels = [{ContLabel, ContLabelOff} | Labels],
+        labels = Labels#{ContLabel => ContLabelOff},
         available_regs = AllFree,
         used_regs = 0,
         regs = jit_regs:invalidate_all(State3#state.regs)
@@ -1081,7 +1081,7 @@ decrement_reductions_and_maybe_schedule_next(State0) ->
         func_bodies = NewFuncBodies,
         current_body = <<>>,
         current_label = ContLabel,
-        labels = [{ContLabel, ContLabelOff} | Labels],
+        labels = Labels#{ContLabel => ContLabelOff},
         available_regs = AllFree,
         used_regs = 0,
         regs = jit_regs:invalidate_all(State9#state.regs)
@@ -1119,7 +1119,7 @@ call_or_schedule_next(State0, Label) ->
         func_bodies = NewFuncBodies,
         current_body = <<>>,
         current_label = ContLabel,
-        labels = [{ContLabel, ContLabelOff} | Labels],
+        labels = Labels#{ContLabel => ContLabelOff},
         available_regs = AllFree,
         used_regs = 0,
         regs = jit_regs:invalidate_all(State3#state.regs)
@@ -1288,7 +1288,7 @@ add_label(
         func_bodies = NewFuncBodies,
         current_body = <<>>,
         current_label = Label,
-        labels = [{Label, LabelOff} | Labels],
+        labels = Labels#{Label => LabelOff},
         regs = Regs1,
         beam_label = Label
     };
@@ -1321,7 +1321,7 @@ add_label(
         func_bodies = NewFuncBodies,
         current_body = <<>>,
         current_label = ContLabel,
-        labels = [{ContLabel, ContLabelOff} | Labels],
+        labels = Labels#{ContLabel => ContLabelOff},
         available_regs = AllFree,
         used_regs = 0,
         regs = Regs1
@@ -1345,7 +1345,7 @@ add_label(
             _ ->
                 JumpTableStart
         end,
-    State#state{labels = [{Label, LabelOff} | Labels]}.
+    State#state{labels = Labels#{Label => LabelOff}}.
 
 get_regs_tracking(#state{regs = Regs}) -> Regs.
 
@@ -1737,6 +1737,7 @@ primitive_returns_void(?PRIM_TERM_CONV_TO_FLOAT) -> true;
 primitive_returns_void(?PRIM_FNEGATE) -> true;
 primitive_returns_void(?PRIM_BITSTRING_COPY_MODULE_STR) -> true;
 primitive_returns_void(?PRIM_FREE) -> true;
+primitive_returns_void(?PRIM_TRY_CASE) -> true;
 primitive_returns_void(_) -> false.
 
 %% Must be kept in sync with ModuleNativeInterface in jit.h.

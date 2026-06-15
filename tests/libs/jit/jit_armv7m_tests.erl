@@ -81,3 +81,39 @@ call_primitive_0_thumb2_test() ->
             "   a:	bc05      	pop	{r0, r2}"
         >>,
     ?assertStream(arm_thumb2, Dump, Stream).
+
+%% if_block with '== 0' uses the fused cbnz
+if_block_eq0_cbnz_thumb2_test() ->
+    State0 = ?BACKEND:new(?THUMB2_VARIANT, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, RegA} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    {State2, RegB} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    State3 = ?BACKEND:if_block(State2, {RegA, '==', 0}, fun(BSt0) ->
+        ?BACKEND:add(BSt0, RegB, 2)
+    end),
+    Stream = ?BACKEND:stream(State3),
+    Dump = <<
+        "   0:	6987      	ldr	r7, [r0, #24]\n"
+        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+        "   4:	b907      	cbnz	r7, 0x8\n"
+        "   6:	3602      	adds	r6, #2"
+    >>,
+    ?assertStream(arm_thumb2, Dump, Stream),
+    ?assertEqual([RegA, RegB], ?BACKEND:used_regs(State3)).
+
+%% if_block with '!= 0' uses the fused cbz
+if_block_ne0_cbz_thumb2_test() ->
+    State0 = ?BACKEND:new(?THUMB2_VARIANT, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, RegA} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    {State2, RegB} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    State3 = ?BACKEND:if_block(State2, {RegA, '!=', 0}, fun(BSt0) ->
+        ?BACKEND:add(BSt0, RegB, 2)
+    end),
+    Stream = ?BACKEND:stream(State3),
+    Dump = <<
+        "   0:	6987      	ldr	r7, [r0, #24]\n"
+        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+        "   4:	b107      	cbz	r7, 0x8\n"
+        "   6:	3602      	adds	r6, #2"
+    >>,
+    ?assertStream(arm_thumb2, Dump, Stream),
+    ?assertEqual([RegA, RegB], ?BACKEND:used_regs(State3)).

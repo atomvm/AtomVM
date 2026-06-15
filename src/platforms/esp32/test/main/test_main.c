@@ -180,6 +180,54 @@ term avm_test_case(const char *test_module)
     return ret_value;
 }
 
+#ifndef AVM_NO_JIT
+TEST_CASE("test_jit_compile", "[test_run]")
+{
+    esp32_sys_queue_init();
+
+    GlobalContext *glb = globalcontext_new();
+    TEST_ASSERT(glb != NULL);
+
+    port_driver_init_all(glb);
+    nif_collection_init_all(glb);
+
+    TEST_ASSERT(avmpack_is_valid(main_avm, size) != 0);
+
+    struct ConstAVMPack *avmpack_data = malloc(sizeof(struct ConstAVMPack));
+    TEST_ASSERT(avmpack_data != NULL);
+    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
+    avmpack_data->base.in_use = true;
+    avmpack_data->base.data = main_avm;
+    synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
+
+    // Pre-load test_jit_simple (JIT precompiled) before running test_jit_compile.
+    // test_jit_compile:start/0 calls test_jit_simple:run/0 to verify that one
+    // JIT-precompiled module can call another.
+    Module *jit_simple_mod = globalcontext_load_module_from_avm(glb, "test_jit_simple.beam");
+    TEST_ASSERT(jit_simple_mod != NULL);
+    globalcontext_insert_module(glb, jit_simple_mod);
+
+    Module *mod = globalcontext_load_module_from_avm(glb, "test_jit_compile.beam");
+    TEST_ASSERT(mod != NULL);
+    globalcontext_insert_module(glb, mod);
+
+    Context *ctx = context_new(glb);
+    TEST_ASSERT(ctx != NULL);
+    ctx->leader = 1;
+
+    ESP_LOGI(TAG, "Running start/0 from test_jit_compile.beam...\n");
+    context_execute_loop(ctx, mod, "start", 0);
+    term ret_value = ctx->x[0];
+
+    context_destroy(ctx);
+    nif_collection_destroy_all(glb);
+    port_driver_destroy_all(glb);
+    globalcontext_destroy(glb);
+
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+#endif
+
 TEST_CASE("test_esp_partition", "[test_run]")
 {
     term ret_value = avm_test_case("test_esp_partition.beam");
@@ -235,6 +283,13 @@ TEST_CASE("test_file", "[test_run]")
 
 // SPI SD CARD, is configured for esp32 simulator in diagram.esp32.json
 #if (!CONFIG_ETH_USE_OPENETH && CONFIG_IDF_TARGET_ESP32)
+
+TEST_CASE("test_i2c", "[test_run]")
+{
+    term ret_value = avm_test_case("test_i2c.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+
 TEST_CASE("test_file", "[test_run]")
 {
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {

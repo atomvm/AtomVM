@@ -603,6 +603,15 @@ cbnz_test_() ->
         ?_assertAsmEqual(<<16#b5fffc03:32/little>>, "cbnz x3, -128", jit_aarch64_asm:cbnz(r3, -128))
     ].
 
+cbz_test_() ->
+    [
+        ?_assertAsmEqual(<<16#b4000401:32/little>>, "cbz x1, 128", jit_aarch64_asm:cbz(r1, 128)),
+        ?_assertAsmEqual(
+            <<16#34000402:32/little>>, "cbz w2, 128", jit_aarch64_asm:cbz_w(r2, 128)
+        ),
+        ?_assertAsmEqual(<<16#b4fffc03:32/little>>, "cbz x3, -128", jit_aarch64_asm:cbz(r3, -128))
+    ].
+
 tbz_test_() ->
     [
         ?_assertAsmEqual(

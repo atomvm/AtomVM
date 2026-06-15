@@ -2957,6 +2957,7 @@ static term nif_erlang_display_1(Context *ctx, int argc, term argv[])
 
     term_display(stdout, argv[0], ctx);
     printf("\n");
+    fflush(stdout);
 
     return TRUE_ATOM;
 }
@@ -3899,7 +3900,7 @@ static term nif_binary_replace(Context *ctx, int argc, term argv[])
     }
     size_t result_size = bin_size + pattern_n * (repl_size - pattern_size);
 
-    size_t size_binary = term_binary_data_size_in_terms(result_size);
+    size_t size_binary = term_binary_heap_size(result_size);
     term roots[3] = { bin_term, pattern, replacement };
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, size_binary, 3, roots, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -5643,6 +5644,7 @@ static term nif_console_print(Context *ctx, int argc, term argv[])
         const char *data = term_binary_data(t);
         unsigned long n = term_binary_size(t);
         fprintf(stdout, "%.*s", (int) n, data);
+        fflush(stdout);
     } else {
         size_t size;
         switch (interop_iolist_size(t, &size)) {
@@ -6626,6 +6628,8 @@ static term nif_jit_backend_module(Context *ctx, int argc, term argv[])
     return JIT_ARM32_ATOM;
 #elif JIT_ARCH_TARGET == JIT_ARCH_WASM32
     return JIT_WASM32_ATOM;
+#elif JIT_ARCH_TARGET == JIT_ARCH_XTENSA
+    return JIT_XTENSA_ATOM;
 #else
 #error Unknown JIT target
 #endif
@@ -7492,7 +7496,7 @@ static term nif_zlib_compress_1(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(to_allocate)) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(to_allocate)) != MEMORY_GC_OK)) {
         free(output_buf);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }

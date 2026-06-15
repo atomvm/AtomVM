@@ -53,8 +53,13 @@
 #include <zlib.h>
 #endif
 
+// BEAM Types version from OTP source code:
+// lib/compiler/src/beam_types.hrl
+#define BEAM_TYPES_VERSION_V3 3
+#define BEAM_TYPES_VERSION_V4 4
+
 // BEAM Type constants from OTP source code:
-// /opt/src/otp/lib/compiler/src/beam_types.erl lines 1446-1461
+// lib/compiler/src/beam_types.erl
 #define BEAM_TYPE_ATOM (1 << 0)
 #define BEAM_TYPE_BITSTRING (1 << 1)
 #define BEAM_TYPE_CONS (1 << 2)
@@ -67,14 +72,18 @@
 #define BEAM_TYPE_PORT (1 << 9)
 #define BEAM_TYPE_REFERENCE (1 << 10)
 #define BEAM_TYPE_TUPLE (1 << 11)
+#define BEAM_TYPE_RECORD (1 << 12) // v4 only
 
-#define BEAM_TYPE_HAS_LOWER_BOUND (1 << 12)
-#define BEAM_TYPE_HAS_UPPER_BOUND (1 << 13)
-#define BEAM_TYPE_HAS_UNIT (1 << 14)
-
-// BEAM Types version from OTP source code:
-// /opt/src/otp/lib/compiler/src/beam_types.hrl line 22
-#define BEAM_TYPES_VERSION 3
+// v3 flag bits (OTP 27/28)
+#define BEAM_TYPE_V3_HAS_LOWER_BOUND (1 << 12)
+#define BEAM_TYPE_V3_HAS_UPPER_BOUND (1 << 13)
+#define BEAM_TYPE_V3_HAS_UNIT (1 << 14)
+#define BEAM_TYPE_V3_BITS_MASK 0xFFF
+// v4 flag bits (OTP 29+)
+#define BEAM_TYPE_V4_HAS_LOWER_BOUND (1 << 13)
+#define BEAM_TYPE_V4_HAS_UPPER_BOUND (1 << 14)
+#define BEAM_TYPE_V4_HAS_UNIT (1 << 15)
+#define BEAM_TYPE_V4_BITS_MASK 0x1FFF
 
 #define LITT_UNCOMPRESSED_SIZE_OFFSET 8
 #define LITT_HEADER_SIZE 12
@@ -1411,13 +1420,29 @@ term module_get_type_by_index(const Module *mod, int type_index, Context *ctx)
     uint32_t count = READ_32_UNALIGNED(types_data + 4);
 
     // Check if version is supported
-    if (version != BEAM_TYPES_VERSION) {
+    if (version != BEAM_TYPES_VERSION_V3 && version != BEAM_TYPES_VERSION_V4) {
         return globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "any"));
     }
 
     // Check bounds
     if (type_index >= (int) count) {
         return globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "any"));
+    }
+
+    uint16_t has_lower_bound_mask;
+    uint16_t has_upper_bound_mask;
+    uint16_t has_unit_mask;
+    uint16_t type_bits_mask;
+    if (version == BEAM_TYPES_VERSION_V4) {
+        has_lower_bound_mask = BEAM_TYPE_V4_HAS_LOWER_BOUND;
+        has_upper_bound_mask = BEAM_TYPE_V4_HAS_UPPER_BOUND;
+        has_unit_mask = BEAM_TYPE_V4_HAS_UNIT;
+        type_bits_mask = BEAM_TYPE_V4_BITS_MASK;
+    } else {
+        has_lower_bound_mask = BEAM_TYPE_V3_HAS_LOWER_BOUND;
+        has_upper_bound_mask = BEAM_TYPE_V3_HAS_UPPER_BOUND;
+        has_unit_mask = BEAM_TYPE_V3_HAS_UNIT;
+        type_bits_mask = BEAM_TYPE_V3_BITS_MASK;
     }
 
     // Skip to type data
@@ -1430,13 +1455,13 @@ term module_get_type_by_index(const Module *mod, int type_index, Context *ctx)
         pos += 2;
 
         // Skip extra data if present
-        if (type_bits & BEAM_TYPE_HAS_LOWER_BOUND) {
+        if (type_bits & has_lower_bound_mask) {
             pos += 8;
         }
-        if (type_bits & BEAM_TYPE_HAS_UPPER_BOUND) {
+        if (type_bits & has_upper_bound_mask) {
             pos += 8;
         }
-        if (type_bits & BEAM_TYPE_HAS_UNIT) {
+        if (type_bits & has_unit_mask) {
             pos += 1;
         }
     }
@@ -1452,24 +1477,24 @@ term module_get_type_by_index(const Module *mod, int type_index, Context *ctx)
     bool has_lower = false;
     bool has_upper = false;
 
-    if (type_bits & BEAM_TYPE_HAS_LOWER_BOUND) {
+    if (type_bits & has_lower_bound_mask) {
         lower_bound = (int64_t) READ_64_UNALIGNED(pos);
         pos += 8;
         has_lower = true;
     }
-    if (type_bits & BEAM_TYPE_HAS_UPPER_BOUND) {
+    if (type_bits & has_upper_bound_mask) {
         upper_bound = (int64_t) READ_64_UNALIGNED(pos);
         pos += 8;
         has_upper = true;
     }
-    if (type_bits & BEAM_TYPE_HAS_UNIT) {
+    if (type_bits & has_unit_mask) {
         unit = *pos + 1; // Stored as unit-1
         pos += 1;
     }
 
     // Decode type based on TypeBits (matching jit_precompile.erl exact pattern matching)
-    // From OTP source code: /opt/src/otp/lib/compiler/src/beam_types.erl decode_type function
-    uint16_t type_pattern = type_bits & 0xFFF; // Mask out flags, keep type bits
+    // From OTP source code: lib/compiler/src/beam_types.erl decode_type function
+    uint16_t type_pattern = type_bits & type_bits_mask;
 
     switch (type_pattern) {
         case BEAM_TYPE_ATOM:
@@ -1581,6 +1606,9 @@ term module_get_type_by_index(const Module *mod, int type_index, Context *ctx)
         case BEAM_TYPE_TUPLE:
             return globalcontext_make_atom(ctx->global, ATOM_STR("\x7", "t_tuple"));
 
+        case BEAM_TYPE_RECORD:
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x8", "t_record"));
+
         default:
             // Default fallback for any other combination or union types
             return globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "any"));
@@ -1602,7 +1630,7 @@ ModuleNativeEntryPoint module_get_native_entry_point(Module *module, int exporte
     return jit_wasm_get_entry_point((const void *) module->native_code, exported_label);
 #else
     assert(module->native_code);
-    return (ModuleNativeEntryPoint) ((uintptr_t) module->native_code + JIT_JUMPTABLE_ENTRY_SIZE * exported_label);
+    return (ModuleNativeEntryPoint) (((const uint8_t *) module->native_code) + JIT_JUMPTABLE_OFFSET + JIT_JUMPTABLE_ENTRY_SIZE * exported_label);
 #endif
 }
 #endif
@@ -2006,8 +2034,15 @@ bool module_find_line(Module *mod, size_t offset, uint32_t *line, size_t *filena
             }
             return module_find_line_ref(mod, prev_line_ref, line, filename_len, filename);
         }
+
+#else
+#if JIT_ARCH_TARGET == JIT_ARCH_XTENSA
+        struct JITState temp_jit_state = { .code_base = (const void *) mod->native_code };
+        ModuleNativeEntryPoint label0_entry = module_get_native_entry_point(mod, 0);
+        const uint8_t *labels_and_lines = (const uint8_t *) label0_entry(NULL, &temp_jit_state, NULL);
 #else
         const uint8_t *labels_and_lines = (const uint8_t *) mod->native_code(NULL, NULL, NULL);
+#endif
         int labels_count = READ_16_UNALIGNED(labels_and_lines);
         labels_and_lines += 2 + labels_count * 6;
         size_t lines_count = READ_16_UNALIGNED(labels_and_lines);
@@ -2093,7 +2128,14 @@ COLD_FUNC void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, s
             *l_off = 0;
         }
 #else
+#if JIT_ARCH_TARGET == JIT_ARCH_XTENSA
+        // C11 6.7.9 §21 : this is safe
+        struct JITState temp_jit_state = { .code_base = (const void *) mod->native_code };
+        ModuleNativeEntryPoint label0_entry = module_get_native_entry_point(mod, 0);
+        const uint8_t *labels_and_lines = (const uint8_t *) label0_entry(NULL, &temp_jit_state, NULL);
+#else
         const uint8_t *labels_and_lines = (const uint8_t *) mod->native_code(NULL, NULL, NULL);
+#endif
         int labels_count = READ_16_UNALIGNED(labels_and_lines);
         labels_and_lines += 2;
         uint32_t label_offset = 0;
@@ -2176,7 +2218,13 @@ uint32_t module_label_code_offset(Module *mod, int label)
 #ifdef JIT_JUMPTABLE_IS_DATA
         return (uint32_t) label * JIT_JUMPTABLE_ENTRY_SIZE;
 #else
+#if JIT_ARCH_TARGET == JIT_ARCH_XTENSA
+        struct JITState temp_jit_state = { .code_base = (const void *) mod->native_code };
+        ModuleNativeEntryPoint label0_entry = module_get_native_entry_point(mod, 0);
+        const uint8_t *labels_and_lines = (const uint8_t *) label0_entry(NULL, &temp_jit_state, NULL);
+#else
         const uint8_t *labels_and_lines = (const uint8_t *) mod->native_code(NULL, NULL, NULL);
+#endif
         int labels_count = READ_16_UNALIGNED(labels_and_lines);
         labels_and_lines += 2;
         while (labels_count > 0) {
@@ -2205,6 +2253,6 @@ void module_set_native_code(Module *mod, uint32_t labels_count, ModuleNativeEntr
 {
     mod->native_code = entry_point;
     // Extra function is OP_INT_CALL_END
-    mod->end_instruction_ii = JIT_JUMPTABLE_ENTRY_SIZE * labels_count;
+    mod->end_instruction_ii = JIT_JUMPTABLE_OFFSET + JIT_JUMPTABLE_ENTRY_SIZE * labels_count;
 }
 #endif

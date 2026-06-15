@@ -36,7 +36,7 @@ set(ERLANG_MODULES
     uart_hal
 )
 
-pack_archive(eavmlib ${ERLANG_MODULES})
+pack_precompiled_archive(eavmlib ${ERLANG_MODULES})
 
 include(../../../version.cmake)
 

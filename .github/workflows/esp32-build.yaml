@@ -47,24 +47,44 @@ jobs:
       matrix:
         esp-idf-target: ["esp32", "esp32c3"]
         idf-version:
-         - 'v5.2.6'
-         - 'v5.3.4'
-         - 'v5.4.3'
-         - 'v5.5.3'
+         - 'v5.2.7'
+         - 'v5.3.5'
+         - 'v5.4.4'
+         - 'v5.5.4'
+        jit: [false]
 
         include:
         - esp-idf-target: "esp32p4"
           idf-version: 'v5.4.4'
+          jit: false
         - esp-idf-target: "esp32p4"
-          idf-version: 'v5.5.3'
+          idf-version: 'v5.5.4'
+          jit: false
         - esp-idf-target: "esp32s3"
-          idf-version: 'v5.5.3'
+          idf-version: 'v5.5.4'
+          jit: false
         - esp-idf-target: "esp32s3"
-          idf-version: 'v5.5.3'
+          idf-version: 'v5.5.4'
           usb-serial: 'ON'
+          jit: false
+        - esp-idf-target: "esp32s3"
+          idf-version: 'v5.5.4'
+          usb-cdc: 'ON'
+          jit: false
         - esp-idf-target: "esp32"
-          idf-version: 'v5.4.3'
+          idf-version: 'v5.4.4'
           libsodium: 'ON'
+          jit: false
+        # JIT builds (v5.5.4 only)
+        - esp-idf-target: "esp32c3"
+          idf-version: 'v5.5.4'
+          jit: true
+        - esp-idf-target: "esp32"
+          idf-version: 'v5.5.4'
+          jit: true
+        - esp-idf-target: "esp32s3"
+          idf-version: 'v5.5.4'
+          jit: true
 
     steps:
     - name: Checkout repo
@@ -88,7 +108,7 @@ jobs:
         idf.py add-dependency "espressif/libsodium^1.0.20~4"
 
     - name: Add ESP TinyUSB dependency
-      if: matrix.usb-serial == 'ON'
+      if: matrix.usb-serial == 'ON' || matrix.usb-cdc == 'ON'
       working-directory: ./src/platforms/esp32/
       run: |
         . $IDF_PATH/export.sh
@@ -99,21 +119,34 @@ jobs:
       working-directory: ./src/platforms/esp32/
       env:
         USB_SERIAL: ${{ matrix.usb-serial || 'OFF' }}
+        USB_CDC: ${{ matrix.usb-cdc || 'OFF' }}
       run: |
         . $IDF_PATH/export.sh
         if [[ "${USB_SERIAL}" == "ON" ]]; then
           echo 'CONFIG_USE_USB_SERIAL=y' >> sdkconfig.defaults.in
         fi
+        if [[ "${USB_CDC}" == "ON" ]]; then
+          printf '%s\n' \
+            'CONFIG_TINYUSB_CDC_ENABLED=y' \
+            'CONFIG_AVM_ENABLE_USB_CDC_PORT_DRIVER=y' \
+            >> sdkconfig.defaults.in
+        fi
         export IDF_TARGET=${{matrix.esp-idf-target}}
-        idf.py set-target ${{matrix.esp-idf-target}}
-        idf.py ${{ matrix.libsodium == 'ON' && '-DAVM_USE_LIBSODIUM=ON' || '' }} build
-        idf.py size
+        if [ "${{ matrix.jit }}" = "true" ]; then
+          SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.jit" idf.py set-target ${{matrix.esp-idf-target}}
+          SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.jit" idf.py build
+        else
+          idf.py set-target ${{matrix.esp-idf-target}}
+          idf.py ${{ matrix.libsodium == 'ON' && '-DAVM_USE_LIBSODIUM=ON' || '' }} build
+        fi
 
-    - name: Print component size info with idf.py
+    - name: Print size info with idf.py
+      if: matrix.idf-version != 'v5.2.7'
       shell: bash
       working-directory: ./src/platforms/esp32/
       run: |
         . $IDF_PATH/export.sh
+        idf.py size
         idf.py size-components
 
     - name: "Perform CodeQL Analysis"
@@ -216,6 +249,9 @@ jobs:
         echo "CONFIG_HEAP_POISONING_COMPREHENSIVE=y" >> sdkconfig.defaults
         echo "CONFIG_ESP_WIFI_IRAM_OPT=n" >> sdkconfig.defaults
         echo "CONFIG_ESP_WIFI_RX_IRAM_OPT=n" >> sdkconfig.defaults
+        if [ "${{ matrix.jit }}" = "true" ]; then
+          echo "CONFIG_JIT_ENABLED=y" >> sdkconfig.defaults
+        fi
         . $IDF_PATH/export.sh
         export IDF_TARGET=${{matrix.esp-idf-target}}
         idf.py set-target ${{matrix.esp-idf-target}}
@@ -239,7 +275,7 @@ jobs:
       if: failure() && matrix.esp-idf-target != 'esp32p4'
       uses: actions/upload-artifact@v4
       with:
-        name: atomvm-esp32-test-${{ matrix.esp-idf-target }}-${{ matrix.idf-version }}-memcheck.elf
+        name: atomvm-esp32-test-${{ matrix.esp-idf-target }}-${{ matrix.idf-version }}${{ matrix.jit && '-jit' || '' }}-memcheck.elf
         path: ./src/platforms/esp32/test/build/atomvm-esp32-test.elf
         if-no-files-found: error
 
@@ -252,6 +288,10 @@ jobs:
         . $IDF_PATH/export.sh
         export IDF_TARGET=${{matrix.esp-idf-target}}
         export PATH=${PATH}:${HOME}/.cache/rebar3/bin
+        cp sdkconfig.defaults sdkconfig.defaults.backup
+        if [ "${{ matrix.jit }}" = "true" ]; then
+          echo "CONFIG_JIT_ENABLED=y" >> sdkconfig.defaults
+        fi
         idf.py set-target ${{matrix.esp-idf-target}}
         idf.py build
 
@@ -265,12 +305,13 @@ jobs:
         . $IDF_PATH/export.sh
         export PATH=/opt/qemu/bin:${PATH}
         pytest --target=${{matrix.esp-idf-target}} --embedded-services=idf,qemu -s
+        cp sdkconfig.defaults.backup sdkconfig.defaults
 
     - name: Upload ESP32 tests ELF artifact
       # TODO: remove the following exclusion when ESP32P4 support is added to espressif/qemu
       if: failure() && matrix.esp-idf-target != 'esp32p4'
       uses: actions/upload-artifact@v4
       with:
-        name: atomvm-esp32-test-${{ matrix.esp-idf-target }}-${{ matrix.idf-version }}.elf
+        name: atomvm-esp32-test-${{ matrix.esp-idf-target }}-${{ matrix.idf-version }}${{ matrix.jit && '-jit' || '' }}.elf
         path: ./src/platforms/esp32/test/build/atomvm-esp32-test.elf
         if-no-files-found: error

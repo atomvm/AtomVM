@@ -146,6 +146,13 @@
         Reg =:= r15)
 ).
 
+%% Low registers (r0-r7) are the only ones usable as the operand of the
+%% Thumb-2 cbz/cbnz compare-and-branch instructions.
+-define(IS_LOW_REGISTER(Reg),
+    (Reg =:= r0 orelse Reg =:= r1 orelse Reg =:= r2 orelse Reg =:= r3 orelse Reg =:= r4 orelse
+        Reg =:= r5 orelse Reg =:= r6 orelse Reg =:= r7)
+).
+
 -type stream() :: any().
 -type branch_type() ::
     {adr, armv6m_register()} | b_w | {far_branch, non_neg_integer(), armv6m_register()}.
@@ -154,11 +161,11 @@
     stream_module :: module(),
     stream :: stream(),
     offset :: non_neg_integer(),
-    branches :: [{non_neg_integer(), non_neg_integer(), branch_type()}],
+    branches :: #{integer() | reference() => [{non_neg_integer(), branch_type()}]},
     jump_table_start :: non_neg_integer(),
     available_regs :: non_neg_integer(),
     used_regs :: non_neg_integer(),
-    labels :: [{integer() | reference(), integer()}],
+    labels :: #{integer() | reference() => integer()},
     variant :: non_neg_integer(),
     literal_pool :: [{non_neg_integer(), armv6m_register(), non_neg_integer()}],
     regs :: jit_regs:regs(),
@@ -296,12 +303,12 @@ new(Variant, StreamModule, Stream) ->
     #state{
         stream_module = StreamModule,
         stream = Stream,
-        branches = [],
+        branches = #{},
         jump_table_start = 0,
         offset = StreamModule:offset(Stream),
         available_regs = ?AVAILABLE_REGS_MASK,
         used_regs = 0,
-        labels = [],
+        labels = #{},
         variant = Variant,
         literal_pool = [],
         regs = jit_regs:new(),
@@ -581,27 +588,25 @@ patch_branch(StreamModule, Stream, Offset, Type, LabelOffset) ->
 -spec patch_branches_for_label(
     module(),
     stream(),
-    integer(),
+    integer() | reference(),
     non_neg_integer(),
-    [{integer(), non_neg_integer(), any()}]
-) -> {stream(), [{integer(), non_neg_integer(), any()}]}.
+    #{integer() | reference() => [{non_neg_integer(), branch_type()}]}
+) ->
+    {stream(), #{integer() | reference() => [{non_neg_integer(), branch_type()}]}}.
 patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Branches) ->
-    patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Branches, []).
-
-patch_branches_for_label(_StreamModule, Stream, _TargetLabel, _LabelOffset, [], Acc) ->
-    {Stream, lists:reverse(Acc)};
-patch_branches_for_label(
-    StreamModule,
-    Stream0,
-    TargetLabel,
-    LabelOffset,
-    [{Label, Offset, Type} | Rest],
-    Acc
-) when Label =:= TargetLabel ->
-    Stream1 = patch_branch(StreamModule, Stream0, Offset, Type, LabelOffset),
-    patch_branches_for_label(StreamModule, Stream1, TargetLabel, LabelOffset, Rest, Acc);
-patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, [Branch | Rest], Acc) ->
-    patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Rest, [Branch | Acc]).
+    case Branches of
+        #{TargetLabel := BrList} ->
+            Stream1 = lists:foldl(
+                fun({Offset, Type}, AccStream) ->
+                    patch_branch(StreamModule, AccStream, Offset, Type, LabelOffset)
+                end,
+                Stream,
+                BrList
+            ),
+            {Stream1, maps:remove(TargetLabel, Branches)};
+        _ ->
+            {Stream, Branches}
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @doc Rewrite stream to update all branches for labels.
@@ -610,19 +615,29 @@ patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, [Branch
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
 -spec update_branches(state()) -> state().
-update_branches(#state{branches = []} = State) ->
-    State;
 update_branches(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
-        branches = [{Label, Offset, Type} | BranchesT],
+        branches = Branches,
         labels = Labels
     } = State
 ) ->
-    {Label, LabelOffset} = lists:keyfind(Label, 1, Labels),
-    Stream1 = patch_branch(StreamModule, Stream0, Offset, Type, LabelOffset),
-    update_branches(State#state{stream = Stream1, branches = BranchesT}).
+    Stream1 = maps:fold(
+        fun(Label, BrList, AccStream) ->
+            #{Label := LabelOffset} = Labels,
+            lists:foldl(
+                fun({Offset, Type}, AccStream2) ->
+                    patch_branch(StreamModule, AccStream2, Offset, Type, LabelOffset)
+                end,
+                AccStream,
+                BrList
+            )
+        end,
+        Stream0,
+        Branches
+    ),
+    State#state{stream = Stream1, branches = #{}}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Generate code to load a primitive function pointer into a register
@@ -864,7 +879,11 @@ return_if_not_equal_to_ctx(
 jump_to_label(
     #state{stream_module = StreamModule, stream = Stream0, labels = Labels} = State0, Label
 ) ->
-    LabelLookupResult = lists:keyfind(Label, 1, Labels),
+    LabelLookupResult =
+        case Labels of
+            #{Label := LabelOffset} -> {Label, LabelOffset};
+            _ -> false
+        end,
     Offset = StreamModule:offset(Stream0),
     {State1, CodeBlock} = branch_to_label_code(State0, Offset, Label, LabelLookupResult),
     Stream1 = StreamModule:append(Stream0, CodeBlock),
@@ -992,8 +1011,8 @@ branch_to_label_code(
     #state{branches = Branches, thumb2 = true} = State0, Offset, Label, false
 ) ->
     CodeBlock = <<16#FFFF:16, 16#FFFF:16>>,
-    Reloc = {Label, Offset, b_w},
-    State1 = State0#state{branches = [Reloc | Branches]},
+    BrEntry = {Offset, b_w},
+    State1 = State0#state{branches = Branches#{Label => [BrEntry | maps:get(Label, Branches, [])]}},
     {State1, CodeBlock};
 branch_to_label_code(
     #state{available_regs = Available, branches = Branches} = State0, Offset, Label, false
@@ -1024,8 +1043,8 @@ branch_to_label_code(
         end,
     % Add relocation entry
     CodeBlock = binary:copy(<<16#FF>>, SequenceSize),
-    Reloc = {Label, Offset, {far_branch, SequenceSize, TempReg}},
-    State1 = State0#state{branches = [Reloc | Branches]},
+    BrEntry = {Offset, {far_branch, SequenceSize, TempReg}},
+    State1 = State0#state{branches = Branches#{Label => [BrEntry | maps:get(Label, Branches, [])]}},
     {State1, CodeBlock};
 branch_to_label_code(
     #state{available_regs = 0, branches = Branches} = State0, Offset, Label, false
@@ -1066,8 +1085,8 @@ branch_to_label_code(
         end,
     % Add relocation entry
     CodeBlock = binary:copy(<<16#FF>>, SequenceSize),
-    Reloc = {Label, Offset, {far_branch, SequenceSize, ?IP_REG}},
-    State1 = State0#state{branches = [Reloc | Branches]},
+    BrEntry = {Offset, {far_branch, SequenceSize, ?IP_REG}},
+    State1 = State0#state{branches = Branches#{Label => [BrEntry | maps:get(Label, Branches, [])]}},
     {State1, CodeBlock};
 branch_to_label_code(#state{available_regs = 0}, _Offset, _Label, _LabelLookup) ->
     error({no_available_registers, _LabelLookup}).
@@ -1102,7 +1121,7 @@ if_block(
     Stream3 = lists:foldl(
         fun({ReplacementOffset, CC}, AccStream) ->
             BranchOffset = OffsetAfter - ReplacementOffset,
-            NewBranchInstr = jit_armv6m_asm:bcc(CC, BranchOffset),
+            NewBranchInstr = rewrite_cond_branch(CC, BranchOffset),
             StreamModule:replace(AccStream, ReplacementOffset, NewBranchInstr)
         end,
         Stream2,
@@ -1123,7 +1142,7 @@ if_block(
     OffsetAfter = StreamModule:offset(Stream2),
     %% Patch the conditional branch instruction to jump to the end of the block
     BranchOffset = OffsetAfter - (Offset + BranchInstrOffset),
-    NewBranchInstr = jit_armv6m_asm:bcc(CC, BranchOffset),
+    NewBranchInstr = rewrite_cond_branch(CC, BranchOffset),
     Stream3 = StreamModule:replace(Stream2, Offset + BranchInstrOffset, NewBranchInstr),
     State3 = merge_used_regs(State2#state{stream = Stream3}, State1#state.used_regs),
     MergedRegs = jit_regs:merge(State1#state.regs, State2#state.regs),
@@ -1160,7 +1179,7 @@ if_else_block(
     OffsetAfter = StreamModule:offset(Stream3),
     %% Patch the conditional branch to jump to the else block
     ElseBranchOffset = OffsetAfter - (Offset + BranchInstrOffset),
-    NewBranchInstr = jit_armv6m_asm:bcc(CC, ElseBranchOffset),
+    NewBranchInstr = rewrite_cond_branch(CC, ElseBranchOffset),
     Stream4 = StreamModule:replace(Stream3, Offset + BranchInstrOffset, NewBranchInstr),
     %% Build the else block
     StateElse = State2#state{
@@ -1180,10 +1199,24 @@ if_else_block(
     MergedRegs = jit_regs:merge(State2#state.regs, State3#state.regs),
     State4#state{regs = MergedRegs}.
 
+%% @private
+%% Regenerate the conditional branch that skips an if-block, given the patched
+%% offset. Atom conditions use the Thumb-1 bcc; the cbz/cbnz tuples (only
+%% produced for the thumb2 variant) use the fused compare-and-branch.
+-spec rewrite_cond_branch(
+    jit_armv6m_asm:cc() | {cbz | cbnz, armv6m_register()}, integer()
+) -> binary().
+rewrite_cond_branch({cbz, Reg}, Offset) ->
+    jit_armv7m_asm:cbz(Reg, Offset);
+rewrite_cond_branch({cbnz, Reg}, Offset) ->
+    jit_armv7m_asm:cbnz(Reg, Offset);
+rewrite_cond_branch(CC, Offset) when is_atom(CC) ->
+    jit_armv6m_asm:bcc(CC, Offset).
+
 -spec if_block_cond(state(), condition()) ->
     {
         state(),
-        jit_armv6m_asm:cc() | {tbz | tbnz, atom(), 0..63} | {cbz, atom()},
+        jit_armv6m_asm:cc() | {tbz | tbnz, atom(), 0..63} | {cbz | cbnz, armv6m_register()},
         non_neg_integer()
     }.
 %% Handle {Val, '<', Reg} which means "Val < Reg" or "Reg > Val"
@@ -1325,27 +1358,60 @@ if_block_cond(
     State2 = State1#state{stream = Stream1},
     {State2, CC, byte_size(I1)};
 if_block_cond(
-    #state{stream_module = StreamModule, stream = Stream0} = State0, {RegOrTuple, '==', 0}
+    #state{stream_module = StreamModule, stream = Stream0, thumb2 = Thumb2} = State0,
+    {RegOrTuple, '==', 0}
 ) ->
     Reg =
         case RegOrTuple of
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    %% Compare register with 0
-    I1 = jit_armv6m_asm:cmp(Reg, 0),
-    %% Branch if not equal
-    CC = ne,
-    ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, 16#FFFF:16>>),
+    %% Skip the block when Reg is non-zero.
+    {Code, CC, Delta} =
+        case Thumb2 andalso ?IS_LOW_REGISTER(Reg) of
+            true ->
+                %% Fused compare-and-branch (cbnz) replaces cmp #0 + bne
+                ?ASSERT(byte_size(jit_armv7m_asm:cbnz(Reg, 4)) =:= 2),
+                {<<16#FFFF:16>>, {cbnz, Reg}, 0};
+            false ->
+                I1 = jit_armv6m_asm:cmp(Reg, 0),
+                ?ASSERT(byte_size(jit_armv6m_asm:bcc(ne, 0)) =:= 2),
+                {<<I1/binary, 16#FFFF:16>>, ne, byte_size(I1)}
+        end,
+    Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, CC, byte_size(I1)};
+    {State2, CC, Delta};
 %% Delegate (int) forms to regular forms since we only have 32-bit words
 if_block_cond(State, {'(int)', RegOrTuple, '==', 0}) ->
     if_block_cond(State, {RegOrTuple, '==', 0});
 if_block_cond(State, {'(int)', RegOrTuple, '==', Val}) when is_integer(Val) ->
     if_block_cond(State, {RegOrTuple, '==', Val});
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0, thumb2 = Thumb2} = State0,
+    {RegOrTuple, '!=', 0}
+) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    %% Skip the block when Reg is zero.
+    {Code, CC, Delta} =
+        case Thumb2 andalso ?IS_LOW_REGISTER(Reg) of
+            true ->
+                %% Fused compare-and-branch (cbz) replaces cmp #0 + beq
+                ?ASSERT(byte_size(jit_armv7m_asm:cbz(Reg, 4)) =:= 2),
+                {<<16#FFFF:16>>, {cbz, Reg}, 0};
+            false ->
+                I1 = jit_armv6m_asm:cmp(Reg, 0),
+                ?ASSERT(byte_size(jit_armv6m_asm:bcc(eq, 0)) =:= 2),
+                {<<I1/binary, 16#FFFF:16>>, eq, byte_size(I1)}
+        end,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, CC, Delta};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '!=', Val}
@@ -3229,7 +3295,7 @@ set_continuation_to_offset(
     Offset = StreamModule:offset(Stream0),
     ?ASSERT(byte_size(jit_armv6m_asm:adr(Temp, 4)) =:= 2),
     I1 = <<16#FFFF:16>>,
-    Reloc = {OffsetRef, Offset, {adr, Temp}},
+    BrEntry = {Offset, {adr, Temp}},
     % Set thumb bit (LSB = 1) by adding 1 to the 4-byte aligned address
     I2 = jit_armv6m_asm:adds(Temp, Temp, 1),
     % Load jit_state pointer from stack, then store continuation
@@ -3238,7 +3304,10 @@ set_continuation_to_offset(
     Code = <<I1/binary, I2/binary, I3/binary, I4/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, Temp), TempJitState),
-    {State#state{stream = Stream1, branches = [Reloc | Branches], regs = Regs1}, OffsetRef}.
+    {
+        State#state{stream = Stream1, branches = Branches#{OffsetRef => [BrEntry]}, regs = Regs1},
+        OffsetRef
+    }.
 
 %% @doc Implement a continuation entry point.
 %% TODO: push r4-r7 and lr
@@ -3876,7 +3945,11 @@ call_only_or_schedule_next(
     % If zero, we want to fall through to scheduling code
 
     % Look up label once to avoid duplicate lookup in helper
-    LabelLookupResult = lists:keyfind(Label, 1, State0#state.labels),
+    LabelLookupResult =
+        case State0#state.labels of
+            #{Label := LabelOffset0} -> {Label, LabelOffset0};
+            _ -> false
+        end,
 
     BccOffset = StreamModule:offset(Stream1),
 
@@ -4033,7 +4106,7 @@ return_labels_and_lines(
 ) ->
     SortedLabels = lists:keysort(2, [
         {Label, LabelOffset}
-     || {Label, LabelOffset} <- Labels, is_integer(Label)
+     || {Label, LabelOffset} <- maps:to_list(Labels), is_integer(Label)
     ]),
 
     % Check if current offset is 4-byte aligned
@@ -4303,10 +4376,10 @@ add_label(
     ),
 
     State#state{
-        stream = Stream2, branches = RemainingBranches, labels = [{Label, LabelOffset} | Labels]
+        stream = Stream2, branches = RemainingBranches, labels = Labels#{Label => LabelOffset}
     };
 add_label(#state{labels = Labels} = State, Label, Offset) ->
-    State#state{labels = [{Label, Offset} | Labels]}.
+    State#state{labels = Labels#{Label => Offset}}.
 
 -ifdef(JIT_DWARF).
 %%-----------------------------------------------------------------------------

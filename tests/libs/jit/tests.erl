@@ -42,7 +42,9 @@ start() ->
         jit_riscv64_tests,
         jit_riscv64_asm_tests,
         jit_x86_64_tests,
-        jit_x86_64_asm_tests
+        jit_x86_64_asm_tests,
+        jit_xtensa_tests,
+        jit_xtensa_asm_tests
     ]),
     case Result of
         ok -> ok;

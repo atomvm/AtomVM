@@ -29,13 +29,17 @@ macro(jit_precompile module_name)
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_precompile.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_stream_binary.beam
-            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_dwarf.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${_jit_base_arch}.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${_jit_base_arch}_asm.beam
         )
         if("${AVM_JIT_TARGET_ARCH}" MATCHES "thumb2")
             list(APPEND jit_compiler_modules
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_armv7m_asm.beam
+            )
+        endif()
+        if (NOT AVM_DISABLE_JIT_DWARF)
+            list(APPEND jit_compiler_modules
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_dwarf.beam
             )
         endif()
         if (NOT AVM_DISABLE_JIT_DWARF)
@@ -178,6 +182,7 @@ compile_erlang(try_noerror)
 compile_erlang(catch_badmatch)
 compile_erlang(catch_nocasematch)
 compile_erlang(catch_noifmatch)
+compile_erlang(test_catch_return_atom)
 compile_erlang(try_catch_test)
 compile_erlang(list_concat)
 compile_erlang(make_ref_test)
@@ -737,6 +742,7 @@ set(erlang_test_beams
     catch_badmatch.beam
     catch_nocasematch.beam
     catch_noifmatch.beam
+    test_catch_return_atom.beam
     try_catch_test.beam
     list_concat.beam
     make_ref_test.beam

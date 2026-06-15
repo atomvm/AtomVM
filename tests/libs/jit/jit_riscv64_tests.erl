@@ -676,6 +676,42 @@ if_block_test_() ->
                 ?_test(begin
                     State1 = ?BACKEND:if_block(
                         State0,
+                        {RegA, '!=', 0},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	03053f83          	ld	t6,48(a0)\n"
+                        "   4:	03853f03          	ld	t5,56(a0)\n"
+                        "   8:	000f8363          	beqz	t6,0xe\n"
+                        "   c:	0f09                	addi	t5,t5,2"
+                    >>,
+                    ?assertStream(riscv64, Dump, Stream),
+                    ?assertEqual(lists:sort([RegB, RegA]), lists:sort(?BACKEND:used_regs(State1)))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {'(int)', {free, RegA}, '!=', 0},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	03053f83          	ld	t6,48(a0)\n"
+                        "   4:	03853f03          	ld	t5,56(a0)\n"
+                        "   8:	000f8363          	beqz	t6,0xe\n"
+                        "   c:	0f09                	addi	t5,t5,2"
+                    >>,
+                    ?assertStream(riscv64, Dump, Stream),
+                    ?assertEqual(lists:sort([RegB]), lists:sort(?BACKEND:used_regs(State1)))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
                         {RegA, '!=', ?TERM_NIL},
                         fun(BSt0) ->
                             ?BACKEND:add(BSt0, RegB, 2)

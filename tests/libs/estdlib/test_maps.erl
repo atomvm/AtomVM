@@ -24,6 +24,11 @@
 
 -include("etest.hrl").
 
+%% Map comprehensions (`#{K => V || K := V <- M}') were introduced in OTP 26.
+-if(?OTP_RELEASE >= 26).
+-define(HAS_MAP_COMPREHENSION, true).
+-endif.
+
 test() ->
     ok = test_get(),
     ok = test_is_key(),
@@ -71,6 +76,7 @@ test() ->
     end,
     ok = test_remove(),
     ok = test_update(),
+    ok = test_comprehension(),
     ok.
 
 test_get() ->
@@ -353,6 +359,49 @@ test_update() ->
     ?ASSERT_ERROR(maps:update(a, 40, {hello}), {badmap, {hello}}),
     ok = check_bad_map(fun() -> maps:update(foo, bar, id(not_a_map)) end),
     ok.
+
+-ifdef(HAS_MAP_COMPREHENSION).
+%% Map comprehensions rely on the compiler-generated calls to
+%% erts_internal:mc_iterator/1 and erts_internal:mc_refill/1.
+test_comprehension() ->
+    %% Empty map yields an empty map.
+    EmptyResult = #{K => V * 10 || K := V <- id(#{})},
+    ?ASSERT_MATCH(map_size(EmptyResult), 0),
+
+    %% Single and multiple associations, with a value transform.
+    ?ASSERT_MATCH(#{K => V * 10 || K := V <- id(#{a => 1})}, #{a => 10}),
+    ?ASSERT_MATCH(
+        #{K => V * 10 || K := V <- id(#{a => 1, b => 2, c => 3})},
+        #{a => 10, b => 20, c => 30}
+    ),
+
+    %% A filter drops associations.
+    ?ASSERT_MATCH(
+        #{K => V || K := V <- id(#{a => 1, b => 2, c => 3, d => 4}), V rem 2 =:= 0},
+        #{b => 2, d => 4}
+    ),
+
+    %% Both key and value can be transformed.
+    ?ASSERT_MATCH(
+        #{{key, K} => V + 1 || K := V <- id(#{1 => 10, 2 => 20})},
+        #{{key, 1} => 11, {key, 2} => 21}
+    ),
+
+    %% A map comprehension may iterate over a map iterator, not only a map.
+    Iter = maps:iterator(id(#{x => 1, y => 2})),
+    ?ASSERT_MATCH(#{K => V * 2 || K := V <- Iter}, #{x => 2, y => 4}),
+
+    %% A map generator may also feed a list comprehension.
+    ?ASSERT_MATCH(
+        lists:sort([{K, V} || K := V <- id(#{a => 1, b => 2})]),
+        [{a, 1}, {b, 2}]
+    ),
+
+    ok.
+-else.
+test_comprehension() ->
+    ok.
+-endif.
 
 id(X) -> X.
 

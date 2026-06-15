@@ -1300,6 +1300,33 @@ case esp:mount("sdmmc", "/sdcard", fat, []) of
 end.
 ```
 
+The SDMMC slot uses the default ESP-IDF pins unless pin options are supplied.  On SoCs whose SDMMC peripheral
+is routed through the GPIO matrix (for example ESP32-S3, and ESP32-P4 slot 1), boards that route the SD card to
+different GPIOs can configure the SDMMC lines in the mount options.  On the classic ESP32, the SDMMC pins are
+fixed by IOMUX; AtomVM rejects pin overrides on fixed-pin targets by raising `badarg`:
+
+```erlang
+SDMMCOpts = [
+    {clk, 39},
+    {cmd, 38},
+    {d0, 40},
+    {width, 1}
+],
+case esp:mount("sdmmc", "/sdcard", fat, SDMMCOpts) of
+    {ok, MountedRef} ->
+        io:format("SD card mounted successfully~n"),
+        {ok, MountedRef};
+    {error, Reason} ->
+        io:format("Failed to mount SD card: ~p~n", [Reason]),
+        {error, Reason}
+end.
+```
+
+The supported SDMMC options are `clk`, `cmd`, `d0`, `d1`, `d2`, `d3`, and `width`.  Use `{width, 1}` for
+1-bit mode or `{width, 4}` for 4-bit mode; omit `width` for the ESP-IDF default (the widest mode supported
+by the card).  The `d1`, `d2`, and `d3` pins are only required for 4-bit mode.  The `width` option is
+supported on fixed-pin and GPIO-matrix targets.
+
 #### Mounting SPI SD card
 
 To mount a SPI SD card, first create a SPI instance configured for your specific board, then use the `esp:mount/4` function:
@@ -1984,6 +2011,38 @@ ok = uart:close(UART)
 ```
 
 Once the UART driver is closed, any calls to `uart` functions using a reference to the UART driver instance should return with the value `{error, noproc}`.
+
+### USB CDC
+
+On platforms with a USB device controller, AtomVM can expose a USB CDC (Communications Device Class) ACM interface, which appears on the host as a virtual serial port (`/dev/ttyACMx` on Linux, `/dev/cu.usbmodemXXXX` on macOS, a COM port on Windows). The same byte-stream interface can be used as a UART replacement (logs, REPLs, custom serial protocols) or as the transport for [distribution over USB CDC](./distributed-erlang.md#usb-distribution).
+
+The Erlang-side API is the platform-specific `usb_cdc` module ([`libs/avm_esp32/src/usb_cdc.erl`](https://github.com/atomvm/AtomVM/blob/main/libs/avm_esp32/src/usb_cdc.erl), [`libs/avm_rp2/src/usb_cdc.erl`](https://github.com/atomvm/AtomVM/blob/main/libs/avm_rp2/src/usb_cdc.erl), [`libs/avm_stm32/src/usb_cdc.erl`](https://github.com/atomvm/AtomVM/blob/main/libs/avm_stm32/src/usb_cdc.erl)). It mirrors the `uart` API: `open/1,2`, `read/1,2`, `write/2`, `close/1`.
+
+#### Platform support and build configuration
+
+| Platform | Notes |
+|----------|-------|
+| ESP32 | Enable `CONFIG_USE_USB_SERIAL` and `CONFIG_AVM_ENABLE_USB_CDC_PORT_DRIVER` in `menuconfig`. The ESP-IDF `esp_tinyusb` component must be installed. |
+| RP2040/RP2350 | Set `-DAVM_USB_CDC_PORT_DRIVER_ENABLED=ON` in CMake. You must also disable stdio over USB (`pico_enable_stdio_usb(AtomVM 0)`) so that the CDC interface is available for the port driver. |
+| STM32 | Set `-DAVM_USB_CDC_PORT_DRIVER_ENABLED=ON` in CMake. TinyUSB is fetched automatically by default; set the `TINYUSB_PATH` environment variable to use a local checkout. |
+
+#### USB VID/PID and string descriptors
+
+USB CDC ACM is a standard device class, so on chip vendors that ship their own VID with a blessed "standard CDC" PID arrangement, AtomVM uses that pair by default and no override is required for the device class to be correctly identified by the host:
+
+- **RP2**: `0x2E8A:0x0009` Raspberry Pi's registered "Pico SDK CDC UART" PID, chip-agnostic (covers RP2040 and RP2350), per the [raspberrypi/usb-pid registry](https://github.com/raspberrypi/usb-pid). The same pair is used by pico-sdk's `stdio_usb` and by any other firmware exposing standard CDC under Pi's VID, so host-side tooling cannot distinguish AtomVM-Pico from other CDC firmwares on this pair. Note that bootrom PIDs (`0x0003` on RP2040, `0x000F` on RP2350) must NOT be reused.
+- **ESP32**: `0x303A` (Espressif VID) + TinyUSB-derived class-encoded PID, via the `esp_tinyusb` defaults (`CONFIG_TINYUSB_DESC_USE_ESPRESSIF_VID=y`, `CONFIG_TINYUSB_DESC_USE_DEFAULT_PID=y`). [Espressif's USB VID/PID guidance](https://docs.espressif.com/projects/esp-iot-solution/en/latest/usb/usb_overview/usb_vid_pid.html) explicitly states that USB standard-class devices built on TinyUSB do not need a separate PID under Espressif's VID.
+- **STM32**: `0xCAFE:0x4001` TinyUSB example placeholder, **not** a vendor-issued identity. Production firmware should override this with a real VID/PID. It is possible to apply to ST for a PID.
+
+If you want AtomVM to be distinguishable from other standard-CDC firmwares on the same chip (so host-side udev rules, drivers, or tooling can target it specifically), override the defaults:
+
+- **RP2 / STM32**: `-DAVM_USB_CDC_VID=0xXXXX -DAVM_USB_CDC_PID=0xXXXX` in CMake. RP2 builds may register a project-specific PID for free under Pi's VID via the [usb-pid registry](https://github.com/raspberrypi/usb-pid).
+- **ESP32**: set `CONFIG_TINYUSB_DESC_USE_ESPRESSIF_VID=n` / `CONFIG_TINYUSB_DESC_USE_DEFAULT_PID=n` and provide `CONFIG_TINYUSB_DESC_CUSTOM_VID` / `CONFIG_TINYUSB_DESC_CUSTOM_PID` in `menuconfig`.
+
+The string descriptors can be overridden the same way:
+
+- **RP2 / STM32** (CMake): `-DAVM_USB_CDC_MANUFACTURER="Your Company"`, `-DAVM_USB_CDC_PRODUCT="Your Product"`, `-DAVM_USB_CDC_INTERFACE_NAME="Your Product CDC ACM"`.
+- **ESP32** (sdkconfig): `CONFIG_TINYUSB_DESC_MANUFACTURER_STRING`, `CONFIG_TINYUSB_DESC_PRODUCT_STRING`, `CONFIG_TINYUSB_DESC_CDC_STRING`.
 
 ### LED Control
 

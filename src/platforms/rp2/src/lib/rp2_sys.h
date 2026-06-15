@@ -82,6 +82,10 @@ struct RP2PlatformData
 #endif
     queue_t event_queue;
 
+#if defined(AVM_USB_CDC_PORT_DRIVER_ENABLED) && !defined(AVM_NO_SMP)
+    mutex_t tinyusb_mutex;
+#endif
+
 #ifndef AVM_NO_SMP
     Mutex *entropy_mutex;
 #endif
@@ -94,5 +98,19 @@ struct RP2PlatformData
     mbedtls_ctr_drbg_context random_ctx;
     bool random_is_initialized;
 };
+
+#ifdef AVM_USB_CDC_PORT_DRIVER_ENABLED
+/**
+ * @brief Acquire the lock guarding TinyUSB device APIs.
+ * @details TinyUSB is not safe to call from multiple cores concurrently
+ * (see TinyUSB docs/reference/concurrency.rst). All non-callback uses of
+ * tud_xxx and tusb_init must be wrapped with this lock. Callbacks invoked
+ * by tud_task already run under the lock and must not relock.
+ * No-op when AVM_NO_SMP is defined.
+ * @end
+ */
+void sys_tinyusb_lock(GlobalContext *global);
+void sys_tinyusb_unlock(GlobalContext *global);
+#endif
 
 #endif

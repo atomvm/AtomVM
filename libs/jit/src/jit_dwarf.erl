@@ -436,7 +436,8 @@ backend_to_machine_type(jit_aarch64) -> ?EM_AARCH64;
 backend_to_machine_type(jit_armv6m) -> ?EM_ARM;
 backend_to_machine_type(jit_arm32) -> ?EM_ARM;
 backend_to_machine_type(jit_riscv32) -> ?EM_RISCV;
-backend_to_machine_type(jit_riscv64) -> ?EM_RISCV.
+backend_to_machine_type(jit_riscv64) -> ?EM_RISCV;
+backend_to_machine_type(jit_xtensa) -> ?EM_XTENSA.
 
 backend_to_elf_flags(jit_armv6m) ->
     ?EF_ARM_EABI_VER5 bor ?EF_ARM_ABI_FLOAT_SOFT bor ?EF_ARM_ARCH_V6M;

@@ -140,6 +140,7 @@ compile(Target, Dir, Dwarf, Path) ->
                 "riscv64" -> ?JIT_ARCH_RISCV64;
                 "arm32" -> ?JIT_ARCH_ARM32;
                 "wasm32" -> ?JIT_ARCH_WASM32;
+                "xtensa" -> ?JIT_ARCH_XTENSA;
                 _ -> error({unsupported_target, Target})
             end,
 
@@ -280,8 +281,9 @@ parse_imported_functions_chunk0(
     ImportedFunction = {Module, Function, Arity},
     parse_imported_functions_chunk0(N - 1, Rest, AtomResolver, [ImportedFunction | Acc]).
 
-%% Version (from beam_types.hrl)
--define(BEAM_TYPES_VERSION, 3).
+%% Versions (from beam_types.hrl). v3 is OTP < 29, v4 is OTP >= 29
+-define(BEAM_TYPES_VERSION_V3, 3).
+-define(BEAM_TYPES_VERSION_V4, 4).
 
 %% Type chunk constants (from beam_types.erl)
 -define(BEAM_TYPE_ATOM, (1 bsl 0)).
@@ -297,21 +299,27 @@ parse_imported_functions_chunk0(
 -define(BEAM_TYPE_REFERENCE, (1 bsl 10)).
 -define(BEAM_TYPE_TUPLE, (1 bsl 11)).
 
--define(BEAM_TYPE_HAS_LOWER_BOUND, (1 bsl 12)).
--define(BEAM_TYPE_HAS_UPPER_BOUND, (1 bsl 13)).
--define(BEAM_TYPE_HAS_UNIT, (1 bsl 14)).
-
-type_resolver(<<Version:32, _Count:32, TypeData/binary>>) when Version =:= ?BEAM_TYPES_VERSION ->
-    Types = parse_type_entries(TypeData, []),
+type_resolver(<<Version:32, _Count:32, TypeData/binary>>) when
+    Version =:= ?BEAM_TYPES_VERSION_V3; Version =:= ?BEAM_TYPES_VERSION_V4
+->
+    Types = parse_type_entries(Version, TypeData, []),
     fun(Index) -> lists:nth(Index + 1, Types) end;
 type_resolver(_) ->
     fun(_) -> any end.
 
-parse_type_entries(<<>>, Acc) ->
+parse_type_entries(_Version, <<>>, Acc) ->
     lists:reverse(Acc);
-parse_type_entries(
-    <<0:1, HasUnit:1, HasUpperBound:1, HasLowerBound:1, TypeBits:12, Rest0/binary>>, Acc
-) ->
+parse_type_entries(?BEAM_TYPES_VERSION_V3 = Version, <<Header:16, Rest0/binary>>, Acc) ->
+    %% v3: bit15 unused, bits 14/13/12 = unit/upper/lower flags, bits 0..11 type.
+    <<0:1, HasUnit:1, HasUpperBound:1, HasLowerBound:1, TypeBits:12>> = <<Header:16>>,
+    parse_type_entry(Version, TypeBits, HasLowerBound, HasUpperBound, HasUnit, Rest0, Acc);
+parse_type_entries(?BEAM_TYPES_VERSION_V4 = Version, <<Header:16, Rest0/binary>>, Acc) ->
+    %% v4: bits 15/14/13 = unit/upper/lower flags, bits 0..12 type (bit 12 is
+    %% BEAM_TYPE_RECORD, which we treat as `any`).
+    <<HasUnit:1, HasUpperBound:1, HasLowerBound:1, TypeBits:13>> = <<Header:16>>,
+    parse_type_entry(Version, TypeBits, HasLowerBound, HasUpperBound, HasUnit, Rest0, Acc).
+
+parse_type_entry(Version, TypeBits, HasLowerBound, HasUpperBound, HasUnit, Rest0, Acc) ->
     {Rest, LowerBound, UpperBound, Unit} = parse_extra(
         HasLowerBound, HasUpperBound, HasUnit, Rest0, '-inf', '+inf', 1
     ),
@@ -348,7 +356,7 @@ parse_type_entries(
             _ ->
                 any
         end,
-    parse_type_entries(Rest, [Type | Acc]).
+    parse_type_entries(Version, Rest, [Type | Acc]).
 
 parse_extra(1, HasUpperBound, HasUnit, <<Value:64/signed, Rest/binary>>, '-inf', '+inf', 1) ->
     parse_extra(0, HasUpperBound, HasUnit, Rest, Value, '+inf', 1);

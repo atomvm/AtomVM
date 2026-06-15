@@ -144,6 +144,16 @@ include(cmake/atomvm_dev_config.cmake)
 # Include SDK fetch (CMSIS + HAL/LL)
 include(cmake/stm32_sdk.cmake)
 
+option(AVM_USB_CDC_PORT_DRIVER_ENABLED "Enable USB CDC port driver" OFF)
+set(AVM_USB_CDC_VID "0xCAFE" CACHE STRING "USB CDC vendor ID (default: TinyUSB example placeholder; override for distribution)")
+set(AVM_USB_CDC_PID "0x4001" CACHE STRING "USB CDC product ID (default: TinyUSB example placeholder; override for distribution)")
+set(AVM_USB_CDC_MANUFACTURER "AtomVM" CACHE STRING "USB CDC iManufacturer string descriptor")
+set(AVM_USB_CDC_PRODUCT "AtomVM CDC" CACHE STRING "USB CDC iProduct string descriptor")
+set(AVM_USB_CDC_INTERFACE_NAME "AtomVM CDC ACM" CACHE STRING "USB CDC interface string descriptor")
+if (AVM_USB_CDC_PORT_DRIVER_ENABLED)
+    include(cmake/stm32_tinyusb.cmake)
+endif()
+
 # Include additional compilation flags (must come after dev_config sets CMAKE_FLASH_SIZE)
 include(cmake/compile-flags.cmake)
 
