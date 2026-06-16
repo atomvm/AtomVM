@@ -29,6 +29,7 @@ add_subdirectory(avm_network/src)
 add_subdirectory(avm_esp32/src)
 add_subdirectory(avm_rp2/src)
 add_subdirectory(avm_stm32/src)
+add_subdirectory(avm_zephyr/src)
 add_subdirectory(avm_emscripten/src)
 add_subdirectory(avm_unix/src)
 add_subdirectory(esp32boot)
@@ -64,6 +65,7 @@ pack_lib(atomvmlib ${ATOMVM_COMMON_LIBS} avm_network avm_unix TARGETS ${AVM_NATI
 pack_lib(atomvmlib-esp32 ${ATOMVM_COMMON_LIBS} avm_network avm_esp32 TARGETS xtensa xtensa+float32 riscv32)
 pack_lib(atomvmlib-rp2 UF2 ${ATOMVM_COMMON_LIBS} avm_network avm_rp2 TARGETS armv6m armv6m+thumb2 armv6m+thumb2+float32 riscv32)
 pack_lib(atomvmlib-stm32 ${ATOMVM_COMMON_LIBS} avm_stm32 TARGETS armv6m armv6m+thumb2 armv6m+thumb2+float32)
+pack_lib(atomvmlib-zephyr ${ATOMVM_COMMON_LIBS} avm_network avm_zephyr TARGETS x86_64 arm32 armv6m armv6m+thumb2 armv6m+thumb2+float32 riscv32 xtensa xtensa+float32)
 pack_lib(atomvmlib-emscripten ${ATOMVM_COMMON_LIBS} avm_network avm_emscripten TARGETS wasm32)
 
 if (Dialyzer_FOUND)
@@ -85,6 +87,7 @@ if (Dialyzer_FOUND)
     dialyzer_beams_list(avm_esp32 ${CMAKE_CURRENT_BINARY_DIR}/avm_esp32/src/avm_esp32.avm)
     dialyzer_beams_list(avm_rp2 ${CMAKE_CURRENT_BINARY_DIR}/avm_rp2/src/avm_rp2.avm)
     dialyzer_beams_list(avm_stm32 ${CMAKE_CURRENT_BINARY_DIR}/avm_stm32/src/avm_stm32.avm)
+    dialyzer_beams_list(avm_zephyr ${CMAKE_CURRENT_BINARY_DIR}/avm_zephyr/src/avm_zephyr.avm)
     dialyzer_beams_list(avm_emscripten ${CMAKE_CURRENT_BINARY_DIR}/avm_emscripten/src/avm_emscripten.avm)
 
     add_custom_command(
@@ -125,6 +128,7 @@ if (Dialyzer_FOUND)
     build_plt(atomvmlib-esp32 ${CMAKE_CURRENT_BINARY_DIR}/avm_esp32_beams.txt)
     build_plt(atomvmlib-rp2 ${CMAKE_CURRENT_BINARY_DIR}/avm_rp2_beams.txt)
     build_plt(atomvmlib-stm32 ${CMAKE_CURRENT_BINARY_DIR}/avm_stm32_beams.txt)
+    build_plt(atomvmlib-zephyr ${CMAKE_CURRENT_BINARY_DIR}/avm_zephyr_beams.txt)
     build_plt(atomvmlib-emscripten ${CMAKE_CURRENT_BINARY_DIR}/avm_emscripten_beams.txt)
 else()
     message("Dialyzer was not found -- skipping PLT build")
@@ -139,6 +143,7 @@ install(
         ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib-esp32.avm
         ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib-rp2.avm
         ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib-stm32.avm
+        ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib-zephyr.avm
         ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib-emscripten.avm
     DESTINATION lib/atomvm
 )
