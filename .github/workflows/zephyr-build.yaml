@@ -1,0 +1,106 @@
+#
+#  Copyright 2026 Peter M <petermm@gmail.com>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: Zephyr Build
+
+on:
+  push:
+    paths:
+      - '.github/workflows/zephyr-build.yaml'
+      - 'src/platforms/zephyr/**'
+      - 'src/libAtomVM/**'
+  pull_request:
+    paths:
+      - '.github/workflows/zephyr-build.yaml'
+      - 'src/platforms/zephyr/**'
+      - 'src/libAtomVM/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  zephyr:
+    runs-on: ubuntu-24.04
+    container: ghcr.io/zephyrproject-rtos/ci:v0.29.2
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Configure Git Safe Directory
+        run: |
+          git config --global --add safe.directory '*'
+
+      - name: Configure Zephyr SDK Path
+        run: |
+          echo "ZEPHYR_SDK_INSTALL_DIR=/opt/toolchains/zephyr-sdk-${ZSDK_VERSION}" >> $GITHUB_ENV
+
+      - name: Cache West Workspace
+        if: ${{ !env.ACT }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            .west
+            zephyr
+            modules
+          key: ${{ runner.os }}-west-${{ hashFiles('src/platforms/zephyr/west.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-west-
+
+      - name: Initialize West Workspace
+        working-directory: ./
+        run: |
+          mkdir -p .west
+          printf "[manifest]\npath = src/platforms/zephyr\nfile = west.yml\n" > .west/config
+          west update --narrow
+          west blobs fetch hal_espressif
+          west blobs fetch hal_infineon
+
+#      - name: Build for native_sim_64
+#        working-directory: ./src/platforms/zephyr
+#        run: |
+#          west build -b native_sim_64 -p=auto .
+
+      - name: Build for nucleo_f429zi
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b nucleo_f429zi -p=auto .
+
+      - name: Build for esp32_devkitc/esp32/procpu
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b esp32_devkitc/esp32/procpu -p=auto .
+
+      - name: Build for esp32s3_devkitc/esp32s3/procpu
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b esp32s3_devkitc/esp32s3/procpu -p=auto .
+
+      - name: Build for rpi_pico/rp2040
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b rpi_pico/rp2040 -p=auto .
+
+      - name: Build for rpi_pico/rp2040/w
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b rpi_pico/rp2040/w -p=auto .
+
+      - name: Build for rpi_pico2/rp2350a/m33
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b rpi_pico2/rp2350a/m33 -p=auto .
+
+      - name: Build for rpi_pico2/rp2350a/m33/w
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b rpi_pico2/rp2350a/m33/w -p=auto .
+
+      - name: Build for rpi_pico2/rp2350a/hazard3
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b rpi_pico2/rp2350a/hazard3 -p=auto .

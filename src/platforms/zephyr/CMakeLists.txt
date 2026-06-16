@@ -52,11 +52,29 @@ option(AVM_CONFIG_REBOOT_ON_NOT_OK "Reboot when application exits with non 'ok' 
 option(AVM_DISABLE_GPIO_NIFS "Disable GPIO nifs (input and output)" OFF)
 option(AVM_DISABLE_GPIO_PORT_DRIVER "Disable GPIO 'port' driver (input, output, and interrupts)" OFF)
 
-set(AVM_DISABLE_SMP ON FORCE)
+set(AVM_DISABLE_SMP ON CACHE BOOL "Disable SMP" FORCE)
+set(AVM_DISABLE_TASK_DRIVER OFF CACHE BOOL "Disable Task Driver" FORCE)
 zephyr_library_compile_definitions(AVM_NO_SMP)
 add_compile_definitions(AVM_NO_SMP)
+add_compile_definitions(AVM_NO_JIT)
+add_compile_definitions(_GNU_SOURCE)
+add_compile_definitions(_POSIX_C_SOURCE=200809L)
+if (NOT AVM_DISABLE_TASK_DRIVER)
+    add_compile_definitions(AVM_TASK_DRIVER_ENABLED)
+endif()
+if (CONFIG_NET_SOCKETS)
+    add_compile_definitions(OTP_SOCKET_BSD=1)
+endif()
 
 set(HAVE_CLOCK_SETTIME ON FORCE)
+set(HAVE_PLATFORM_ATOMIC_H ON CACHE BOOL "Platform has platform_atomic.h" FORCE)
+if(CONFIG_SOC_FAMILY_ESPRESSIF_ESP32 AND CONFIG_RISCV)
+    # Espressif RISC-V targets such as ESP32-C3 can pass libAtomVM's C11
+    # atomic compile check but fail to link __atomic_fetch_* helpers. Use
+    # Zephyr's platform atomic shim instead of advertising HAVE_ATOMIC.
+    set(ATOMIC_POINTER_LOCK_FREE_IS_TWO FALSE CACHE INTERNAL "Use Zephyr platform atomics" FORCE)
+endif()
+set(HAVE_RENAME "" CACHE INTERNAL "Have symbol rename" FORCE)
 
 if (AVM_NEWLIB_NANO)
     set(LINKER_FLAGS "${LINKER_FLAGS} -specs=nano.specs")
@@ -118,7 +136,12 @@ if(CMAKE_COMPILER_IS_GNUCC)
     target_compile_options(app PUBLIC -Wall -Wextra -ggdb)
 endif()
 
-add_subdirectory(src/libAtomVM libAtomVM)
+set(AVM_PORT_ZEPHYR ON CACHE BOOL "Build for Zephyr" FORCE)
+set(AVM_DISABLE_JIT ON CACHE BOOL "Disable JIT" FORCE)
+add_subdirectory(../../libAtomVM libAtomVM)
+target_include_directories(libAtomVM PUBLIC src/lib)
+add_dependencies(libAtomVM zephyr_generated_headers)
+add_dependencies(libAtomVM${PLATFORM_LIB_SUFFIX} zephyr_generated_headers)
 target_link_libraries(app PUBLIC libAtomVM)
 
 message("----------------------------------------")

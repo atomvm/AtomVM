@@ -1,0 +1,11 @@
+/*
+ * Keep the Zephyr and AtomVM console on the ESP32-C3 native USB
+ * Serial/JTAG port used for flashing and monitoring.
+ */
+
+/ {
+	chosen {
+		zephyr,console = &usb_serial;
+		zephyr,shell-uart = &usb_serial;
+	};
+};

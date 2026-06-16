@@ -26,17 +26,70 @@
 #include <trace.h>
 
 #include <zephyr/kernel.h>
-#include <zephyr/posix/time.h>
-
-#include "avm_log.h"
+#include <stdlib.h>
 #include "zephyros_sys.h"
+#include "avm_log.h"
+#include "platform_atomic.h"
+
+#include "../../../../libAtomVM/resources.h"
+
+#if defined(CONFIG_NET_SOCKETS)
+#include <poll.h>
+#include <sys/select.h>
+#endif
+
+#if defined(CONFIG_EVENTFD)
+#include <sys/eventfd.h>
+#include <unistd.h>
+#endif
+
+struct ZephyrPlatformData
+{
+#if defined(CONFIG_NET_SOCKETS)
+    struct pollfd *fds;
+    int listeners_poll_count;
+    int select_events_poll_count;
+#endif
+#if defined(CONFIG_EVENTFD)
+    int signal_fd;
+#endif
+};
+
+static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts);
+
+#if defined(CONFIG_NET_SOCKETS)
+static void event_listener_add_to_polling_set(struct EventListener *listener, GlobalContext *glb)
+{
+    UNUSED(listener);
+    struct ZephyrPlatformData *platform = glb->platform_data;
+    if (platform) {
+        platform->listeners_poll_count = -1;
+    }
+}
+
+static void listener_event_remove_from_polling_set(listener_event_t event, GlobalContext *glb)
+{
+    UNUSED(event);
+    struct ZephyrPlatformData *platform = glb->platform_data;
+    if (platform) {
+        platform->listeners_poll_count = -1;
+    }
+}
+
+static bool event_listener_is_event(struct EventListener *listener, listener_event_t event)
+{
+    return listener->fd == event;
+}
+
+#include <listeners.h>
+#endif
 
 #define TAG "sys"
 
 struct PortDriverDefListItem *port_driver_list;
 struct NifCollectionDefListItem *nif_collection_list;
 
-static inline void sys_clock_gettime(struct timespec *t)
+static inline void platform_clock_gettime(struct timespec *t)
 {
     uint64_t now = sys_monotonic_time_u64();
     t->tv_sec = (time_t) now / 1000;
@@ -59,47 +112,272 @@ void platform_defaultatoms_init(GlobalContext *glb)
 
 void sys_init_platform(GlobalContext *glb)
 {
-    UNUSED(glb);
+    struct ZephyrPlatformData *platform = malloc(sizeof(struct ZephyrPlatformData));
+    if (UNLIKELY(!platform)) {
+        AVM_ABORT();
+    }
+#if defined(CONFIG_NET_SOCKETS)
+    platform->fds = NULL;
+    platform->listeners_poll_count = -1;
+    platform->select_events_poll_count = -1;
+#endif
+#if defined(CONFIG_EVENTFD)
+    platform->signal_fd = eventfd(0, EFD_NONBLOCK);
+    if (platform->signal_fd < 0) {
+        AVM_LOGE(TAG, "Failed to create eventfd");
+        AVM_ABORT();
+    }
+#endif
+    glb->platform_data = platform;
 }
 
 void sys_free_platform(GlobalContext *glb)
 {
+    struct ZephyrPlatformData *platform = glb->platform_data;
+    if (platform) {
+#if defined(CONFIG_EVENTFD)
+        if (platform->signal_fd >= 0) {
+            close(platform->signal_fd);
+        }
+#endif
+#if defined(CONFIG_NET_SOCKETS)
+        free(platform->fds);
+#endif
+        free(platform);
+        glb->platform_data = NULL;
+    }
+}
+
+void sys_signal(GlobalContext *glb)
+{
+#if defined(CONFIG_EVENTFD)
+    struct ZephyrPlatformData *platform = glb->platform_data;
+    if (platform && platform->signal_fd >= 0) {
+        eventfd_t val = 1;
+        (void) eventfd_write(platform->signal_fd, val);
+    }
+#else
     UNUSED(glb);
+#endif
 }
 
 void sys_poll_events(GlobalContext *glb, int timeout_ms)
 {
-    UNUSED(glb);
-    UNUSED(timeout_ms);
+#if defined(CONFIG_NET_SOCKETS)
+    struct ZephyrPlatformData *platform = glb->platform_data;
+    if (UNLIKELY(!platform)) {
+        return;
+    }
+
+    struct pollfd *fds = platform->fds;
+    int listeners_poll_count = platform->listeners_poll_count;
+    int select_events_poll_count = platform->select_events_poll_count;
+
+    int signal_poll_count = 0;
+#if defined(CONFIG_EVENTFD)
+    signal_poll_count = 1;
+#endif
+
+    int fd_index;
+
+    if (listeners_poll_count < 0 || select_events_poll_count < 0) {
+        struct ListHead *select_events = synclist_wrlock(&glb->select_events);
+        size_t select_events_new_count = 0;
+        if (select_events_poll_count < 0) {
+            select_event_count_and_destroy_closed(select_events, NULL, NULL, &select_events_new_count, glb);
+        } else {
+            select_events_new_count = select_events_poll_count;
+        }
+
+        size_t listeners_new_count = 0;
+        struct ListHead *listeners = NULL;
+        struct ListHead *item;
+        if (listeners_poll_count < 0) {
+            listeners = synclist_rdlock(&glb->listeners);
+            LIST_FOR_EACH (item, listeners) {
+                EventListener *listener = GET_LIST_ENTRY(item, EventListener, listeners_list_head);
+                int listener_fd = listener->fd;
+                if (listener_fd >= 0) {
+                    listeners_new_count++;
+                }
+            }
+        } else {
+            listeners_new_count = listeners_poll_count;
+        }
+
+        size_t new_count = signal_poll_count + select_events_new_count + listeners_new_count;
+        struct pollfd *new_fds = realloc(fds, sizeof(struct pollfd) * new_count);
+        if (UNLIKELY(new_count > 0 && !new_fds)) {
+            if (listeners_poll_count < 0) {
+                synclist_unlock(&glb->listeners);
+            }
+            synclist_unlock(&glb->select_events);
+            return;
+        }
+        fds = new_fds;
+        platform->fds = fds;
+
+#if defined(CONFIG_EVENTFD)
+        fds[0].fd = platform->signal_fd;
+        fds[0].events = POLLIN;
+        fds[0].revents = 0;
+#endif
+
+        fd_index = signal_poll_count;
+        if (listeners_poll_count < 0) {
+            LIST_FOR_EACH (item, listeners) {
+                EventListener *listener = GET_LIST_ENTRY(item, EventListener, listeners_list_head);
+                int listener_fd = listener->fd;
+                if (listener_fd >= 0) {
+                    fds[fd_index].fd = listener_fd;
+                    fds[fd_index].events = POLLIN;
+                    fds[fd_index].revents = 0;
+                    fd_index++;
+                }
+            }
+            platform->listeners_poll_count = listeners_new_count;
+            synclist_unlock(&glb->listeners);
+        } else {
+            fd_index += listeners_new_count;
+        }
+
+        LIST_FOR_EACH (item, select_events) {
+            struct SelectEvent *select_event = GET_LIST_ENTRY(item, struct SelectEvent, head);
+            if (select_event->read || select_event->write) {
+                fds[fd_index].fd = select_event->event;
+                fds[fd_index].events = (select_event->read ? POLLIN : 0) | (select_event->write ? POLLOUT : 0);
+                fds[fd_index].revents = 0;
+                fd_index++;
+            }
+        }
+        platform->select_events_poll_count = select_events_new_count;
+        synclist_unlock(&glb->select_events);
+
+        listeners_poll_count = listeners_new_count;
+        select_events_poll_count = select_events_new_count;
+    }
+
+    int poll_count = signal_poll_count + listeners_poll_count + select_events_poll_count;
+    if (poll_count == 0) {
+        if (timeout_ms > 0) {
+            k_msleep(timeout_ms);
+        }
+        return;
+    }
+
+    int nb_descriptors = poll(fds, poll_count, timeout_ms);
+    if (nb_descriptors <= 0) {
+        return;
+    }
+
+    fd_index = 0;
+#if defined(CONFIG_EVENTFD)
+    if (nb_descriptors > 0) {
+        if (fds[0].revents & POLLIN) {
+            eventfd_t ignored;
+            (void) eventfd_read(platform->signal_fd, &ignored);
+            nb_descriptors--;
+        }
+        fd_index++;
+    }
+#endif
+
+    if (nb_descriptors > 0) {
+        struct ListHead *listeners = synclist_wrlock(&glb->listeners);
+        struct ListHead *item = listeners->next;
+        struct ListHead *previous = listeners;
+        for (int i = 0; i < listeners_poll_count && nb_descriptors > 0; i++, fd_index++) {
+            if (!(fds[fd_index].revents & fds[fd_index].events)) {
+                continue;
+            }
+            fds[fd_index].revents = 0;
+            nb_descriptors--;
+            process_listener_handler(glb, fds[fd_index].fd, listeners, &item, &previous);
+        }
+        synclist_unlock(&glb->listeners);
+    }
+
+    for (int i = 0; i < select_events_poll_count && nb_descriptors > 0; i++, fd_index++) {
+        if (!(fds[fd_index].revents & fds[fd_index].events)) {
+            continue;
+        }
+        bool is_read = fds[fd_index].revents & POLLIN;
+        bool is_write = fds[fd_index].revents & POLLOUT;
+        fds[fd_index].revents = 0;
+        nb_descriptors--;
+        select_event_notify(fds[fd_index].fd, is_read, is_write, glb);
+    }
+#else
+    if (timeout_ms > 0) {
+        k_msleep(timeout_ms);
+    }
+#endif
 }
 
+void sys_register_listener(GlobalContext *global, struct EventListener *listener)
+{
+    struct ListHead *listeners = synclist_wrlock(&global->listeners);
+    list_append(listeners, &listener->listeners_list_head);
+#if defined(CONFIG_NET_SOCKETS)
+    event_listener_add_to_polling_set(listener, global);
+#endif
+    synclist_unlock(&global->listeners);
+}
+
+void sys_unregister_listener(GlobalContext *global, struct EventListener *listener)
+{
+    synclist_remove(&global->listeners, &listener->listeners_list_head);
+#if defined(CONFIG_NET_SOCKETS)
+    struct ZephyrPlatformData *platform = global->platform_data;
+    if (platform) {
+        platform->listeners_poll_count = -1;
+    }
+#endif
+}
+
+#if !defined(CONFIG_NET_SOCKETS)
 void sys_listener_destroy(struct ListHead *item)
 {
     UNUSED(item);
 }
+#endif
 
 void sys_register_select_event(GlobalContext *global, ErlNifEvent event, bool is_write)
 {
-    UNUSED(global);
     UNUSED(event);
     UNUSED(is_write);
+#if defined(CONFIG_NET_SOCKETS)
+    struct ZephyrPlatformData *platform = global->platform_data;
+    if (platform) {
+        platform->select_events_poll_count = -1;
+    }
+#else
+    UNUSED(global);
+#endif
 }
 
 void sys_unregister_select_event(GlobalContext *global, ErlNifEvent event, bool is_write)
 {
-    UNUSED(global);
     UNUSED(event);
     UNUSED(is_write);
+#if defined(CONFIG_NET_SOCKETS)
+    struct ZephyrPlatformData *platform = global->platform_data;
+    if (platform) {
+        platform->select_events_poll_count = -1;
+    }
+#else
+    UNUSED(global);
+#endif
 }
 
 void sys_time(struct timespec *t)
 {
-    sys_clock_gettime(t);
+    platform_clock_gettime(t);
 }
 
 void sys_monotonic_time(struct timespec *t)
 {
-    sys_clock_gettime(t);
+    platform_clock_gettime(t);
 }
 
 uint64_t sys_monotonic_time_u64()
@@ -232,4 +510,14 @@ const struct Nif *nif_collection_resolve_nif(const char *name)
     }
 
     return NULL;
+}
+
+bool platform_atomic_compare_exchange_weak_ptr(void **object, void **expected, void *desired)
+{
+    void *expected_value = *expected;
+    bool exchanged = atomic_ptr_cas((atomic_ptr_t *) object, expected_value, desired);
+    if (!exchanged) {
+        *expected = atomic_ptr_get((atomic_ptr_t *) object);
+    }
+    return exchanged;
 }
