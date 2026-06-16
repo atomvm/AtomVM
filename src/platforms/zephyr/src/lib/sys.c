@@ -521,3 +521,92 @@ bool platform_atomic_compare_exchange_weak_ptr(void **object, void **expected, v
     }
     return exchanged;
 }
+
+#ifndef AVM_NO_SMP
+static struct k_spinlock atomic_ops_lock;
+
+bool smp_atomic_compare_exchange_weak_int(void *object, void *expected, uint64_t desired, size_t desired_len)
+{
+    k_spinlock_key_t key = k_spin_lock(&atomic_ops_lock);
+
+    bool result;
+    switch (desired_len) {
+        case sizeof(uint64_t): {
+            uint64_t *object_ptr = (uint64_t *) object;
+            uint64_t *expected_ptr = (uint64_t *) expected;
+            result = *object_ptr == *expected_ptr;
+            if (result) {
+                *object_ptr = desired;
+            } else {
+                *expected_ptr = *object_ptr;
+            }
+            break;
+        }
+        case sizeof(uint32_t): {
+            uint32_t *object_ptr = (uint32_t *) object;
+            uint32_t *expected_ptr = (uint32_t *) expected;
+            result = *object_ptr == *expected_ptr;
+            if (result) {
+                *object_ptr = (uint32_t) desired;
+            } else {
+                *expected_ptr = *object_ptr;
+            }
+            break;
+        }
+        case sizeof(uint16_t): {
+            uint16_t *object_ptr = (uint16_t *) object;
+            uint16_t *expected_ptr = (uint16_t *) expected;
+            result = *object_ptr == *expected_ptr;
+            if (result) {
+                *object_ptr = (uint16_t) desired;
+            } else {
+                *expected_ptr = *object_ptr;
+            }
+            break;
+        }
+        case sizeof(uint8_t): {
+            uint8_t *object_ptr = (uint8_t *) object;
+            uint8_t *expected_ptr = (uint8_t *) expected;
+            result = *object_ptr == *expected_ptr;
+            if (result) {
+                *object_ptr = (uint8_t) desired;
+            } else {
+                *expected_ptr = *object_ptr;
+            }
+            break;
+        }
+        default:
+            AVM_ABORT();
+    }
+
+    k_spin_unlock(&atomic_ops_lock, key);
+    return result;
+}
+
+size_t smp_atomic_fetch_add_size(size_t *object, size_t delta)
+{
+    k_spinlock_key_t key = k_spin_lock(&atomic_ops_lock);
+    size_t result = *object;
+    *object += delta;
+    k_spin_unlock(&atomic_ops_lock, key);
+    return result;
+}
+
+size_t smp_atomic_fetch_sub_size(size_t *object, size_t delta)
+{
+    k_spinlock_key_t key = k_spin_lock(&atomic_ops_lock);
+    size_t result = *object;
+    *object -= delta;
+    k_spin_unlock(&atomic_ops_lock, key);
+    return result;
+}
+
+size_t smp_atomic_fetch_or_size(size_t *object, size_t mask)
+{
+    k_spinlock_key_t key = k_spin_lock(&atomic_ops_lock);
+    size_t result = *object;
+    *object |= mask;
+    k_spin_unlock(&atomic_ops_lock, key);
+    return result;
+}
+#endif

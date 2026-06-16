@@ -37,6 +37,7 @@
 #include <defaultatoms.h>
 #include <globalcontext.h>
 #include <module.h>
+#include <smp.h>
 #include <utils.h>
 
 #include "lib/avm_devcfg.h"
@@ -70,6 +71,16 @@ int main()
     GlobalContext *glb = globalcontext_new();
 
     AVM_LOGI(TAG, "Starting AtomVM revision %s", ATOMVM_VERSION);
+
+#if defined(AVM_ZEPHYR_BOOT_TEST)
+#ifndef AVM_NO_SMP
+    AVM_LOGI(TAG, "Zephyr boot test: SMP schedulers=%d online=%d", smp_get_online_processors(), glb->online_schedulers);
+#else
+    AVM_LOGI(TAG, "Zephyr boot test: SMP disabled");
+#endif
+    globalcontext_destroy(glb);
+    return 0;
+#endif
 
     uint32_t size = (AVM_FLASH_END - AVM_ADDRESS);
     const void *flashed_avm;
