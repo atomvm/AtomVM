@@ -104,3 +104,21 @@ jobs:
         working-directory: ./src/platforms/zephyr
         run: |
           west build -b rpi_pico2/rp2350a/hazard3 -p=auto .
+
+      - name: Build SMP for qemu_x86_64
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b qemu_x86_64 -p=auto . -- -DAVM_ZEPHYR_EXPERIMENTAL_SMP=ON -DAVM_ZEPHYR_BOOT_TEST=ON
+
+      - name: Boot SMP build on qemu_x86_64
+        working-directory: ./src/platforms/zephyr
+        run: |
+          set +e
+          timeout 20s west build -t run > qemu_x86_64_smp.log 2>&1
+          status=$?
+          set -e
+          cat qemu_x86_64_smp.log
+          grep -q "Zephyr boot test: SMP schedulers=2 online=2" qemu_x86_64_smp.log
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+            exit "$status"
+          fi

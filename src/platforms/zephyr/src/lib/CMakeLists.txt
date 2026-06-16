@@ -35,10 +35,26 @@ zephyr_include_directories(
     ${CMAKE_BINARY_DIR}/zephyr/include/generated/
 )
 
+if(HAVE_PLATFORM_SMP_H)
+    zephyr_library_compile_definitions(HAVE_PLATFORM_SMP_H)
+endif()
+if(HAVE_PLATFORM_ATOMIC_H)
+    zephyr_library_compile_definitions(HAVE_PLATFORM_ATOMIC_H)
+endif()
+if(ATOMIC_POINTER_LOCK_FREE_IS_TWO)
+    zephyr_library_compile_definitions(HAVE_ATOMIC)
+endif()
+
 zephyr_library_sources(
     platform_nifs.c
     sys.c
 )
+
+if(NOT AVM_DISABLE_SMP)
+    zephyr_library_sources(
+        smp.c
+    )
+endif()
 
 if(CONFIG_NET_SOCKETS)
     zephyr_library_sources(
