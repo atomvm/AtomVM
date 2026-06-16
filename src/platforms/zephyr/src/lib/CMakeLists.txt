@@ -72,6 +72,12 @@ if(CONFIG_WIFI)
     )
 endif()
 
+if(CONFIG_SERIAL)
+    zephyr_library_sources(
+        uart_driver.c
+    )
+endif()
+
 if(CMAKE_COMPILER_IS_GNUCC)
     target_compile_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC -Wall -pedantic -Wextra -ggdb)
 endif()
