@@ -22,10 +22,19 @@
 #define _PLATFORM_ATOMIC_H
 
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #define ATOMIC_COMPARE_EXCHANGE_WEAK_PTR(object, expected, desired) \
     platform_atomic_compare_exchange_weak_ptr((void **) (object), (void **) (expected), (void *) (desired))
 
+#define ATOMIC_COMPARE_EXCHANGE_WEAK_INT(object, expected, desired) \
+    smp_atomic_compare_exchange_weak_int((void *) (object), (void *) (expected), (uint64_t) (desired), sizeof(desired))
+
 bool platform_atomic_compare_exchange_weak_ptr(void **object, void **expected, void *desired);
+bool smp_atomic_compare_exchange_weak_int(void *object, void *expected, uint64_t desired, size_t desired_len);
+size_t smp_atomic_fetch_add_size(size_t *object, size_t delta);
+size_t smp_atomic_fetch_sub_size(size_t *object, size_t delta);
+size_t smp_atomic_fetch_or_size(size_t *object, size_t mask);
 
 #endif
