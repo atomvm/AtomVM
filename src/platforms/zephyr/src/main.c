@@ -27,6 +27,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/reboot.h>
 
+#if defined(CONFIG_SOC_FAMILY_ESPRESSIF_ESP32)
+#include <spi_flash_mmap.h>
+#endif
+
 #include <avm_version.h>
 #include <avmpack.h>
 #include <context.h>
@@ -61,14 +65,25 @@
 
 int main()
 {
+    printk("%s", ATOMVM_BANNER);
 
     GlobalContext *glb = globalcontext_new();
 
-    printk("%s", ATOMVM_BANNER);
     AVM_LOGI(TAG, "Starting AtomVM revision %s", ATOMVM_VERSION);
 
-    const void *flashed_avm = (void *) AVM_ADDRESS;
     uint32_t size = (AVM_FLASH_END - AVM_ADDRESS);
+    const void *flashed_avm;
+
+#if defined(CONFIG_SOC_FAMILY_ESPRESSIF_ESP32)
+    spi_flash_mmap_handle_t avm_mmap_handle;
+    esp_err_t mmap_result = spi_flash_mmap(AVM_ADDRESS, size, SPI_FLASH_MMAP_DATA, &flashed_avm, &avm_mmap_handle);
+    if (mmap_result != ESP_OK) {
+        AVM_LOGE(TAG, "Unable to map application AVM pack from flash offset 0x%lx: %d", (unsigned long) AVM_ADDRESS, mmap_result);
+        AVM_ABORT();
+    }
+#else
+    flashed_avm = (const void *) AVM_ADDRESS;
+#endif
 
     uint32_t startup_beam_size;
     const void *startup_beam;
@@ -79,7 +94,7 @@ int main()
     port_driver_init_all(glb);
     nif_collection_init_all(glb);
 
-    if (!avmpack_is_valid(flashed_avm, size) || !avmpack_find_section_by_flag(flashed_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
+    if (!avmpack_is_valid(flashed_avm, size) || !avmpack_find_section_by_flag(flashed_avm, BEAM_START_FLAG, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
         AVM_LOGE(TAG, "Invalid AVM Pack");
         AVM_ABORT();
     }
