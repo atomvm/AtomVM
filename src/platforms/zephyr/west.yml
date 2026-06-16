@@ -10,13 +10,19 @@ manifest:
   projects:
     - name: zephyr
       remote: zephyrproject-rtos
-      revision: v3.5.0
+      revision: v4.4.0
       import:
         # By using name-allowlist we can clone only the modules that are
         # strictly needed by the application.
         name-allowlist:
           - cmsis          # required by the ARM port
-          - stm32          # required by STM32 boards
+          - cmsis_6        # required by the ARM port in newer Zephyr
+          - hal_espressif  # required by ESP32 boards
+          - hal_infineon   # required by Raspberry Pi Pico W Wi-Fi
+          - hal_stm32      # required by STM32 boards
+          - hal_rpi_pico   # required by Raspberry Pi Pico (RP2040) boards
+          - mbedtls        # required for ESP32 crypto/WiFi
+          - tf-psa-crypto  # required for newer Zephyr PSA crypto
           - native_sim     # 32-bit native
           - native_sim_64  # 64-bit native
           - qemu_x86       # QEMU 32-bit virtual machine
