@@ -29,6 +29,7 @@ project (libAtomVM${PLATFORM_LIB_SUFFIX})
 zephyr_library_named(libAtomVM${PLATFORM_LIB_SUFFIX})
 
 zephyr_include_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
     ../../../../libAtomVM
     ${CMAKE_BINARY_DIR}/zephyr/include/generated/
@@ -38,6 +39,22 @@ zephyr_library_sources(
     platform_nifs.c
     sys.c
 )
+
+if(CONFIG_NET_SOCKETS)
+    zephyr_library_sources(
+        otp_socket_platform.c
+        ../../../../libAtomVM/otp_socket.c
+        ../../../../libAtomVM/inet.c
+        otp_net_platform.c
+        ../../../../libAtomVM/otp_net.c
+    )
+endif()
+
+if(CONFIG_WIFI)
+    zephyr_library_sources(
+        network_driver.c
+    )
+endif()
 
 if(CMAKE_COMPILER_IS_GNUCC)
     target_compile_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC -Wall -pedantic -Wextra -ggdb)

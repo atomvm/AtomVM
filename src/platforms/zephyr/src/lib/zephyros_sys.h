@@ -98,12 +98,20 @@ struct NifCollectionDefListItem
 extern struct PortDriverDefListItem *port_driver_list;
 extern struct NifCollectionDefListItem *nif_collection_list;
 
-static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts);
 void port_driver_init_all(GlobalContext *global);
 void port_driver_destroy_all(GlobalContext *global);
 
 const struct Nif *nif_collection_resolve_nif(const char *name);
 void nif_collection_init_all(GlobalContext *global);
 void nif_collection_destroy_all(GlobalContext *global);
+
+typedef int listener_event_t;
+
+struct EventListener
+{
+    struct ListHead listeners_list_head;
+    listener_event_t fd;
+    struct EventListener *(*handler)(GlobalContext *glb, struct EventListener *listener);
+};
 
 #endif /* _ZEPHYROS_SYS_H_ */
