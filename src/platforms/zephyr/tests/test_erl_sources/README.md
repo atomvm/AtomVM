@@ -6,7 +6,7 @@
 
 # Zephyr Erlang test sources
 
-This directory is reserved for Erlang modules that will be compiled and packed
-into Zephyr simulator test AVMs, following the platform test pattern used by
+This directory contains Erlang modules compiled and packed into Zephyr
+simulator test AVMs, following the platform test pattern used by
 `src/platforms/esp32/test/main/test_erl_sources` and
 `src/platforms/rp2/tests/test_erl_sources`.
