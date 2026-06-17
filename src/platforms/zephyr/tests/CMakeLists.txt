@@ -20,6 +20,8 @@ set_property(GLOBAL PROPERTY C_STANDARD iso9899:2011)
 
 get_filename_component(ATOMVM_ZEPHYR_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 
+option(AVM_ZEPHYR_NATIVE_SIM_I2C_TEST "Run the native_sim Erlang I2C emulator test" OFF)
+
 # Reuse the normal platform configuration, plus any matching board-specific
 # config or overlay from the Zephyr port root. Zephyr normally discovers these
 # relative to the application root, but this test app lives one directory down.
@@ -43,14 +45,30 @@ foreach(ATOMVM_ZEPHYR_BOARD_CANDIDATE ${ATOMVM_ZEPHYR_BOARD_CANDIDATES})
     endif()
 endforeach()
 
+if(AVM_ZEPHYR_NATIVE_SIM_I2C_TEST)
+    list(APPEND EXTRA_CONF_FILE "${CMAKE_CURRENT_LIST_DIR}/native_sim_i2c.conf")
+    list(APPEND DTC_OVERLAY_FILE "${CMAKE_CURRENT_LIST_DIR}/boards/native_sim.overlay")
+endif()
+
 if(BOARD MATCHES "^qemu_x86_64")
     set(AVM_ZEPHYR_EXPERIMENTAL_SMP ON CACHE BOOL "Enable experimental AtomVM SMP support on Zephyr" FORCE)
 else()
     set(AVM_ZEPHYR_EXPERIMENTAL_SMP OFF CACHE BOOL "Enable experimental AtomVM SMP support on Zephyr" FORCE)
 endif()
-set(AVM_ZEPHYR_BOOT_TEST ON CACHE BOOL "Boot AtomVM far enough to exercise Zephyr platform initialization" FORCE)
+if(AVM_ZEPHYR_NATIVE_SIM_I2C_TEST)
+    set(AVM_ZEPHYR_BOOT_TEST OFF CACHE BOOL "Boot AtomVM far enough to exercise Zephyr platform initialization" FORCE)
+    set(AVM_ZEPHYR_TEST_AVM ON CACHE BOOL "Use an embedded test AVM pack instead of a flashed application" FORCE)
+    set(AVM_ZEPHYR_TEST_EXIT ON CACHE BOOL "Exit the Zephyr application when the AtomVM application returns" FORCE)
+else()
+    set(AVM_ZEPHYR_BOOT_TEST ON CACHE BOOL "Boot AtomVM far enough to exercise Zephyr platform initialization" FORCE)
+endif()
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(AtomVMZephyrTests LANGUAGES C)
 
 include(${ATOMVM_ZEPHYR_ROOT}/cmake/AtomVMZephyrApp.cmake)
+
+if(AVM_ZEPHYR_NATIVE_SIM_I2C_TEST)
+    target_sources(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/i2c_native_sim_emul.c)
+    add_subdirectory(test_erl_sources)
+endif()

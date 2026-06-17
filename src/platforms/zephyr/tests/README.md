@@ -7,8 +7,9 @@
 # AtomVM Zephyr simulator tests
 
 The Zephyr test app reuses the normal `src/platforms/zephyr` build through
-`cmake/AtomVMZephyrApp.cmake`, and enables `AVM_ZEPHYR_BOOT_TEST` for a
-QEMU-backed boot smoke test.
+`cmake/AtomVMZephyrApp.cmake`. The QEMU scenario enables `AVM_ZEPHYR_BOOT_TEST`
+for a boot smoke test, while `native_sim` embeds a small Erlang test AVM and
+uses Zephyr's I2C emulator to exercise the AtomVM Zephyr I2C NIFs.
 
 Run the suite from the AtomVM repository root after initializing the Zephyr
 west workspace:
@@ -22,13 +23,12 @@ Or use the Zephyr Docker image wrapper from `src/platforms/zephyr`:
 ```shell
 ./docker-test.sh
 ./docker-test.sh -b qemu_x86_64
+./docker-test.sh -b native_sim
 ```
 
-The `-b` option mirrors `docker-build.sh`, but the initial simulator suite is
-run only on `qemu_x86_64`. ESP32 scenarios are currently build-only until a
-simulator or device harness is added.
+The `-b` option mirrors `docker-build.sh`. ESP32 scenarios are currently
+build-only until a simulator or device harness is added.
 
-Future Erlang-driven Zephyr tests should follow the ESP32 and RP2 pattern:
-place platform-specific Erlang modules under this test directory, compile them
-into a test AVM during CMake configuration, and execute them from a Zephyr test
-entry point or boot-test mode.
+Erlang-driven Zephyr tests follow the ESP32 and RP2 pattern: platform-specific
+modules live under `test_erl_sources`, compile into a test AVM during CMake
+configuration, and execute from the Zephyr test app.

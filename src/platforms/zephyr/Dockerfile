@@ -12,6 +12,22 @@ USER root
 # Create workspace directory
 WORKDIR /workspace/zephyr-workspace
 
+# Erlang-driven simulator tests compile BEAM files and build packbeam inside
+# CMake, following the ESP32/RP2 platform-test pattern.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        erlang-base \
+        erlang-crypto \
+        erlang-dev \
+        erlang-inets \
+        erlang-parsetools \
+        erlang-public-key \
+        erlang-ssl \
+        erlang-syntax-tools \
+        erlang-tools \
+        rebar3 && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy the west manifest from the host to the temporary location inside the image
 COPY west.yml AtomVM/src/platforms/zephyr/west.yml
 

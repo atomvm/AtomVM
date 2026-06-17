@@ -34,3 +34,20 @@ tests:
     integration_platforms:
       - esp32_devkitc/esp32/procpu
     build_only: true
+  atomvm.zephyr.i2c_native_sim:
+    tags:
+      - atomvm
+      - zephyr
+      - i2c
+      - native_sim
+    platform_allow:
+      - native_sim/native/64
+    integration_platforms:
+      - native_sim/native/64
+    harness: console
+    harness_config:
+      type: one_line
+      regex:
+        - "Exited with return: ok"
+    extra_args: AVM_ZEPHYR_NATIVE_SIM_I2C_TEST=ON
+    timeout: 30

@@ -36,8 +36,12 @@ done
 echo "==> Building local Docker image '$IMAGE_NAME'..."
 docker build -t "$IMAGE_NAME" -f "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR"
 
+if [[ "$BOARD" == "native_sim" ]]; then
+    BOARD="native_sim/native/64"
+fi
+
 echo "==> Running Zephyr tests for board '$BOARD' inside the container..."
-if [[ "$BOARD" != "qemu_x86_64" ]]; then
+if [[ "$BOARD" == esp32* ]]; then
     echo "==> Note: qemu_x86_64 runs in simulation; ESP32 scenarios are build-only until a simulator/device harness is added."
 fi
 docker run --rm \

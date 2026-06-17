@@ -21,6 +21,8 @@
 
 #include <errno.h>
 #include <signal.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -64,6 +66,11 @@
     "    ###########################################################\n" \
     "\n"
 
+#if defined(AVM_ZEPHYR_TEST_AVM)
+extern const uint8_t zephyr_test_modules_avm[];
+extern const size_t zephyr_test_modules_avm_size;
+#endif
+
 int main()
 {
     printk("%s", ATOMVM_BANNER);
@@ -85,7 +92,10 @@ int main()
     uint32_t size = (AVM_FLASH_END - AVM_ADDRESS);
     const void *flashed_avm;
 
-#if defined(CONFIG_SOC_FAMILY_ESPRESSIF_ESP32)
+#if defined(AVM_ZEPHYR_TEST_AVM)
+    flashed_avm = zephyr_test_modules_avm;
+    size = (uint32_t) zephyr_test_modules_avm_size;
+#elif defined(CONFIG_SOC_FAMILY_ESPRESSIF_ESP32)
     spi_flash_mmap_handle_t avm_mmap_handle;
     esp_err_t mmap_result = spi_flash_mmap(AVM_ADDRESS, size, SPI_FLASH_MMAP_DATA, &flashed_avm, &avm_mmap_handle);
     if (mmap_result != ESP_OK) {
@@ -141,6 +151,14 @@ int main()
     }
     free(ret_atom_string);
 
+#if defined(AVM_ZEPHYR_TEST_EXIT)
+    if (ret_value == OK_ATOM) {
+        AVM_LOGI(TAG, "AtomVM test application terminated successfully.");
+        return 0;
+    }
+    AVM_LOGE(TAG, "AtomVM test application terminated with non-ok return value.");
+    return 1;
+#else
     bool reboot_on_not_ok =
 #if defined(CONFIG_REBOOT_ON_NOT_OK)
         CONFIG_REBOOT_ON_NOT_OK ? true : false;
@@ -156,5 +174,6 @@ int main()
             ;
         }
     }
+#endif
     return 0;
 }
