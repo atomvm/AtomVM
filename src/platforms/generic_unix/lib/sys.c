@@ -660,9 +660,8 @@ void event_listener_add_to_polling_set(struct EventListener *listener, GlobalCon
 #endif
 }
 
-void sys_register_listener(GlobalContext *global, struct EventListener *listener)
+void sys_register_listener_nolock(GlobalContext *global, struct EventListener *listener)
 {
-    struct ListHead *listeners = synclist_wrlock(&global->listeners);
     event_listener_add_to_polling_set(listener, global);
 #ifndef AVM_NO_SMP
 #ifndef HAVE_KQUEUE
@@ -670,7 +669,13 @@ void sys_register_listener(GlobalContext *global, struct EventListener *listener
     sys_signal(global);
 #endif
 #endif
-    list_append(listeners, &listener->listeners_list_head);
+    list_append(synclist_nolock(&global->listeners), &listener->listeners_list_head);
+}
+
+void sys_register_listener(GlobalContext *global, struct EventListener *listener)
+{
+    synclist_wrlock(&global->listeners);
+    sys_register_listener_nolock(global, listener);
     synclist_unlock(&global->listeners);
 }
 
@@ -692,10 +697,17 @@ static void listener_event_remove_from_polling_set(listener_event_t listener_fd,
 #endif
 }
 
-void sys_unregister_listener(GlobalContext *global, struct EventListener *listener)
+void sys_unregister_listener_nolock(GlobalContext *global, struct EventListener *listener)
 {
     listener_event_remove_from_polling_set(listener->fd, global);
-    synclist_remove(&global->listeners, &listener->listeners_list_head);
+    list_remove(&listener->listeners_list_head);
+}
+
+void sys_unregister_listener(GlobalContext *global, struct EventListener *listener)
+{
+    synclist_wrlock(&global->listeners);
+    sys_unregister_listener_nolock(global, listener);
+    synclist_unlock(&global->listeners);
 }
 
 void sys_register_select_event(GlobalContext *global, ErlNifEvent event, bool is_write)
@@ -729,6 +741,9 @@ void sys_unregister_select_event(GlobalContext *global, ErlNifEvent event, bool 
     EV_SET(&kev, event, is_write ? EVFILT_WRITE : EVFILT_READ, EV_DELETE, 0, 0, NULL);
     (void) kevent(platform->kqueue_fd, &kev, 1, NULL, 0, &ts);
     platform->select_events_poll_count = -1;
+#ifndef AVM_NO_SMP
+    sys_signal(global);
+#endif
 #else
     UNUSED(event);
     UNUSED(is_write);
