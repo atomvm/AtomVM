@@ -43,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer lines return `{error, {parser, {line_too_long, Prefix}}}` with the first 128 bytes of
   the offending line. Callers whose upstream servers emit unusually large headers must account
   for this limit
+- Replaced the `exavmlib` `Protocol` module with a small runtime shim (only `Protocol.__concat__/2`),
+  saving ~31 KB of flash. ExAtomVM uses precompiled, unconsolidated protocols and continue to function normally at runtime.
 
 ### Removed
 - Removed `ahttp_client` support for obsolete line folding (RFC 9112 §5.2); folded header and
