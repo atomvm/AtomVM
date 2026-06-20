@@ -534,6 +534,7 @@ struct Test tests[] = {
     TEST_CASE(bs_get_binary_fixed_size),
     TEST_CASE(bs_get_integer_fixed_size),
     TEST_CASE(bs_get_float_dynamic_size),
+    TEST_CASE(bs_get_float_gc),
     TEST_CASE(test_is_not_equal),
     TEST_CASE(test_make_fun2),
     TEST_CASE(test_allocate_zero),

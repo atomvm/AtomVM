@@ -234,7 +234,7 @@ struct ModuleNativeInterface
     void *(*malloc)(Context *ctx, JITState *jit_state, size_t sz);
     void (*free)(void *ptr);
     term (*put_map_assoc)(Context *ctx, JITState *jit_state, term src, size_t new_entries, size_t num_elements, term *kv);
-    term (*bitstring_extract_float)(Context *ctx, term *bin_ptr, size_t offset, int n, int bs_flags);
+    term (*bitstring_extract_float)(Context *ctx, JITState *jit_state, term *match_state_ptr, int n, int bs_flags, int live);
     int (*module_get_fun_arity)(Module *fun_module, uint32_t fun_index);
     bool (*bitstring_match_module_str)(Context *ctx, JITState *jit_state, term bin, size_t offset, int str_id, size_t len);
     term (*bitstring_get_utf8)(term src);

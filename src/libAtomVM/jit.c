@@ -1514,26 +1514,33 @@ static term jit_bitstring_extract_integer(
     }
 }
 
-static term jit_bitstring_extract_float(Context *ctx, term *bin_ptr, size_t offset, int n, int bs_flags)
+static term jit_bitstring_extract_float(Context *ctx, JITState *jit_state, term *match_state_ptr, int n, int bs_flags, int live)
 {
-    TRACE("jit_bitstring_extract_float: bin_ptr=%p offset=%d n=%d bs_flags=%d\n", (void *) bin_ptr, (int) offset, n, bs_flags);
+    TRACE("jit_bitstring_extract_float: match_state_ptr=%p n=%d bs_flags=%d live=%d\n", (void *) match_state_ptr, n, bs_flags, live);
+    avm_int_t offset = (avm_int_t) match_state_ptr[2];
     avm_float_t value;
     bool status;
     switch (n) {
         case 16:
-            status = bitstring_extract_f16((term) (((uintptr_t) bin_ptr) | TERM_PRIMARY_BOXED), offset, n, bs_flags, &value);
+            status = bitstring_extract_f16(match_state_ptr[1], offset, n, bs_flags, &value);
             break;
         case 32:
-            status = bitstring_extract_f32((term) (((uintptr_t) bin_ptr) | TERM_PRIMARY_BOXED), offset, n, bs_flags, &value);
+            status = bitstring_extract_f32(match_state_ptr[1], offset, n, bs_flags, &value);
             break;
         case 64:
-            status = bitstring_extract_f64((term) (((uintptr_t) bin_ptr) | TERM_PRIMARY_BOXED), offset, n, bs_flags, &value);
+            status = bitstring_extract_f64(match_state_ptr[1], offset, n, bs_flags, &value);
             break;
         default:
             status = false;
     }
     if (UNLIKELY(!status)) {
         return FALSE_ATOM;
+    }
+    match_state_ptr[2] = (term) (offset + n);
+    TRIM_LIVE_REGS(live);
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, FLOAT_SIZE, live, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
+        return term_invalid_term();
     }
     return term_from_float(value, &ctx->heap);
 }
