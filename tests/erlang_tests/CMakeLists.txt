@@ -234,6 +234,7 @@ compile_erlang(test_abs)
 compile_erlang(test_is_process_alive)
 compile_erlang(test_is_not_type)
 compile_erlang(test_is_bitstring_is_binary)
+compile_erlang(test_is_builtin)
 compile_erlang(test_badarith)
 compile_erlang(test_badarith2)
 compile_erlang(test_badarith3)
@@ -271,6 +272,7 @@ compile_erlang(test_heap_growth)
 compile_erlang(test_system_flag)
 compile_erlang(test_system_info)
 compile_erlang(test_binary_to_term)
+compile_erlang(test_bitstring_to_list)
 compile_erlang(test_selective_receive)
 compile_erlang(test_timeout_not_integer)
 compile_erlang(test_undef)
@@ -793,6 +795,7 @@ set(erlang_test_beams
     test_is_process_alive.beam
     test_is_not_type.beam
     test_is_bitstring_is_binary.beam
+    test_is_builtin.beam
     test_badarith.beam
     test_badarith2.beam
     test_badarith3.beam
@@ -830,6 +833,7 @@ set(erlang_test_beams
     test_system_flag.beam
     test_system_info.beam
     test_binary_to_term.beam
+    test_bitstring_to_list.beam
     test_selective_receive.beam
     test_timeout_not_integer.beam
     test_undef.beam
