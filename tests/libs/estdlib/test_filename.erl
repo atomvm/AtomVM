@@ -27,6 +27,76 @@
 test() ->
     ok = test_join(),
     ok = test_split(),
+    ok = test_join2(),
+    ok = test_dirname(),
+    ok = test_basename(),
+    ok = test_extension(),
+    ok = test_rootname(),
+    ok.
+
+test_join2() ->
+    ?ASSERT_MATCH(filename:join("/usr", "local"), "/usr/local"),
+    ?ASSERT_MATCH(filename:join("a", ""), "a"),
+    ?ASSERT_MATCH(filename:join("", "b"), "/b"),
+    ?ASSERT_MATCH(filename:join("a/", "/b"), "/b"),
+    ?ASSERT_MATCH(filename:join("a/", "b/"), "a/b"),
+    ok.
+
+test_dirname() ->
+    ?ASSERT_MATCH(filename:dirname("/usr/src/kalle.erl"), "/usr/src"),
+    ?ASSERT_MATCH(filename:dirname("kalle.erl"), "."),
+    ?ASSERT_MATCH(filename:dirname("/"), "/"),
+    ?ASSERT_MATCH(filename:dirname("/usr/"), "/usr"),
+    ?ASSERT_MATCH(filename:dirname("usr/src/"), "usr/src"),
+    ?ASSERT_MATCH(filename:dirname("a/b/c"), "a/b"),
+    ?ASSERT_MATCH(filename:dirname(""), "."),
+    ?ASSERT_MATCH(filename:dirname("."), "."),
+    ok.
+
+test_basename() ->
+    ?ASSERT_MATCH(filename:basename("/usr/src/kalle.erl"), "kalle.erl"),
+    ?ASSERT_MATCH(filename:basename("kalle.erl"), "kalle.erl"),
+    ?ASSERT_MATCH(filename:basename("/"), ""),
+    ?ASSERT_MATCH(filename:basename("/usr/"), "usr"),
+    ?ASSERT_MATCH(filename:basename("a/b/c"), "c"),
+    ?ASSERT_MATCH(filename:basename(""), ""),
+    ?ASSERT_MATCH(filename:basename("src/kalle.erl", ".erl"), "kalle"),
+    ?ASSERT_MATCH(filename:basename("src/kalle.beam", ".erl"), "kalle.beam"),
+    ?ASSERT_MATCH(filename:basename("kalle.erl", ".erl"), "kalle"),
+    %% Only a single trailing separator marks the "directory" case
+    ?ASSERT_MATCH(filename:basename("a//"), ""),
+    ?ASSERT_MATCH(filename:basename("a/b//"), ""),
+    ?ASSERT_MATCH(filename:basename("trailing/slash///"), ""),
+    ?ASSERT_MATCH(filename:basename("a/b.erl/", ".erl"), "b.erl"),
+    ?ASSERT_MATCH(filename:basename("a/", "a"), "a"),
+    %% An Ext containing "/" can match across components
+    ?ASSERT_MATCH(filename:basename("/a/b", "/b"), "a"),
+    ?ASSERT_MATCH(filename:basename("a//b", "/b"), ""),
+    ok.
+
+test_extension() ->
+    ?ASSERT_MATCH(filename:extension("foo.erl"), ".erl"),
+    ?ASSERT_MATCH(filename:extension("a/b.c/foo"), ""),
+    ?ASSERT_MATCH(filename:extension("foo"), ""),
+    ?ASSERT_MATCH(filename:extension("a.b/c.d"), ".d"),
+    ?ASSERT_MATCH(filename:extension("/x.y/z.erl"), ".erl"),
+    ok.
+
+test_rootname() ->
+    ?ASSERT_MATCH(filename:rootname("foo.erl"), "foo"),
+    ?ASSERT_MATCH(filename:rootname("a/b.c/foo"), "a/b.c/foo"),
+    ?ASSERT_MATCH(filename:rootname("/x.y/z.erl"), "/x.y/z"),
+    ?ASSERT_MATCH(filename:rootname("foo"), "foo"),
+    ?ASSERT_MATCH(filename:rootname("foo.erl", ".erl"), "foo"),
+    ?ASSERT_MATCH(filename:rootname("foo.beam", ".erl"), "foo.beam"),
+    %% A dot extension that is the whole basename is not stripped
+    ?ASSERT_MATCH(filename:rootname("a/.erl", ".erl"), "a/.erl"),
+    ?ASSERT_MATCH(filename:rootname("a/.bashrc", ".bashrc"), "a/.bashrc"),
+    %% A leading-dot dotfile with no directory has no root name
+    ?ASSERT_MATCH(filename:rootname("."), []),
+    ?ASSERT_MATCH(filename:rootname(".bashrc"), []),
+    ?ASSERT_MATCH(filename:rootname(".."), "."),
+    ?ASSERT_MATCH(filename:rootname(".a.b"), ".a"),
     ok.
 
 test_join() ->
@@ -68,6 +138,28 @@ test_join() ->
     ?ASSERT_MATCH(filename:join([".", "foo"]), "./foo"),
     ?ASSERT_MATCH(filename:join(["foo", "."]), "foo/."),
     ?ASSERT_MATCH(filename:join(["foo", ".."]), "foo/.."),
+
+    %% A trailing separator in the final component is stripped
+    ?ASSERT_MATCH(filename:join(["a/"]), "a"),
+    ?ASSERT_MATCH(filename:join(["a", ""]), "a"),
+    ?ASSERT_MATCH(filename:join(["", ""]), ""),
+    ?ASSERT_MATCH(filename:join(["a/b///c/"]), "a/b/c"),
+
+    %% A "." component followed by a separator is dropped ("/./" -> "/"),
+    %% but a leading "./" and a trailing "/." are kept
+    ?ASSERT_MATCH(filename:join("a/.", "b"), "a/b"),
+    ?ASSERT_MATCH(filename:join("a", "./b"), "a/b"),
+    ?ASSERT_MATCH(filename:join(["a", ".", "b"]), "a/b"),
+    ?ASSERT_MATCH(filename:join(["a/./b"]), "a/b"),
+    ?ASSERT_MATCH(filename:join(["a/.//./b"]), "a/b"),
+    ?ASSERT_MATCH(filename:join(["a/./."]), "a/."),
+    ?ASSERT_MATCH(filename:join(["a/../b"]), "a/../b"),
+    ?ASSERT_MATCH(filename:join(["./a"]), "./a"),
+    ?ASSERT_MATCH(filename:join(["./"]), "."),
+    ?ASSERT_MATCH(filename:join(["./."]), "./."),
+    ?ASSERT_MATCH(filename:join([".././"]), ".."),
+    ?ASSERT_MATCH(filename:join(["/./"]), "/"),
+    ?ASSERT_MATCH(filename:join(["/."]), "/."),
 
     ok.
 
