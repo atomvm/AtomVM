@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added `filename:dirname/1`, `filename:basename/1,2`, `filename:extension/1`, `filename:rootname/1,2` and `filename:join/2`
 - Added `init:get_arguments/0`
+- Added `console:print_err/1` to write to standard error
 - Added Erlang distribution over serial (uart)
 - Added WASM32 JIT backend for Emscripten platform
 - Added `network:wifi_scan/0,1` to ESP32 network driver to scan available APs when in sta or sta+ap mode.
@@ -54,6 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `header_continuation` / `trailer_header_continuation` response events are no longer emitted
 
 ### Fixed
+- Route `io:put_chars(standard_error, ...)` and `io:format(standard_error, ...)` to stderr instead
+  of aliasing them to standard_io (diagnostics no longer pollute an escript's stdout)
 - Stop using deprecated `term_from_int32` on STM32 platform
 - Stop using deprecated `term_from_int32` on RP2 platform
 - Stop using deprecated `term_from_int32` on ESP32 platform

@@ -42,6 +42,11 @@ were using the `0x210000` offset.
   * Instantiate with `const module = await AtomVM({ arguments: [...] })`
   * The old implicit global-script pattern is no longer supported
   * `AtomVM.worker.js` is no longer emitted; only `AtomVM.mjs` and `AtomVM.wasm` are needed
+- `io:put_chars(standard_error, ...)` (and `io:format/3`, `io:fwrite/3` targeting
+  `standard_error`) now write directly to the OS standard error stream via `console:print_err/1`,
+  instead of being routed through the process group leader as an alias for `standard_io`. Code or
+  tests that captured `standard_error` output by swapping the group leader must instead redirect
+  or intercept the underlying stderr stream, or pass an explicit pid/device.
 
 ## v0.6.4 -> v0.6.5
 

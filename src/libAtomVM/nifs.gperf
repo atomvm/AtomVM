@@ -225,6 +225,7 @@ code_server:type_resolver/2, IF_HAVE_JIT(&code_server_type_resolver_nif)
 code_server:import_resolver/2, IF_HAVE_JIT(&code_server_import_resolver_nif)
 code_server:set_native_code/3, IF_HAVE_JIT(&code_server_set_native_code_nif)
 console:print/1, &console_print_nif
+console:print_err/1, &console_print_err_nif
 base64:encode/1, &base64_encode_nif
 base64:encode/2, &base64_encode_nif
 base64:decode/1, &base64_decode_nif

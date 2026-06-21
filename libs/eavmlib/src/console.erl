@@ -24,7 +24,7 @@
 %%-----------------------------------------------------------------------------
 -module(console).
 
--export([start/0, puts/1, puts/2, flush/0, flush/1, print/1]).
+-export([start/0, puts/1, puts/2, flush/0, flush/1, print/1, print_err/1]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Text the string data to write to the console
@@ -72,6 +72,17 @@ flush(Console) ->
 %%-----------------------------------------------------------------------------
 -spec print(Text :: iodata()) -> ok | {error, term()}.
 print(_Text) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Text the data to write to the standard error
+%% @returns ok if the data was written, or {error, Reason}, if there was
+%%          an error.
+%% @doc     Write a string to the console's standard error.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec print_err(Text :: iodata()) -> ok | {error, term()}.
+print_err(_Text) ->
     erlang:nif_error(undefined).
 
 %% Internal operations
