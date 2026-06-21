@@ -56,7 +56,8 @@
     posix_closedir/1,
     posix_readdir/1,
     get_creation/0,
-    subprocess/4
+    subprocess/4,
+    posix_kill/2
 ]).
 
 -export_type([
@@ -517,4 +518,27 @@ get_creation() ->
 ) ->
     {ok, non_neg_integer(), posix_fd()} | {error, posix_error()}.
 subprocess(_Path, _Args, _Env, _Options) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   OsPid   operating system process id, as returned by `subprocess/4'
+%% @param   Signal  signal number to send, e.g. 15 for SIGTERM
+%% @returns `ok' or an error tuple
+%% @doc     Send a signal to a process using kill(2). Typically used to
+%%          terminate a process started with `subprocess/4'.
+%%
+%%          A return value of `ok' means kill(2) accepted the request; it does
+%%          not guarantee that the target terminated, as the signal may be
+%%          caught, blocked, or ignored. Signal `0' sends no signal and merely
+%%          performs a POSIX existence/permission check.
+%%
+%%          `OsPid' follows kill(2) semantics: a positive value targets a single
+%%          process, `0' targets the caller's process group, `-1' targets every
+%%          process the caller may signal, and a value less than `-1' targets the
+%%          process group whose id is the absolute value.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_kill(OsPid :: integer(), Signal :: non_neg_integer()) ->
+    ok | {error, posix_error()}.
+posix_kill(_OsPid, _Signal) ->
     erlang:nif_error(undefined).

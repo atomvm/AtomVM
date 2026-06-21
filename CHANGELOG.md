@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added `filename:dirname/1`, `filename:basename/1,2`, `filename:extension/1`, `filename:rootname/1,2` and `filename:join/2`
 - Added `init:get_arguments/0`
+- Added `atomvm:posix_kill/2` to send a signal to a process, typically one started with `atomvm:subprocess/4`
 - Added Erlang distribution over serial (uart)
 - Added WASM32 JIT backend for Emscripten platform
 - Added `network:wifi_scan/0,1` to ESP32 network driver to scan available APs when in sta or sta+ap mode.

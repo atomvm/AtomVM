@@ -47,6 +47,9 @@ extern const struct Nif atomvm_posix_select_stop_nif;
 extern const struct Nif atomvm_subprocess_nif;
 #endif
 #endif
+#if HAVE_KILL
+extern const struct Nif atomvm_posix_kill_nif;
+#endif
 #if HAVE_OPEN && HAVE_CLOSE && HAVE_LSEEK
 extern const struct Nif atomvm_posix_seek_nif;
 #endif

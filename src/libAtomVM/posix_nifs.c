@@ -56,6 +56,11 @@
 #include <spawn.h>
 #endif
 
+#if HAVE_KILL
+#include <limits.h>
+#include <signal.h>
+#endif
+
 #include "defaultatoms.h"
 #include "erl_nif_priv.h"
 #include "globalcontext.h"
@@ -69,7 +74,7 @@ extern char **environ;
 
 term posix_errno_to_term(int err, GlobalContext *glb)
 {
-#if HAVE_OPEN && HAVE_CLOSE || defined(HAVE_CLOCK_SETTIME) || defined(HAVE_SETTIMEOFDAY)
+#if HAVE_OPEN && HAVE_CLOSE || defined(HAVE_CLOCK_SETTIME) || defined(HAVE_SETTIMEOFDAY) || HAVE_KILL
     // These are defined in SUSv1
     term result;
     switch (err) {
@@ -954,6 +959,43 @@ static term nif_atomvm_subprocess(Context *ctx, int argc, term argv[])
 #endif
 #endif
 
+#if HAVE_KILL
+static bool term_is_valid_pid(term t)
+{
+    if (!term_is_int64(t)) {
+        return false;
+    }
+    // The value must round-trip through pid_t: a larger integer would be
+    // silently truncated and target a different (possibly own) process.
+    int64_t value = term_to_int64(t);
+    return ((int64_t) (pid_t) value) == value;
+}
+
+static bool term_is_signal_number(term t)
+{
+    if (!term_is_int64(t)) {
+        return false;
+    }
+    int64_t value = term_to_int64(t);
+    return value >= 0 && value <= INT_MAX;
+}
+
+static term nif_atomvm_posix_kill(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    VALIDATE_VALUE(argv[0], term_is_valid_pid);
+    VALIDATE_VALUE(argv[1], term_is_signal_number);
+
+    pid_t pid = (pid_t) term_to_int64(argv[0]);
+    int signo = (int) term_to_int64(argv[1]);
+
+    if (UNLIKELY(kill(pid, signo) != 0)) {
+        return errno_to_error_tuple_maybe_gc(ctx);
+    }
+    return OK_ATOM;
+}
+#endif
+
 #if HAVE_MKFIFO
 static term nif_atomvm_posix_mkfifo(Context *ctx, int argc, term argv[])
 {
@@ -1835,6 +1877,12 @@ const struct Nif atomvm_subprocess_nif = {
     .nif_ptr = nif_atomvm_subprocess
 };
 #endif
+#endif
+#if HAVE_KILL
+const struct Nif atomvm_posix_kill_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_posix_kill
+};
 #endif
 #if HAVE_OPEN && HAVE_CLOSE && HAVE_LSEEK
 const struct Nif atomvm_posix_seek_nif = {
