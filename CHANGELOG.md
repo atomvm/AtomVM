@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sending to an alias reference
 - Added xtensa JIT backend for esp32 platform
 - Added support for configuring pins and width for sdmmc on ESP32
+- Added `esp:sdcard_open/2`, `esp:sdcard_read/2`, `esp:sdcard_write/3`, `esp:sdcard_info/1` and
+  `esp:sdcard_close/1` to the ESP32 `esp` module for low level SD card block (sector) access
 - Added support for map comprehensions
 - Added USB CDC port drivers for ESP32, RP2, and STM32 platforms
 - Added a Linux `gpio` driver for the generic_unix port (in `avm_unix`) using sysfs

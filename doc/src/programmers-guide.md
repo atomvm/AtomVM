@@ -1394,6 +1394,58 @@ These functions allow you to work with external storage devices or partitions on
 Remember to properly unmount any mounted filesystems before powering off or resetting the device to prevent data corruption.
 ```
 
+#### Raw SD card block access
+
+In addition to mounting a FAT filesystem, AtomVM can access an SD card at the block (sector)
+level, without mounting any filesystem. This is useful for implementing custom filesystems,
+inspecting partition tables, or reading and writing raw images.
+
+Open the card with [`esp:sdcard_open/2`](./apidocs/erlang/eavmlib/esp.md#sdcard_open-2). The
+source string (`"sdmmc"` or `"sdspi"`) and the options are the same as for `esp:mount/4`:
+
+```erlang
+{ok, SDCard} = esp:sdcard_open("sdmmc", []),
+```
+
+For an SPI attached card, first create a SPI instance, then pass the `spi_host` and `cs`
+options, exactly as with `esp:mount/4`:
+
+```erlang
+SPI = spi:open(SPIConfig),
+{ok, SDCard} = esp:sdcard_open("sdspi", [{spi_host, SPI}, {cs, 5}]),
+```
+
+Use [`esp:sdcard_info/1`](./apidocs/erlang/eavmlib/esp.md#sdcard_info-1) to obtain the card
+geometry, then read and write individual sectors with
+[`esp:sdcard_read/2`](./apidocs/erlang/eavmlib/esp.md#sdcard_read-2) and
+[`esp:sdcard_write/3`](./apidocs/erlang/eavmlib/esp.md#sdcard_write-3). The data passed to
+`esp:sdcard_write/3` must be exactly one sector in size:
+
+```erlang
+{ok, #{sector_size := SectorSize, sector_count := SectorCount}} = esp:sdcard_info(SDCard),
+{ok, Sector0} = esp:sdcard_read(SDCard, 0),
+ok = esp:sdcard_write(SDCard, SectorCount - 1, <<0:(SectorSize * 8)>>),
+```
+
+When you are done, close the card with
+[`esp:sdcard_close/1`](./apidocs/erlang/eavmlib/esp.md#sdcard_close-1):
+
+```erlang
+ok = esp:sdcard_close(SDCard),
+```
+
+All `esp:sdcard_*` functions are synchronous: like `esp:mount/4`, they run on the scheduler
+that executes the calling process and block it for the duration of the card transaction
+(typically milliseconds).
+
+```{warning}
+A given physical card should not be accessed through `esp:sdcard_open/2` and `esp:mount/4` at
+the same time. Writing raw sectors bypasses any filesystem, so be careful not to corrupt a
+filesystem you intend to keep using. A card opened with `"sdspi"` must be closed with
+`esp:sdcard_close/1` before the SPI bus is closed with `spi:close/1`: closing the bus first
+leaves the SPI host unusable until the device is restarted.
+```
+
 ### Restart and Sleep
 
 You can use the [`esp:restart/0`](./apidocs/erlang/eavmlib/esp.md#restart0) function to immediately restart the ESP32 device.  This function does not return a value.

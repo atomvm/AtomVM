@@ -82,6 +82,10 @@ config AVM_ENABLE_STORAGE_NIFS
     bool "Enable Storage NIFs"
     default y
 
+config AVM_ENABLE_RAW_SDCARD_NIFS
+    bool "Enable raw SD card block device NIFs"
+    default y
+
 config AVM_ENABLE_GPIO_PORT_DRIVER
     bool "Enable GPIO port driver"
     default y

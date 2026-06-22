@@ -391,6 +391,14 @@ TEST_CASE("test_mount", "[test_run]")
     term ret_value = avm_test_case("test_mount.beam");
     TEST_ASSERT(ret_value == OK_ATOM);
 }
+
+#ifdef CONFIG_AVM_ENABLE_RAW_SDCARD_NIFS
+TEST_CASE("test_sdcard", "[test_run]")
+{
+    term ret_value = avm_test_case("test_sdcard.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+#endif
 #endif
 
 struct pipefs_global_ctx
