@@ -21,6 +21,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "avmpack.h"
@@ -96,6 +97,7 @@ int main(void)
     const void *ptr = NULL;
     uint32_t sz = 0;
     const char *name = NULL;
+    uint32_t real_size = 0;
 
     // --- A valid pack: header + one BEAM section + terminator ---
     memset(buf, 0, sizeof(buf));
@@ -199,6 +201,91 @@ int main(void)
     CHECK(avmpack_find_section_by_flag(
               buf, pack_size, END_OF_FILE_MASK, END_OF_FILE, &ptr, &sz, &name)
         == 0);
+
+    // --- Completeness of a pack of exactly known size, and size recovery in a bounded region ---
+    memset(buf, 0, sizeof(buf));
+    memcpy(buf, avmpack_header, 24);
+    off = put_section(buf, 24, "mymod.beam", BEAM_START_FLAG, 16);
+    pack_size = put_end(buf, off);
+    CHECK(avmpack_is_complete(buf, pack_size));
+    CHECK(avmpack_compute_size(buf, sizeof(buf), &real_size) && real_size == pack_size);
+    // trailing bytes after the terminator are rejected
+    CHECK(avmpack_is_complete(buf, pack_size + 4) == false);
+    // a file cut exactly at the section end has no tail terminator
+    CHECK(avmpack_is_complete(buf, pack_size - 16) == false);
+    // the same pack at a misaligned base
+    memset(storage, 0xFF, sizeof(storage));
+    memcpy(pack, avmpack_header, 24);
+    off = put_section(pack, 24, "mymod.beam", BEAM_START_FLAG, 16);
+    pack_size = put_end(pack, off);
+    CHECK(avmpack_is_complete(pack, pack_size));
+    CHECK(avmpack_compute_size(pack, sizeof(storage) - 1, &real_size) && real_size == pack_size);
+
+    // --- Truncated pack: section present, terminator chopped off, 0xFF tail ---
+    memset(buf, 0xFF, sizeof(buf));
+    memcpy(buf, avmpack_header, 24);
+    put_section(buf, 24, "mymod.beam", BEAM_CODE_FLAG, 16);
+    CHECK(avmpack_compute_size(buf, sizeof(buf), &real_size) == false);
+
+    // --- Oversized, misaligned and zero section sizes ---
+    memset(buf, 0xFF, sizeof(buf));
+    memcpy(buf, avmpack_header, 24);
+    put_u32_be(buf + 24, 0x10000); // claims 64 KiB, far past the bounded view
+    put_u32_be(buf + 24 + 4, 0);
+    put_u32_be(buf + 24 + 8, 0);
+    memcpy(buf + 24 + 12, "x", 2);
+    CHECK(avmpack_compute_size(buf, 64, &real_size) == false);
+    put_u32_be(buf + 24, 17);
+    CHECK(avmpack_compute_size(buf, sizeof(buf), &real_size) == false);
+    memset(buf, 0, sizeof(buf));
+    memcpy(buf, avmpack_header, 24);
+    CHECK(avmpack_compute_size(buf, sizeof(buf), &real_size) == false);
+
+    // --- Terminator name with no NUL in its 4 bytes, at the exact end of the pack ---
+    memset(buf, 0, sizeof(buf));
+    memcpy(buf, avmpack_header, 24);
+    off = put_section(buf, 24, "mymod.beam", BEAM_START_FLAG, 16);
+    put_u32_be(buf + off, 0);
+    put_u32_be(buf + off + 4, 0);
+    put_u32_be(buf + off + 8, 0);
+    memcpy(buf + off + 12, "endX", 4);
+    pack_size = off + 16;
+    uint8_t *exact = malloc(pack_size);
+    if (exact == NULL) {
+        fprintf(stderr, "malloc failed\n");
+        return 1;
+    }
+    memcpy(exact, buf, pack_size);
+    CHECK(avmpack_is_complete(exact, pack_size) == false);
+    CHECK(avmpack_compute_size(exact, pack_size, &real_size) == false);
+    memcpy(exact + off + 12, "ENDX", 4);
+    CHECK(avmpack_is_complete(exact, pack_size) == false);
+    memcpy(exact + off + 12, "END", 4);
+    CHECK(avmpack_is_complete(exact, pack_size));
+    CHECK(avmpack_compute_size(exact, pack_size, &real_size) && real_size == pack_size);
+    memcpy(exact + off + 12, "eNd", 4);
+    CHECK(avmpack_is_complete(exact, pack_size));
+    CHECK(avmpack_compute_size(exact, pack_size, &real_size) && real_size == pack_size);
+    memcpy(exact + off + 12, "enx", 4);
+    CHECK(avmpack_is_complete(exact, pack_size) == false);
+    free(exact);
+
+    // --- Corrupt chain with a well-formed terminator as the last 16 bytes ---
+    memset(buf, 0xFF, sizeof(buf));
+    memcpy(buf, avmpack_header, 24);
+    put_u32_be(buf + 24, 0x10000); // first section claims 64 KiB
+    put_u32_be(buf + 24 + 4, 0);
+    put_u32_be(buf + 24 + 8, 0);
+    memcpy(buf + 24 + 12, "x", 2);
+    pack_size = put_end(buf, 256);
+    CHECK(avmpack_is_complete(buf, pack_size));
+    CHECK(avmpack_compute_size(buf, pack_size, &real_size) == false);
+    CHECK(avmpack_find_section_by_name(buf, pack_size, "missing", &ptr, &sz) == 0);
+
+#if SIZE_MAX > UINT32_MAX
+    // --- A size that 32-bit pack offsets cannot describe ---
+    CHECK(avmpack_is_complete(buf, (size_t) UINT32_MAX + 1) == false);
+#endif
 
     if (failures == 0) {
         fprintf(stderr, "All avmpack tests passed!\n");

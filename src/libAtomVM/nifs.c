@@ -5670,7 +5670,7 @@ static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[])
 
     size_t bin_size = term_binary_size(binary);
 
-    if (UNLIKELY(bin_size > UINT32_MAX || !avmpack_is_valid(term_binary_data(binary), bin_size))) {
+    if (UNLIKELY(!avmpack_is_complete(term_binary_data(binary), bin_size))) {
         RAISE_ERROR(BADARG_ATOM);
     }
 

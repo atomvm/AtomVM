@@ -439,7 +439,7 @@ enum OpenAVMResult sys_open_avm_from_file(
     if (IS_NULL_PTR(mapped)) {
         return AVM_OPEN_CANNOT_OPEN;
     }
-    if (UNLIKELY(!avmpack_is_valid(mapped->mapped, mapped->size))) {
+    if (UNLIKELY(!avmpack_is_complete(mapped->mapped, mapped->size))) {
         return AVM_OPEN_INVALID;
     }
 

@@ -194,6 +194,12 @@ int main(int argc, char **argv)
     Module *startup_module = NULL;
 
     if (has_embedded_avm) {
+        if (UNLIKELY(!avmpack_is_complete(embedded_data, embedded_size))) {
+            fprintf(stderr, "Embedded AVM pack is invalid or truncated.\n");
+            globalcontext_destroy(glb);
+            return EXIT_FAILURE;
+        }
+
         struct AVMPackData *avmpack_data = malloc(sizeof(struct AVMPackData));
         if (!avmpack_data) {
             fprintf(stderr, "Failed to allocate memory for embedded AVM pack.\n");

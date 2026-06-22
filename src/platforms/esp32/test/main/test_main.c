@@ -160,12 +160,13 @@ term avm_test_case(const char *test_module)
     port_driver_init_all(glb);
     nif_collection_init_all(glb);
 
-    TEST_ASSERT(avmpack_is_valid(main_avm, size) != 0);
+    uint32_t main_avm_size;
+    TEST_ASSERT(avmpack_compute_size(main_avm, size, &main_avm_size));
 
     struct ConstAVMPack *avmpack_data = malloc(sizeof(struct ConstAVMPack));
     TEST_ASSERT(avmpack_data != NULL);
 
-    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info, size);
+    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info, main_avm_size);
     avmpack_data->base.in_use = true;
     avmpack_data->base.data = main_avm;
     synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
@@ -209,11 +210,12 @@ TEST_CASE("test_jit_compile", "[test_run]")
     port_driver_init_all(glb);
     nif_collection_init_all(glb);
 
-    TEST_ASSERT(avmpack_is_valid(main_avm, size) != 0);
+    uint32_t main_avm_size;
+    TEST_ASSERT(avmpack_compute_size(main_avm, size, &main_avm_size));
 
     struct ConstAVMPack *avmpack_data = malloc(sizeof(struct ConstAVMPack));
     TEST_ASSERT(avmpack_data != NULL);
-    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info, size);
+    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info, main_avm_size);
     avmpack_data->base.in_use = true;
     avmpack_data->base.data = main_avm;
     synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);

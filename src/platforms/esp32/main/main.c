@@ -95,11 +95,12 @@ void app_main()
     port_driver_init_all(glb);
     nif_collection_init_all(glb);
 
-    if (!avmpack_is_valid(startup_avm, size)) {
-        ESP_LOGE(TAG, "Invalid startup avmpack. size=%u", size);
+    uint32_t avm_size;
+    if (!avmpack_compute_size(startup_avm, size, &avm_size)) {
+        ESP_LOGE(TAG, "Invalid or truncated startup avmpack. partition size=%u", size);
         AVM_ABORT();
     }
-    if (!avmpack_find_section_by_flag(startup_avm, size, BEAM_START_FLAG, BEAM_START_FLAG,
+    if (!avmpack_find_section_by_flag(startup_avm, avm_size, BEAM_START_FLAG, BEAM_START_FLAG,
             &startup_beam, &startup_beam_size, &startup_module_name)) {
         ESP_LOGE(TAG, "Error: Failed to locate start module in startup partition. (Did you flash a library by mistake?)");
         AVM_ABORT();
@@ -110,7 +111,7 @@ void app_main()
         ESP_LOGE(TAG, "Memory error: Cannot allocate AVMPackData for main.avm.");
         AVM_ABORT();
     }
-    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info, size);
+    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info, avm_size);
     avmpack_data->base.in_use = true;
     avmpack_data->base.data = startup_avm;
     synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);

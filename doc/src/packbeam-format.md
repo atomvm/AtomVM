@@ -120,6 +120,8 @@ requirement that the `Path` component of a normal file be a simple file name.
 
 Packbeam files end with a special `end` header.  The `size` field of the `end` header is 0 bytes.
 
+The `end` header is mandatory: the runtime uses it to confirm a pack is complete, and rejects a pack whose terminator is missing (e.g. a truncated flash image) instead of scanning past its data.
+
 #### Example `end` header
 
 The following sequence of bytes encodes the `end` header:
