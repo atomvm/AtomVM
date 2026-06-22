@@ -458,7 +458,7 @@ enum OpenAVMResult sys_open_avm_from_file(GlobalContext *global, const char *pat
         if (IS_NULL_PTR(part_avm)) {
             return AVM_OPEN_FAILED_ALLOC;
         }
-        avmpack_data_init(&part_avm->base, &esp32_part_avm_pack_info);
+        avmpack_data_init(&part_avm->base, &esp32_part_avm_pack_info, size);
         part_avm->base.data = part_data;
         part_avm->part_handle = part_handle;
         avmpack_data = &part_avm->base;
@@ -500,7 +500,7 @@ enum OpenAVMResult sys_open_avm_from_file(GlobalContext *global, const char *pat
             free(file_data);
             return AVM_OPEN_FAILED_ALLOC;
         }
-        avmpack_data_init(&in_memory_avm->base, &in_memory_avm_pack_info);
+        avmpack_data_init(&in_memory_avm->base, &in_memory_avm_pack_info, size);
         in_memory_avm->base.data = file_data;
         avmpack_data = &in_memory_avm->base;
     }

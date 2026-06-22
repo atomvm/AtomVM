@@ -27,6 +27,7 @@
 
 #include "avmpack.h"
 #include "context.h"
+#include "defaultatoms.h"
 #include "globalcontext.h"
 #include "jit_stream_flash.h"
 #include "jit_stream_flash_platform.h"
@@ -185,8 +186,8 @@ static uint8_t create_minimal_avmpack(void)
     uint32_t *sec_header = (uint32_t *) section;
 
     // Section format: size (4) + flags (4) + reserved (4) + name (null-terminated)
-    // Write size in big-endian (total section size including header)
-    uint32_t section_size = 4 + 4 + 4 + 4; // size + flags + reserved + "end\0"
+    // The terminator declares size 0 even though it occupies 16 bytes
+    uint32_t section_size = 0;
     sec_header[0] = __builtin_bswap32(section_size);
 
     // Write flags in big-endian
@@ -202,6 +203,15 @@ static uint8_t create_minimal_avmpack(void)
     return 0;
 }
 
+static void create_terminatorless_avmpack(void)
+{
+    uint8_t *pack = mock_flash + 0x100;
+
+    const char header_str[] = "#!/usr/bin/env AtomVM\n";
+    memcpy(pack, header_str, 23);
+    pack[23] = 0;
+}
+
 // Register AVM pack with global context
 static void register_test_avmpack(GlobalContext *glb)
 {
@@ -209,11 +219,23 @@ static void register_test_avmpack(GlobalContext *glb)
 
     // Create AVMPackData
     struct ConstAVMPack *pack = malloc(sizeof(struct ConstAVMPack));
-    avmpack_data_init(&pack->base, &const_avm_pack_info);
+    avmpack_data_init(&pack->base, &const_avm_pack_info, sizeof(mock_flash) - 0x100);
     pack->base.data = mock_flash + 0x100;
     pack->base.in_use = true;
 
     // Add to global context's avmpack list
+    synclist_append(&glb->avmpack_data, &pack->base.avmpack_head);
+}
+
+static void register_terminatorless_avmpack(GlobalContext *glb)
+{
+    create_terminatorless_avmpack();
+
+    struct ConstAVMPack *pack = malloc(sizeof(struct ConstAVMPack));
+    avmpack_data_init(&pack->base, &const_avm_pack_info, sizeof(mock_flash) - 0x100);
+    pack->base.data = mock_flash + 0x100;
+    pack->base.in_use = true;
+
     synclist_append(&glb->avmpack_data, &pack->base.avmpack_head);
 }
 
@@ -836,6 +858,43 @@ static void test_stale_data_cleanup(void)
     fprintf(stderr, "PASS: Stale data cleanup test\n");
 }
 
+void test_no_terminator_bug(void)
+{
+    fprintf(stderr, "\n=== Test: Pack Without Terminator ===\n");
+
+    memset(mock_flash, 0x00, MOCK_FLASH_SIZE);
+    memset(&mock_flash[0], 0xFF, FLASH_SECTOR_SIZE); // first page with AVM
+
+    GlobalContext *glb = globalcontext_new();
+    Context *ctx = context_new(glb);
+
+    // The only registered pack must be the broken one, otherwise a valid pack still provides an
+    // append position and the failure path is never reached.
+    register_terminatorless_avmpack(glb);
+    jit_stream_flash_init(glb);
+
+    nif_function new_nif = get_nif("jit_stream_flash:new/1");
+    assert(new_nif != NULL);
+
+    term argv[1];
+    argv[0] = term_from_int(10); // label count
+    term stream = new_nif(ctx, 1, argv);
+
+    if (!term_is_invalid_term(stream)) {
+        fprintf(stderr, "FAIL: expected jit_stream_flash:new/1 to raise, got a stream\n");
+        exit(1);
+    }
+    if (ctx->exception_reason != BADARG_ATOM) {
+        fprintf(stderr, "FAIL: expected badarg, got a different exception reason\n");
+        exit(1);
+    }
+
+    scheduler_terminate(ctx);
+    globalcontext_destroy(glb);
+
+    fprintf(stderr, "PASS: Pack without terminator\n");
+}
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
@@ -852,6 +911,7 @@ int main(int argc, char **argv)
     test_esp32_crash_bug();
     test_tail_corruption_bug();
     test_stale_data_cleanup();
+    test_no_terminator_bug();
 
     fprintf(stderr, "\nAll tests passed!\n");
     return EXIT_SUCCESS;

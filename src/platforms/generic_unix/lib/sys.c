@@ -444,7 +444,7 @@ enum OpenAVMResult sys_open_avm_from_file(
         mapped_file_close(mapped);
         return AVM_OPEN_FAILED_ALLOC;
     }
-    avmpack_data_init(&avmpack_data->base, &mapped_file_avm_pack_info);
+    avmpack_data_init(&avmpack_data->base, &mapped_file_avm_pack_info, (uint32_t) mapped->size);
     avmpack_data->base.data = mapped->mapped;
     avmpack_data->mapped = mapped;
 

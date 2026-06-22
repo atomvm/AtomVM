@@ -86,6 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed a JIT crash (`EXC_BAD_ACCESS`/SIGBUS) on Apple Silicon
 - Fixed the ESP32 event poller re-blocking after running a listener, which could delay a process
   readied by a driver (e.g. an active-mode socket message) until the next event or timer tick
+- Fixed AVM pack lookups not finding sections placed after a data file
+- Fixed an out-of-bounds read crashing the VM on an AVM pack section lookup miss (e.g. `atomvm:read_priv/2` for an unpacked file)
 
 ## [0.7.0-alpha.1] - 2026-04-06
 

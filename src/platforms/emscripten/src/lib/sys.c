@@ -690,7 +690,8 @@ enum OpenAVMResult sys_open_avm_from_file(
     UNUSED(global);
 
     emscripten_fetch_t *fetch = NULL;
-    void *data = load_or_fetch_file(path, &fetch, NULL);
+    size_t data_size = 0;
+    void *data = load_or_fetch_file(path, &fetch, &data_size);
     if (IS_NULL_PTR(data)) {
         return AVM_OPEN_CANNOT_OPEN;
     }
@@ -704,7 +705,7 @@ enum OpenAVMResult sys_open_avm_from_file(
         }
         return AVM_OPEN_FAILED_ALLOC;
     }
-    avmpack_data_init(&const_avm->base, &const_avm_pack_info);
+    avmpack_data_init(&const_avm->base, &const_avm_pack_info, (uint32_t) data_size);
     const_avm->base.data = (const uint8_t *) data;
 
     *avm_data = &const_avm->base;

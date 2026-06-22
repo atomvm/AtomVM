@@ -145,7 +145,11 @@ static struct JITEntry *globalcontext_find_first_jit_entry(GlobalContext *global
     struct ListHead *avmpack_data = synclist_rdlock(&global->avmpack_data);
     LIST_FOR_EACH (item, avmpack_data) {
         struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
-        avmpack_find_section_by_flag(avmpack_data->data, END_OF_FILE_MASK, END_OF_FILE, &end_offset, &end_size, &end_name);
+        if (!avmpack_find_section_by_flag(avmpack_data->data, avmpack_data->size, END_OF_FILE_MASK,
+                END_OF_FILE, &end_offset, &end_size, &end_name)) {
+            valid_cache = false;
+            continue;
+        }
         valid_cache = valid_cache && (strcmp(end_name, "END") == 0);
 
         if (end_offset > max_end_offset) {
@@ -153,6 +157,13 @@ static struct JITEntry *globalcontext_find_first_jit_entry(GlobalContext *global
         }
     }
     synclist_unlock(&global->avmpack_data);
+
+    if (IS_NULL_PTR(max_end_offset)) {
+        // No pack has a terminator: there is no known place to append, and the arithmetic below
+        // would wrap to 0.
+        *is_valid = false;
+        return NULL;
+    }
 
     uintptr_t max_end_offset_page = ((((uintptr_t) max_end_offset) - 1) & ~(FLASH_SECTOR_SIZE - 1));
     *is_valid = valid_cache;
@@ -180,17 +191,26 @@ static void globalcontext_set_cache_valid(GlobalContext *global)
 
     do {
         valid_cache = true;
+        bool found_end = true;
         struct ListHead *item;
         struct ListHead *avmpack_data = synclist_rdlock(&global->avmpack_data);
         LIST_FOR_EACH (item, avmpack_data) {
             struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
-            avmpack_find_section_by_flag(avmpack_data->data, END_OF_FILE_MASK, END_OF_FILE, &end_offset, &end_size, &end_name);
+            if (!avmpack_find_section_by_flag(avmpack_data->data, avmpack_data->size,
+                    END_OF_FILE_MASK, END_OF_FILE, &end_offset, &end_size, &end_name)) {
+                found_end = false;
+                valid_cache = false;
+                break;
+            }
             if (strcmp(end_name, "END")) {
                 valid_cache = false;
                 break;
             }
         }
         synclist_unlock(&global->avmpack_data);
+        if (!found_end) {
+            break;
+        }
         if (!valid_cache) {
             // Replace "end" with "END" - this is a 3-byte string replacement
             const uint8_t end_str[] = "END";
@@ -398,6 +418,10 @@ static term nif_jit_stream_flash_new(Context *ctx, int argc, term argv[])
         // No valid entries, get the first position
         bool is_valid;
         new_entry = globalcontext_find_first_jit_entry(ctx->global, &is_valid);
+        if (IS_NULL_PTR(new_entry)) {
+            fprintf(stderr, "No valid position to append JIT code to\n");
+            RAISE_ERROR(BADARG_ATOM);
+        }
     } else {
         // Get position after last valid entry
         new_entry = jit_entry_next(last_valid_entry);

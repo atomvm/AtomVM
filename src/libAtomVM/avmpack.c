@@ -27,8 +27,11 @@
 #include <stdio.h>
 
 #define AVMPACK_SIZE 24
+#define AVMPACK_SECTION_HEADER_SIZE 12
+#define AVMPACK_MIN_SECTION_SIZE 16
+#define AVMPACK_END_MARKER_SIZE 16
 
-static inline int pad(int size)
+static inline size_t pad(size_t size)
 {
     return ((size + 4 - 1) >> 2) << 2;
 }
@@ -52,79 +55,126 @@ bool avmpack_is_valid(const void *avmpack_binary, uint32_t size)
     return memcmp(avmpack_binary, pack_header, AVMPACK_SIZE) == 0;
 }
 
-int avmpack_find_section_by_flag(const void *avmpack_binary, uint32_t flags_mask, uint32_t flags_val, const void **ptr, uint32_t *size, const char **name)
+enum AVMPackSectionKind
 {
-    int offset = AVMPACK_SIZE;
-    const uint32_t *flags;
+    AVMPackSectionInvalid,
+    AVMPackSectionRegular,
+    AVMPackSectionEnd
+};
 
-    do {
-        const uint32_t *sizes = ((const uint32_t *) (avmpack_binary)) + offset / sizeof(uint32_t);
-        flags = ((const uint32_t *) (avmpack_binary)) + 1 + offset / sizeof(uint32_t);
+struct AVMPackSection
+{
+    uint32_t size;
+    uint32_t data_size;
+    uint32_t flags;
+    const char *name;
+    const void *data;
+};
 
-        if ((ENDIAN_SWAP_32(*flags) & flags_mask) == flags_val) {
-            const char *found_section_name = (const char *) (sizes + 3);
-            int section_name_len = pad(strlen(found_section_name) + 1);
+static enum AVMPackSectionKind read_section(const void *avmpack_binary, uint32_t avmpack_size,
+    uint32_t offset, struct AVMPackSection *section)
+{
+    if (offset > avmpack_size || avmpack_size - offset < AVMPACK_MIN_SECTION_SIZE) {
+        return AVMPackSectionInvalid;
+    }
 
-            *ptr = sizes + 3 + section_name_len / sizeof(uint32_t);
-            *size = ENDIAN_SWAP_32(*sizes);
-            *name = (const char *) (sizes + 3);
+    // A pack may sit at any byte offset (e.g. atomvm:add_avm_pack_binary/2 with a sub-binary).
+    const uint8_t *header = (const uint8_t *) avmpack_binary + offset;
+    uint32_t section_size = READ_32_UNALIGNED(header);
+    uint32_t flags = READ_32_UNALIGNED(header + 4);
+    const char *name = (const char *) (header + AVMPACK_SECTION_HEADER_SIZE);
+
+    if (section_size == 0) {
+        // The min-size guard above keeps the terminator name bytes in bounds for strcmp.
+        if (flags == 0 && (strcmp(name, "end") == 0 || strcmp(name, "END") == 0)) {
+            section->size = 0;
+            section->data_size = 0;
+            section->flags = 0;
+            section->name = name;
+            section->data = (const uint8_t *) avmpack_binary + offset + AVMPACK_END_MARKER_SIZE;
+            return AVMPackSectionEnd;
+        }
+        return AVMPackSectionInvalid;
+    }
+
+    if (section_size < AVMPACK_MIN_SECTION_SIZE || (section_size & 3) != 0
+        || section_size > avmpack_size - offset) {
+        return AVMPackSectionInvalid;
+    }
+
+    size_t name_region = section_size - AVMPACK_SECTION_HEADER_SIZE;
+    const void *nul = memchr(name, '\0', name_region);
+    if (nul == NULL) {
+        return AVMPackSectionInvalid;
+    }
+    size_t padded_name_len = pad((size_t) ((const char *) nul - name) + 1);
+    if (padded_name_len > name_region) {
+        return AVMPackSectionInvalid;
+    }
+
+    section->size = section_size;
+    section->data_size = section_size - AVMPACK_SECTION_HEADER_SIZE - (uint32_t) padded_name_len;
+    section->flags = flags;
+    section->name = name;
+    section->data
+        = (const uint8_t *) avmpack_binary + offset + AVMPACK_SECTION_HEADER_SIZE + padded_name_len;
+
+    return AVMPackSectionRegular;
+}
+
+int avmpack_find_section_by_flag(const void *avmpack_binary, uint32_t avmpack_size,
+    uint32_t flags_mask, uint32_t flags_val, const void **ptr, uint32_t *size, const char **name)
+{
+    uint32_t offset = AVMPACK_SIZE;
+    struct AVMPackSection section;
+    enum AVMPackSectionKind kind;
+
+    while ((kind = read_section(avmpack_binary, avmpack_size, offset, &section))
+        != AVMPackSectionInvalid) {
+        if ((section.flags & flags_mask) == flags_val) {
+            *ptr = section.data;
+            *size = section.data_size;
+            *name = section.name;
             return 1;
         }
-
-        offset += ENDIAN_SWAP_32(*sizes);
-
-    } while (*flags);
+        if (kind == AVMPackSectionEnd) {
+            break;
+        }
+        offset += section.size;
+    }
 
     return 0;
 }
 
-int avmpack_find_section_by_name(const void *avmpack_binary, const char *name, const void **ptr, uint32_t *size)
+int avmpack_find_section_by_name(const void *avmpack_binary, uint32_t avmpack_size,
+    const char *name, const void **ptr, uint32_t *size)
 {
-    int offset = AVMPACK_SIZE;
-    const uint32_t *flags;
+    uint32_t offset = AVMPACK_SIZE;
+    struct AVMPackSection section;
 
-    do {
-        const uint32_t *sizes = ((const uint32_t *) (avmpack_binary)) + offset / sizeof(uint32_t);
-        flags = ((const uint32_t *) (avmpack_binary)) + 1 + offset / sizeof(uint32_t);
-
-        const char *found_section_name = (const char *) (sizes + 3);
-        if (!strcmp(name, found_section_name)) {
-            int section_name_len = pad(strlen(found_section_name) + 1);
-
-            *ptr = sizes + 3 + section_name_len / sizeof(uint32_t);
-            *size = ENDIAN_SWAP_32(*sizes);
+    while (read_section(avmpack_binary, avmpack_size, offset, &section) == AVMPackSectionRegular) {
+        if (!strcmp(name, section.name)) {
+            *ptr = section.data;
+            *size = section.data_size;
             return 1;
         }
-
-        offset += ENDIAN_SWAP_32(*sizes);
-
-    } while (*flags);
+        offset += section.size;
+    }
 
     return 0;
 }
 
-void *avmpack_fold(void *accum, const void *avmpack_binary, avmpack_fold_fun fold_fun)
+void *avmpack_fold(
+    void *accum, const void *avmpack_binary, uint32_t avmpack_size, avmpack_fold_fun fold_fun)
 {
-    int offset = AVMPACK_SIZE;
-    uint32_t size = 0;
+    uint32_t offset = AVMPACK_SIZE;
+    struct AVMPackSection section;
 
-    do {
-        const uint32_t *size_ptr = ((const uint32_t *) (avmpack_binary)) + offset / sizeof(uint32_t);
-        size = ENDIAN_SWAP_32(*size_ptr);
-        if (size > 0) {
-            const uint32_t *flags_ptr = size_ptr + 1;
-            uint32_t flags = ENDIAN_SWAP_32(*flags_ptr);
-            const char *section_name = (const char *) (size_ptr + 3);
-            int section_name_len = pad(strlen(section_name) + 1);
-            accum = fold_fun(
-                accum,
-                size_ptr, size,
-                size_ptr + 3 + section_name_len / sizeof(uint32_t),
-                flags,
-                section_name);
-            offset += size;
-        }
-    } while (size > 0);
+    while (read_section(avmpack_binary, avmpack_size, offset, &section) == AVMPackSectionRegular) {
+        accum = fold_fun(accum, (const uint8_t *) avmpack_binary + offset, section.size,
+            section.data, section.flags, section.name);
+        offset += section.size;
+    }
 
     return accum;
 }

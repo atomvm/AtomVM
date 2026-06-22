@@ -92,7 +92,9 @@ static int app_main()
         }
         AVM_ABORT();
     }
-    if (!avmpack_find_section_by_flag(MAIN_AVM, BEAM_START_FLAG, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
+    if (!avmpack_find_section_by_flag(MAIN_AVM, (uint32_t) (XIP_SRAM_BASE - (uintptr_t) MAIN_AVM),
+            BEAM_START_FLAG, BEAM_START_FLAG, &startup_beam, &startup_beam_size,
+            &startup_module_name)) {
         sleep_ms(5000);
         fprintf(stderr, "Fatal error: Failed to locate start module in main.avm packbeam.  (Did you flash a library by mistake?)");
         AVM_ABORT();
@@ -105,7 +107,8 @@ static int app_main()
         AVM_ABORT();
     }
 
-    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
+    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info,
+        (uint32_t) (XIP_SRAM_BASE - (uintptr_t) MAIN_AVM));
     avmpack_data->base.data = MAIN_AVM;
     avmpack_data->base.in_use = true;
 
@@ -118,7 +121,8 @@ static int app_main()
             fprintf(stderr, "Memory error: Cannot allocate AVMPackData for lib.avm.");
             AVM_ABORT();
         }
-        avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
+        avmpack_data_init(&avmpack_data->base, &const_avm_pack_info,
+            (uint32_t) ((uintptr_t) MAIN_AVM - (uintptr_t) LIB_AVM));
         avmpack_data->base.data = LIB_AVM;
         avmpack_data->base.in_use = true;
         synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
