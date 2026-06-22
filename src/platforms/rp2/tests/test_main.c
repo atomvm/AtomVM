@@ -98,14 +98,15 @@ static term avm_test_case(const char *test_module)
 
     nif_collection_init_all(glb);
 
-    if (!avmpack_is_valid(MAIN_AVM, XIP_SRAM_BASE - (uintptr_t) MAIN_AVM)) {
+    if (!avmpack_is_valid(MAIN_AVM, RP2_XIP_CS0_END - (uintptr_t) MAIN_AVM)) {
         TEST_FAIL_MESSAGE("Fatal error: invalid main.avm packbeam");
         return term_invalid_term();
     }
 
     struct ConstAVMPack *avmpack_data = malloc(sizeof(struct ConstAVMPack));
     TEST_ASSERT_NOT_NULL(avmpack_data);
-    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
+    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info,
+        RP2_XIP_CS0_END - (uintptr_t) MAIN_AVM);
     avmpack_data->base.data = MAIN_AVM;
     avmpack_data->base.in_use = true;
 

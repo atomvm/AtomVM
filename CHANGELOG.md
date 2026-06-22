@@ -28,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bytes that the other scheduler then took
 - Fixed ESP32 SPI pin typespecs to allow `-1` for unused pins.
 - Fixed ESP32 double free crash when closing SPI ports
+- Fixed the VM crashing (`LoadProhibited` on ESP32) when `atomvm:read_priv/2` or a module load
+  looked up a name that is not in a truncated or corrupt AVM pack, such as an image larger than
+  its flash partition
+- Fixed `code:get_object_code/1` returning extra bytes after the module (the start of the next
+  pack entry) for modules loaded from an AVM pack
 
 ## [0.7.0-beta.0] - 2026-09-28
 
