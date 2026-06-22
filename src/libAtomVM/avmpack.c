@@ -179,6 +179,42 @@ void *avmpack_fold(
     return accum;
 }
 
+bool avmpack_is_complete(const void *avmpack_binary, uint32_t exact_size)
+{
+    // The header and every section are multiples of 4, so a complete pack's size must be too.
+    if (!avmpack_is_valid(avmpack_binary, exact_size)
+        || exact_size < AVMPACK_SIZE + AVMPACK_END_MARKER_SIZE || (exact_size & 3) != 0) {
+        return false;
+    }
+
+    struct AVMPackSection section;
+
+    return read_section(avmpack_binary, exact_size, exact_size - AVMPACK_END_MARKER_SIZE, &section)
+        == AVMPackSectionEnd;
+}
+
+bool avmpack_compute_size(const void *avmpack_binary, uint32_t max_size, uint32_t *real_size)
+{
+    if (!avmpack_is_valid(avmpack_binary, max_size)) {
+        return false;
+    }
+
+    uint32_t offset = AVMPACK_SIZE;
+    struct AVMPackSection section;
+    enum AVMPackSectionKind kind;
+    while ((kind = read_section(avmpack_binary, max_size, offset, &section))
+        == AVMPackSectionRegular) {
+        offset += section.size;
+    }
+
+    if (kind == AVMPackSectionEnd) {
+        *real_size = offset + AVMPACK_END_MARKER_SIZE;
+        return true;
+    }
+
+    return false;
+}
+
 static void in_memory_avm_pack_destructor(struct AVMPackData *obj, GlobalContext *global);
 
 const struct AVMPackInfo in_memory_avm_pack_info = {

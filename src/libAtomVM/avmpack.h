@@ -146,12 +146,41 @@ int avmpack_find_section_by_name(const void *avmpack_binary, uint32_t avmpack_si
  * @brief Returns \c true if the pointed binary starts with a valid AVM Pack header.
  *
  * @details Performs a cheap check of the 24-byte magic header only. It does not validate the
- * section chain or detect truncation.
+ * section chain or detect truncation; use \c avmpack_is_complete or \c avmpack_compute_size
+ * for that.
  * @param avmpack_binary a pointer to an AVM Pack binary.
  * @param size the size of AVM Pack binary.
  * @returns \c true if it is a valid AVM Pack binary, \c false otherwise.
  */
 bool avmpack_is_valid(const void *avmpack_binary, uint32_t size);
+
+/**
+ * @brief Checks that an AVM Pack of an exactly known size is complete (not truncated).
+ *
+ * @details Verifies the magic header and that the pack ends exactly with the canonical \c end
+ * terminator section at <tt>exact_size - 16</tt>. Does not traverse the section chain, so it
+ * preserves lazy loading for memory-mapped files. Use this whenever the exact size of the pack is
+ * known (a file size, an in-memory binary). Trailing bytes after the terminator are rejected.
+ * @param avmpack_binary a pointer to an AVM Pack binary.
+ * @param exact_size the exact size in bytes of the AVM Pack.
+ * @returns \c true if the pack is a complete AVM Pack, \c false otherwise.
+ */
+bool avmpack_is_complete(const void *avmpack_binary, uint32_t exact_size);
+
+/**
+ * @brief Validates an AVM Pack within an upper-bounded region and computes its real size.
+ *
+ * @details Verifies the magic header and walks the section chain (bounded by \p max_size,
+ * validating every section header) until the canonical \c end terminator is reached. Use this when
+ * only an upper bound is known (e.g. a flash partition larger than the image); it both validates
+ * the pack and recovers its real size. If the terminator is not reached within \p max_size (or a
+ * section header is invalid), the pack is truncated or corrupt.
+ * @param avmpack_binary a pointer to an AVM Pack binary.
+ * @param max_size the size in bytes of the region containing the AVM Pack (upper bound).
+ * @param real_size on success, set to the real size in bytes of the AVM Pack.
+ * @returns \c true if a complete AVM Pack was found within \p max_size, \c false otherwise.
+ */
+bool avmpack_compute_size(const void *avmpack_binary, uint32_t max_size, uint32_t *real_size);
 
 /**
  * @brief Fold over all the sections in an AVM Pack.
