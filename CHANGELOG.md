@@ -59,6 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from ref ticks, `TERM_BOXED_REFERENCE_PROCESS_SIZE` for process references (aliases), or
   `TERM_BOXED_REFERENCE_MAX_SIZE` to fit any reference. `REF_SIZE` still expands to the short
   reference size, but now emits a compiler warning
+- ESP32 builds now fail at configure time when `boot.avm` does not fit its partition, instead of
+  producing an image that is silently truncated at flash time
 
 ### Removed
 - Removed `ahttp_client` support for obsolete line folding (RFC 9112 §5.2); folded header and
