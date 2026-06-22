@@ -216,6 +216,78 @@ static bool storage_nif_configure_sdmmc_slot(
 }
 #endif
 
+enum sdcard_interface
+{
+    SDCardSDMMC,
+    SDCardSDSPI
+};
+
+struct SDCardConfig
+{
+    enum sdcard_interface interface;
+    sdmmc_host_t host;
+    union
+    {
+#ifdef SDMMC_SLOT_CONFIG_DEFAULT
+        sdmmc_slot_config_t mmc_slot;
+#endif
+        sdspi_device_config_t spi_dev;
+    } slot;
+};
+
+static bool sdcard_config_from_source(
+    const char *source, term opts_term, struct SDCardConfig *cfg, GlobalContext *glb)
+{
+#ifdef SDMMC_SLOT_CONFIG_DEFAULT
+    if (!strcmp(source, "sdmmc")) {
+        sdmmc_host_t host_config = SDMMC_HOST_DEFAULT();
+        sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+        if (UNLIKELY(!storage_nif_configure_sdmmc_slot(opts_term, &slot_config, glb))) {
+            return false;
+        }
+        cfg->interface = SDCardSDMMC;
+        cfg->host = host_config;
+        cfg->slot.mmc_slot = slot_config;
+        return true;
+    }
+#endif
+
+    if (!strcmp(source, "sdspi")) {
+        sdmmc_host_t host_config = SDSPI_HOST_DEFAULT();
+        sdspi_device_config_t spi_slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
+
+        term spi_port = interop_kv_get_value(opts_term, ATOM_STR("\x8", "spi_host"), glb);
+        spi_host_device_t host_dev;
+        // spi_driver_get_peripheral already checks if spi_port is valid
+        if (!spi_driver_get_peripheral(spi_port, &host_dev, glb)) {
+            return false;
+        }
+        spi_slot_config.host_id = host_dev;
+
+        term cs_term = interop_kv_get_value(opts_term, ATOM_STR("\x2", "cs"), glb);
+        if (UNLIKELY(!term_is_integer(cs_term))) {
+            return false;
+        }
+        spi_slot_config.gpio_cs = term_to_int(cs_term);
+
+        term cd_term
+            = interop_kv_get_value_default(opts_term, ATOM_STR("\x2", "cd"), UNDEFINED_ATOM, glb);
+        if (cd_term != UNDEFINED_ATOM) {
+            if (UNLIKELY(!term_is_integer(cd_term))) {
+                return false;
+            }
+            spi_slot_config.gpio_cd = term_to_int(cd_term);
+        }
+
+        cfg->interface = SDCardSDSPI;
+        cfg->host = host_config;
+        cfg->slot.spi_dev = spi_slot_config;
+        return true;
+    }
+
+    return false;
+}
+
 static term nif_esp_mount(Context *ctx, int argc, term argv[])
 {
     GlobalContext *glb = ctx->global;
@@ -287,84 +359,37 @@ static term nif_esp_mount(Context *ctx, int argc, term argv[])
             mount->base_path, source + part_by_name_len, &mount_config, &mount->handle.wl);
 #endif
 
-// C3 doesn't support this
+    } else if (!strcmp(source, "sdmmc") || !strcmp(source, "sdspi")) {
+        mount_config.allocation_unit_size = 512;
+
+        struct SDCardConfig cfg;
+        if (!sdcard_config_from_source(source, opts_term, &cfg, ctx->global)) {
+            free(source);
+            free(target);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+
+        mount = enif_alloc_resource(platform->mounted_fs_resource_type, sizeof(struct MountedFS));
+        if (IS_NULL_PTR(mount)) {
+            free(source);
+            free(target);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        SMP_LOCK_INIT(mount);
+        mount->base_path = target;
+        target = NULL;
+
+        if (cfg.interface == SDCardSDSPI) {
+            mount->mount_type = FATSDSPI;
+            ret = esp_vfs_fat_sdspi_mount(
+                mount->base_path, &cfg.host, &cfg.slot.spi_dev, &mount_config, &mount->handle.card);
 #ifdef SDMMC_SLOT_CONFIG_DEFAULT
-    } else if (!strcmp(source, "sdmmc")) {
-        mount_config.allocation_unit_size = 512;
-
-        sdmmc_host_t host_config = SDMMC_HOST_DEFAULT();
-        sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
-
-        if (UNLIKELY(!storage_nif_configure_sdmmc_slot(opts_term, &slot_config, ctx->global))) {
-            free(source);
-            free(target);
-            RAISE_ERROR(BADARG_ATOM);
-        }
-
-        mount = enif_alloc_resource(platform->mounted_fs_resource_type, sizeof(struct MountedFS));
-        if (IS_NULL_PTR(mount)) {
-            free(source);
-            free(target);
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-        SMP_LOCK_INIT(mount);
-        mount->base_path = target;
-        target = NULL;
-        mount->mount_type = FATSDMMC;
-
-        ret = esp_vfs_fat_sdmmc_mount(
-            mount->base_path, &host_config, &slot_config, &mount_config, &mount->handle.card);
+        } else {
+            mount->mount_type = FATSDMMC;
+            ret = esp_vfs_fat_sdmmc_mount(mount->base_path, &cfg.host, &cfg.slot.mmc_slot,
+                &mount_config, &mount->handle.card);
 #endif
-
-    } else if (!strcmp(source, "sdspi")) {
-        mount_config.allocation_unit_size = 512;
-
-        sdmmc_host_t host_config = SDSPI_HOST_DEFAULT();
-        sdspi_device_config_t spi_slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-
-        term spi_port = interop_kv_get_value(opts_term, ATOM_STR("\x8", "spi_host"), ctx->global);
-        spi_host_device_t host_dev;
-        // spi_driver_get_peripheral already checks if spi_port is valid
-        bool ok = spi_driver_get_peripheral(spi_port, &host_dev, ctx->global);
-        if (!ok) {
-            free(source);
-            free(target);
-            RAISE_ERROR(BADARG_ATOM);
         }
-        spi_slot_config.host_id = host_dev;
-
-        term cs_term = interop_kv_get_value(opts_term, ATOM_STR("\x2", "cs"), ctx->global);
-        if (UNLIKELY(!term_is_integer(cs_term))) {
-            free(source);
-            free(target);
-            RAISE_ERROR(BADARG_ATOM);
-        }
-        spi_slot_config.gpio_cs = term_to_int(cs_term);
-
-        term cd_term = interop_kv_get_value_default(
-            opts_term, ATOM_STR("\x2", "cd"), UNDEFINED_ATOM, ctx->global);
-        if (cd_term != UNDEFINED_ATOM) {
-            if (UNLIKELY(!term_is_integer(cd_term))) {
-                free(source);
-                free(target);
-                RAISE_ERROR(BADARG_ATOM);
-            }
-            spi_slot_config.gpio_cd = term_to_int(cd_term);
-        }
-
-        mount = enif_alloc_resource(platform->mounted_fs_resource_type, sizeof(struct MountedFS));
-        if (IS_NULL_PTR(mount)) {
-            free(source);
-            free(target);
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-        SMP_LOCK_INIT(mount);
-        mount->base_path = target;
-        target = NULL;
-        mount->mount_type = FATSDSPI;
-
-        ret = esp_vfs_fat_sdspi_mount(
-            mount->base_path, &host_config, &spi_slot_config, &mount_config, &mount->handle.card);
     } else {
         free(source);
         free(target);
