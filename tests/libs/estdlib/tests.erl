@@ -82,6 +82,7 @@ get_non_networking_tests(_OTPVersion) ->
         test_filename,
         test_serial_dist,
         test_uart,
+        test_gpio,
         test_serial_dist_socat
     ].
 

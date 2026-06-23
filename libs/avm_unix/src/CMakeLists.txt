@@ -23,6 +23,7 @@ project(avm_unix)
 include(BuildErlang)
 
 set(ERLANG_MODULES
+    gpio
     uart
 )
 
