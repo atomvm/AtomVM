@@ -1209,6 +1209,16 @@ cryptographic operations.
 
 When AtomVM is built with `-DAVM_USE_LIBSODIUM=ON`, Ed25519 signing and verification (`crypto:sign/4`, `crypto:verify/5`) and X25519 key agreement (`crypto:generate_key/2`, `crypto:compute_key/4`) are also available.  This option requires libsodium to be installed on the build host (e.g. `libsodium-dev` on Debian/Ubuntu), or the `espressif/libsodium` component on ESP32.
 
+```{important}
+**Increase the ESP32 task stack size when using libsodium.**
+The Ed25519 and X25519 operations backed by libsodium use a large amount of stack, more than the ESP32 main task is
+given by default (`CONFIG_ESP_MAIN_TASK_STACK_SIZE`, 3584 bytes).  With the default setting these operations fail at
+runtime.  Increase the stack in your `sdkconfig`, for example by setting `CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384` (via
+`idf.py menuconfig` at `Component config ---> Common ESP-related ---> Main task stack size`, or in
+`sdkconfig.defaults`).  A value of `16384` is known to work; a smaller value may be sufficient but has not been
+verified.
+```
+
 ## ESP32-specific APIs
 
 Certain APIs are specific to and only supported on the ESP32 platform.  This section describes these APIs.
