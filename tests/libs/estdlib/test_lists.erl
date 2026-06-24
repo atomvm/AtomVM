@@ -477,6 +477,17 @@ test_mapfoldl() ->
         lists:mapfoldl(fun(X, A) -> {X * A, A + 1} end, 1, [1, 2, 3])
     ),
     ?ASSERT_ERROR(lists:mapfoldl(fun(X, A) -> {X * A, A + 1} end, 1, foo), function_clause),
+    ok = test_mapfoldr(),
+    ok.
+
+test_mapfoldr() ->
+    ?ASSERT_MATCH({[], 1}, lists:mapfoldr(fun(X, A) -> {X * A, A + 1} end, 1, [])),
+    %% Right-to-left: the accumulator visits 3, then 2, then 1.
+    ?ASSERT_MATCH(
+        {[3, 4, 3], 4},
+        lists:mapfoldr(fun(X, A) -> {X * A, A + 1} end, 1, [1, 2, 3])
+    ),
+    ?ASSERT_ERROR(lists:mapfoldr(fun(X, A) -> {X * A, A + 1} end, 1, foo), function_clause),
     ok.
 
 test_append() ->
