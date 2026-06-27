@@ -161,10 +161,12 @@ _Static_assert(offsetof(JITState, remaining_reductions) == 0x10, "jit_state->rem
 #elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M || JIT_ARCH_TARGET == JIT_ARCH_ARM32 || JIT_ARCH_TARGET == JIT_ARCH_RISCV32 || JIT_ARCH_TARGET == JIT_ARCH_WASM32 || JIT_ARCH_TARGET == JIT_ARCH_XTENSA
 _Static_assert(offsetof(Context, e) == 0x14, "ctx->e is 0x14 in 32-bit backends");
 _Static_assert(offsetof(Context, x) == 0x18, "ctx->x is 0x18 in 32-bit backends");
+// cp is now a 64-bit cp_t spanning two 32-bit words (low word = offset << 2 at
+// 0x5C, high word = Module* at 0x60); the following fields shift up by one word.
 _Static_assert(offsetof(Context, cp) == 0x5C, "ctx->cp is 0x5C in 32-bit backends");
-_Static_assert(offsetof(Context, fr) == 0x60, "ctx->fr is 0x60 in 32-bit backends");
-_Static_assert(offsetof(Context, bs) == 0x64, "ctx->bs is 0x64 in 32-bit backends");
-_Static_assert(offsetof(Context, bs_offset) == 0x68, "ctx->bs_offset is 0x68 in 32-bit backends");
+_Static_assert(offsetof(Context, fr) == 0x64, "ctx->fr is 0x64 in 32-bit backends");
+_Static_assert(offsetof(Context, bs) == 0x68, "ctx->bs is 0x68 in 32-bit backends");
+_Static_assert(offsetof(Context, bs_offset) == 0x6C, "ctx->bs_offset is 0x6C in 32-bit backends");
 
 _Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in 32-bit backends");
 _Static_assert(offsetof(JITState, continuation) == 0x4, "jit_state->continuation is 0x4 in 32-bit backends");
@@ -260,26 +262,25 @@ static void jit_trim_live_regs(Context *ctx, uint32_t live)
 // Update jit_state->module and jit_state->continuation
 static Context *jit_return(Context *ctx, JITState *jit_state)
 {
-    int module_index = ctx->cp >> 24;
-    TRACE("jit_return: ctx->cp = %d, module_index = %d, offset = %d\n", (int) ctx->cp, module_index, (int) (ctx->cp & 0xFFFFFF) >> 2);
-    Module *mod = globalcontext_get_module_by_index(ctx->global, module_index);
+    Module *mod = cp_to_module(ctx->cp, ctx->global);
+    unsigned int offset = cp_to_offset(ctx->cp);
+    TRACE("jit_return: mod = %p, offset = %u\n", (void *) mod, offset);
 
     // Native case
 #ifndef AVM_NO_EMU
     if (mod->native_code == NULL) {
         // return to emulated
         const uint8_t *code = mod->code->code;
-        const uint8_t *pc = code + ((ctx->cp & 0xFFFFFF) >> 2);
-        jit_state->continuation_pc = pc;
+        jit_state->continuation_pc = code + offset;
     } else {
 #endif
 #ifdef JIT_JUMPTABLE_IS_DATA
         // WASM: continuation stores (label + 1) for the dispatch loop to convert.
-        int label = ((ctx->cp & 0xFFFFFF) >> 2) / JIT_JUMPTABLE_ENTRY_SIZE;
-        TRACE("jit_return: cp=0x%x mod=%d label=%d\n", (unsigned) ctx->cp, module_index, label);
+        int label = (int) offset / JIT_JUMPTABLE_ENTRY_SIZE;
+        TRACE("jit_return: mod=%p label=%d\n", (void *) mod, label);
         jit_state->continuation = (NativeContinuation) (label + 1);
 #else
-    uintptr_t native_pc = (uintptr_t) mod->native_code + ((ctx->cp & 0xFFFFFF) >> 2);
+    uintptr_t native_pc = (uintptr_t) mod->native_code + offset;
     jit_state->continuation = (NativeContinuation) native_pc;
 #endif
 #ifndef AVM_NO_EMU
@@ -510,8 +511,8 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
             // workaround for issue
             // https://github.com/erlang/otp/issues/7152
             if (n_words >= 0) {
-                ctx->cp = ctx->e[n_words];
-                ctx->e += (n_words + 1);
+                ctx->cp = load_cp(ctx->e + n_words);
+                ctx->e += (n_words + CP_SIZE_IN_TERMS);
             }
 
             if (ctx->heap.root->next) {
@@ -519,7 +520,7 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
                     return jit_raise_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
                 }
             }
-            if ((long) ctx->cp == -1) {
+            if (cp_is_terminate(ctx->cp)) {
                 return 0;
             }
 
@@ -531,8 +532,8 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
             // not access ctx->e or ctx->cp)
 
             if (n_words >= 0) {
-                ctx->cp = ctx->e[n_words];
-                ctx->e += (n_words + 1);
+                ctx->cp = load_cp(ctx->e + n_words);
+                ctx->e += (n_words + CP_SIZE_IN_TERMS);
             }
 
             // Native case
@@ -567,8 +568,8 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
         }
         case ModuleNativeFunction: {
             if (n_words >= 0) {
-                ctx->cp = ctx->e[n_words];
-                ctx->e += (n_words + 1);
+                ctx->cp = load_cp(ctx->e + n_words);
+                ctx->e += (n_words + CP_SIZE_IN_TERMS);
             }
 
             const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
@@ -582,8 +583,8 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
         }
         case BIFFunctionType: {
             if (n_words >= 0) {
-                ctx->cp = ctx->e[n_words];
-                ctx->e += (n_words + 1);
+                ctx->cp = load_cp(ctx->e + n_words);
+                ctx->e += (n_words + CP_SIZE_IN_TERMS);
             }
 
             const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(func);
@@ -615,8 +616,8 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
             // even on OTP28, so it is required to allow calling them using
             // CALL_EXT_ONLY even on OTP28: BIFs are used for try ... catch.
             if (n_words >= 0) {
-                ctx->cp = ctx->e[n_words];
-                ctx->e += (n_words + 1);
+                ctx->cp = load_cp(ctx->e + n_words);
+                ctx->e += (n_words + CP_SIZE_IN_TERMS);
             }
 
             const struct GCBif *gcbif = EXPORTED_FUNCTION_TO_GCBIF(func);
@@ -653,15 +654,15 @@ static term jit_module_get_atom_term_by_id(JITState *jit_state, int atom_index)
 static bool jit_allocate(Context *ctx, JITState *jit_state, uint32_t stack_need, uint32_t heap_need, uint32_t live)
 {
     TRACE("jit_allocate: ENTRY ctx=%p jit_state=%p stack_need=%" PRIu32 " heap_need=%" PRIu32 " live=%" PRIu32 "\n", (void *) ctx, (void *) jit_state, stack_need, heap_need, live);
-    if (ctx->heap.root->next || ((ctx->heap.heap_ptr + heap_need > ctx->e - (stack_need + 1)))) {
+    if (ctx->heap.root->next || ((ctx->heap.heap_ptr + heap_need > ctx->e - (stack_need + CP_SIZE_IN_TERMS)))) {
         TRIM_LIVE_REGS(live);
-        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need + stack_need + 1, live, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need + stack_need + CP_SIZE_IN_TERMS, live, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
             return false;
         }
     }
-    ctx->e -= stack_need + 1;
-    ctx->e[stack_need] = ctx->cp;
+    ctx->e -= stack_need + CP_SIZE_IN_TERMS;
+    store_cp(ctx->e + stack_need, ctx->cp);
     return true;
 }
 
@@ -676,8 +677,8 @@ static BifImpl0 jit_get_imported_bif(JITState *jit_state, uint32_t bif)
 static bool jit_deallocate(Context *ctx, JITState *jit_state, uint32_t n_words)
 {
     TRACE("jit_deallocate: n_words=%" PRIu32 "\n", n_words);
-    ctx->cp = ctx->e[n_words];
-    ctx->e += n_words + 1;
+    ctx->cp = load_cp(ctx->e + n_words);
+    ctx->e += n_words + CP_SIZE_IN_TERMS;
     // Hopefully, we only need x[0]
     if (ctx->heap.root->next) {
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, ctx->x, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {

@@ -131,6 +131,7 @@ struct GlobalContext
 #endif
     Module **modules_by_index;
     int ATOMIC loaded_modules_count;
+    unsigned int catch_labels_count;
 
     struct SyncList avmpack_data;
 
@@ -537,6 +538,19 @@ int globalcontext_insert_module(GlobalContext *global, Module *module);
  * @returns the module
  */
 Module *globalcontext_get_module_by_index(GlobalContext *global, int index);
+
+/**
+ * @brief Get the module and the label a catch id refers to.
+ *
+ * @details Catch ids are handed out at load time, each module getting as many
+ * consecutive ids as it has labels, so this resolves an id by looking for the
+ * module with the greatest base that is not greater than the id.
+ * @param global the global context.
+ * @param catch_id the catch id, as obtained from term_to_catch_id.
+ * @param label on return, the label of the exception handler in the module.
+ * @returns the module the catch id belongs to
+ */
+Module *globalcontext_get_module_by_catch_id(GlobalContext *global, unsigned int catch_id, int *label);
 
 /**
  * @brief Returns the module with the given name

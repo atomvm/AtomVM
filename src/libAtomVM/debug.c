@@ -20,6 +20,8 @@
 
 #include "debug.h"
 
+#include "module.h"
+
 static COLD_FUNC void debug_display_type(term t, const Context *ctx)
 {
     if (term_is_atom(t) || term_is_integer(t) || term_is_nil(t) || term_is_pid(t)) {
@@ -31,9 +33,9 @@ static COLD_FUNC void debug_display_type(term t, const Context *ctx)
     } else if ((t & 0x3) == 0x1) {
         fprintf(stderr, "list(0x%lx)", (unsigned long) term_to_term_ptr(t));
     } else if (term_is_catch_label(t)) {
-        int module_index;
-        int catch_label = term_to_catch_label_and_module(t, &module_index);
-        fprintf(stderr, "catch label(%i:%i)", module_index, catch_label);
+        int catch_label;
+        Module *catch_module = globalcontext_get_module_by_catch_id(ctx->global, term_to_catch_id(t), &catch_label);
+        fprintf(stderr, "catch label(%i:%i)", catch_module->module_index, catch_label);
     } else if (term_is_cp(t)) {
         fprintf(stderr, "continuation pointer");
     } else {

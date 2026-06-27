@@ -20,9 +20,33 @@
 
 -module(export_test_module).
 
--export([exported_func/1]).
+-export([exported_func/1, catching_func/2, tracing_func/1, raising_func/1, erroring_func/1]).
 
 exported_func(0) ->
     1;
 exported_func(N) ->
     ?MODULE:exported_func(N - 1) * N.
+
+catching_func(Other, N) ->
+    try Other:raising_func(N) of
+        R -> {?MODULE, unexpected, R}
+    catch
+        throw:{thrown, M, X} -> {?MODULE, M, X * 2}
+    end.
+
+raising_func(N) ->
+    X = id(N) * 2,
+    throw({thrown, ?MODULE, X}).
+
+erroring_func(N) ->
+    X = id(N) * 2,
+    error({my_error, ?MODULE, X}).
+
+tracing_func(Other) ->
+    try Other:erroring_func(1) of
+        R -> {?MODULE, unexpected, R}
+    catch
+        error:{my_error, M, _X}:Stacktrace -> {?MODULE, M, Stacktrace}
+    end.
+
+id(X) -> X.

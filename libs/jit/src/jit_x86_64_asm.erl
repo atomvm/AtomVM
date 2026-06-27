@@ -294,6 +294,31 @@ movl({0, SrcReg}, DestReg) when is_atom(SrcReg), is_atom(DestReg) ->
     (case {REX_R, REX_B} of
         {0, 0} -> <<16#8B, 0:2, MODRM_REG:3, MODRM_RM:3>>;
         _ -> <<?X86_64_REX(0, REX_R, 0, REX_B), 16#8B, 0:2, MODRM_REG:3, MODRM_RM:3>>
+    end);
+movl({Offset, SrcReg}, DestReg) when is_atom(SrcReg), is_atom(DestReg), ?IS_SINT8_T(Offset) ->
+    {REX_B, MODRM_RM} = x86_64_x_reg(SrcReg),
+    {REX_R, MODRM_REG} = x86_64_x_reg(DestReg),
+    % disp8
+    (case {REX_R, REX_B} of
+        {0, 0} -> <<16#8B, 1:2, MODRM_REG:3, MODRM_RM:3, Offset>>;
+        _ -> <<?X86_64_REX(0, REX_R, 0, REX_B), 16#8B, 1:2, MODRM_REG:3, MODRM_RM:3, Offset>>
+    end);
+movl({Offset, SrcReg}, DestReg) when is_atom(SrcReg), is_atom(DestReg), ?IS_SINT32_T(Offset) ->
+    {REX_B, MODRM_RM} = x86_64_x_reg(SrcReg),
+    {REX_R, MODRM_REG} = x86_64_x_reg(DestReg),
+    % disp32
+    (case {REX_R, REX_B} of
+        {0, 0} ->
+            <<16#8B, 2:2, MODRM_REG:3, MODRM_RM:3, Offset:32/little>>;
+        _ ->
+            <<
+                ?X86_64_REX(0, REX_R, 0, REX_B),
+                16#8B,
+                2:2,
+                MODRM_REG:3,
+                MODRM_RM:3,
+                Offset:32/little
+            >>
     end).
 
 shlq(Imm, Reg) when ?IS_UINT8_T(Imm) ->

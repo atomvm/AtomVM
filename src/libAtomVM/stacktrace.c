@@ -163,7 +163,10 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, size_t current_offset,
             Module *cp_mod;
             size_t mod_offset;
 
-            module_cp_to_label_offset(*ct, &cp_mod, NULL, NULL, &mod_offset, ctx->global);
+            // A saved cp spans CP_SIZE_IN_TERMS slots (2 on 32-bit: offset then
+            // Module*). Both are CP-tagged; reconstruct it and skip the extra slot.
+            module_cp_to_label_offset(load_cp(ct), &cp_mod, NULL, NULL, &mod_offset, ctx->global);
+            ct += CP_SIZE_IN_TERMS - 1;
             // TODO: investigate
             // mod_offset is currently never equal to cp_mod->end_instruction_ii with native code
             if (mod_offset != cp_mod->end_instruction_ii && !(prev_mod == cp_mod && mod_offset == prev_mod_offset)) {
@@ -183,10 +186,8 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, size_t current_offset,
                 }
             }
         } else if (term_is_catch_label(*ct)) {
-            int module_index;
-            int label = term_to_catch_label_and_module(*ct, &module_index);
-
-            Module *cl_mod = globalcontext_get_module_by_index(ctx->global, module_index);
+            int label;
+            Module *cl_mod = globalcontext_get_module_by_catch_id(ctx->global, term_to_catch_id(*ct), &label);
             size_t mod_offset = module_label_code_offset(cl_mod, label);
 
             if (!(prev_mod == cl_mod && mod_offset == prev_mod_offset)) {
@@ -298,7 +299,8 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, size_t current_offset,
             Module *cp_mod;
             size_t mod_offset;
 
-            module_cp_to_label_offset(*ct, &cp_mod, NULL, NULL, &mod_offset, ctx->global);
+            module_cp_to_label_offset(load_cp(ct), &cp_mod, NULL, NULL, &mod_offset, ctx->global);
+            ct += CP_SIZE_IN_TERMS - 1;
             if (mod_offset != cp_mod->end_instruction_ii && !(prev_mod == cp_mod && mod_offset == prev_mod_offset)) {
 
                 prev_mod = cp_mod;
@@ -312,9 +314,8 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, size_t current_offset,
             }
         } else if (term_is_catch_label(*ct)) {
 
-            int module_index;
-            int label = term_to_catch_label_and_module(*ct, &module_index);
-            Module *cl_mod = globalcontext_get_module_by_index(ctx->global, module_index);
+            int label;
+            Module *cl_mod = globalcontext_get_module_by_catch_id(ctx->global, term_to_catch_id(*ct), &label);
             size_t mod_offset = module_label_code_offset(cl_mod, label);
 
             if (!(prev_mod == cl_mod && mod_offset == prev_mod_offset)) {
@@ -323,7 +324,7 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, size_t current_offset,
                 prev_mod_offset = mod_offset;
 
                 term frame_info = term_alloc_tuple(2, &ctx->heap);
-                term_put_tuple_element(frame_info, 0, term_from_int(module_index));
+                term_put_tuple_element(frame_info, 0, term_from_int(cl_mod->module_index));
                 term_put_tuple_element(frame_info, 1, term_from_int(mod_offset));
 
                 raw_stacktrace = term_list_prepend(frame_info, raw_stacktrace, &ctx->heap);
@@ -428,9 +429,10 @@ term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
         size_t mod_index_tuple_arity = term_get_tuple_arity(mod_index_tuple);
         assert((mod_index_tuple_arity == 2) || (mod_index_tuple_arity == 5));
 
-        term cp = module_address(
+        cp_t cp = make_cp_from_index(
             term_to_int(term_get_tuple_element(mod_index_tuple, 0)),
-            term_to_int(term_get_tuple_element(mod_index_tuple, 1)));
+            term_to_int(term_get_tuple_element(mod_index_tuple, 1)),
+            ctx->global);
 
         Module *cp_mod;
         int label;

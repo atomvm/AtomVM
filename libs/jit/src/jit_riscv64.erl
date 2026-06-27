@@ -59,6 +59,7 @@
     set_continuation_to_offset/1,
     continuation_entry_point/1,
     get_module_index/1,
+    get_module_catch_labels_base/1,
     and_/3,
     or_/3,
     add/3,
@@ -229,6 +230,7 @@
 -define(JITSTATE_REDUCTIONCOUNT_OFFSET, 16#10).
 -define(PRIMITIVE(N), {?NATIVE_INTERFACE_REG, N * 8}).
 -define(MODULE_INDEX(ModuleReg), {ModuleReg, 0}).
+-define(MODULE_CATCH_LABELS_BASE_OFFSET, 4).
 
 -define(JUMP_TABLE_ENTRY_SIZE, 8).
 

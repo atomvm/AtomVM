@@ -616,8 +616,8 @@ void context_process_code_server_resume_signal(Context *ctx)
 #endif
 #endif
     // Fix CP to OP_INT_CALL_END
-    if (ctx->cp == module_address(module->module_index, 0)) {
-        ctx->cp = module_address(module->module_index, module->end_instruction_ii);
+    if (ctx->cp == make_cp(module, 0)) {
+        ctx->cp = make_cp(module, module->end_instruction_ii);
     }
 #endif
     context_update_flags(ctx, ~Trap, NoFlags);
@@ -1415,10 +1415,10 @@ int context_get_catch_label(Context *ctx, Module **mod)
 
     while (ct != ctx->heap.heap_end) {
         if (term_is_catch_label(*ct)) {
-            int target_module;
-            int target_label = term_to_catch_label_and_module(*ct, &target_module);
-            TRACE("- found catch: label: %i, module: %i\n", target_label, target_module);
-            *mod = globalcontext_get_module_by_index(ctx->global, target_module);
+            int target_label;
+            Module *target_module = globalcontext_get_module_by_catch_id(ctx->global, term_to_catch_id(*ct), &target_label);
+            TRACE("- found catch: label: %i, module: %i\n", target_label, target_module->module_index);
+            *mod = target_module;
 
             DEBUG_DUMP_STACK(ctx);
             ctx->e = last_frame;
@@ -1471,15 +1471,18 @@ COLD_FUNC void context_dump(Context *ctx)
 
     while (ct != ctx->heap.heap_end) {
         if (term_is_catch_label(*ct)) {
-            int target_module;
-            int target_label = term_to_catch_label_and_module(*ct, &target_module);
-            fprintf(stderr, "catch: %i:%i\n", target_label, target_module);
+            int target_label;
+            Module *target_module = globalcontext_get_module_by_catch_id(ctx->global, term_to_catch_id(*ct), &target_label);
+            fprintf(stderr, "catch: %i:%i\n", target_label, target_module->module_index);
 
         } else if (term_is_cp(*ct)) {
             Module *cp_mod;
             int label;
             size_t offset;
-            module_cp_to_label_offset(*ct, &cp_mod, &label, &offset, NULL, ctx->global);
+            // A saved cp spans CP_SIZE_IN_TERMS slots (2 on 32-bit: offset then
+            // Module*). Reconstruct it from all its slots and skip the extra one.
+            module_cp_to_label_offset(load_cp(ct), &cp_mod, &label, &offset, NULL, ctx->global);
+            ct += CP_SIZE_IN_TERMS - 1;
             // Cast offset to unsigned as some embedded libc implementations do not support %zu
             fprintf(stderr, "#CP<module: %i, label: %i, offset: %u>\n", cp_mod->module_index, label, (unsigned) offset);
 

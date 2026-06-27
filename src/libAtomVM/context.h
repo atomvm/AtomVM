@@ -95,7 +95,17 @@ struct Context
 
     // Following fields offsets are also hard-coded in jit backends
     term x[MAX_REG + 1];
-    term cp;
+    // Continuation pointer: 64-bit wide, so on 32-bit term platforms it spans
+    // two stack slots and can hold a full Module pointer plus a code offset.
+    // On 32-bit term platforms uint64_t is naturally 8-byte aligned, which would
+    // insert 4 bytes of padding after x[] and push cp to 0x60; the JIT backends
+    // expect the offset word at 0x5C and the Module* at 0x60, so keep it packed
+    // and 4-byte aligned (it always lands on a 4-byte boundary anyway).
+#if TERM_BYTES == 4
+    cp_t cp __attribute__((packed, aligned(4)));
+#else
+    cp_t cp;
+#endif
     avm_float_t *fr;
     term bs;
     size_t bs_offset;

@@ -60,6 +60,10 @@
     set_continuation_to_offset/1,
     continuation_entry_point/1,
     get_module_index/1,
+    get_module_catch_labels_base/1,
+    get_module/1,
+    get_cp_module/1,
+    get_cp_offset/1,
     and_/3,
     or_/3,
     add/3,
@@ -179,10 +183,13 @@
 -define(NATIVE_INTERFACE_REG, r2).
 -define(Y_REGS, {?CTX_REG, 16#14}).
 -define(X_REG(N), {?CTX_REG, 16#18 + (N * 4)}).
+% ctx->cp is a 64-bit cp_t occupying two slots (little-endian targets):
+% ?CP holds the low word (offset << 2), ?CP_MODULE holds the high word (Module*).
 -define(CP, {?CTX_REG, 16#5C}).
--define(FP_REGS, {?CTX_REG, 16#60}).
--define(BS, {?CTX_REG, 16#64}).
--define(BS_OFFSET, {?CTX_REG, 16#68}).
+-define(CP_MODULE, {?CTX_REG, 16#60}).
+-define(FP_REGS, {?CTX_REG, 16#64}).
+-define(BS, {?CTX_REG, 16#68}).
+-define(BS_OFFSET, {?CTX_REG, 16#6C}).
 % JITSTATE is on stack, accessed via stack offset
 % These macros now expect a register that contains the jit_state pointer
 -define(JITSTATE_MODULE(Reg), {Reg, 0}).
@@ -190,6 +197,7 @@
 -define(JITSTATE_REDUCTIONCOUNT(Reg), {Reg, 16#8}).
 -define(PRIMITIVE(N), {?NATIVE_INTERFACE_REG, N * 4}).
 -define(MODULE_INDEX(ModuleReg), {ModuleReg, 0}).
+-define(MODULE_CATCH_LABELS_BASE(ModuleReg), {ModuleReg, 4}).
 
 -define(JUMP_TABLE_ENTRY_SIZE, 8).
 
@@ -2835,10 +2843,14 @@ move_to_cp(
     Avail = jit_regs:available_regs(Regs0),
     Reg = first_avail(Avail),
     AvailT = Avail band (bnot reg_bit(Reg)),
+    % The saved cp spans two slots: y[Y] = offset word (-> ?CP), y[Y+1] = Module*
+    % (-> ?CP_MODULE). Copy both into ctx->cp.
     State1 = ldr_y_reg(State, Reg, Y, AvailT),
-    I2 = jit_arm32_asm:str(al, Reg, ?CP),
-    Stream1 = (State1#state.stream_module):append(State1#state.stream, I2),
-    State1#state{stream = Stream1}.
+    SM = State1#state.stream_module,
+    Stream1 = SM:append(State1#state.stream, jit_arm32_asm:str(al, Reg, ?CP)),
+    State2 = ldr_y_reg(State1#state{stream = Stream1}, Reg, Y + 1, AvailT),
+    Stream2 = SM:append(State2#state.stream, jit_arm32_asm:str(al, Reg, ?CP_MODULE)),
+    State2#state{stream = Stream2}.
 
 increment_sp(
     #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} =
@@ -2967,6 +2979,78 @@ get_module_index(
         Reg
     }.
 
+%% @doc Load the catch id of the current module's label 0 into a native register.
+get_module_catch_labels_base(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        regs = Regs0
+    } = State
+) ->
+    Avail = jit_regs:available_regs(Regs0),
+    Reg = first_avail(Avail),
+    RegBit = reg_bit(Reg),
+    Avail1 = Avail band (bnot RegBit),
+    TempJitState = first_avail(Avail1),
+    % Load jit_state pointer from stack, then load module
+    I1a = jit_arm32_asm:ldr(al, TempJitState, {sp, ?STACK_OFFSET_JITSTATE}),
+    I1b = jit_arm32_asm:ldr(al, Reg, ?JITSTATE_MODULE(TempJitState)),
+    I2 = jit_arm32_asm:ldr(al, Reg, ?MODULE_CATCH_LABELS_BASE(Reg)),
+    Code = <<I1a/binary, I1b/binary, I2/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    Regs1 = jit_regs:invalidate_reg(Regs0, TempJitState),
+    Regs2 = jit_regs:set_contents(Regs1, Reg, catch_labels_base),
+    Regs3 = jit_regs:alloc_reg(Regs2, RegBit),
+    {
+        State#state{
+            stream = Stream1,
+            regs = Regs3
+        },
+        Reg
+    }.
+
+%% @doc Load the current module pointer (jit_state->module) into a register.
+get_module(
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State
+) ->
+    Avail = jit_regs:available_regs(Regs0),
+    Reg = first_avail(Avail),
+    RegBit = reg_bit(Reg),
+    Avail1 = Avail band (bnot RegBit),
+    TempJitState = first_avail(Avail1),
+    I1a = jit_arm32_asm:ldr(al, TempJitState, {sp, ?STACK_OFFSET_JITSTATE}),
+    I1b = jit_arm32_asm:ldr(al, Reg, ?JITSTATE_MODULE(TempJitState)),
+    Code = <<I1a/binary, I1b/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, TempJitState), Reg),
+    Regs2 = jit_regs:alloc_reg(Regs1, RegBit),
+    {State#state{stream = Stream1, regs = Regs2}, Reg}.
+
+%% @doc Load the Module pointer stored in ctx->cp (?CP_MODULE) into a register.
+get_cp_module(
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State
+) ->
+    Avail = jit_regs:available_regs(Regs0),
+    Reg = first_avail(Avail),
+    RegBit = reg_bit(Reg),
+    I = jit_arm32_asm:ldr(al, Reg, ?CP_MODULE),
+    Stream1 = StreamModule:append(Stream0, I),
+    Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    Regs2 = jit_regs:alloc_reg(Regs1, RegBit),
+    {State#state{stream = Stream1, regs = Regs2}, Reg}.
+
+%% @doc Load the offset word (offset << 2) stored in ctx->cp (?CP) into a register.
+get_cp_offset(
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State
+) ->
+    Avail = jit_regs:available_regs(Regs0),
+    Reg = first_avail(Avail),
+    RegBit = reg_bit(Reg),
+    I = jit_arm32_asm:ldr(al, Reg, ?CP),
+    Stream1 = StreamModule:append(Stream0, I),
+    Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    Regs2 = jit_regs:alloc_reg(Regs1, RegBit),
+    {State#state{stream = Stream1, regs = Regs2}, Reg}.
 %% @doc Perform an AND of a register with an immediate.
 %% JIT currently calls this with two values: ?TERM_PRIMARY_CLEAR_MASK (-4) to
 %% clear bits and ?TERM_BOXED_TAG_MASK (0x3F). We can avoid any literal pool
@@ -3518,30 +3602,24 @@ call_primitive_with_cp(State0, Primitive, Args) ->
 
 -spec set_cp(state()) -> {state(), non_neg_integer(), arm32_register()}.
 set_cp(State0) ->
-    % get module index (dynamically)
-    {
-        #state{stream_module = StreamModule, stream = Stream0, regs = Regs1} = State1,
-        Reg
-    } = get_module_index(
-        State0
-    ),
-    AvailRegs = jit_regs:available_regs(Regs1),
-    % Get a temporary register from available registers
+    % cp is two words: store the Module pointer (jit_state->module) at ?CP_MODULE,
+    % and the return offset << 2 at ?CP (patched by rewrite_cp_offset below).
+    {#state{stream_module = StreamModule, stream = Stream0} = State1, ModReg} =
+        get_module(State0),
+    IModStore = jit_arm32_asm:str(al, ModReg, ?CP_MODULE),
+    Stream1 = StreamModule:append(Stream0, IModStore),
+    State2 = free_native_register(State1#state{stream = Stream1}, ModReg),
+    AvailRegs = jit_regs:available_regs(State2#state.regs),
+    % Get a temporary register to hold the offset value
     TempReg = first_avail(AvailRegs),
-
-    Offset = StreamModule:offset(Stream0),
-    % build cp with module_index << 24
-    I1 = jit_arm32_asm:lsl(al, Reg, Reg, 24),
-    % Placeholder for offset load instruction
-    I2 = <<16#FFFFFFFF:32>>,
-    MOVOffset = Offset + byte_size(I1),
-    % OR the module index with the offset (loaded in temp register)
-    I3 = jit_arm32_asm:orr(al, Reg, Reg, TempReg),
-    I4 = jit_arm32_asm:str(al, Reg, ?CP),
-    Code = <<I1/binary, I2/binary, I3/binary, I4/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State2 = State1#state{stream = Stream1},
-    State3 = free_native_register(State2, Reg),
+    Offset = StreamModule:offset(Stream1),
+    % Placeholder for the offset load instruction (patched by rewrite_cp_offset)
+    I1 = <<16#FFFFFFFF:32>>,
+    MOVOffset = Offset,
+    I2 = jit_arm32_asm:str(al, TempReg, ?CP),
+    Code = <<I1/binary, I2/binary>>,
+    Stream2 = StreamModule:append(Stream1, Code),
+    State3 = State2#state{stream = Stream2},
     {State3, MOVOffset, TempReg}.
 
 -spec rewrite_cp_offset(state(), non_neg_integer(), arm32_register()) -> state().

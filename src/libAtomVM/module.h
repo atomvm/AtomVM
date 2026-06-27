@@ -109,6 +109,8 @@ struct Module
 {
     int module_index;
 
+    unsigned int catch_labels_base;
+    uint32_t labels_count;
     CodeChunk *code;
     void *import_table;
     void *export_table;
@@ -330,16 +332,135 @@ static inline const struct ExportedFunction *module_resolve_function(Module *mod
 }
 
 /*
- * @brief Casts an instruction index and module index to a return address
- *
- * @details Casts an instruction index and module index to a value that return instruction can restore later.
- * @param module_index the module index
- * @param the instruction index (0 is the first module instruction)
- * @return casted return address
+ * Number of `term` stack slots occupied by a saved continuation pointer.
+ * On 64-bit a cp fits in one slot; on 32-bit it spans two (offset + Module*).
  */
-static inline term module_address(unsigned int module_index, unsigned int instruction_index)
+#if TERM_BITS == 64
+#define CP_SIZE_IN_TERMS 1
+#else
+#define CP_SIZE_IN_TERMS 2
+#endif
+
+/*
+ * @brief Builds a continuation pointer (return address) from a module and an instruction index.
+ *
+ * @details The continuation pointer encodes which module to resume and at which
+ * code offset. The offset is shifted left by 2 (TERM_PRIMARY_CP tag, 0b00) so the
+ * garbage collector skips it when it appears on the stack. The offset is mode-
+ * interpreted at the destination module (BEAM bytecode offset when emulated,
+ * native code offset when jit-compiled).
+ *
+ * On 64-bit, the module is identified by its index packed in the high bits (as
+ * historically). On 32-bit, the Module pointer is stored directly in the high 32
+ * bits: AtomVM never unloads modules so the pointer is stable, this removes the
+ * 256-module ceiling of index packing, and the return path needs no index lookup.
+ * A malloc-aligned Module pointer has its low 2 bits clear, so once stored in its
+ * own stack slot it carries the TERM_PRIMARY_CP tag and is also skipped by the GC.
+ *
+ * @param mod the module to resume into
+ * @param instruction_index the code offset (0 is the first module instruction)
+ * @return the continuation pointer
+ */
+static inline cp_t make_cp(const Module *mod, unsigned int instruction_index)
 {
-    return (term) ((module_index << 24) | (instruction_index << 2));
+#if TERM_BITS == 64
+    return ((cp_t) (unsigned int) mod->module_index << 24) | ((cp_t) instruction_index << 2);
+#else
+    return ((cp_t) (uintptr_t) mod << 32) | ((cp_t) (instruction_index << 2));
+#endif
+}
+
+/*
+ * @brief Builds a continuation pointer from a module index and instruction index.
+ *
+ * @details Cold-path counterpart of make_cp() for callers that only have a module
+ * index (e.g. rebuilding a cp from a stored raw stacktrace). On 32-bit it resolves
+ * the index to a Module pointer; on 64-bit it packs the index as make_cp() would.
+ */
+static inline cp_t make_cp_from_index(unsigned int module_index, unsigned int instruction_index, GlobalContext *global)
+{
+#if TERM_BITS == 64
+    (void) global;
+    return ((cp_t) module_index << 24) | ((cp_t) instruction_index << 2);
+#else
+    Module *mod = globalcontext_get_module_by_index(global, (int) module_index);
+    return make_cp(mod, instruction_index);
+#endif
+}
+
+/*
+ * @brief Stores a continuation pointer to a stack location (CP_SIZE_IN_TERMS slots).
+ */
+static inline void store_cp(term *dst, cp_t cp)
+{
+#if TERM_BITS == 64
+    dst[0] = (term) cp;
+#else
+    dst[0] = (term) (uint32_t) cp; // offset << 2 (TERM_PRIMARY_CP tag)
+    dst[1] = (term) (uintptr_t) (cp >> 32); // Module pointer (aligned, TERM_PRIMARY_CP tag)
+#endif
+}
+
+/*
+ * @brief Loads a continuation pointer previously saved with store_cp.
+ */
+static inline cp_t load_cp(const term *src)
+{
+#if TERM_BITS == 64
+    return (cp_t) src[0];
+#else
+    return (cp_t) (uint32_t) src[0] | ((cp_t) (uintptr_t) src[1] << 32);
+#endif
+}
+
+/*
+ * @brief Returns the module a continuation pointer resumes into.
+ */
+static inline Module *cp_to_module(cp_t cp, GlobalContext *global)
+{
+#if TERM_BITS == 64
+    return globalcontext_get_module_by_index(global, (int) (cp >> 24));
+#else
+    (void) global;
+    return (Module *) (uintptr_t) (cp >> 32);
+#endif
+}
+
+/*
+ * @brief Returns the code offset a continuation pointer resumes at.
+ */
+static inline unsigned int cp_to_offset(cp_t cp)
+{
+#if TERM_BITS == 64
+    return (unsigned int) ((cp & 0xFFFFFF) >> 2);
+#else
+    return (unsigned int) ((uint32_t) cp >> 2);
+#endif
+}
+
+/*
+ * @brief Tells whether a continuation pointer is the process-termination sentinel.
+ */
+static inline bool cp_is_terminate(cp_t cp)
+{
+    return ((int64_t) cp) == -1;
+}
+
+/*
+ * @brief Builds the catch term installing an exception handler at a label.
+ *
+ * @details Exception handlers are identified on the stack by a catch id rather
+ * than by a (module index, label) pair, so that neither the number of modules
+ * nor the number of labels per module is capped by how the two would have to
+ * share the bits of a 32-bit term.
+ *
+ * @param mod the module the handler belongs to
+ * @param label the label of the handler
+ * @return the catch term to store in the stack slot of the try/catch
+ */
+static inline term module_term_from_catch_label(const Module *mod, unsigned int label)
+{
+    return term_from_catch_id(mod->catch_labels_base + label);
 }
 
 static inline uint32_t module_get_fun_freeze(const Module *this_module, int fun_index)
@@ -477,7 +598,7 @@ static inline bool module_has_line_chunk(Module *mod)
  * @param mod_offset if not null, set to offset of cp from module start
  * @param global the global context
  */
-void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, size_t *l_off, size_t *mod_offset, GlobalContext *global);
+void module_cp_to_label_offset(cp_t cp, Module **cp_mod, int *label, size_t *l_off, size_t *mod_offset, GlobalContext *global);
 
 /**
  * @brief Get the offset of a given label from the beginning of the code, emulated or native

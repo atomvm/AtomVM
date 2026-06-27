@@ -1117,6 +1117,10 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
         fprintf(stderr, "Error: Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         return NULL;
     }
+    // On 32-bit, continuation pointers store this Module pointer directly in a
+    // stack slot, relying on its low 2 bits being clear (TERM_PRIMARY_CP tag) so
+    // the GC skips it. malloc guarantees suitable alignment; assert it anyway.
+    assert(((uintptr_t) mod & TERM_PRIMARY_MASK) == 0);
     memset(mod, 0, sizeof(Module));
 
     mod->module_index = -1;
@@ -1139,6 +1143,7 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
 
     if (offsets[CODE]) {
         mod->code = (CodeChunk *) (beam_file + offsets[CODE]);
+        mod->labels_count = ENDIAN_SWAP_32(mod->code->labels);
     }
     mod->import_table = beam_file + offsets[IMPT];
     mod->export_table = beam_file + offsets[EXPT];
@@ -2104,10 +2109,10 @@ bool module_find_line(Module *mod, size_t offset, uint32_t *line, size_t *filena
 #endif
 }
 
-COLD_FUNC void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, size_t *l_off, size_t *out_mod_offset, GlobalContext *global)
+COLD_FUNC void module_cp_to_label_offset(cp_t cp, Module **cp_mod, int *label, size_t *l_off, size_t *out_mod_offset, GlobalContext *global)
 {
-    Module *mod = globalcontext_get_module_by_index(global, ((uintptr_t) cp) >> 24);
-    size_t mod_offset = (cp & 0xFFFFFF) >> 2;
+    Module *mod = cp_to_module(cp, global);
+    size_t mod_offset = cp_to_offset(cp);
     if (out_mod_offset) {
         *out_mod_offset = mod_offset;
     }
@@ -2252,6 +2257,7 @@ uint32_t module_label_code_offset(Module *mod, int label)
 void module_set_native_code(Module *mod, uint32_t labels_count, ModuleNativeEntryPoint entry_point)
 {
     mod->native_code = entry_point;
+    mod->labels_count = labels_count;
     // Extra function is OP_INT_CALL_END
     mod->end_instruction_ii = JIT_JUMPTABLE_OFFSET + JIT_JUMPTABLE_ENTRY_SIZE * labels_count;
 }

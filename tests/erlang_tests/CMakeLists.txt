@@ -611,6 +611,7 @@ compile_erlang(test_crypto)
 
 compile_erlang(test_code_all_available_loaded)
 compile_erlang(test_code_load_binary DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/code_load/export_test_module_data.hrl)
+compile_erlang(test_many_modules DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/code_load/export_test_module_data.hrl)
 compile_erlang(test_code_load_abs)
 compile_erlang(test_code_ensure_loaded)
 compile_erlang(test_add_avm_pack_binary DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/code_load/code_load_pack_data.hrl)
@@ -1178,6 +1179,7 @@ set(erlang_test_beams
 
     test_code_all_available_loaded.beam
     test_code_load_binary.beam
+    test_many_modules.beam
     test_code_load_abs.beam
     test_code_ensure_loaded.beam
     test_add_avm_pack_binary.beam

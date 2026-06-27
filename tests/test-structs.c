@@ -19,9 +19,12 @@
  */
 
 #include <assert.h>
+#include <stddef.h>
 #include <stdlib.h>
 
 #include "atom_table.h"
+#include "module.h"
+#include "term.h"
 #include "utils.h"
 #include "valueshashtable.h"
 
@@ -479,6 +482,72 @@ void test_atom_table(void)
     atom_table_destroy(table);
 }
 
+static void test_cp_encoding(void)
+{
+    // A stack Module is suitably aligned; only module_index is read by make_cp.
+    Module m;
+    memset(&m, 0, sizeof(m));
+    m.module_index = 300; // >= 256: the case the old 8-bit packing overflowed.
+
+    // Offsets up to the 64-bit packing limit (offset << 2 must fit in 24 bits).
+    unsigned int offsets[] = { 0, 4, 1000, (1u << 20), (1u << 22) - 4 };
+    for (size_t i = 0; i < sizeof(offsets) / sizeof(offsets[0]); i++) {
+        unsigned int off = offsets[i];
+        cp_t cp = make_cp(&m, off);
+
+        // Offset round-trips.
+        assert(cp_to_offset(cp) == off);
+
+        // Module identity round-trips.
+#if TERM_BITS == 64
+        // 64-bit: the module index is packed in the high bits.
+        assert((unsigned int) (cp >> 24) == 300u);
+#else
+        // 32-bit: the Module pointer is stored directly (no index lookup).
+        assert(cp_to_module(cp, NULL) == &m);
+#endif
+
+        // store_cp/load_cp round-trip across the on-stack representation.
+        term slots[2] = { 0, 0 };
+        store_cp(slots, cp);
+        assert(load_cp(slots) == cp);
+
+        // Every stored slot must be GC-safe (low 2 bits clear => TERM_PRIMARY_CP),
+        // so the collector skips it instead of following it as a pointer.
+        for (int s = 0; s < CP_SIZE_IN_TERMS; s++) {
+            assert((slots[s] & TERM_PRIMARY_MASK) == TERM_PRIMARY_CP);
+        }
+    }
+
+    // The process-termination sentinel is recognized; a real cp is not.
+    assert(cp_is_terminate((cp_t) -1));
+    assert(!cp_is_terminate(make_cp(&m, 0)));
+}
+
+static void test_catch_encoding(void)
+{
+    _Static_assert(offsetof(Module, module_index) == 0, "module_index must be at offset 0");
+    _Static_assert(offsetof(Module, catch_labels_base) == 4, "catch_labels_base must be at offset 4");
+
+    Module m;
+    memset(&m, 0, sizeof(m));
+    m.catch_labels_base = 300u * 512u;
+
+    unsigned int labels[] = { 0, 1, 42, 511 };
+    for (size_t i = 0; i < sizeof(labels) / sizeof(labels[0]); i++) {
+        term catch_term = module_term_from_catch_label(&m, labels[i]);
+
+        assert(term_is_catch_label(catch_term));
+        assert(term_to_catch_id(catch_term) == m.catch_labels_base + labels[i]);
+
+        assert(!term_is_cp(catch_term));
+    }
+
+    term max_catch = term_from_catch_id(TERM_MAX_CATCH_ID);
+    assert(term_is_catch_label(max_catch));
+    assert(term_to_catch_id(max_catch) == TERM_MAX_CATCH_ID);
+}
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
@@ -486,6 +555,8 @@ int main(int argc, char **argv)
 
     test_valueshashtable();
     test_atom_table();
+    test_cp_encoding();
+    test_catch_encoding();
 
     return EXIT_SUCCESS;
 }

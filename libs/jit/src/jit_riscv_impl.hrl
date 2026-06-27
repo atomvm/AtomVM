@@ -2499,6 +2499,35 @@ copy_to_native_register(
 copy_to_native_register(State, Reg) ->
     move_to_native_register(State, Reg).
 
+-if(?WORD_SIZE_BYTES =:= 4).
+move_to_cp(
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} =
+        State,
+    {y_reg, Y}
+) ->
+    Avail = jit_regs:available_regs(Regs0),
+    Reg = first_avail(Avail),
+    AvailT = Avail band (bnot reg_bit(Reg)),
+    % The saved cp spans two slots: y[Y] = offset word (-> ?CP), y[Y+1] = Module*
+    % (-> ?CP_MODULE). Copy both into ctx->cp.
+    I1 = ldr_y_reg(Reg, Y, AvailT),
+    {CpBase, CpOff} = ?CP,
+    I2 = ?STORE_WORD(CpBase, Reg, CpOff),
+    I3 = ldr_y_reg(Reg, Y + 1, AvailT),
+    {CpModBase, CpModOff} = ?CP_MODULE,
+    I4 = ?STORE_WORD(CpModBase, Reg, CpModOff),
+    Code = <<I1/binary, I2/binary, I3/binary, I4/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    % Reg ends holding y[Y+1] (the Module*); ldr_y_reg also clobbers
+    % first_avail(AvailT) as a hidden temp for loading the Y_REGS pointer.
+    Regs1a = jit_regs:invalidate_reg(Regs0, Reg),
+    Regs1 =
+        case AvailT of
+            0 -> Regs1a;
+            _ -> jit_regs:invalidate_reg(Regs1a, first_avail(AvailT))
+        end,
+    State#state{stream = Stream1, regs = Regs1}.
+-else.
 move_to_cp(
     #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} =
         State,
@@ -2520,6 +2549,7 @@ move_to_cp(
             _ -> jit_regs:invalidate_reg(Regs1a, first_avail(AvailT))
         end,
     State#state{stream = Stream1, regs = Regs1}.
+-endif.
 
 increment_sp(
     #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} =
@@ -2624,6 +2654,31 @@ get_module_index(
     Code = <<I1/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     Regs1 = jit_regs:set_contents(Regs0, Reg, module_index),
+    {
+        State#state{
+            stream = Stream1,
+            regs = jit_regs:alloc_reg(Regs1, RegBit)
+        },
+        Reg
+    }.
+
+%% @doc Load the catch id of the current module's label 0 into a native register.
+get_module_catch_labels_base(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        regs = Regs0
+    } = State
+) ->
+    Avail = jit_regs:available_regs(Regs0),
+    Reg = first_avail(Avail),
+    RegBit = reg_bit(Reg),
+    % Load module pointer from jit_state (which is in a1)
+    I1 = ?LOAD_WORD(Reg, ?JITSTATE_REG, ?JITSTATE_MODULE_OFFSET),
+    I2 = ?ASM:lw(Reg, Reg, ?MODULE_CATCH_LABELS_BASE_OFFSET),
+    Code = <<I1/binary, I2/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    Regs1 = jit_regs:set_contents(Regs0, Reg, catch_labels_base),
     {
         State#state{
             stream = Stream1,
@@ -3093,6 +3148,35 @@ call_primitive_with_cp(State0, Primitive, Args) ->
     State2 = call_primitive_last(State1, Primitive, Args),
     rewrite_cp_offset(State2, RewriteOffset, TempReg).
 
+-if(?WORD_SIZE_BYTES =:= 4).
+set_cp(State0) ->
+    % 32-bit: cp spans two words. Store the Module pointer (jit_state->module)
+    % to ?CP_MODULE, and a placeholder offset << 2 to ?CP (the placeholder is
+    % patched by rewrite_cp_offset once the resume offset is known).
+    {
+        #state{stream_module = StreamModule, stream = Stream0} = State1,
+        ModReg
+    } = get_module(State0),
+    {CpModBase, CpModOff} = ?CP_MODULE,
+    IModStore = ?STORE_WORD(CpModBase, ModReg, CpModOff),
+    Stream1 = StreamModule:append(Stream0, IModStore),
+    State2 = free_native_register(State1#state{stream = Stream1}, ModReg),
+    Avail = jit_regs:available_regs(State2#state.regs),
+    TempReg = first_avail(Avail),
+    Offset = StreamModule:offset(Stream1),
+    % Reserve 8 bytes (two instructions) for the offset load; li may expand to
+    % one or two instructions, so always reserve the larger form. The 0xFFFFFFFF
+    % placeholders are flash-friendly (bits can only flip 1->0).
+    I1 = <<16#FFFFFFFF:32/little>>,
+    I2 = <<16#FFFFFFFF:32/little>>,
+    MOVOffset = Offset,
+    {CpBase, CpOff} = ?CP,
+    I3 = ?STORE_WORD(CpBase, TempReg, CpOff),
+    Code = <<I1/binary, I2/binary, I3/binary>>,
+    Stream2 = StreamModule:append(Stream1, Code),
+    State3 = State2#state{stream = Stream2},
+    {State3, MOVOffset, TempReg}.
+-else.
 set_cp(#state{regs = RegsSC} = State0) ->
     Avail = jit_regs:available_regs(RegsSC),
     TempReg = first_avail(Avail),
@@ -3133,6 +3217,7 @@ set_cp(#state{regs = RegsSC} = State0) ->
     State3 = free_native_register(State2, Reg),
     State4 = free_native_register(State3, TempReg),
     {State4, MOVOffset, TempReg}.
+-endif.
 
 rewrite_cp_offset(
     #state{stream_module = StreamModule, stream = Stream0, offset = CodeOffset} = State0,
