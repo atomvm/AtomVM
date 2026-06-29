@@ -39,6 +39,7 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 #include <esp_log.h>
 #include <esp_partition.h>
@@ -112,12 +113,16 @@ static const char *const revision_atom = "\x8" "revision";
 
 QueueHandle_t event_queue = NULL;
 QueueSetHandle_t event_set = NULL;
+static SemaphoreHandle_t signal_semaphore = NULL;
 
 void esp32_sys_queue_init()
 {
-    event_set = xQueueCreateSet(EVENT_QUEUE_LEN * 4);
+    // + 1 accounts for the signal binary semaphore
+    event_set = xQueueCreateSet(EVENT_QUEUE_LEN * 4 + 1);
     event_queue = xQueueCreate(EVENT_QUEUE_LEN, sizeof(void *));
     xQueueAddToSet(event_queue, event_set);
+    signal_semaphore = xSemaphoreCreateBinary();
+    xQueueAddToSet(signal_semaphore, event_set);
 }
 
 static inline void sys_clock_gettime(struct timespec *t)
@@ -132,6 +137,14 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
     void *sender = NULL;
     QueueSetMemberHandle_t event_source;
     while ((event_source = xQueueSelectFromSet(event_set, wait_ticks))) {
+#if !defined(AVM_NO_SMP) || defined(AVM_TASK_DRIVER_ENABLED)
+        if (event_source == signal_semaphore) {
+            // We've been signaled
+            xSemaphoreTake(signal_semaphore, 0);
+            return;
+        }
+#endif
+
         // Listener used shared event_queue.
         if (event_source == event_queue) {
             if (UNLIKELY(xQueueReceive(event_queue, &sender, 0) == pdFALSE)) {
@@ -140,13 +153,6 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
         } else {
             sender = event_source;
         }
-
-#if !defined(AVM_NO_SMP) || defined(AVM_TASK_DRIVER_ENABLED)
-        if (sender == CAST_FUNC_TO_VOID_PTR(sys_signal)) {
-            // We've been signaled
-            return;
-        }
-#endif
 
         struct ListHead *listeners = synclist_wrlock(&glb->listeners);
         if (!process_listener_handler(glb, sender, listeners, NULL, NULL)) {
@@ -170,8 +176,8 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
 
 void sys_signal(GlobalContext *glb)
 {
-    void *queue_item = CAST_FUNC_TO_VOID_PTR(sys_signal);
-    xQueueSendToBack(event_queue, &queue_item, 0);
+    UNUSED(glb);
+    xSemaphoreGive(signal_semaphore);
 }
 
 void sys_time(struct timespec *t)

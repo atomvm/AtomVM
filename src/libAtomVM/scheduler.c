@@ -152,6 +152,51 @@ static void scheduler_process_native_signal_messages(Context *ctx)
     }
 }
 
+static Context *scheduler_first_runnable_ready(GlobalContext *global)
+{
+    Context *result = NULL;
+    SMP_SPINLOCK_LOCK(&global->processes_spinlock);
+    // Pick first ready which is not running.
+    struct ListHead *next_ready = list_first(&global->ready_processes);
+    while (next_ready != &global->ready_processes) {
+        result = GET_LIST_ENTRY(next_ready, Context, processes_list_head);
+        if (!(result->flags & Running)) {
+            list_remove(next_ready);
+            context_update_flags(result, ~Ready, Running);
+            if (result->native_handler) {
+                // Native handlers are marked as waiting
+                list_append(&global->waiting_processes, next_ready);
+            } else {
+                list_append(&global->running_processes, next_ready);
+            }
+            break;
+        }
+        next_ready = next_ready->next;
+        result = NULL;
+    }
+    SMP_SPINLOCK_UNLOCK(&global->processes_spinlock);
+    return result;
+}
+
+#ifndef AVM_NO_SMP
+// Caller must hold processes_spinlock. Returns true iff ready_processes holds a
+// process a scheduler can actually dispatch right now: a Ready entry that is not
+// also flagged Running. A Ready|Running entry is a signaled context still
+// executing on another scheduler; scheduler_first_runnable_ready skips it, so it
+// is not dispatchable backlog.
+static bool scheduler_has_runnable_ready(GlobalContext *global)
+{
+    struct ListHead *item;
+    LIST_FOR_EACH (item, &global->ready_processes) {
+        Context *c = GET_LIST_ENTRY(item, Context, processes_list_head);
+        if (!context_get_flags(c, Running)) {
+            return true;
+        }
+    }
+    return false;
+}
+#endif
+
 static Context *scheduler_run0(GlobalContext *global)
 {
     // This function should return a new process to run.
@@ -209,6 +254,13 @@ static Context *scheduler_run0(GlobalContext *global)
                 return NULL;
             }
             if (!is_waiting) {
+                // If a process is ready, process it instead of waking up
+                // the poller scheduler
+                result = scheduler_first_runnable_ready(global);
+                if (result != NULL) {
+                    break;
+                }
+
                 // Before entering the condition variable, signal the poll events
                 // so the thread polling on events can check the ready queue.
                 sys_signal(global);
@@ -232,32 +284,23 @@ static Context *scheduler_run0(GlobalContext *global)
         int32_t wait_timeout = update_timer_list(global);
         SMP_SPINLOCK_UNLOCK(&global->timer_spinlock);
 
-        SMP_SPINLOCK_LOCK(&global->processes_spinlock);
-        // Pick first ready which is not running.
-        struct ListHead *next_ready = list_first(&global->ready_processes);
-        while (next_ready != &global->ready_processes) {
-            result = GET_LIST_ENTRY(next_ready, Context, processes_list_head);
-            if (!(result->flags & Running)) {
-                list_remove(next_ready);
-                context_update_flags(result, ~Ready, Running);
-                if (result->native_handler) {
-                    // Native handlers are marked as waiting
-                    list_append(&global->waiting_processes, next_ready);
-                } else {
-                    list_append(&global->running_processes, next_ready);
-                }
-                break;
-            }
-            next_ready = next_ready->next;
-            result = NULL;
+        if (result == NULL) {
+            result = scheduler_first_runnable_ready(global);
         }
-        SMP_SPINLOCK_UNLOCK(&global->processes_spinlock);
 
-        if (result == NULL && !global->scheduler_stop_all) {
-            sys_poll_events(global, wait_timeout);
-        } else {
-            sys_poll_events(global, SYS_POLL_EVENTS_DO_NOT_WAIT);
+        // Only the poller scheduler drives the event loop.
+#ifndef AVM_NO_SMP
+        if (is_waiting) {
+#endif
+            if (result == NULL && !global->scheduler_stop_all) {
+                // The poller may block waiting for events.
+                sys_poll_events(global, wait_timeout);
+            } else {
+                sys_poll_events(global, SYS_POLL_EVENTS_DO_NOT_WAIT);
+            }
+#ifndef AVM_NO_SMP
         }
+#endif
 #ifdef AVM_TASK_DRIVER_ENABLED
         globalcontext_process_task_driver_queues(global);
 #endif
@@ -265,8 +308,11 @@ static Context *scheduler_run0(GlobalContext *global)
     } while (result == NULL);
 
 #ifndef AVM_NO_SMP
-    global->waiting_scheduler = false;
-    smp_condvar_signal(global->schedulers_cv);
+    // Only the polling scheduler relinquishes the poller role.
+    if (is_waiting) {
+        global->waiting_scheduler = false;
+        smp_condvar_signal(global->schedulers_cv);
+    }
     SMP_MUTEX_UNLOCK(global->schedulers_mutex);
 #endif
 
@@ -357,17 +403,13 @@ static void scheduler_make_ready(Context *ctx)
     }
     list_remove(&ctx->processes_list_head);
 #ifndef AVM_NO_SMP
-    if (SMP_MUTEX_TRYLOCK(global->schedulers_mutex)) {
-        // Start a new scheduler if none are going to take this process.
-        if (!global->waiting_scheduler
-            && global->running_schedulers > 0
-            && global->running_schedulers < global->online_schedulers
-            && !context_get_flags(ctx, Running)) {
-            global->running_schedulers++;
-            smp_scheduler_start(global);
-        }
-        SMP_MUTEX_UNLOCK(global->schedulers_mutex);
-    }
+    // The readying scheduler will pick up this process itself (directly before
+    // parking, or on its next reschedule), so only wake or start another
+    // scheduler when there is already a *runnable* backlog to parallelize.
+    // ctx is not in ready_processes yet (it was just removed), and entries
+    // flagged Running are signaled contexts no scheduler can dispatch, so
+    // neither inflates the count.
+    bool ready_backlog = scheduler_has_runnable_ready(global);
 #endif
     // Move to ready queue (from waiting or running)
     // The process may be running (it would be signaled), so mark it
@@ -376,13 +418,23 @@ static void scheduler_make_ready(Context *ctx)
     list_append(&global->ready_processes, &ctx->processes_list_head);
     SMP_SPINLOCK_UNLOCK(&global->processes_spinlock);
 #ifndef AVM_NO_SMP
-    if (SMP_MUTEX_TRYLOCK(global->schedulers_mutex)) {
-        if (global->waiting_scheduler) {
+    if (ready_backlog) {
+        if (SMP_MUTEX_TRYLOCK(global->schedulers_mutex)) {
+            // Start a new scheduler if none are going to take this process.
+            if (!global->waiting_scheduler
+                && global->running_schedulers > 0
+                && global->running_schedulers < global->online_schedulers
+                && !context_get_flags(ctx, Running)) {
+                global->running_schedulers++;
+                smp_scheduler_start(global);
+            }
+            if (global->waiting_scheduler) {
+                sys_signal(global);
+            }
+            SMP_MUTEX_UNLOCK(global->schedulers_mutex);
+        } else {
             sys_signal(global);
         }
-        SMP_MUTEX_UNLOCK(global->schedulers_mutex);
-    } else {
-        sys_signal(global);
     }
 #elif defined(AVM_TASK_DRIVER_ENABLED)
     sys_signal(global);

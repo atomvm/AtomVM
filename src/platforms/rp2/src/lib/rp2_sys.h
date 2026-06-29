@@ -27,7 +27,8 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
 
-#include <pico/cond.h>
+#include <pico/mutex.h>
+#include <pico/sem.h>
 #include <pico/util/queue.h>
 
 #include <mbedtls/ctr_drbg.h>
@@ -77,8 +78,7 @@ void sys_unregister_listener_from_event(GlobalContext *global, listener_event_t 
 struct RP2PlatformData
 {
 #ifndef AVM_NO_SMP
-    mutex_t event_poll_mutex;
-    cond_t event_poll_cond;
+    semaphore_t event_poll_sem;
 #endif
     queue_t event_queue;
 

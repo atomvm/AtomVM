@@ -43,6 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer lines return `{error, {parser, {line_too_long, Prefix}}}` with the first 128 bytes of
   the offending line. Callers whose upstream servers emit unusually large headers must account
   for this limit
+- Improved performance of SMP scheduler. As a result, resources selected with `enif_select` and
+  stopped with the `ERL_NIF_SELECT_STOP_SCHEDULED` result are now released asynchronously by the
+  scheduler polling events, staying within the boundaries of the BEAM `enif_select` specification
 
 ### Removed
 - Removed `ahttp_client` support for obsolete line folding (RFC 9112 §5.2); folded header and

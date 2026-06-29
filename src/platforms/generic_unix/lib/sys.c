@@ -535,7 +535,11 @@ void sys_init_platform(GlobalContext *global)
     platform->kqueue_fd = kqueue();
     platform->listeners_poll_count = 0;
     platform->select_events_poll_count = 0;
-#ifndef AVM_NO_SMP
+    // Register the user event that sys_signal triggers. sys_signal is compiled
+    // whenever SMP or the task driver is enabled, so the registration must
+    // match that condition -- otherwise a non-SMP task-driver build triggers an
+    // unregistered event and kevent fails.
+#if !defined(AVM_NO_SMP) || defined(AVM_TASK_DRIVER_ENABLED)
     struct timespec ts = { 0, 0 };
     struct kevent kev;
     EV_SET(&kev, SIGNAL_IDENTIFIER, EVFILT_USER, EV_ADD | EV_CLEAR, 0, 0, NULL);
@@ -741,6 +745,9 @@ void sys_unregister_select_event(GlobalContext *global, ErlNifEvent event, bool 
     EV_SET(&kev, event, is_write ? EVFILT_WRITE : EVFILT_READ, EV_DELETE, 0, 0, NULL);
     (void) kevent(platform->kqueue_fd, &kev, 1, NULL, 0, &ts);
     platform->select_events_poll_count = -1;
+#ifndef AVM_NO_SMP
+    sys_signal(global);
+#endif
 #else
     UNUSED(event);
     UNUSED(is_write);

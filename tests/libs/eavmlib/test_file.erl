@@ -130,7 +130,13 @@ test_fifo_select(_HasSelect) ->
 test_gc(HasSelect) ->
     Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
     GCSubPid = spawn(fun() -> gc_loop(Path, undefined) end),
-    MemorySize0 = erlang:memory(binary),
+    % Dead resource terms from earlier tests still hold their refc binaries
+    % until this process collects them, and resources stopped with
+    % ERL_NIF_SELECT_STOP_SCHEDULED are released asynchronously by the
+    % scheduler polling events: collect, then wait for the global binary
+    % count to settle before taking the baseline.
+    erlang:garbage_collect(),
+    MemorySize0 = wait_memory_stable(erlang:memory(binary), 100),
     call_gc_loop(GCSubPid, open),
     MemorySize1 = erlang:memory(binary),
     ?ASSERT_TRUE(MemorySize1 > MemorySize0),
@@ -166,7 +172,11 @@ test_gc(HasSelect) ->
             ?ASSERT_EQUALS(MemorySize8, MemorySize1),
             call_gc_loop(GCSubPid, close),
             call_gc_loop(GCSubPid, gc),
-            MemorySize9 = erlang:memory(binary),
+            % If select_stop raced the ready_output notification, the stop
+            % was scheduled (ERL_NIF_SELECT_STOP_SCHEDULED) and the resource
+            % is only released once the scheduler polling events retires the
+            % closed select event, so wait for memory to converge.
+            MemorySize9 = wait_memory_binary(MemorySize0, 100),
             ?ASSERT_EQUALS(MemorySize9, MemorySize0);
         true ->
             ok
@@ -180,6 +190,31 @@ call_gc_loop(Pid, Message) ->
     Pid ! {self(), Message},
     receive
         {Pid, Message} -> ok
+    end.
+
+% Wait until two samples 20ms apart are equal.
+wait_memory_stable(Last, 0) ->
+    Last;
+wait_memory_stable(Last, Retries) ->
+    receive
+    after 20 -> ok
+    end,
+    case erlang:memory(binary) of
+        Last -> Last;
+        Other -> wait_memory_stable(Other, Retries - 1)
+    end.
+
+wait_memory_binary(Expected, Retries) ->
+    case erlang:memory(binary) of
+        Expected ->
+            Expected;
+        Other when Retries =:= 0 ->
+            Other;
+        _ ->
+            receive
+            after 10 -> ok
+            end,
+            wait_memory_binary(Expected, Retries - 1)
     end.
 
 gc_loop(Path, File) ->
