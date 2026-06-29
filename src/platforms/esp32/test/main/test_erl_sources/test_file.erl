@@ -50,7 +50,12 @@ test_basic_file() ->
 test_gc() ->
     Path = "/sdcard/atomvm-2.txt",
     GCSubPid = spawn(fun() -> gc_loop(Path, undefined) end),
-    MemorySize0 = erlang:memory(binary),
+    % Dead resource terms from earlier tests still hold their refc binaries
+    % until this process collects them, and resources are released
+    % asynchronously by the scheduler polling events: collect, then wait for
+    % the global binary count to settle before taking the baseline.
+    erlang:garbage_collect(),
+    MemorySize0 = wait_memory_stable(erlang:memory(binary), 100),
     call_gc_loop(GCSubPid, open),
     MemorySize1 = erlang:memory(binary),
     true = MemorySize1 > MemorySize0,
@@ -74,6 +79,18 @@ test_gc() ->
     call_gc_loop(GCSubPid, quit),
     ok = atomvm:posix_unlink(Path),
     ok.
+
+% Wait until two samples 20ms apart are equal.
+wait_memory_stable(Last, 0) ->
+    Last;
+wait_memory_stable(Last, Retries) ->
+    receive
+    after 20 -> ok
+    end,
+    case erlang:memory(binary) of
+        Last -> Last;
+        Other -> wait_memory_stable(Other, Retries - 1)
+    end.
 
 call_gc_loop(Pid, Message) ->
     Pid ! {self(), Message},

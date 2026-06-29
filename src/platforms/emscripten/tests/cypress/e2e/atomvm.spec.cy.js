@@ -28,4 +28,9 @@ describe("atomvm", () => {
   it("should compute pi with a reasonable error", () => {
     cy.get("#pierror").should("contain", "true");
   });
+  // The caller is trapped until the main thread answers, so a missing wake-up
+  // of the scheduler that owns it hangs the process instead of failing.
+  it("should run a synchronous script on the main thread", () => {
+    cy.get("#sync").should("contain", "ranok");
+  });
 });
