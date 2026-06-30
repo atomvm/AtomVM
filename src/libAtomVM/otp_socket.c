@@ -2417,7 +2417,10 @@ static term nif_socket_recvfrom(Context *ctx, int argc, term argv[])
 //
 // send/sendto
 //
-static ssize_t do_socket_send(struct SocketResource *rsrc_obj, const uint8_t *buf, size_t len, term dest)
+// Sends buf on the socket and returns the number of bytes accepted by the
+// stack, or a negative SocketErrors value. For SocketOtherError, error_code
+// is set to the errno (BSD sockets) or to the lwIP error.
+static ssize_t do_socket_send(struct SocketResource *rsrc_obj, const uint8_t *buf, size_t len, term dest, int *error_code)
 {
     ssize_t sent_data = -1;
 #if OTP_SOCKET_BSD
@@ -2444,12 +2447,14 @@ static ssize_t do_socket_send(struct SocketResource *rsrc_obj, const uint8_t *bu
         sent_data = send(rsrc_obj->fd, buf, len, 0);
     }
     if (sent_data < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        int err = errno;
+        if (err == EAGAIN || err == EWOULDBLOCK) {
             return SocketWouldBlock;
         }
-        if (errno == EBADF || errno == ECONNRESET) {
+        if (err == EBADF || err == ECONNRESET) {
             return SocketClosed;
         }
+        *error_code = err;
         return SocketOtherError;
     }
     return sent_data;
@@ -2464,6 +2469,7 @@ static ssize_t do_socket_send(struct SocketResource *rsrc_obj, const uint8_t *bu
         term port_term = interop_kv_get_value_default(dest, port_atom, term_from_int(0), global);
         avm_int_t port_number = term_to_int(port_term);
         if (port_number < 0 || port_number > 65535) {
+            *error_code = ERR_VAL;
             return SocketOtherError;
         }
         port_u16 = (uint16_t) port_number;
@@ -2491,21 +2497,33 @@ static ssize_t do_socket_send(struct SocketResource *rsrc_obj, const uint8_t *bu
         pbuf_free(p);
     } else {
         // If the socket is connection-mode, dest_addr shall be ignored.
-        // Because we are copying, we cannot really send tcp_sndbuf(rsrc_obj->tcp_pcb) at once
+        // Because we are copying, we cannot really send tcp_sndbuf(rsrc_obj->tcp_pcb) at once.
+        // tcp_write fails with ERR_MEM when the data exceeds the send buffer, so
+        // cap the write at the available space, consistently with
+        // lwip_tcp_can_send: a partial write is returned as {ok, Rest}.
         size_t buflen = MIN(len, TCP_MSS);
+        if (len > 0) {
+            size_t sndbuf = tcp_sndbuf(rsrc_obj->tcp_pcb);
+            if (sndbuf == 0) {
+                LWIP_END();
+                return SocketWouldBlock;
+            }
+            buflen = MIN(buflen, sndbuf);
+        }
         int flags = TCP_WRITE_FLAG_COPY;
         if (buflen < len) {
             flags |= TCP_WRITE_FLAG_MORE;
         }
         err = tcp_write(rsrc_obj->tcp_pcb, buf, buflen, flags);
         if (err == ERR_MEM) {
-            sent_data = 0;
-        } else {
+            // Send buffer or queue full: transient, the caller can retry.
+            LWIP_END();
+            return SocketWouldBlock;
+        }
+        if (err == ERR_OK) {
+            err = tcp_output(rsrc_obj->tcp_pcb);
             if (err == ERR_OK) {
-                err = tcp_output(rsrc_obj->tcp_pcb);
-                if (err == ERR_OK) {
-                    sent_data = buflen;
-                }
+                sent_data = buflen;
             }
         }
     }
@@ -2513,10 +2531,8 @@ static ssize_t do_socket_send(struct SocketResource *rsrc_obj, const uint8_t *bu
     if (err == ERR_CLSD) {
         return SocketClosed;
     }
-    if (sent_data == 0) {
-        return SocketWouldBlock;
-    }
     if (err != ERR_OK) {
+        *error_code = err;
         return SocketOtherError;
     }
     return sent_data;
@@ -2525,8 +2541,9 @@ static ssize_t do_socket_send(struct SocketResource *rsrc_obj, const uint8_t *bu
 
 ssize_t socket_send(struct SocketResource *rsrc_obj, const uint8_t *buf, size_t len, term dest)
 {
+    int error_code = 0;
     SMP_RWLOCK_RDLOCK(rsrc_obj->socket_lock);
-    ssize_t result = do_socket_send(rsrc_obj, buf, len, dest);
+    ssize_t result = do_socket_send(rsrc_obj, buf, len, dest, &error_code);
     SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
     return result;
 }
@@ -2547,15 +2564,17 @@ static term nif_socket_send_internal(Context *ctx, int argc, term argv[], bool i
     }
 
     SMP_RWLOCK_RDLOCK(rsrc_obj->socket_lock);
+    // As in OTP, sending on a socket that was closed is reported as closed,
+    // like sending on a connection closed by the peer.
 #if OTP_SOCKET_BSD
     if (rsrc_obj->fd == 0) {
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
-        return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
+        return make_error_tuple(CLOSED_ATOM, ctx);
     }
 #elif OTP_SOCKET_LWIP
     if (rsrc_obj->socket_state == SocketStateClosed) {
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
-        return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
+        return make_error_tuple(CLOSED_ATOM, ctx);
     }
     if (rsrc_obj->socket_state & SocketStateListening) {
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
@@ -2572,10 +2591,18 @@ static term nif_socket_send_internal(Context *ctx, int argc, term argv[], bool i
     const uint8_t *buf = (const uint8_t *) term_binary_data(data);
     size_t len = term_binary_size(data);
 
-    ssize_t sent_data = do_socket_send(rsrc_obj, buf, len, dest);
+    int error_code = 0;
+    ssize_t sent_data = do_socket_send(rsrc_obj, buf, len, dest, &error_code);
     SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
 
     // {ok, RestData} | {error, Reason}
+
+    // Transient send backpressure (lwIP ERR_MEM / BSD EAGAIN|EWOULDBLOCK) is
+    // reported as {error, eagain} so callers can retry rather than mistaking it
+    // for a closed connection.
+    if (sent_data == SocketWouldBlock) {
+        return make_error_tuple(posix_errno_to_term(EAGAIN, global), ctx);
+    }
 
     size_t rest_len = len - sent_data;
     if (rest_len == 0) {
@@ -2592,15 +2619,19 @@ static term nif_socket_send_internal(Context *ctx, int argc, term argv[], bool i
         return port_create_tuple2(ctx, OK_ATOM, rest);
 
     } else if (sent_data == 0) {
-        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &data, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-
-        return port_create_tuple2(ctx, OK_ATOM, data);
-    } else {
-        TRACE("Unable to send data: res=%zi.\n", sent_data);
+        // do_socket_send only returns 0 for a closed connection (SocketClosed:
+        // lwIP ERR_CLSD, BSD EBADF|ECONNRESET); an empty payload already
+        // returned ok above via the rest_len == 0 check. Report it as such.
         return make_error_tuple(CLOSED_ATOM, ctx);
+    } else {
+        // SocketOtherError: report the actual error, as in OTP. A transient
+        // condition (e.g. ENOBUFS, EINTR) is not a closed connection.
+        TRACE("Unable to send data: res=%zi error=%i.\n", sent_data, error_code);
+#if OTP_SOCKET_BSD
+        return make_error_tuple(posix_errno_to_term(error_code, global), ctx);
+#elif OTP_SOCKET_LWIP
+        return make_lwip_err_tuple((err_t) error_code, ctx);
+#endif
     }
 }
 

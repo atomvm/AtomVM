@@ -129,6 +129,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `unicode:characters_to_list/1,2` and `unicode:characters_to_binary/1,2,3` returning an
   error tuple with an uninitialized value in place of the rest for a top-level argument that is
   not chardata, such as `unicode:characters_to_list(foo)`; they now raise `badarg`
+- Fixed `socket:send/2` reporting any error other than backpressure as `closed` on BSD sockets:
+  the actual error (e.g. `epipe`, `enobufs`) is now returned
+- `socket:send/2,3` and `socket:sendto/3,4` on a socket that was closed now return
+  `{error, closed}`, as in OTP, instead of `{error, ebadf}`
 - Fixed a lost wake up in the ESP32 select thread: a select event registered while the thread was
   rebuilding its poll set was not polled until another one was registered or unregistered
 
