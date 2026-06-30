@@ -2491,30 +2491,39 @@ static ssize_t do_socket_send(struct SocketResource *rsrc_obj, const uint8_t *bu
         pbuf_free(p);
     } else {
         // If the socket is connection-mode, dest_addr shall be ignored.
-        // Because we are copying, we cannot really send tcp_sndbuf(rsrc_obj->tcp_pcb) at once
+        // Because we are copying, we cannot really send tcp_sndbuf(rsrc_obj->tcp_pcb) at once.
+        // tcp_write fails with ERR_MEM when the data exceeds the send buffer, so
+        // cap the write at the available space, consistently with
+        // lwip_tcp_can_send: a partial write is returned as {ok, Rest}.
         size_t buflen = MIN(len, TCP_MSS);
+        if (len > 0) {
+            size_t sndbuf = tcp_sndbuf(rsrc_obj->tcp_pcb);
+            if (sndbuf == 0) {
+                LWIP_END();
+                return SocketWouldBlock;
+            }
+            buflen = MIN(buflen, sndbuf);
+        }
         int flags = TCP_WRITE_FLAG_COPY;
         if (buflen < len) {
             flags |= TCP_WRITE_FLAG_MORE;
         }
         err = tcp_write(rsrc_obj->tcp_pcb, buf, buflen, flags);
         if (err == ERR_MEM) {
-            sent_data = 0;
-        } else {
+            // Send buffer or queue full: transient, the caller can retry.
+            LWIP_END();
+            return SocketWouldBlock;
+        }
+        if (err == ERR_OK) {
+            err = tcp_output(rsrc_obj->tcp_pcb);
             if (err == ERR_OK) {
-                err = tcp_output(rsrc_obj->tcp_pcb);
-                if (err == ERR_OK) {
-                    sent_data = buflen;
-                }
+                sent_data = buflen;
             }
         }
     }
     LWIP_END();
     if (err == ERR_CLSD) {
         return SocketClosed;
-    }
-    if (sent_data == 0) {
-        return SocketWouldBlock;
     }
     if (err != ERR_OK) {
         return SocketOtherError;
@@ -2577,6 +2586,13 @@ static term nif_socket_send_internal(Context *ctx, int argc, term argv[], bool i
 
     // {ok, RestData} | {error, Reason}
 
+    // Transient send backpressure (lwIP ERR_MEM / BSD EAGAIN|EWOULDBLOCK) is
+    // reported as {error, eagain} so callers can retry rather than mistaking it
+    // for a closed connection.
+    if (sent_data == SocketWouldBlock) {
+        return make_error_tuple(posix_errno_to_term(EAGAIN, global), ctx);
+    }
+
     size_t rest_len = len - sent_data;
     if (rest_len == 0) {
         return OK_ATOM;
@@ -2592,12 +2608,10 @@ static term nif_socket_send_internal(Context *ctx, int argc, term argv[], bool i
         return port_create_tuple2(ctx, OK_ATOM, rest);
 
     } else if (sent_data == 0) {
-        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &data, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-
-        return port_create_tuple2(ctx, OK_ATOM, data);
+        // do_socket_send only returns 0 for a closed connection (SocketClosed:
+        // lwIP ERR_CLSD, BSD EBADF|ECONNRESET); an empty payload already
+        // returned ok above via the rest_len == 0 check. Report it as such.
+        return make_error_tuple(CLOSED_ATOM, ctx);
     } else {
         TRACE("Unable to send data: res=%zi.\n", sent_data);
         return make_error_tuple(CLOSED_ATOM, ctx);
