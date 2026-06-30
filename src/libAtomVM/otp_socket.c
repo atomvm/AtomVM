@@ -2573,6 +2573,13 @@ static term nif_socket_send_internal(Context *ctx, int argc, term argv[], bool i
 
     // {ok, RestData} | {error, Reason}
 
+    // Transient send backpressure (lwIP ERR_MEM / BSD EAGAIN|EWOULDBLOCK) is
+    // reported as {error, eagain} so callers can retry rather than mistaking it
+    // for a closed connection.
+    if (sent_data == SocketWouldBlock) {
+        return make_error_tuple(posix_errno_to_term(EAGAIN, global), ctx);
+    }
+
     size_t rest_len = len - sent_data;
     if (rest_len == 0) {
         return OK_ATOM;
@@ -2588,12 +2595,10 @@ static term nif_socket_send_internal(Context *ctx, int argc, term argv[], bool i
         return port_create_tuple2(ctx, OK_ATOM, rest);
 
     } else if (sent_data == 0) {
-        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &data, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-
-        return port_create_tuple2(ctx, OK_ATOM, data);
+        // do_socket_send only returns 0 for a closed connection (SocketClosed:
+        // lwIP ERR_CLSD, BSD EBADF|ECONNRESET); an empty payload already
+        // returned ok above via the rest_len == 0 check. Report it as such.
+        return make_error_tuple(CLOSED_ATOM, ctx);
     } else {
         TRACE("Unable to send data: res=%zi.\n", sent_data);
         return make_error_tuple(CLOSED_ATOM, ctx);
