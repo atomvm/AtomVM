@@ -110,9 +110,13 @@ static esp_err_t close_i2c_resource(struct I2CResource *rsrc_obj)
     }
 
     esp_err_t err = i2c_bus_manager_close(rsrc_obj->bus_handle);
+    // Always release any pending tx_buf allocation, even if closing the bus
+    // itself failed, so that a failed close (e.g. surfaced to `i2c:close/1`)
+    // doesn't leak the pending transmission buffer for the lifetime of the
+    // resource.
+    reset_i2c_transmission_state(rsrc_obj);
     if (err == ESP_OK) {
         rsrc_obj->i2c_port = I2C_RESOURCE_PORT_INVALID;
-        reset_i2c_transmission_state(rsrc_obj);
     }
 
     return err;
@@ -389,30 +393,32 @@ static term nif_i2c_write_bytes(Context *ctx, int argc, term argv[])
     }
 
     //
-    // Build the write buffer (optional register prefix + data) and send it
+    // Build the write buffer (optional register prefix + data) and send it.
+    // Only the register-prefixed case needs a scratch buffer to make the
+    // register address and data contiguous; otherwise `buf` can be handed
+    // directly to the transmit call, avoiding an extra alloc + copy.
     //
 
-    size_t write_size = (has_register ? 1 : 0) + data_len;
-    uint8_t *write_buf = NULL;
-    if (write_size > 0) {
-        write_buf = malloc(write_size);
+    esp_err_t err;
+    if (has_register) {
+        size_t write_size = 1 + data_len;
+        uint8_t *write_buf = malloc(write_size);
         if (IS_NULL_PTR(write_buf)) {
             if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
                 return OUT_OF_MEMORY_ATOM;
             }
             return create_error_tuple(ctx, esp_err_to_term(ctx->global, ESP_ERR_NO_MEM));
         }
-        size_t offset = 0;
-        if (has_register) {
-            write_buf[0] = register_address;
-            offset = 1;
-        }
-        memcpy(write_buf + offset, buf, data_len);
-    }
+        write_buf[0] = register_address;
+        memcpy(write_buf + 1, buf, data_len);
 
-    esp_err_t err = i2c_bus_manager_transmit(rsrc_obj->bus_handle, addr, rsrc_obj->clock_speed_hz,
-        write_buf, write_size, rsrc_obj->xfer_timeout_ms);
-    free(write_buf);
+        err = i2c_bus_manager_transmit(rsrc_obj->bus_handle, addr, rsrc_obj->clock_speed_hz,
+            write_buf, write_size, rsrc_obj->xfer_timeout_ms);
+        free(write_buf);
+    } else {
+        err = i2c_bus_manager_transmit(rsrc_obj->bus_handle, addr, rsrc_obj->clock_speed_hz, buf,
+            data_len, rsrc_obj->xfer_timeout_ms);
+    }
 
     if (UNLIKELY(err != ESP_OK)) {
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {

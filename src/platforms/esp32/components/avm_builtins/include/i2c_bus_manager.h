@@ -62,6 +62,11 @@ esp_err_t i2c_bus_manager_close(i2c_master_bus_handle_t bus_handle);
  * handle for any transaction, this function adds a transient device handle
  * for the given address, performs the transaction, and removes the device
  * handle again before returning.
+ *
+ * If `write_size` is 0, an address-only ACK/NACK probe is performed via
+ * `i2c_master_probe()` instead (the underlying driver rejects zero-length
+ * write buffers outright), matching the legacy driver's support for
+ * address-only transactions (e.g. device-presence or busy-polling checks).
  */
 esp_err_t i2c_bus_manager_transmit(i2c_master_bus_handle_t bus_handle, uint16_t address,
     uint32_t clock_speed_hz, const uint8_t *write_buffer, size_t write_size,

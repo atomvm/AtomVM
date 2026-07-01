@@ -397,24 +397,26 @@ static term i2cdriver_write_bytes(Context *ctx, term pid, term req)
         has_register = true;
     }
 
-    size_t write_size = (has_register ? 1 : 0) + data_len;
-    uint8_t *write_buf = NULL;
-    if (write_size > 0) {
-        write_buf = malloc(write_size);
+    // Only the register-prefixed case needs a scratch buffer to make the
+    // register address and data contiguous; otherwise `data` can be handed
+    // directly to the transmit call, avoiding an extra alloc + copy.
+    esp_err_t result;
+    if (has_register) {
+        size_t write_size = 1 + data_len;
+        uint8_t *write_buf = malloc(write_size);
         if (IS_NULL_PTR(write_buf)) {
             return make_esp_err_error(ctx, ESP_ERR_NO_MEM);
         }
-        size_t offset = 0;
-        if (has_register) {
-            write_buf[0] = register_address;
-            offset = 1;
-        }
-        memcpy(write_buf + offset, data, data_len);
-    }
+        write_buf[0] = register_address;
+        memcpy(write_buf + 1, data, data_len);
 
-    esp_err_t result = i2c_bus_manager_transmit(i2c_data->bus_handle, address,
-        i2c_data->clock_speed_hz, write_buf, write_size, I2C_PORT_DRIVER_TIMEOUT_MS);
-    free(write_buf);
+        result = i2c_bus_manager_transmit(i2c_data->bus_handle, address,
+            i2c_data->clock_speed_hz, write_buf, write_size, I2C_PORT_DRIVER_TIMEOUT_MS);
+        free(write_buf);
+    } else {
+        result = i2c_bus_manager_transmit(i2c_data->bus_handle, address,
+            i2c_data->clock_speed_hz, data, data_len, I2C_PORT_DRIVER_TIMEOUT_MS);
+    }
 
     if (UNLIKELY(result != ESP_OK)) {
         ESP_LOGE(TAG, "i2cdriver_write_bytes: transaction error: result was: %s", esp_err_to_name(result));

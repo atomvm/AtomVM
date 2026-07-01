@@ -96,9 +96,33 @@ static esp_err_t remove_device(i2c_master_dev_handle_t dev_handle, esp_err_t tra
     return (transaction_result != ESP_OK) ? transaction_result : err;
 }
 
+// `i2c_master_transmit()` rejects zero-length write buffers with
+// `ESP_ERR_INVALID_ARG` (unlike the legacy driver, which happily emitted a
+// START/address/STOP sequence with no data bytes in between). AtomVM's i2c
+// API allows this (e.g. `i2c:write_bytes(I2C, Addr, <<>>)`, or an empty
+// `begin_transmission/end_transmission` pair), commonly used as a
+// device-presence/ACK probe. To preserve that behavior, a zero-length
+// write is instead performed as an address-only probe via
+// `i2c_master_probe()`, and its result is mapped onto the same
+// `{ok, error}`/`{error, esp_fail}` contract a real transmit would have
+// produced: `ESP_OK` on ACK, `ESP_FAIL` on NACK (`ESP_ERR_NOT_FOUND`).
+static esp_err_t probe_address(
+    i2c_master_bus_handle_t bus_handle, uint16_t address, int xfer_timeout_ms)
+{
+    esp_err_t err = i2c_master_probe(bus_handle, address, xfer_timeout_ms);
+    if (err == ESP_ERR_NOT_FOUND) {
+        return ESP_FAIL;
+    }
+    return err;
+}
+
 esp_err_t i2c_bus_manager_transmit(i2c_master_bus_handle_t bus_handle, uint16_t address,
     uint32_t clock_speed_hz, const uint8_t *write_buffer, size_t write_size, int xfer_timeout_ms)
 {
+    if (write_size == 0) {
+        return probe_address(bus_handle, address, xfer_timeout_ms);
+    }
+
     i2c_master_dev_handle_t dev_handle;
     esp_err_t err = add_device(bus_handle, address, clock_speed_hz, &dev_handle);
     if (UNLIKELY(err != ESP_OK)) {
