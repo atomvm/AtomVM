@@ -21,6 +21,7 @@
 set(AVM_BUILTIN_COMPONENT_SRCS
     "dac_driver.c"
     "gpio_driver.c"
+    "i2c_bus_manager.c"
     "i2c_driver.c"
     "i2c_resource.c"
     "ledc_nif.c"
@@ -72,6 +73,13 @@ if(CONFIG_AVM_ENABLE_USB_CDC_PORT_DRIVER)
     if(IDF_VERSION_MAJOR GREATER_EQUAL 6 OR (IDF_VERSION_MAJOR EQUAL 5 AND IDF_VERSION_MINOR GREATER_EQUAL 3))
         target_link_libraries(${COMPONENT_LIB} PRIVATE idf::espressif__esp_tinyusb)
     endif()
+endif()
+
+# The (new, non-legacy) I2C master driver (driver/i2c_master.h) is provided by the "driver"
+# component up to IDF 5.x, but starting with IDF 6.0 the legacy "driver" component no longer
+# has a public dependency on it, so it must be linked explicitly.
+if((CONFIG_AVM_ENABLE_I2C_PORT_DRIVER OR CONFIG_AVM_ENABLE_I2C_RESOURCE_NIFS) AND IDF_VERSION_MAJOR GREATER_EQUAL 6)
+    target_link_libraries(${COMPONENT_LIB} PRIVATE idf::esp_driver_i2c)
 endif()
 
 if (IDF_VERSION_MAJOR EQUAL 4)

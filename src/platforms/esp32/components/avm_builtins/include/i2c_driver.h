@@ -21,12 +21,10 @@
 #ifndef _I2C_DRIVER_H_
 #define _I2C_DRIVER_H_
 
-#include <driver/i2c.h>
+#include <driver/i2c_master.h>
 
 #include <globalcontext.h>
 #include <term.h>
-
-#define ATOMVM_ESP32_I2C_OLD_API 1
 
 enum I2CAcquireOpts
 {
@@ -41,10 +39,17 @@ enum I2CAcquireResult
 
 typedef enum I2CAcquireResult I2CAcquireResult;
 
-// These functions are meant for integrating native drivers with the I2C port driver
-// defined as following only when ATOMVM_ESP32_I2C_OLD_API is set
-// it will be changed in future.
-I2CAcquireResult i2c_driver_acquire(term i2c_port, i2c_port_t *i2c_num, GlobalContext *global);
+// These functions are meant for integrating other native drivers with the
+// `i2c` port driver, allowing them to share its already-open
+// `i2c_master_bus_handle_t` (e.g. to add their own devices to the bus)
+// instead of opening a competing bus on the same I2C peripheral.
+//
+// NOTE: callers must not call `i2c_master_bus_rm_device()`-style APIs on
+// devices they did not add themselves, and must not delete the bus handle;
+// ownership of the bus remains with the `i2c` port that created it, and is
+// only released back via `i2c_driver_release()`.
+I2CAcquireResult i2c_driver_acquire(
+    term i2c_port, i2c_master_bus_handle_t *bus_handle, GlobalContext *global);
 void i2c_driver_release(term i2c_port, GlobalContext *global);
 
 #endif
