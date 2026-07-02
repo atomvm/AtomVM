@@ -190,7 +190,14 @@ static NativeHandlerResult i2c_driver_unref(Context *ctx)
     return NativeTerminate;
 }
 
-static term make_einprogress_error(Context *ctx, term owner_pid)
+// Takes the owning `struct I2CData *` rather than a pre-extracted
+// `transmitting_pid` term, and reads `i2c_data->transmitting_pid` only
+// after the `memory_ensure_free()` call below. Capturing the term into a
+// local/parameter *before* a GC-triggering call and using it *after* is a
+// use-after-GC hazard for boxed terms; deferring the field read avoids the
+// pattern entirely rather than relying on the fact that `transmitting_pid`
+// happens to always be an immediate (a local pid or `term_invalid_term()`).
+static term make_einprogress_error(Context *ctx, struct I2CData *i2c_data)
 {
     if (UNLIKELY(memory_ensure_free(ctx, 2 * TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
         ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
@@ -199,7 +206,7 @@ static term make_einprogress_error(Context *ctx, term owner_pid)
 
     term reason_tuple = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(reason_tuple, 0, globalcontext_make_atom(ctx->global, einprogress_atom));
-    term_put_tuple_element(reason_tuple, 1, owner_pid);
+    term_put_tuple_element(reason_tuple, 1, i2c_data->transmitting_pid);
 
     return port_create_error_tuple(ctx, reason_tuple);
 }
@@ -220,7 +227,7 @@ static term i2cdriver_begin_transmission(Context *ctx, term pid, term req)
     if (UNLIKELY(i2c_data->transmitting_pid != term_invalid_term())) {
         // another process is already transmitting
         ESP_LOGE(TAG, "i2cdriver_begin_transmission: Another process is already transmitting");
-        return make_einprogress_error(ctx, i2c_data->transmitting_pid);
+        return make_einprogress_error(ctx, i2c_data);
     }
 
     term address_term = term_get_tuple_element(req, 1);
@@ -239,7 +246,7 @@ static term i2cdriver_end_transmission(Context *ctx, term pid)
     if (UNLIKELY(i2c_data->transmitting_pid != pid)) {
         // transaction owned from a different pid
         ESP_LOGE(TAG, "i2cdriver_end_transmission: Another process is already transmitting");
-        return make_einprogress_error(ctx, i2c_data->transmitting_pid);
+        return make_einprogress_error(ctx, i2c_data);
     }
 
     esp_err_t result = i2c_bus_manager_transmit(i2c_data->bus_handle, i2c_data->tx_address,
@@ -264,7 +271,7 @@ static term i2cdriver_write_byte(Context *ctx, term pid, term req)
     if (UNLIKELY(i2c_data->transmitting_pid != pid)) {
         // transaction owned from a different pid
         ESP_LOGE(TAG, "i2cdriver_write_byte: Another process is already transmitting");
-        return make_einprogress_error(ctx, i2c_data->transmitting_pid);
+        return make_einprogress_error(ctx, i2c_data);
     }
 
     term data_term = term_get_tuple_element(req, 1);
@@ -286,7 +293,7 @@ static term i2cdriver_qwrite_bytes(Context *ctx, term pid, term req)
     if (UNLIKELY(i2c_data->transmitting_pid != pid)) {
         // transaction owned from a different pid
         ESP_LOGE(TAG, "i2cdriver_qwrite_bytes: Another process is already transmitting");
-        return make_einprogress_error(ctx, i2c_data->transmitting_pid);
+        return make_einprogress_error(ctx, i2c_data);
     }
 
     term data_term = term_get_tuple_element(req, 1);
@@ -314,7 +321,7 @@ static term i2cdriver_read_bytes(Context *ctx, term pid, term req)
 
     if (UNLIKELY(i2c_data->transmitting_pid != term_invalid_term())) {
         ESP_LOGE(TAG, "i2cdriver_read_bytes: Another process is already transmitting");
-        return make_einprogress_error(ctx, i2c_data->transmitting_pid);
+        return make_einprogress_error(ctx, i2c_data);
     }
 
     int arity = term_get_tuple_arity(req);
@@ -368,7 +375,7 @@ static term i2cdriver_write_bytes(Context *ctx, term pid, term req)
 
     if (UNLIKELY(i2c_data->transmitting_pid != term_invalid_term())) {
         ESP_LOGE(TAG, "i2cdriver_write_bytes: Another process is already transmitting");
-        return make_einprogress_error(ctx, i2c_data->transmitting_pid);
+        return make_einprogress_error(ctx, i2c_data);
     }
 
     int arity = term_get_tuple_arity(req);
