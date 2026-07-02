@@ -46,6 +46,7 @@
 %% internal nifs
 -export([
     nif_select_read/2,
+    nif_select_write/2,
     nif_accept/1,
     nif_recv/2,
     nif_recvfrom/2,
@@ -571,13 +572,13 @@ recvfrom0_nowait(Socket, Length, Ref) ->
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
 %% @param   Data the data to send
-%% @returns `{ok, Rest}' if successful; `{error, Reason}', otherwise.
+%% @returns `ok' if all data was accepted; `{ok, Rest}' if only part of the data
+%%          was accepted; `{error, Reason}', otherwise.
 %% @doc     Send data on the specified socket.
 %%
-%%          Note that this function will block until data is sent
-%%          on the socket.  The data may not have been received by the
-%%          intended recipient, and the data may not even have been sent
-%%          over the network.
+%%          For stream sockets, partial sends and transient backpressure are
+%%          retried internally until all data has been accepted or an error
+%%          occurs.
 %%
 %% Example:
 %%
@@ -586,10 +587,12 @@ recvfrom0_nowait(Socket, Length, Ref) ->
 %%-----------------------------------------------------------------------------
 -spec send(Socket :: socket(), Data :: iodata()) ->
     ok | {ok, Rest :: binary()} | {error, Reason :: term()}.
+send(_Socket, <<>>) ->
+    ok;
 send(Socket, Data) when is_binary(Data) ->
-    ?MODULE:nif_send(Socket, Data);
+    send_all_binary(Socket, Data);
 send(Socket, Data) ->
-    ?MODULE:nif_send(Socket, erlang:iolist_to_binary(Data)).
+    send_all_binary(Socket, erlang:iolist_to_binary(Data)).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
@@ -709,6 +712,10 @@ nif_select_read(_Socket, _Ref) ->
     erlang:nif_error(undefined).
 
 %% @private
+nif_select_write(_Socket, _Ref) ->
+    erlang:nif_error(undefined).
+
+%% @private
 nif_accept(_Socket) ->
     erlang:nif_error(undefined).
 
@@ -731,3 +738,36 @@ nif_send(_Socket, _Data) ->
 %% @private
 nif_sendto(_Socket, _Data, _Dest) ->
     erlang:nif_error(undefined).
+
+send_all_binary(_Socket, <<>>) ->
+    ok;
+send_all_binary(Socket, Data) ->
+    case ?MODULE:nif_send(Socket, Data) of
+        ok ->
+            ok;
+        {ok, Rest} ->
+            send_all_binary(Socket, Rest);
+        {error, eagain} ->
+            case wait_write(Socket) of
+                ok ->
+                    send_all_binary(Socket, Data);
+                {error, _Reason} = Error ->
+                    Error
+            end;
+        {error, _Reason} = Error ->
+            Error
+    end.
+
+wait_write(Socket) ->
+    Ref = erlang:make_ref(),
+    case ?MODULE:nif_select_write(Socket, Ref) of
+        ok ->
+            receive
+                {'$socket', Socket, select, Ref} ->
+                    ok;
+                {'$socket', Socket, abort, {Ref, closed}} ->
+                    {error, closed}
+            end;
+        {error, _Reason} = Error ->
+            Error
+    end.
