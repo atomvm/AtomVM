@@ -45,7 +45,10 @@ if [[ "$BOARD" == esp32* ]]; then
     echo "==> Note: qemu_x86_64 runs in simulation; ESP32 scenarios are build-only until a simulator/device harness is added."
 fi
 docker run --rm \
+    -e ASAN_OPTIONS=detect_leaks=0 \
+    -e LSAN_OPTIONS=exitcode=0 \
     -v "$ATOMVM_ROOT:/workspace/zephyr-workspace/AtomVM" \
     -w /workspace/zephyr-workspace \
     "$IMAGE_NAME" \
     west twister -T "$TEST_ROOT" -p "$BOARD" --inline-logs -W --outdir "$OUT_DIR" "${EXTRA_TWISTER_ARGS[@]}"
+

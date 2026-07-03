@@ -117,7 +117,12 @@ set(
 )
 
 # Specify output executable
-target_sources(app PRIVATE ${ATOMVM_ZEPHYR_ROOT}/src/main.c)
+if (PROJECT_NAME STREQUAL "AtomVMZephyrTests")
+    target_sources(app PRIVATE ${ATOMVM_ZEPHYR_ROOT}/tests/src/test_main.c)
+else()
+    target_sources(app PRIVATE ${ATOMVM_ZEPHYR_ROOT}/src/main.c)
+endif()
+
 target_include_directories(app PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}/libAtomVM
     ${CMAKE_BINARY_DIR}/zephyr/include/generated)

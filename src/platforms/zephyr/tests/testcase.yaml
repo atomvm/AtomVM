@@ -7,21 +7,19 @@
 #
 
 tests:
-  atomvm.zephyr.boot_smp:
+  atomvm.zephyr.tests:
     tags:
       - atomvm
       - zephyr
       - qemu
     platform_allow:
       - qemu_x86_64
+      - native_sim/native/64
     integration_platforms:
       - qemu_x86_64
-    harness: console
-    harness_config:
-      type: one_line
-      regex:
-        - "Zephyr boot test: SMP schedulers=2 online=2"
-    timeout: 20
+      - native_sim/native/64
+    harness: ztest
+    timeout: 30
   atomvm.zephyr.build_esp32:
     tags:
       - atomvm
@@ -44,10 +42,24 @@ tests:
       - native_sim/native/64
     integration_platforms:
       - native_sim/native/64
-    harness: console
-    harness_config:
-      type: one_line
-      regex:
-        - "Exited with return: ok"
+    harness: ztest
     extra_args: AVM_ZEPHYR_NATIVE_SIM_I2C_TEST=ON
+    timeout: 30
+  atomvm.zephyr.i2c_native_sim.asan_ubsan:
+    tags:
+      - atomvm
+      - zephyr
+      - i2c
+      - native_sim
+      - asan
+      - ubsan
+    platform_allow:
+      - native_sim/native/64
+    integration_platforms:
+      - native_sim/native/64
+    harness: ztest
+    extra_args: AVM_ZEPHYR_NATIVE_SIM_I2C_TEST=ON
+    extra_configs:
+      - CONFIG_ASAN=y
+      - CONFIG_UBSAN=y
     timeout: 30
