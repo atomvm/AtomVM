@@ -110,7 +110,7 @@ int main()
     const void *startup_beam;
     const char *startup_module_name;
 
-    AVM_LOGD(TAG, "Maximum application size: %lu KiB", (size / 1024));
+    AVM_LOGD(TAG, "Maximum application size: %lu KiB", (unsigned long) (size / 1024));
 
     port_driver_init_all(glb);
     nif_collection_init_all(glb);
@@ -119,8 +119,8 @@ int main()
         AVM_LOGE(TAG, "Invalid AVM Pack");
         AVM_ABORT();
     }
-    AVM_LOGD(TAG, "Booting file mapped at: %p, size: %lu", flashed_avm, startup_beam_size);
-    AVM_LOGI(TAG, "Application size: %lu B, free flash space: %lu KiB", startup_beam_size, ((size - startup_beam_size) / 1024));
+    AVM_LOGD(TAG, "Booting file mapped at: %p, size: %lu", flashed_avm, (unsigned long) startup_beam_size);
+    AVM_LOGI(TAG, "Application size: %lu B, free flash space: %lu KiB", (unsigned long) startup_beam_size, (unsigned long) ((size - startup_beam_size) / 1024));
 
     struct ConstAVMPack *avmpack_data = malloc(sizeof(struct ConstAVMPack));
     if (IS_NULL_PTR(avmpack_data)) {

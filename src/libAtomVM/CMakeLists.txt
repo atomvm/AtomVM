@@ -160,7 +160,10 @@ if (ADVANCED_TRACING)
     target_compile_definitions(libAtomVM PUBLIC ENABLE_ADVANCED_TRACE)
 endif()
 
-target_link_libraries(libAtomVM PUBLIC m)
+# Zephyr owns libc/libm selection; plain -lm can pull host libm into native_sim.
+if(NOT AVM_PORT_ZEPHYR)
+    target_link_libraries(libAtomVM PUBLIC m)
+endif()
 include(CheckCSourceCompiles)
 set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -Werror=unknown-pragmas")
 check_c_source_compiles("

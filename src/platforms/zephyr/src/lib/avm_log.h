@@ -78,35 +78,47 @@ enum AVMLogLevel
 #endif /* ENABLE_LOG_LINE_INFO */
 /* clang-format on */
 
-#define AVM_LOGE(tag, format, ...)                                                                                                                     \
+#define AVM_LOGE(tag, ...)                                                                                                                     \
     do {                                                                                                                                               \
         uint64_t log_timestamp = sys_monotonic_time_u64();                                                                                             \
-        if (AVM_MAX_LOG >= LOG_ERROR)                                                                                                                  \
-            printf(LOG_COLOR_ERROR "ERROR [%llu] %s: " format " (%s:%i)" LOG_RESET_COLOR "\n", log_timestamp, tag, ##__VA_ARGS__, __FILE__, __LINE__); \
+        if (AVM_MAX_LOG >= LOG_ERROR) {                                                                                                                \
+            printf(LOG_COLOR_ERROR "ERROR [%llu] %s: ", (unsigned long long) log_timestamp, tag);                                                      \
+            printf(__VA_ARGS__);                                                                                                                       \
+            printf(" (%s:%i)" LOG_RESET_COLOR "\n", __FILE__, __LINE__);                                                                               \
+        }                                                                                                                                              \
     } while (0)
-#define AVM_LOGW(tag, format, ...)                                                                                                          \
+#define AVM_LOGW(tag, ...)                                                                                                                  \
     do {                                                                                                                                    \
         uint64_t log_timestamp = sys_monotonic_time_u64();                                                                                  \
-        if (AVM_MAX_LOG >= LOG_WARN)                                                                                                        \
-            printf(LOG_COLOR_WARN "WARN [%llu] %s: " format LINE_FORMAT LOG_RESET_COLOR "\n", log_timestamp, tag, ##__VA_ARGS__ LINE_DATA); \
+        if (AVM_MAX_LOG >= LOG_WARN) {                                                                                                      \
+            printf(LOG_COLOR_WARN "WARN [%llu] %s: ", (unsigned long long) log_timestamp, tag);                                             \
+            printf(__VA_ARGS__);                                                                                                            \
+            printf(LINE_FORMAT LOG_RESET_COLOR "\n" LINE_DATA);                                                                             \
+        }                                                                                                                                   \
     } while (0)
-#define AVM_LOGI(tag, format, ...)                                                                                                          \
+#define AVM_LOGI(tag, ...)                                                                                                                  \
     do {                                                                                                                                    \
         uint64_t log_timestamp = sys_monotonic_time_u64();                                                                                  \
-        if (AVM_MAX_LOG >= LOG_INFO)                                                                                                        \
-            printf(LOG_COLOR_INFO "INFO [%llu] %s: " format LINE_FORMAT LOG_RESET_COLOR "\n", log_timestamp, tag, ##__VA_ARGS__ LINE_DATA); \
+        if (AVM_MAX_LOG >= LOG_INFO) {                                                                                                      \
+            printf(LOG_COLOR_INFO "INFO [%llu] %s: ", (unsigned long long) log_timestamp, tag);                                             \
+            printf(__VA_ARGS__);                                                                                                            \
+            printf(LINE_FORMAT LOG_RESET_COLOR "\n" LINE_DATA);                                                                             \
+        }                                                                                                                                   \
     } while (0)
-#define AVM_LOGD(tag, format, ...)                                                                                                            \
+#define AVM_LOGD(tag, ...)                                                                                                                    \
     do {                                                                                                                                      \
         uint64_t log_timestamp = sys_monotonic_time_u64();                                                                                    \
-        if (AVM_MAX_LOG >= LOG_DEBUG)                                                                                                         \
-            printf(LOG_COLOR_DEBUG "DEBUG [%llu] %s: " format LINE_FORMAT LOG_RESET_COLOR "\n", log_timestamp, tag, ##__VA_ARGS__ LINE_DATA); \
+        if (AVM_MAX_LOG >= LOG_DEBUG) {                                                                                                       \
+            printf(LOG_COLOR_DEBUG "DEBUG [%llu] %s: ", (unsigned long long) log_timestamp, tag);                                             \
+            printf(__VA_ARGS__);                                                                                                              \
+            printf(LINE_FORMAT LOG_RESET_COLOR "\n" LINE_DATA);                                                                               \
+        }                                                                                                                                     \
     } while (0)
 #else
-#define AVM_LOGE(tag, format, ...)
-#define AVM_LOGW(tag, format, ...)
-#define AVM_LOGI(tag, format, ...)
-#define AVM_LOGD(tag, format, ...)
+#define AVM_LOGE(tag, ...)
+#define AVM_LOGW(tag, ...)
+#define AVM_LOGI(tag, ...)
+#define AVM_LOGD(tag, ...)
 #endif /* AVM_LOG_DISABLE */
 
 #endif /* _AVM_LOG_H_ */
