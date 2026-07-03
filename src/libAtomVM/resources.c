@@ -214,7 +214,7 @@ static int enif_select_common(ErlNifEnv *env, ErlNifEvent event, enum ErlNifSele
     }
     // Second read or second write overwrites only that direction, preserving
     // the other direction when both are selected on the same event.
-    uint64_t ref_ticks = (!message && ref != UNDEFINED_ATOM) ? term_to_ref_ticks(ref) : 0;
+    uint64_t ref_ticks = (!message && term_is_local_reference(ref)) ? term_to_ref_ticks(ref) : 0;
     if (mode & ERL_NIF_SELECT_READ) {
         enif_select_event_message_dispose(select_event->read_message, global, false);
         select_event->read_message = message;
@@ -262,7 +262,7 @@ int enif_select_read(ErlNifEnv *env, ErlNifEvent event, void *obj, const ErlNifP
     }
     Message *message = mailbox_message_create_normal_message_from_term(msg);
     enum ErlNifSelectFlags mode = ERL_NIF_SELECT_READ;
-    return enif_select_common(env, event, mode, obj, pid, term_nil(), message);
+    return enif_select_common(env, event, mode, obj, pid, UNDEFINED_ATOM, message);
 }
 
 int enif_select_write(ErlNifEnv *env, ErlNifEvent event, void *obj, const ErlNifPid *pid, ERL_NIF_TERM msg, ErlNifEnv *msg_env)
@@ -272,7 +272,7 @@ int enif_select_write(ErlNifEnv *env, ErlNifEvent event, void *obj, const ErlNif
     }
     Message *message = mailbox_message_create_normal_message_from_term(msg);
     enum ErlNifSelectFlags mode = ERL_NIF_SELECT_WRITE;
-    return enif_select_common(env, event, mode, obj, pid, term_nil(), message);
+    return enif_select_common(env, event, mode, obj, pid, UNDEFINED_ATOM, message);
 }
 
 term select_event_make_notification(void *rsrc_obj, uint64_t ref_ticks, bool is_write, Heap *heap)
