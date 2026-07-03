@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   describing the functions and the BEAM instructions supported by the configured build
 - Added a `check-native-stubs` build target, run in CI, that verifies every function
   registered in `bifs.gperf` or `nifs.gperf` has a matching Erlang export
+- Added support for `rest_for_one` and `simple_one_for_one` supervisor restart strategies
 
 ### Changed
 - `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does:
