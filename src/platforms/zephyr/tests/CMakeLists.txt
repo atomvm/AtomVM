@@ -43,7 +43,14 @@ foreach(ATOMVM_ZEPHYR_BOARD_CANDIDATE ${ATOMVM_ZEPHYR_BOARD_CANDIDATES})
     if(NOT DEFINED DTC_OVERLAY_FILE AND EXISTS "${ATOMVM_ZEPHYR_BOARD_OVERLAY}")
         set(DTC_OVERLAY_FILE "${ATOMVM_ZEPHYR_BOARD_OVERLAY}")
     endif()
+
+    set(ATOMVM_ZEPHYR_TEST_BOARD_CONF "${CMAKE_CURRENT_LIST_DIR}/boards/${ATOMVM_ZEPHYR_BOARD_FILE}.conf")
+    if(EXISTS "${ATOMVM_ZEPHYR_TEST_BOARD_CONF}")
+        list(APPEND EXTRA_CONF_FILE "${ATOMVM_ZEPHYR_TEST_BOARD_CONF}")
+    endif()
 endforeach()
+
+list(APPEND EXTRA_CONF_FILE "${CMAKE_CURRENT_LIST_DIR}/prj.conf")
 
 if(AVM_ZEPHYR_NATIVE_SIM_I2C_TEST)
     list(APPEND EXTRA_CONF_FILE "${CMAKE_CURRENT_LIST_DIR}/native_sim_i2c.conf")
@@ -55,13 +62,11 @@ if(BOARD MATCHES "^qemu_x86_64")
 else()
     set(AVM_ZEPHYR_EXPERIMENTAL_SMP OFF CACHE BOOL "Enable experimental AtomVM SMP support on Zephyr" FORCE)
 endif()
-if(AVM_ZEPHYR_NATIVE_SIM_I2C_TEST)
-    set(AVM_ZEPHYR_BOOT_TEST OFF CACHE BOOL "Boot AtomVM far enough to exercise Zephyr platform initialization" FORCE)
-    set(AVM_ZEPHYR_TEST_AVM ON CACHE BOOL "Use an embedded test AVM pack instead of a flashed application" FORCE)
-    set(AVM_ZEPHYR_TEST_EXIT ON CACHE BOOL "Exit the Zephyr application when the AtomVM application returns" FORCE)
-else()
-    set(AVM_ZEPHYR_BOOT_TEST ON CACHE BOOL "Boot AtomVM far enough to exercise Zephyr platform initialization" FORCE)
-endif()
+
+set(AVM_ZEPHYR_BOOT_TEST OFF CACHE BOOL "Boot AtomVM far enough to exercise Zephyr platform initialization" FORCE)
+set(AVM_ZEPHYR_TEST_AVM ON CACHE BOOL "Use an embedded test AVM pack instead of a flashed application" FORCE)
+set(AVM_ZEPHYR_TEST_EXIT ON CACHE BOOL "Exit the Zephyr application when the AtomVM application returns" FORCE)
+
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(AtomVMZephyrTests LANGUAGES C)
@@ -70,5 +75,7 @@ include(${ATOMVM_ZEPHYR_ROOT}/cmake/AtomVMZephyrApp.cmake)
 
 if(AVM_ZEPHYR_NATIVE_SIM_I2C_TEST)
     target_sources(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/i2c_native_sim_emul.c)
-    add_subdirectory(test_erl_sources)
 endif()
+
+add_subdirectory(test_erl_sources)
+

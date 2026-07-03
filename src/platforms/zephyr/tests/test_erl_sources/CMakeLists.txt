@@ -29,11 +29,14 @@ function(compile_erlang module_name)
     set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/${module_name}.beam")
 endfunction()
 
+compile_erlang(test_list_to_atom)
 compile_erlang(test_i2c_native_sim)
 
 set(erlang_test_beams
+    test_list_to_atom.beam
     test_i2c_native_sim.beam
 )
+
 
 add_custom_command(
     OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/zephyr_test_modules.avm"
