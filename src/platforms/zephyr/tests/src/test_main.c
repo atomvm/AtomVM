@@ -78,6 +78,57 @@ ZTEST(atomvm_tests, test_list_to_atom)
     zassert_equal(ret_value, OK_ATOM, "test_list_to_atom did not return 'ok'");
 }
 
+ZTEST(atomvm_tests, test_system_architecture)
+{
+    term ret_value = avm_test_case("test_system_architecture.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_system_architecture did not return 'ok'");
+}
+
+ZTEST(atomvm_tests, test_list_to_binary)
+{
+    term ret_value = avm_test_case("test_list_to_binary.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_list_to_binary did not return 'ok'");
+}
+const struct Nif *platform_nifs_get_nif(const char *nifname);
+
+ZTEST(atomvm_tests, test_platform_nif)
+{
+    const struct Nif *nif = platform_nifs_get_nif("atomvm:platform/0");
+    zassert_not_null(nif, "Failed to resolve atomvm:platform/0");
+}
+
+ZTEST(atomvm_tests, test_missing_nif)
+{
+    const struct Nif *nif = platform_nifs_get_nif("atomvm:missing/0");
+    zassert_is_null(nif, "Resolved missing/0 which should be NULL");
+}
+
+ZTEST(atomvm_tests, test_tz)
+{
+    term ret_value = avm_test_case("test_tz.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_tz did not return 'ok'");
+}
+
+#if !defined(CONFIG_BOARD_NATIVE_SIM)
+ZTEST(atomvm_tests, test_mount)
+{
+    term ret_value = avm_test_case("test_mount.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_mount did not return 'ok'");
+}
+
+ZTEST(atomvm_tests, test_monotonic_time)
+{
+    term ret_value = avm_test_case("test_monotonic_time.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_monotonic_time did not return 'ok'");
+}
+
+ZTEST(atomvm_tests, test_time_and_processes)
+{
+    term ret_value = avm_test_case("test_time_and_processes.beam");
+    zassert_equal(term_to_int(ret_value), 6, "test_time_and_processes did not return 6");
+}
+#endif
+
 #if defined(AVM_ZEPHYR_NATIVE_SIM_I2C_TEST)
 ZTEST(atomvm_tests, test_i2c_native_sim)
 {
