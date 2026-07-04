@@ -31,9 +31,13 @@ test() ->
     ok = test_recv_nowait(),
     ok = test_accept_nowait(),
     ok = test_setopt_getopt(),
+    ok = test_close_accepted_socket_while_selecting(),
     case erlang:system_info(machine) of
         "ATOM" ->
-            ok = test_abandon_select();
+            ok = test_abandon_select(),
+            ok = test_send_backpressure(),
+            ok = test_close_with_reader_and_writer(),
+            ok = test_writer_killed_reader_survives();
         "BEAM" ->
             ok
     end,
@@ -568,6 +572,302 @@ test_abandon_select() ->
     end,
 
     erlang:garbage_collect(),
+    ok.
+
+%%
+%% test_send_backpressure
+%%
+%% Exercises the write-select mechanism used internally by socket:send/2 to
+%% wait for transient send backpressure (a full TCP send buffer) to clear,
+%% instead of leaking {error, eagain} or {ok, Rest} to the caller.
+%%
+
+test_send_backpressure() ->
+    etest:flush_msg_queue(),
+
+    {ok, ListenSocket} = socket:open(inet, stream, tcp),
+    ok = socket:setopt(ListenSocket, {socket, reuseaddr}, true),
+    ok = socket:setopt(ListenSocket, {socket, linger}, #{onoff => true, linger => 0}),
+    ok = socket:bind(ListenSocket, #{family => inet, addr => loopback, port => 0}),
+    ok = socket:listen(ListenSocket),
+    {ok, #{port := Port}} = socket:sockname(ListenSocket),
+
+    Self = self(),
+    Acceptor = spawn_link(fun() -> backpressure_acceptor(Self, ListenSocket) end),
+
+    {ok, ClientSocket} = socket:open(inet, stream, tcp),
+    ok = try_connect(ClientSocket, Port, 10),
+
+    ok =
+        receive
+            {server_socket, _ServerSocket} -> ok
+        after 5000 ->
+            error({timeout, waiting_for_server_socket})
+        end,
+
+    %% Fill the client's send buffer (the server never reads) using the raw
+    %% nif_send/2 directly, bypassing socket:send/2's automatic retry, until
+    %% we either observe a real {error, eagain} or give up after a generous
+    %% number of attempts. Different platforms/kernels size their socket
+    %% buffers differently, so we tolerate never observing backpressure
+    %% rather than failing the test outright.
+    Chunk = binary:copy(<<0>>, 65536),
+    {TotalSent, EAgainObserved} = fill_send_buffer(ClientSocket, Chunk, 0, 256),
+
+    ok =
+        case EAgainObserved andalso TotalSent > 0 of
+            true ->
+                %% socket:nif_select_write/2 should let us wait until the
+                %% socket becomes writable again. Depending on how the
+                %% platform/kernel sizes and accounts for socket buffers, a
+                %% small partial drain on the peer may not be enough to
+                %% cross the low-water mark for writability, so we have the
+                %% acceptor drain everything (as a real reader normally
+                %% would) to reliably free up space.
+                Ref = erlang:make_ref(),
+                ok = socket:nif_select_write(ClientSocket, Ref),
+
+                Acceptor ! {drain_all, self()},
+                ok =
+                    receive
+                        {'$socket', ClientSocket, select, Ref} ->
+                            ok
+                    after 30000 ->
+                        error({timeout, waiting_for_select_write})
+                    end,
+
+                %% socket:send/2 should now transparently retry (internally
+                %% waiting for write-readiness as needed) and complete
+                %% successfully instead of returning {error, eagain} or
+                %% {ok, Rest}.
+                ok = socket:send(ClientSocket, Chunk),
+                ok = socket:close(ClientSocket),
+                ok =
+                    receive
+                        {drained_all, N} when is_integer(N) -> ok
+                    after 30000 -> error({timeout, waiting_for_drain_all})
+                    end,
+                ok;
+            false ->
+                %% We never managed to fill the send buffer; nothing more to
+                %% verify on this platform.
+                Acceptor ! {drain_all, self()},
+                ok = socket:close(ClientSocket),
+                ok =
+                    receive
+                        {drained_all, N} when is_integer(N) -> ok
+                    after 30000 -> error({timeout, waiting_for_drain_all})
+                    end,
+                ok
+        end,
+
+    ok.
+
+%% @private
+%% Accepts a single connection and gives control of when to start reading
+%% on it to the test process, so the test can deliberately stall the
+%% receiver in order to build up send backpressure on the client side.
+backpressure_acceptor(Owner, ListenSocket) ->
+    {ok, ServerSocket} = socket:accept(ListenSocket),
+    Owner ! {server_socket, ServerSocket},
+    backpressure_acceptor_loop(Owner, ServerSocket),
+    ok = socket:close(ListenSocket).
+
+backpressure_acceptor_loop(Owner, ServerSocket) ->
+    receive
+        {drain_all, Owner} ->
+            Total = recv_until_closed(ServerSocket, 0),
+            Owner ! {drained_all, Total},
+            ok = socket:close(ServerSocket)
+    after 60000 ->
+        ok = socket:close(ServerSocket)
+    end.
+
+recv_until_closed(Socket, Acc) ->
+    case socket:recv(Socket, 0, 30000) of
+        {ok, Data} ->
+            recv_until_closed(Socket, Acc + byte_size(Data));
+        {error, closed} ->
+            Acc;
+        {error, timeout} ->
+            Acc
+    end.
+
+%% @private
+%% Repeatedly calls the raw nif_send/2 (bypassing socket:send/2's automatic
+%% retry) with the same chunk of data, until either an {error, eagain} is
+%% observed (returns {TotalSent, true}) or MaxAttempts is reached without
+%% ever observing backpressure (returns {TotalSent, false}).
+fill_send_buffer(_Socket, _Chunk, TotalSent, 0) ->
+    {TotalSent, false};
+fill_send_buffer(Socket, Chunk, TotalSent, AttemptsLeft) ->
+    case socket:nif_send(Socket, Chunk) of
+        ok ->
+            fill_send_buffer(Socket, Chunk, TotalSent + byte_size(Chunk), AttemptsLeft - 1);
+        {ok, Rest} ->
+            Sent = byte_size(Chunk) - byte_size(Rest),
+            fill_send_buffer(Socket, Chunk, TotalSent + Sent, AttemptsLeft - 1);
+        {error, eagain} ->
+            {TotalSent, true};
+        {error, Reason} ->
+            error({unexpected_send_error, Reason})
+    end.
+
+%%
+%% test_close_accepted_socket_while_selecting
+%%
+%% A process selects on an accepted socket and another process closes it. The
+%% selecting state of a socket must be initialized whatever way the socket was
+%% created, including by accept.
+%%
+
+test_close_accepted_socket_while_selecting() ->
+    etest:flush_msg_queue(),
+
+    {ok, ListenSocket} = socket:open(inet, stream, tcp),
+    ok = socket:setopt(ListenSocket, {socket, reuseaddr}, true),
+    ok = socket:bind(ListenSocket, #{family => inet, addr => loopback, port => 0}),
+    ok = socket:listen(ListenSocket),
+    {ok, #{port := Port}} = socket:sockname(ListenSocket),
+
+    {ok, ClientSocket} = socket:open(inet, stream, tcp),
+    ok = try_connect(ClientSocket, Port, 10),
+    {ok, ServerSocket} = socket:accept(ListenSocket),
+
+    Self = self(),
+    Reader = spawn_link(fun() ->
+        Self ! {recv_result, self(), socket:recv(ServerSocket, 0, 30000)}
+    end),
+    timer:sleep(200),
+    ok = socket:close(ServerSocket),
+    ok = expect_result(recv_result, Reader, {error, closed}),
+
+    ok = socket:close(ClientSocket),
+    ok = socket:close(ListenSocket),
+    ok.
+
+%%
+%% test_close_with_reader_and_writer
+%%
+%% A socket has one selecting process per direction: a process blocked in
+%% recv and another one blocked in send, against a peer that does not read.
+%% Closing the socket from a third process must abort both of them.
+%%
+
+test_close_with_reader_and_writer() ->
+    etest:flush_msg_queue(),
+    case setup_full_send_buffer() of
+        {ok, Setup = #{client := Client}} ->
+            {Reader, Writer} = start_reader_and_writer(Client),
+            ok = socket:close(Client),
+            ok = expect_result(recv_result, Reader, {error, closed}),
+            ok = expect_result(send_result, Writer, {error, closed}),
+            teardown_full_send_buffer(Setup);
+        no_backpressure ->
+            ok
+    end.
+
+%%
+%% test_writer_killed_reader_survives
+%%
+%% When the process blocked in send dies, only its direction is released: the
+%% process blocked in recv must still receive data sent afterwards.
+%%
+
+test_writer_killed_reader_survives() ->
+    etest:flush_msg_queue(),
+    case setup_full_send_buffer() of
+        {ok, Setup = #{client := Client, server := Server}} ->
+            {Reader, Writer} = start_reader_and_writer(Client),
+            MonitorRef = erlang:monitor(process, Writer),
+            exit(Writer, kill),
+            ok =
+                receive
+                    {'DOWN', MonitorRef, process, Writer, killed} -> ok
+                after 5000 -> error({timeout, waiting_for_writer_down})
+                end,
+            %% Give the dead writer's monitor time to fire.
+            timer:sleep(200),
+            ok = socket:send(Server, <<"hello">>),
+            ok = expect_result(recv_result, Reader, {ok, <<"hello">>}),
+            ok = socket:close(Client),
+            teardown_full_send_buffer(Setup);
+        no_backpressure ->
+            ok
+    end.
+
+%% @private
+%% Starts a process blocked in recv on Client, and then a process blocked in
+%% send on it (the peer of Client does not read).
+start_reader_and_writer(Client) ->
+    Self = self(),
+    Reader = spawn(fun() ->
+        Self ! {recv_result, self(), socket:recv(Client, 0, 30000)}
+    end),
+    timer:sleep(100),
+    %% Much more than any socket buffer can hold (buffers can grow after the
+    %% first eagain), so that the send cannot complete while the peer is not
+    %% reading.
+    Data = binary:copy(<<0>>, 64 * 1024 * 1024),
+    Writer = spawn(fun() ->
+        Self ! {send_result, self(), socket:send(Client, Data)}
+    end),
+    timer:sleep(200),
+    {Reader, Writer}.
+
+%% @private
+expect_result(Tag, Pid, Expected) ->
+    receive
+        {Tag, Pid, Expected} -> ok;
+        {Tag, Pid, Other} -> error({unexpected_result, Tag, Other})
+    after 5000 ->
+        error({timeout, Tag})
+    end.
+
+%% @private
+%% Connects a client to a server that never reads, and fills the client send
+%% buffer. Returns no_backpressure if the platform never reported eagain.
+setup_full_send_buffer() ->
+    {ok, ListenSocket} = socket:open(inet, stream, tcp),
+    ok = socket:setopt(ListenSocket, {socket, reuseaddr}, true),
+    ok = socket:setopt(ListenSocket, {socket, linger}, #{onoff => true, linger => 0}),
+    ok = socket:bind(ListenSocket, #{family => inet, addr => loopback, port => 0}),
+    ok = socket:listen(ListenSocket),
+    {ok, #{port := Port}} = socket:sockname(ListenSocket),
+
+    Self = self(),
+    Acceptor = spawn_link(fun() -> backpressure_acceptor(Self, ListenSocket) end),
+
+    {ok, Client} = socket:open(inet, stream, tcp),
+    ok = try_connect(Client, Port, 10),
+    Server =
+        receive
+            {server_socket, ServerSocket} -> ServerSocket
+        after 5000 ->
+            error({timeout, waiting_for_server_socket})
+        end,
+
+    Chunk = binary:copy(<<0>>, 65536),
+    Setup = #{client => Client, server => Server, acceptor => Acceptor},
+    case fill_send_buffer(Client, Chunk, 0, 256) of
+        {_TotalSent, true} ->
+            {ok, Setup};
+        {_TotalSent, false} ->
+            teardown_full_send_buffer(Setup),
+            no_backpressure
+    end.
+
+%% @private
+%% Lets the acceptor drain and close its side. The client socket must be
+%% closed by the caller, or is closed here if it was not already.
+teardown_full_send_buffer(#{client := Client, acceptor := Acceptor}) ->
+    _ = socket:close(Client),
+    Acceptor ! {drain_all, self()},
+    ok =
+        receive
+            {drained_all, N} when is_integer(N) -> ok
+        after 30000 -> error({timeout, waiting_for_drain_all})
+        end,
     ok.
 
 id(X) ->
