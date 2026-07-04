@@ -27,5 +27,6 @@ manifest:
           - native_sim_64  # 64-bit native
           - qemu_x86       # QEMU 32-bit virtual machine
           - qemu_x86_64    # QEMU 64-bit virtual machine
+          - fatfs          # required for FAT filesystem support
   self:
     path: .

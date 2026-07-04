@@ -20,6 +20,15 @@ tests:
       - native_sim/native/64
     harness: ztest
     timeout: 30
+    extra_configs:
+      - CONFIG_FILE_SYSTEM=y
+      - CONFIG_FAT_FILESYSTEM_ELM=y
+      - CONFIG_DISK_ACCESS=y
+      - CONFIG_DISK_DRIVERS=y
+      - CONFIG_DISK_DRIVER_RAM=y
+      - CONFIG_FILE_SYSTEM_MKFS=y
+      - CONFIG_POSIX_API=y
+      - CONFIG_POSIX_SYSTEM_INTERFACES=y
   atomvm.zephyr.build_esp32:
     tags:
       - atomvm

@@ -53,6 +53,7 @@ struct ZephyrPlatformData
 #if defined(CONFIG_EVENTFD)
     int signal_fd;
 #endif
+    int dummy;
 };
 
 static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts);
