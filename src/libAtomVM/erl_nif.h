@@ -106,26 +106,26 @@ typedef enum
 
 /**
  * @brief enif_select mode flags
- * @details ERL_NIF_SELECT_CANCEL which was introduced with OTP-22, is unimplemented.
+ * @details `ERL_NIF_SELECT_CANCEL` must be combined with `ERL_NIF_SELECT_READ`
+ * and/or `ERL_NIF_SELECT_WRITE`, and cannot be combined with `ERL_NIF_SELECT_STOP`.
  */
 enum ErlNifSelectFlags
 {
     ERL_NIF_SELECT_READ = 1,
     ERL_NIF_SELECT_WRITE = 2,
     ERL_NIF_SELECT_STOP = 4,
-    //  ERL_NIF_SELECT_CANCEL = 8,
+    ERL_NIF_SELECT_CANCEL = 8,
 };
 
 /**
  * @brief enif_select result flags
- * @details ERL_NIF_SELECT_CANCEL which was introduced with OTP-22, is unimplemented.
  */
 enum
 {
     ERL_NIF_SELECT_STOP_CALLED = 1,
     ERL_NIF_SELECT_STOP_SCHEDULED = 2,
-    //  ERL_NIF_SELECT_READ_CANCELLED = 4,
-    //  ERL_NIF_SELECT_WRITE_CANCELLED = 8,
+    ERL_NIF_SELECT_READ_CANCELLED = 4,
+    ERL_NIF_SELECT_WRITE_CANCELLED = 8,
 
     ERL_NIF_SELECT_INVALID_EVENT = -1,
     ERL_NIF_SELECT_FAILED = -2,
@@ -257,12 +257,15 @@ ERL_NIF_TERM enif_make_resource_binary(ErlNifEnv *env, void *obj, const void *da
  * @param env current environment
  * @param event event object (typically a file descriptor)
  * @param mode select mode (`ERL_NIF_SELECT_READ` and/or `ERL_NIF_SELECT_WRITE`)
- * optionally with `ERL_NIF_SELECT_CANCEL` to cancel, or `ERL_NIF_SELECT_STOP`
- * to stop.
+ * optionally with `ERL_NIF_SELECT_CANCEL` to cancel a pending select of the
+ * given direction(s) while keeping the event, or `ERL_NIF_SELECT_STOP` to stop.
  * @param obj resource object working as a container of the event object.
  * @param pid process id to send a message to or NULL to use the current process (from `env`)
  * @param ref reference object used in sent messages or `undefined` atom.
- * @return a negative value on failure, 0 or flags on success.
+ * @return a negative value on failure, 0 or flags on success. With
+ * `ERL_NIF_SELECT_CANCEL`, `ERL_NIF_SELECT_READ_CANCELLED` and/or
+ * `ERL_NIF_SELECT_WRITE_CANCELLED` are set for each pending select that was
+ * cancelled.
  */
 int enif_select(ErlNifEnv *env, ErlNifEvent event, enum ErlNifSelectFlags mode, void *obj, const ErlNifPid *pid, ERL_NIF_TERM ref);
 

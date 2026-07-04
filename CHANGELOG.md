@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added PPP over a UART to the `network` module on ESP32 (opt-in with `CONFIG_AVM_ENABLE_PPP=y`,
   which needs `CONFIG_LWIP_PPP_SUPPORT=y`): `{ppp, [...]}` in `network:start/1` runs the link on a
   UART whose other end is ready for it, such as a cellular modem the application has dialed
+- Added `enif_select_write` and `ERL_NIF_SELECT_CANCEL` (both previously declared but not
+  implemented), and reworked `enif_select`/`enif_select_read`/`enif_select_write` so a resource
+  can hold independent pending read and write selects (each with its own ref/message/pid) on the
+  same event at the same time
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
