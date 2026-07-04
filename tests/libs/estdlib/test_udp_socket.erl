@@ -24,6 +24,7 @@
 
 test() ->
     ok = test_echo(),
+    ok = test_send_empty(),
     ok = test_buf_size(),
     ok = test_timeout(),
     ok = test_nowait(),
@@ -49,6 +50,18 @@ test() ->
     ok.
 
 -define(PACKET_SIZE, 7).
+
+%% An empty datagram is a valid datagram: sendto/3 must hand it to the socket.
+test_send_empty() ->
+    {ok, Receiver} = socket:open(inet, dgram, udp),
+    ok = socket:bind(Receiver, #{family => inet, addr => loopback, port => 0}),
+    {ok, #{port := Port}} = socket:sockname(Receiver),
+    {ok, Sender} = socket:open(inet, dgram, udp),
+    ok = socket:sendto(Sender, <<>>, #{family => inet, addr => loopback, port => Port}),
+    ok = socket:close(Sender),
+    {error, _} = socket:sendto(Sender, <<>>, #{family => inet, addr => loopback, port => Port}),
+    ok = socket:close(Receiver),
+    ok.
 
 start_echo_server(Port) ->
     {ok, Socket} = socket:open(inet, dgram, udp),
