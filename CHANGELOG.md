@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   implemented), and reworked `enif_select`/`enif_select_read`/`enif_select_write` so a resource
   can hold independent pending read and write selects (each with its own ref/message/pid) on the
   same event at the same time
+- Added `socket:nif_select_write/2`; sockets now keep one selecting process per direction, so a
+  process blocked in `socket:send/2` no longer disturbs another process blocked in `socket:recv/2,3`
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
@@ -137,6 +139,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the actual error (e.g. `epipe`, `enobufs`) is now returned
 - `socket:send/2,3` and `socket:sendto/3,4` on a socket that was closed now return
   `{error, closed}`, as in OTP, instead of `{error, ebadf}`
+- Fixed a use-after-free in `socket:shutdown/2` with `read_write` on lwIP (Raspberry Pi Pico W):
+  lwIP can free the pcb right away, e.g. when there is unread data, and its callbacks were
+  detached afterwards
+- Fixed `socket:send/2` busy looping on lwIP when `tcp_write` fails for lack of memory while the
+  send buffer has room (Raspberry Pi Pico W)
+- Fixed a race on the write select flag between the `tcp_sent` callback and
+  `socket:nif_select_write/2` on SMP builds (Raspberry Pi Pico W)
+- Fixed selecting for read or write on a socket closed by another process raising `badarg` on
+  lwIP, instead of delivering the closed notification as on BSD sockets, and a write select on a
+  connecting socket silently dropping the process trapped in `socket:connect/2`
+- Fixed selecting on a socket that is already closed leaving the caller as the select owner with
+  a monitor that no event would ever release
 - Fixed a lost wake up in the ESP32 select thread: a select event registered while the thread was
   rebuilding its poll set was not polled until another one was registered or unregistered
 

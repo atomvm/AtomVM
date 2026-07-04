@@ -50,6 +50,7 @@
     nif_recv/2,
     nif_recvfrom/2,
     nif_select_stop/1,
+    nif_select_read_stop/1,
     nif_send/2,
     nif_sendto/3
 ]).
@@ -269,7 +270,7 @@ accept0(Socket, Timeout) ->
                 {'$socket', Socket, select, Ref} ->
                     case ?MODULE:nif_accept(Socket) of
                         {error, _} = E ->
-                            ?MODULE:nif_select_stop(Socket),
+                            ?MODULE:nif_select_read_stop(Socket),
                             E;
                         {ok, _Socket} = Reply ->
                             Reply
@@ -382,7 +383,7 @@ recv0(Socket, Length, Timeout) ->
                 {'$socket', Socket, select, Ref} ->
                     case ?MODULE:nif_recv(Socket, Length) of
                         {error, _} = E ->
-                            ?MODULE:nif_select_stop(Socket),
+                            ?MODULE:nif_select_read_stop(Socket),
                             E;
                         {ok, Data} ->
                             {ok, Data}
@@ -433,7 +434,7 @@ recv0_r(Socket, Length, Timeout, EndQuery, Acc) ->
                 {'$socket', Socket, select, Ref} ->
                     case ?MODULE:nif_recv(Socket, Length) of
                         {error, _} = E ->
-                            ?MODULE:nif_select_stop(Socket),
+                            ?MODULE:nif_select_read_stop(Socket),
                             E;
                         {ok, Data} ->
                             NewAcc = [Data | Acc],
@@ -537,7 +538,7 @@ recvfrom0(Socket, Length, Timeout) ->
                 {'$socket', Socket, select, Ref} ->
                     case ?MODULE:nif_recvfrom(Socket, Length) of
                         {error, _} = E ->
-                            ?MODULE:nif_select_stop(Socket),
+                            ?MODULE:nif_select_read_stop(Socket),
                             E;
                         {ok, {_Address, _Data}} = Reply ->
                             Reply
@@ -722,6 +723,12 @@ nif_recvfrom(_Socket, _Length) ->
 
 %% @private
 nif_select_stop(_Socket) ->
+    erlang:nif_error(undefined).
+
+%% @private
+%% Like nif_select_stop/1, but if another process is selecting for write on the
+%% socket, only the read direction is stopped.
+nif_select_read_stop(_Socket) ->
     erlang:nif_error(undefined).
 
 %% @private

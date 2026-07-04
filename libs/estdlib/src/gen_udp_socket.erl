@@ -335,7 +335,7 @@ handle_active_recvfrom(State) ->
             State;
         {error, _} = E ->
             %% CAUTION: internal API
-            socket:nif_select_stop(Socket),
+            socket:nif_select_read_stop(Socket),
             ?LOG_INFO("unable to receive on pending select~n"),
             State#state.controlling_process ! {udp_error, WrappedSocket, E},
             State
@@ -353,7 +353,7 @@ handle_passive_recvfrom(State, From, Length, _Timeout) ->
             gen_server:reply(From, {ok, {Addr, Port, BinaryOrList}}),
             State;
         {error, _} = E ->
-            socket:nif_select_stop(Socket),
+            socket:nif_select_read_stop(Socket),
             ?LOG_INFO("unable to receive on pending select~n"),
             gen_server:reply(From, E),
             State
