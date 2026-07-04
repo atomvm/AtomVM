@@ -127,23 +127,25 @@ target_include_directories(app PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}/libAtomVM
     ${CMAKE_BINARY_DIR}/zephyr/include/generated)
 
+set(AVM_PORT_ZEPHYR ON CACHE BOOL "Build for Zephyr" FORCE)
+set(AVM_DISABLE_JIT ON CACHE BOOL "Disable JIT" FORCE)
+include(SystemArchitecture)
+avm_get_system_architecture_string(AVM_SYSTEM_ARCHITECTURE_STRING PLATFORM_OS zephyr)
+add_subdirectory(${ATOMVM_ZEPHYR_ROOT}/../../libAtomVM ${CMAKE_CURRENT_BINARY_DIR}/libAtomVM)
+target_include_directories(libAtomVM PUBLIC ${ATOMVM_ZEPHYR_ROOT}/src/lib)
+add_dependencies(libAtomVM zephyr_generated_headers)
+target_link_libraries(app PUBLIC libAtomVM)
+
 add_subdirectory(${ATOMVM_ZEPHYR_ROOT}/src/lib ${CMAKE_CURRENT_BINARY_DIR}/src/lib)
 
 target_link_libraries(app PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX})
+add_dependencies(libAtomVM${PLATFORM_LIB_SUFFIX} zephyr_generated_headers)
 
 set_property(TARGET app PROPERTY C_STANDARD 11)
 
 if(CMAKE_COMPILER_IS_GNUCC)
     target_compile_options(app PUBLIC -Wall -Wextra -ggdb)
 endif()
-
-set(AVM_PORT_ZEPHYR ON CACHE BOOL "Build for Zephyr" FORCE)
-set(AVM_DISABLE_JIT ON CACHE BOOL "Disable JIT" FORCE)
-add_subdirectory(${ATOMVM_ZEPHYR_ROOT}/../../libAtomVM ${CMAKE_CURRENT_BINARY_DIR}/libAtomVM)
-target_include_directories(libAtomVM PUBLIC ${ATOMVM_ZEPHYR_ROOT}/src/lib)
-add_dependencies(libAtomVM zephyr_generated_headers)
-add_dependencies(libAtomVM${PLATFORM_LIB_SUFFIX} zephyr_generated_headers)
-target_link_libraries(app PUBLIC libAtomVM)
 
 message("----------------------------------------")
 message(STATUS "Board       : ${BOARD}")
