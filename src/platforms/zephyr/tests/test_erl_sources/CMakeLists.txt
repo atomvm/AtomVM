@@ -31,10 +31,22 @@ endfunction()
 
 compile_erlang(test_list_to_atom)
 compile_erlang(test_i2c_native_sim)
+compile_erlang(test_system_architecture)
+compile_erlang(test_list_to_binary)
+compile_erlang(test_monotonic_time)
+compile_erlang(test_time_and_processes)
+compile_erlang(test_tz)
+compile_erlang(test_mount)
 
 set(erlang_test_beams
     test_list_to_atom.beam
     test_i2c_native_sim.beam
+    test_system_architecture.beam
+    test_list_to_binary.beam
+    test_monotonic_time.beam
+    test_time_and_processes.beam
+    test_tz.beam
+    test_mount.beam
 )
 
 
