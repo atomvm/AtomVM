@@ -142,8 +142,12 @@ handle_call(getstat, _From, #state{received = Received, sent = Sent} = State) ->
     {reply, {ok, Received, Sent, 0}, State}.
 
 handle_cast(tick, #state{socket = Socket, sent = Sent} = State) ->
-    socket:send(Socket, <<0:32>>),
-    {noreply, State#state{sent = Sent + 1}};
+    case socket:send(Socket, <<0:32>>) of
+        ok ->
+            {noreply, State#state{sent = Sent + 1}};
+        {error, Reason} ->
+            {stop, {send_error, Reason}, State}
+    end;
 handle_cast({handshake_complete, DHandle}, State0) ->
     ok = erlang:dist_ctrl_get_data_notification(DHandle),
     % We now need to get messages when data is coming.
@@ -154,8 +158,10 @@ handle_cast({handshake_complete, DHandle}, State0) ->
     end.
 
 handle_info(dist_data, State0) ->
-    State1 = send_data_loop(State0),
-    {noreply, State1};
+    case send_data_loop(State0) of
+        {ok, State1} -> {noreply, State1};
+        {stop, Reason, State1} -> {stop, Reason, State1}
+    end;
 handle_info(
     {'$socket', Socket, select, SelectHandle},
     #state{socket = Socket, select_handle = SelectHandle} = State0
@@ -209,10 +215,14 @@ send_data_loop(#state{dhandle = DHandle, socket = Socket, sent = Sent} = State) 
     case erlang:dist_ctrl_get_data(DHandle) of
         none ->
             ok = erlang:dist_ctrl_get_data_notification(DHandle),
-            State;
+            {ok, State};
         Data ->
             DataBin = ?PRE_PROCESS(Data),
             DataSize = byte_size(DataBin),
-            socket:send(Socket, <<DataSize:32, DataBin/binary>>),
-            send_data_loop(State#state{sent = Sent + 1})
+            case socket:send(Socket, <<DataSize:32, DataBin/binary>>) of
+                ok ->
+                    send_data_loop(State#state{sent = Sent + 1});
+                {error, Reason} ->
+                    {stop, {send_error, Reason}, State}
+            end
     end.

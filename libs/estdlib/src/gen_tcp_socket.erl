@@ -263,7 +263,13 @@ handle_call({send, Packet}, From, State) ->
         {send, Packet}, From, State
     ]),
     ?LOG_INFO("Sending packet"),
-    {reply, socket:send(State#state.socket, Packet), State};
+    Reply =
+        case socket:send(State#state.socket, Packet) of
+            % gen_tcp:send/2 does not report the data that was not sent
+            {error, {Reason, _RestData}} -> {error, Reason};
+            Result -> Result
+        end,
+    {reply, Reply, State};
 handle_call({recv, Length, Timeout}, From, State) ->
     ?LOG_DEBUG("handle_call [~p], ~p, ~p]", [
         {recv, Length, Timeout}, From, State
