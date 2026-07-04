@@ -35,6 +35,16 @@ zephyr_include_directories(
     ${CMAKE_BINARY_DIR}/zephyr/include/generated/
 )
 
+if(CONFIG_FAT_FILESYSTEM_ELM)
+    zephyr_include_directories(
+        ${ZEPHYR_BASE}/../modules/fs/fatfs/include
+    )
+endif()
+if(CONFIG_POSIX_API)
+    zephyr_compile_definitions(HAVE_OPEN HAVE_CLOSE HAVE_READDIR HAVE_OPENDIR HAVE_CLOSEDIR HAVE_PATH_MAX O_NOCTTY=0 O_SYNC=0)
+    target_compile_definitions(libAtomVM PUBLIC HAVE_OPEN HAVE_CLOSE HAVE_READDIR HAVE_OPENDIR HAVE_CLOSEDIR HAVE_PATH_MAX O_NOCTTY=0 O_SYNC=0)
+endif()
+
 if(HAVE_PLATFORM_SMP_H)
     zephyr_library_compile_definitions(HAVE_PLATFORM_SMP_H)
 endif()
