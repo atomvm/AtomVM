@@ -379,10 +379,10 @@ handle_info({'$socket', Socket, abort, {Ref, closed}}, State) ->
     case maps:get(Ref, State#state.pending_selects, undefined) of
         undefined ->
             ?LOG_WARNING("Unable to find select ref ~p in pending selects", [Ref]),
-            socket:nif_select_stop(Socket),
+            socket:nif_select_read_stop(Socket),
             {noreply, State};
         {accept, From, _AcceptingProc, _Timeout} ->
-            socket:nif_select_stop(Socket),
+            socket:nif_select_read_stop(Socket),
             gen_server:reply(From, {error, closed}),
             {noreply, State};
         active ->
@@ -390,7 +390,7 @@ handle_info({'$socket', Socket, abort, {Ref, closed}}, State) ->
             State#state.controlling_process ! {tcp_closed, WrappedSocket},
             {noreply, State};
         {passive, From, _Length, _Timeout} ->
-            socket:nif_select_stop(Socket),
+            socket:nif_select_read_stop(Socket),
             gen_server:reply(From, {error, closed}),
             {noreply, State#state{
                 pending_selects = maps:remove(Ref, State#state.pending_selects)
@@ -465,7 +465,7 @@ handle_accept(State, From, AcceptingProc) ->
         {error, _Reason} = Error ->
             ?LOG_ERROR("Failed to accept connection: ~p", [Error]),
             %% CAUTION: internal API
-            socket:nif_select_stop(Socket),
+            socket:nif_select_read_stop(Socket),
             gen_server:reply(From, Error),
             State
     end.
@@ -510,7 +510,7 @@ handle_active_recv(State) ->
         {error, closed} ->
             ?LOG_INFO("Socket was closed by peer"),
             %% CAUTION: internal API
-            socket:nif_select_stop(Socket),
+            socket:nif_select_read_stop(Socket),
             %% peer has closed the connection
             WrappedSocket = {?GEN_TCP_MONIKER, self(), ?MODULE},
             State#state.controlling_process ! {tcp_closed, WrappedSocket},
@@ -518,7 +518,7 @@ handle_active_recv(State) ->
         {error, _} = Error ->
             ?LOG_ERROR("Error on receive on pending select Error=~p", [Error]),
             %% CAUTION: internal API
-            socket:nif_select_stop(Socket),
+            socket:nif_select_read_stop(Socket),
             %% TODO is this right?  I don't think active receivers would know
             %% what to do with this message.  Maybe log it instead?
             State#state.controlling_process ! {tcp_error, WrappedSocket, Error},
@@ -547,7 +547,7 @@ handle_passive_recv(State, From, Length, _Timeout) ->
             State;
         {error, _} = Error ->
             ?LOG_ERROR("Error on receive from socket:nif_recv Error=~p", [Error]),
-            socket:nif_select_stop(Socket),
+            socket:nif_select_read_stop(Socket),
             ?LOG_INFO("unable to receive on pending select~n"),
             gen_server:reply(From, Error),
             State
