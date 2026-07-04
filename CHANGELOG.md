@@ -140,6 +140,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `unicode:characters_to_list/1,2` and `unicode:characters_to_binary/1,2,3` returning an
   error tuple with an uninitialized value in place of the rest for a top-level argument that is
   not chardata, such as `unicode:characters_to_list(foo)`; they now raise `badarg`
+- `socket:send/2,3` now correctly distinguishes transient send backpressure (lwIP `ERR_MEM` / BSD
+  `EAGAIN`|`EWOULDBLOCK`) from a closed connection at the NIF level, returning `{error, closed}`
+  (rather than `{ok, Data}`) when the peer has closed the connection, and waits for the socket to
+  become writable again and retries internally, so callers get `ok | {error, Reason}` (or
+  `{error, {Reason, RestData}}` when an error follows a partial send, as in OTP) and no longer
+  need to implement their own retry/backoff for partial sends or backpressure; `ssl:send/2`,
+  `ssl:recv/2` and the TLS handshake/close-notify loops likewise wait for write-readiness instead
+  of busy-looping on `want_write`
 - Fixed Erlang distribution over sockets (`socket_dist_controller`) silently ignoring
   `socket:send/2` errors on `tick` and outgoing distribution data; the connection is now
   terminated instead of continuing to run against a broken socket
