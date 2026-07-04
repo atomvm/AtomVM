@@ -48,6 +48,7 @@ struct ValuesHashTable
 };
 
 struct ValuesHashTable *valueshashtable_new(void);
+void valueshashtable_destroy(struct ValuesHashTable *hash_table);
 int valueshashtable_insert(struct ValuesHashTable *hash_table, uintptr_t key, uintptr_t value);
 uintptr_t valueshashtable_get_value(const struct ValuesHashTable *hash_table, uintptr_t key, uintptr_t default_value);
 int valueshashtable_has_key(const struct ValuesHashTable *hash_table, uintptr_t key);
