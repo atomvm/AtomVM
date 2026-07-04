@@ -6,11 +6,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.7.0-beta.1] - Unreleased
 
+### Added
+- Added `enif_select_write` and `ERL_NIF_SELECT_CANCEL` (both previously declared but not
+  implemented), and reworked `enif_select`/`enif_select_read`/`enif_select_write` so a resource
+  can hold independent pending read and write selects (each with its own ref/message/pid) on the
+  same event at the same time
+- Added `socket:nif_select_write/2`; sockets now keep one selecting process per direction, so a
+  process blocked in `socket:send/2` no longer disturbs another process blocked in `socket:recv/2,3`
+
 ### Fixed
 - Fixed maps decoded by `binary_to_term/1,2` and received over distribution keeping the
   encoder's key order, which broke `==` and made `=>` updates on an existing key produce
   duplicate keys
 - Fixed `binary_to_term/1,2` accepting maps with duplicate keys instead of raising `badarg`
+- `socket:send/2,3` now correctly distinguishes transient send backpressure (lwIP `ERR_MEM` / BSD
+  `EAGAIN`|`EWOULDBLOCK`) from a closed connection at the NIF level, returning `{error, closed}`
+  (rather than `{ok, Data}`) when the peer has closed the connection, and waits for the socket to
+  become writable again and retries internally, so callers get `ok | {error, Reason}` and no longer
+  need to implement their own retry/backoff for partial sends or backpressure; `ssl:send/2`,
+  `ssl:recv/2` and the TLS handshake/close-notify loops likewise wait for write-readiness instead
+  of busy-looping on `want_write`
+- Fixed Erlang distribution over sockets (`socket_dist_controller`) silently ignoring
+  `socket:send/2` errors on `tick` and outgoing distribution data; the connection is now
+  terminated instead of continuing to run against a broken socket
 
 ## [0.7.0-beta.0] - 2026-09-28
 
