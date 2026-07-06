@@ -722,6 +722,7 @@ wifi_scan(Options) ->
     Platform =
         case atomvm:platform() of
             esp32 -> ok;
+            zephyr -> ok;
             Platform0 -> Platform0
         end,
     Passive = proplists:get_bool(passive, Options),
@@ -754,7 +755,7 @@ wifi_scan(Options) ->
     | {error, Reason :: term()}.
 wifi_scan() ->
     case atomvm:platform() of
-        esp32 ->
+        Platform when Platform =:= esp32; Platform =:= zephyr ->
             Config =
                 try
                     NetConfig = gen_server:call(?SERVER, get_config),
