@@ -43,6 +43,8 @@ compile_erlang(test_file)
 compile_erlang(test_select)
 compile_erlang(test_wifi_scan)
 compile_erlang(test_wifi_managed)
+compile_erlang(test_wifi_example)
+compile_erlang(test_net)
 compile_erlang(zephyr)
 
 set(erlang_test_beams
@@ -60,6 +62,8 @@ set(erlang_test_beams
     test_select.beam
     test_wifi_scan.beam
     test_wifi_managed.beam
+    test_wifi_example.beam
+    test_net.beam
     zephyr.beam
 )
 
