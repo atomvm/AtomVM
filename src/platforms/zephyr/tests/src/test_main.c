@@ -109,6 +109,18 @@ ZTEST(atomvm_tests, test_tz)
     zassert_equal(ret_value, OK_ATOM, "test_tz did not return 'ok'");
 }
 
+ZTEST(atomvm_tests, test_md5)
+{
+    term ret_value = avm_test_case("test_md5.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_md5 did not return 'ok'");
+}
+
+ZTEST(atomvm_tests, test_crypto)
+{
+    term ret_value = avm_test_case("test_crypto.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_crypto did not return 'ok'");
+}
+
 #if !defined(CONFIG_BOARD_NATIVE_SIM)
 ZTEST(atomvm_tests, test_mount)
 {
@@ -126,6 +138,12 @@ ZTEST(atomvm_tests, test_time_and_processes)
 {
     term ret_value = avm_test_case("test_time_and_processes.beam");
     zassert_equal(term_to_int(ret_value), 6, "test_time_and_processes did not return 6");
+}
+
+ZTEST(atomvm_tests, test_file)
+{
+    term ret_value = avm_test_case("test_file.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_file did not return 'ok'");
 }
 #endif
 
