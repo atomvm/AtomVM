@@ -22,10 +22,17 @@
 -export([start/0]).
 
 start() ->
-    ok = test_hash(),
-    ok = test_crypto_one_time(),
-    ok = test_available_ciphers(),
-    ok.
+    try
+        ok = test_hash(),
+        ok = test_crypto_one_time(),
+        ok = test_available_ciphers(),
+        ok
+    catch
+        Class:Reason:Stack ->
+            erlang:display({test_crypto_failed, Class, Reason, Stack}),
+            error
+    end.
+
 
 test_hash() ->
     test_hash(

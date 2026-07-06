@@ -239,3 +239,8 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     }
     return NULL;
 }
+
+#ifdef CONFIG_PSA_CRYPTO
+#include <otp_crypto.h>
+REGISTER_NIF_COLLECTION(otp_crypto, NULL, NULL, otp_crypto_nif_get_nif)
+#endif
