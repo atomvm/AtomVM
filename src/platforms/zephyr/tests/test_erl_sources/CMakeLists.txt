@@ -40,6 +40,7 @@ compile_erlang(test_mount)
 compile_erlang(test_md5)
 compile_erlang(test_crypto)
 compile_erlang(test_file)
+compile_erlang(test_select)
 
 set(erlang_test_beams
     test_list_to_atom.beam
@@ -53,6 +54,7 @@ set(erlang_test_beams
     test_md5.beam
     test_crypto.beam
     test_file.beam
+    test_select.beam
 )
 
 
