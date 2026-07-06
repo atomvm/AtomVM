@@ -37,6 +37,9 @@ compile_erlang(test_monotonic_time)
 compile_erlang(test_time_and_processes)
 compile_erlang(test_tz)
 compile_erlang(test_mount)
+compile_erlang(test_md5)
+compile_erlang(test_crypto)
+compile_erlang(test_file)
 
 set(erlang_test_beams
     test_list_to_atom.beam
@@ -47,6 +50,9 @@ set(erlang_test_beams
     test_time_and_processes.beam
     test_tz.beam
     test_mount.beam
+    test_md5.beam
+    test_crypto.beam
+    test_file.beam
 )
 
 
