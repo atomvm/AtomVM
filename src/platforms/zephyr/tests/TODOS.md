@@ -6,7 +6,7 @@ This document lists the remaining test cases from ESP32 (`src/platforms/esp32/te
 
 These tests check platform-independent core/NIF functionalities that are fully supported by Zephyr's subsystems.
 
-* [ ] **`test_select` (POSIX Select)**
+* [x] **`test_select` (POSIX Select)**
   * *Purpose*: Verifies event multiplexing, eventfd, and socket notifications.
   * *Dependencies*: Zephyr's ZVFS and POSIX select APIs (`CONFIG_POSIX_API=y`).
 * [x] **`test_file` (File I/O)**
