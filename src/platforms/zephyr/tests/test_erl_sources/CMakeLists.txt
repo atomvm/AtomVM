@@ -41,6 +41,7 @@ compile_erlang(test_md5)
 compile_erlang(test_crypto)
 compile_erlang(test_file)
 compile_erlang(test_select)
+compile_erlang(test_wifi_scan)
 compile_erlang(zephyr)
 
 set(erlang_test_beams
@@ -56,6 +57,7 @@ set(erlang_test_beams
     test_crypto.beam
     test_file.beam
     test_select.beam
+    test_wifi_scan.beam
     zephyr.beam
 )
 

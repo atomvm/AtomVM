@@ -121,6 +121,14 @@ ZTEST(atomvm_tests, test_crypto)
     zassert_equal(ret_value, OK_ATOM, "test_crypto did not return 'ok'");
 }
 
+#if defined(CONFIG_WIFI)
+ZTEST(atomvm_tests, test_wifi_scan)
+{
+    term ret_value = avm_test_case("test_wifi_scan.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_wifi_scan did not return 'ok'");
+}
+#endif
+
 #if defined(CONFIG_NET_SOCKETPAIR) && !defined(CONFIG_BOARD_NATIVE_SIM)
 ZTEST(atomvm_tests, test_select)
 {
