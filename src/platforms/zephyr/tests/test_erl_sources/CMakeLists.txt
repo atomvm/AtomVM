@@ -41,6 +41,7 @@ compile_erlang(test_md5)
 compile_erlang(test_crypto)
 compile_erlang(test_file)
 compile_erlang(test_select)
+compile_erlang(zephyr)
 
 set(erlang_test_beams
     test_list_to_atom.beam
@@ -55,6 +56,7 @@ set(erlang_test_beams
     test_crypto.beam
     test_file.beam
     test_select.beam
+    zephyr.beam
 )
 
 
