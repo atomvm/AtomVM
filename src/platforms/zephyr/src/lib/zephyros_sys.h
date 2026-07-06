@@ -114,4 +114,22 @@ struct EventListener
     struct EventListener *(*handler)(GlobalContext *glb, struct EventListener *listener);
 };
 
+#if defined(CONFIG_NET_SOCKETS)
+#include <poll.h>
+#endif
+#include <erl_nif.h>
+
+struct ZephyrPlatformData
+{
+#if defined(CONFIG_NET_SOCKETS)
+    struct pollfd *fds;
+    int listeners_poll_count;
+    int select_events_poll_count;
+#endif
+#if defined(CONFIG_EVENTFD)
+    int signal_fd;
+#endif
+    ErlNifResourceType *zephyr_mounted_fs_resource_type;
+};
+
 #endif /* _ZEPHYROS_SYS_H_ */
