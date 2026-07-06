@@ -43,18 +43,8 @@
 #include <unistd.h>
 #endif
 
-struct ZephyrPlatformData
-{
-#if defined(CONFIG_NET_SOCKETS)
-    struct pollfd *fds;
-    int listeners_poll_count;
-    int select_events_poll_count;
-#endif
-#if defined(CONFIG_EVENTFD)
-    int signal_fd;
-#endif
-    int dummy;
-};
+
+
 
 static Context *port_driver_create_port(const char *port_name, GlobalContext *global, term opts);
 
@@ -129,6 +119,7 @@ void sys_init_platform(GlobalContext *glb)
         AVM_ABORT();
     }
 #endif
+    platform->zephyr_mounted_fs_resource_type = NULL;
     glb->platform_data = platform;
 }
 
@@ -609,5 +600,70 @@ size_t smp_atomic_fetch_or_size(size_t *object, size_t mask)
     *object |= mask;
     k_spin_unlock(&atomic_ops_lock, key);
     return result;
+}
+#endif
+
+#ifdef HAVE_PSA_CRYPTO
+#include <mbedtls/entropy.h>
+#include <mbedtls/ctr_drbg.h>
+#include <zephyr/random/random.h>
+
+#ifdef CONFIG_MBEDTLS_ENTROPY_C
+static mbedtls_entropy_context entropy_ctx;
+static bool entropy_is_initialized = false;
+#endif
+static mbedtls_ctr_drbg_context random_ctx;
+static bool random_is_initialized = false;
+
+int sys_mbedtls_entropy_func(void *entropy, unsigned char *buf, size_t size)
+{
+#ifdef CONFIG_MBEDTLS_ENTROPY_C
+    return mbedtls_entropy_func(entropy, buf, size);
+#else
+    UNUSED(entropy);
+    int rc = sys_csrand_get(buf, size);
+    return rc == 0 ? 0 : -1;
+#endif
+}
+
+mbedtls_entropy_context *sys_mbedtls_get_entropy_context_lock(GlobalContext *global)
+{
+    UNUSED(global);
+#ifdef CONFIG_MBEDTLS_ENTROPY_C
+    if (!entropy_is_initialized) {
+        mbedtls_entropy_init(&entropy_ctx);
+        entropy_is_initialized = true;
+    }
+    return &entropy_ctx;
+#else
+    return NULL;
+#endif
+}
+
+void sys_mbedtls_entropy_context_unlock(GlobalContext *global)
+{
+    UNUSED(global);
+}
+
+mbedtls_ctr_drbg_context *sys_mbedtls_get_ctr_drbg_context_lock(GlobalContext *global)
+{
+    if (!random_is_initialized) {
+        mbedtls_ctr_drbg_init(&random_ctx);
+        mbedtls_entropy_context *entropy_ctx_ptr = sys_mbedtls_get_entropy_context_lock(global);
+        const char *seed = "AtomVM Zephyr PSA Mbed-TLS initial seed.";
+        int seed_len = strlen(seed);
+        int seed_err = mbedtls_ctr_drbg_seed(&random_ctx, sys_mbedtls_entropy_func,
+            entropy_ctx_ptr, (const unsigned char *) seed, seed_len);
+        if (seed_err != 0) {
+            AVM_ABORT();
+        }
+        random_is_initialized = true;
+    }
+    return &random_ctx;
+}
+
+void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
+{
+    UNUSED(global);
 }
 #endif
