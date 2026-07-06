@@ -43,6 +43,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef CONFIG_SNTP
+#include <zephyr/net/sntp.h>
+#include <time.h>
+#endif
+
 #include "zephyros_sys.h"
 
 #define TAG "network_driver"
@@ -59,6 +64,20 @@ static const char *const sta_connected_atom = ATOM_STR("\xD", "sta_connected");
 static const char *const sta_disconnected_atom = ATOM_STR("\x10", "sta_disconnected");
 static const char *const sta_got_ip_atom = ATOM_STR("\xA", "sta_got_ip");
 static const char *const managed_atom = ATOM_STR("\x7", "managed");
+#ifdef CONFIG_SNTP
+static const char *const sntp_atom = ATOM_STR("\x4", "sntp");
+static const char *const host_atom = ATOM_STR("\x4", "host");
+static const char *const sntp_sync_atom = ATOM_STR("\x9", "sntp_sync");
+#endif
+
+#ifdef CONFIG_SNTP
+#define SNTP_WORKQ_STACK_SIZE 16384
+#define SNTP_WORKQ_PRIORITY K_PRIO_PREEMPT(8)
+
+static const struct k_work_queue_config sntp_work_q_config = {
+    .name = "atomvm_sntp"
+};
+#endif
 
 enum network_cmd
 {
@@ -120,6 +139,17 @@ struct NetworkDriverData
     term sta_connected_term;
     term sta_disconnected_term;
     term sta_got_ip_term;
+#ifdef CONFIG_SNTP
+    char *sntp_host;
+    term sntp_sync_term;
+    struct k_mutex sntp_lock;
+    bool sntp_enabled;
+    struct k_work sntp_work;
+    struct k_work_sync sntp_work_sync;
+    struct k_work_q sntp_work_q;
+    k_thread_stack_t *sntp_work_q_stack;
+    bool sntp_work_q_started;
+#endif
 };
 
 static struct NetworkDriverData *driver_data = NULL;
@@ -371,6 +401,97 @@ static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb,
     }
 }
 
+#ifdef CONFIG_SNTP
+static void disable_sntp_sync(void)
+{
+    if (!driver_data) {
+        return;
+    }
+
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    driver_data->sntp_enabled = false;
+    k_mutex_unlock(&driver_data->sntp_lock);
+
+    k_work_cancel_sync(&driver_data->sntp_work, &driver_data->sntp_work_sync);
+
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    free(driver_data->sntp_host);
+    driver_data->sntp_host = NULL;
+    k_mutex_unlock(&driver_data->sntp_lock);
+}
+
+static char *copy_sntp_host_if_enabled(void)
+{
+    char *host = NULL;
+
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    if (driver_data->sntp_enabled && driver_data->sntp_host) {
+        size_t host_len = strlen(driver_data->sntp_host) + 1;
+        host = malloc(host_len);
+        if (host) {
+            memcpy(host, driver_data->sntp_host, host_len);
+        }
+    }
+    k_mutex_unlock(&driver_data->sntp_lock);
+
+    return host;
+}
+
+static void send_sntp_sync_from_task(const struct timespec *tspec)
+{
+    BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) * 2 + BOXED_INT64_SIZE * 2, heap);
+    {
+        term tv_tuple = port_heap_create_tuple2(
+            &heap,
+            term_make_maybe_boxed_int64(tspec->tv_sec, &heap),
+            term_make_maybe_boxed_int64(tspec->tv_nsec / 1000, &heap));
+        term reply = port_heap_create_tuple2(&heap, driver_data->sntp_sync_term, tv_tuple);
+        term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+        term msg = port_heap_create_tuple2(&heap, ref, reply);
+        globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
+    }
+    END_WITH_STACK_HEAP(heap, driver_data->global);
+}
+
+static void sntp_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+
+    if (!driver_data) {
+        return;
+    }
+
+    char *host = copy_sntp_host_if_enabled();
+    if (!host) {
+        return;
+    }
+
+    printk("SNTP query started for host: %s\n", host);
+
+    struct sntp_time ts;
+    int err = sntp_simple(host, 2000, &ts);
+    free(host);
+
+    if (err == 0) {
+        k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+        bool enabled = driver_data->sntp_enabled;
+        k_mutex_unlock(&driver_data->sntp_lock);
+        if (!enabled) {
+            return;
+        }
+
+        printk("SNTP synchronization successful. Seconds: %llu\n", ts.seconds);
+
+        struct timespec tspec;
+        tspec.tv_sec = ts.seconds;
+        tspec.tv_nsec = ((uint64_t)ts.fraction * 1000000000ULL) >> 32;
+        sys_set_time_from_sntp(&tspec);
+
+        send_sntp_sync_from_task(&tspec);
+    }
+}
+#endif
+
 static void ipv4_mgmt_event_handler(struct net_mgmt_event_callback *cb,
                                     uint64_t mgmt_event,
                                     struct net_if *iface)
@@ -439,6 +560,15 @@ static void ipv4_mgmt_event_handler(struct net_mgmt_event_callback *cb,
             globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
         }
         END_WITH_STACK_HEAP(heap, driver_data->global);
+
+#ifdef CONFIG_SNTP
+        k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+        bool submit_sntp = driver_data->sntp_enabled && driver_data->sntp_host && driver_data->sntp_work_q_started;
+        k_mutex_unlock(&driver_data->sntp_lock);
+        if (submit_sntp) {
+            k_work_submit_to_queue(&driver_data->sntp_work_q, &driver_data->sntp_work);
+        }
+#endif
     }
 }
 
@@ -463,6 +593,10 @@ static term start_network(Context *ctx, term pid, term ref, term config)
     term managed_term = interop_kv_get_value(sta_config, managed_atom, ctx->global);
     bool managed = (managed_term == TRUE_ATOM);
 
+#ifdef CONFIG_SNTP
+    term sntp_config = interop_kv_get_value(config, sntp_atom, ctx->global);
+#endif
+
     if (term_is_invalid_term(ssid_term) && !managed) {
         return BADARG_ATOM;
     }
@@ -485,6 +619,21 @@ static term start_network(Context *ctx, term pid, term ref, term config)
         }
     }
 
+#ifdef CONFIG_SNTP
+    char *sntp_host = NULL;
+    if (!term_is_invalid_term(sntp_config)) {
+        term host_term = interop_kv_get_value(sntp_config, host_atom, ctx->global);
+        if (!term_is_invalid_term(host_term)) {
+            sntp_host = interop_term_to_string(host_term, &ok);
+            if (!ok) {
+                free(ssid);
+                free(psk);
+                return BADARG_ATOM;
+            }
+        }
+    }
+#endif
+
     driver_data->owner_process_id = term_to_local_process_id(pid);
     driver_data->ref_ticks = term_to_ref_ticks(ref);
     driver_data->managed = managed;
@@ -498,6 +647,14 @@ static term start_network(Context *ctx, term pid, term ref, term config)
         free(driver_data->psk);
     }
     driver_data->psk = psk;
+
+#ifdef CONFIG_SNTP
+    disable_sntp_sync();
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    driver_data->sntp_host = sntp_host;
+    driver_data->sntp_enabled = sntp_host != NULL;
+    k_mutex_unlock(&driver_data->sntp_lock);
+#endif
 
     // Register callbacks if not registered yet
     if (!driver_data->cb_registered) {
@@ -528,7 +685,7 @@ static term start_network(Context *ctx, term pid, term ref, term config)
         cnx_params.timeout = SYS_FOREVER_MS;
 
         int err = net_mgmt(NET_REQUEST_WIFI_CONNECT, driver_data->iface, &cnx_params, sizeof(cnx_params));
-        if (err != 0) {
+        if (err != 0 && err != -EALREADY && err != -EISCONN) {
             return ERROR_ATOM;
         }
     }
@@ -734,7 +891,7 @@ static term sta_connect_ap(Context *ctx, term pid, term ref, term config)
     cnx_params.timeout = SYS_FOREVER_MS;
 
     int err = net_mgmt(NET_REQUEST_WIFI_CONNECT, driver_data->iface, &cnx_params, sizeof(cnx_params));
-    if (err != 0) {
+    if (err != 0 && err != -EALREADY && err != -EISCONN) {
         return ERROR_ATOM;
     }
 
@@ -788,6 +945,10 @@ static void stop_network(void)
 #endif
         net_mgmt(NET_REQUEST_WIFI_DISCONNECT, driver_data->iface, NULL, 0);
     }
+
+#ifdef CONFIG_SNTP
+    disable_sntp_sync();
+#endif
 
     driver_data->connected = false;
     driver_data->got_ip = false;
@@ -907,6 +1068,21 @@ void network_driver_init(GlobalContext *global)
     data->sta_connected_term = globalcontext_make_atom(global, sta_connected_atom);
     data->sta_disconnected_term = globalcontext_make_atom(global, sta_disconnected_atom);
     data->sta_got_ip_term = globalcontext_make_atom(global, sta_got_ip_atom);
+#ifdef CONFIG_SNTP
+    data->sntp_sync_term = globalcontext_make_atom(global, sntp_sync_atom);
+    k_mutex_init(&data->sntp_lock);
+    k_work_init(&data->sntp_work, sntp_work_handler);
+    data->sntp_work_q_stack = k_thread_stack_alloc(SNTP_WORKQ_STACK_SIZE, 0);
+    if (data->sntp_work_q_stack) {
+        k_work_queue_start(
+            &data->sntp_work_q,
+            data->sntp_work_q_stack,
+            SNTP_WORKQ_STACK_SIZE,
+            SNTP_WORKQ_PRIORITY,
+            &sntp_work_q_config);
+        data->sntp_work_q_started = true;
+    }
+#endif
     driver_data = data;
 }
 
@@ -922,6 +1098,17 @@ void network_driver_destroy(GlobalContext *global)
         if (driver_data->scan_cb_registered) {
             net_mgmt_del_event_callback(&driver_data->scan_cb);
         }
+#ifdef CONFIG_SNTP
+        disable_sntp_sync();
+        if (driver_data->sntp_work_q_started) {
+            k_work_queue_drain(&driver_data->sntp_work_q, true);
+            k_work_queue_stop(&driver_data->sntp_work_q, K_FOREVER);
+            driver_data->sntp_work_q_started = false;
+        }
+        if (driver_data->sntp_work_q_stack) {
+            k_thread_stack_free(driver_data->sntp_work_q_stack);
+        }
+#endif
         free(driver_data->ssid);
         free(driver_data->psk);
         free(driver_data);

@@ -80,11 +80,29 @@ static bool event_listener_is_event(struct EventListener *listener, listener_eve
 struct PortDriverDefListItem *port_driver_list;
 struct NifCollectionDefListItem *nif_collection_list;
 
+static K_MUTEX_DEFINE(wall_clock_mutex);
+static int64_t wall_clock_offset_ns = 0;
+
 static inline void platform_clock_gettime(struct timespec *t)
 {
     uint64_t now = sys_monotonic_time_u64();
     t->tv_sec = (time_t) now / 1000;
     t->tv_nsec = ((int32_t) now % 1000) * 1000000;
+}
+
+static int64_t timespec_to_ns(const struct timespec *t)
+{
+    return ((int64_t) t->tv_sec * 1000000000LL) + t->tv_nsec;
+}
+
+static void ns_to_timespec(int64_t ns, struct timespec *t)
+{
+    t->tv_sec = ns / 1000000000LL;
+    t->tv_nsec = ns % 1000000000LL;
+    if (t->tv_nsec < 0) {
+        t->tv_sec--;
+        t->tv_nsec += 1000000000LL;
+    }
 }
 
 static int32_t timespec_diff_to_ms(struct timespec *timespec1, struct timespec *timespec2)
@@ -365,6 +383,24 @@ void sys_unregister_select_event(GlobalContext *global, ErlNifEvent event, bool 
 void sys_time(struct timespec *t)
 {
     platform_clock_gettime(t);
+
+    k_mutex_lock(&wall_clock_mutex, K_FOREVER);
+    int64_t offset_ns = wall_clock_offset_ns;
+    k_mutex_unlock(&wall_clock_mutex);
+
+    if (offset_ns != 0) {
+        ns_to_timespec(timespec_to_ns(t) + offset_ns, t);
+    }
+}
+
+void sys_set_time_from_sntp(const struct timespec *t)
+{
+    struct timespec now;
+    platform_clock_gettime(&now);
+
+    k_mutex_lock(&wall_clock_mutex, K_FOREVER);
+    wall_clock_offset_ns = timespec_to_ns(t) - timespec_to_ns(&now);
+    k_mutex_unlock(&wall_clock_mutex);
 }
 
 void sys_monotonic_time(struct timespec *t)
