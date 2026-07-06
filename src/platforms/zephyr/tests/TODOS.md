@@ -9,10 +9,10 @@ These tests check platform-independent core/NIF functionalities that are fully s
 * [ ] **`test_select` (POSIX Select)**
   * *Purpose*: Verifies event multiplexing, eventfd, and socket notifications.
   * *Dependencies*: Zephyr's ZVFS and POSIX select APIs (`CONFIG_POSIX_API=y`).
-* [ ] **`test_file` (File I/O)**
+* [x] **`test_file` (File I/O)**
   * *Purpose*: Tests file access, seeking, directory listing, and cleanup.
   * *Dependencies*: Zephyr VFS (`CONFIG_FILE_SYSTEM=y`), now enabled in `test_mount`.
-* [ ] **`test_md5` / `test_crypto` (Cryptography)**
+* [x] **`test_md5` / `test_crypto` (Cryptography)**
   * *Purpose*: Verifies MD5, SHA, and symmetric encryption NIFs.
   * *Dependencies*: mbedtls / tinycrypt integration in the Zephyr build.
 * [ ] **`atomvm_smp_0` (SMP Scheduling)**
