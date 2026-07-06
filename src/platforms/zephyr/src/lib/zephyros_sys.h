@@ -22,6 +22,7 @@
 
 #include <interop.h>
 #include <sys.h>
+#include <time.h>
 
 #define ZEPHYR_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\x6", "zephyr"))
 
@@ -104,6 +105,8 @@ void port_driver_destroy_all(GlobalContext *global);
 const struct Nif *nif_collection_resolve_nif(const char *name);
 void nif_collection_init_all(GlobalContext *global);
 void nif_collection_destroy_all(GlobalContext *global);
+
+void sys_set_time_from_sntp(const struct timespec *t);
 
 typedef int listener_event_t;
 
