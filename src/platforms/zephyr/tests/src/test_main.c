@@ -121,6 +121,14 @@ ZTEST(atomvm_tests, test_crypto)
     zassert_equal(ret_value, OK_ATOM, "test_crypto did not return 'ok'");
 }
 
+#if defined(CONFIG_NET_SOCKETPAIR) && !defined(CONFIG_BOARD_NATIVE_SIM)
+ZTEST(atomvm_tests, test_select)
+{
+    term ret_value = avm_test_case("test_select.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_select did not return 'ok'");
+}
+#endif
+
 #if !defined(CONFIG_BOARD_NATIVE_SIM)
 ZTEST(atomvm_tests, test_mount)
 {
@@ -154,4 +162,3 @@ ZTEST(atomvm_tests, test_i2c_native_sim)
     zassert_equal(ret_value, OK_ATOM, "test_i2c_native_sim did not return 'ok'");
 }
 #endif
-

@@ -32,7 +32,7 @@ start() ->
         ok
     catch
         Class:Reason:Stack ->
-            erlang:display({Class, Reason, Stack}),
+            erlang:display({test_file_start_failed, Class, Reason, Stack}),
             error
     end.
 
@@ -54,6 +54,7 @@ test_basic_file() ->
 test_gc() ->
     Path = "/RAM:/atomvm-2.txt",
     GCSubPid = spawn(fun() -> gc_loop(Path, undefined) end),
+    erlang:monitor(process, GCSubPid),
     MemorySize0 = erlang:memory(binary),
     call_gc_loop(GCSubPid, open),
     MemorySize1 = erlang:memory(binary),
@@ -82,15 +83,26 @@ test_gc() ->
 call_gc_loop(Pid, Message) ->
     Pid ! {self(), Message},
     receive
-        {Pid, Message} -> ok
+        {Pid, Message} -> ok;
+        {'DOWN', _Ref, process, Pid, Reason} ->
+            erlang:display({gc_subprocess_died, Reason, while_waiting_for, Message}),
+            exit(gc_subprocess_died)
+    after 5000 ->
+        erlang:display({timeout_waiting_for, Message, Pid}),
+        exit(timeout)
     end.
 
 gc_loop(Path, File) ->
     receive
         {Caller, open} ->
-            {ok, Fd} = atomvm:posix_open(Path, [o_rdwr, o_creat, o_append], 8#644),
-            Caller ! {self(), open},
-            gc_loop(Path, Fd);
+            case atomvm:posix_open(Path, [o_rdwr, o_creat], 8#644) of
+                {ok, Fd} ->
+                    Caller ! {self(), open},
+                    gc_loop(Path, Fd);
+                Error ->
+                    erlang:display({gc_loop_open_failed, Error}),
+                    exit({open_failed, Error})
+            end;
         {Caller, forget} ->
             Caller ! {self(), forget},
             gc_loop(Path, undefined);
@@ -99,7 +111,7 @@ gc_loop(Path, File) ->
             Caller ! {self(), gc},
             gc_loop(Path, File);
         {Caller, close} ->
-            atomvm:posix_close(File),
+            ok = atomvm:posix_close(File),
             Caller ! {self(), close},
             gc_loop(Path, undefined);
         {Caller, quit} ->
