@@ -129,13 +129,15 @@ ZTEST(atomvm_tests, test_select)
 }
 #endif
 
-#if !defined(CONFIG_BOARD_NATIVE_SIM)
+#if !defined(CONFIG_BOARD_NATIVE_SIM) && defined(CONFIG_FAT_FILESYSTEM_ELM)
 ZTEST(atomvm_tests, test_mount)
 {
     term ret_value = avm_test_case("test_mount.beam");
     zassert_equal(ret_value, OK_ATOM, "test_mount did not return 'ok'");
 }
+#endif
 
+#if !defined(CONFIG_BOARD_NATIVE_SIM)
 ZTEST(atomvm_tests, test_monotonic_time)
 {
     term ret_value = avm_test_case("test_monotonic_time.beam");
@@ -147,7 +149,9 @@ ZTEST(atomvm_tests, test_time_and_processes)
     term ret_value = avm_test_case("test_time_and_processes.beam");
     zassert_equal(term_to_int(ret_value), 6, "test_time_and_processes did not return 6");
 }
+#endif
 
+#if !defined(CONFIG_BOARD_NATIVE_SIM) && defined(CONFIG_FAT_FILESYSTEM_ELM)
 ZTEST(atomvm_tests, test_file)
 {
     term ret_value = avm_test_case("test_file.beam");
