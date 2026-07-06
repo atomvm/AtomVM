@@ -54,6 +54,7 @@ static const char *const ssid_atom = ATOM_STR("\x4", "ssid");
 static const char *const psk_atom = ATOM_STR("\x3", "psk");
 static const char *const rssi_atom = ATOM_STR("\x4", "rssi");
 static const char *const scan_results_atom = ATOM_STR("\xC", "scan_results");
+static const char *const scan_canceled_atom = ATOM_STR("\xD", "scan_canceled");
 static const char *const sta_connected_atom = ATOM_STR("\xD", "sta_connected");
 static const char *const sta_disconnected_atom = ATOM_STR("\x10", "sta_disconnected");
 static const char *const sta_got_ip_atom = ATOM_STR("\xA", "sta_got_ip");
@@ -65,6 +66,7 @@ enum network_cmd
     NetworkStartCmd,
     NetworkRssiCmd,
     NetworkStopCmd,
+    NetworkScanStopCmd,
     StaHaltCmd,
     StaConnectCmd,
     WifiScanCmd
@@ -74,6 +76,7 @@ static const AtomStringIntPair cmd_table[] = {
     { ATOM_STR("\x5", "start"), NetworkStartCmd },
     { rssi_atom, NetworkRssiCmd },
     { ATOM_STR("\x4", "stop"), NetworkStopCmd },
+    { ATOM_STR("\xB", "cancel_scan"), NetworkScanStopCmd },
     { ATOM_STR("\x8", "halt_sta"), StaHaltCmd },
     { ATOM_STR("\x7", "connect"), StaConnectCmd },
     { ATOM_STR("\x4", "scan"), WifiScanCmd },
@@ -567,6 +570,23 @@ static void wifi_scan(Context *ctx, term pid, term ref, term config)
     }
 }
 
+static void cancel_scan(Context *ctx, term pid, term ref, term reply_config)
+{
+    if (driver_data && driver_data->scanning) {
+        if (driver_data->scan_cb_registered) {
+            net_mgmt_del_event_callback(&driver_data->scan_cb);
+            driver_data->scan_cb_registered = false;
+        }
+        driver_data->scanning = false;
+    }
+
+    term scan_canceled = globalcontext_make_atom(ctx->global, scan_canceled_atom);
+    size_t reply_size = PORT_REPLY_SIZE + TUPLE_SIZE(3);
+    port_ensure_available(ctx, reply_size);
+    term reply = port_create_tuple3(ctx, scan_canceled, reply_config, OK_ATOM);
+    port_send_reply(ctx, pid, ref, reply);
+}
+
 static term resolve_sta_config(term config, GlobalContext *global)
 {
     term sta_config = interop_kv_get_value(config, sta_atom, global);
@@ -784,6 +804,10 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
             }
             case WifiScanCmd: {
                 wifi_scan(ctx, pid, ref, config);
+                break;
+            }
+            case NetworkScanStopCmd: {
+                cancel_scan(ctx, pid, ref, config);
                 break;
             }
             default: {

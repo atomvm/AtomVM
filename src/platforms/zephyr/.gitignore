@@ -5,3 +5,4 @@
 build/
 twister-out*/
 build-esp32-test/
+build-wokwi-test/
