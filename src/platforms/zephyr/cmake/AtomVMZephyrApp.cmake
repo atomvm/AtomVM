@@ -61,6 +61,10 @@ endif()
 if (CONFIG_NET_SOCKETS)
     add_compile_definitions(OTP_SOCKET_BSD=1)
 endif()
+if (CONFIG_PSA_CRYPTO)
+    add_compile_definitions(HAVE_PSA_CRYPTO)
+endif()
+
 
 set(HAVE_CLOCK_SETTIME ON FORCE)
 set(HAVE_PLATFORM_ATOMIC_H ON CACHE BOOL "Platform has platform_atomic.h" FORCE)

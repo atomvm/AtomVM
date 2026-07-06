@@ -30,6 +30,7 @@ zephyr_library_named(libAtomVM${PLATFORM_LIB_SUFFIX})
 
 zephyr_include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_BINARY_DIR}
     ../../../../libAtomVM
     ${CMAKE_BINARY_DIR}/zephyr/include/generated/
@@ -75,6 +76,13 @@ if(CONFIG_NET_SOCKETS)
         ../../../../libAtomVM/otp_net.c
     )
 endif()
+
+if(CONFIG_PSA_CRYPTO)
+    zephyr_library_sources(
+        ../../../../libAtomVM/otp_crypto.c
+    )
+endif()
+
 
 if(CONFIG_WIFI)
     zephyr_library_sources(
