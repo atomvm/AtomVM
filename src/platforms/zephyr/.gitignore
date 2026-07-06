@@ -4,3 +4,4 @@
 
 build/
 twister-out*/
+build-esp32-test/
