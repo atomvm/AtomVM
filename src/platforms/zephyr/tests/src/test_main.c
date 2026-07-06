@@ -60,6 +60,15 @@ term avm_test_case(const char *test_module)
     context_execute_loop(ctx, mod, "start", 0);
     term ret_value = ctx->x[0];
 
+    fprintf(stdout, "AtomVM finished with return value: ");
+    term_display(stdout, ret_value, ctx);
+    if (ret_value == ERROR_ATOM || ret_value == EXIT_ATOM || ret_value == THROW_ATOM) {
+        fprintf(stdout, " (reason: ");
+        term_display(stdout, ctx->x[1], ctx);
+        fprintf(stdout, ")");
+    }
+    fprintf(stdout, "\n");
+
     context_destroy(ctx);
 
     nif_collection_destroy_all(glb);
@@ -126,6 +135,12 @@ ZTEST(atomvm_tests, test_wifi_scan)
 {
     term ret_value = avm_test_case("test_wifi_scan.beam");
     zassert_equal(ret_value, OK_ATOM, "test_wifi_scan did not return 'ok'");
+}
+
+ZTEST(atomvm_tests, test_wifi_managed)
+{
+    term ret_value = avm_test_case("test_wifi_managed.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_wifi_managed did not return 'ok'");
 }
 #endif
 

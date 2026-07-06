@@ -267,6 +267,10 @@ static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb,
     if (mgmt_event == NET_EVENT_WIFI_CONNECT_RESULT) {
         const struct wifi_status *status = (const struct wifi_status *)cb->info;
         if (status->status == 0) {
+            if (driver_data->connected || driver_data->got_ip) {
+                driver_data->connected = true;
+                return;
+            }
             driver_data->connected = true;
 
             // Notify AtomVM process: sta_connected
@@ -277,6 +281,67 @@ static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb,
                 globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
             }
             END_WITH_STACK_HEAP(heap, driver_data->global);
+
+            // Check if we already have an IP address configured
+            struct net_if_ipv4 *ipv4 = driver_data->iface->config.ip.ipv4;
+            bool has_ip = false;
+            struct in_addr ip = {0};
+            struct in_addr netmask = {0};
+            struct in_addr gw = {0};
+            if (ipv4) {
+                for (int i = 0; i < NET_IF_MAX_IPV4_ADDR; i++) {
+                    if (ipv4->unicast[i].ipv4.is_used) {
+                        ip = ipv4->unicast[i].ipv4.address.in_addr;
+                        netmask = ipv4->unicast[i].netmask;
+                        gw = ipv4->gw;
+                        has_ip = true;
+                        break;
+                    }
+                }
+            }
+
+            if (has_ip && !driver_data->got_ip) {
+                driver_data->got_ip = true;
+
+                // Notify AtomVM process: {sta_got_ip, {IP, Netmask, Gateway}}
+                BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(3) + TUPLE_SIZE(4) * 3, heap);
+                {
+                    uint32_t ip_val = ntohl(ip.s_addr);
+                    term ip_elements[4] = {
+                        term_from_int((ip_val >> 24) & 0xFF),
+                        term_from_int((ip_val >> 16) & 0xFF),
+                        term_from_int((ip_val >> 8) & 0xFF),
+                        term_from_int(ip_val & 0xFF)
+                    };
+                    term ip_tuple = port_heap_create_tuple_n(&heap, 4, ip_elements);
+
+                    uint32_t mask_val = ntohl(netmask.s_addr);
+                    term mask_elements[4] = {
+                        term_from_int((mask_val >> 24) & 0xFF),
+                        term_from_int((mask_val >> 16) & 0xFF),
+                        term_from_int((mask_val >> 8) & 0xFF),
+                        term_from_int(mask_val & 0xFF)
+                    };
+                    term mask_tuple = port_heap_create_tuple_n(&heap, 4, mask_elements);
+
+                    uint32_t gw_val = ntohl(gw.s_addr);
+                    term gw_elements[4] = {
+                        term_from_int((gw_val >> 24) & 0xFF),
+                        term_from_int((gw_val >> 16) & 0xFF),
+                        term_from_int((gw_val >> 8) & 0xFF),
+                        term_from_int(gw_val & 0xFF)
+                    };
+                    term gw_tuple = port_heap_create_tuple_n(&heap, 4, gw_elements);
+
+                    term ip_info = port_heap_create_tuple3(&heap, ip_tuple, mask_tuple, gw_tuple);
+                    term reply_val = port_heap_create_tuple2(&heap, driver_data->sta_got_ip_term, ip_info);
+
+                    term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+                    term msg = port_heap_create_tuple2(&heap, ref, reply_val);
+                    globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
+                }
+                END_WITH_STACK_HEAP(heap, driver_data->global);
+            }
 
             // Start DHCPv4 client on interface
 #if defined(CONFIG_NET_DHCPV4)
@@ -451,7 +516,7 @@ static term start_network(Context *ctx, term pid, term ref, term config)
         struct wifi_connect_req_params cnx_params = {0};
         cnx_params.ssid = (const uint8_t *)driver_data->ssid;
         cnx_params.ssid_length = strlen(driver_data->ssid);
-        if (driver_data->psk) {
+        if (driver_data->psk && (strlen(driver_data->psk) > 0)) {
             cnx_params.psk = (const uint8_t *)driver_data->psk;
             cnx_params.psk_length = strlen(driver_data->psk);
             cnx_params.security = WIFI_SECURITY_TYPE_PSK;
@@ -657,7 +722,7 @@ static term sta_connect_ap(Context *ctx, term pid, term ref, term config)
     struct wifi_connect_req_params cnx_params = {0};
     cnx_params.ssid = (const uint8_t *)ssid;
     cnx_params.ssid_length = strlen(ssid);
-    if (psk) {
+    if (psk && (strlen(psk) > 0)) {
         cnx_params.psk = (const uint8_t *)psk;
         cnx_params.psk_length = strlen(psk);
         cnx_params.security = WIFI_SECURITY_TYPE_PSK;
