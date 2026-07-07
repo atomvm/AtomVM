@@ -40,11 +40,15 @@
 #include <zephyr/net/dhcpv4.h>
 
 #include <errno.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef CONFIG_SNTP
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
+#include <zephyr/net/dns_resolve.h>
+#include <zephyr/net/net_ip.h>
 #include <zephyr/net/sntp.h>
+#include <zephyr/net/socketutils.h>
 #include <time.h>
 #endif
 
@@ -64,19 +68,18 @@ static const char *const sta_connected_atom = ATOM_STR("\xD", "sta_connected");
 static const char *const sta_disconnected_atom = ATOM_STR("\x10", "sta_disconnected");
 static const char *const sta_got_ip_atom = ATOM_STR("\xA", "sta_got_ip");
 static const char *const managed_atom = ATOM_STR("\x7", "managed");
-#ifdef CONFIG_SNTP
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
 static const char *const sntp_atom = ATOM_STR("\x4", "sntp");
 static const char *const host_atom = ATOM_STR("\x4", "host");
 static const char *const sntp_sync_atom = ATOM_STR("\x9", "sntp_sync");
 #endif
 
-#ifdef CONFIG_SNTP
-#define SNTP_WORKQ_STACK_SIZE 16384
-#define SNTP_WORKQ_PRIORITY K_PRIO_PREEMPT(8)
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
+#define ATOMVM_ZEPHYR_SNTP_TIMEOUT_MS 2000
+#define ATOMVM_ZEPHYR_SNTP_SERVER_PORT 123
 
-static const struct k_work_queue_config sntp_work_q_config = {
-    .name = "atomvm_sntp"
-};
+static void sntp_socket_service_handler(struct net_socket_service_event *event);
+NET_SOCKET_SERVICE_SYNC_DEFINE_STATIC(atomvm_sntp_service, sntp_socket_service_handler, 1);
 #endif
 
 enum network_cmd
@@ -139,16 +142,22 @@ struct NetworkDriverData
     term sta_connected_term;
     term sta_disconnected_term;
     term sta_got_ip_term;
-#ifdef CONFIG_SNTP
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
     char *sntp_host;
+    char *sntp_dns_query_host;
     term sntp_sync_term;
     struct k_mutex sntp_lock;
     bool sntp_enabled;
-    struct k_work sntp_work;
-    struct k_work_sync sntp_work_sync;
-    struct k_work_q sntp_work_q;
-    k_thread_stack_t *sntp_work_q_stack;
-    bool sntp_work_q_started;
+    bool sntp_dns_pending;
+    bool sntp_query_pending;
+    uint16_t sntp_dns_id;
+    bool sntp_dns_id_valid;
+    uint32_t sntp_generation;
+    struct sntp_ctx sntp_ctx;
+    struct net_sockaddr_storage sntp_addr;
+    net_socklen_t sntp_addrlen;
+    struct k_work_delayable sntp_timeout_work;
+    struct k_work_sync sntp_timeout_work_sync;
 #endif
 };
 
@@ -401,59 +410,100 @@ static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb,
     }
 }
 
-#ifdef CONFIG_SNTP
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
+static bool sntp_is_current_locked(uint32_t generation)
+{
+    return driver_data->sntp_enabled && driver_data->sntp_generation == generation;
+}
+
+static void sntp_clear_dns_query_host_locked(void)
+{
+    free(driver_data->sntp_dns_query_host);
+    driver_data->sntp_dns_query_host = NULL;
+}
+
 static void disable_sntp_sync(void)
 {
     if (!driver_data) {
         return;
     }
 
+    bool cancel_dns = false;
+    uint16_t dns_id = 0;
+    bool close_sntp = false;
+
     k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    driver_data->sntp_generation++;
     driver_data->sntp_enabled = false;
+    if (driver_data->sntp_dns_pending && driver_data->sntp_dns_id_valid) {
+        cancel_dns = true;
+        dns_id = driver_data->sntp_dns_id;
+    }
+    close_sntp = driver_data->sntp_query_pending;
+    driver_data->sntp_dns_pending = false;
+    driver_data->sntp_dns_id = 0;
+    driver_data->sntp_dns_id_valid = false;
+    driver_data->sntp_query_pending = false;
+    driver_data->sntp_addrlen = 0;
     k_mutex_unlock(&driver_data->sntp_lock);
 
-    k_work_cancel_sync(&driver_data->sntp_work, &driver_data->sntp_work_sync);
+#if defined(CONFIG_DNS_RESOLVER)
+    if (cancel_dns) {
+        dns_cancel_addr_info(dns_id);
+    }
+#else
+    ARG_UNUSED(cancel_dns);
+    ARG_UNUSED(dns_id);
+#endif
+    if (close_sntp) {
+        sntp_close_async(&atomvm_sntp_service);
+    }
+
+    k_work_cancel_delayable_sync(&driver_data->sntp_timeout_work, &driver_data->sntp_timeout_work_sync);
 
     k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    sntp_clear_dns_query_host_locked();
     free(driver_data->sntp_host);
     driver_data->sntp_host = NULL;
     k_mutex_unlock(&driver_data->sntp_lock);
 }
 
-static char *copy_sntp_host_if_enabled(void)
+static void send_sntp_sync_from_task(const struct sntp_time *ts, uint32_t generation)
 {
-    char *host = NULL;
+    struct timespec tspec;
+    tspec.tv_sec = ts->seconds;
+    tspec.tv_nsec = ((uint64_t) ts->fraction * 1000000000ULL) >> 32;
 
     k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
-    if (driver_data->sntp_enabled && driver_data->sntp_host) {
-        size_t host_len = strlen(driver_data->sntp_host) + 1;
-        host = malloc(host_len);
-        if (host) {
-            memcpy(host, driver_data->sntp_host, host_len);
-        }
-    }
+    bool enabled = sntp_is_current_locked(generation);
     k_mutex_unlock(&driver_data->sntp_lock);
 
-    return host;
-}
-
-static void send_sntp_sync_from_task(const struct timespec *tspec)
-{
-    BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) * 2 + BOXED_INT64_SIZE * 2, heap);
-    {
-        term tv_tuple = port_heap_create_tuple2(
-            &heap,
-            term_make_maybe_boxed_int64(tspec->tv_sec, &heap),
-            term_make_maybe_boxed_int64(tspec->tv_nsec / 1000, &heap));
-        term reply = port_heap_create_tuple2(&heap, driver_data->sntp_sync_term, tv_tuple);
-        term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
-        term msg = port_heap_create_tuple2(&heap, ref, reply);
-        globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
+    if (!enabled) {
+        return;
     }
-    END_WITH_STACK_HEAP(heap, driver_data->global);
+
+    printk("SNTP synchronization successful. Seconds: %lld\n", (long long) tspec.tv_sec);
+    sys_set_time_from_sntp(&tspec);
+
+    size_t heap_size = PORT_REPLY_SIZE + TUPLE_SIZE(2) * 2 + BOXED_INT64_SIZE * 2;
+    Heap heap;
+    if (UNLIKELY(memory_init_heap(&heap, heap_size) != MEMORY_GC_OK)) {
+        printk("SNTP synchronization notification failed: out of memory\n");
+        return;
+    }
+
+    term tv_sec = term_make_maybe_boxed_int64(tspec.tv_sec, &heap);
+    term tv_usec = term_make_maybe_boxed_int64(tspec.tv_nsec / 1000, &heap);
+    term tv_tuple = port_heap_create_tuple2(&heap, tv_sec, tv_usec);
+    term reply = port_heap_create_tuple2(&heap, driver_data->sntp_sync_term, tv_tuple);
+    term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+    term msg = port_heap_create_tuple2(&heap, ref, reply);
+
+    globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
+    memory_destroy_heap(&heap, driver_data->global);
 }
 
-static void sntp_work_handler(struct k_work *work)
+static void sntp_timeout_handler(struct k_work *work)
 {
     ARG_UNUSED(work);
 
@@ -461,35 +511,239 @@ static void sntp_work_handler(struct k_work *work)
         return;
     }
 
-    char *host = copy_sntp_host_if_enabled();
-    if (!host) {
+    bool close_sntp = false;
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    if (driver_data->sntp_query_pending) {
+        driver_data->sntp_query_pending = false;
+        close_sntp = true;
+    }
+    k_mutex_unlock(&driver_data->sntp_lock);
+
+    if (close_sntp) {
+        printk("SNTP query timed out.\n");
+        sntp_close_async(&atomvm_sntp_service);
+    }
+}
+
+static int sntp_query_async(const struct net_sockaddr *addr, net_socklen_t addrlen, uint32_t generation)
+{
+    int ret;
+    bool close_sntp = false;
+
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    if (!sntp_is_current_locked(generation) || driver_data->sntp_query_pending) {
+        k_mutex_unlock(&driver_data->sntp_lock);
+        return -ECANCELED;
+    }
+
+    driver_data->sntp_query_pending = true;
+    ret = sntp_init_async(&driver_data->sntp_ctx, addr, addrlen, &atomvm_sntp_service);
+    if (ret < 0) {
+        driver_data->sntp_query_pending = false;
+        k_mutex_unlock(&driver_data->sntp_lock);
+        return ret;
+    }
+
+    ret = sntp_send_async(&driver_data->sntp_ctx);
+    if (ret < 0) {
+        driver_data->sntp_query_pending = false;
+        close_sntp = true;
+    } else {
+        k_work_reschedule(&driver_data->sntp_timeout_work, K_MSEC(ATOMVM_ZEPHYR_SNTP_TIMEOUT_MS));
+    }
+
+    k_mutex_unlock(&driver_data->sntp_lock);
+
+    if (close_sntp) {
+        sntp_close_async(&atomvm_sntp_service);
+    }
+
+    return ret;
+}
+
+static void sntp_socket_service_handler(struct net_socket_service_event *event)
+{
+    if (!driver_data) {
         return;
     }
 
-    printk("SNTP query started for host: %s\n", host);
+    uint32_t generation = 0;
+    bool current = false;
+    int fd = event->event.fd;
+
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    if (driver_data->sntp_enabled && driver_data->sntp_query_pending && driver_data->sntp_ctx.sock.fd == fd) {
+        driver_data->sntp_query_pending = false;
+        generation = driver_data->sntp_generation;
+        current = true;
+    }
+    k_mutex_unlock(&driver_data->sntp_lock);
+
+    if (!current) {
+        return;
+    }
 
     struct sntp_time ts;
-    int err = sntp_simple(host, 2000, &ts);
-    free(host);
+    int ret = sntp_read_async(event, &ts);
+    sntp_close_async(&atomvm_sntp_service);
+    k_work_cancel_delayable(&driver_data->sntp_timeout_work);
 
-    if (err == 0) {
-        k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
-        bool enabled = driver_data->sntp_enabled;
-        k_mutex_unlock(&driver_data->sntp_lock);
-        if (!enabled) {
-            return;
-        }
-
-        printk("SNTP synchronization successful. Seconds: %llu\n", ts.seconds);
-
-        struct timespec tspec;
-        tspec.tv_sec = ts.seconds;
-        tspec.tv_nsec = ((uint64_t)ts.fraction * 1000000000ULL) >> 32;
-        sys_set_time_from_sntp(&tspec);
-
-        send_sntp_sync_from_task(&tspec);
+    if (ret == 0) {
+        send_sntp_sync_from_task(&ts, generation);
     }
 }
+
+#if defined(CONFIG_DNS_RESOLVER)
+static void sntp_dns_result_handler(enum dns_resolve_status status, struct dns_addrinfo *info, void *user_data)
+{
+    if (!driver_data) {
+        return;
+    }
+
+    uint32_t generation = (uint32_t) (uintptr_t) user_data;
+
+    if (status == DNS_EAI_INPROGRESS && info) {
+        k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+        if (sntp_is_current_locked(generation) && driver_data->sntp_dns_pending && driver_data->sntp_addrlen == 0 && info->ai_addrlen <= sizeof(driver_data->sntp_addr)) {
+            memset(&driver_data->sntp_addr, 0, sizeof(driver_data->sntp_addr));
+            memcpy(&driver_data->sntp_addr, &info->ai_addr, info->ai_addrlen);
+            if (net_port_set_default(net_sad(&driver_data->sntp_addr), ATOMVM_ZEPHYR_SNTP_SERVER_PORT) == 0) {
+                driver_data->sntp_addrlen = info->ai_addrlen;
+            }
+        }
+        k_mutex_unlock(&driver_data->sntp_lock);
+        return;
+    }
+
+    struct net_sockaddr_storage addr;
+    net_socklen_t addrlen = 0;
+    bool start_query = false;
+
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    if (sntp_is_current_locked(generation) && driver_data->sntp_dns_pending) {
+        driver_data->sntp_dns_pending = false;
+        driver_data->sntp_dns_id = 0;
+        driver_data->sntp_dns_id_valid = false;
+        if (status == DNS_EAI_ALLDONE && driver_data->sntp_addrlen > 0) {
+            addr = driver_data->sntp_addr;
+            addrlen = driver_data->sntp_addrlen;
+            start_query = true;
+        }
+        driver_data->sntp_addrlen = 0;
+        sntp_clear_dns_query_host_locked();
+    }
+    k_mutex_unlock(&driver_data->sntp_lock);
+
+    if (start_query) {
+        int ret = sntp_query_async(net_sad(&addr), addrlen, generation);
+        if (ret < 0) {
+            printk("SNTP query start failed: %d\n", ret);
+        }
+    }
+}
+#endif
+
+static void start_sntp_sync(void)
+{
+    if (!driver_data) {
+        return;
+    }
+
+    uint32_t generation;
+    char *query_host;
+
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    if (!driver_data->sntp_enabled || !driver_data->sntp_host || driver_data->sntp_dns_pending || driver_data->sntp_query_pending) {
+        k_mutex_unlock(&driver_data->sntp_lock);
+        return;
+    }
+
+    size_t host_len = strlen(driver_data->sntp_host) + 1;
+    query_host = malloc(host_len);
+    if (!query_host) {
+        k_mutex_unlock(&driver_data->sntp_lock);
+        return;
+    }
+
+    memcpy(query_host, driver_data->sntp_host, host_len);
+    sntp_clear_dns_query_host_locked();
+    driver_data->sntp_dns_query_host = query_host;
+    driver_data->sntp_dns_pending = true;
+    driver_data->sntp_dns_id = 0;
+    driver_data->sntp_dns_id_valid = false;
+    driver_data->sntp_addrlen = 0;
+    generation = driver_data->sntp_generation;
+    k_mutex_unlock(&driver_data->sntp_lock);
+
+    printk("SNTP query started for host: %s\n", query_host);
+
+#if defined(CONFIG_DNS_RESOLVER)
+    enum dns_query_type query_type;
+#if defined(CONFIG_NET_IPV4)
+    query_type = DNS_QUERY_TYPE_A;
+#elif defined(CONFIG_NET_IPV6)
+    query_type = DNS_QUERY_TYPE_AAAA;
+#else
+    query_type = DNS_QUERY_TYPE_ANY;
+#endif
+
+    uint16_t dns_id = 0;
+    int ret = dns_get_addr_info(
+        query_host,
+        query_type,
+        &dns_id,
+        sntp_dns_result_handler,
+        (void *) (uintptr_t) generation,
+        ATOMVM_ZEPHYR_SNTP_TIMEOUT_MS);
+
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    if (ret == 0) {
+        if (sntp_is_current_locked(generation) && driver_data->sntp_dns_pending) {
+            driver_data->sntp_dns_id = dns_id;
+            driver_data->sntp_dns_id_valid = true;
+        }
+    } else if (sntp_is_current_locked(generation) && driver_data->sntp_dns_pending) {
+        driver_data->sntp_dns_pending = false;
+        driver_data->sntp_dns_id = 0;
+        driver_data->sntp_dns_id_valid = false;
+        sntp_clear_dns_query_host_locked();
+    }
+    k_mutex_unlock(&driver_data->sntp_lock);
+
+    if (ret < 0) {
+        printk("SNTP DNS query start failed: %d\n", ret);
+    }
+#else
+    struct net_sockaddr_storage addr;
+    memset(&addr, 0, sizeof(addr));
+    int ret = -EINVAL;
+    if (net_ipaddr_parse(query_host, strlen(query_host), net_sad(&addr))) {
+        if (IS_ENABLED(CONFIG_NET_IPV4) && addr.ss_family == NET_AF_INET) {
+            ret = net_port_set_default(net_sad(&addr), ATOMVM_ZEPHYR_SNTP_SERVER_PORT);
+            if (ret == 0) {
+                ret = sntp_query_async(net_sad(&addr), sizeof(struct net_sockaddr_in), generation);
+            }
+        } else if (IS_ENABLED(CONFIG_NET_IPV6) && addr.ss_family == NET_AF_INET6) {
+            ret = net_port_set_default(net_sad(&addr), ATOMVM_ZEPHYR_SNTP_SERVER_PORT);
+            if (ret == 0) {
+                ret = sntp_query_async(net_sad(&addr), sizeof(struct net_sockaddr_in6), generation);
+            }
+        }
+    }
+
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    if (sntp_is_current_locked(generation)) {
+        driver_data->sntp_dns_pending = false;
+        sntp_clear_dns_query_host_locked();
+    }
+    k_mutex_unlock(&driver_data->sntp_lock);
+
+    if (ret < 0) {
+        printk("SNTP address setup failed: %d\n", ret);
+    }
+#endif
+}
+
 #endif
 
 static void ipv4_mgmt_event_handler(struct net_mgmt_event_callback *cb,
@@ -561,13 +815,8 @@ static void ipv4_mgmt_event_handler(struct net_mgmt_event_callback *cb,
         }
         END_WITH_STACK_HEAP(heap, driver_data->global);
 
-#ifdef CONFIG_SNTP
-        k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
-        bool submit_sntp = driver_data->sntp_enabled && driver_data->sntp_host && driver_data->sntp_work_q_started;
-        k_mutex_unlock(&driver_data->sntp_lock);
-        if (submit_sntp) {
-            k_work_submit_to_queue(&driver_data->sntp_work_q, &driver_data->sntp_work);
-        }
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
+        start_sntp_sync();
 #endif
     }
 }
@@ -593,7 +842,7 @@ static term start_network(Context *ctx, term pid, term ref, term config)
     term managed_term = interop_kv_get_value(sta_config, managed_atom, ctx->global);
     bool managed = (managed_term == TRUE_ATOM);
 
-#ifdef CONFIG_SNTP
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
     term sntp_config = interop_kv_get_value(config, sntp_atom, ctx->global);
 #endif
 
@@ -619,7 +868,7 @@ static term start_network(Context *ctx, term pid, term ref, term config)
         }
     }
 
-#ifdef CONFIG_SNTP
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
     char *sntp_host = NULL;
     if (!term_is_invalid_term(sntp_config)) {
         term host_term = interop_kv_get_value(sntp_config, host_atom, ctx->global);
@@ -648,9 +897,10 @@ static term start_network(Context *ctx, term pid, term ref, term config)
     }
     driver_data->psk = psk;
 
-#ifdef CONFIG_SNTP
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
     disable_sntp_sync();
     k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    driver_data->sntp_generation++;
     driver_data->sntp_host = sntp_host;
     driver_data->sntp_enabled = sntp_host != NULL;
     k_mutex_unlock(&driver_data->sntp_lock);
@@ -946,7 +1196,7 @@ static void stop_network(void)
         net_mgmt(NET_REQUEST_WIFI_DISCONNECT, driver_data->iface, NULL, 0);
     }
 
-#ifdef CONFIG_SNTP
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
     disable_sntp_sync();
 #endif
 
@@ -1068,20 +1318,10 @@ void network_driver_init(GlobalContext *global)
     data->sta_connected_term = globalcontext_make_atom(global, sta_connected_atom);
     data->sta_disconnected_term = globalcontext_make_atom(global, sta_disconnected_atom);
     data->sta_got_ip_term = globalcontext_make_atom(global, sta_got_ip_atom);
-#ifdef CONFIG_SNTP
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
     data->sntp_sync_term = globalcontext_make_atom(global, sntp_sync_atom);
     k_mutex_init(&data->sntp_lock);
-    k_work_init(&data->sntp_work, sntp_work_handler);
-    data->sntp_work_q_stack = k_thread_stack_alloc(SNTP_WORKQ_STACK_SIZE, 0);
-    if (data->sntp_work_q_stack) {
-        k_work_queue_start(
-            &data->sntp_work_q,
-            data->sntp_work_q_stack,
-            SNTP_WORKQ_STACK_SIZE,
-            SNTP_WORKQ_PRIORITY,
-            &sntp_work_q_config);
-        data->sntp_work_q_started = true;
-    }
+    k_work_init_delayable(&data->sntp_timeout_work, sntp_timeout_handler);
 #endif
     driver_data = data;
 }
@@ -1098,16 +1338,8 @@ void network_driver_destroy(GlobalContext *global)
         if (driver_data->scan_cb_registered) {
             net_mgmt_del_event_callback(&driver_data->scan_cb);
         }
-#ifdef CONFIG_SNTP
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
         disable_sntp_sync();
-        if (driver_data->sntp_work_q_started) {
-            k_work_queue_drain(&driver_data->sntp_work_q, true);
-            k_work_queue_stop(&driver_data->sntp_work_q, K_FOREVER);
-            driver_data->sntp_work_q_started = false;
-        }
-        if (driver_data->sntp_work_q_stack) {
-            k_thread_stack_free(driver_data->sntp_work_q_stack);
-        }
 #endif
         free(driver_data->ssid);
         free(driver_data->psk);
