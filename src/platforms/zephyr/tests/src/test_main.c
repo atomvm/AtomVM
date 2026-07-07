@@ -148,6 +148,12 @@ ZTEST(atomvm_tests, test_wifi_example)
     term ret_value = avm_test_case("test_wifi_example.beam");
     zassert_equal(ret_value, OK_ATOM, "test_wifi_example did not return 'ok'");
 }
+
+ZTEST(atomvm_tests, test_ssl)
+{
+    term ret_value = avm_test_case("test_ssl.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_ssl did not return 'ok'");
+}
 #endif
 
 #if defined(CONFIG_NET_SOCKETPAIR) && !defined(CONFIG_BOARD_NATIVE_SIM)
