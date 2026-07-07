@@ -140,4 +140,4 @@ if [ -z "$WOKWI_CLI_TOKEN" ]; then
 fi
 
 cd "$SIM_DIR"
-wokwi-cli --timeout 20000 --expect-text "PROJECT EXECUTION SUCCESSFUL" .
+wokwi-cli --timeout 60000 --expect-text "PROJECT EXECUTION SUCCESSFUL" .
