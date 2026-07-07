@@ -326,3 +326,8 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
 #include <otp_crypto.h>
 REGISTER_NIF_COLLECTION(otp_crypto, NULL, NULL, otp_crypto_nif_get_nif)
 #endif
+
+#ifdef CONFIG_AVM_ENABLE_CRYPTO
+#include <otp_ssl.h>
+REGISTER_NIF_COLLECTION(ssl, otp_ssl_init, NULL, otp_ssl_nif_get_nif)
+#endif

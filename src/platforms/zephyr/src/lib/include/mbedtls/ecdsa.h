@@ -39,6 +39,7 @@ static int asn1_write_integer(unsigned char **p, unsigned char *start, const uns
 }
 
 // Convert raw (R || S) to DER signature
+/*
 static inline int mbedtls_ecdsa_raw_to_der(
     size_t bits, const unsigned char *raw, size_t raw_len,
     unsigned char *der, size_t der_size, size_t *der_len)
@@ -51,7 +52,6 @@ static inline int mbedtls_ecdsa_raw_to_der(
     const unsigned char *r_raw = raw;
     const unsigned char *s_raw = raw + key_len;
 
-    // We write from the end of the buffer backwards
     unsigned char *p = der + der_size;
     unsigned char *end = p;
 
@@ -70,7 +70,7 @@ static inline int mbedtls_ecdsa_raw_to_der(
         p -= 1;
         p[0] = (unsigned char)seq_len;
         p -= 1;
-        p[0] = 0x30; // Tag: SEQUENCE
+        p[0] = 0x30;
     } else {
         if (p - der < 3) {
             return -1;
@@ -78,15 +78,16 @@ static inline int mbedtls_ecdsa_raw_to_der(
         p -= 1;
         p[0] = (unsigned char)(seq_len & 0xFF);
         p -= 1;
-        p[0] = 0x81; // 1-byte length format
+        p[0] = 0x81;
         p -= 1;
-        p[0] = 0x30; // Tag: SEQUENCE
+        p[0] = 0x30;
     }
 
     *der_len = end - p;
     memmove(der, p, *der_len);
     return 0;
 }
+*/
 
 // Helper to read an ASN.1 integer
 static int asn1_read_integer(const unsigned char **p, const unsigned char *end, unsigned char *d, size_t len)
@@ -120,7 +121,7 @@ static int asn1_read_integer(const unsigned char **p, const unsigned char *end, 
     return 0;
 }
 
-// Convert DER signature to raw (R || S)
+/*
 static inline int mbedtls_ecdsa_der_to_raw(
     size_t bits, const unsigned char *der, size_t der_len,
     unsigned char *raw, size_t raw_size, size_t *raw_len)
@@ -170,6 +171,7 @@ static inline int mbedtls_ecdsa_der_to_raw(
     *raw_len = raw_size;
     return 0;
 }
+*/
 
 #ifdef __cplusplus
 }

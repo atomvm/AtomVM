@@ -43,7 +43,7 @@
 #include <psa/crypto.h>
 #endif
 
-// #define ENABLE_TRACE
+#define ENABLE_TRACE
 #include <trace.h>
 
 #define TAG "otp_ssl"
@@ -75,12 +75,20 @@ static void mbedtls_debug_cb(void *ctx, int level, const char *filename, int lin
 
 struct EntropyContextResource
 {
+#if !defined(MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG)
     mbedtls_entropy_context context;
+#else
+    int dummy;
+#endif
 };
 
 struct CtrDrbgResource
 {
+#if !defined(MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG)
     mbedtls_ctr_drbg_context context;
+#else
+    int dummy;
+#endif
 };
 
 struct SSLContextResource
@@ -91,14 +99,19 @@ struct SSLContextResource
 struct SSLConfigResource
 {
     mbedtls_ssl_config config;
+    struct CtrDrbgResource *rng_obj;
 };
 
 static void entropycontext_dtor(ErlNifEnv *caller_env, void *obj)
 {
     UNUSED(caller_env);
 
+#if !defined(MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG)
     struct EntropyContextResource *rsrc_obj = (struct EntropyContextResource *) obj;
     mbedtls_entropy_free(&rsrc_obj->context);
+#else
+    UNUSED(obj);
+#endif
 }
 
 static void ctrdrbg_dtor(ErlNifEnv *caller_env, void *obj)
@@ -106,6 +119,7 @@ static void ctrdrbg_dtor(ErlNifEnv *caller_env, void *obj)
     TRACE("%s\n", __func__);
     UNUSED(caller_env);
 
+#if !defined(MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG)
     struct CtrDrbgResource *rsrc_obj = (struct CtrDrbgResource *) obj;
     mbedtls_entropy_context *entropy_context = rsrc_obj->context.MBEDTLS_PRIVATE(p_entropy);
     // Release the drbg first
@@ -116,6 +130,9 @@ static void ctrdrbg_dtor(ErlNifEnv *caller_env, void *obj)
         struct RefcBinary *entropy_refc = refc_binary_from_data(entropy_obj);
         refc_binary_decrement_refcount(entropy_refc, caller_env->global);
     }
+#else
+    UNUSED(obj);
+#endif
 }
 
 static void sslcontext_dtor(ErlNifEnv *caller_env, void *obj)
@@ -141,13 +158,11 @@ static void sslconfig_dtor(ErlNifEnv *caller_env, void *obj)
     UNUSED(caller_env);
 
     struct SSLConfigResource *rsrc_obj = (struct SSLConfigResource *) obj;
-    const mbedtls_ctr_drbg_context *ctr_drbg_context = rsrc_obj->config.MBEDTLS_PRIVATE(p_rng);
     mbedtls_ssl_config_free(&rsrc_obj->config);
 
     // Eventually release the ctrdrbg
-    if (ctr_drbg_context) {
-        struct CtrDrbgResource *rng_obj = CONTAINER_OF(ctr_drbg_context, struct CtrDrbgResource, context);
-        struct RefcBinary *config_refc = refc_binary_from_data(rng_obj);
+    if (rsrc_obj->rng_obj) {
+        struct RefcBinary *config_refc = refc_binary_from_data(rsrc_obj->rng_obj);
         refc_binary_decrement_refcount(config_refc, caller_env->global);
     }
 }
@@ -238,7 +253,9 @@ static term nif_ssl_entropy_init(Context *ctx, int argc, term argv[])
     term obj = term_from_resource(rsrc_obj, &ctx->heap);
     enif_release_resource(rsrc_obj); // decrement refcount after enif_alloc_resource
 
+#if !defined(MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG)
     mbedtls_entropy_init(&rsrc_obj->context);
+#endif
 
     return obj;
 }
@@ -261,7 +278,9 @@ static term nif_ssl_ctr_drbg_init(Context *ctx, int argc, term argv[])
     term obj = term_from_resource(rsrc_obj, &ctx->heap);
     enif_release_resource(rsrc_obj); // decrement refcount after enif_alloc_resource
 
+#if !defined(MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG)
     mbedtls_ctr_drbg_init(&rsrc_obj->context);
+#endif
 
     return obj;
 }
@@ -284,6 +303,7 @@ static term nif_ssl_ctr_drbg_seed(Context *ctx, int argc, term argv[])
     }
     struct EntropyContextResource *entropy_obj = (struct EntropyContextResource *) rsrc_obj_ptr;
 
+#if !defined(MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG)
     int err = mbedtls_ctr_drbg_seed(&ctrdrbg_obj->context, mbedtls_entropy_func, &entropy_obj->context, (const unsigned char *) term_binary_data(argv[2]), term_binary_size(argv[2]));
     if (UNLIKELY(err)) {
         RAISE_ERROR(BADARG_ATOM);
@@ -291,6 +311,10 @@ static term nif_ssl_ctr_drbg_seed(Context *ctx, int argc, term argv[])
 
     struct RefcBinary *entropy_refc = refc_binary_from_data(entropy_obj);
     refc_binary_increment_refcount(entropy_refc);
+#else
+    UNUSED(ctrdrbg_obj);
+    UNUSED(entropy_obj);
+#endif
 
     return OK_ATOM;
 }
@@ -359,6 +383,7 @@ static term nif_ssl_config_init(Context *ctx, int argc, term argv[])
         AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
+    rsrc_obj->rng_obj = NULL;
     if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
         enif_release_resource(rsrc_obj);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -484,10 +509,20 @@ static term nif_ssl_conf_rng(Context *ctx, int argc, term argv[])
     }
     struct CtrDrbgResource *ctr_drbg_obj = (struct CtrDrbgResource *) rsrc_obj_ptr;
 
-    struct RefcBinary *ctr_drbg_refc = refc_binary_from_data(ctr_drbg_obj);
-    refc_binary_increment_refcount(ctr_drbg_refc);
+    if (conf_obj->rng_obj != ctr_drbg_obj) {
+        if (conf_obj->rng_obj) {
+            struct RefcBinary *old_ctr_drbg_refc = refc_binary_from_data(conf_obj->rng_obj);
+            refc_binary_decrement_refcount(old_ctr_drbg_refc, ctx->global);
+        }
 
+        struct RefcBinary *ctr_drbg_refc = refc_binary_from_data(ctr_drbg_obj);
+        refc_binary_increment_refcount(ctr_drbg_refc);
+        conf_obj->rng_obj = ctr_drbg_obj;
+    }
+
+#if !defined(MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG)
     mbedtls_ssl_conf_rng(&conf_obj->config, mbedtls_ctr_drbg_random, &ctr_drbg_obj->context);
+#endif
 
     return OK_ATOM;
 }

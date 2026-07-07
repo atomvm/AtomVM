@@ -80,6 +80,7 @@ endif()
 if(CONFIG_PSA_CRYPTO)
     zephyr_library_sources(
         ../../../../libAtomVM/otp_crypto.c
+        ../../../../libAtomVM/otp_ssl.c
     )
 endif()
 
