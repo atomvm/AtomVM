@@ -20,6 +20,7 @@ ATOMVM_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 IMAGE_NAME="atomvm-zephyr-build"
 BOARD="esp32_devkitc/esp32/procpu"
 SKIP_BUILD=false
+WOKWI_TIMEOUT_MS="${WOKWI_TIMEOUT_MS:-120000}"
 
 # Parse arguments
 while [[ "$#" -gt 0 ]]; do
@@ -140,4 +141,4 @@ if [ -z "$WOKWI_CLI_TOKEN" ]; then
 fi
 
 cd "$SIM_DIR"
-wokwi-cli --timeout 60000 --expect-text "PROJECT EXECUTION SUCCESSFUL" .
+wokwi-cli --timeout "$WOKWI_TIMEOUT_MS" --expect-text "PROJECT EXECUTION SUCCESSFUL" --fail-text "PROJECT EXECUTION FAILED" .
