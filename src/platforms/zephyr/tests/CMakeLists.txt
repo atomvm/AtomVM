@@ -70,6 +70,7 @@ set(AVM_ZEPHYR_TEST_AVM ON CACHE BOOL "Use an embedded test AVM pack instead of 
 set(AVM_ZEPHYR_TEST_EXIT ON CACHE BOOL "Exit the Zephyr application when the AtomVM application returns" FORCE)
 
 
+set(MBEDTLS_FATAL_WARNINGS OFF CACHE BOOL "" FORCE)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(AtomVMZephyrTests LANGUAGES C)
 
