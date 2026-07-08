@@ -21,7 +21,8 @@
 -module(test_ssl).
 -export([start/0]).
 
--define(HOST, "www.cloudflare.com").
+% TLS terminates at github.com; HTTP Host targets test.atomvm.org (ESP32 qemu pattern).
+-define(HOST, "github.com").
 -define(SELECT_TIMEOUT, 15000).
 
 start() ->
@@ -77,14 +78,14 @@ run_ssl() ->
     Entropy = ssl:nif_entropy_init(),
     CtrDrbg = ssl:nif_ctr_drbg_init(),
     ok = ssl:nif_ctr_drbg_seed(CtrDrbg, Entropy, <<"AtomVM">>),
-    % Get address of www.cloudflare.com
+    % Get address of github.com
     io:format("test_ssl: dns.~n"),
     {ok, Results} = net:getaddrinfo_nif(?HOST, undefined),
     [TCPAddr | _] = [
         Addr
      || #{addr := #{addr := Addr}, type := stream, protocol := tcp, family := inet} <- Results
     ],
-    % Connect to www.cloudflare.com:443
+    % Connect to github.com:443
     io:format("test_ssl: tcp connect.~n"),
     {ok, Socket} = socket:open(inet, stream, tcp),
     ok = socket:connect(Socket, #{family => inet, addr => TCPAddr, port => 443}),
@@ -115,7 +116,7 @@ run_ssl() ->
     ok.
 
 request() ->
-    <<"GET / HTTP/1.1\r\nHost: www.cloudflare.com\r\nConnection: close\r\nUser-Agent: AtomVM Zephyr Wokwi\r\n\r\n">>.
+    <<"GET / HTTP/1.1\r\nHost: github.com\r\nConnection: close\r\nUser-Agent: AtomVM Zephyr Wokwi\r\n\r\n">>.
 
 assert_http_response(<<"HTTP/", _/binary>>) ->
     ok;
@@ -151,7 +152,6 @@ handshake_loop(SSLContext, Socket) ->
                     Error
             end;
         want_write ->
-            timer:sleep(10),
             handshake_loop(SSLContext, Socket);
         {error, _Reason} = Error ->
             socket:close(Socket),
@@ -172,7 +172,6 @@ send_loop(SSLContext, Socket, Binary) ->
                     Error
             end;
         want_write ->
-            timer:sleep(10),
             send_loop(SSLContext, Socket, Binary);
         {error, _Reason} = Error ->
             Error
@@ -193,7 +192,6 @@ recv_loop(SSLContext, Socket, Remaining, Acc) ->
                     Error
             end;
         want_write ->
-            timer:sleep(10),
             recv_loop(SSLContext, Socket, Remaining, Acc);
         {error, _Reason} = Error ->
             Error
@@ -211,7 +209,6 @@ close_notify_loop(SSLContext, Socket) ->
                     Error
             end;
         want_write ->
-            timer:sleep(10),
             close_notify_loop(SSLContext, Socket);
         {error, _Reason} = Error ->
             Error
