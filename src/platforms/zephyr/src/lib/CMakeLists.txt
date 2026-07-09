@@ -80,8 +80,12 @@ endif()
 if(CONFIG_PSA_CRYPTO)
     zephyr_library_sources(
         ../../../../libAtomVM/otp_crypto.c
-        ../../../../libAtomVM/otp_ssl.c
     )
+    if(CONFIG_NET_SOCKETS)
+        zephyr_library_sources(
+            ../../../../libAtomVM/otp_ssl.c
+        )
+    endif()
 endif()
 
 
