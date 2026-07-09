@@ -43,5 +43,5 @@ These test ESP32-specific registers, partition managers, or RTC hardware feature
   * *Adaptation*: Map to Zephyr's Flash Map API (`flash_area` / `CONFIG_FLASH_MAP=y`) or NVS.
 * [x] **`test_deep_sleep_hold` (Power Management)**
   * *Adaptation*: Map to Zephyr's Power Management subsystem (`CONFIG_PM=y` / `pm_state`).
-* [ ] **`test_twdt` (Watchdog Timers)**
-  * *Adaptation*: Map to Zephyr's standard Watchdog driver API (`CONFIG_WATCHDOG=y`).
+* [x] **`test_twdt` (Watchdog Timers)**
+  * *Adaptation*: Map to Zephyr's standard Task Watchdog driver API (`CONFIG_TASK_WDT=y`).

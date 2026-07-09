@@ -210,6 +210,14 @@ ZTEST(atomvm_tests, test_deep_sleep_hold)
 }
 #endif
 
+#if defined(CONFIG_TASK_WDT)
+ZTEST(atomvm_tests, test_twdt)
+{
+    term ret_value = avm_test_case("test_twdt.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_twdt did not return 'ok'");
+}
+#endif
+
 #if defined(CONFIG_PM_POLICY_CUSTOM)
 #include <zephyr/pm/policy.h>
 const struct pm_state_info *pm_policy_next_state(uint8_t cpu, int32_t ticks)
