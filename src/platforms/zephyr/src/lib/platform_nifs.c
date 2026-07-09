@@ -425,6 +425,212 @@ static term nif_zephyr_pm_state_next_get(Context *ctx, int argc, term argv[])
 }
 #endif
 
+#ifdef CONFIG_TASK_WDT
+#include <zephyr/task_wdt/task_wdt.h>
+
+static bool platform_task_wdt_initialized = true;
+static bool platform_task_wdt_inited_in_kernel = false;
+static uint32_t platform_task_wdt_default_timeout_ms = 5000;
+
+static void ensure_task_wdt_kernel_inited(void)
+{
+    if (UNLIKELY(!platform_task_wdt_inited_in_kernel)) {
+        task_wdt_init(NULL);
+        platform_task_wdt_inited_in_kernel = true;
+    }
+}
+
+struct zephyr_task_wdt_user_handle {
+    int channel_id;
+    bool active;
+};
+
+static term parse_task_wdt_config(Context *ctx, uint32_t *timeout_ms, term argv[])
+{
+    VALIDATE_VALUE(argv[0], term_is_tuple);
+    size_t tuple_size = term_get_tuple_arity(argv[0]);
+    if (tuple_size != 3) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    term timeout_ms_term = term_get_tuple_element(argv[0], 0);
+    VALIDATE_VALUE(timeout_ms_term, term_is_integer);
+    avm_int_t timeout = term_to_int(timeout_ms_term);
+    if (timeout <= 0) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    term core_mask_term = term_get_tuple_element(argv[0], 1);
+    VALIDATE_VALUE(core_mask_term, term_is_integer);
+    avm_int_t core_mask = term_to_int(core_mask_term);
+    if (core_mask < 0 || core_mask > (1 << 2)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    term trigger_panic_term = term_get_tuple_element(argv[0], 2);
+    if (trigger_panic_term != TRUE_ATOM && trigger_panic_term != FALSE_ATOM) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    *timeout_ms = (uint32_t)timeout;
+    return OK_ATOM;
+}
+
+static term nif_zephyr_task_wdt_init(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    uint32_t timeout_ms;
+    if (term_is_invalid_term(parse_task_wdt_config(ctx, &timeout_ms, argv))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (platform_task_wdt_initialized) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term result_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(result_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(result_tuple, 1, globalcontext_make_atom(ctx->global, ATOM_STR("\xf", "already_started")));
+        return result_tuple;
+    }
+
+    ensure_task_wdt_kernel_inited();
+
+    platform_task_wdt_initialized = true;
+    platform_task_wdt_default_timeout_ms = timeout_ms;
+
+    return OK_ATOM;
+}
+
+static term nif_zephyr_task_wdt_reconfigure(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    uint32_t timeout_ms;
+    if (term_is_invalid_term(parse_task_wdt_config(ctx, &timeout_ms, argv))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (!platform_task_wdt_initialized) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term result_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(result_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(result_tuple, 1, globalcontext_make_atom(ctx->global, ATOM_STR("\x6", "noproc")));
+        return result_tuple;
+    }
+
+    platform_task_wdt_default_timeout_ms = timeout_ms;
+    return OK_ATOM;
+}
+
+static term nif_zephyr_task_wdt_deinit(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    if (!platform_task_wdt_initialized) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term result_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(result_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(result_tuple, 1, globalcontext_make_atom(ctx->global, ATOM_STR("\x6", "noproc")));
+        return result_tuple;
+    }
+
+    ensure_task_wdt_kernel_inited();
+    task_wdt_suspend();
+    for (int id = 0; id < CONFIG_TASK_WDT_CHANNELS; id++) {
+        task_wdt_delete(id);
+    }
+
+    platform_task_wdt_initialized = false;
+    return OK_ATOM;
+}
+
+static term nif_zephyr_task_wdt_add_user(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    if (!term_is_binary(argv[0])) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (!platform_task_wdt_initialized) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    ensure_task_wdt_kernel_inited();
+    int channel_id = task_wdt_add(platform_task_wdt_default_timeout_ms, NULL, NULL);
+    if (channel_id < 0) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + term_binary_heap_size(sizeof(struct zephyr_task_wdt_user_handle))) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term binary = term_create_empty_binary(sizeof(struct zephyr_task_wdt_user_handle), &ctx->heap, ctx->global);
+    struct zephyr_task_wdt_user_handle *handle = (struct zephyr_task_wdt_user_handle *) term_binary_data(binary);
+    handle->channel_id = channel_id;
+    handle->active = true;
+
+    term result_tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result_tuple, 0, OK_ATOM);
+    term_put_tuple_element(result_tuple, 1, binary);
+
+    return result_tuple;
+}
+
+static term nif_zephyr_task_wdt_reset_user(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    if (!term_is_binary(argv[0])) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    size_t binary_size = term_binary_size(argv[0]);
+    if (binary_size != sizeof(struct zephyr_task_wdt_user_handle)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    struct zephyr_task_wdt_user_handle *handle = (struct zephyr_task_wdt_user_handle *) term_binary_data(argv[0]);
+    if (!handle->active) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int result = task_wdt_feed(handle->channel_id);
+    if (result != 0) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    return OK_ATOM;
+}
+
+static term nif_zephyr_task_wdt_delete_user(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    if (!term_is_binary(argv[0])) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    size_t binary_size = term_binary_size(argv[0]);
+    if (binary_size != sizeof(struct zephyr_task_wdt_user_handle)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    struct zephyr_task_wdt_user_handle *handle = (struct zephyr_task_wdt_user_handle *) term_binary_data(argv[0]);
+    if (!handle->active) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int result = task_wdt_delete(handle->channel_id);
+    if (result != 0) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    handle->active = false;
+    return OK_ATOM;
+}
+#endif
+
 const struct Nif *platform_nifs_get_nif(const char *nifname)
 {
     if (strcmp("atomvm:platform/0", nifname) == 0) {
@@ -445,6 +651,50 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
             .nif_ptr = nif_zephyr_pm_state_next_get
         };
         return &zephyr_pm_state_next_get_nif;
+    }
+#endif
+#ifdef CONFIG_TASK_WDT
+    if (strcmp("zephyr:task_wdt_init/1", nifname) == 0) {
+        static const struct Nif zephyr_task_wdt_init_nif = {
+            .base.type = NIFFunctionType,
+            .nif_ptr = nif_zephyr_task_wdt_init
+        };
+        return &zephyr_task_wdt_init_nif;
+    }
+    if (strcmp("zephyr:task_wdt_reconfigure/1", nifname) == 0) {
+        static const struct Nif zephyr_task_wdt_reconfigure_nif = {
+            .base.type = NIFFunctionType,
+            .nif_ptr = nif_zephyr_task_wdt_reconfigure
+        };
+        return &zephyr_task_wdt_reconfigure_nif;
+    }
+    if (strcmp("zephyr:task_wdt_deinit/0", nifname) == 0) {
+        static const struct Nif zephyr_task_wdt_deinit_nif = {
+            .base.type = NIFFunctionType,
+            .nif_ptr = nif_zephyr_task_wdt_deinit
+        };
+        return &zephyr_task_wdt_deinit_nif;
+    }
+    if (strcmp("zephyr:task_wdt_add_user/1", nifname) == 0) {
+        static const struct Nif zephyr_task_wdt_add_user_nif = {
+            .base.type = NIFFunctionType,
+            .nif_ptr = nif_zephyr_task_wdt_add_user
+        };
+        return &zephyr_task_wdt_add_user_nif;
+    }
+    if (strcmp("zephyr:task_wdt_reset_user/1", nifname) == 0) {
+        static const struct Nif zephyr_task_wdt_reset_user_nif = {
+            .base.type = NIFFunctionType,
+            .nif_ptr = nif_zephyr_task_wdt_reset_user
+        };
+        return &zephyr_task_wdt_reset_user_nif;
+    }
+    if (strcmp("zephyr:task_wdt_delete_user/1", nifname) == 0) {
+        static const struct Nif zephyr_task_wdt_delete_user_nif = {
+            .base.type = NIFFunctionType,
+            .nif_ptr = nif_zephyr_task_wdt_delete_user
+        };
+        return &zephyr_task_wdt_delete_user_nif;
     }
 #endif
 #ifdef CONFIG_NET_SOCKETPAIR

@@ -14,7 +14,13 @@
     umount/1,
     socketpair/0,
     pm_state_force/2,
-    pm_state_next_get/1
+    pm_state_next_get/1,
+    task_wdt_init/1,
+    task_wdt_reconfigure/1,
+    task_wdt_deinit/0,
+    task_wdt_add_user/1,
+    task_wdt_reset_user/1,
+    task_wdt_delete_user/1
 ]).
 
 mkfs(_Source, _FS) ->
@@ -33,4 +39,22 @@ pm_state_force(_Cpu, _StateInfo) ->
     erlang:nif_error(undefined).
 
 pm_state_next_get(_Cpu) ->
+    erlang:nif_error(undefined).
+
+task_wdt_init(_Config) ->
+    erlang:nif_error(undefined).
+
+task_wdt_reconfigure(_Config) ->
+    erlang:nif_error(undefined).
+
+task_wdt_deinit() ->
+    erlang:nif_error(undefined).
+
+task_wdt_add_user(_Name) ->
+    erlang:nif_error(undefined).
+
+task_wdt_reset_user(_Handle) ->
+    erlang:nif_error(undefined).
+
+task_wdt_delete_user(_Handle) ->
     erlang:nif_error(undefined).
