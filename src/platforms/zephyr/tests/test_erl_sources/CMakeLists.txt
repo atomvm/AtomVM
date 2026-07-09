@@ -46,6 +46,7 @@ compile_erlang(test_wifi_managed)
 compile_erlang(test_wifi_example)
 compile_erlang(test_net)
 compile_erlang(test_ssl)
+compile_erlang(test_deep_sleep_hold)
 compile_erlang(zephyr)
 
 set(erlang_test_beams
@@ -66,6 +67,7 @@ set(erlang_test_beams
     test_wifi_example.beam
     test_net.beam
     test_ssl.beam
+    test_deep_sleep_hold.beam
     zephyr.beam
 )
 

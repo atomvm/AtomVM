@@ -12,7 +12,9 @@
     mkfs/2,
     mount/4,
     umount/1,
-    socketpair/0
+    socketpair/0,
+    pm_state_force/2,
+    pm_state_next_get/1
 ]).
 
 mkfs(_Source, _FS) ->
@@ -25,4 +27,10 @@ umount(_MountedFS) ->
     erlang:nif_error(undefined).
 
 socketpair() ->
+    erlang:nif_error(undefined).
+
+pm_state_force(_Cpu, _StateInfo) ->
+    erlang:nif_error(undefined).
+
+pm_state_next_get(_Cpu) ->
     erlang:nif_error(undefined).
