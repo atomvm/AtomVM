@@ -277,12 +277,176 @@ static const struct Nif atomvm_platform_nif = {
     .nif_ptr = nif_atomvm_platform
 };
 
+#ifdef CONFIG_PM
+#include <zephyr/pm/pm.h>
+
+static enum pm_state term_to_pm_state(term t, GlobalContext *glb, bool *ok)
+{
+    *ok = true;
+    if (globalcontext_is_term_equal_to_atom_string(glb, t, ATOM_STR("\x6", "active"))) {
+        return PM_STATE_ACTIVE;
+    } else if (globalcontext_is_term_equal_to_atom_string(glb, t, ATOM_STR("\xc", "runtime_idle"))) {
+        return PM_STATE_RUNTIME_IDLE;
+    } else if (globalcontext_is_term_equal_to_atom_string(glb, t, ATOM_STR("\xf", "suspend_to_idle"))) {
+        return PM_STATE_SUSPEND_TO_IDLE;
+    } else if (globalcontext_is_term_equal_to_atom_string(glb, t, ATOM_STR("\x7", "standby"))) {
+        return PM_STATE_STANDBY;
+    } else if (globalcontext_is_term_equal_to_atom_string(glb, t, ATOM_STR("\xe", "suspend_to_ram"))) {
+        return PM_STATE_SUSPEND_TO_RAM;
+    } else if (globalcontext_is_term_equal_to_atom_string(glb, t, ATOM_STR("\xf", "suspend_to_disk"))) {
+        return PM_STATE_SUSPEND_TO_DISK;
+    } else if (globalcontext_is_term_equal_to_atom_string(glb, t, ATOM_STR("\x8", "soft_off"))) {
+        return PM_STATE_SOFT_OFF;
+    }
+    *ok = false;
+    return PM_STATE_ACTIVE;
+}
+
+static term pm_state_to_term(enum pm_state state, GlobalContext *glb)
+{
+    switch (state) {
+        case PM_STATE_ACTIVE:
+            return globalcontext_make_atom(glb, ATOM_STR("\x6", "active"));
+        case PM_STATE_RUNTIME_IDLE:
+            return globalcontext_make_atom(glb, ATOM_STR("\xc", "runtime_idle"));
+        case PM_STATE_SUSPEND_TO_IDLE:
+            return globalcontext_make_atom(glb, ATOM_STR("\xf", "suspend_to_idle"));
+        case PM_STATE_STANDBY:
+            return globalcontext_make_atom(glb, ATOM_STR("\x7", "standby"));
+        case PM_STATE_SUSPEND_TO_RAM:
+            return globalcontext_make_atom(glb, ATOM_STR("\xe", "suspend_to_ram"));
+        case PM_STATE_SUSPEND_TO_DISK:
+            return globalcontext_make_atom(glb, ATOM_STR("\xf", "suspend_to_disk"));
+        case PM_STATE_SOFT_OFF:
+            return globalcontext_make_atom(glb, ATOM_STR("\x8", "soft_off"));
+        default:
+            return globalcontext_make_atom(glb, ATOM_STR("\x7", "unknown"));
+    }
+}
+
+static term nif_zephyr_pm_state_force(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    if (!term_is_integer(argv[0])) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    int cpu = term_to_int(argv[0]);
+
+    term state_term = argv[1];
+    enum pm_state state = PM_STATE_ACTIVE;
+    uint8_t substate_id = 0;
+    uint32_t min_residency_us = 0;
+    uint32_t exit_latency_us = 0;
+
+    bool ok;
+    if (term_is_atom(state_term)) {
+        state = term_to_pm_state(state_term, ctx->global, &ok);
+        if (!ok) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    } else if (term_is_tuple(state_term)) {
+        int tuple_size = term_get_tuple_arity(state_term);
+        if (tuple_size < 2 || tuple_size > 4) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        term el0 = term_get_tuple_element(state_term, 0);
+        if (!term_is_atom(el0)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        state = term_to_pm_state(el0, ctx->global, &ok);
+        if (!ok) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+
+        term el1 = term_get_tuple_element(state_term, 1);
+        if (!term_is_integer(el1)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        substate_id = term_to_int(el1);
+
+        if (tuple_size >= 3) {
+            term el2 = term_get_tuple_element(state_term, 2);
+            if (!term_is_integer(el2)) {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            min_residency_us = term_to_int(el2);
+        }
+        if (tuple_size == 4) {
+            term el3 = term_get_tuple_element(state_term, 3);
+            if (!term_is_integer(el3)) {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            exit_latency_us = term_to_int(el3);
+        }
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    struct pm_state_info info = {
+        .state = state,
+        .substate_id = substate_id,
+        .min_residency_us = min_residency_us,
+        .exit_latency_us = exit_latency_us,
+    };
+
+    bool forced = pm_state_force(cpu, &info);
+    return forced ? TRUE_ATOM : FALSE_ATOM;
+}
+
+static term nif_zephyr_pm_state_next_get(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    if (!term_is_integer(argv[0])) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    int cpu = term_to_int(argv[0]);
+
+    const struct pm_state_info *info = pm_state_next_get(cpu);
+    if (info == NULL) {
+        return UNDEFINED_ATOM;
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(4)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term state_atom = pm_state_to_term(info->state, ctx->global);
+    term substate_term = term_from_int(info->substate_id);
+    term min_residency_term = term_from_int(info->min_residency_us);
+    term exit_latency_term = term_from_int(info->exit_latency_us);
+
+    term result_tuple = term_alloc_tuple(4, &ctx->heap);
+    term_put_tuple_element(result_tuple, 0, state_atom);
+    term_put_tuple_element(result_tuple, 1, substate_term);
+    term_put_tuple_element(result_tuple, 2, min_residency_term);
+    term_put_tuple_element(result_tuple, 3, exit_latency_term);
+
+    return result_tuple;
+}
+#endif
+
 const struct Nif *platform_nifs_get_nif(const char *nifname)
 {
     if (strcmp("atomvm:platform/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &atomvm_platform_nif;
     }
+#ifdef CONFIG_PM
+    if (strcmp("zephyr:pm_state_force/2", nifname) == 0) {
+        static const struct Nif zephyr_pm_state_force_nif = {
+            .base.type = NIFFunctionType,
+            .nif_ptr = nif_zephyr_pm_state_force
+        };
+        return &zephyr_pm_state_force_nif;
+    }
+    if (strcmp("zephyr:pm_state_next_get/1", nifname) == 0) {
+        static const struct Nif zephyr_pm_state_next_get_nif = {
+            .base.type = NIFFunctionType,
+            .nif_ptr = nif_zephyr_pm_state_next_get
+        };
+        return &zephyr_pm_state_next_get_nif;
+    }
+#endif
 #ifdef CONFIG_NET_SOCKETPAIR
     if (strcmp("zephyr:socketpair/0", nifname) == 0) {
         static const struct Nif zephyr_socketpair_nif = {
@@ -327,7 +491,7 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
 REGISTER_NIF_COLLECTION(otp_crypto, NULL, NULL, otp_crypto_nif_get_nif)
 #endif
 
-#ifdef CONFIG_AVM_ENABLE_CRYPTO
+#if defined(CONFIG_AVM_ENABLE_CRYPTO) && defined(CONFIG_NET_SOCKETS)
 #include <otp_ssl.h>
 REGISTER_NIF_COLLECTION(ssl, otp_ssl_init, NULL, otp_ssl_nif_get_nif)
 #endif

@@ -201,3 +201,22 @@ ZTEST(atomvm_tests, test_i2c_native_sim)
     zassert_equal(ret_value, OK_ATOM, "test_i2c_native_sim did not return 'ok'");
 }
 #endif
+
+#if defined(CONFIG_PM)
+ZTEST(atomvm_tests, test_deep_sleep_hold)
+{
+    term ret_value = avm_test_case("test_deep_sleep_hold.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_deep_sleep_hold did not return 'ok'");
+}
+#endif
+
+#if defined(CONFIG_PM_POLICY_CUSTOM)
+#include <zephyr/pm/policy.h>
+const struct pm_state_info *pm_policy_next_state(uint8_t cpu, int32_t ticks)
+{
+    ARG_UNUSED(cpu);
+    ARG_UNUSED(ticks);
+    return NULL;
+}
+#endif
+

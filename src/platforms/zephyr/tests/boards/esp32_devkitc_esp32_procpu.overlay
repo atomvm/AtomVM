@@ -1,0 +1,8 @@
+&rtc_timer {
+	status = "okay";
+	wakeup-source;
+};
+
+&deep_sleep {
+	status = "okay";
+};
