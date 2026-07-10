@@ -29,9 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `erlang:get_keys/0,1` to query process dictionary keys
 - Added the `{scope, {Start, Length}}` option to `binary:split/3`
 - Added `lists:sum/1`
-- Added `maps:take/2`, `maps:update_with/3`, `maps:update_with/4`, `maps:with/2`,
-  `maps:without/2`, `maps:filtermap/2`, `maps:intersect/2`, `maps:intersect_with/3`,
-  `maps:groups_from_list/2` and `maps:groups_from_list/3` to the estdlib `maps` module
+- Added more OTP-compatible functions to the estdlib `maps` module, including
+  `maps:take/2`, `maps:update_with/3,4`, `maps:with/2`, `maps:without/2`,
+  `maps:filtermap/2`, `maps:intersect/2`, `maps:intersect_with/3`,
+  `maps:groups_from_list/2,3`, and `maps:is_iterator_valid/1`
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
