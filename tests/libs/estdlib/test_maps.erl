@@ -34,13 +34,7 @@ test() ->
     ok = test_is_key(),
     ok = test_put(),
     ok = test_iterator(),
-    HasIterator2 =
-        case erlang:system_info(machine) of
-            "BEAM" ->
-                erlang:system_info(version) >= "14.";
-            "ATOM" ->
-                true
-        end,
+    HasIterator2 = has_iterator_2(),
     case HasIterator2 of
         true ->
             ok = test_iterator_2_undefined(),
@@ -128,6 +122,13 @@ test_iterator() ->
     EmptyIterator = maps:iterator(EmptyMap),
     none = maps:next(EmptyIterator),
 
+    %% Key-value iterator triples are iterators too.
+    ?ASSERT_EQUALS(maps:next(id({a, 1, none})), {a, 1, none}),
+    %% Invalid positions and malformed ordered iterators must not reach map storage.
+    ?ASSERT_ERROR(maps:next([-1 | #{a => 1}]), badarg),
+    ?ASSERT_ERROR(maps:next([2 | #{a => 1}]), badarg),
+    ?ASSERT_ERROR(maps:next([[a | malformed] | #{a => 1}]), badarg),
+
     ok.
 
 test_iterator_2_undefined() ->
@@ -210,7 +211,14 @@ test_values() ->
 test_to_list() ->
     ?ASSERT_MATCH(maps:to_list(maps:new()), []),
     ?ASSERT_MATCH(lists:sort(maps:to_list(#{a => 1, b => 2, c => 3})), [{a, 1}, {b, 2}, {c, 3}]),
+    ?ASSERT_EQUALS(maps:to_list(id(none)), []),
+    ?ASSERT_EQUALS(maps:to_list(id({a, 1, {b, 2, none}})), [{a, 1}, {b, 2}]),
+    ok = maybe_with_ordered_iterator(fun() ->
+        OrderedIter = maps:iterator(#{b => 2, a => 1, c => 3}, ordered),
+        ?ASSERT_EQUALS(maps:to_list(OrderedIter), [{a, 1}, {b, 2}, {c, 3}])
+    end),
     ok = check_bad_map(fun() -> maps:to_list(id(not_a_map)) end),
+    ok = check_bad_map(fun() -> maps:to_list(id([-1 | #{a => 1}])) end),
     ok.
 
 test_from_list() ->
@@ -240,17 +248,59 @@ test_filter() ->
     Filter = fun(_Key, Value) -> Value rem 2 == 0 end,
     ?ASSERT_EQUALS(maps:filter(Filter, maps:new()), #{}),
     ?ASSERT_EQUALS(maps:filter(Filter, #{a => 1, b => 2, c => 3}), #{b => 2}),
+    ?ASSERT_EQUALS(
+        maps:filter(fun(_K, _V) -> true end, id({a, 1, {b, 2, none}})),
+        #{a => 1, b => 2}
+    ),
+    ok = maybe_with_ordered_iterator(fun() ->
+        Self = self(),
+        OrderedIter = maps:iterator(#{b => 2, a => 1, c => 3}, ordered),
+        ?ASSERT_EQUALS(
+            maps:filter(
+                fun(K, V) ->
+                    Self ! {Self, filter_order, K},
+                    V > 1
+                end,
+                OrderedIter
+            ),
+            #{b => 2, c => 3}
+        ),
+        ?ASSERT_EQUALS(collect_order(filter_order, []), [a, b, c])
+    end),
     ok = check_bad_map(fun() -> maps:filter(Filter, id(not_a_map)) end),
-    ok = check_bad_map_or_badarg(fun() -> maps:filter(not_a_function, id(not_a_map)) end),
+    ok = check_bad_map(fun() -> maps:filter(Filter, id([-1 | #{a => 1}])) end),
+    ?ASSERT_ERROR(maps:filter(not_a_function, id(not_a_map)), badarg),
     ?ASSERT_ERROR(maps:filter(not_a_function, maps:new()), badarg),
+    ?ASSERT_ERROR(
+        maps:filter(fun(_K, _V) -> unexpected_return end, #{a => 1}),
+        {case_clause, unexpected_return}
+    ),
     ok.
 
 test_fold() ->
     Fun = fun(_Key, Value, Sum) -> Sum + Value end,
     ?ASSERT_EQUALS(maps:fold(Fun, 0, maps:new()), 0),
     ?ASSERT_EQUALS(maps:fold(Fun, 0, #{a => 1, b => 2, c => 3}), 6),
+    ?ASSERT_EQUALS(maps:fold(Fun, 0, id({a, 1, {b, 2, none}})), 3),
+    ok = maybe_with_ordered_iterator(fun() ->
+        Self = self(),
+        OrderedIter = maps:iterator(#{b => 2, a => 1, c => 3}, ordered),
+        ?ASSERT_EQUALS(
+            maps:fold(
+                fun(K, V, Sum) ->
+                    Self ! {Self, fold_order, K},
+                    Sum + V
+                end,
+                0,
+                OrderedIter
+            ),
+            6
+        ),
+        ?ASSERT_EQUALS(collect_order(fold_order, []), [a, b, c])
+    end),
     ok = check_bad_map(fun() -> maps:fold(Fun, any, id(not_a_map)) end),
-    ok = check_bad_map_or_badarg(fun() -> maps:fold(not_a_function, any, id(not_a_map)) end),
+    ok = check_bad_map(fun() -> maps:fold(Fun, 0, id([-1 | #{a => 1}])) end),
+    ?ASSERT_ERROR(maps:fold(not_a_function, any, id(not_a_map)), badarg),
     ?ASSERT_ERROR(maps:fold(not_a_function, any, maps:new()), badarg),
     ok.
 
@@ -282,8 +332,21 @@ test_foreach() ->
                 end,
             ok = maps:foreach(Fun, #{a => 1, b => 2, c => 3}),
             ?ASSERT_EQUALS(lists:sort(collect_foreach([])), [{a, 1}, {b, 2}, {c, 3}]),
+            ok = maps:foreach(Fun, id({a, 1, {b, 2, none}})),
+            ?ASSERT_EQUALS(lists:sort(collect_foreach([])), [{a, 1}, {b, 2}]),
+            ok = maybe_with_ordered_iterator(fun() ->
+                OrderedIter = maps:iterator(#{b => 2, a => 1, c => 3}, ordered),
+                ok = maps:foreach(
+                    fun(K, _V) ->
+                        Self ! {Self, foreach_order, K}
+                    end,
+                    OrderedIter
+                ),
+                ?ASSERT_EQUALS(collect_order(foreach_order, []), [a, b, c])
+            end),
             ok = check_bad_map(fun() -> maps:foreach(Fun, id(not_a_map)) end),
-            ok = check_bad_map_or_badarg(fun() -> maps:foreach(not_a_function, id(not_a_map)) end),
+            ok = check_bad_map(fun() -> maps:foreach(Fun, id([-1 | #{a => 1}])) end),
+            ?ASSERT_ERROR(maps:foreach(not_a_function, id(not_a_map)), badarg),
             ?ASSERT_ERROR(maps:foreach(not_a_function, maps:new()), badarg),
             ok;
         true ->
@@ -294,8 +357,25 @@ test_map() ->
     Fun = fun(_Key, Value) -> 2 * Value end,
     ?ASSERT_EQUALS(maps:map(Fun, maps:new()), #{}),
     ?ASSERT_EQUALS(maps:map(Fun, #{a => 1, b => 2, c => 3}), #{a => 2, b => 4, c => 6}),
+    ?ASSERT_EQUALS(maps:map(Fun, id({a, 1, {b, 2, none}})), #{a => 2, b => 4}),
+    ok = maybe_with_ordered_iterator(fun() ->
+        Self = self(),
+        OrderedIter = maps:iterator(#{b => 2, a => 1, c => 3}, ordered),
+        ?ASSERT_EQUALS(
+            maps:map(
+                fun(K, V) ->
+                    Self ! {Self, map_order, K},
+                    V * 2
+                end,
+                OrderedIter
+            ),
+            #{a => 2, b => 4, c => 6}
+        ),
+        ?ASSERT_EQUALS(collect_order(map_order, []), [a, b, c])
+    end),
     ok = check_bad_map(fun() -> maps:map(Fun, id(not_a_map)) end),
-    ok = check_bad_map_or_badarg(fun() -> maps:map(not_a_function, id(not_a_map)) end),
+    ok = check_bad_map(fun() -> maps:map(Fun, id([-1 | #{a => 1}])) end),
+    ?ASSERT_ERROR(maps:map(not_a_function, id(not_a_map)), badarg),
     ?ASSERT_ERROR(maps:map(not_a_function, maps:new()), badarg),
     ok.
 
@@ -356,6 +436,12 @@ test_remove() ->
     ?ASSERT_EQUALS(maps:remove(b, #{a => 1, b => 2, c => 3}), #{a => 1, c => 3}),
     ?ASSERT_EQUALS(maps:remove(c, #{a => 1, b => 2, c => 3}), #{a => 1, b => 2}),
     ?ASSERT_EQUALS(maps:remove(d, #{a => 1, b => 2, c => 3}), #{a => 1, b => 2, c => 3}),
+    ok = maybe_with_atomvm_ordered_iterator(fun() ->
+        OrderedIter = maps:iterator(#{b => 2, a => 1, c => 3}, ordered),
+        ?ASSERT_EQUALS(maps:remove(b, OrderedIter), #{a => 1, c => 3}),
+        ?ASSERT_EQUALS(maps:remove(b, id({a, 1, {b, 2, none}})), #{a => 1}),
+        ok = check_bad_map(fun() -> maps:remove(a, id([-1 | #{a => 1}])) end)
+    end),
     ok = check_bad_map(fun() -> maps:remove(foo, id(not_a_map)) end),
     ok.
 
@@ -532,9 +618,38 @@ test_filtermap() ->
         maps:filtermap(fun(_K, V) -> V > 1 end, Iter),
         #{b => 2, c => 3}
     ),
+    %% Key-value iterator triples, including makeshift chains, are valid iterators.
+    ?ASSERT_EQUALS(
+        maps:filtermap(fun(_K, _V) -> true end, id({a, 1, {b, 2, none}})),
+        #{a => 1, b => 2}
+    ),
+    %% Ordered iterators keep the requested callback order
+    ok = maybe_with_ordered_iterator(fun() ->
+        Self = self(),
+        OrderedIter = maps:iterator(#{b => 2, a => 1, c => 3}, ordered),
+        ?ASSERT_EQUALS(
+            maps:filtermap(
+                fun(K, V) ->
+                    Self ! {Self, filtermap_order, K},
+                    {true, V}
+                end,
+                OrderedIter
+            ),
+            #{a => 1, b => 2, c => 3}
+        ),
+        ?ASSERT_EQUALS(collect_order(filtermap_order, []), [a, b, c])
+    end),
     %% Error cases
     ok = check_bad_map(fun() -> maps:filtermap(fun(_K, _V) -> true end, id(not_a_map)) end),
+    ok = check_bad_map(fun() ->
+        maps:filtermap(fun(_K, _V) -> true end, id([-1 | #{a => 1}]))
+    end),
     ?ASSERT_ERROR(maps:filtermap(not_a_function, maps:new()), badarg),
+    ?ASSERT_ERROR(maps:filtermap(not_a_function, id(not_a_map)), badarg),
+    ?ASSERT_ERROR(
+        maps:filtermap(fun(_K, _V) -> unexpected_return end, #{a => 1}),
+        {case_clause, unexpected_return}
+    ),
     ok.
 
 test_intersect() ->
@@ -592,6 +707,8 @@ test_intersect_with() ->
     ok = check_bad_map(fun() -> maps:intersect_with(Combiner, id(not_a_map), #{}) end),
     ok = check_bad_map(fun() -> maps:intersect_with(Combiner, #{}, id(not_a_map)) end),
     ?ASSERT_ERROR(maps:intersect_with(not_a_function, #{}, #{}), badarg),
+    ?ASSERT_ERROR(maps:intersect_with(not_a_function, id(not_a_map), #{}), badarg),
+    ?ASSERT_ERROR(maps:intersect_with(not_a_function, #{}, id(not_a_map)), badarg),
     ok.
 
 test_groups_from_list() ->
@@ -634,15 +751,71 @@ test_is_iterator_valid() ->
     %% Partially consumed iterator
     {_, _, Iter3} = maps:next(maps:iterator(#{a => 1, b => 2})),
     ?ASSERT_EQUALS(maps:is_iterator_valid(Iter3), true),
-    %% Ordered iterator
-    Iter4 = maps:iterator(#{a => 1, b => 2}, ordered),
-    ?ASSERT_EQUALS(maps:is_iterator_valid(Iter4), true),
+    %% Ordered iterators
+    ok = maybe_with_ordered_iterator(fun() ->
+        ?ASSERT_EQUALS(maps:is_iterator_valid(maps:iterator(#{}, ordered)), true),
+        ?ASSERT_EQUALS(maps:is_iterator_valid(maps:iterator(#{a => 1, b => 2}, ordered)), true),
+        ?ASSERT_EQUALS(maps:is_iterator_valid(maps:iterator(#{}, reversed)), true),
+        ?ASSERT_EQUALS(maps:is_iterator_valid(maps:iterator(#{a => 1, b => 2}, reversed)), true),
+        ?ASSERT_EQUALS(maps:is_iterator_valid(maps:iterator(#{}, fun erlang:'=<'/2)), true),
+        ?ASSERT_EQUALS(
+            maps:is_iterator_valid(maps:iterator(#{a => 1, b => 2}, fun erlang:'=<'/2)), true
+        )
+    end),
+    %% Makeshift iterators matching maps:next/1 return values
+    ?ASSERT_EQUALS(maps:is_iterator_valid({a, 1, none}), true),
+    ?ASSERT_EQUALS(maps:is_iterator_valid({a, 1, {b, 2, none}}), true),
+    ?ASSERT_EQUALS(maps:is_iterator_valid({a, 1, maps:iterator(#{b => 2})}), true),
     %% Invalid iterators
     ?ASSERT_EQUALS(maps:is_iterator_valid(not_an_iterator), false),
     ?ASSERT_EQUALS(maps:is_iterator_valid(42), false),
+    ?ASSERT_EQUALS(maps:is_iterator_valid(1.0), false),
     ?ASSERT_EQUALS(maps:is_iterator_valid([]), false),
+    ?ASSERT_EQUALS(maps:is_iterator_valid(<<"not an iterator">>), false),
+    ?ASSERT_EQUALS(maps:is_iterator_valid(fun() -> ok end), false),
+    ?ASSERT_EQUALS(maps:is_iterator_valid(#{}), false),
+    ?ASSERT_EQUALS(maps:is_iterator_valid({}), false),
+    ?ASSERT_EQUALS(maps:is_iterator_valid({a}), false),
+    ?ASSERT_EQUALS(maps:is_iterator_valid({a, b}), false),
+    ?ASSERT_EQUALS(maps:is_iterator_valid({a, b, c, d}), false),
+    ?ASSERT_EQUALS(maps:is_iterator_valid({a, b, c}), false),
+    ?ASSERT_EQUALS(maps:is_iterator_valid({a, b, {c, d, e}}), false),
     ?ASSERT_EQUALS(maps:is_iterator_valid([not_int | #{}]), false),
+    %% Default iterator positions must be within the map, and never negative.
+    ?ASSERT_EQUALS(maps:is_iterator_valid([-1 | #{a => 1}]), false),
+    ?ASSERT_EQUALS(maps:is_iterator_valid([2 | #{a => 1}]), false),
+    %% Validation must inspect the complete ordered-key list, not only its head.
+    ?ASSERT_EQUALS(maps:is_iterator_valid([[a | malformed] | #{a => 1}]), false),
+    ?ASSERT_EQUALS(maps:is_iterator_valid([[a, missing] | #{a => 1}]), false),
     ok.
+
+collect_order(Tag, Acc) ->
+    Self = self(),
+    receive
+        {Self, Tag, Key} ->
+            collect_order(Tag, [Key | Acc])
+    after 0 -> lists:reverse(Acc)
+    end.
+
+maybe_with_ordered_iterator(Fun) ->
+    case has_iterator_2() of
+        true -> Fun();
+        false -> ok
+    end.
+
+maybe_with_atomvm_ordered_iterator(Fun) ->
+    case erlang:system_info(machine) of
+        "ATOM" -> Fun();
+        "BEAM" -> ok
+    end.
+
+has_iterator_2() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            erlang:system_info(version) >= "14.";
+        "ATOM" ->
+            true
+    end.
 
 id(X) -> X.
 
@@ -652,20 +825,6 @@ check_bad_map(F) ->
         fail
     catch
         error:{badmap, _} -> ok
-    end.
-
-check_bad_map_or_badarg(F) ->
-    BadargFirst =
-        case erlang:system_info(machine) of
-            "BEAM" -> erlang:system_info(version) >= "12.";
-            "ATOM" -> false
-        end,
-    try
-        F(),
-        fail
-    catch
-        error:{badmap, _} when not BadargFirst -> ok;
-        error:badarg when BadargFirst -> ok
     end.
 
 check_bad_key(F, _Key) ->
