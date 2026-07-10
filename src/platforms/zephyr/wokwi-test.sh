@@ -32,23 +32,28 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
-# We only support board options that map to Wokwi parts.
-# Currently we check for esp32-devkit-c-v4 and pi-pico.
-if [[ "$BOARD" == *"esp32"* ]]; then
-    WOKWI_BOARD_TYPE="board-esp32-devkit-c-v4"
-    WOKWI_OFFSET="0x1000"
-    FIRMWARE_FILE="zephyr.bin"
-elif [[ "$BOARD" == *"pico"* || "$BOARD" == *"rp2"* ]]; then
-    WOKWI_BOARD_TYPE="wokwi-pi-pico"
-    WOKWI_OFFSET=""
-    FIRMWARE_FILE="zephyr.elf"
-else
-    echo "Warning: Unsupported board for Wokwi CLI simulation. Defaulting to esp32_devkitc."
-    BOARD="esp32_devkitc/esp32/procpu"
-    WOKWI_BOARD_TYPE="board-esp32-devkit-c-v4"
-    WOKWI_OFFSET="0x1000"
-    FIRMWARE_FILE="zephyr.bin"
-fi
+case "$BOARD" in
+    esp32_devkitc/esp32/procpu)
+        DIAGRAM_FILE="diagram.esp32.json"
+        FIRMWARE_FILE="zephyr.bin"
+        ;;
+    esp32c3_devkitm/esp32c3)
+        DIAGRAM_FILE="diagram.esp32c3.json"
+        FIRMWARE_FILE="zephyr.bin"
+        ;;
+    esp32s3_devkitc/esp32s3/procpu)
+        DIAGRAM_FILE="diagram.esp32s3.json"
+        FIRMWARE_FILE="zephyr.bin"
+        ;;
+    rpi_pico/rp2040)
+        DIAGRAM_FILE="diagram.pico.json"
+        FIRMWARE_FILE="zephyr.elf"
+        ;;
+    *)
+        echo "Error: Unsupported board for Wokwi CLI simulation: $BOARD"
+        exit 1
+        ;;
+esac
 
 BUILD_DIR="build-wokwi-test"
 BOARD_CLEAN="${BOARD//\//_}"
@@ -86,46 +91,7 @@ firmware = "${FIRMWARE_FILE}"
 elf = "zephyr.elf"
 EOF
 
-# Create diagram.json
-if [ -n "$WOKWI_OFFSET" ]; then
-    # ESP32
-    cat <<EOF > "$SIM_DIR/diagram.json"
-{
-  "version": 1,
-  "author": "AtomVM",
-  "editor": "wokwi",
-  "parts": [
-    {
-      "type": "${WOKWI_BOARD_TYPE}",
-      "id": "esp",
-      "top": 0,
-      "left": 0,
-      "attrs": {
-        "firmwareOffset": "${WOKWI_OFFSET}"
-      }
-    },
-    {
-      "type": "wokwi-microsd-card",
-      "id": "sd1",
-      "top": 200,
-      "left": 200,
-      "attrs": {}
-    }
-  ],
-  "connections": [
-    ["esp:TX", "\$serialMonitor:RX", "", []],
-    ["esp:RX", "\$serialMonitor:TX", "", []],
-    ["esp:5", "sd1:CS", "green", []],
-    ["esp:23", "sd1:DI", "blue", []],
-    ["esp:18", "sd1:SCK", "yellow", []],
-    ["esp:19", "sd1:DO", "orange", []],
-    ["esp:3V3", "sd1:VDD", "red", []],
-    ["esp:GND.1", "sd1:VSS", "black", []]
-  ]
-}
-EOF
-else
-    # Pico
+if [ "$DIAGRAM_FILE" = "diagram.pico.json" ]; then
     cat <<EOF > "$SIM_DIR/diagram.json"
 {
   "version": 1,
@@ -145,6 +111,8 @@ else
   ]
 }
 EOF
+else
+    cp "$SCRIPT_DIR/tests/sim_boards/$DIAGRAM_FILE" "$SIM_DIR/diagram.json"
 fi
 
 # Run wokwi-cli
