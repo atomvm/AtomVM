@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "author": "Uri Shaked",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "id": "esp",
+      "type": "board-esp32-c61-devkitc-1",
+      "attrs": { "cpuFrequency": "32" }
+    }
+  ],
+  "connections": [
+    ["esp:TX", "$serialMonitor:RX", ""],
+    ["esp:RX", "$serialMonitor:TX", ""]
+  ]
+}
