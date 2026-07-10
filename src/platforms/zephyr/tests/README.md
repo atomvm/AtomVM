@@ -26,8 +26,17 @@ Or use the Zephyr Docker image wrapper from `src/platforms/zephyr`:
 ./docker-test.sh -b native_sim
 ```
 
-The `-b` option mirrors `docker-build.sh`. ESP32 scenarios are currently
-build-only until a simulator or device harness is added.
+The `-b` option mirrors `docker-build.sh`. Wokwi runtime coverage is available
+for the ESP32, ESP32-C3, and ESP32-S3 test builds:
+
+```shell
+./wokwi-test.sh -b esp32_devkitc/esp32/procpu
+./wokwi-test.sh -b esp32c3_devkitm/esp32c3
+./wokwi-test.sh -b esp32s3_devkitc/esp32s3/procpu
+```
+
+The checked-in Wokwi diagrams are under `sim_boards`. Other ESP32 scenarios
+remain build-only until Zephyr board support and a simulator harness are added.
 
 Erlang-driven Zephyr tests follow the ESP32 and RP2 pattern: platform-specific
 modules live under `test_erl_sources`, compile into a test AVM during CMake
