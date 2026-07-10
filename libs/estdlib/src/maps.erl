@@ -137,21 +137,18 @@ is_key(Key, Map) ->
     erlang:is_map_key(Key, Map).
 
 %%-----------------------------------------------------------------------------
-%% @param   Iterator the iterator to validate
-%% @returns `true' if the iterator is valid, `false' otherwise
-%% @doc Check if an iterator is valid.
+%% @param   MaybeIterator the term to inspect
+%% @returns `true' if `MaybeIterator' is a valid map iterator; `false' otherwise
+%% @doc Check if a term is a valid map iterator.
 %%
-%% This function checks if an iterator can still be used with `maps:next/1'.
-%% An iterator becomes invalid if it has been exhausted or if the underlying
-%% map has been modified.
-%%
-%% This is an internal function, primarily used by other functions in this module.
+%% This function recognizes iterators returned by `maps:iterator/1,2',
+%% `{Key, Value, Iterator}' triples returned by `maps:next/1', and `none'.
 %% @end
 %%-----------------------------------------------------------------------------
--spec is_iterator_valid(Iterator :: iterator()) -> boolean().
-is_iterator_valid(Iterator) ->
+-spec is_iterator_valid(MaybeIterator :: iterator() | term()) -> boolean().
+is_iterator_valid(MaybeIterator) ->
     try
-        is_iterator_valid_1(Iterator)
+        is_iterator_valid_1(MaybeIterator)
     catch
         error:badarg -> false
     end.
@@ -270,13 +267,16 @@ values(Map) ->
 %% an iterator.
 %% @end
 %%-----------------------------------------------------------------------------
--spec to_list(Map :: #{Key => Value}) -> [{Key, Value}].
+-spec to_list(MapOrIterator :: map_or_iterator(Key, Value)) -> [{Key, Value}].
 to_list(Map) when is_map(Map) ->
-    to_list(maps:iterator(Map));
-to_list(Iterator) when is_list(Iterator) andalso is_map(tl(Iterator)) ->
-    iterate_entries(maps:next(Iterator), []);
-to_list(Map) ->
-    error({badmap, Map}).
+    iterate_entries(maps:next(maps:iterator(Map)), [], undefined);
+to_list(Iterator) ->
+    ErrorTag = make_ref(),
+    try
+        iterate_entries(try_next(Iterator, ErrorTag), [], ErrorTag)
+    catch
+        error:ErrorTag -> error({badmap, Iterator})
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   List a list of `[{Key, Value}]' pairs
@@ -348,13 +348,14 @@ find(Key, Map) ->
     MapOrIterator :: map_or_iterator(Key, Value)
 ) -> #{Key => Value}.
 filter(Pred, Map) when is_function(Pred, 2) andalso is_map(Map) ->
-    iterate_filter(Pred, maps:next(maps:iterator(Map)), ?MODULE:new());
-filter(Pred, [Pos | Map] = Iterator) when
-    is_function(Pred, 2) andalso is_integer(Pos) andalso is_map(Map)
-->
-    iterate_filter(Pred, maps:next(Iterator), ?MODULE:new());
-filter(_Pred, Map) when not is_map(Map) ->
-    error({badmap, Map});
+    iterate_filter(Pred, maps:next(maps:iterator(Map)), ?MODULE:new(), undefined);
+filter(Pred, Iterator) when is_function(Pred, 2) ->
+    ErrorTag = make_ref(),
+    try
+        iterate_filter(Pred, try_next(Iterator, ErrorTag), ?MODULE:new(), ErrorTag)
+    catch
+        error:ErrorTag -> error({badmap, Iterator})
+    end;
 filter(_Pred, _Map) ->
     error(badarg).
 
@@ -380,13 +381,14 @@ filter(_Pred, _Map) ->
     MapOrIterator :: map_or_iterator(Key, Value)
 ) -> #{Key => Value | NewValue}.
 filtermap(Fun, Map) when is_function(Fun, 2) andalso is_map(Map) ->
-    maps:from_list(iterate_filtermap(Fun, maps:next(maps:iterator(Map)), []));
-filtermap(Fun, [Pos | Map] = Iterator) when
-    is_function(Fun, 2) andalso is_integer(Pos) andalso is_map(Map)
-->
-    maps:from_list(iterate_filtermap(Fun, maps:next(Iterator), []));
-filtermap(_Fun, Map) when not is_map(Map) ->
-    error({badmap, Map});
+    maps:from_list(iterate_filtermap(Fun, maps:next(maps:iterator(Map)), [], undefined));
+filtermap(Fun, Iterator) when is_function(Fun, 2) ->
+    ErrorTag = make_ref(),
+    try
+        maps:from_list(iterate_filtermap(Fun, try_next(Iterator, ErrorTag), [], ErrorTag))
+    catch
+        error:ErrorTag -> error({badmap, Iterator})
+    end;
 filtermap(_Fun, _Map) ->
     error(badarg).
 
@@ -411,13 +413,14 @@ filtermap(_Fun, _Map) ->
     MapOrIterator :: map_or_iterator(Key, Value)
 ) -> Accum.
 fold(Fun, Init, Map) when is_function(Fun, 3) andalso is_map(Map) ->
-    iterate_fold(Fun, maps:next(maps:iterator(Map)), Init);
-fold(Fun, Init, [Pos | Map] = Iterator) when
-    is_function(Fun, 3) andalso is_integer(Pos) andalso is_map(Map)
-->
-    iterate_fold(Fun, maps:next(Iterator), Init);
-fold(_Fun, _Init, Map) when not is_map(Map) ->
-    error({badmap, Map});
+    iterate_fold(Fun, maps:next(maps:iterator(Map)), Init, undefined);
+fold(Fun, Init, Iterator) when is_function(Fun, 3) ->
+    ErrorTag = make_ref(),
+    try
+        iterate_fold(Fun, try_next(Iterator, ErrorTag), Init, ErrorTag)
+    catch
+        error:ErrorTag -> error({badmap, Iterator})
+    end;
 fold(_Fun, _Init, _Map) ->
     error(badarg).
 
@@ -438,13 +441,14 @@ fold(_Fun, _Init, _Map) ->
     MapOrIterator :: map_or_iterator(Key, Value)
 ) -> ok.
 foreach(Fun, Map) when is_function(Fun, 2) andalso is_map(Map) ->
-    iterate_foreach(Fun, maps:next(maps:iterator(Map)));
-foreach(Fun, [Pos | Map] = Iterator) when
-    is_function(Fun, 2) andalso is_integer(Pos) andalso is_map(Map)
-->
-    iterate_foreach(Fun, maps:next(Iterator));
-foreach(_Fun, Map) when not is_map(Map) ->
-    error({badmap, Map});
+    iterate_foreach(Fun, maps:next(maps:iterator(Map)), undefined);
+foreach(Fun, Iterator) when is_function(Fun, 2) ->
+    ErrorTag = make_ref(),
+    try
+        iterate_foreach(Fun, try_next(Iterator, ErrorTag), ErrorTag)
+    catch
+        error:ErrorTag -> error({badmap, Iterator})
+    end;
 foreach(_Fun, _Map) ->
     error(badarg).
 
@@ -553,8 +557,9 @@ intersect(_Map1, Map2) when not is_map(Map2) ->
 %% `Combiner(Key, Value1, Value2)' where `Value1' is from `Map1' and `Value2'
 %% is from `Map2'.
 %%
-%% This function raises a `badmap' error if either `Map1' or `Map2' is not a map,
-%% and a `badarg' error if `Combiner' is not a function of arity 3.
+%% This function raises a `badarg' error if `Combiner' is not a function of
+%% arity 3. Otherwise, it raises a `badmap' error if either `Map1' or `Map2' is
+%% not a map.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec intersect_with(
@@ -572,9 +577,13 @@ intersect_with(Combiner, Map1, Map2) when
             RCombiner = fun(K, V1, V2) -> Combiner(K, V2, V1) end,
             intersect_with_small_map_first(RCombiner, Map2, Map1)
     end;
-intersect_with(_Combiner, Map1, _Map2) when not is_map(Map1) ->
+intersect_with(Combiner, Map1, _Map2) when
+    is_function(Combiner, 3) andalso not is_map(Map1)
+->
     error({badmap, Map1});
-intersect_with(_Combiner, _Map1, Map2) when not is_map(Map2) ->
+intersect_with(Combiner, _Map1, Map2) when
+    is_function(Combiner, 3) andalso not is_map(Map2)
+->
     error({badmap, Map2});
 intersect_with(_Combiner, _Map1, _Map2) ->
     error(badarg).
@@ -592,13 +601,14 @@ intersect_with(_Combiner, _Map1, _Map2) ->
 -spec map(Fun :: fun((Key, Value) -> MappedValue), Map :: map_or_iterator(Key, Value)) ->
     #{Key => MappedValue}.
 map(Fun, Map) when is_function(Fun, 2) andalso is_map(Map) ->
-    iterate_map(Fun, maps:next(maps:iterator(Map)), ?MODULE:new());
-map(Fun, [Pos | Map] = Iterator) when
-    is_function(Fun, 2) andalso is_integer(Pos) andalso is_map(Map)
-->
-    iterate_map(Fun, maps:next(Iterator), ?MODULE:new());
-map(_Fun, Map) when not is_map(Map) ->
-    error({badmap, Map});
+    iterate_map(Fun, maps:next(maps:iterator(Map)), ?MODULE:new(), undefined);
+map(Fun, Iterator) when is_function(Fun, 2) ->
+    ErrorTag = make_ref(),
+    try
+        iterate_map(Fun, try_next(Iterator, ErrorTag), ?MODULE:new(), ErrorTag)
+    catch
+        error:ErrorTag -> error({badmap, Iterator})
+    end;
 map(_Fun, _Map) ->
     error(badarg).
 
@@ -662,14 +672,17 @@ merge_with(_Combiner, _Map1, Map2) when not is_map(Map2) ->
 remove(Key, Map) when is_map(Map) ->
     case ?MODULE:is_key(Key, Map) of
         true ->
-            iterate_remove(Key, maps:next(maps:iterator(Map)), ?MODULE:new());
+            iterate_remove(Key, maps:next(maps:iterator(Map)), ?MODULE:new(), undefined);
         _ ->
             Map
     end;
-remove(Key, [Pos | Map] = Iterator) when is_integer(Pos) andalso is_map(Map) ->
-    iterate_remove(Key, maps:next(Iterator), ?MODULE:new());
-remove(_Key, Map) when not is_map(Map) ->
-    error({badmap, Map}).
+remove(Key, Iterator) ->
+    ErrorTag = make_ref(),
+    try
+        iterate_remove(Key, try_next(Iterator, ErrorTag), ?MODULE:new(), ErrorTag)
+    catch
+        error:ErrorTag -> error({badmap, Iterator})
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   Key     the key to update
@@ -829,44 +842,44 @@ iterate_values({_Key, Value, Iterator}, Accum) ->
     iterate_values(maps:next(Iterator), [Value | Accum]).
 
 %% @private
-iterate_entries(none, Accum) ->
+iterate_entries(none, Accum, _ErrorTag) ->
     lists:reverse(Accum);
-iterate_entries({Key, Value, Iterator}, Accum) ->
-    iterate_entries(maps:next(Iterator), [{Key, Value} | Accum]).
+iterate_entries({Key, Value, Iterator}, Accum, ErrorTag) ->
+    iterate_entries(try_next(Iterator, ErrorTag), [{Key, Value} | Accum], ErrorTag).
 
 %% @private
-iterate_filter(_Pred, none, Accum) ->
+iterate_filter(_Pred, none, Accum, _ErrorTag) ->
     Accum;
-iterate_filter(Pred, {Key, Value, Iterator}, Accum) ->
+iterate_filter(Pred, {Key, Value, Iterator}, Accum, ErrorTag) ->
     NewAccum =
         case Pred(Key, Value) of
             true ->
                 Accum#{Key => Value};
-            _ ->
+            false ->
                 Accum
         end,
-    iterate_filter(Pred, maps:next(Iterator), NewAccum).
+    iterate_filter(Pred, try_next(Iterator, ErrorTag), NewAccum, ErrorTag).
 
 %% @private
-iterate_fold(_Fun, none, Accum) ->
+iterate_fold(_Fun, none, Accum, _ErrorTag) ->
     Accum;
-iterate_fold(Fun, {Key, Value, Iterator}, Accum) ->
+iterate_fold(Fun, {Key, Value, Iterator}, Accum, ErrorTag) ->
     NewAccum = Fun(Key, Value, Accum),
-    iterate_fold(Fun, maps:next(Iterator), NewAccum).
+    iterate_fold(Fun, try_next(Iterator, ErrorTag), NewAccum, ErrorTag).
 
 %% @private
-iterate_foreach(_Fun, none) ->
+iterate_foreach(_Fun, none, _ErrorTag) ->
     ok;
-iterate_foreach(Fun, {Key, Value, Iterator}) ->
+iterate_foreach(Fun, {Key, Value, Iterator}, ErrorTag) ->
     _ = Fun(Key, Value),
-    iterate_foreach(Fun, maps:next(Iterator)).
+    iterate_foreach(Fun, try_next(Iterator, ErrorTag), ErrorTag).
 
 %% @private
-iterate_map(_Fun, none, Accum) ->
+iterate_map(_Fun, none, Accum, _ErrorTag) ->
     Accum;
-iterate_map(Fun, {Key, Value, Iterator}, Accum) ->
+iterate_map(Fun, {Key, Value, Iterator}, Accum, ErrorTag) ->
     NewAccum = Accum#{Key => Fun(Key, Value)},
-    iterate_map(Fun, maps:next(Iterator), NewAccum).
+    iterate_map(Fun, try_next(Iterator, ErrorTag), NewAccum, ErrorTag).
 
 %% @private
 iterate_merge_with(_Combiner, none, Accum) ->
@@ -888,12 +901,12 @@ iterate_merge({Key, Value, Iterator}, Accum) ->
     iterate_merge(maps:next(Iterator), Accum#{Key => Value}).
 
 %% @private
-iterate_remove(_Key, none, Accum) ->
+iterate_remove(_Key, none, Accum, _ErrorTag) ->
     Accum;
-iterate_remove(Key, {Key, _Value, Iterator}, Accum) ->
-    iterate_remove(Key, maps:next(Iterator), Accum);
-iterate_remove(Key, {OtherKey, Value, Iterator}, Accum) ->
-    iterate_remove(Key, maps:next(Iterator), Accum#{OtherKey => Value}).
+iterate_remove(Key, {Key, _Value, Iterator}, Accum, ErrorTag) ->
+    iterate_remove(Key, try_next(Iterator, ErrorTag), Accum, ErrorTag);
+iterate_remove(Key, {OtherKey, Value, Iterator}, Accum, ErrorTag) ->
+    iterate_remove(Key, try_next(Iterator, ErrorTag), Accum#{OtherKey => Value}, ErrorTag).
 
 %% @private
 iterate_from_list([], Accum) ->
@@ -904,9 +917,9 @@ iterate_from_list(_List, _Accum) ->
     error(badarg).
 
 %% @private
-iterate_filtermap(_Fun, none, Accum) ->
+iterate_filtermap(_Fun, none, Accum, _ErrorTag) ->
     lists:reverse(Accum);
-iterate_filtermap(Fun, {Key, Value, Iterator}, Accum) ->
+iterate_filtermap(Fun, {Key, Value, Iterator}, Accum, ErrorTag) ->
     NewAccum =
         case Fun(Key, Value) of
             true ->
@@ -916,7 +929,7 @@ iterate_filtermap(Fun, {Key, Value, Iterator}, Accum) ->
             false ->
                 Accum
         end,
-    iterate_filtermap(Fun, maps:next(Iterator), NewAccum).
+    iterate_filtermap(Fun, try_next(Iterator, ErrorTag), NewAccum, ErrorTag).
 
 %% @private
 groups_from_list_1(_KeyFun, _ValueFun, [], Acc) ->
@@ -950,6 +963,20 @@ intersect_with_iterate({K, V1, Iterator}, Keep, BigMap, Combiner) ->
     end;
 intersect_with_iterate(none, Keep, _BigMap, _Combiner) ->
     maps:from_list(Keep).
+
+%% @private
+try_next({_, _, _} = KeyValueIterator, _ErrorTag) ->
+    KeyValueIterator;
+try_next(none, _ErrorTag) ->
+    none;
+try_next(Iterator, undefined) ->
+    maps:next(Iterator);
+try_next(Iterator, ErrorTag) ->
+    try
+        maps:next(Iterator)
+    catch
+        error:badarg -> error(ErrorTag)
+    end.
 
 %% @private
 is_iterator_valid_1(none) ->

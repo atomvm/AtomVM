@@ -7039,6 +7039,9 @@ static term nif_maps_next(Context *ctx, int argc, term argv[])
     }
 
     term iterator = argv[0];
+    if (term_is_tuple(iterator) && term_get_tuple_arity(iterator) == 3) {
+        return iterator;
+    }
     VALIDATE_VALUE(iterator, term_is_nonempty_list);
 
     term post = term_get_list_head(iterator);
@@ -7052,16 +7055,34 @@ static term nif_maps_next(Context *ctx, int argc, term argv[])
     int pos;
     if (term_is_integer(post)) {
         int size = term_get_map_size(map);
-        pos = term_to_int(post);
-        if (pos >= size) {
+        avm_int_t requested_pos = term_to_int(post);
+        if (UNLIKELY(requested_pos < 0 || requested_pos > size)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        if (requested_pos == size) {
             return NONE_ATOM;
         }
+        pos = (int) requested_pos;
     } else if (term_is_nil(post)) {
         return NONE_ATOM;
     } else {
-        pos = term_find_map_pos(map, term_get_list_head(post), ctx->global);
-        if (pos == TERM_MAP_NOT_FOUND) {
-            return NONE_ATOM;
+        term remaining_keys = post;
+        pos = TERM_MAP_NOT_FOUND;
+        while (term_is_nonempty_list(remaining_keys)) {
+            int key_pos = term_find_map_pos(map, term_get_list_head(remaining_keys), ctx->global);
+            if (UNLIKELY(key_pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            if (UNLIKELY(key_pos == TERM_MAP_NOT_FOUND)) {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            if (pos == TERM_MAP_NOT_FOUND) {
+                pos = key_pos;
+            }
+            remaining_keys = term_get_list_tail(remaining_keys);
+        }
+        if (UNLIKELY(!term_is_nil(remaining_keys))) {
+            RAISE_ERROR(BADARG_ATOM);
         }
     }
 
