@@ -135,6 +135,20 @@ jobs:
         run: |
           west build -b esp32_devkitc/esp32/procpu -p=auto -d build-esp32-test tests
 
+      - name: Build Wokwi Test for ESP32-C3
+        id: build_wokwi_esp32c3
+        continue-on-error: true
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b esp32c3_devkitm/esp32c3 -p=auto -d build-esp32c3-test tests
+
+      - name: Build Wokwi Test for ESP32-S3
+        id: build_wokwi_esp32s3
+        continue-on-error: true
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b esp32s3_devkitc/esp32s3/procpu -p=auto -d build-esp32s3-test tests
+
       - name: Build Wokwi Test for Pico
         id: build_wokwi_pico
         continue-on-error: true
@@ -154,6 +168,8 @@ jobs:
           PICO2_M33_W: ${{ steps.build_pico2_m33_w.outcome }}
           PICO2_HAZARD3: ${{ steps.build_pico2_hazard3.outcome }}
           WOKWI_ESP32: ${{ steps.build_wokwi_esp32.outcome }}
+          WOKWI_ESP32C3: ${{ steps.build_wokwi_esp32c3.outcome }}
+          WOKWI_ESP32S3: ${{ steps.build_wokwi_esp32s3.outcome }}
           WOKWI_PICO: ${{ steps.build_wokwi_pico.outcome }}
         run: |
           failed=0
@@ -174,6 +190,8 @@ jobs:
           check_build "rpi_pico2/rp2350a/m33/w" "$PICO2_M33_W"
           check_build "rpi_pico2/rp2350a/hazard3" "$PICO2_HAZARD3"
           check_build "Wokwi ESP32 test" "$WOKWI_ESP32"
+          check_build "Wokwi ESP32-C3 test" "$WOKWI_ESP32C3"
+          check_build "Wokwi ESP32-S3 test" "$WOKWI_ESP32S3"
           check_build "Wokwi Pico test" "$WOKWI_PICO"
 
           exit "$failed"
@@ -189,6 +207,30 @@ jobs:
         with:
           name: zephyr-esp32-test-elf
           path: esp32-test-artifact/
+
+      - name: Stage ESP32-C3 Test Files
+        run: |
+          mkdir -p esp32c3-test-artifact
+          cp src/platforms/zephyr/build-esp32c3-test/zephyr/zephyr.elf esp32c3-test-artifact/
+          cp src/platforms/zephyr/build-esp32c3-test/zephyr/zephyr.bin esp32c3-test-artifact/
+
+      - name: Upload ESP32-C3 Test Files
+        uses: actions/upload-artifact@v7
+        with:
+          name: zephyr-esp32c3-test-elf
+          path: esp32c3-test-artifact/
+
+      - name: Stage ESP32-S3 Test Files
+        run: |
+          mkdir -p esp32s3-test-artifact
+          cp src/platforms/zephyr/build-esp32s3-test/zephyr/zephyr.elf esp32s3-test-artifact/
+          cp src/platforms/zephyr/build-esp32s3-test/zephyr/zephyr.bin esp32s3-test-artifact/
+
+      - name: Upload ESP32-S3 Test Files
+        uses: actions/upload-artifact@v7
+        with:
+          name: zephyr-esp32s3-test-elf
+          path: esp32s3-test-artifact/
 
       - name: Stage Pico Test Files
         run: |
@@ -344,31 +386,47 @@ jobs:
     needs: [build]
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: ESP32
+            artifact: zephyr-esp32-test-elf
+            sim_dir: esp32-sim
+            diagram: diagram.esp32.json
+          - target: ESP32-C3
+            artifact: zephyr-esp32c3-test-elf
+            sim_dir: esp32c3-sim
+            diagram: diagram.esp32c3.json
+          - target: ESP32-S3
+            artifact: zephyr-esp32s3-test-elf
+            sim_dir: esp32s3-sim
+            diagram: diagram.esp32s3.json
     steps:
-      - name: Download ESP32 Test ELF
-        uses: actions/download-artifact@v8
-        with:
-          name: zephyr-esp32-test-elf
-          path: esp32-sim/
+      - name: Checkout repo
+        uses: actions/checkout@v6
 
-      - name: Download Pico Test ELF
+      - name: Download ${{ matrix.target }} Test ELF
         uses: actions/download-artifact@v8
         with:
-          name: zephyr-pico-test-elf
-          path: pico-sim/
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.sim_dir }}/
 
       - name: Install Wokwi CLI
         run: curl -L https://wokwi.com/ci/install.sh | sh
 
-      - name: Run ESP32 Wokwi Test
+      - name: Run ${{ matrix.target }} Wokwi Test
         env:
           WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
+          SIM_DIR: ${{ matrix.sim_dir }}
+          DIAGRAM: ${{ matrix.diagram }}
+          TARGET_NAME: ${{ matrix.target }}
         run: |
-          cd esp32-sim
+          cd "$SIM_DIR"
           echo -e "[wokwi]\nversion = 1\nfirmware = \"zephyr.bin\"\nelf = \"zephyr.elf\"" > wokwi.toml
-          echo '{"version": 1, "author": "AtomVM", "editor": "wokwi", "parts": [{"type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {"firmwareOffset": "0x1000"}}, {"type": "wokwi-microsd-card", "id": "sd1", "top": 200, "left": 200, "attrs": {}}], "connections": [["esp:TX", "$serialMonitor:RX", "", []], ["esp:RX", "$serialMonitor:TX", "", []], ["esp:5", "sd1:CS", "green", []], ["esp:23", "sd1:DI", "blue", []], ["esp:18", "sd1:SCK", "yellow", []], ["esp:19", "sd1:DO", "orange", []], ["esp:3V3", "sd1:VDD", "red", []], ["esp:GND.1", "sd1:VSS", "black", []]]}' > diagram.json
+          cp "../src/platforms/zephyr/tests/sim_boards/$DIAGRAM" diagram.json
           set +e
-          wokwi-cli --timeout 20000 --expect-text "PROJECT EXECUTION SUCCESSFUL" . | tee wokwi.log
+          wokwi-cli --timeout 60000 --expect-text "PROJECT EXECUTION SUCCESSFUL" . | tee wokwi.log
           WOKWI_EXIT=${PIPESTATUS[0]}
           set -e
           python3 -c '
@@ -414,7 +472,7 @@ jobs:
                   sf.write("❌ No test cases were detected. The simulation may have crashed or timed out.\n")
                   if summary_block:
                       sf.write("\n#### Summary Log\n```\n" + "\n".join(summary_block) + "\n```\n")
-          ' wokwi.log "$GITHUB_STEP_SUMMARY" "ESP32"
+          ' wokwi.log "$GITHUB_STEP_SUMMARY" "$TARGET_NAME"
           exit $WOKWI_EXIT
 
       # - name: Run Pico Wokwi Test
