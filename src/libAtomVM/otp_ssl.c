@@ -38,6 +38,7 @@
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
 #include <mbedtls/ssl.h>
+#include <mbedtls/version.h>
 
 #if defined(HAVE_PSA_CRYPTO)
 #include <psa/crypto.h>
@@ -520,7 +521,7 @@ static term nif_ssl_conf_rng(Context *ctx, int argc, term argv[])
         conf_obj->rng_obj = ctr_drbg_obj;
     }
 
-#if !defined(MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG)
+#if MBEDTLS_VERSION_NUMBER < 0x04000000 && !defined(MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG)
     mbedtls_ssl_conf_rng(&conf_obj->config, mbedtls_ctr_drbg_random, &ctr_drbg_obj->context);
 #endif
 

@@ -73,54 +73,110 @@ jobs:
             https://cdn.jsdelivr.net/hex
 
       - name: Build for nucleo_f429zi
+        id: build_nucleo_f429zi
+        continue-on-error: true
         working-directory: ./src/platforms/zephyr
         run: |
           west build -b nucleo_f429zi -p=auto .
 
       - name: Build for esp32_devkitc/esp32/procpu
+        id: build_esp32
+        continue-on-error: true
         working-directory: ./src/platforms/zephyr
         run: |
           west build -b esp32_devkitc/esp32/procpu -p=auto .
 
       - name: Build for esp32s3_devkitc/esp32s3/procpu
+        id: build_esp32s3
+        continue-on-error: true
         working-directory: ./src/platforms/zephyr
         run: |
           west build -b esp32s3_devkitc/esp32s3/procpu -p=auto .
 
       - name: Build for rpi_pico/rp2040
+        id: build_pico
+        continue-on-error: true
         working-directory: ./src/platforms/zephyr
         run: |
           west build -b rpi_pico/rp2040 -p=auto .
 
       - name: Build for rpi_pico/rp2040/w
+        id: build_pico_w
+        continue-on-error: true
         working-directory: ./src/platforms/zephyr
         run: |
           west build -b rpi_pico/rp2040/w -p=auto .
 
       - name: Build for rpi_pico2/rp2350a/m33
+        id: build_pico2_m33
+        continue-on-error: true
         working-directory: ./src/platforms/zephyr
         run: |
           west build -b rpi_pico2/rp2350a/m33 -p=auto .
 
       - name: Build for rpi_pico2/rp2350a/m33/w
+        id: build_pico2_m33_w
+        continue-on-error: true
         working-directory: ./src/platforms/zephyr
         run: |
           west build -b rpi_pico2/rp2350a/m33/w -p=auto .
 
       - name: Build for rpi_pico2/rp2350a/hazard3
+        id: build_pico2_hazard3
+        continue-on-error: true
         working-directory: ./src/platforms/zephyr
         run: |
           west build -b rpi_pico2/rp2350a/hazard3 -p=auto .
 
       - name: Build Wokwi Test for ESP32
+        id: build_wokwi_esp32
+        continue-on-error: true
         working-directory: ./src/platforms/zephyr
         run: |
           west build -b esp32_devkitc/esp32/procpu -p=auto -d build-esp32-test tests
 
       - name: Build Wokwi Test for Pico
+        id: build_wokwi_pico
+        continue-on-error: true
         working-directory: ./src/platforms/zephyr
         run: |
           west build -b rpi_pico/rp2040 -p=auto -d build-pico-test tests
+
+      - name: Report build failures
+        if: ${{ always() }}
+        env:
+          NUCLEO_F429ZI: ${{ steps.build_nucleo_f429zi.outcome }}
+          ESP32: ${{ steps.build_esp32.outcome }}
+          ESP32S3: ${{ steps.build_esp32s3.outcome }}
+          PICO: ${{ steps.build_pico.outcome }}
+          PICO_W: ${{ steps.build_pico_w.outcome }}
+          PICO2_M33: ${{ steps.build_pico2_m33.outcome }}
+          PICO2_M33_W: ${{ steps.build_pico2_m33_w.outcome }}
+          PICO2_HAZARD3: ${{ steps.build_pico2_hazard3.outcome }}
+          WOKWI_ESP32: ${{ steps.build_wokwi_esp32.outcome }}
+          WOKWI_PICO: ${{ steps.build_wokwi_pico.outcome }}
+        run: |
+          failed=0
+
+          check_build() {
+            if [ "$2" != "success" ]; then
+              echo "::error::$1 build $2"
+              failed=1
+            fi
+          }
+
+          check_build "nucleo_f429zi" "$NUCLEO_F429ZI"
+          check_build "esp32_devkitc/esp32/procpu" "$ESP32"
+          check_build "esp32s3_devkitc/esp32s3/procpu" "$ESP32S3"
+          check_build "rpi_pico/rp2040" "$PICO"
+          check_build "rpi_pico/rp2040/w" "$PICO_W"
+          check_build "rpi_pico2/rp2350a/m33" "$PICO2_M33"
+          check_build "rpi_pico2/rp2350a/m33/w" "$PICO2_M33_W"
+          check_build "rpi_pico2/rp2350a/hazard3" "$PICO2_HAZARD3"
+          check_build "Wokwi ESP32 test" "$WOKWI_ESP32"
+          check_build "Wokwi Pico test" "$WOKWI_PICO"
+
+          exit "$failed"
 
       - name: Stage ESP32 Test Files
         run: |
