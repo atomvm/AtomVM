@@ -1,8 +1,42 @@
+#include <zephyr/dt-bindings/pinctrl/esp32-pinctrl.h>
+
 &rtc_timer {
 	status = "okay";
 	wakeup-source;
 };
 
+&pinctrl {
+	spim3_default: spim3_default {
+		group1 {
+			pinmux = <SPIM3_MISO_GPIO19>,
+				 <SPIM3_SCLK_GPIO18>;
+		};
+
+		group2 {
+			pinmux = <SPIM3_MOSI_GPIO23>;
+			output-low;
+		};
+	};
+};
+
 &deep_sleep {
 	status = "okay";
+};
+
+&spi3 {
+	status = "okay";
+	cs-gpios = <&gpio0 5 GPIO_ACTIVE_LOW>;
+
+	sd0: sd@0 {
+		compatible = "zephyr,sdhc-spi-slot";
+		reg = <0>;
+		status = "okay";
+		spi-max-frequency = <1000000>;
+
+		mmc {
+			compatible = "zephyr,sdmmc-disk";
+			disk-name = "SD";
+			status = "okay";
+		};
+	};
 };

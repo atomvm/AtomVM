@@ -24,10 +24,23 @@
 
 start() ->
     try
-        ok = zephyr:mkfs("RAM", fat),
-        {ok, Ref} = zephyr:mount("RAM", "/RAM:", fat, []),
-        ok = test_basic_file(),
-        ok = test_gc(),
+        SystemArchitecture = erlang:system_info(system_architecture),
+        IsESP32 = case binary:split(SystemArchitecture, <<"-">>, [global]) of
+            [<<"xtensa">>, Vendor | _] ->
+                nomatch =/= binary:match(Vendor, <<"espressif">>);
+            _ ->
+                false
+        end,
+        DeviceName = if IsESP32 -> "SD"; true -> "RAM" end,
+        MountPt = "/" ++ DeviceName ++ ":",
+        ok =
+            case DeviceName of
+                "RAM" -> zephyr:mkfs(DeviceName, fat);
+                _ -> ok
+            end,
+        {ok, Ref} = zephyr:mount(DeviceName, MountPt, fat, []),
+        ok = test_basic_file(MountPt),
+        ok = test_gc(MountPt),
         ok = zephyr:umount(Ref),
         ok
     catch
@@ -36,8 +49,8 @@ start() ->
             error
     end.
 
-test_basic_file() ->
-    Path = "/RAM:/atomvm-1.txt",
+test_basic_file(MountPt) ->
+    Path = MountPt ++ "/atomvm-1.txt",
     {ok, Fd} = atomvm:posix_open(Path, [o_wronly, o_creat, o_excl], 8#644),
     {ok, 5} = atomvm:posix_write(Fd, <<"Hello">>),
     ok = atomvm:posix_close(Fd),
@@ -51,8 +64,8 @@ test_basic_file() ->
     ok = atomvm:posix_unlink(Path).
 
 % Test is based on the fact that `erlang:memory(binary)` count resources.
-test_gc() ->
-    Path = "/RAM:/atomvm-2.txt",
+test_gc(MountPt) ->
+    Path = MountPt ++ "/atomvm-2.txt",
     GCSubPid = spawn(fun() -> gc_loop(Path, undefined) end),
     erlang:monitor(process, GCSubPid),
     MemorySize0 = erlang:memory(binary),

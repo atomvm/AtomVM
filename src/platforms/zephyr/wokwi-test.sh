@@ -103,11 +103,24 @@ if [ -n "$WOKWI_OFFSET" ]; then
       "attrs": {
         "firmwareOffset": "${WOKWI_OFFSET}"
       }
+    },
+    {
+      "type": "wokwi-microsd-card",
+      "id": "sd1",
+      "top": 200,
+      "left": 200,
+      "attrs": {}
     }
   ],
   "connections": [
     ["esp:TX", "\$serialMonitor:RX", "", []],
-    ["esp:RX", "\$serialMonitor:TX", "", []]
+    ["esp:RX", "\$serialMonitor:TX", "", []],
+    ["esp:5", "sd1:CS", "green", []],
+    ["esp:23", "sd1:DI", "blue", []],
+    ["esp:18", "sd1:SCK", "yellow", []],
+    ["esp:19", "sd1:DO", "orange", []],
+    ["esp:3V3", "sd1:VDD", "red", []],
+    ["esp:GND.1", "sd1:VSS", "black", []]
   ]
 }
 EOF
