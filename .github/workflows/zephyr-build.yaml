@@ -366,7 +366,7 @@ jobs:
         run: |
           cd esp32-sim
           echo -e "[wokwi]\nversion = 1\nfirmware = \"zephyr.bin\"\nelf = \"zephyr.elf\"" > wokwi.toml
-          echo '{"version": 1, "author": "AtomVM", "editor": "wokwi", "parts": [{"type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {"firmwareOffset": "0x1000"}}], "connections": [["esp:TX", "$serialMonitor:RX", "", []], ["esp:RX", "$serialMonitor:TX", "", []]]}' > diagram.json
+          echo '{"version": 1, "author": "AtomVM", "editor": "wokwi", "parts": [{"type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {"firmwareOffset": "0x1000"}}, {"type": "wokwi-microsd-card", "id": "sd1", "top": 200, "left": 200, "attrs": {}}], "connections": [["esp:TX", "$serialMonitor:RX", "", []], ["esp:RX", "$serialMonitor:TX", "", []], ["esp:5", "sd1:CS", "green", []], ["esp:23", "sd1:DI", "blue", []], ["esp:18", "sd1:SCK", "yellow", []], ["esp:19", "sd1:DO", "orange", []], ["esp:3V3", "sd1:VDD", "red", []], ["esp:GND.1", "sd1:VSS", "black", []]]}' > diagram.json
           set +e
           wokwi-cli --timeout 20000 --expect-text "PROJECT EXECUTION SUCCESSFUL" . | tee wokwi.log
           WOKWI_EXIT=${PIPESTATUS[0]}
