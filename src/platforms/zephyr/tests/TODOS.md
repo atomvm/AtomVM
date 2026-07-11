@@ -39,6 +39,14 @@ hardware interfaces supported by Zephyr should have Erlang APIs and tests.
     selects use the GPIO API.
   * Native simulator coverage verifies lifecycle and transaction validation.
     Add a Wokwi peripheral test for device-specific transfers later.
+* [x] **Retention memory**
+  * `retention.erl` exposes Zephyr's portable retention API.
+  * ESP32, ESP32-C3, and ESP32-S3 tests reserve a checksummed 256-byte RTC RAM
+    partition for data that survives deep sleep.
+  * QEMU x86_64 exercises the portable RAM-backed implementation, and RP2040
+    reserves the final 256 bytes of SRAM for build and Wokwi validation.
+  * Normal AtomVM board fragments mirror the test configurations so retention
+    is available in standard firmware builds, not only in the test image.
 * [ ] **PWM — medium priority**
   * Provide a portable Zephyr PWM API instead of copying the ESP32-specific
     `ledc` module.

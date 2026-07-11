@@ -90,11 +90,19 @@ ZTEST(atomvm_tests, test_adc)
 }
 #endif
 
-#if defined(CONFIG_GPIO)
+#if defined(CONFIG_GPIO) && defined(DT_N_NODELABEL_gpio0) && DT_NODE_HAS_STATUS(DT_NODELABEL(gpio0), okay)
 ZTEST(atomvm_tests, test_gpio)
 {
     term ret_value = avm_test_case("test_gpio.beam");
     zassert_equal(ret_value, OK_ATOM, "test_gpio did not return 'ok'");
+}
+#endif
+
+#if defined(CONFIG_RETENTION) && DT_HAS_CHOSEN(atomvm_retention)
+ZTEST(atomvm_tests, test_retention)
+{
+    term ret_value = avm_test_case("test_retention.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_retention did not return 'ok'");
 }
 #endif
 
