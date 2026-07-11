@@ -113,6 +113,12 @@ if(CONFIG_ADC)
     )
 endif()
 
+if(CONFIG_GPIO)
+    zephyr_library_sources(
+        gpio_driver.c
+    )
+endif()
+
 if(CMAKE_COMPILER_IS_GNUCC)
     target_compile_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC -Wall -pedantic -Wextra -ggdb)
 endif()

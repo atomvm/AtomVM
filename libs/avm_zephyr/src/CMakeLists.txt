@@ -24,6 +24,7 @@ include(BuildErlang)
 
 set(ERLANG_MODULES
     adc
+    gpio
     i2c
     uart
 )

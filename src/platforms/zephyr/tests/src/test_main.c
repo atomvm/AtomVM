@@ -90,6 +90,14 @@ ZTEST(atomvm_tests, test_adc)
 }
 #endif
 
+#if defined(CONFIG_GPIO)
+ZTEST(atomvm_tests, test_gpio)
+{
+    term ret_value = avm_test_case("test_gpio.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_gpio did not return 'ok'");
+}
+#endif
+
 #if defined(CONFIG_SERIAL)
 ZTEST(atomvm_tests, test_uart)
 {
