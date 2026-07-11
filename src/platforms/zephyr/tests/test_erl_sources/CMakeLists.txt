@@ -49,6 +49,7 @@ compile_erlang(test_net)
 compile_erlang(test_ssl)
 compile_erlang(test_deep_sleep_hold)
 compile_erlang(test_twdt)
+compile_erlang(test_uart)
 compile_erlang(zephyr)
 
 set(erlang_test_beams
@@ -72,6 +73,7 @@ set(erlang_test_beams
     test_ssl.beam
     test_deep_sleep_hold.beam
     test_twdt.beam
+    test_uart.beam
     zephyr.beam
 )
 
