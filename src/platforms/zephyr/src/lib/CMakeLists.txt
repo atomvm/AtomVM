@@ -107,6 +107,12 @@ if(CONFIG_I2C)
     )
 endif()
 
+if(CONFIG_SPI)
+    zephyr_library_sources(
+        spi_driver.c
+    )
+endif()
+
 if(CONFIG_ADC)
     zephyr_library_sources(
         adc_driver.c
