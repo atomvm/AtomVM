@@ -33,10 +33,12 @@ hardware interfaces supported by Zephyr should have Erlang APIs and tests.
   * Direction, pull, read, write, and GPIO interrupt registration have
     simulator smoke coverage. Add dedicated interrupt loopback coverage later.
   * Cover input, output, pull configuration, and interrupts.
-* [ ] **SPI — high priority**
-  * Add a Zephyr SPI NIF driver and `spi.erl` implementation of `spi_hal`.
-  * Select buses and chip selects through devicetree and add an emulator or
-    Wokwi peripheral test.
+* [x] **SPI**
+  * `spi.erl` implements `spi_hal` over a Zephyr SPI resource NIF. Controllers
+    and bus pins are selected through devicetree; optional software chip
+    selects use the GPIO API.
+  * Native simulator coverage verifies lifecycle and transaction validation.
+    Add a Wokwi peripheral test for device-specific transfers later.
 * [ ] **PWM — medium priority**
   * Provide a portable Zephyr PWM API instead of copying the ESP32-specific
     `ledc` module.
