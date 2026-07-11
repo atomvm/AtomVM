@@ -70,18 +70,6 @@ tests:
       - CONFIG_ASAN=y
       - CONFIG_UBSAN=y
     timeout: 30
-  atomvm.zephyr.retention_qemu:
-    tags:
-      - atomvm
-      - zephyr
-      - retention
-      - qemu
-    platform_allow:
-      - qemu_x86_64
-    integration_platforms:
-      - qemu_x86_64
-    harness: ztest
-    timeout: 30
   atomvm.zephyr.retention_rp2040:
     tags:
       - atomvm
