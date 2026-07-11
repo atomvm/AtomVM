@@ -61,6 +61,12 @@ zephyr_library_sources(
     sys.c
 )
 
+if(CONFIG_PM_POLICY_CUSTOM)
+    zephyr_library_sources(
+        pm_policy.c
+    )
+endif()
+
 if(NOT AVM_DISABLE_SMP)
     zephyr_library_sources(
         smp.c
