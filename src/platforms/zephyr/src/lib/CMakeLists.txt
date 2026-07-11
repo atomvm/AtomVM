@@ -113,6 +113,12 @@ if(CONFIG_SPI)
     )
 endif()
 
+if(CONFIG_RETENTION)
+    zephyr_library_sources(
+        retention_driver.c
+    )
+endif()
+
 if(CONFIG_ADC)
     zephyr_library_sources(
         adc_driver.c

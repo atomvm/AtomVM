@@ -1,29 +1,32 @@
 /*
- * Keep the Zephyr and AtomVM console on the ESP32-C3 native USB
- * Serial/JTAG port used for flashing and monitoring.
+ * This file is part of AtomVM.
+ *
+ * Copyright 2026 Peter M <petermm@gmail.com>
+ *
+ * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
 / {
 	chosen {
 		atomvm,retention = &atomvm_retention;
-		zephyr,console = &usb_serial;
-		zephyr,shell-uart = &usb_serial;
 	};
 
-	memory@50001f00 {
+	memory@7fff00 {
 		compatible = "zephyr,memory-region", "mmio-sram";
-		reg = <0x50001f00 0x100>;
-		ranges = <0x0 0x50001f00 0x100>;
-		zephyr,memory-region = "ATOMVM_RTC_RETAINED";
+		reg = <0x7fff00 0x100>;
+		ranges = <0x0 0x7fff00 0x100>;
+		zephyr,memory-region = "ATOMVM_RETAINED";
 		status = "okay";
 		#address-cells = <1>;
 		#size-cells = <1>;
+
 		atomvm_retained_mem: retainedmem {
 			compatible = "zephyr,retained-ram";
 			status = "okay";
 			ranges;
 			#address-cells = <1>;
 			#size-cells = <1>;
+
 			atomvm_retention: retention@0 {
 				compatible = "zephyr,retention";
 				status = "okay";
@@ -35,6 +38,6 @@
 	};
 };
 
-&rtc_fast_ram {
-	reg = <0x50000000 0x1f00>;
+&dram0 {
+	reg = <0x0 0x7fff00>;
 };
