@@ -258,13 +258,3 @@ ZTEST(atomvm_tests, test_twdt)
     zassert_equal(ret_value, OK_ATOM, "test_twdt did not return 'ok'");
 }
 #endif
-
-#if defined(CONFIG_PM_POLICY_CUSTOM)
-#include <zephyr/pm/policy.h>
-const struct pm_state_info *pm_policy_next_state(uint8_t cpu, int32_t ticks)
-{
-    ARG_UNUSED(cpu);
-    ARG_UNUSED(ticks);
-    return NULL;
-}
-#endif
