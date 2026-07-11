@@ -119,6 +119,12 @@ if(CONFIG_SPI)
     )
 endif()
 
+if(CONFIG_PWM)
+    zephyr_library_sources(
+        pwm_driver.c
+    )
+endif()
+
 if(CONFIG_RETENTION)
     zephyr_library_sources(
         retention_driver.c
