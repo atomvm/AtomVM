@@ -84,7 +84,7 @@ static const struct device *get_default_spi_device(void)
 #if DT_HAS_CHOSEN(atomvm_spi)
     return DEVICE_DT_GET(DT_CHOSEN(atomvm_spi));
 #else
-    return get_spi_device_by_index(0);
+    return NULL;
 #endif
 }
 
