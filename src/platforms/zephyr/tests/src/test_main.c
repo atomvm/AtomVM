@@ -7,6 +7,7 @@
  */
 
 #include <zephyr/ztest.h>
+#include <zephyr/devicetree.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -80,6 +81,14 @@ term avm_test_case(const char *test_module)
 }
 
 ZTEST_SUITE(atomvm_tests, NULL, NULL, NULL, NULL, NULL);
+
+#if defined(CONFIG_ADC) && DT_NODE_HAS_PROP(DT_PATH(zephyr_user), io_channels)
+ZTEST(atomvm_tests, test_adc)
+{
+    term ret_value = avm_test_case("test_adc.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_adc did not return 'ok'");
+}
+#endif
 
 ZTEST(atomvm_tests, test_list_to_atom)
 {
@@ -227,4 +236,3 @@ const struct pm_state_info *pm_policy_next_state(uint8_t cpu, int32_t ticks)
     return NULL;
 }
 #endif
-
