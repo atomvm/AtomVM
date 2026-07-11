@@ -68,7 +68,7 @@ if [ "$SKIP_BUILD" = false ]; then
         -v "$ATOMVM_ROOT:/workspace/zephyr-workspace/AtomVM" \
         -w /workspace/zephyr-workspace \
         "$IMAGE_NAME" \
-        west build -b "$BOARD" -d "AtomVM/src/platforms/zephyr/${BUILD_DIR}" -p=auto AtomVM/src/platforms/zephyr/tests
+        west build -b "$BOARD" -d "AtomVM/src/platforms/zephyr/${BUILD_DIR}" -p=always AtomVM/src/platforms/zephyr/tests
 fi
 
 # Locate build binaries on host

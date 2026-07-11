@@ -23,6 +23,7 @@ project(avm_zephyr)
 include(BuildErlang)
 
 set(ERLANG_MODULES
+    adc
     i2c
 )
 
