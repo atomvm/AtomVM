@@ -57,7 +57,14 @@ endforeach()
 
 list(APPEND EXTRA_CONF_FILE "${CMAKE_CURRENT_LIST_DIR}/prj.conf")
 list(APPEND EXTRA_CONF_FILE ${ATOMVM_ZEPHYR_TEST_BOARD_CONFS})
-list(APPEND DTC_OVERLAY_FILE "${CMAKE_CURRENT_LIST_DIR}/app.overlay")
+
+# The shared RAM disk is only needed on hosts that exercise filesystem tests
+# without a real block device (QEMU, native_sim, RP2040). ESP32 Wokwi uses the
+# SPI microSD path instead; applying the ramdisk there wastes ~tens of KiB of
+# scarce internal DRAM and has already overflowed dram0_0_seg in CI.
+if(BOARD MATCHES "^qemu_x86_64" OR BOARD MATCHES "^native_sim" OR BOARD MATCHES "^rpi_pico")
+    list(APPEND DTC_OVERLAY_FILE "${CMAKE_CURRENT_LIST_DIR}/app.overlay")
+endif()
 
 if(AVM_ZEPHYR_NATIVE_SIM_I2C_TEST)
     list(APPEND EXTRA_CONF_FILE "${CMAKE_CURRENT_LIST_DIR}/native_sim_i2c.conf")
