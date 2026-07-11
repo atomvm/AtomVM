@@ -31,6 +31,7 @@ endfunction()
 
 compile_erlang(test_list_to_atom)
 compile_erlang(test_adc)
+compile_erlang(test_gpio)
 compile_erlang(test_i2c_native_sim)
 compile_erlang(test_system_architecture)
 compile_erlang(test_list_to_binary)
@@ -55,6 +56,7 @@ compile_erlang(zephyr)
 set(erlang_test_beams
     test_list_to_atom.beam
     test_adc.beam
+    test_gpio.beam
     test_i2c_native_sim.beam
     test_system_architecture.beam
     test_list_to_binary.beam
