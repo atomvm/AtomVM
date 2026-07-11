@@ -18,11 +18,14 @@ hardware interfaces supported by Zephyr should have Erlang APIs and tests.
 * [x] **I2C**
   * `i2c.erl` implements `i2c_hal` on top of the Zephyr I2C NIF driver.
   * `native_sim` coverage uses Zephyr's I2C target emulator.
-* [ ] **UART — high priority**
+* [x] **UART**
   * `uart_driver.c` already implements the Zephyr resource NIFs (`init`,
     `deinit`, `read`, `write`, `abort`, and state/error queries).
-  * Add `libs/avm_zephyr/src/uart.erl`, implement the common `uart_hal` API,
-    package it in `avm_zephyr.avm`, and add loopback/emulator coverage.
+  * `uart.erl` implements `uart_hal` with devicetree controller selection and
+    scheduler-safe polling around the native driver's bounded operations.
+  * Smoke coverage verifies both resource NIFs and the high-level API without
+    transmitting data on the test console. Add loopback/emulator coverage when
+    a dedicated non-console UART is available in the simulator configuration.
 * [ ] **GPIO — high priority**
   * Add a Zephyr GPIO NIF driver and `gpio.erl` API using devicetree GPIO
     controllers rather than ESP32/RP2 pin-mux assumptions.
