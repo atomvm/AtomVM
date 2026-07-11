@@ -57,10 +57,11 @@ endforeach()
 
 list(APPEND EXTRA_CONF_FILE "${CMAKE_CURRENT_LIST_DIR}/prj.conf")
 list(APPEND EXTRA_CONF_FILE ${ATOMVM_ZEPHYR_TEST_BOARD_CONFS})
+list(APPEND DTC_OVERLAY_FILE "${CMAKE_CURRENT_LIST_DIR}/app.overlay")
 
 if(AVM_ZEPHYR_NATIVE_SIM_I2C_TEST)
     list(APPEND EXTRA_CONF_FILE "${CMAKE_CURRENT_LIST_DIR}/native_sim_i2c.conf")
-    list(APPEND DTC_OVERLAY_FILE "${CMAKE_CURRENT_LIST_DIR}/boards/native_sim.overlay")
+    list(APPEND DTC_OVERLAY_FILE "${CMAKE_CURRENT_LIST_DIR}/boards/native_sim_i2c.overlay")
 endif()
 
 if(BOARD MATCHES "^qemu_x86_64")
@@ -82,6 +83,11 @@ include(${ATOMVM_ZEPHYR_ROOT}/cmake/AtomVMZephyrApp.cmake)
 
 if(AVM_ZEPHYR_NATIVE_SIM_I2C_TEST)
     target_sources(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/i2c_native_sim_emul.c)
+endif()
+
+# Zephyr's fake PWM driver (used on native_sim) needs FFF globals linked in.
+if(CONFIG_PWM_FAKE)
+    target_sources(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/pwm_fake_fff.c)
 endif()
 
 add_subdirectory(test_erl_sources)

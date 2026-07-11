@@ -10,12 +10,13 @@
     chosen {
         atomvm,i2c = &i2c0;
         atomvm,spi = &spi0;
+        atomvm,pwm = &pwm0;
     };
-};
 
-&i2c0 {
-    atomvm_i2c_test_target: atomvm-i2c-test-target@50 {
-        compatible = "vnd,atomvm-native-sim-i2c-target";
-        reg = <0x50>;
+    pwm0: pwm0 {
+        compatible = "zephyr,fake-pwm";
+        status = "okay";
+        #pwm-cells = <2>;
+        frequency = <10000000>;
     };
 };
