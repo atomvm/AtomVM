@@ -10,6 +10,10 @@ mirror every module from a chip-specific library: modules such as `esp`, `pico`,
 and ESP32 `ledc` expose vendor-specific functionality. However, the common
 hardware interfaces supported by Zephyr should have Erlang APIs and tests.
 
+Public platform subsystems are enabled by the normal board configuration and
+inherited by tests. Application-specific ADC channels, SPI pinctrl, chip
+selects, and other wiring remain in application/test overlays.
+
 * [x] **ADC**
   * `adc.erl` uses Zephyr's devicetree-selected ADC channel.
   * The ESP32, ESP32-C3, and ESP32-S3 Wokwi diagrams provide a slide
