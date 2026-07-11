@@ -9,6 +9,7 @@
 / {
     chosen {
         atomvm,i2c = &i2c0;
+        atomvm,spi = &spi0;
     };
 };
 
