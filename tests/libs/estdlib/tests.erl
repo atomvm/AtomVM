@@ -79,6 +79,7 @@ get_non_networking_tests(_OTPVersion) ->
         test_lists_subtraction,
         test_os,
         test_file,
+        test_init,
         test_filename,
         test_serial_dist,
         test_uart,
