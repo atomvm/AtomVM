@@ -6,14 +6,15 @@
 
 / {
     /*
-     * Small FAT volume for test_mount / test_file. The tests only create a
-     * couple of short files, so 16 KiB is enough for mkfs + payload and keeps
-     * the static DRAM cost reasonable on embedded targets.
+     * FAT volume for test_mount / test_file on hosts without a real block
+     * device. Elm FatFs needs enough sectors for boot/FAT/root; 16 KiB fails
+     * mkfs with -EIO. Keep the previous 64 KiB size. ESP Wokwi images do not
+     * apply this overlay (they use SPI microSD instead).
      */
     ramdisk0 {
         compatible = "zephyr,ram-disk";
         disk-name = "RAM";
         sector-size = <512>;
-        sector-count = <32>; /* 32 * 512 = 16 KiB */
+        sector-count = <128>; /* 128 * 512 = 64 KiB */
     };
 };
