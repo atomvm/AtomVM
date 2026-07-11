@@ -51,9 +51,11 @@ selects, and other wiring remain in application/test overlays.
     reserves the final 256 bytes of SRAM for build and Wokwi validation.
   * Normal AtomVM board fragments mirror the test configurations so retention
     is available in standard firmware builds, not only in the test image.
-* [ ] **PWM — medium priority**
-  * Provide a portable Zephyr PWM API instead of copying the ESP32-specific
-    `ledc` module.
+* [x] **PWM**
+  * `pwm.erl` exposes Zephyr's portable PWM API (`set` in nanoseconds,
+    `set_cycles`, and `get_cycles_per_sec`). Controllers are selected by
+    `atomvm,pwm`, index (`pwm0`/`ledc0` as 0), or device name.
+  * Native simulator coverage uses Zephyr's fake PWM driver.
 * [ ] **DAC — medium priority**
   * Add an API using Zephyr's DAC subsystem on boards that expose a DAC.
 * [ ] **USB CDC — lower priority**
