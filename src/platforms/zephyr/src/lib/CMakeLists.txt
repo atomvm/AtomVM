@@ -107,6 +107,12 @@ if(CONFIG_I2C)
     )
 endif()
 
+if(CONFIG_ADC)
+    zephyr_library_sources(
+        adc_driver.c
+    )
+endif()
+
 if(CMAKE_COMPILER_IS_GNUCC)
     target_compile_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC -Wall -pedantic -Wextra -ggdb)
 endif()
