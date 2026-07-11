@@ -2,6 +2,10 @@
 #include <zephyr/dt-bindings/adc/adc.h>
 
 / {
+	chosen {
+		atomvm,spi = &spi3;
+	};
+
 	zephyr,user {
 		io-channels = <&adc0 6>;
 	};

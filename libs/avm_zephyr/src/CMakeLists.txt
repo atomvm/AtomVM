@@ -26,6 +26,7 @@ set(ERLANG_MODULES
     adc
     gpio
     i2c
+    spi
     uart
 )
 

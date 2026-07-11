@@ -98,6 +98,14 @@ ZTEST(atomvm_tests, test_gpio)
 }
 #endif
 
+#if defined(CONFIG_SPI) && DT_HAS_CHOSEN(atomvm_spi)
+ZTEST(atomvm_tests, test_spi)
+{
+    term ret_value = avm_test_case("test_spi.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_spi did not return 'ok'");
+}
+#endif
+
 #if defined(CONFIG_SERIAL)
 ZTEST(atomvm_tests, test_uart)
 {
