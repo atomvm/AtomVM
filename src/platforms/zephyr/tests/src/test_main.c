@@ -90,6 +90,14 @@ ZTEST(atomvm_tests, test_adc)
 }
 #endif
 
+#if defined(CONFIG_SERIAL)
+ZTEST(atomvm_tests, test_uart)
+{
+    term ret_value = avm_test_case("test_uart.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_uart did not return 'ok'");
+}
+#endif
+
 ZTEST(atomvm_tests, test_list_to_atom)
 {
     term ret_value = avm_test_case("test_list_to_atom.beam");

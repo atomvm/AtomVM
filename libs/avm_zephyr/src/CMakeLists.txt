@@ -25,6 +25,7 @@ include(BuildErlang)
 set(ERLANG_MODULES
     adc
     i2c
+    uart
 )
 
 pack_archive(avm_zephyr DEPENDS_ON eavmlib ERLC_FLAGS +warnings_as_errors MODULES ${ERLANG_MODULES})
