@@ -44,6 +44,7 @@ compile_erlang(test_crypto)
 compile_erlang(test_file)
 compile_erlang(test_select)
 compile_erlang(test_spi)
+compile_erlang(test_pwm)
 compile_erlang(test_wifi_scan)
 compile_erlang(test_wifi_managed)
 compile_erlang(test_wifi_example)
@@ -71,6 +72,7 @@ set(erlang_test_beams
     test_file.beam
     test_select.beam
     test_spi.beam
+    test_pwm.beam
     test_wifi_scan.beam
     test_wifi_managed.beam
     test_wifi_example.beam

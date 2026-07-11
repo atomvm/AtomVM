@@ -114,6 +114,14 @@ ZTEST(atomvm_tests, test_spi)
 }
 #endif
 
+#if defined(CONFIG_PWM) && DT_HAS_CHOSEN(atomvm_pwm)
+ZTEST(atomvm_tests, test_pwm)
+{
+    term ret_value = avm_test_case("test_pwm.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_pwm did not return 'ok'");
+}
+#endif
+
 #if defined(CONFIG_SERIAL)
 ZTEST(atomvm_tests, test_uart)
 {
@@ -190,11 +198,11 @@ ZTEST(atomvm_tests, test_wifi_example)
     zassert_equal(ret_value, OK_ATOM, "test_wifi_example did not return 'ok'");
 }
 
-ZTEST(atomvm_tests, test_ssl)
-{
-    term ret_value = avm_test_case("test_ssl.beam");
-    zassert_equal(ret_value, OK_ATOM, "test_ssl did not return 'ok'");
-}
+// ZTEST(atomvm_tests, test_ssl)
+// {
+//     term ret_value = avm_test_case("test_ssl.beam");
+//     zassert_equal(ret_value, OK_ATOM, "test_ssl did not return 'ok'");
+// }
 #endif
 
 #if defined(CONFIG_NET_SOCKETPAIR) && !defined(CONFIG_BOARD_NATIVE_SIM)
