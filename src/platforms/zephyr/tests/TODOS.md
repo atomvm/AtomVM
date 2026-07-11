@@ -26,9 +26,12 @@ hardware interfaces supported by Zephyr should have Erlang APIs and tests.
   * Smoke coverage verifies both resource NIFs and the high-level API without
     transmitting data on the test console. Add loopback/emulator coverage when
     a dedicated non-console UART is available in the simulator configuration.
-* [ ] **GPIO — high priority**
-  * Add a Zephyr GPIO NIF driver and `gpio.erl` API using devicetree GPIO
-    controllers rather than ESP32/RP2 pin-mux assumptions.
+* [x] **GPIO**
+  * `gpio.erl` implements `gpio_hal` using Zephyr GPIO controllers. Pins may
+    use the chosen/default controller or explicitly select a controller with
+    `{Controller, Pin}`.
+  * Direction, pull, read, write, and GPIO interrupt registration have
+    simulator smoke coverage. Add dedicated interrupt loopback coverage later.
   * Cover input, output, pull configuration, and interrupts.
 * [ ] **SPI — high priority**
   * Add a Zephyr SPI NIF driver and `spi.erl` implementation of `spi_hal`.
