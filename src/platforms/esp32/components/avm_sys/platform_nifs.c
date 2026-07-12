@@ -1226,7 +1226,13 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         return &esp_sleep_enable_timer_wakeup_nif;
     }
 #if SOC_ULP_SUPPORTED
+    // Historical name kept for compatibility; esp.erl's documented API
+    // is sleep_enable_ulp_wakeup/0.
     if (strcmp("esp:sleep_ulp_wakeup/0", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_sleep_ulp_wakeup_nif;
+    }
+    if (strcmp("esp:sleep_enable_ulp_wakeup/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_sleep_ulp_wakeup_nif;
     }
