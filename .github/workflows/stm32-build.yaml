@@ -98,6 +98,9 @@ jobs:
             tests: "boot gpio i2c spi crypto uart"
           - device: stm32g474ret6
             max_size: 393216
+            # 384 KB flash: exclude mbedTLS/crypto (~38 KB) to fit the whole
+            # firmware. G474 has an RNG, so crypto is opt-out via the flag.
+            disable-crypto: "ON"
           - device: stm32l476rgt6
             max_size: 524288
           - device: stm32l562qei6
@@ -166,7 +169,7 @@ jobs:
         set -euo pipefail
         mkdir build
         cd build
-        cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/arm-toolchain.cmake -DDEVICE=${{ matrix.device }} ${{ matrix.usb-cdc == 'ON' && '-DAVM_USB_CDC_PORT_DRIVER_ENABLED=ON' || '' }}
+        cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/arm-toolchain.cmake -DDEVICE=${{ matrix.device }} ${{ matrix.usb-cdc == 'ON' && '-DAVM_USB_CDC_PORT_DRIVER_ENABLED=ON' || '' }} ${{ matrix.disable-crypto == 'ON' && '-DAVM_DISABLE_MBEDTLS=ON' || '' }}
         cmake --build .
 
     - name: "Perform CodeQL Analysis"

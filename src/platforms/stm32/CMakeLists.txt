@@ -35,6 +35,7 @@ option(AVM_ENABLE_LOG_LINES "Include source and line info for all enabled levels
 option(AVM_CONFIG_REBOOT_ON_NOT_OK "Reboot when application exits with non 'ok' return" OFF)
 option(AVM_DISABLE_GPIO_NIFS "Disable GPIO nifs (input and output)" OFF)
 option(AVM_DISABLE_GPIO_PORT_DRIVER "Disable GPIO 'port' driver (input, output, and interrupts)" OFF)
+option(AVM_DISABLE_MBEDTLS "Exclude mbedTLS/crypto NIFs even on devices with an RNG (saves ~38 KB flash)" OFF)
 option(AVM_PRINT_PROCESS_CRASH_DUMPS "Print crash reports when processes die with non-standard reasons" ON)
 
 set(AVM_HSE_VALUE "" CACHE STRING "HSE crystal frequency in Hz (e.g. 25000000). Overrides family default.")
