@@ -82,6 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed ESP32 socket driver holding the global socket-list lock across blocking TCP connects, leaking the port on connect failure, losing concurrent `accept` waiters, leaking `netbuf` on receive error paths, and a recycled-`netconn` race between socket close and the event handler
 - Fixed generic_unix TCP server sockets performing an abortive close that could truncate replies awaiting ack
 - Fixed a JIT crash (`EXC_BAD_ACCESS`/SIGBUS) on Apple Silicon
+- Fixed `term_from_resource` failing to compile from C++
 
 ## [0.7.0-alpha.1] - 2026-04-06
 
