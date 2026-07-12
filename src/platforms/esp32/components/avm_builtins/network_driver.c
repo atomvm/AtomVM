@@ -757,6 +757,7 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
                 // TODO: expose an erlang callback so applications can choose how to respond to this
                 // event, i.e. start a periodic scan for known networks, or initiate a connection
                 ESP_LOGI(TAG, "WIFI_EVENT_STA_START received.");
+                esp_wifi_set_ps(WIFI_PS_NONE);
                 if (!data->managed) {
                     esp_wifi_connect();
                 }

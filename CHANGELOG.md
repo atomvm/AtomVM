@@ -49,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for this limit
 - Replaced the `exavmlib` `Protocol` module with a small runtime shim (only `Protocol.__concat__/2`),
   saving ~31 KB of flash. ExAtomVM uses precompiled, unconsolidated protocols and continue to function normally at runtime.
+- On ESP32 platform, when starting wifi as a station (client), disable wifi power save so TCP servers are reachable
 
 ### Removed
 - Removed `ahttp_client` support for obsolete line folding (RFC 9112 §5.2); folded header and
