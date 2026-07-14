@@ -1033,6 +1033,11 @@ DEFINE_MATH_NIF(tanh)
 #define IF_HAVE_OPEN_CLOSE(expr) NULL
 #define IF_HAVE_EXECVE(expr) NULL
 #endif
+#if HAVE_KILL
+#define IF_HAVE_KILL(expr) (expr)
+#else
+#define IF_HAVE_KILL(expr) NULL
+#endif
 #if HAVE_OPEN && HAVE_CLOSE && HAVE_LSEEK
 #define IF_HAVE_LSEEK(expr) (expr)
 #else

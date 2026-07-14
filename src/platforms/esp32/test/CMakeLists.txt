@@ -41,6 +41,8 @@ set(HAVE_MKFIFO NO)
 set(HAVE_MKFIFO "" CACHE INTERNAL "Have symbol mkfifo" FORCE)
 set(HAVE_EXECVE NO)
 set(HAVE_EXECVE "" CACHE INTERNAL "Have symbol execve" FORCE)
+set(HAVE_KILL NO)
+set(HAVE_KILL "" CACHE INTERNAL "Have symbol kill" FORCE)
 # Force HAVE_SOCKET
 # Automatically detecting it requires to put too many components include dirs
 # in CMAKE_REQUIRED_INCLUDES as lwip includes freetos and many esp system components

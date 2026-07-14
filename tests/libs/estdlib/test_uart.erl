@@ -75,31 +75,40 @@ has_socat() ->
 
 %% Verify that socat ptys actually support termios (fails under qemu-user)
 has_working_ptys() ->
-    {SocatFd, PtyA, _PtyB} = start_socat(),
-    Result =
+    with_socat(fun(PtyA, _PtyB) ->
         case atomvm:posix_open(PtyA, [o_rdwr, o_noctty]) of
             {ok, Fd} ->
-                case atomvm:posix_tcgetattr(Fd) of
-                    {ok, _} ->
-                        atomvm:posix_close(Fd),
-                        true;
-                    {error, _} ->
-                        atomvm:posix_close(Fd),
-                        false
+                try
+                    case atomvm:posix_tcgetattr(Fd) of
+                        {ok, _} -> true;
+                        {error, _} -> false
+                    end
+                after
+                    atomvm:posix_close(Fd)
                 end;
             {error, _} ->
                 false
-        end,
-    stop_socat(SocatFd),
-    Result.
+        end
+    end).
 
-%% Start socat and return {SocatFd, PtyA, PtyB}
+%% Run Fun with a fresh socat pty pair, guaranteeing socat is killed even if
+%% Fun crashes: a leaked socat holds both ptys and eventually exhausts the pool.
+with_socat(Fun) ->
+    {SocatFd, PtyA, PtyB} = start_socat(),
+    try
+        Fun(PtyA, PtyB)
+    after
+        stop_socat(SocatFd)
+    end.
+
+%% Start socat and return {SocatHandle, PtyA, PtyB}
 %% socat -d -d pty,raw,echo=0 pty,raw,echo=0
 %% outputs on stderr: "N PTY is /dev/ttysXXX" twice
+%% exec so the subprocess pid is socat itself, not the wrapping shell.
 start_socat() ->
-    {ok, _Pid, Fd} = atomvm:subprocess(
+    {ok, OsPid, Fd} = atomvm:subprocess(
         "/bin/sh",
-        ["sh", "-c", "socat -d -d pty,raw,echo=0 pty,raw,echo=0 2>&1"],
+        ["sh", "-c", "exec socat -d -d pty,raw,echo=0 pty,raw,echo=0 2>&1"],
         undefined,
         [stdout]
     ),
@@ -109,9 +118,18 @@ start_socat() ->
     receive
     after 200 -> ok
     end,
-    {Fd, PtyA, PtyB}.
+    {{OsPid, Fd}, PtyA, PtyB}.
 
-stop_socat(Fd) ->
+%% socat keeps running (holding both ptys) until killed: closing the
+%% stdout pipe is not enough, and leaked socats eventually exhaust the
+%% system pty pool.
+stop_socat({OsPid, Fd}) ->
+    %% SIGTERM; tolerate esrch so an already-exited socat does not mask the
+    %% real test failure during cleanup.
+    case atomvm:posix_kill(OsPid, 15) of
+        ok -> ok;
+        {error, esrch} -> ok
+    end,
     atomvm:posix_close(Fd).
 
 %% Read a line like "... N PTY is /dev/ttysXXX" and extract the path
@@ -148,90 +166,108 @@ extract_pty(Line) ->
 %%--------------------------------------------------------------------
 
 test_posix_tcgetattr() ->
-    {SocatFd, PtyA, _PtyB} = start_socat(),
-    {ok, Fd} = atomvm:posix_open(PtyA, [o_rdwr, o_noctty]),
-    {ok, Tio} = atomvm:posix_tcgetattr(Fd),
-    true = is_map(Tio),
-    true = is_integer(maps:get(cflag, Tio)),
-    true = is_integer(maps:get(iflag, Tio)),
-    true = is_integer(maps:get(oflag, Tio)),
-    true = is_integer(maps:get(lflag, Tio)),
-    true = is_integer(maps:get(ispeed, Tio)),
-    true = is_integer(maps:get(ospeed, Tio)),
-    ok = atomvm:posix_close(Fd),
-    stop_socat(SocatFd),
-    ok.
+    with_socat(fun(PtyA, _PtyB) ->
+        {ok, Fd} = atomvm:posix_open(PtyA, [o_rdwr, o_noctty]),
+        try
+            {ok, Tio} = atomvm:posix_tcgetattr(Fd),
+            true = is_map(Tio),
+            true = is_integer(maps:get(cflag, Tio)),
+            true = is_integer(maps:get(iflag, Tio)),
+            true = is_integer(maps:get(oflag, Tio)),
+            true = is_integer(maps:get(lflag, Tio)),
+            true = is_integer(maps:get(ispeed, Tio)),
+            true = is_integer(maps:get(ospeed, Tio)),
+            ok
+        after
+            atomvm:posix_close(Fd)
+        end
+    end).
 
 test_posix_tcsetattr_raw() ->
-    {SocatFd, PtyA, _PtyB} = start_socat(),
-    {ok, Fd} = atomvm:posix_open(PtyA, [o_rdwr, o_noctty]),
-    %% Set raw mode + speed
-    ok = atomvm:posix_tcsetattr(Fd, tcsanow, #{
-        raw => true,
-        ispeed => 115200,
-        ospeed => 115200
-    }),
-    %% Verify speed was set
-    {ok, Tio} = atomvm:posix_tcgetattr(Fd),
-    115200 = maps:get(ispeed, Tio),
-    115200 = maps:get(ospeed, Tio),
-    ok = atomvm:posix_close(Fd),
-    stop_socat(SocatFd),
-    ok.
+    with_socat(fun(PtyA, _PtyB) ->
+        {ok, Fd} = atomvm:posix_open(PtyA, [o_rdwr, o_noctty]),
+        try
+            %% Set raw mode + speed
+            ok = atomvm:posix_tcsetattr(Fd, tcsanow, #{
+                raw => true,
+                ispeed => 115200,
+                ospeed => 115200
+            }),
+            %% Verify speed was set
+            {ok, Tio} = atomvm:posix_tcgetattr(Fd),
+            115200 = maps:get(ispeed, Tio),
+            115200 = maps:get(ospeed, Tio),
+            ok
+        after
+            atomvm:posix_close(Fd)
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% UART HAL tests over socat pty pair
 %%--------------------------------------------------------------------
 
 test_uart_roundtrip() ->
-    {SocatFd, PtyA, PtyB} = start_socat(),
-    UartA = uart:open([{peripheral, PtyA}, {speed, 115200}]),
-    UartB = uart:open([{peripheral, PtyB}, {speed, 115200}]),
-    ok = uart:write(UartA, <<"hello">>),
-    {ok, <<"hello">>} = uart:read(UartB, 2000),
-    ok = uart:write(UartB, <<"world">>),
-    {ok, <<"world">>} = uart:read(UartA, 2000),
-    uart:close(UartA),
-    uart:close(UartB),
-    stop_socat(SocatFd),
-    ok.
+    with_socat(fun(PtyA, PtyB) ->
+        UartA = uart:open([{peripheral, PtyA}, {speed, 115200}]),
+        UartB = uart:open([{peripheral, PtyB}, {speed, 115200}]),
+        try
+            ok = uart:write(UartA, <<"hello">>),
+            {ok, <<"hello">>} = uart:read(UartB, 2000),
+            ok = uart:write(UartB, <<"world">>),
+            {ok, <<"world">>} = uart:read(UartA, 2000),
+            ok
+        after
+            uart:close(UartA),
+            uart:close(UartB)
+        end
+    end).
 
 test_uart_read_timeout() ->
-    {SocatFd, PtyA, _PtyB} = start_socat(),
-    UartA = uart:open([{peripheral, PtyA}, {speed, 115200}]),
-    {error, timeout} = uart:read(UartA, 200),
-    uart:close(UartA),
-    stop_socat(SocatFd),
-    ok.
+    with_socat(fun(PtyA, _PtyB) ->
+        UartA = uart:open([{peripheral, PtyA}, {speed, 115200}]),
+        try
+            {error, timeout} = uart:read(UartA, 200),
+            ok
+        after
+            uart:close(UartA)
+        end
+    end).
 
 test_uart_bidirectional() ->
-    {SocatFd, PtyA, PtyB} = start_socat(),
-    UartA = uart:open([{peripheral, PtyA}, {speed, 115200}]),
-    UartB = uart:open([{peripheral, PtyB}, {speed, 115200}]),
-    %% Send from both sides simultaneously
-    ok = uart:write(UartA, <<"from_a">>),
-    ok = uart:write(UartB, <<"from_b">>),
-    {ok, <<"from_b">>} = uart:read(UartA, 2000),
-    {ok, <<"from_a">>} = uart:read(UartB, 2000),
-    uart:close(UartA),
-    uart:close(UartB),
-    stop_socat(SocatFd),
-    ok.
+    with_socat(fun(PtyA, PtyB) ->
+        UartA = uart:open([{peripheral, PtyA}, {speed, 115200}]),
+        UartB = uart:open([{peripheral, PtyB}, {speed, 115200}]),
+        try
+            %% Send from both sides simultaneously
+            ok = uart:write(UartA, <<"from_a">>),
+            ok = uart:write(UartB, <<"from_b">>),
+            {ok, <<"from_b">>} = uart:read(UartA, 2000),
+            {ok, <<"from_a">>} = uart:read(UartB, 2000),
+            ok
+        after
+            uart:close(UartA),
+            uart:close(UartB)
+        end
+    end).
 
 test_uart_large_payload() ->
-    {SocatFd, PtyA, PtyB} = start_socat(),
-    UartA = uart:open([{peripheral, PtyA}, {speed, 115200}]),
-    UartB = uart:open([{peripheral, PtyB}, {speed, 115200}]),
-    %% Send a payload larger than a single read buffer (256 bytes)
-    Payload = list_to_binary(lists:duplicate(500, $x)),
-    ok = uart:write(UartA, Payload),
-    %% May need multiple reads to get all data
-    Received = read_all(UartB, byte_size(Payload), 5000, <<>>),
-    Payload = Received,
-    uart:close(UartA),
-    uart:close(UartB),
-    stop_socat(SocatFd),
-    ok.
+    with_socat(fun(PtyA, PtyB) ->
+        UartA = uart:open([{peripheral, PtyA}, {speed, 115200}]),
+        UartB = uart:open([{peripheral, PtyB}, {speed, 115200}]),
+        try
+            %% Send a payload larger than a single read buffer (256 bytes)
+            Payload = list_to_binary(lists:duplicate(500, $x)),
+            ok = uart:write(UartA, Payload),
+            %% May need multiple reads to get all data
+            Received = read_all(UartB, byte_size(Payload), 5000, <<>>),
+            Payload = Received,
+            ok
+        after
+            uart:close(UartA),
+            uart:close(UartB)
+        end
+    end).
 
 %% Read until we have ExpectedSize bytes or timeout
 read_all(_Uart, ExpectedSize, _Timeout, Acc) when byte_size(Acc) >= ExpectedSize ->
