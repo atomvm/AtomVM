@@ -32,6 +32,7 @@ set(ERLANG_MODULES
     test_gen_statem
     test_gen_udp
     test_gen_tcp
+    test_gpio
     test_inet
     test_io_lib
     test_json
@@ -60,6 +61,7 @@ set(ERLANG_MODULES
     test_supervisor
     test_lists_subtraction
     test_file
+    test_init
     test_filename
     test_tcp_socket
     test_udp_socket
