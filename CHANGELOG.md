@@ -104,6 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   builds, which made `erlang:crc32/2`, `erlang:crc32_combine/3` and `crypto:pbkdf2_hmac/5`
   silently truncate huge integer arguments instead of raising `badarg`
 - Fixed `put_map_exact` writing the new key into a keys tuple shared with other maps
+- Fixed a process that exited before ever being scheduled staying in the scheduler's process list
 
 ## [0.7.0-alpha.1] - 2026-04-06
 
