@@ -252,6 +252,27 @@ different_architectures_test() ->
         Backends
     ).
 
+% Regression test for the Context `x' array offset used in the synthetic DWARF
+% type and the x-register location lists. This offset must match
+% offsetof(Context, x), which is pinned to each backend's ?X_REG macro by static
+% asserts in jit.c. When the Context layout changed (generational GC), these
+% offsets drifted (0x30/0x18 vs the real 0x58/0x2C), which silently broke
+% `ctx->x[N]' evaluation under lldb. Deriving from ?X_REG keeps them in sync.
+dwarf_x_reg_offset_test() ->
+    % {Backend, ExpectedXOffset} matching offsetof(Context, x) per word size.
+    Expected = [
+        {jit_x86_64, 16#58},
+        {jit_aarch64, 16#58},
+        {jit_armv6m, 16#2C},
+        {jit_riscv32, 16#2C}
+    ],
+    lists:foreach(
+        fun({Backend, XOffset}) ->
+            ?assertEqual(XOffset, Backend:dwarf_x_reg_offset())
+        end,
+        Expected
+    ).
+
 % Helper function to find .text section in ELF
 find_text_section(_Headers, _StringTable, 0, _Index) ->
     not_found;

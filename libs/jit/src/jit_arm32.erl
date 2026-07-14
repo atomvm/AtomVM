@@ -75,6 +75,8 @@
     xor_/3
 ]).
 
+-export([dwarf_x_reg_offset/0]).
+
 -ifdef(JIT_DWARF).
 -export([
     dwarf_opcode/2,
@@ -173,16 +175,16 @@
     | {maybe_free_arm32_register(), '&', non_neg_integer(), '!=', integer()}
     | {{free, arm32_register()}, '==', {free, arm32_register()}}.
 
-% ctx->e is 0x14
-% ctx->x is 0x18
+% ctx->e is 0x28
+% ctx->x is 0x2C
 -define(CTX_REG, r0).
 -define(NATIVE_INTERFACE_REG, r2).
--define(Y_REGS, {?CTX_REG, 16#14}).
--define(X_REG(N), {?CTX_REG, 16#18 + (N * 4)}).
--define(CP, {?CTX_REG, 16#5C}).
--define(FP_REGS, {?CTX_REG, 16#60}).
--define(BS, {?CTX_REG, 16#64}).
--define(BS_OFFSET, {?CTX_REG, 16#68}).
+-define(Y_REGS, {?CTX_REG, 16#28}).
+-define(X_REG(N), {?CTX_REG, 16#2C + (N * 4)}).
+-define(CP, {?CTX_REG, 16#70}).
+-define(FP_REGS, {?CTX_REG, 16#74}).
+-define(BS, {?CTX_REG, 16#78}).
+-define(BS_OFFSET, {?CTX_REG, 16#7C}).
 % JITSTATE is on stack, accessed via stack offset
 % These macros now expect a register that contains the jit_state pointer
 -define(JITSTATE_MODULE(Reg), {Reg, 0}).
@@ -3793,6 +3795,12 @@ value_to_contents(Value) -> jit_regs:value_to_contents(Value, ?MAX_REG).
 
 %% Convert a VM register destination to a contents descriptor.
 vm_dest_to_contents(Dest) -> jit_regs:vm_dest_to_contents(Dest, ?MAX_REG).
+
+%% @doc Byte offset of the `x' register array within the Context struct.
+%% Derived from ?X_REG so it tracks the codegen offset.
+-spec dwarf_x_reg_offset() -> non_neg_integer().
+dwarf_x_reg_offset() ->
+    element(2, ?X_REG(0)).
 
 -ifdef(JIT_DWARF).
 %%-----------------------------------------------------------------------------
