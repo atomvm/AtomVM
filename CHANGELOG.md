@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for map comprehensions
 - Added USB CDC port drivers for ESP32, RP2, and STM32 platforms
 - Added a Linux `gpio` driver for the generic_unix port (in `avm_unix`) using sysfs
+- Updated esp-idf i2c driver
 
 ### Changed
 - ESP32: migrated both the `i2c` port driver and the `i2c` NIF-resource driver from the legacy,
