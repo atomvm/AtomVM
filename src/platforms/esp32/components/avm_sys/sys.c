@@ -132,6 +132,9 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
     void *sender = NULL;
     QueueSetMemberHandle_t event_source;
     while ((event_source = xQueueSelectFromSet(event_set, wait_ticks))) {
+        // Drain without re-blocking after the first event, then return so the
+        // scheduler loop can run any process a listener just made ready
+        wait_ticks = 0;
         // Listener used shared event_queue.
         if (event_source == event_queue) {
             if (UNLIKELY(xQueueReceive(event_queue, &sender, 0) == pdFALSE)) {
