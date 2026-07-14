@@ -405,7 +405,10 @@ assert_stream(Arch, Dump, Stream) ->
         true ->
             ok;
         false ->
-            diff_disasm(Arch, Expected, Actual),
+            case erlang:system_info(machine) of
+                "BEAM" -> diff_disasm(Arch, Expected, Actual);
+                "ATOM" -> ok
+            end,
             ?assertEqual(Expected, Actual)
     end.
 
@@ -433,8 +436,10 @@ assert_stream(Arch, Dump, Stream, File, _Line) ->
                                 Actual
                         end,
                     update_test_source(Arch, Dump, DisasmInput, File);
-                _ ->
-                    diff_disasm(Arch, Expected, Actual)
+                {"BEAM", _} ->
+                    diff_disasm(Arch, Expected, Actual);
+                {"ATOM", _} ->
+                    ok
             end,
             ?assertEqual(Expected, Actual)
     end.
@@ -629,18 +634,38 @@ replace_dump_in_source(File, OldDump, NewDumpRaw) ->
     case find_dump_tokens(Tokens, OldDump) of
         {StartLine, EndLine} ->
             Lines = binary:split(Content, <<"\n">>, [global]),
-            %% Get indent from the first string line (StartLine + 1 is first content)
-            FirstContentLine = lists:nth(StartLine + 1, Lines),
-            Indent = get_indent(FirstContentLine),
-            NewDumpLines = format_dump_lines(NewDumpRaw, Indent),
-            %% Replace: keep lines up to StartLine (the << line),
-            %% insert new content, keep from EndLine (the >> line) onward
-            Before = lists:sublist(Lines, 1, StartLine),
-            After = lists:nthtail(EndLine - 1, Lines),
-            NewLines = Before ++ NewDumpLines ++ After,
-            NewContent = iolist_to_binary(lists:join(<<"\n">>, NewLines)),
-            ok = file:write_file(File, NewContent),
-            io:format("Updated ~s at line ~p~n", [File, StartLine]),
+            %% When `<<` and `>>` are on different lines, we keep the `<<` line
+            %% (StartLine) and the `>>` line (EndLine) and replace what's
+            %% between. When they're on the same line (single-line Dump =
+            %% <<"...">>), we replace that line entirely with `<<`, the new
+            %% strings, and `>>,` on separate lines.
+            if
+                StartLine < EndLine ->
+                    %% Get indent from the first string line (StartLine + 1 is first content)
+                    FirstContentLine = lists:nth(StartLine + 1, Lines),
+                    Indent = get_indent(FirstContentLine),
+                    NewDumpLines = format_dump_lines(NewDumpRaw, Indent),
+                    Before = lists:sublist(Lines, 1, StartLine),
+                    After = lists:nthtail(EndLine - 1, Lines),
+                    NewLines = Before ++ NewDumpLines ++ After,
+                    NewContent = iolist_to_binary(lists:join(<<"\n">>, NewLines)),
+                    ok = file:write_file(File, NewContent),
+                    io:format("Updated ~s at line ~p~n", [File, StartLine]);
+                StartLine =:= EndLine ->
+                    %% Same-line `Dump = <<"...">>,` — replace inside the
+                    %% literal in place, preserving the line's structure.
+                    LineBin = lists:nth(StartLine, Lines),
+                    LineStr = binary_to_list(LineBin),
+                    {Prefix, Suffix} = split_bin_literal(LineStr),
+                    NewBin = format_bin_literal(NewDumpRaw),
+                    NewLineStr = Prefix ++ NewBin ++ Suffix,
+                    Before = lists:sublist(Lines, 1, StartLine - 1),
+                    After = lists:nthtail(StartLine, Lines),
+                    NewLines = Before ++ [iolist_to_binary(NewLineStr)] ++ After,
+                    NewContent = iolist_to_binary(lists:join(<<"\n">>, NewLines)),
+                    ok = file:write_file(File, NewContent),
+                    io:format("Updated ~s at line ~p~n", [File, StartLine])
+            end,
             ok;
         not_found ->
             io:format("WARNING: Could not find old dump in ~s~n", [File]),
@@ -711,3 +736,36 @@ format_dump_lines([Line], Indent, Acc) ->
 format_dump_lines([Line | Rest], Indent, Acc) ->
     Formatted = iolist_to_binary([Indent, $", Line, "\\n", $"]),
     format_dump_lines(Rest, Indent, [Formatted | Acc]).
+
+%% Split a line like `    Dump = <<"...">>,` into the part before the literal
+%% (`    Dump = `) and the part after (`,`). The literal itself (`<<...>>`)
+%% is dropped.
+split_bin_literal(Line) ->
+    {Prefix, Tail} = split_at(Line, "<<", []),
+    {_, AfterClose} = split_at(Tail, ">>", []),
+    {Prefix ++ "<<", ">>" ++ AfterClose}.
+
+split_at([], _Needle, Acc) ->
+    {lists:reverse(Acc), []};
+split_at(Str, Needle, Acc) ->
+    case lists:prefix(Needle, Str) of
+        true ->
+            {lists:reverse(Acc), lists:nthtail(length(Needle), Str)};
+        false ->
+            [C | Rest] = Str,
+            split_at(Rest, Needle, [C | Acc])
+    end.
+
+%% Format a raw dump string as a quoted literal suitable for placement
+%% inside a `<<...>>` on a single line: `"line1\nline2"`. Newlines in
+%% the input become escaped `\n` inside the literal.
+format_bin_literal(DumpRaw) ->
+    RawLines0 = string:split(DumpRaw, "\n", all),
+    RawLines = lists:reverse(
+        lists:dropwhile(
+            fun(L) -> string:trim(L) =:= "" end,
+            lists:reverse(RawLines0)
+        )
+    ),
+    Joined = lists:join("\\n", RawLines),
+    [$" | lists:flatten(Joined) ++ [$"]].

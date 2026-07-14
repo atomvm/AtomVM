@@ -1003,6 +1003,9 @@ first_pass(<<?OP_SET_TUPLE_ELEMENT, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt2, Tuple, Rest2} = decode_compact_term(Rest1, MMod, MSt1, State0),
     {Position, Rest3} = decode_literal(Rest2),
     ?TRACE("OP_SET_TUPLE_ELEMENT ~p, ~p, ~p\n", [NewElement, Tuple, Position]),
+    %% No write barrier needed: the compiler emits set_tuple_element only
+    %% right after the tuple's creation, with no possible GC in between, so
+    %% the tuple cannot be in the old generation.
     {MSt3, Reg} = MMod:move_to_native_register(MSt2, Tuple),
     {MSt4, Reg} = MMod:and_(MSt3, {free, Reg}, ?TERM_PRIMARY_CLEAR_MASK),
     MSt5 = MMod:move_to_array_element(MSt4, NewElement, Reg, Position + 1),

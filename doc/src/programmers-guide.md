@@ -365,6 +365,7 @@ The [options](./apidocs/erlang/estdlib/erlang.md#spawn_option) argument is a pro
 |-----|------------|---------------|-------------|
 | `min_heap_size` | `non_neg_integer()` | none | Minimum heap size of the process.  The heap will shrink no smaller than this size. |
 | `max_heap_size` | `non_neg_integer()` | unbounded | Maximum heap size of the process.  The heap will grow no larger than this size. |
+| `fullsweep_after` | `non_neg_integer()` | 65535 | Maximum number of [minor garbage collections](./memory-management.md#generational-garbage-collection) before a full sweep is forced.  Set to `0` to disable generational garbage collection. |
 | `link` | `boolean()` | `false` | Whether to link the spawned process to the spawning process. |
 | `monitor` | `boolean()` | `false` | Whether to link the spawning process should monitor the spawned process. |
 | `atomvm_heap_growth` | `bounded_free \| minimum \| fibonacci` | `bounded_free` | [Strategy](./memory-management.md#heap-growth-strategies) to grow the heap of the process. |

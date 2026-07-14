@@ -462,6 +462,7 @@ compile_erlang(test_bs_start_match_live)
 compile_erlang(test_bs_utf)
 compile_erlang(test_catch)
 compile_erlang(test_gc)
+compile_erlang(test_minor_gc_messages)
 compile_erlang(test_raise)
 compile_erlang(test_map)
 
@@ -603,6 +604,7 @@ compile_erlang(link_kill_parent)
 compile_erlang(link_throw)
 compile_erlang(unlink_error)
 compile_erlang(trap_exit_flag)
+compile_erlang(test_process_flag_fullsweep_after)
 compile_erlang(test_exit1)
 compile_erlang(test_exit2)
 
@@ -1028,6 +1030,7 @@ set(erlang_test_beams
     test_bs_utf.beam
     test_catch.beam
     test_gc.beam
+    test_minor_gc_messages.beam
     test_raise.beam
     test_map.beam
 
@@ -1170,6 +1173,7 @@ set(erlang_test_beams
     link_throw.beam
     unlink_error.beam
     trap_exit_flag.beam
+    test_process_flag_fullsweep_after.beam
     test_exit1.beam
     test_exit2.beam
 
