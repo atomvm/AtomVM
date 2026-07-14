@@ -29,7 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implemented `enif_select_write` (previously declared but not implemented), and reworked
   `enif_select`/`enif_select_read`/`enif_select_write` so a resource can hold independent
   pending read and write selects (each with its own ref/message/pid) on the same event at
-  the same time, instead of one direction silently overwriting the other's state
+  the same time
+- Added a Linux `gpio` driver for the generic_unix port (in `avm_unix`) using sysfs
 
 ### Changed
 - Updated network type db() to dbm() to reflect the actual representation of the type
