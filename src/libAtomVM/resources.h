@@ -92,9 +92,12 @@ struct SelectEvent
     bool read;
     bool write;
     bool close;
-    int32_t local_pid;
-    uint64_t ref_ticks;
-    Message *message;
+    int32_t read_local_pid;
+    int32_t write_local_pid;
+    uint64_t read_ref_ticks;
+    uint64_t write_ref_ticks;
+    Message *read_message;
+    Message *write_message;
 };
 
 /**

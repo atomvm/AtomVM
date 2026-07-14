@@ -78,8 +78,6 @@ echo(ConnectedSocket) ->
             case socket:send(ConnectedSocket, Data) of
                 ok ->
                     io:format("All data was sent~n");
-                {ok, Rest} ->
-                    io:format("Some data was sent.  Remaining: ~p~n", [Rest]);
                 {error, Reason} ->
                     io:format("An error occurred sending data: ~p~n", [Reason])
             end,

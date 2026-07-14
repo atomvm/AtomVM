@@ -33,7 +33,8 @@ test() ->
     ok = test_setopt_getopt(),
     case erlang:system_info(machine) of
         "ATOM" ->
-            ok = test_abandon_select();
+            ok = test_abandon_select(),
+            ok = test_send_backpressure();
         "BEAM" ->
             ok
     end,
@@ -569,6 +570,145 @@ test_abandon_select() ->
 
     erlang:garbage_collect(),
     ok.
+
+%%
+%% test_send_backpressure
+%%
+%% Exercises the write-select mechanism used internally by socket:send/2 to
+%% wait for transient send backpressure (a full TCP send buffer) to clear,
+%% instead of leaking {error, eagain} or {ok, Rest} to the caller.
+%%
+
+test_send_backpressure() ->
+    etest:flush_msg_queue(),
+
+    {ok, ListenSocket} = socket:open(inet, stream, tcp),
+    ok = socket:setopt(ListenSocket, {socket, reuseaddr}, true),
+    ok = socket:setopt(ListenSocket, {socket, linger}, #{onoff => true, linger => 0}),
+    ok = socket:bind(ListenSocket, #{family => inet, addr => loopback, port => 0}),
+    ok = socket:listen(ListenSocket),
+    {ok, #{port := Port}} = socket:sockname(ListenSocket),
+
+    Self = self(),
+    Acceptor = spawn_link(fun() -> backpressure_acceptor(Self, ListenSocket) end),
+
+    {ok, ClientSocket} = socket:open(inet, stream, tcp),
+    ok = try_connect(ClientSocket, Port, 10),
+
+    ok =
+        receive
+            {server_socket, _ServerSocket} -> ok
+        after 5000 ->
+            error({timeout, waiting_for_server_socket})
+        end,
+
+    %% Fill the client's send buffer (the server never reads) using the raw
+    %% nif_send/2 directly, bypassing socket:send/2's automatic retry, until
+    %% we either observe a real {error, eagain} or give up after a generous
+    %% number of attempts. Different platforms/kernels size their socket
+    %% buffers differently, so we tolerate never observing backpressure
+    %% rather than failing the test outright.
+    Chunk = binary:copy(<<0>>, 65536),
+    {TotalSent, EAgainObserved} = fill_send_buffer(ClientSocket, Chunk, 0, 256),
+
+    ok =
+        case EAgainObserved andalso TotalSent > 0 of
+            true ->
+                %% socket:nif_select_write/2 should let us wait until the
+                %% socket becomes writable again. Depending on how the
+                %% platform/kernel sizes and accounts for socket buffers, a
+                %% small partial drain on the peer may not be enough to
+                %% cross the low-water mark for writability, so we have the
+                %% acceptor drain everything (as a real reader normally
+                %% would) to reliably free up space.
+                Ref = erlang:make_ref(),
+                ok = socket:nif_select_write(ClientSocket, Ref),
+
+                Acceptor ! {drain_all, self()},
+                ok =
+                    receive
+                        {'$socket', ClientSocket, select, Ref} ->
+                            ok
+                    after 30000 ->
+                        error({timeout, waiting_for_select_write})
+                    end,
+
+                %% socket:send/2 should now transparently retry (internally
+                %% waiting for write-readiness as needed) and complete
+                %% successfully instead of returning {error, eagain} or
+                %% {ok, Rest}.
+                ok = socket:send(ClientSocket, Chunk),
+                ok = socket:close(ClientSocket),
+                ok =
+                    receive
+                        {drained_all, N} when is_integer(N) -> ok
+                    after 30000 -> error({timeout, waiting_for_drain_all})
+                    end,
+                ok;
+            false ->
+                %% We never managed to fill the send buffer; nothing more to
+                %% verify on this platform.
+                Acceptor ! {drain_all, self()},
+                ok = socket:close(ClientSocket),
+                ok =
+                    receive
+                        {drained_all, N} when is_integer(N) -> ok
+                    after 30000 -> error({timeout, waiting_for_drain_all})
+                    end,
+                ok
+        end,
+
+    ok.
+
+%% @private
+%% Accepts a single connection and gives control of when to start reading
+%% on it to the test process, so the test can deliberately stall the
+%% receiver in order to build up send backpressure on the client side.
+backpressure_acceptor(Owner, ListenSocket) ->
+    {ok, ServerSocket} = socket:accept(ListenSocket),
+    Owner ! {server_socket, ServerSocket},
+    backpressure_acceptor_loop(Owner, ServerSocket),
+    ok = socket:close(ListenSocket).
+
+backpressure_acceptor_loop(Owner, ServerSocket) ->
+    receive
+        {drain_all, Owner} ->
+            Total = recv_until_closed(ServerSocket, 0),
+            Owner ! {drained_all, Total},
+            ok = socket:close(ServerSocket)
+    after 60000 ->
+        ok = socket:close(ServerSocket)
+    end.
+
+recv_until_closed(Socket, Acc) ->
+    case socket:recv(Socket, 0, 30000) of
+        {ok, Data} ->
+            recv_until_closed(Socket, Acc + byte_size(Data));
+        {error, closed} ->
+            Acc;
+        {error, timeout} ->
+            Acc
+    end.
+
+%% @private
+%% Repeatedly calls the raw nif_send/2 (bypassing socket:send/2's automatic
+%% retry) with the same chunk of data, until either an {error, eagain} is
+%% observed (returns {TotalSent, true}) or MaxAttempts is reached without
+%% ever observing backpressure (returns {TotalSent, false}).
+fill_send_buffer(_Socket, _Chunk, TotalSent, 0) ->
+    {TotalSent, false};
+fill_send_buffer(Socket, Chunk, TotalSent, AttemptsLeft) ->
+    case socket:nif_send(Socket, Chunk) of
+        ok ->
+            fill_send_buffer(Socket, Chunk, TotalSent + byte_size(Chunk), AttemptsLeft - 1);
+        {ok, Rest} ->
+            Sent = byte_size(Chunk) - byte_size(Rest),
+            fill_send_buffer(Socket, Chunk, TotalSent + Sent, AttemptsLeft - 1);
+        {error, eagain} ->
+            {TotalSent, true};
+        {error, Reason} ->
+            error({unexpected_send_error, Reason})
+    end.
 
 id(X) ->
     X.

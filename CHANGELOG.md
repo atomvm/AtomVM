@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for configuring pins and width for sdmmc on ESP32
 - Added support for map comprehensions
 - Added USB CDC port drivers for ESP32, RP2, and STM32 platforms
+- Implemented `enif_select_write` (previously declared but not implemented), and reworked
+  `enif_select`/`enif_select_read`/`enif_select_write` so a resource can hold independent
+  pending read and write selects (each with its own ref/message/pid) on the same event at
+  the same time
 - Added a Linux `gpio` driver for the generic_unix port (in `avm_unix`) using sysfs
 
 ### Changed
@@ -69,6 +73,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed several underallocation issues that could trigger data corruption on `binary:replace`, `zlib:compress` and bsd socket recv code.
 - Fixed a bug where `catch` would raise on regular atom results
 - Fixed ESP32 socket driver holding the global socket-list lock across blocking TCP connects, leaking the port on connect failure, losing concurrent `accept` waiters, leaking `netbuf` on receive error paths, and a recycled-`netconn` race between socket close and the event handler
+- `socket:send/2,3` now correctly distinguishes transient send backpressure (lwIP `ERR_MEM` / BSD
+  `EAGAIN`|`EWOULDBLOCK`) from a closed connection at the NIF level, and waits for the socket to
+  become writable again (using a new `nif_select_write/2`) and retries internally, so callers get
+  `ok | {error, Reason}` and no longer need to implement their own retry/backoff for partial sends
+  or backpressure; `ssl:send/2`, `ssl:recv/2` and the TLS handshake/close-notify loops likewise wait
+  for write-readiness instead of busy-looping on `want_write`
+- Fixed Erlang distribution over sockets (`socket_dist_controller`) silently ignoring
+  `socket:send/2` errors on `tick` and outgoing distribution data; the connection is now
+  terminated instead of continuing to run against a broken socket
 
 ## [0.7.0-alpha.1] - 2026-04-06
 

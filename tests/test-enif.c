@@ -20,6 +20,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "context.h"
 #include "defaultatoms.h"
@@ -29,6 +30,7 @@
 #include "external_term.h"
 #include "globalcontext.h"
 #include "memory.h"
+#include "resources.h"
 #include "scheduler.h"
 #include "utils.h"
 
@@ -704,6 +706,226 @@ void test_resource_release_in_down_handler_two_monitors(void)
     globalcontext_destroy(glb);
 }
 
+// enif_select_read/enif_select_write should track independent messages, refs
+// and target pids for the same event, so a resource can have a pending read
+// select and a pending write select at the same time (e.g. a socket with a
+// permanent recv select and a transient send-backpressure select).
+void test_resource_select_read_write_independent_messages(void)
+{
+    GlobalContext *glb = globalcontext_new();
+    Context *read_ctx = context_new(glb);
+    Context *write_ctx = context_new(glb);
+    ErlNifEnv *env = erl_nif_env_from_context(read_ctx);
+
+    ErlNifResourceTypeInit init;
+    init.members = 1;
+    init.dtor = resource_dtor;
+    ErlNifResourceFlags flags;
+    cb_read_resource = 0;
+    dtor_call_count = 0;
+
+    ErlNifResourceType *resource_type = enif_init_resource_type(env, "test_select_resource", &init, ERL_NIF_RT_CREATE, &flags);
+    assert(resource_type != NULL);
+
+    void *ptr = enif_alloc_resource(resource_type, sizeof(uint32_t));
+    uint32_t *resource = (uint32_t *) ptr;
+    *resource = 99;
+
+    int pipefds[2];
+    assert(pipe(pipefds) == 0);
+    ErlNifEvent event = (ErlNifEvent) pipefds[0];
+
+    ErlNifPid read_pid = read_ctx->process_id;
+    ErlNifPid write_pid = write_ctx->process_id;
+
+    term read_msg = term_from_int(11);
+    term write_msg = term_from_int(22);
+
+    int r = enif_select_read(env, event, ptr, &read_pid, read_msg, NULL);
+    assert(r == 0);
+    r = enif_select_write(env, event, ptr, &write_pid, write_msg, NULL);
+    assert(r == 0);
+
+    // Firing both read and write readiness must deliver the read message to
+    // read_ctx and the write message to write_ctx, without either clobbering
+    // the other (this is the bug being tested: a shared message/ref/pid field
+    // would either lose one notification or send it to the wrong process).
+    bool notified = select_event_notify(event, true, true, glb);
+    assert(notified);
+
+    assert(mailbox_process_outer_list(&read_ctx->mailbox) == NULL);
+    assert(mailbox_has_next(&read_ctx->mailbox));
+    term read_received;
+    assert(mailbox_peek(read_ctx, &read_received));
+    assert(read_received == read_msg);
+    mailbox_remove_message(&read_ctx->mailbox, &read_ctx->heap);
+    assert(!mailbox_has_next(&read_ctx->mailbox));
+
+    assert(mailbox_process_outer_list(&write_ctx->mailbox) == NULL);
+    assert(mailbox_has_next(&write_ctx->mailbox));
+    term write_received;
+    assert(mailbox_peek(write_ctx, &write_received));
+    assert(write_received == write_msg);
+    mailbox_remove_message(&write_ctx->mailbox, &write_ctx->heap);
+    assert(!mailbox_has_next(&write_ctx->mailbox));
+
+    // Once a direction fires, only that direction is consumed; the other
+    // stays armed until it is separately triggered or explicitly stopped.
+    // Re-arm both to test the ref-ticks (no custom message) path together.
+    r = enif_select_read(env, event, ptr, &read_pid, read_msg, NULL);
+    assert(r == 0);
+    r = enif_select_write(env, event, ptr, &write_pid, write_msg, NULL);
+    assert(r == 0);
+
+    // Re-selecting read must not disturb the pending write selection (and
+    // vice-versa): overwrite only the read side with a new pid/message.
+    Context *other_read_ctx = context_new(glb);
+    ErlNifPid other_read_pid = other_read_ctx->process_id;
+    term other_read_msg = term_from_int(33);
+    r = enif_select_read(env, event, ptr, &other_read_pid, other_read_msg, NULL);
+    assert(r == 0);
+
+    notified = select_event_notify(event, true, true, glb);
+    assert(notified);
+
+    // Original read_ctx should get nothing new (its select was overwritten).
+    assert(mailbox_process_outer_list(&read_ctx->mailbox) == NULL);
+    assert(!mailbox_has_next(&read_ctx->mailbox));
+
+    assert(mailbox_process_outer_list(&other_read_ctx->mailbox) == NULL);
+    assert(mailbox_has_next(&other_read_ctx->mailbox));
+    term other_read_received;
+    assert(mailbox_peek(other_read_ctx, &other_read_received));
+    assert(other_read_received == other_read_msg);
+
+    assert(mailbox_process_outer_list(&write_ctx->mailbox) == NULL);
+    assert(mailbox_has_next(&write_ctx->mailbox));
+    term write_received_again;
+    assert(mailbox_peek(write_ctx, &write_received_again));
+    assert(write_received_again == write_msg);
+    mailbox_remove_message(&write_ctx->mailbox, &write_ctx->heap);
+
+    // Both directions have now fired and are no longer armed, so stopping the
+    // select should immediately release the extra refcount it was holding.
+    int stop_result = enif_select(env, event, ERL_NIF_SELECT_STOP, ptr, NULL, term_nil());
+    assert(stop_result == ERL_NIF_SELECT_STOP_CALLED);
+
+    int release_result = enif_release_resource(ptr);
+    assert(release_result);
+
+    scheduler_terminate(read_ctx);
+    scheduler_terminate(write_ctx);
+    scheduler_terminate(other_read_ctx);
+
+    close(pipefds[0]);
+    close(pipefds[1]);
+
+    globalcontext_destroy(glb);
+}
+
+// The generic enif_select/2 API (no custom message, just a reference) must
+// also track read and write refs independently when both directions are
+// selected on the same event, e.g. a single ref selecting both directions,
+// followed by a read-only re-select that must not clear the write ref.
+void test_resource_select_read_write_independent_refs(void)
+{
+    GlobalContext *glb = globalcontext_new();
+    Context *ctx = context_new(glb);
+    ErlNifEnv *env = erl_nif_env_from_context(ctx);
+
+    ErlNifResourceTypeInit init;
+    init.members = 1;
+    init.dtor = resource_dtor;
+    ErlNifResourceFlags flags;
+    cb_read_resource = 0;
+
+    ErlNifResourceType *resource_type = enif_init_resource_type(env, "test_select_resource_refs", &init, ERL_NIF_RT_CREATE, &flags);
+    assert(resource_type != NULL);
+
+    void *ptr = enif_alloc_resource(resource_type, sizeof(uint32_t));
+    uint32_t *resource = (uint32_t *) ptr;
+    *resource = 7;
+
+    int pipefds[2];
+    assert(pipe(pipefds) == 0);
+    ErlNifEvent event = (ErlNifEvent) pipefds[0];
+
+    ErlNifPid pid = ctx->process_id;
+
+    assert(memory_erl_nif_env_ensure_free(env, REF_SIZE) == MEMORY_GC_OK);
+    term write_ref = term_from_ref_ticks(globalcontext_get_ref_ticks(glb), &env->heap);
+
+    // Select for write with an explicit ref and no custom message.
+    int r = enif_select(env, event, ERL_NIF_SELECT_WRITE, ptr, &pid, write_ref);
+    assert(r == 0);
+
+    // Now select read only, with UNDEFINED_ATOM (no ref requested). This must
+    // not disturb the write ref registered above.
+    r = enif_select(env, event, ERL_NIF_SELECT_READ, ptr, &pid, UNDEFINED_ATOM);
+    assert(r == 0);
+
+    bool notified = select_event_notify(event, true, true, glb);
+    assert(notified);
+
+    // Two notifications should have been queued: {select, Resource, undefined, ready_input}
+    // and {select, Resource, WriteRef, ready_output}.
+    assert(mailbox_process_outer_list(&ctx->mailbox) == NULL);
+    assert(mailbox_has_next(&ctx->mailbox));
+
+    bool saw_read = false;
+    bool saw_write = false;
+    for (int i = 0; i < 2; i++) {
+        term msg;
+        assert(mailbox_peek(ctx, &msg));
+        assert(term_is_tuple(msg));
+        assert(term_get_tuple_arity(msg) == 4);
+        assert(term_get_tuple_element(msg, 0) == SELECT_ATOM);
+        term ref_or_undefined = term_get_tuple_element(msg, 2);
+        term kind = term_get_tuple_element(msg, 3);
+        if (kind == READY_INPUT_ATOM) {
+            assert(ref_or_undefined == UNDEFINED_ATOM);
+            saw_read = true;
+        } else {
+            assert(kind == READY_OUTPUT_ATOM);
+            assert(term_is_reference(ref_or_undefined));
+            saw_write = true;
+        }
+        if (i == 0) {
+            assert(mailbox_has_next(&ctx->mailbox));
+            mailbox_next(&ctx->mailbox);
+        }
+    }
+    assert(saw_read);
+    assert(saw_write);
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+    assert(!mailbox_has_next(&ctx->mailbox));
+
+    // Both directions have now fired and are no longer armed, so stopping the
+    // select should immediately release the extra refcount it was holding.
+    int stop_result = enif_select(env, event, ERL_NIF_SELECT_STOP, ptr, NULL, term_nil());
+    assert(stop_result == ERL_NIF_SELECT_STOP_CALLED);
+
+    int release_result = enif_release_resource(ptr);
+    assert(release_result);
+
+    scheduler_terminate(ctx);
+
+    close(pipefds[0]);
+    close(pipefds[1]);
+
+#ifdef AVM_TASK_DRIVER_ENABLED
+    // Notifications built without a custom message (the ref-only path
+    // exercised above) release their transient resource reference through
+    // the task-driver refc queue rather than synchronously; drain it so the
+    // resource is properly freed instead of merely being reported as a
+    // (harmless) dangling resource on shutdown.
+    globalcontext_process_task_driver_queues(glb);
+#endif
+
+    globalcontext_destroy(glb);
+}
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
@@ -719,6 +941,8 @@ int main(int argc, char **argv)
     test_resource_binaries();
     test_resource_release_in_down_handler();
     test_resource_release_in_down_handler_two_monitors();
+    test_resource_select_read_write_independent_messages();
+    test_resource_select_read_write_independent_refs();
 
     return EXIT_SUCCESS;
 }
