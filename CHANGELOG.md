@@ -64,6 +64,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed several underallocation issues that could trigger data corruption on `binary:replace`, `zlib:compress` and bsd socket recv code.
 - Fixed a bug where `catch` would raise on regular atom results
 - Fixed ESP32 socket driver holding the global socket-list lock across blocking TCP connects, leaking the port on connect failure, losing concurrent `accept` waiters, leaking `netbuf` on receive error paths, and a recycled-`netconn` race between socket close and the event handler
+- Fixed `timer_manager:send_after/3` (and therefore `erlang:send_after/3` and `timer:send_after/2,3`)
+  returning a reference that was never registered with the timer manager, so `cancel_timer/1` always
+  returned `false` and the scheduled message was delivered regardless of cancellation
 
 ## [0.7.0-alpha.1] - 2026-04-06
 
