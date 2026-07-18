@@ -290,6 +290,16 @@ call_primitive_last_test() ->
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
+% An argument list that exhausts the scratch registers must still be rejected
+% with a descriptive error, not an opaque first_avail/1 function_clause.
+call_primitive_last_unsupported_args_test() ->
+    State = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    Args = [ctx, a9, a7, a6, a5, 0],
+    ?assertError(
+        {unsupported_call_primitive_last_args, Args},
+        ?BACKEND:call_primitive_last(State, 0, Args)
+    ).
+
 shift_right_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, RegA} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
