@@ -367,17 +367,8 @@ static term init_server_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
     }
     socket_data->sockfd = sockfd;
 
-    //
-    // set socket options:
-    //      reuse-address
-    //      disable linger
-    //
     int flag = 1;
     setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *) &flag, sizeof(int));
-    struct linger sl;
-    sl.l_onoff = 1;
-    sl.l_linger = 0;
-    setsockopt(sockfd, SOL_SOCKET, SO_LINGER, &sl, sizeof(sl));
 
     if (fcntl(socket_data->sockfd, F_SETFL, O_NONBLOCK) == -1) {
         close(sockfd);
