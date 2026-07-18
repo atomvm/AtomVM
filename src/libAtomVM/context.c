@@ -342,6 +342,13 @@ void context_process_process_info_request_signal(Context *ctx, struct ProcessInf
         return;
     }
 
+    if (process_table_locked) {
+        // Called from context_destroy: this process has already been removed
+        // from the process table
+        mailbox_send_term_signal(target, TrapAnswerSignal, UNDEFINED_ATOM);
+        return;
+    }
+
     if (signal->mode == PROCESS_INFO_SINGLE) {
         term atom = signal->atoms[0];
         size_t term_size;
