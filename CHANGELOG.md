@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `"USB_SERIAL_JTAG"` peripheral to the ESP32 `uart` module on chips with a built-in
   USB-Serial-JTAG controller (C3/C5/C6/C61/H2/H21/H4/P4/S3)
 - Added support for the `safe` option in `erlang:binary_to_term/2`
+- Added support for process aliases: `erlang:alias/0,1`, `erlang:unalias/1`,
+  `erlang:monitor/3` with the `{alias, Mode}` option, `spawn_opt` `{monitor, MonitorOpts}` and
+  sending to an alias reference
 - Added xtensa JIT backend for esp32 platform
 - Added support for configuring pins and width for sdmmc on ESP32
 - Added support for map comprehensions
@@ -49,6 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for this limit
 - Replaced the `exavmlib` `Protocol` module with a small runtime shim (only `Protocol.__concat__/2`),
   saving ~31 KB of flash. ExAtomVM uses precompiled, unconsolidated protocols and continue to function normally at runtime.
+- Deprecated the C macro `REF_SIZE`: use `TERM_BOXED_REFERENCE_SHORT_SIZE` for references built
+  from ref ticks, `TERM_BOXED_REFERENCE_PROCESS_SIZE` for process references (aliases), or
+  `TERM_BOXED_REFERENCE_MAX_SIZE` to fit any reference. `REF_SIZE` still expands to the short
+  reference size, but now emits a compiler warning
 
 ### Removed
 - Removed `ahttp_client` support for obsolete line folding (RFC 9112 §5.2); folded header and

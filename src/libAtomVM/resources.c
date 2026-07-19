@@ -238,6 +238,10 @@ int enif_select(ErlNifEnv *env, ErlNifEvent event, enum ErlNifSelectFlags mode, 
     if (UNLIKELY(mode & (ERL_NIF_SELECT_READ | ERL_NIF_SELECT_WRITE) && !term_is_local_reference(ref) && ref != UNDEFINED_ATOM)) {
         return ERL_NIF_SELECT_BADARG;
     }
+    // Unlike the BEAM, AtomVM does not support a process alias as an enif_select ref.
+    if (UNLIKELY(term_is_process_reference(ref))) {
+        return ERL_NIF_SELECT_BADARG;
+    }
     return enif_select_common(env, event, mode, obj, pid, ref, NULL);
 }
 

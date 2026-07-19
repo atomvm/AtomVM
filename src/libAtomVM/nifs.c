@@ -1340,7 +1340,7 @@ static NativeHandlerResult process_console_message(Context *ctx, term msg)
 {
     // msg is not in the port's heap
     NativeHandlerResult result = NativeContinue;
-    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(3) + TERM_BOXED_REFERENCE_PROCESS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, MAX(TUPLE_SIZE(3), 2 * TUPLE_SIZE(2)), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         fprintf(stderr, "Unable to allocate sufficient memory for console driver.\n");
         AVM_ABORT();
     }
@@ -1358,7 +1358,6 @@ static NativeHandlerResult process_console_message(Context *ctx, term msg)
         term pid = term_get_tuple_element(msg, 1);
         term ref = term_get_tuple_element(msg, 2);
         term req = term_get_tuple_element(msg, 3);
-        uint64_t ref_ticks = term_to_ref_ticks(ref);
 
         if (is_tagged_tuple(req, PUT_CHARS_ATOM, 3)) {
             term chars = term_get_tuple_element(req, 2);
@@ -1368,11 +1367,9 @@ static NativeHandlerResult process_console_message(Context *ctx, term msg)
                 printf("%s", str);
                 free(str);
 
-                term refcopy = term_from_ref_ticks(ref_ticks, &ctx->heap);
-
                 term reply = term_alloc_tuple(3, &ctx->heap);
                 term_put_tuple_element(reply, 0, IO_REPLY_ATOM);
-                term_put_tuple_element(reply, 1, refcopy);
+                term_put_tuple_element(reply, 1, ref);
                 term_put_tuple_element(reply, 2, OK_ATOM);
 
                 port_send_message(ctx->global, pid, reply);
@@ -1432,7 +1429,7 @@ static NativeHandlerResult process_console_mailbox(Context *ctx)
     return result;
 }
 
-static term parse_monitor_opts(Context *ctx, term monitor_opts, bool *is_alias, enum ContextMonitorAliasType *alias_type)
+static term parse_monitor_opts(Context *ctx, term monitor_opts, bool *is_alias, context_monitor_alias_type_t *alias_type)
 {
     *is_alias = false;
     while (term_is_nonempty_list(monitor_opts)) {
@@ -1547,41 +1544,49 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
     }
     RefData ref_data;
     bool is_spawn_monitor = false;
+    bool is_alias = false;
+    context_monitor_alias_type_t alias_type;
     term new_pid = term_from_local_process_id(new_ctx->process_id);
 
+    // Do every fallible step before publishing any side effect: destroying a never-published
+    // new_ctx would send the caller a spurious {'EXIT', Pid, normal} for a spawn that raised.
+    struct Monitor *new_link = NULL;
+    struct Monitor *self_link = NULL;
+    struct Monitor *alias_monitor = NULL;
+    struct Monitor *new_monitor = NULL;
+    struct Monitor *self_monitor = NULL;
+
     if (link_term == TRUE_ATOM) {
-        // We can call context_add_monitor directly on new process because it's not started yet
-        struct Monitor *new_link = monitor_link_new(term_from_local_process_id(ctx->process_id));
+        new_link = monitor_link_new(term_from_local_process_id(ctx->process_id));
         if (IS_NULL_PTR(new_link)) {
             context_destroy(new_ctx);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        struct Monitor *self_link = monitor_link_new(new_pid);
+        self_link = monitor_link_new(new_pid);
         if (IS_NULL_PTR(self_link)) {
-            free(new_link);
+            monitor_destroy(new_link);
             context_destroy(new_ctx);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        context_add_monitor(new_ctx, new_link);
-        context_add_monitor(ctx, self_link);
     }
     if (monitor_term == TRUE_ATOM) {
         monitor_term = term_nil();
     }
     if (term_is_list(monitor_term)) {
         is_spawn_monitor = true;
-        bool is_alias;
-        enum ContextMonitorAliasType alias_type;
 
         if (UNLIKELY(term_is_invalid_term(parse_monitor_opts(ctx, monitor_term, &is_alias, &alias_type)))) {
+            monitor_destroy(new_link);
+            monitor_destroy(self_link);
             context_destroy(new_ctx);
             return term_invalid_term();
         }
-        struct Monitor *alias_monitor = NULL;
         if (is_alias) {
             ref_data = (RefData){ .ref_ticks = globalcontext_get_ref_ticks(ctx->global), .process_id = ctx->process_id };
             alias_monitor = monitor_alias_new(&ref_data, alias_type);
             if (IS_NULL_PTR(alias_monitor)) {
+                monitor_destroy(new_link);
+                monitor_destroy(self_link);
                 context_destroy(new_ctx);
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
@@ -1589,21 +1594,52 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
             ref_data = (RefData){ .ref_ticks = globalcontext_get_ref_ticks(ctx->global), .process_id = INVALID_PROCESS_ID };
         }
 
-        struct Monitor *new_monitor = monitor_new(term_from_local_process_id(ctx->process_id), &ref_data, false);
+        new_monitor = monitor_new(term_from_local_process_id(ctx->process_id), &ref_data, false);
         if (IS_NULL_PTR(new_monitor)) {
+            monitor_destroy(new_link);
+            monitor_destroy(self_link);
+            monitor_destroy(alias_monitor);
             context_destroy(new_ctx);
-            free(alias_monitor);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        struct Monitor *self_monitor = monitor_new(new_pid, &ref_data, true);
+        self_monitor = monitor_new(new_pid, &ref_data, true);
         if (IS_NULL_PTR(self_monitor)) {
-            free(alias_monitor);
-            free(new_monitor);
+            monitor_destroy(new_link);
+            monitor_destroy(self_link);
+            monitor_destroy(alias_monitor);
+            monitor_destroy(new_monitor);
             context_destroy(new_ctx);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 
-        // We can call context_add_monitor directly on new process because it's not started yet
+        // Reserve before publishing (see above). GC here is safe: new_pid and ref_data are immediates.
+        int ref_size = is_alias ? TERM_BOXED_REFERENCE_PROCESS_SIZE : TERM_BOXED_REFERENCE_SHORT_SIZE;
+        int res_size = ref_size + TUPLE_SIZE(2);
+        if (UNLIKELY(memory_ensure_free_opt(ctx, res_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            monitor_destroy(new_link);
+            monitor_destroy(self_link);
+            monitor_destroy(alias_monitor);
+            monitor_destroy(self_monitor);
+            monitor_destroy(new_monitor);
+            context_destroy(new_ctx);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+    } else if (UNLIKELY(!term_is_invalid_term(monitor_term))) {
+        // {monitor, BadTerm} where BadTerm is neither a list nor 'true': raise badarg like OTP
+        // instead of spawning an unmonitored process.
+        monitor_destroy(new_link);
+        monitor_destroy(self_link);
+        context_destroy(new_ctx);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    // Nothing can fail from here on. Publish in order so the entries keep their relative position
+    // in the monitor lists. context_add_monitor on new_ctx is safe because it is not started yet.
+    if (new_link != NULL) {
+        context_add_monitor(new_ctx, new_link);
+        context_add_monitor(ctx, self_link);
+    }
+    if (is_spawn_monitor) {
         context_add_monitor(new_ctx, new_monitor);
         context_add_monitor(ctx, self_monitor);
         if (is_alias) {
@@ -1612,12 +1648,6 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
     }
 
     if (is_spawn_monitor) {
-        int res_size = TERM_BOXED_REFERENCE_PROCESS_SIZE + TUPLE_SIZE(2);
-        if (UNLIKELY(memory_ensure_free_opt(ctx, res_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            context_destroy(new_ctx);
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-
         scheduler_init_ready(new_ctx);
 
         term ref = term_from_ref_data(&ref_data, &ctx->heap);
@@ -1819,20 +1849,6 @@ static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
 
         globalcontext_send_message(glb, local_process_id, argv[1]);
 
-    } else if (term_is_process_reference(target)) {
-        int32_t process_id = term_process_ref_to_process_id(target);
-        int64_t ref_ticks = term_to_ref_ticks(target);
-        Context *p = globalcontext_get_process_lock(glb, process_id);
-        if (p) {
-            struct MonitorAlias *alias = context_find_alias(p, ref_ticks);
-            if (alias != NULL) {
-                if (alias->alias_type == ContextMonitorAliasReplyDemonitor) {
-                    context_unalias(alias);
-                }
-                mailbox_send(p, argv[1]);
-            }
-            globalcontext_get_process_unlock(glb, p);
-        }
     } else if (term_is_atom(target)) {
         // We need to hold a lock on the processes_table until the message is sent to avoid a race condition,
         // otherwise the receiving process could be killed at any point between checking it is registered,
@@ -1857,9 +1873,16 @@ static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
 
         globalcontext_send_message_nolock(glb, local_process_id, argv[1]);
         synclist_unlock(&glb->processes_table);
-    } else if (!term_is_reference(target)) {
+    } else if (UNLIKELY(!term_is_reference(target))) {
         RAISE_ERROR(BADARG_ATOM);
+    } else if (term_is_process_reference(target)) {
+        int32_t process_id = term_process_ref_to_process_id(target);
+        globalcontext_send_message_to_alias(glb, process_id, target, argv[1]);
     }
+    // else: a non-local-process reference is silently dropped, as OTP drops a send to a
+    // non-active-alias reference.
+    // TODO: route sends to external references over distribution. Outbound distributed aliases are
+    // unsupported, so the message is currently lost.
 
     return argv[1];
 }
@@ -5014,14 +5037,13 @@ static term nif_erlang_memory(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
 {
-
     term object_type = argv[0];
     term target_proc = argv[1];
     term options = argc == 3 ? argv[2] : term_nil();
     term target_pid;
     size_t target_proc_size = 0;
     bool is_alias;
-    enum ContextMonitorAliasType alias_type;
+    context_monitor_alias_type_t alias_type;
 
     if (object_type != PROCESS_ATOM && object_type != PORT_ATOM) {
         RAISE_ERROR(BADARG_ATOM);
@@ -5039,35 +5061,47 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     }
 
     Context *target;
-    int32_t local_process_id;
-    // gcc < 14 is not smart enough to find out local_process_id is not used initialized below
-#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ < 14
-    local_process_id = 0;
-#endif
+    // Some compilers cannot tell that local_process_id is always set before it is used below
+    int32_t local_process_id = INVALID_PROCESS_ID;
     if (UNLIKELY(target_pid == UNDEFINED_ATOM)) {
         target = NULL;
     } else {
         local_process_id = term_to_local_process_id(target_pid);
-        // Monitoring self is possible but no monitor is actually created
+        // Monitoring self installs nothing, like OTP: no monitor and (with {alias, _}) no alias, so
+        // sends to the returned ref are dropped and unalias/1, demonitor(Ref, [info]) return false.
         if (UNLIKELY(local_process_id == ctx->process_id)) {
             if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFERENCE_SHORT_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
             uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
-            term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
-            return ref;
+            return term_from_ref_ticks(ref_ticks, &ctx->heap);
         }
 
         target = globalcontext_get_process_lock(ctx->global, local_process_id);
     }
 
+    int ref_size = is_alias ? TERM_BOXED_REFERENCE_PROCESS_SIZE : TERM_BOXED_REFERENCE_SHORT_SIZE;
+
     if (IS_NULL_PTR(target)) {
-        int res_size = TERM_BOXED_REFERENCE_PROCESS_SIZE + TUPLE_SIZE(5) + target_proc_size;
+        int res_size = ref_size + TUPLE_SIZE(5) + target_proc_size;
+        RefData ref_data = { .ref_ticks = globalcontext_get_ref_ticks(ctx->global), .process_id = is_alias ? ctx->process_id : INVALID_PROCESS_ID };
+        // The monitor is immediately removed by the noproc DOWN, so only an explicit_unalias alias
+        // stays active (demonitor / reply_demonitor would be deactivated right away, as at a DOWN).
+        struct Monitor *alias_monitor = NULL;
+        if (is_alias && alias_type == ContextMonitorAliasExplicitUnalias) {
+            alias_monitor = monitor_alias_new(&ref_data, alias_type);
+            if (IS_NULL_PTR(alias_monitor)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+        }
         if (UNLIKELY(memory_ensure_free_opt(ctx, res_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            monitor_destroy(alias_monitor);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
-        term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
+        if (alias_monitor != NULL) {
+            context_add_monitor(ctx, alias_monitor);
+        }
+        term ref = term_from_ref_data(&ref_data, &ctx->heap);
         term down_message_tuple = term_alloc_tuple(5, &ctx->heap);
         term_put_tuple_element(down_message_tuple, 0, DOWN_ATOM);
         term_put_tuple_element(down_message_tuple, 1, ref);
@@ -5110,27 +5144,35 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     }
     if (IS_NULL_PTR(self_monitor)) {
         globalcontext_get_process_unlock(ctx->global, target);
-        free(alias_monitor);
+        monitor_destroy(alias_monitor);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term monitoring_pid = term_from_local_process_id(ctx->process_id);
     struct Monitor *other_monitor = monitor_new(monitoring_pid, &ref_data, false);
     if (IS_NULL_PTR(other_monitor)) {
-        free(alias_monitor);
-        free(self_monitor);
+        monitor_destroy(alias_monitor);
+        monitor_destroy(self_monitor);
         globalcontext_get_process_unlock(ctx->global, target);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
+
+    // Reserve the result reference *before* publishing any monitor/alias state, so an OOM here
+    // cannot leave the target with a queued MonitorSignal while the caller gets an exception and
+    // never receives the reference. GC here is safe: the monitor structs hold only immediates.
+    if (UNLIKELY(memory_ensure_free_opt(ctx, ref_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        monitor_destroy(alias_monitor);
+        monitor_destroy(self_monitor);
+        monitor_destroy(other_monitor);
+        globalcontext_get_process_unlock(ctx->global, target);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
     mailbox_send_monitor_signal(target, MonitorSignal, other_monitor);
     globalcontext_get_process_unlock(ctx->global, target);
 
     context_add_monitor(ctx, self_monitor);
     if (is_alias) {
         context_add_monitor(ctx, alias_monitor);
-    }
-
-    if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFERENCE_PROCESS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     return term_from_ref_data(&ref_data, &ctx->heap);
@@ -5209,7 +5251,7 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[])
 
         if (UNLIKELY(!context_add_monitor(ctx, self_link))) {
             globalcontext_get_process_unlock(ctx->global, target);
-            free(other_link);
+            monitor_destroy(other_link);
             return TRUE_ATOM;
         }
 
@@ -7567,8 +7609,29 @@ static term nif_erlang_crc32_combine_3(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_alias(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
-    UNUSED(argv);
+    // The reply option reuses the reply_demonitor machinery: with no monitor to remove, the alias
+    // is deactivated when the first message via it is delivered.
+    context_monitor_alias_type_t alias_type = ContextMonitorAliasExplicitUnalias;
+    if (argc == 1) {
+        term opts = argv[0];
+        VALIDATE_VALUE(opts, term_is_list);
+        while (term_is_nonempty_list(opts)) {
+            term option = term_get_list_head(opts);
+            if (option == EXPLICIT_UNALIAS_ATOM) {
+                alias_type = ContextMonitorAliasExplicitUnalias;
+            } else if (option == REPLY_ATOM) {
+                alias_type = ContextMonitorAliasReplyDemonitor;
+            } else if (UNLIKELY(option == PRIORITY_ATOM)) {
+                RAISE_ERROR(UNSUPPORTED_ATOM);
+            } else {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            opts = term_get_list_tail(opts);
+        }
+        if (UNLIKELY(!term_is_nil(opts))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
 
     if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFERENCE_PROCESS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -7576,7 +7639,7 @@ static term nif_erlang_alias(Context *ctx, int argc, term argv[])
 
     RefData ref_data = { .ref_ticks = globalcontext_get_ref_ticks(ctx->global), .process_id = ctx->process_id };
     term process_ref = term_from_ref_data(&ref_data, &ctx->heap);
-    struct Monitor *monitor = monitor_alias_new(&ref_data, ContextMonitorAliasExplicitUnalias);
+    struct Monitor *monitor = monitor_alias_new(&ref_data, alias_type);
     if (IS_NULL_PTR(monitor)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
@@ -7589,14 +7652,19 @@ static term nif_erlang_unalias(Context *ctx, int argc, term argv[])
     UNUSED(argc);
 
     term process_ref = argv[0];
-    VALIDATE_VALUE(process_ref, term_is_local_reference);
+    VALIDATE_VALUE(process_ref, term_is_reference);
+    if (UNLIKELY(!term_is_local_reference(process_ref))) {
+        // An external reference cannot be an alias of the calling process: return false like
+        // OTP, instead of raising badarg.
+        return FALSE_ATOM;
+    }
     uint64_t ref_ticks = term_to_ref_ticks(process_ref);
 
     struct MonitorAlias *alias = context_find_alias(ctx, ref_ticks);
     if (IS_NULL_PTR(alias)) {
         return FALSE_ATOM;
     } else {
-        context_unalias(alias);
+        context_unalias(ctx, alias);
         return TRUE_ATOM;
     }
 }

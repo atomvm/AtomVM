@@ -53,6 +53,11 @@
 #define DEFAULT_STACK_SIZE 8
 #define BYTES_PER_TERM (TERM_BITS / 8)
 
+// active_alias_count saturates at this value instead of wrapping to 0. A wrap would make
+// context_find_alias skip the list walk and silently drop every alias of the process. A
+// saturated count is only reset to 0 when the last monitor of the process goes away.
+#define ACTIVE_ALIAS_COUNT_SATURATED 0xFF
+
 static struct Monitor *context_monitors_handle_terminate(Context *ctx);
 static void context_distribution_handle_terminate(Context *ctx);
 static void destroy_extended_registers(Context *ctx, unsigned int live);
@@ -83,6 +88,7 @@ Context *context_new(GlobalContext *glb)
     ctx->heap_growth_strategy = BoundedFreeHeapGrowth;
     ctx->has_min_heap_size = 0;
     ctx->has_max_heap_size = 0;
+    ctx->active_alias_count = 0;
 
     mailbox_init(&ctx->mailbox);
 
@@ -139,10 +145,9 @@ void context_destroy(Context *ctx)
     // Hold and release the spin lock for timers and cancel any timer
     scheduler_cancel_timeout(ctx);
 
-    // Remove the process from the scheduler queue. A process terminated by the scheduler was
-    // already dequeued (and its queue item was reset, making this a no-op), but a process that
-    // is destroyed before it was ever scheduled -- e.g. on a spawn_opt option error -- is still
-    // on the waiting queue, and destroying it without dequeuing would leave a dangling entry.
+    // A process terminated by the scheduler was already dequeued and its queue item reset, so this
+    // is a no-op. A process destroyed before it was ever scheduled (e.g. a spawn_opt option error)
+    // is still on the waiting queue, and dequeuing it here avoids leaving a dangling entry.
     SMP_SPINLOCK_LOCK(&ctx->global->processes_spinlock);
     list_remove(&ctx->processes_list_head);
     SMP_SPINLOCK_UNLOCK(&ctx->global->processes_spinlock);
@@ -163,7 +168,7 @@ void context_destroy(Context *ctx)
 
     // Process any link/unlink/monitor/demonitor signal that arrived recently
     // Also process ProcessInfoRequestSignal so caller isn't trapped waiting
-    MailboxMessage *signal_message = mailbox_process_outer_list(&ctx->mailbox);
+    MailboxMessage *signal_message = mailbox_process_outer_list_native(&ctx->mailbox);
     while (signal_message) {
         switch (signal_message->type) {
             case ProcessInfoRequestSignal: {
@@ -226,6 +231,7 @@ void context_destroy(Context *ctx)
             case FlushInfoMonitorSignal:
             case LinkExitSignal: // target will not be found when processing this link
             case MonitorDownSignal: // likewise
+            case AliasMessageSignal: // process is terminating; drop the alias message
             case CodeServerResumeSignal:
                 break;
             case NormalMessage: {
@@ -443,6 +449,14 @@ void context_process_monitor_down_signal(Context *ctx, struct TermSignal *signal
                 // Remove link
                 list_remove(&monitor->monitor_list_head);
                 free(monitoring_monitor);
+
+                // {alias, demonitor} / {alias, reply_demonitor}: the alias is deactivated when the
+                // monitor is removed, including the automatic removal at 'DOWN' delivery.
+                struct MonitorAlias *alias = context_find_alias(ctx, ref_ticks);
+                if (alias != NULL && alias->alias_type != ContextMonitorAliasExplicitUnalias) {
+                    context_unalias(ctx, alias);
+                }
+
                 // Enqueue the term as a message.
                 mailbox_send(ctx, signal->signal_term);
                 break;
@@ -463,6 +477,11 @@ void context_process_monitor_down_signal(Context *ctx, struct TermSignal *signal
                 mailbox_send(ctx, signal->signal_term);
                 END_WITH_STACK_HEAP(temp_heap, ctx->global);
 
+                struct MonitorAlias *alias = context_find_alias(ctx, ref_ticks);
+                if (alias != NULL && alias->alias_type != ContextMonitorAliasExplicitUnalias) {
+                    context_unalias(ctx, alias);
+                }
+
                 free(monitoring_monitor);
                 break;
             }
@@ -470,6 +489,38 @@ void context_process_monitor_down_signal(Context *ctx, struct TermSignal *signal
     }
     // If monitor was not found, it was removed and message should not be sent.
     // (flush option removes messages that were already sent)
+}
+
+term context_process_alias_message_signal(Context *ctx, struct TermSignal *signal)
+{
+    term ref = term_get_tuple_element(signal->signal_term, 0);
+    uint64_t ref_ticks = term_to_ref_ticks(ref);
+    term message = term_get_tuple_element(signal->signal_term, 1);
+
+    struct MonitorAlias *alias = context_find_alias(ctx, ref_ticks);
+    if (IS_NULL_PTR(alias)) {
+        // Alias is not (or no longer) active: drop the message, matching OTP.
+        return term_invalid_term();
+    }
+
+    if (alias->alias_type == ContextMonitorAliasReplyDemonitor) {
+        // Capture the monitored pid before context_demonitor removes the local monitoring entry.
+        bool is_monitoring = false;
+        term monitor_pid = context_get_monitor_pid(ctx, ref_ticks, &is_monitoring);
+        context_demonitor(ctx, ref_ticks);
+        if (!term_is_invalid_term(monitor_pid) && is_monitoring) {
+            // Takes the processes_table read lock: callers of mailbox_process_outer_list
+            // must not already hold it.
+            int32_t monitored_process_id = term_to_local_process_id(monitor_pid);
+            Context *target = globalcontext_get_process_lock(ctx->global, monitored_process_id);
+            if (target) {
+                mailbox_send_ref_signal(target, DemonitorSignal, ref_ticks);
+                globalcontext_get_process_unlock(ctx->global, target);
+            }
+        }
+    }
+
+    return message;
 }
 
 void context_process_code_server_resume_signal(Context *ctx)
@@ -795,14 +846,16 @@ static struct Monitor *context_monitors_handle_terminate(Context *ctx)
                 Context *target = globalcontext_get_process_nolock(glb, local_process_id);
                 // Target cannot be NULL as we processed Demonitor signals
                 assert(target != NULL);
-                int required_terms = TERM_BOXED_REFERENCE_PROCESS_SIZE + TUPLE_SIZE(5);
+                bool is_monitored_alias = monitored_monitor->ref_data.process_id != INVALID_PROCESS_ID;
+                int ref_size = is_monitored_alias ? TERM_BOXED_REFERENCE_PROCESS_SIZE : TERM_BOXED_REFERENCE_SHORT_SIZE;
+                int required_terms = ref_size + TUPLE_SIZE(5);
                 if (UNLIKELY(memory_ensure_free(ctx, required_terms) != MEMORY_GC_OK)) {
                     // TODO: handle out of memory here
                     fprintf(stderr, "Cannot handle out of memory.\n");
                     globalcontext_get_process_unlock(glb, target);
                     AVM_ABORT();
                 }
-                // Prepare the message on ctx's heap which will be freed afterwards.
+                // Prepare the message on ctx's heap, which is freed afterwards.
                 term ref = term_from_ref_data(&monitored_monitor->ref_data, &ctx->heap);
 
                 term port_or_process = term_pid_or_port_from_context(ctx);
@@ -822,6 +875,9 @@ static struct Monitor *context_monitors_handle_terminate(Context *ctx)
             }
             case CONTEXT_MONITOR_ALIAS: {
                 struct MonitorAlias *alias = CONTAINER_OF(monitor, struct MonitorAlias, monitor);
+                if (LIKELY(ctx->active_alias_count != ACTIVE_ALIAS_COUNT_SATURATED)) {
+                    ctx->active_alias_count--;
+                }
                 free(alias);
                 break;
             }
@@ -864,7 +920,7 @@ struct Monitor *monitor_link_new(term link_pid)
     }
 }
 
-struct Monitor *monitor_new(term monitor_pid, RefData *ref_data, bool is_monitoring)
+struct Monitor *monitor_new(term monitor_pid, const RefData *ref_data, bool is_monitoring)
 {
     struct MonitorLocalMonitor *monitor = malloc(sizeof(struct MonitorLocalMonitor));
     if (IS_NULL_PTR(monitor)) {
@@ -881,7 +937,7 @@ struct Monitor *monitor_new(term monitor_pid, RefData *ref_data, bool is_monitor
     return &monitor->monitor;
 }
 
-struct Monitor *monitor_registeredname_monitor_new(int32_t monitor_process_id, term monitor_name, RefData *ref_data)
+struct Monitor *monitor_registeredname_monitor_new(int32_t monitor_process_id, term monitor_name, const RefData *ref_data)
 {
     struct MonitorLocalRegisteredNameMonitor *monitor = malloc(sizeof(struct MonitorLocalRegisteredNameMonitor));
     if (IS_NULL_PTR(monitor)) {
@@ -895,7 +951,7 @@ struct Monitor *monitor_registeredname_monitor_new(int32_t monitor_process_id, t
     return &monitor->monitor;
 }
 
-struct Monitor *monitor_alias_new(RefData *ref_data, enum ContextMonitorAliasType alias_type)
+struct Monitor *monitor_alias_new(const RefData *ref_data, context_monitor_alias_type_t alias_type)
 {
     struct MonitorAlias *monitor = malloc(sizeof(struct MonitorAlias));
     if (IS_NULL_PTR(monitor)) {
@@ -920,6 +976,35 @@ struct Monitor *monitor_resource_monitor_new(void *resource, uint64_t ref_ticks)
     monitor->ref_ticks = ref_ticks;
 
     return &monitor->monitor;
+}
+
+void monitor_destroy(struct Monitor *monitor)
+{
+    if (monitor == NULL) {
+        return;
+    }
+
+    switch (monitor->monitor_type) {
+        case CONTEXT_MONITOR_LINK_LOCAL:
+            free(CONTAINER_OF(monitor, struct LinkLocalMonitor, monitor));
+            break;
+        case CONTEXT_MONITOR_LINK_REMOTE:
+            free(CONTAINER_OF(monitor, struct LinkRemoteMonitor, monitor));
+            break;
+        case CONTEXT_MONITOR_MONITORING_LOCAL:
+        case CONTEXT_MONITOR_MONITORED_LOCAL:
+            free(CONTAINER_OF(monitor, struct MonitorLocalMonitor, monitor));
+            break;
+        case CONTEXT_MONITOR_MONITORING_LOCAL_REGISTEREDNAME:
+            free(CONTAINER_OF(monitor, struct MonitorLocalRegisteredNameMonitor, monitor));
+            break;
+        case CONTEXT_MONITOR_ALIAS:
+            free(CONTAINER_OF(monitor, struct MonitorAlias, monitor));
+            break;
+        case CONTEXT_MONITOR_RESOURCE:
+            free(CONTAINER_OF(monitor, struct ResourceContextMonitor, monitor));
+            break;
+    }
 }
 
 bool context_add_monitor(Context *ctx, struct Monitor *new_monitor)
@@ -964,7 +1049,7 @@ bool context_add_monitor(Context *ctx, struct Monitor *new_monitor)
                     struct MonitorAlias *existing_alias_monitor = CONTAINER_OF(existing, struct MonitorAlias, monitor);
 
                     if (UNLIKELY(existing_alias_monitor->alias_type == new_alias_monitor->alias_type && existing_alias_monitor->ref_data.ref_ticks == new_alias_monitor->ref_data.ref_ticks)) {
-                        free(new_monitor);
+                        free(new_alias_monitor);
                         return false;
                     }
                     break;
@@ -994,6 +1079,11 @@ bool context_add_monitor(Context *ctx, struct Monitor *new_monitor)
         }
     }
     list_append(&ctx->monitors_head, &new_monitor->monitor_list_head);
+    if (new_monitor->monitor_type == CONTEXT_MONITOR_ALIAS) {
+        if (LIKELY(ctx->active_alias_count < ACTIVE_ALIAS_COUNT_SATURATED)) {
+            ctx->active_alias_count++;
+        }
+    }
     return true;
 }
 
@@ -1104,7 +1194,7 @@ void context_demonitor(Context *ctx, uint64_t ref_ticks)
 {
     struct MonitorAlias *alias = context_find_alias(ctx, ref_ticks);
     if (alias != NULL && alias->alias_type != ContextMonitorAliasExplicitUnalias) {
-        context_unalias(alias);
+        context_unalias(ctx, alias);
     }
 
     struct ListHead *item;
@@ -1149,6 +1239,11 @@ void context_demonitor(Context *ctx, uint64_t ref_ticks)
 
 struct MonitorAlias *context_find_alias(Context *ctx, uint64_t ref_ticks)
 {
+    // The vast majority of processes never create an alias: skip the monitor list walk
+    // entirely for them (this runs for every 'DOWN' and demonitor, not only for aliases).
+    if (LIKELY(ctx->active_alias_count == 0)) {
+        return NULL;
+    }
     struct ListHead *item;
     LIST_FOR_EACH (item, &ctx->monitors_head) {
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
@@ -1163,11 +1258,18 @@ struct MonitorAlias *context_find_alias(Context *ctx, uint64_t ref_ticks)
     return NULL;
 }
 
-void context_unalias(struct MonitorAlias *alias)
+void context_unalias(Context *ctx, struct MonitorAlias *alias)
 {
     TERM_DEBUG_ASSERT(alias != NULL);
     struct Monitor *monitor = &alias->monitor;
     list_remove(&monitor->monitor_list_head);
+    TERM_DEBUG_ASSERT(ctx->active_alias_count > 0);
+    if (LIKELY(ctx->active_alias_count != ACTIVE_ALIAS_COUNT_SATURATED)) {
+        ctx->active_alias_count--;
+    } else if (list_is_empty(&ctx->monitors_head)) {
+        // No monitors left means no active alias: a saturated count can recover.
+        ctx->active_alias_count = 0;
+    }
     free(alias);
 }
 

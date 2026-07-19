@@ -177,6 +177,7 @@
     tuple_size/1,
     tuple_to_list/1,
     alias/0,
+    alias/1,
     unalias/1
 ]).
 
@@ -221,7 +222,8 @@
 -type send_destination() ::
     pid()
     | port()
-    | atom().
+    | atom()
+    | reference().
 
 % Current type until we make these references
 -type resource() :: binary().
@@ -1228,8 +1230,10 @@ spawn_monitor(Module, Function, Args) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Function    function to create a process from
-%% @param   Options     additional options.
-%% @returns pid of the new process
+%% @param   Options     additional options, see `spawn_option()'. With `monitor'
+%%          or `{monitor, MonitorOpts}' the new process is also monitored, see
+%%          `monitor/3' for the monitor options.
+%% @returns pid of the new process, or `{Pid, MonitorRef}' when monitoring
 %% @doc     Create a new process.
 %% @end
 %%-----------------------------------------------------------------------------
@@ -1242,8 +1246,10 @@ spawn_opt(_Name, _Options) ->
 %% @param   Module      module of the function to create a process from
 %% @param   Function    name of the function to create a process from
 %% @param   Args        arguments to pass to the function to create a process from
-%% @param   Options     additional options.
-%% @returns pid of the new process
+%% @param   Options     additional options, see `spawn_option()'. With `monitor'
+%%          or `{monitor, MonitorOpts}' the new process is also monitored, see
+%%          `monitor/3' for the monitor options.
+%% @returns pid of the new process, or `{Pid, MonitorRef}' when monitoring
 %% @doc     Create a new process by calling exported Function from Module with Args.
 %% @end
 %%-----------------------------------------------------------------------------
@@ -1283,10 +1289,11 @@ make_ref() ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @param   Pid     process to send the message to
+%% @param   Target  process, registered name or alias to send the message to
 %% @param   Message message to send
 %% @returns the sent message
-%% @doc     Send a message to a given process
+%% @doc     Send a message to a given process. A message sent to a reference
+%%          that is not an active alias is silently dropped.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec send(Target :: send_destination(), Message :: Message) -> Message.
@@ -1322,10 +1329,14 @@ monitor(_Type, _PidOrPort) ->
 %%          makes the monitor also an alias on the calling process (see `alias/0').
 %%          `AliasMode' defines the behaviour of the alias:
 %%          - explicit_unalias - the alias can be only removed with `unalias/1',
-%%          - demonitor - the alias is also removed when `demonitor/1' is called
-%%                        on the monitor,
-%%          - reply_demonitor - the alias is also removed after a first message
-%%                              is sent via it.
+%%          - demonitor - the alias is also removed when the monitor is removed,
+%%                        by `demonitor/1' or by the delivery of a `DOWN' message,
+%%          - reply_demonitor - additionally, the alias is deactivated and the
+%%                              monitor removed (as by `demonitor/1') when the
+%%                              first message sent via the alias is delivered.
+%%
+%%          <b>Note:</b> Unlike Erlang/OTP, the `{tag, Term}' option is not
+%%          supported and raises `unsupported'.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec monitor
@@ -2186,6 +2197,22 @@ tuple_to_list(_Tuple) ->
 %%-----------------------------------------------------------------------------
 -spec alias() -> Alias when Alias :: reference().
 alias() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Options alias options
+%% @returns A reference aliasing the calling process.
+%% @doc     Creates an alias for the calling process, like `alias/0'.
+%%          With `explicit_unalias' (the default, so `alias([])' is `alias/0')
+%%          the alias stays active until `unalias/1'; with `reply' it is
+%%          deactivated when the first message sent via the alias is delivered.
+%%
+%%          <b>Note:</b> Unlike Erlang/OTP, the `priority' option (OTP 28) is
+%%          not supported and raises `unsupported'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec alias(Options) -> Alias when Options :: [explicit_unalias | reply], Alias :: reference().
+alias(_Options) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

@@ -263,6 +263,20 @@ bool globalcontext_process_exists(GlobalContext *glb, int32_t process_id);
 void globalcontext_send_message(GlobalContext *glb, int32_t process_id, term t);
 
 /**
+ * @brief Send a message to a process alias (process reference).
+ *
+ * @details Posts an AliasMessageSignal carrying {Ref, Message} to the owner process. The owner
+ * validates the alias against its own monitors when it drains signals and either delivers Message
+ * as a normal message or drops it. This avoids touching the owner's monitor list from the sender.
+ *
+ * @param glb the global context (that owns the process table).
+ * @param process_id the local process id of the alias owner.
+ * @param ref the process reference (alias) used as the send target.
+ * @param message the message to send.
+ */
+void globalcontext_send_message_to_alias(GlobalContext *glb, int32_t process_id, term ref, term message);
+
+/**
  * @brief Send a message to a process from another process.
  * There should be a lock on the process table. This variant can be used by
  * listener handlers as an optimization (instead of sending a message to the

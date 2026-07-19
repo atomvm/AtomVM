@@ -129,14 +129,7 @@ extern "C" {
 #define TERM_BOXED_REFC_BINARY_SIZE 6
 #define TERM_BOXED_BIN_MATCH_STATE_SIZE 4
 #define TERM_BOXED_SUB_BINARY_SIZE 4
-#if TERM_BYTES == 8
 #define TERM_BOXED_REFERENCE_RESOURCE_SIZE 4
-#else
-// Enough size would be 4, but reference types
-// are distinguished by size and 4 conflicts with
-// TERM_BOXED_REFERENCE_PROCESS_SIZE on 32bit arch.
-#define TERM_BOXED_REFERENCE_RESOURCE_SIZE 5
-#endif
 #define TERM_BOXED_REFERENCE_RESOURCE_HEADER (((TERM_BOXED_REFERENCE_RESOURCE_SIZE - 1) << 6) | TERM_BOXED_REF)
 #define TERM_BOXED_RESOURCE_SIZE TERM_BOXED_REFERENCE_RESOURCE_SIZE
 
@@ -162,8 +155,15 @@ extern "C" {
 // If you change a reference size, make sure it doesn't
 // conflict with other reference sizes on all architectures.
 #define TERM_BOXED_REFERENCE_SHORT_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
-#define REF_SIZE _Pragma("REF_SIZE is deprecated, use TERM_BOXED_REFERENCE_SHORT_SIZE instead") TERM_BOXED_REFERENCE_SHORT_SIZE
+#define REF_SIZE _Pragma("GCC warning \"REF_SIZE is deprecated, use TERM_BOXED_REFERENCE_SHORT_SIZE instead\"") TERM_BOXED_REFERENCE_SHORT_SIZE
+#if TERM_BYTES == 8
 #define TERM_BOXED_REFERENCE_PROCESS_SIZE (TERM_BOXED_REFERENCE_SHORT_SIZE + 1)
+#else
+// Enough size would be 3 + 1, but that is the resource reference size on 32-bit. Pad the
+// process reference instead of the resource reference: process references only exist when
+// aliases are used, while resource references are everywhere on the embedded targets.
+#define TERM_BOXED_REFERENCE_PROCESS_SIZE (TERM_BOXED_REFERENCE_SHORT_SIZE + 2)
+#endif
 #define TERM_BOXED_REFERENCE_PROCESS_HEADER (((TERM_BOXED_REFERENCE_PROCESS_SIZE - 1) << 6) | TERM_BOXED_REF)
 #if TERM_BYTES == 8
 #define EXTERNAL_PID_SIZE 3
@@ -182,9 +182,11 @@ extern "C" {
 #endif
 #define EXTERNAL_REF_MAX_WORDS 5
 #define TERM_BOXED_REFERENCE_MAX_SIZE EXTERNAL_REF_SIZE(EXTERNAL_REF_MAX_WORDS)
-_Static_assert(TERM_BOXED_REFERENCE_SHORT_SIZE < TERM_BOXED_REFERENCE_PROCESS_SIZE, "Short ref size must be smaller than process ref size");
-_Static_assert(TERM_BOXED_REFERENCE_PROCESS_SIZE < TERM_BOXED_REFERENCE_RESOURCE_SIZE, "Process ref size must be smaller than reference resource size");
+_Static_assert(TERM_BOXED_REFERENCE_SHORT_SIZE != TERM_BOXED_REFERENCE_PROCESS_SIZE, "Short ref size must differ from process ref size");
+_Static_assert(TERM_BOXED_REFERENCE_SHORT_SIZE != TERM_BOXED_REFERENCE_RESOURCE_SIZE, "Short ref size must differ from reference resource size");
+_Static_assert(TERM_BOXED_REFERENCE_PROCESS_SIZE != TERM_BOXED_REFERENCE_RESOURCE_SIZE, "Process ref size must differ from reference resource size");
 _Static_assert(TERM_BOXED_REFERENCE_PROCESS_SIZE <= TERM_BOXED_REFERENCE_MAX_SIZE, "Max ref size can't be smaller than all other ref sizes");
+_Static_assert(TERM_BOXED_REFERENCE_RESOURCE_SIZE <= TERM_BOXED_REFERENCE_MAX_SIZE, "Max ref size can't be smaller than all other ref sizes");
 #define TUPLE_SIZE(elems) ((int) (elems + 1))
 #define CONS_SIZE 2
 #define REFC_BINARY_CONS_OFFSET 4
@@ -192,7 +194,6 @@ _Static_assert(TERM_BOXED_REFERENCE_PROCESS_SIZE <= TERM_BOXED_REFERENCE_MAX_SIZ
 
 #if TERM_BYTES == 4
 #define REFERENCE_PROCESS_PID_OFFSET 3
-
 #elif TERM_BYTES == 8
 #define REFERENCE_PROCESS_PID_OFFSET 2
 #endif
@@ -273,14 +274,6 @@ _Static_assert(TERM_BOXED_REFERENCE_PROCESS_SIZE <= TERM_BOXED_REFERENCE_MAX_SIZ
 #define TYPEDEF_GLOBALCONTEXT
 typedef struct GlobalContext GlobalContext;
 #endif
-
-enum RefType
-{
-    RefTypeShort,
-    RefTypeProcess,
-    RefTypeResource,
-    RefTypeExternal
-};
 
 typedef struct RefData RefData;
 struct RefData
@@ -2268,10 +2261,11 @@ static inline uint64_t term_to_ref_ticks(term rt)
 /**
  * @brief Creates a process reference
  * @details Process reference contains ref_ticks and process_id of a process.
- * They are used by process aliases and monitors.
+ * They are used by process aliases and monitors. The ticks occupy the same
+ * words as in a short reference, so term_to_ref_ticks works on both shapes.
  *
  * @param process_id process_id of a process that the reference will identify.
- * @param ref_ticks an unique uint64 value that will be used to create ref term.
+ * @param ref_ticks a unique uint64 value that will be used to create ref term.
  * @param heap the heap to allocate memory in
  * @return a ref term created using given ref ticks.
  */
@@ -2283,30 +2277,34 @@ static inline term term_make_process_reference(int32_t process_id, uint64_t ref_
 #if TERM_BYTES == 4
     boxed_value[1] = (ref_ticks >> 32);
     boxed_value[2] = (ref_ticks & 0xFFFFFFFF);
-    boxed_value[3] = process_id;
 
 #elif TERM_BYTES == 8
     boxed_value[1] = (term) ref_ticks;
-    boxed_value[2] = process_id;
 
 #else
 #error "terms must be either 32 or 64 bit wide"
+#endif
+    boxed_value[REFERENCE_PROCESS_PID_OFFSET] = process_id;
+#if TERM_BYTES == 4
+    // Initialize the trailing padding word so GC copies a defined value instead of uninitialized
+    // memory.
+    boxed_value[REFERENCE_PROCESS_PID_OFFSET + 1] = term_nil();
 #endif
 
     return ((term) boxed_value) | TERM_PRIMARY_BOXED;
 }
 
-static inline uint32_t term_process_ref_to_process_id(term rt)
+/**
+ * @brief Get the process id out of a process reference
+ *
+ * @param rt the process reference term
+ * @return the process id of the process the reference identifies
+ */
+static inline int32_t term_process_ref_to_process_id(term rt)
 {
     TERM_DEBUG_ASSERT(term_is_process_reference(rt));
     const term *boxed_value = term_to_const_term_ptr(rt);
-#if TERM_BYTES == 4
-    return (uint32_t) boxed_value[3];
-#elif TERM_BYTES == 8
-    return (uint32_t) boxed_value[2];
-#else
-#error "terms must be either 32 or 64 bit wide"
-#endif
+    return (int32_t) boxed_value[REFERENCE_PROCESS_PID_OFFSET];
 }
 
 /**
@@ -3090,7 +3088,16 @@ static inline term term_from_resource(void *resource, Heap *heap)
     return ret;
 }
 
-static inline term term_from_ref_data(RefData *ref_data, Heap *heap)
+/**
+ * @brief Create a reference term from a RefData
+ * @details Builds a short reference when process_id is INVALID_PROCESS_ID,
+ * and a process reference carrying the owner process id otherwise.
+ *
+ * @param ref_data ref ticks and owner process id of the reference
+ * @param heap the heap to allocate memory in
+ * @return a reference term created from the given ref data
+ */
+static inline term term_from_ref_data(const RefData *ref_data, Heap *heap)
 {
     if (ref_data->process_id == INVALID_PROCESS_ID) {
         return term_from_ref_ticks(ref_data->ref_ticks, heap);

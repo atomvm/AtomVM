@@ -850,33 +850,20 @@ static bool jit_send(Context *ctx, JITState *jit_state)
             set_error(ctx, jit_state, 0, BADARG_ATOM);
             return false;
         }
-        int local_process_id;
-        if (term_is_local_pid_or_port(recipient_term)) {
-            local_process_id = term_to_local_process_id(recipient_term);
-        } else {
-            set_error(ctx, jit_state, 0, BADARG_ATOM);
-            return false;
-        }
+        int local_process_id = term_to_local_process_id(recipient_term);
         globalcontext_send_message(ctx->global, local_process_id, ctx->x[1]);
         ctx->x[0] = ctx->x[1];
-    } else if (term_is_process_reference(recipient_term)) {
-        int32_t process_id = term_process_ref_to_process_id(recipient_term);
-        int64_t ref_ticks = term_to_ref_ticks(recipient_term);
-        Context *p = globalcontext_get_process_lock(ctx->global, process_id);
-        if (p) {
-            struct MonitorAlias *alias = context_find_alias(p, ref_ticks);
-            if (!IS_NULL_PTR(alias)) {
-                if (alias->alias_type == ContextMonitorAliasReplyDemonitor) {
-                    context_unalias(alias);
-                }
-                mailbox_send(p, ctx->x[1]);
-            }
-            globalcontext_get_process_unlock(ctx->global, p);
-        }
-        ctx->x[0] = ctx->x[1];
-    } else if (!term_is_reference(recipient_term)) {
+    } else if (UNLIKELY(!term_is_reference(recipient_term))) {
         set_error(ctx, jit_state, 0, BADARG_ATOM);
         return false;
+    } else if (term_is_process_reference(recipient_term)) {
+        int32_t process_id = term_process_ref_to_process_id(recipient_term);
+        globalcontext_send_message_to_alias(ctx->global, process_id, recipient_term, ctx->x[1]);
+        ctx->x[0] = ctx->x[1];
+    } else {
+        // Drop the send but still return the message in x0, as OTP does for a non-active-alias
+        // reference. Outbound distributed aliases are unsupported.
+        ctx->x[0] = ctx->x[1];
     }
 
     return true;
@@ -903,7 +890,7 @@ static term *jit_extended_register_ptr(Context *ctx, unsigned int index)
 static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
 {
     TRACE("jit_process_signal_messages\n");
-    MailboxMessage *signal_message = mailbox_process_outer_list(&ctx->mailbox);
+    MailboxMessage *signal_message = mailbox_process_outer_list(ctx);
     bool handle_error = false;
     bool reprocess_outer = false;
     while (signal_message) {
@@ -1030,6 +1017,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
 #endif
                 break;
             }
+            case AliasMessageSignal:
             case NormalMessage: {
                 UNREACHABLE();
             }
@@ -1039,7 +1027,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
         signal_message = next;
         if (UNLIKELY(reprocess_outer && signal_message == NULL)) {
             reprocess_outer = false;
-            signal_message = mailbox_process_outer_list(&ctx->mailbox);
+            signal_message = mailbox_process_outer_list(ctx);
         }
     }
     if (context_get_flags(ctx, Killed)) {

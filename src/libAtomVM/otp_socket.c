@@ -1032,6 +1032,10 @@ static term nif_socket_select_read(Context *ctx, int argc, term argv[])
     term select_ref_term = argv[1];
     if (select_ref_term != UNDEFINED_ATOM) {
         VALIDATE_VALUE(select_ref_term, term_is_local_reference);
+        // Unlike the BEAM, AtomVM does not support a process alias as a select handle.
+        if (UNLIKELY(term_is_process_reference(select_ref_term))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
     }
     struct SocketResource *rsrc_obj;
     if (UNLIKELY(!term_to_otp_socket(argv[0], &rsrc_obj, ctx))) {

@@ -99,6 +99,7 @@ enum MessageType
     DemonitorSignal,
     MonitorDownSignal,
     CodeServerResumeSignal,
+    AliasMessageSignal,
 };
 
 struct MailboxMessage
@@ -211,13 +212,27 @@ size_t mailbox_len(Mailbox *mbox);
 size_t mailbox_size(Mailbox *mbox);
 
 /**
- * @brief Process the outer list of messages.
+ * @brief Process the outer list of messages, ignoring aliases.
  *
- * @details To be called from the process only
+ * @details Alias-blind variant of mailbox_process_outer_list, for callers that never own an
+ * active alias: native (port) processes, context teardown and crashdump. To be called from the
+ * process only.
  * @param mbox the mailbox to work with
  * @return the signal messages in received order.
  */
-MailboxMessage *mailbox_process_outer_list(Mailbox *mbox);
+MailboxMessage *mailbox_process_outer_list_native(Mailbox *mbox);
+
+/**
+ * @brief Process the outer list of messages, delivering alias messages in send order.
+ *
+ * @details AliasMessageSignals are validated in ctx's own monitor list and, when the alias is
+ * active, converted to normal messages in place so they keep send order relative to plain
+ * messages from the same sender. To be called from the process only, while not holding the
+ * processes table lock (the reply_demonitor path takes it).
+ * @param ctx the context whose mailbox is processed
+ * @return the remaining (non-alias) signal messages in received order.
+ */
+MailboxMessage *mailbox_process_outer_list(Context *ctx);
 
 /**
  * @brief Sends a message to a certain mailbox.

@@ -68,14 +68,4 @@ bool_to_n(false) ->
     0.
 
 make_alias_ref() ->
-    AliasesAvailable =
-        case erlang:system_info(machine) of
-            "ATOM" -> true;
-            "BEAM" -> erlang:system_info(otp_release) >= "24"
-        end,
-    if
-        AliasesAvailable ->
-            erlang:alias();
-        true ->
-            {mock_alias_ref, make_ref()}
-    end.
+    erlang:alias().

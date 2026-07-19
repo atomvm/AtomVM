@@ -995,28 +995,19 @@ test_encode_resource(OTPVersion) ->
     AlteredResource4 = binary_to_term(AlteredResourceBin4),
     false = AlteredResource4 =:= Resource,
     ok.
+
 test_encode_process_ref() ->
-    AliasesAvailable = is_atomvm_or_otp_version_at_least("24"),
-    if
-        AliasesAvailable ->
-            ProcessRef = erlang:alias(),
-            ProcessRef = binary_to_term(term_to_binary(ProcessRef)),
-            ok;
-        true ->
-            ok
-    end.
+    ProcessRef = erlang:alias(),
+    Bin = term_to_binary(ProcessRef),
+    <<131, 90, _Len:16, 119, 13, "nonode@nohost", 0:32, _/binary>> = Bin,
+    ProcessRef = binary_to_term(?MODULE:id(Bin)),
+    ok.
 
 % Verify term_to_binary(binary_to_term(Bin)) is idempotent.
 binary_to_term_idempotent(Binary, _OTPVersion) ->
     Term = binary_to_term(Binary),
     Binary = term_to_binary(Term),
     Term.
-
-is_atomvm_or_otp_version_at_least(OTPVersion) ->
-    case erlang:system_info(machine) of
-        "ATOM" -> true;
-        "BEAM" -> erlang:system_info(otp_release) >= OTPVersion
-    end.
 
 test_atom_encoding() ->
     true = compare_pair_encoding(latin1_as_utf8_1),

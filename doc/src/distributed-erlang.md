@@ -325,4 +325,11 @@ RPC (remote procedure call) from Erlang/OTP to AtomVM is also supported.
 
 Shell requires several OTP standard library modules. See [the example project](https://github.com/pguyot/atomvm_shell).
 
+## Known Issues & Limitations
+
+- Sending to a remote process alias is not supported: a message sent from AtomVM to an alias
+  (a reference) of another node is silently dropped instead of being routed over distribution.
+  The other direction works: a message sent from a remote BEAM node to an alias of an AtomVM
+  process is delivered.
+
 Please do not hesitate to file issues or pull requests for additional features.

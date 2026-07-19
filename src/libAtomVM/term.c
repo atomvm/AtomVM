@@ -705,14 +705,14 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                                     other_data[0] = other_ticks >> 32;
                                     other_data[1] = (uint32_t) other_ticks;
                                 } else if (len == 3) {
-                                    data[0] = term_process_ref_to_process_id(t);
                                     int64_t t_ticks = term_to_ref_ticks(t);
-                                    data[1] = t_ticks >> 32;
-                                    data[2] = (uint32_t) t_ticks;
-                                    other_data[0] = term_process_ref_to_process_id(other);
+                                    data[0] = t_ticks >> 32;
+                                    data[1] = (uint32_t) t_ticks;
+                                    data[2] = term_process_ref_to_process_id(t);
                                     int64_t other_ticks = term_to_ref_ticks(other);
-                                    other_data[1] = other_ticks >> 32;
-                                    other_data[2] = (uint32_t) other_ticks;
+                                    other_data[0] = other_ticks >> 32;
+                                    other_data[1] = (uint32_t) other_ticks;
+                                    other_data[2] = term_process_ref_to_process_id(other);
                                 } else {
                                     // len == 4
                                     struct RefcBinary *refc = term_resource_refc_binary_ptr(t);
@@ -755,6 +755,8 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                                         len = term_get_external_reference_len(t);
                                     } else if (term_is_resource_reference(t)) {
                                         len = 4;
+                                    } else if (term_is_process_reference(t)) {
+                                        len = 3;
                                     } else {
                                         len = 2;
                                     }
@@ -762,6 +764,8 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                                         other_len = term_get_external_reference_len(other);
                                     } else if (term_is_resource_reference(other)) {
                                         other_len = 4;
+                                    } else if (term_is_process_reference(other)) {
+                                        other_len = 3;
                                     } else {
                                         other_len = 2;
                                     }
@@ -784,6 +788,26 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                                                 int64_t ref_ticks = term_to_ref_ticks(other);
                                                 local_data[0] = ref_ticks >> 32;
                                                 local_data[1] = (uint32_t) ref_ticks;
+                                                other_data = local_data;
+                                            }
+                                        } else if (len == 3) {
+                                            uint32_t local_data[3];
+                                            if (term_is_external(t)) {
+                                                data = term_get_external_reference_words(t);
+                                            } else {
+                                                int64_t ref_ticks = term_to_ref_ticks(t);
+                                                local_data[0] = ref_ticks >> 32;
+                                                local_data[1] = (uint32_t) ref_ticks;
+                                                local_data[2] = term_process_ref_to_process_id(t);
+                                                data = local_data;
+                                            }
+                                            if (term_is_external(other)) {
+                                                other_data = term_get_external_reference_words(other);
+                                            } else {
+                                                int64_t ref_ticks = term_to_ref_ticks(other);
+                                                local_data[0] = ref_ticks >> 32;
+                                                local_data[1] = (uint32_t) ref_ticks;
+                                                local_data[2] = term_process_ref_to_process_id(other);
                                                 other_data = local_data;
                                             }
                                         } else {
