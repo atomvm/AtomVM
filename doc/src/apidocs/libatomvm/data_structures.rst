@@ -15,8 +15,6 @@ Data Structures
    :maxdepth: 4
    :caption: Structs
 
-.. doxygenstruct:: AtomsHashTable
-   :allow-dot-graphs:
 .. doxygenstruct:: AtomStringIntPair
    :allow-dot-graphs:
 .. doxygenstruct:: AtomTable
