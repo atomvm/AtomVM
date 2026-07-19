@@ -75,6 +75,7 @@ get_non_networking_tests(_OTPVersion) ->
         test_queue,
         test_timer,
         test_spawn,
+        test_string,
         test_supervisor,
         test_lists_subtraction,
         test_os,

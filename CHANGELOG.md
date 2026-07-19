@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `console:print_err/1` to write to standard error
 - Added `erlang:term_to_binary/2`, `erlang:is_builtin/3` and `erlang:bitstring_to_list/1`
 - Added `lists:mapfoldr/3`
+- Added `string:to_integer/1`
 
 ### Changed
 - Updated network type db() to dbm() to reflect the actual representation of the type
