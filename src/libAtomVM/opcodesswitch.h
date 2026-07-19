@@ -1240,6 +1240,40 @@ static bool sort_kv_pairs(struct kv_pair *kv, int size, GlobalContext *global)
 }
 #endif
 
+/**
+ * @brief Scale a dynamic segment size by its unit.
+ *
+ * @details Matching opcodes take a segment size from a register and scale it by
+ * the segment unit. The size can be negative or large enough for the product to
+ * overflow, so it cannot be multiplied blindly: the scaled size is compared
+ * against the remaining capacity and added to the match offset, and scaling
+ * first lets a negative size wrap to a small one that passes the capacity check,
+ * or move the match offset before the start of the binary.
+ *
+ * @param size the segment size, as a term (must be any integer)
+ * @param unit the segment unit
+ * @param max_value the largest acceptable scaled size
+ * @param scaled_size on success, the scaled size
+ * @returns \c true if the scaled size is representable and at most
+ * \c max_value, \c false if the match should fail
+ */
+static inline bool bs_scaled_size(term size, uint32_t unit, size_t max_value, size_t *scaled_size)
+{
+    if (!term_is_integer(size)) {
+        // a size that doesn't fit in a small integer cannot fit in max_value
+        return false;
+    }
+    avm_int_t size_val = term_to_int(size);
+    if (size_val < 0) {
+        return false;
+    }
+    if (unit != 0 && (size_t) size_val > max_value / unit) {
+        return false;
+    }
+    *scaled_size = (size_t) size_val * unit;
+    return true;
+}
+
 static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 {
 #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
@@ -4254,17 +4288,17 @@ schedule_in:
                 DECODE_LITERAL(flags_value, pc)
 
                 VERIFY_IS_MATCH_STATE(src, "bs_skip_bits2", 0);
-                VERIFY_IS_INTEGER(size, "bs_skip_bits2", 0);
+                VERIFY_IS_ANY_INTEGER(size, "bs_skip_bits2", 0);
                 // Ignore flags value as skipping bits is the same whatever the endianness
-                avm_int_t size_val = term_to_int(size);
+                TRACE("bs_skip_bits2/5, fail=%u src=%p unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned) unit, (int) flags_value);
 
-                TRACE("bs_skip_bits2/5, fail=%u src=%p size=0x%lx unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned long) size_val, (unsigned) unit, (int) flags_value);
-
-                size_t increment = size_val * unit;
                 avm_int_t bs_offset = term_get_match_state_offset(src);
                 term bs_bin = term_get_match_state_binary(src);
-                if ((bs_offset + increment) > term_binary_size(bs_bin) * 8) {
-                    TRACE("bs_skip_bits2: Insufficient capacity to skip bits: %lu, inc: %zu\n", (unsigned long) bs_offset, increment);
+                size_t bs_capacity = term_binary_size(bs_bin) * 8;
+                size_t increment;
+                if ((size_t) bs_offset > bs_capacity
+                    || !bs_scaled_size(size, unit, bs_capacity - bs_offset, &increment)) {
+                    TRACE("bs_skip_bits2: Insufficient capacity to skip bits: %lu\n", (unsigned long) bs_offset);
                     JUMP_TO_ADDRESS(mod->labels[fail]);
                 } else {
                     term_set_match_state_offset(src, bs_offset + increment);
@@ -4336,16 +4370,22 @@ schedule_in:
                 DECODE_LITERAL(flags_value, pc)
 
                 VERIFY_IS_MATCH_STATE(src, "bs_get_integer", 0);
-                VERIFY_IS_INTEGER(size, "bs_get_integer", 0);
+                VERIFY_IS_ANY_INTEGER(size, "bs_get_integer", 0);
 
-                avm_int_t size_val = term_to_int(size);
+                TRACE("bs_get_integer2/7, fail=%u src=%p live=%u unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned) live, (unsigned) unit, (int) flags_value);
 
-                TRACE("bs_get_integer2/7, fail=%u src=%p live=%u size=%u unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned) size_val, (unsigned) live, (unsigned) unit, (int) flags_value);
-
-                avm_int_t increment = size_val * unit;
                 union maybe_unsigned_int64 value;
                 term bs_bin = term_get_match_state_binary(src);
                 avm_int_t bs_offset = term_get_match_state_offset(src);
+                size_t bs_capacity = term_binary_size(bs_bin) * 8;
+                size_t increment_bits;
+                if ((size_t) bs_offset > bs_capacity
+                    || !bs_scaled_size(size, unit, bs_capacity - bs_offset, &increment_bits)) {
+                    TRACE("bs_get_integer2: size is negative or exceeds the remaining capacity\n");
+                    JUMP_TO_ADDRESS(mod->labels[fail]);
+                }
+                // bounded by the remaining capacity, so it fits in an avm_int_t
+                avm_int_t increment = (avm_int_t) increment_bits;
                 term t;
                 if (increment <= 64) {
                     bool status = bitstring_extract_integer(bs_bin, bs_offset, increment, flags_value, &value);
@@ -4408,16 +4448,23 @@ schedule_in:
                 DECODE_LITERAL(flags_value, pc);
 
                 VERIFY_IS_MATCH_STATE(src, "bs_get_float", 0);
-                VERIFY_IS_INTEGER(size, "bs_get_float", 0);
+                VERIFY_IS_ANY_INTEGER(size, "bs_get_float", 0);
 
-                avm_int_t size_val = term_to_int(size);
+                TRACE("bs_get_float2/7, fail=%u src=%p unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned) unit, (int) flags_value);
 
-                TRACE("bs_get_float2/7, fail=%u src=%p size=%u unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned) size_val, (unsigned) unit, (int) flags_value);
-
-                avm_int_t increment = size_val * unit;
                 avm_float_t value;
                 term bs_bin = term_get_match_state_binary(src);
                 avm_int_t bs_offset = term_get_match_state_offset(src);
+                size_t bs_capacity = term_binary_size(bs_bin) * 8;
+                size_t increment_bits;
+                if ((size_t) bs_offset > bs_capacity
+                    || !bs_scaled_size(size, unit, bs_capacity - bs_offset, &increment_bits)) {
+                    TRACE("bs_get_float2: size is negative or exceeds the remaining capacity\n");
+                    JUMP_TO_ADDRESS(mod->labels[fail]);
+                }
+                // both bounded by the remaining capacity, so they fit in an avm_int_t
+                avm_int_t size_val = term_to_int(size);
+                avm_int_t increment = (avm_int_t) increment_bits;
                 bool status;
                 switch (size_val) {
                     case 16:
@@ -4478,11 +4525,21 @@ schedule_in:
                     TRACE("bs_get_binary2: Unsupported: unit must be 8.\n");
                     RAISE_ERROR(UNSUPPORTED_ATOM);
                 }
-                avm_int_t size_val = 0;
-                if (term_is_integer(size)) {
-                    size_val = term_to_int(size);
+                size_t bs_capacity = term_binary_size(bs_bin);
+                if ((size_t) bs_offset / 8 > bs_capacity) {
+                    TRACE("bs_get_binary2: match state offset is past the end of the binary\n");
+                    JUMP_TO_ADDRESS(mod->labels[fail]);
+                }
+                size_t remaining_bytes = bs_capacity - bs_offset / 8;
+                size_t size_val = 0;
+                if (term_is_any_integer(size)) {
+                    // A negative or oversized size fails the match, as on BEAM
+                    if (!bs_scaled_size(size, 1, remaining_bytes, &size_val)) {
+                        TRACE("bs_get_binary2: size is negative or exceeds the remaining capacity\n");
+                        JUMP_TO_ADDRESS(mod->labels[fail]);
+                    }
                 } else if (size == ALL_ATOM) {
-                    size_val = term_binary_size(bs_bin) - bs_offset / 8;
+                    size_val = remaining_bytes;
                 } else {
                     TRACE("bs_get_binary2: size is neither an integer nor the atom `all`\n");
                     RAISE_ERROR(BADARG_ATOM);
@@ -4498,8 +4555,8 @@ schedule_in:
 
                 TRACE("bs_get_binary2/7, fail=%u src=%p live=%u unit=%u\n", (unsigned) fail, (void *) bs_bin, (unsigned) live, (unsigned) unit);
 
-                if ((unsigned int) (bs_offset / unit + size_val) > term_binary_size(bs_bin)) {
-                    TRACE("bs_get_binary2: insufficient capacity -- bs_offset = %d, size_val = %d\n", (int) bs_offset, (int) size_val);
+                if (size_val > remaining_bytes) {
+                    TRACE("bs_get_binary2: insufficient capacity -- bs_offset = %d, size_val = %zu\n", (int) bs_offset, size_val);
                     JUMP_TO_ADDRESS(mod->labels[fail]);
                 } else {
                     term_set_match_state_offset(src, bs_offset + size_val * unit);

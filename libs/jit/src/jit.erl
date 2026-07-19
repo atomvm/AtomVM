@@ -1307,7 +1307,7 @@ first_pass(<<?OP_BS_GET_INTEGER2, Rest0/binary>>, MMod, MSt0, State0) ->
             is_integer(SizeReg) ->
                 {MSt4, SizeReg * Unit};
             true ->
-                MSt5 = MMod:mul(MSt4, SizeReg, Unit),
+                MSt5 = scale_size_by_unit(SizeReg, Unit, Fail, MMod, MSt4),
                 {MSt5, SizeReg}
         end,
     {MSt7, BSBinaryReg} = MMod:get_array_element(MSt6, MatchStateRegPtr, 1),
@@ -1345,7 +1345,7 @@ first_pass(<<?OP_BS_GET_FLOAT2, Rest0/binary>>, MMod, MSt0, State0) ->
             is_integer(SizeReg) ->
                 {MSt4, SizeReg * Unit};
             true ->
-                MSt5 = MMod:mul(MSt4, SizeReg, Unit),
+                MSt5 = scale_size_by_unit(SizeReg, Unit, Fail, MMod, MSt4),
                 {MSt5, SizeReg}
         end,
     {MSt7, Result} = MMod:call_primitive(MSt6, ?PRIM_BITSTRING_EXTRACT_FLOAT, [
@@ -1415,11 +1415,12 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, State0) ->
                         MMod:free_native_registers(BSt1, [SizeValReg])
                     end,
                     fun(BSt0) ->
-                        {BSt1, SizeValReg} = term_to_int(SizeValReg, 0, MMod, BSt0),
-                        BSt2 = MMod:sub(BSt1, SizeReg, SizeValReg),
-                        BSt3 = cond_jump_to_label({SizeReg, '<', BSOffsetReg1}, Fail, MMod, BSt2),
-                        BSt4 = MMod:move_to_native_register(BSt3, SizeValReg, SizeReg),
-                        MMod:free_native_registers(BSt4, [SizeValReg])
+                        {BSt1, SizeValReg} = term_to_int(SizeValReg, Fail, MMod, BSt0),
+                        BSt2 = cond_jump_to_label({SizeValReg, '<', 0}, Fail, MMod, BSt1),
+                        BSt3 = MMod:sub(BSt2, SizeReg, SizeValReg),
+                        BSt4 = cond_jump_to_label({SizeReg, '<', BSOffsetReg1}, Fail, MMod, BSt3),
+                        BSt5 = MMod:move_to_native_register(BSt4, SizeValReg, SizeReg),
+                        MMod:free_native_registers(BSt5, [SizeValReg])
                     end
                 ),
                 {MSt12, SizeReg}
@@ -1467,7 +1468,7 @@ first_pass(<<?OP_BS_SKIP_BITS2, Rest0/binary>>, MMod, MSt0, State0) ->
             is_integer(SizeReg) ->
                 {MSt4, SizeReg * Unit};
             true ->
-                MSt5 = MMod:mul(MSt4, SizeReg, Unit),
+                MSt5 = scale_size_by_unit(SizeReg, Unit, Fail, MMod, MSt4),
                 {MSt5, SizeReg}
         end,
     {MSt7, BSBinaryReg} = MMod:get_array_element(MSt6, MatchStateRegPtr, 1),
@@ -4491,15 +4492,36 @@ cond_raise_badarg_or_jump_to_fail_label(Cond, 0, MMod, MSt0) ->
 cond_raise_badarg_or_jump_to_fail_label(Cond, FailLabel, MMod, MSt0) when FailLabel > 0 ->
     cond_jump_to_label(Cond, FailLabel, MMod, MSt0).
 
+scale_size_by_unit(SizeReg, Unit, Fail, MMod, MSt0) ->
+    MSt1 = cond_jump_to_label({SizeReg, '<', 0}, Fail, MMod, MSt0),
+    {_MinSmall, MaxSmall} = small_integer_bounds(MMod),
+    % leave two bits of headroom so that adding the match offset cannot overflow
+    MaxSize = (1 bsl (MMod:word_size() * 8 - 2)) div max(Unit, 1),
+    MSt2 =
+        if
+            MaxSize >= MaxSmall ->
+                % the size is a small integer, so it can never exceed MaxSize
+                MSt1;
+            true ->
+                {MSt1a, MaxReg} = MMod:move_to_native_register(MSt1, MaxSize),
+                cond_jump_to_label({{free, MaxReg}, '<', SizeReg}, Fail, MMod, MSt1a)
+        end,
+    MMod:mul(MSt2, SizeReg, Unit).
+
 term_to_int(Term, _FailLabel, _MMod, MSt0) when is_integer(Term) ->
     {MSt0, Term bsr 4};
 term_to_int({literal, Val}, _FailLabel, _MMod, MSt0) when is_integer(Val) ->
     {MSt0, Val};
-% Optimized case: when we have type information showing this is an integer, skip the type check
-term_to_int({typed, Term, {t_integer, _Range}}, _FailLabel, MMod, MSt0) ->
-    {MSt1, Reg} = MMod:move_to_native_register(MSt0, Term),
-    {MSt2, IntReg} = MMod:shift_right(MSt1, {free, Reg}, 4),
-    {MSt2, IntReg};
+% Optimized case: when we have type information showing this is an integer small enough, skip the type check
+term_to_int({typed, Term, {t_integer, Range}}, FailLabel, MMod, MSt0) ->
+    case is_small_integer_range(Range, Range, MMod) of
+        true ->
+            {MSt1, Reg} = MMod:move_to_native_register(MSt0, Term),
+            {MSt2, IntReg} = MMod:shift_right_arith(MSt1, {free, Reg}, 4),
+            {MSt2, IntReg};
+        false ->
+            term_to_int(Term, FailLabel, MMod, MSt0)
+    end;
 term_to_int({typed, Term, _NonIntegerType}, FailLabel, MMod, MSt0) ->
     % Type information shows it's not an integer, fall back to generic path
     term_to_int(Term, FailLabel, MMod, MSt0);
@@ -4508,7 +4530,7 @@ term_to_int(Term, FailLabel, MMod, MSt0) ->
     MSt2 = cond_raise_badarg_or_jump_to_fail_label(
         {Reg, '&', ?TERM_IMMED_TAG_MASK, '!=', ?TERM_INTEGER_TAG}, FailLabel, MMod, MSt1
     ),
-    {MSt3, IntReg} = MMod:shift_right(MSt2, {free, Reg}, 4),
+    {MSt3, IntReg} = MMod:shift_right_arith(MSt2, {free, Reg}, 4),
     {MSt3, IntReg}.
 
 first_pass_float3(Primitive, Rest0, MMod, MSt0, State0) ->

@@ -1479,10 +1479,10 @@ static term extract_bigint(Context *ctx, JITState *jit_state, const uint8_t *byt
 }
 
 static term jit_bitstring_extract_integer(
-    Context *ctx, JITState *jit_state, term *bin_ptr, size_t offset, int n, int bs_flags)
+    Context *ctx, JITState *jit_state, term *bin_ptr, size_t offset, size_t n, int bs_flags)
 {
     TRACE("jit_bitstring_extract_integer: bin_ptr=%p offset=%d n=%d bs_flags=%d\n",
-        (void *) bin_ptr, (int) offset, n, bs_flags);
+        (void *) bin_ptr, (int) offset, (int) n, bs_flags);
     if (n <= 64) {
         union maybe_unsigned_int64 value;
         bool status = bitstring_extract_integer(
@@ -1522,9 +1522,9 @@ static term jit_bitstring_extract_integer(
     }
 }
 
-static term jit_bitstring_extract_float(Context *ctx, JITState *jit_state, term *match_state_ptr, int n, int bs_flags, int live)
+static term jit_bitstring_extract_float(Context *ctx, JITState *jit_state, term *match_state_ptr, size_t n, int bs_flags, int live)
 {
-    TRACE("jit_bitstring_extract_float: match_state_ptr=%p n=%d bs_flags=%d live=%d\n", (void *) match_state_ptr, n, bs_flags, live);
+    TRACE("jit_bitstring_extract_float: match_state_ptr=%p n=%d bs_flags=%d live=%d\n", (void *) match_state_ptr, (int) n, bs_flags, live);
     avm_int_t offset = (avm_int_t) match_state_ptr[2];
     avm_float_t value;
     bool status;
