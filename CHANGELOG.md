@@ -31,8 +31,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for map comprehensions
 - Added USB CDC port drivers for ESP32, RP2, and STM32 platforms
 - Added a Linux `gpio` driver for the generic_unix port (in `avm_unix`) using sysfs
+- Updated esp-idf i2c driver
 
 ### Changed
+- ESP32: migrated both the `i2c` port driver and the `i2c` NIF-resource driver from the legacy,
+  now end-of-life (and slated for removal in IDF v7.0) `driver/i2c.h` API to the new
+  `driver/i2c_master.h` API. This is an internal implementation change with no expected impact
+  on the Erlang-level `i2c` API; `{error, esp_fail}` is still returned for NACK'd transactions
+  on all supported IDF versions
 - Updated network type db() to dbm() to reflect the actual representation of the type
 - Use ES6 modules for emscripten port, using .mjs suffix
 - `ahttp_client` now returns `{error, {parser, incomplete_response}}` when a socket closes mid-response

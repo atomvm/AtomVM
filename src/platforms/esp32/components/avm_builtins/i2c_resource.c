@@ -21,11 +21,11 @@
 
 #include <sdkconfig.h>
 
+#include <stdlib.h>
 #include <string.h>
 
-// Note: The i2c.h legacy driver will be deprecated in 5.2
-// TODO: Migrate to i2c_master.h, once we drop support for IDF SDK 4.x
-#include <driver/i2c.h>
+#include <driver/i2c_master.h>
+#include <driver/i2c_types.h>
 #include <esp_log.h>
 
 #include <context.h>
@@ -43,6 +43,8 @@
 #include <esp32_sys.h>
 #include <sys.h>
 
+#include "include/i2c_bus_manager.h"
+
 #define TAG "i2c_resource"
 
 #define CHECK_ERROR(ctx, err, msg)                                                      \
@@ -54,8 +56,6 @@ if (UNLIKELY(err != ESP_OK)) {                                                  
     return create_error_tuple(ctx, esp_err_to_term(ctx->global, err));                  \
 }
 
-#define ACK_ENABLE true
-#define MS_TO_TICKS(MS) (MS / portTICK_PERIOD_MS)
 #define DEFAULT_SEND_TIMEOUT_MS 500
 
 #define EINPROGRESS_ATOMSTR (ATOM_STR("\xB", "einprogress"))
@@ -66,10 +66,17 @@ static ErlNifResourceType *i2c_resource_type;
 struct I2CResource
 {
     term transmitting_pid;
-    i2c_port_t i2c_num;
-    i2c_cmd_handle_t cmd;
-    uint32_t send_timeout_ms;
+    i2c_master_bus_handle_t bus_handle;
+    struct I2CTxBuffer tx_buf;
+    int i2c_port;
+    uint32_t clock_speed_hz;
+    // -1 (I2C_BUS_MANAGER_TIMEOUT_INFINITE) means wait forever, otherwise
+    // this is in milliseconds, as expected by the new I2C master driver.
+    int32_t xfer_timeout_ms;
+    uint8_t tx_address;
 };
+
+#define I2C_RESOURCE_PORT_INVALID (-1)
 
 static term create_pair(Context *ctx, term term1, term term2)
 {
@@ -87,15 +94,12 @@ static term create_error_tuple(Context *ctx, term reason)
 
 static bool is_i2c_resource_open(const struct I2CResource *rsrc_obj)
 {
-    return rsrc_obj->i2c_num != I2C_NUM_MAX;
+    return rsrc_obj->i2c_port != I2C_RESOURCE_PORT_INVALID;
 }
 
 static void reset_i2c_transmission_state(struct I2CResource *rsrc_obj)
 {
-    if (rsrc_obj->cmd != NULL) {
-        i2c_cmd_link_delete(rsrc_obj->cmd);
-        rsrc_obj->cmd = NULL;
-    }
+    i2c_tx_buffer_reset(&rsrc_obj->tx_buf);
     rsrc_obj->transmitting_pid = term_invalid_term();
 }
 
@@ -105,10 +109,14 @@ static esp_err_t close_i2c_resource(struct I2CResource *rsrc_obj)
         return ESP_OK;
     }
 
-    esp_err_t err = i2c_driver_delete(rsrc_obj->i2c_num);
+    esp_err_t err = i2c_bus_manager_close(rsrc_obj->bus_handle);
+    // Always release any pending tx_buf allocation, even if closing the bus
+    // itself failed, so that a failed close (e.g. surfaced to `i2c:close/1`)
+    // doesn't leak the pending transmission buffer for the lifetime of the
+    // resource.
+    reset_i2c_transmission_state(rsrc_obj);
     if (err == ESP_OK) {
-        rsrc_obj->i2c_num = I2C_NUM_MAX;
-        reset_i2c_transmission_state(rsrc_obj);
+        rsrc_obj->i2c_port = I2C_RESOURCE_PORT_INVALID;
     }
 
     return err;
@@ -170,28 +178,28 @@ static term nif_i2c_open(Context *ctx, int argc, term argv[])
     term clock_speed_hz = interop_kv_get_value(opts, ATOM_STR("\xE", "clock_speed_hz"), global);
     VALIDATE_VALUE(clock_speed_hz, term_is_integer);
 
-    i2c_port_t i2c_num = I2C_NUM_0;
+    int i2c_port = I2C_NUM_0;
     term peripheral = interop_kv_get_value(opts, ATOM_STR("\xA", "peripheral"), global);
     if (!term_is_invalid_term(peripheral)) {
         if (!term_is_integer(peripheral)) {
             ESP_LOGE(TAG, "Invalid parameter: peripheral is not an integer");
             RAISE_ERROR(BADARG_ATOM);
         }
-        i2c_num = term_to_int32(peripheral);
-        if (i2c_num < 0 || i2c_num > I2C_NUM_MAX - 1) {
+        i2c_port = term_to_int32(peripheral);
+        if (i2c_port < 0 || i2c_port > I2C_NUM_MAX - 1) {
             ESP_LOGE(TAG, "Invalid parameter: i2c_num out of range");
             RAISE_ERROR(BADARG_ATOM);
         }
     }
 
     term send_timeout_ms = interop_kv_get_value_default(opts, ATOM_STR("\xF", "send_timeout_ms"), term_from_int(DEFAULT_SEND_TIMEOUT_MS), global);
-    uint32_t send_timeout_ms_val = portMAX_DELAY;
+    int32_t xfer_timeout_ms_val = I2C_BUS_MANAGER_TIMEOUT_INFINITE;
     if (term_is_integer(send_timeout_ms)) {
         if (term_to_int32(send_timeout_ms) < 0) {
             ESP_LOGE(TAG, "Invalid parameter: send_timeout_ms < 0");
             RAISE_ERROR(BADARG_ATOM);
         } else {
-            send_timeout_ms_val = term_to_int32(send_timeout_ms);
+            xfer_timeout_ms_val = term_to_int32(send_timeout_ms);
         }
     } else if (send_timeout_ms != INFINITY_ATOM) {
         ESP_LOGE(TAG, "Invalid parameter: send_timeout_ms send_timeout_ms must be a non-negative integer or `infinity`");
@@ -199,22 +207,14 @@ static term nif_i2c_open(Context *ctx, int argc, term argv[])
     }
 
     //
-    // Initialize config
+    // Create the I2C master bus
     //
 
-    i2c_config_t conf;
-    memset(&conf, 0, sizeof(i2c_config_t));
-    conf.mode = I2C_MODE_MASTER;
-    conf.scl_io_num = term_to_int32(scl);
-    conf.sda_io_num = term_to_int32(sda);
-    conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
-    conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
-    conf.master.clk_speed = term_to_int32(clock_speed_hz);
-
-    esp_err_t err;
-    err = i2c_param_config(i2c_num, &conf);
+    i2c_master_bus_handle_t bus_handle;
+    esp_err_t err = i2c_bus_manager_open(
+        i2c_port, term_to_int32(scl), term_to_int32(sda), &bus_handle);
     if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGE(TAG, "Failed to initialize I2C parameters.  err=%i", err);
+        ESP_LOGE(TAG, "Failed to create I2C master bus.  err=%i", err);
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
             ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
             return OUT_OF_MEMORY_ATOM;
@@ -223,22 +223,7 @@ static term nif_i2c_open(Context *ctx, int argc, term argv[])
         return create_error_tuple(ctx, term_from_int(err));
     }
 
-    //
-    // Install the I2C driver
-    //
-
-    err = i2c_driver_install(i2c_num, I2C_MODE_MASTER, 0, 0, 0);
-    if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGE(TAG, "Failed to install I2C driver.  err=%i", err);
-        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
-            ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-            return OUT_OF_MEMORY_ATOM;
-        }
-        // TODO breaks i2c::open/1 API
-        return create_error_tuple(ctx, term_from_int(err));
-    }
-
-    ESP_LOGI(TAG, "I2C driver installed using I2C port %i", i2c_num);
+    ESP_LOGI(TAG, "I2C driver installed using I2C port %i", i2c_port);
 
     //
     // allocate and initialize the Nif resource
@@ -246,14 +231,16 @@ static term nif_i2c_open(Context *ctx, int argc, term argv[])
 
     struct I2CResource *rsrc_obj = enif_alloc_resource(i2c_resource_type, sizeof(struct I2CResource));
     if (IS_NULL_PTR(rsrc_obj)) {
-        i2c_driver_delete(i2c_num);
+        i2c_bus_manager_close(bus_handle);
         ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     rsrc_obj->transmitting_pid = term_invalid_term();
-    rsrc_obj->i2c_num = i2c_num;
-    rsrc_obj->cmd = NULL;
-    rsrc_obj->send_timeout_ms = send_timeout_ms_val;
+    rsrc_obj->bus_handle = bus_handle;
+    rsrc_obj->i2c_port = i2c_port;
+    rsrc_obj->clock_speed_hz = term_to_int32(clock_speed_hz);
+    rsrc_obj->xfer_timeout_ms = xfer_timeout_ms_val;
+    i2c_tx_buffer_init(&rsrc_obj->tx_buf);
 
     if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_RESOURCE_SIZE) != MEMORY_GC_OK)) {
         close_i2c_resource(rsrc_obj);
@@ -397,56 +384,42 @@ static term nif_i2c_write_bytes(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    term register_ = term_invalid_term();
-    uint8_t register_address;
+    bool has_register = false;
+    uint8_t register_address = 0;
     if (arity == 3) {
-        register_ = term_get_tuple_element(req, 2);
+        term register_ = term_get_tuple_element(req, 2);
         register_address = term_to_int32(register_);
+        has_register = true;
     }
 
     //
-    // Enqueue and run the I2C commands
+    // Build the write buffer (optional register prefix + data) and send it.
+    // Only the register-prefixed case needs a scratch buffer to make the
+    // register address and data contiguous; otherwise `buf` can be handed
+    // directly to the transmit call, avoiding an extra alloc + copy.
     //
 
     esp_err_t err;
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-
-    err = i2c_master_start(cmd);
-    if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGE(TAG, "nif_write_bytes; enqueue start bit: err: %i.", err);
-        goto cleanup_write;
-    }
-
-    err = i2c_master_write_byte(cmd, (addr << 1) | I2C_MASTER_WRITE, ACK_ENABLE);
-    if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGE(TAG, "nif_write_bytes; enqueue I2C bus address: err: %i.", err);
-        goto cleanup_write;
-    }
-
-    if (!term_is_invalid_term(register_)) {
-        err = i2c_master_write_byte(cmd, register_address, ACK_ENABLE);
-        if (UNLIKELY(err != ESP_OK)) {
-            ESP_LOGE(TAG, "nif_write_bytes; enqueue register address: err: %i.", err);
-            goto cleanup_write;
+    if (has_register) {
+        size_t write_size = 1 + data_len;
+        uint8_t *write_buf = malloc(write_size);
+        if (IS_NULL_PTR(write_buf)) {
+            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                return OUT_OF_MEMORY_ATOM;
+            }
+            return create_error_tuple(ctx, esp_err_to_term(ctx->global, ESP_ERR_NO_MEM));
         }
+        write_buf[0] = register_address;
+        memcpy(write_buf + 1, buf, data_len);
+
+        err = i2c_bus_manager_transmit(rsrc_obj->bus_handle, addr, rsrc_obj->clock_speed_hz,
+            write_buf, write_size, rsrc_obj->xfer_timeout_ms);
+        free(write_buf);
+    } else {
+        err = i2c_bus_manager_transmit(rsrc_obj->bus_handle, addr, rsrc_obj->clock_speed_hz, buf,
+            data_len, rsrc_obj->xfer_timeout_ms);
     }
 
-    err = i2c_master_write(cmd, buf, data_len, ACK_ENABLE);
-    if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGE(TAG, "nif_write_bytes; enqueue write data: err: %i.", err);
-        goto cleanup_write;
-    }
-
-    err = i2c_master_stop(cmd);
-    if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGE(TAG, "nif_write_bytes; enqueue stop bit: err: %i.", err);
-        goto cleanup_write;
-    }
-
-    err = i2c_master_cmd_begin(rsrc_obj->i2c_num, cmd, MS_TO_TICKS(rsrc_obj->send_timeout_ms));
-
-cleanup_write:
-    i2c_cmd_link_delete(cmd);
     if (UNLIKELY(err != ESP_OK)) {
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
             return OUT_OF_MEMORY_ATOM;
@@ -532,58 +505,18 @@ static term nif_i2c_read_bytes(Context *ctx, int argc, term argv[])
     uint8_t *buf = (uint8_t *) term_binary_data(data);
 
     //
-    // Enqueue and run the I2C commands
+    // Perform the transaction
     //
 
     esp_err_t err;
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-
-    err = i2c_master_start(cmd);
-    if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGE(TAG, "nif_read_bytes; enqueue start bit: err: %i.", err);
-        goto cleanup_read;
-    }
-
     if (!term_is_invalid_term(register_)) {
-        err = i2c_master_write_byte(cmd, (addr << 1) | I2C_MASTER_WRITE, ACK_ENABLE);
-        if (UNLIKELY(err != ESP_OK)) {
-            ESP_LOGE(TAG, "nif_read_bytes; enqueue write address: err: %i.", err);
-            goto cleanup_read;
-        }
-        err = i2c_master_write_byte(cmd, register_address, ACK_ENABLE);
-        if (UNLIKELY(err != ESP_OK)) {
-            ESP_LOGE(TAG, "nif_read_bytes; enqueue register address: err: %i.", err);
-            goto cleanup_read;
-        }
-        err = i2c_master_start(cmd);
-        if (UNLIKELY(err != ESP_OK)) {
-            ESP_LOGE(TAG, "nif_read_bytes; enqueue repeated start: err: %i.", err);
-            goto cleanup_read;
-        }
+        err = i2c_bus_manager_transmit_receive(rsrc_obj->bus_handle, addr, rsrc_obj->clock_speed_hz,
+            &register_address, 1, buf, read_count, rsrc_obj->xfer_timeout_ms);
+    } else {
+        err = i2c_bus_manager_receive(rsrc_obj->bus_handle, addr, rsrc_obj->clock_speed_hz, buf,
+            read_count, rsrc_obj->xfer_timeout_ms);
     }
 
-    err = i2c_master_write_byte(cmd, (addr << 1) | I2C_MASTER_READ, ACK_ENABLE);
-    if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGE(TAG, "nif_read_bytes; enqueue I2C bus address: err: %i.", err);
-        goto cleanup_read;
-    }
-
-    err = i2c_master_read(cmd, buf, read_count, I2C_MASTER_LAST_NACK);
-    if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGE(TAG, "nif_read_bytes; enqueue read data: err: %i.", err);
-        goto cleanup_read;
-    }
-
-    err = i2c_master_stop(cmd);
-    if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGE(TAG, "nif_read_bytes; enqueue stop bit: err: %i.", err);
-        goto cleanup_read;
-    }
-
-    err = i2c_master_cmd_begin(rsrc_obj->i2c_num, cmd, MS_TO_TICKS(rsrc_obj->send_timeout_ms));
-
-cleanup_read:
-    i2c_cmd_link_delete(cmd);
     if (UNLIKELY(err != ESP_OK)) {
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
             return OUT_OF_MEMORY_ATOM;
@@ -646,35 +579,15 @@ static term nif_i2c_begin_transmission(Context *ctx, int argc, term argv[])
     uint8_t addr = term_to_int32(address);
 
     //
-    // Initiate the I2C command
+    // Start accumulating the transmission; the actual bus transaction is
+    // deferred until nif_i2c_end_transmission/1
     //
 
-    esp_err_t err;
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-
-    err = i2c_master_start(cmd);
-    if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGE(TAG, "nif_begin_transmission; enqueue start bit: err: %i.", err);
-        goto cleanup_begin;
-    }
-
-    err = i2c_master_write_byte(cmd, (addr << 1) | I2C_MASTER_WRITE, ACK_ENABLE);
-    if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGE(TAG, "nif_begin_transmission; enqueue I2C bus address: err: %i.", err);
-        goto cleanup_begin;
-    }
-
+    i2c_tx_buffer_reset(&rsrc_obj->tx_buf);
+    rsrc_obj->tx_address = addr;
     rsrc_obj->transmitting_pid = term_from_local_process_id(ctx->process_id);
-    rsrc_obj->cmd = cmd;
 
     return OK_ATOM;
-
-cleanup_begin:
-    i2c_cmd_link_delete(cmd);
-    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
-        return OUT_OF_MEMORY_ATOM;
-    }
-    return create_error_tuple(ctx, esp_err_to_term(ctx->global, err));
 }
 
 //
@@ -721,17 +634,14 @@ static term nif_i2c_enqueue_write_bytes(Context *ctx, int argc, term argv[])
     const uint8_t *buf = (const uint8_t *) term_binary_data(data);
     size_t len = term_binary_size(data);
 
-    esp_err_t err;
-    for (size_t i = 0; i < len; ++i) {
-        err = i2c_master_write_byte(rsrc_obj->cmd, buf[i], ACK_ENABLE);
-        if (UNLIKELY(err != ESP_OK)) {
-            ESP_LOGE(TAG, "nif_enqueue_write_bytes; enqueue i2c_master_write_byte: err: %i.", err);
-            reset_i2c_transmission_state(rsrc_obj);
-            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
-                return OUT_OF_MEMORY_ATOM;
-            }
-            return create_error_tuple(ctx, esp_err_to_term(ctx->global, err));
+    esp_err_t err = i2c_tx_buffer_append(&rsrc_obj->tx_buf, buf, len);
+    if (UNLIKELY(err != ESP_OK)) {
+        ESP_LOGE(TAG, "nif_enqueue_write_bytes; failed to enqueue bytes: err: %i.", err);
+        reset_i2c_transmission_state(rsrc_obj);
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            return OUT_OF_MEMORY_ATOM;
         }
+        return create_error_tuple(ctx, esp_err_to_term(ctx->global, err));
     }
 
     return OK_ATOM;
@@ -778,22 +688,15 @@ static term nif_i2c_end_transmission(Context *ctx, int argc, term argv[])
     }
 
     //
-    // Write the stop bit and flush the I2C command(s) that have been written
+    // Flush the accumulated write buffer as a single bus transaction
     //
 
-    esp_err_t err;
-    err = i2c_master_stop(rsrc_obj->cmd);
-    if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGE(TAG, "nif_end_transmission; enqueue stop bit: err: %i.", err);
-        goto cleanup_end;
-    }
+    esp_err_t err = i2c_bus_manager_transmit(rsrc_obj->bus_handle, rsrc_obj->tx_address,
+        rsrc_obj->clock_speed_hz, rsrc_obj->tx_buf.data, rsrc_obj->tx_buf.len,
+        rsrc_obj->xfer_timeout_ms);
 
-    err = i2c_master_cmd_begin(rsrc_obj->i2c_num, rsrc_obj->cmd, MS_TO_TICKS(rsrc_obj->send_timeout_ms));
+    reset_i2c_transmission_state(rsrc_obj);
 
-cleanup_end:
-    i2c_cmd_link_delete(rsrc_obj->cmd);
-    rsrc_obj->cmd = NULL;
-    rsrc_obj->transmitting_pid = term_invalid_term();
     if (UNLIKELY(err != ESP_OK)) {
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
             return OUT_OF_MEMORY_ATOM;
