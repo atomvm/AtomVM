@@ -926,6 +926,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
             case TrapExceptionSignal: {
                 struct ImmediateSignal *trap_exception
                     = CONTAINER_OF(signal_message, struct ImmediateSignal, base);
+                context_update_flags(ctx, ~Trap, NoFlags);
                 set_error(ctx, jit_state, 0, trap_exception->immediate);
                 handle_error = true;
                 break;

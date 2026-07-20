@@ -80,6 +80,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed two bugs related to closing fds in `atomvm:subprocess/4`
 - Fixed `message_queue_len` (as reported by `erlang:process_info/2`): unprocessed signals,
   such as monitor or unlink requests, were counted as queued messages
+- Fixed a process hanging forever after catching an exception raised asynchronously by a
+  trapping BIF: the trap flag was left set, so the process parked at the next scheduling
+  point and never ran again
 - Fixed `erlang:localtime/1` memory leak, use-after-free, and TZ restore bugs on newlib/picolibc
 - Fixed ESP32 I2C driver resource leaks, half-closed state, and close-during-transmission errors
 - Fixed several underallocation issues that could trigger data corruption on `binary:replace`, `zlib:compress` and bsd socket recv code.

@@ -824,6 +824,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                 case TrapExceptionSignal: {                                                     \
                     struct ImmediateSignal *trap_exception                                      \
                         = CONTAINER_OF(signal_message, struct ImmediateSignal, base);           \
+                    context_update_flags(ctx, ~Trap, NoFlags);                                  \
                     SET_ERROR(trap_exception->immediate);                                       \
                     handle_error = true;                                                        \
                     break;                                                                      \
