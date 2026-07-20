@@ -127,7 +127,7 @@ static term nif_oneshot_new_channel_p(Context *ctx, int argc, term argv[])
     enif_release_resource(chan_rsrc);
 
     if (!err) {
-        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(3) + REF_SIZE + TUPLE_SIZE(2), 1, &chan_obj, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(3) + TERM_BOXED_REFERENCE_SHORT_SIZE + TUPLE_SIZE(2), 1, &chan_obj, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             ESP_LOGE(TAG, "failed to allocate memory for result: %s:%i.", __FILE__, __LINE__);
             dac_oneshot_del_channel(chan_rsrc->handle);
             chan_rsrc->handle = NULL;

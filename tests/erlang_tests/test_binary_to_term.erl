@@ -157,6 +157,7 @@ start() ->
     ok = test_safe_option(),
     ok = test_invalid_export_fun_encoding(),
     ok = test_atom_utf8_ext_node(),
+    ok = test_encode_process_ref(),
     0.
 
 test_reverse(T, Interop) ->
@@ -993,6 +994,13 @@ test_encode_resource(OTPVersion) ->
     false = AlteredResource3 =:= Resource,
     AlteredResource4 = binary_to_term(AlteredResourceBin4),
     false = AlteredResource4 =:= Resource,
+    ok.
+
+test_encode_process_ref() ->
+    ProcessRef = erlang:alias(),
+    Bin = term_to_binary(ProcessRef),
+    <<131, 90, _Len:16, 119, 13, "nonode@nohost", 0:32, _/binary>> = Bin,
+    ProcessRef = binary_to_term(?MODULE:id(Bin)),
     ok.
 
 % Verify term_to_binary(binary_to_term(Bin)) is idempotent.

@@ -180,7 +180,7 @@ ets_result_t ets_create_table_maybe_gc(
     if (named) {
         *ret = name;
     } else {
-        if (UNLIKELY(memory_ensure_free_opt(ctx, REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFERENCE_SHORT_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             ets_multimap_delete(multimap, ctx->global);
 #ifndef AVM_NO_SMP
             smp_rwlock_destroy(table->lock);

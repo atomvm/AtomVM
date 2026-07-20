@@ -130,6 +130,7 @@ Functions
 .. doxygenfunction:: mailbox_next
 .. doxygenfunction:: mailbox_peek
 .. doxygenfunction:: mailbox_process_outer_list
+.. doxygenfunction:: mailbox_process_outer_list_native
 .. doxygenfunction:: mailbox_remove_message
 .. doxygenfunction:: mailbox_reset
 .. doxygenfunction:: mailbox_send

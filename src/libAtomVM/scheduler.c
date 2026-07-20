@@ -80,7 +80,7 @@ static void scheduler_process_native_signal_messages(Context *ctx)
 {
     // This mirrors PROCESS_SIGNAL_MESSAGES macro of emulated processes, but
     // for native processes.
-    MailboxMessage *signal_message = mailbox_process_outer_list(&ctx->mailbox);
+    MailboxMessage *signal_message = mailbox_process_outer_list_native(&ctx->mailbox);
     bool reprocess_outer = false;
     while (signal_message) {
         switch (signal_message->type) {
@@ -137,6 +137,7 @@ static void scheduler_process_native_signal_messages(Context *ctx)
             case UnlinkRemoteIDSignal: // ports can't be part of distributed links
             case UnlinkRemoteIDAckSignal: // id.
             case CodeServerResumeSignal: // ports do not wait for code server
+            case AliasMessageSignal: // ports cannot own aliases
                 break;
             case NormalMessage: {
                 UNREACHABLE();
@@ -147,7 +148,7 @@ static void scheduler_process_native_signal_messages(Context *ctx)
         signal_message = next;
         if (UNLIKELY(reprocess_outer && signal_message == NULL)) {
             reprocess_outer = false;
-            signal_message = mailbox_process_outer_list(&ctx->mailbox);
+            signal_message = mailbox_process_outer_list_native(&ctx->mailbox);
         }
     }
 }
@@ -289,6 +290,8 @@ Context *scheduler_run(GlobalContext *global)
             if (UNLIKELY(result->flags & Killed)) {
                 SMP_SPINLOCK_LOCK(&global->processes_spinlock);
                 list_remove(&result->processes_list_head);
+                // Reset the queue item so the dequeue in context_destroy is a no-op.
+                list_init(&result->processes_list_head);
                 SMP_SPINLOCK_UNLOCK(&global->processes_spinlock);
                 context_destroy(result);
             } else {
@@ -429,6 +432,9 @@ void scheduler_terminate(Context *ctx)
     SMP_SPINLOCK_LOCK(&ctx->global->processes_spinlock);
     context_update_flags(ctx, ~NoFlags, Killed);
     list_remove(&ctx->processes_list_head);
+    // Reset the queue item so the dequeue in context_destroy is a no-op. For a leader process,
+    // context_destroy is called after the scheduler loop returns.
+    list_init(&ctx->processes_list_head);
     SMP_SPINLOCK_UNLOCK(&ctx->global->processes_spinlock);
     if (!ctx->leader) {
         context_destroy(ctx);

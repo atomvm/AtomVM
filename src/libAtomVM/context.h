@@ -138,6 +138,7 @@ struct Context
     unsigned int leader : 1;
     unsigned int has_min_heap_size : 1;
     unsigned int has_max_heap_size : 1;
+    unsigned int active_alias_count : 8;
 
     bool trap_exit : 1;
 #ifndef AVM_NO_EMU
@@ -177,7 +178,16 @@ enum ContextMonitorType
     CONTEXT_MONITOR_RESOURCE,
     CONTEXT_MONITOR_LINK_REMOTE,
     CONTEXT_MONITOR_MONITORING_LOCAL_REGISTEREDNAME,
+    CONTEXT_MONITOR_ALIAS,
+    CONTEXT_MONITOR_MONITORED_LOCAL_ALIAS,
 };
+
+typedef enum
+{
+    ContextMonitorAliasExplicitUnalias,
+    ContextMonitorAliasDemonitor,
+    ContextMonitorAliasReplyDemonitor,
+} context_monitor_alias_type_t;
 
 #define UNLINK_ID_LINK_ACTIVE 0x0
 
@@ -210,6 +220,13 @@ struct MonitorLocalRegisteredNameMonitor
     uint64_t ref_ticks;
     int32_t monitor_process_id;
     term monitor_name;
+};
+
+struct MonitorAlias
+{
+    struct Monitor monitor;
+    uint64_t ref_ticks;
+    context_monitor_alias_type_t alias_type;
 };
 
 // The other half is called ResourceMonitor and is a linked list of resources
@@ -480,6 +497,21 @@ bool context_process_link_exit_signal(Context *ctx, struct TermSignal *signal);
 void context_process_monitor_down_signal(Context *ctx, struct TermSignal *signal);
 
 /**
+ * @brief Process an alias message signal.
+ *
+ * @details The signal term is a 2-tuple {Ref, Message}. If Ref is an active alias of this process the
+ * Message is returned for delivery as a normal message; otherwise an invalid term is returned and the
+ * message is dropped. For a reply_demonitor alias the alias is also deactivated and the monitor
+ * removed. Runs in the owner's own context (no race). The caller delivers the returned message in send
+ * order so an alias send is not reordered against a plain send.
+ *
+ * @param ctx the context being executed
+ * @param signal the signal with the {Ref, Message} tuple
+ * @return the message to deliver, or an invalid term to drop it
+ */
+term context_process_alias_message_signal(Context *ctx, struct TermSignal *signal);
+
+/**
  * @brief Resume execution after module has been loaded
  *
  * @param ctx the context being executed
@@ -510,12 +542,23 @@ struct Monitor *monitor_link_new(term link_pid);
 /**
  * @brief Create a monitor on a process.
  *
- * @param monitor_pid monitored process
+ * @param monitor_pid monitored process (or monitoring process when ctx is the monitored one)
  * @param ref_ticks reference of the monitor
- * @param is_monitoring if ctx is the monitoring process
+ * @param monitor_type \c CONTEXT_MONITOR_MONITORING_LOCAL for the monitoring process's half,
+ * \c CONTEXT_MONITOR_MONITORED_LOCAL or \c CONTEXT_MONITOR_MONITORED_LOCAL_ALIAS (when the
+ * monitor was created with the {alias, _} option) for the monitored process's half
  * @return the allocated monitor or NULL if allocation failed
  */
-struct Monitor *monitor_new(term monitor_pid, uint64_t ref_ticks, bool is_monitoring);
+struct Monitor *monitor_new(term monitor_pid, uint64_t ref_ticks, enum ContextMonitorType monitor_type);
+
+/**
+ * @brief Create a process alias.
+ *
+ * @param ref_ticks reference of the alias
+ * @param alias_type when the alias is deactivated, see the erlang:monitor/3 alias option
+ * @return the allocated monitor or NULL if allocation failed
+ */
+struct Monitor *monitor_alias_new(uint64_t ref_ticks, context_monitor_alias_type_t alias_type);
 
 /**
  * @brief Create a monitor on a process by registered name.
@@ -535,6 +578,18 @@ struct Monitor *monitor_registeredname_monitor_new(int32_t monitor_process_id, t
  * @return the allocated resource monitor or NULL if allocation failed
  */
 struct Monitor *monitor_resource_monitor_new(void *resource, uint64_t ref_ticks);
+
+/**
+ * @brief Destroy a monitor that was not installed yet.
+ * @details Frees the container struct the monitor is embedded in, recovering
+ * it from its monitor type with CONTAINER_OF instead of relying on the monitor
+ * being the first member. It doesn't remove the monitor from any list, so it
+ * must only be used on monitors that were never passed to context_add_monitor,
+ * e.g. on error paths.
+ *
+ * @param monitor the monitor to free, or NULL in which case nothing is done
+ */
+void monitor_destroy(struct Monitor *monitor);
 
 /**
  * @brief Half-unlink process to another process
@@ -581,6 +636,23 @@ void context_unlink_ack(Context *ctx, term link_pid, uint64_t unlink_id);
  * @param ref_ticks reference of the monitor to remove
  */
 void context_demonitor(Context *ctx, uint64_t ref_ticks);
+
+/**
+ * @brief Find a process alias
+ *
+ * @param ctx the context being executed
+ * @param ref_ticks reference of the alias to find
+ * @return found alias or NULL
+ */
+struct MonitorAlias *context_find_alias(Context *ctx, uint64_t ref_ticks);
+
+/**
+ * @brief Remove an alias of a process
+ *
+ * @param ctx the context owning the alias
+ * @param alias The alias to remove, can be obtained using context_find_alias
+ */
+void context_unalias(Context *ctx, struct MonitorAlias *alias);
 
 /**
  * @brief Get target of a monitor.

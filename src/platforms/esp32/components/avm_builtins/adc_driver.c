@@ -344,7 +344,7 @@ static term nif_adc_init(Context *ctx, int argc, term argv[])
 #endif
 
     // {ok, {'$adc', Unit :: resource(), ref()}}
-    size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(3) + REF_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE;
+    size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(3) + TERM_BOXED_REFERENCE_SHORT_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE;
     ESP_LOGD(TAG, "Requesting memory size %u for return message", requested_size);
     if (UNLIKELY(memory_ensure_free(ctx, requested_size) != MEMORY_GC_OK)) {
         enif_release_resource(unit_rsrc);
@@ -492,7 +492,7 @@ static term nif_adc_acquire(Context *ctx, int argc, term argv[])
     chan_rsrc->calibration = calibration;
 
     // {ok, {'$adc', resource(), ref()}}
-    size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(3) + REF_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE;
+    size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(3) + TERM_BOXED_REFERENCE_SHORT_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE;
     ESP_LOGD(TAG, "Requesting memory size %u for return message", requested_size);
     if (UNLIKELY(memory_ensure_free(ctx, requested_size) != MEMORY_GC_OK)) {
         enif_release_resource(chan_rsrc);

@@ -104,6 +104,7 @@
     make_ref/0,
     send/2,
     monitor/2,
+    monitor/3,
     demonitor/1,
     demonitor/2,
     exit/1,
@@ -174,7 +175,10 @@
     tl/1,
     trunc/1,
     tuple_size/1,
-    tuple_to_list/1
+    tuple_to_list/1,
+    alias/0,
+    alias/1,
+    unalias/1
 ]).
 
 -export_type([
@@ -212,12 +216,14 @@
     | {max_heap_size, pos_integer()}
     | {atomvm_heap_growth, atomvm_heap_growth_strategy()}
     | link
-    | monitor.
+    | monitor
+    | {monitor, [monitor_option()]}.
 
 -type send_destination() ::
     pid()
     | port()
-    | atom().
+    | atom()
+    | reference().
 
 % Current type until we make these references
 -type resource() :: binary().
@@ -237,6 +243,8 @@
 %% Extended `stacktrace()' that can be passed to `raise/3'
 -type raise_stacktrace() ::
     [{module(), atom(), arity() | [term()]} | {function(), arity() | [term()]}] | stacktrace().
+
+-type monitor_option() :: {alias, explicit_unalias | demonitor | reply_demonitor}.
 
 %%-----------------------------------------------------------------------------
 %% @param   Time time in milliseconds after which to send the timeout message.
@@ -1222,8 +1230,10 @@ spawn_monitor(Module, Function, Args) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Function    function to create a process from
-%% @param   Options     additional options.
-%% @returns pid of the new process
+%% @param   Options     additional options, see `spawn_option()'. With `monitor'
+%%          or `{monitor, MonitorOpts}' the new process is also monitored, see
+%%          `monitor/3' for the monitor options.
+%% @returns pid of the new process, or `{Pid, MonitorRef}' when monitoring
 %% @doc     Create a new process.
 %% @end
 %%-----------------------------------------------------------------------------
@@ -1236,8 +1246,10 @@ spawn_opt(_Name, _Options) ->
 %% @param   Module      module of the function to create a process from
 %% @param   Function    name of the function to create a process from
 %% @param   Args        arguments to pass to the function to create a process from
-%% @param   Options     additional options.
-%% @returns pid of the new process
+%% @param   Options     additional options, see `spawn_option()'. With `monitor'
+%%          or `{monitor, MonitorOpts}' the new process is also monitored, see
+%%          `monitor/3' for the monitor options.
+%% @returns pid of the new process, or `{Pid, MonitorRef}' when monitoring
 %% @doc     Create a new process by calling exported Function from Module with Args.
 %% @end
 %%-----------------------------------------------------------------------------
@@ -1277,10 +1289,11 @@ make_ref() ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @param   Pid     process to send the message to
+%% @param   Target  process, registered name or alias to send the message to
 %% @param   Message message to send
 %% @returns the sent message
-%% @doc     Send a message to a given process
+%% @doc     Send a message to a given process. A message sent to a reference
+%%          that is not an active alias is silently dropped.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec send(Target :: send_destination(), Message :: Message) -> Message.
@@ -1304,6 +1317,32 @@ send(_Target, _Message) ->
     (Type :: process, Pid :: pid() | atom()) -> reference();
     (Type :: port, Port :: port() | atom()) -> reference().
 monitor(_Type, _PidOrPort) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Type        type of monitor to create
+%% @param   PidOrPort   pid or port of the object to monitor
+%% @param   Options     monitor options
+%% @returns a monitor reference
+%% @doc     Creates a monitor and allows passing additional options.
+%%          Currently, only the `{alias, AliasMode}' option is supported. Passing it
+%%          makes the monitor also an alias on the calling process (see `alias/0').
+%%          `AliasMode' defines the behaviour of the alias:
+%%          - explicit_unalias - the alias can be only removed with `unalias/1',
+%%          - demonitor - the alias is also removed when the monitor is removed,
+%%                        by `demonitor/1' or by the delivery of a `DOWN' message,
+%%          - reply_demonitor - additionally, the alias is deactivated and the
+%%                              monitor removed (as by `demonitor/1') when the
+%%                              first message sent via the alias is delivered.
+%%
+%%          <b>Note:</b> Unlike Erlang/OTP, the `{tag, Term}' option is not
+%%          supported and raises `unsupported'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec monitor
+    (Type :: process, Pid :: pid() | atom(), [monitor_option()]) -> reference();
+    (Type :: port, Port :: port() | atom(), [monitor_option()]) -> reference().
+monitor(_Type, _PidOrPort, _Options) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -2146,4 +2185,42 @@ tuple_size(_Tuple) ->
 %%-----------------------------------------------------------------------------
 -spec tuple_to_list(Tuple :: tuple()) -> [term()].
 tuple_to_list(_Tuple) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns A reference aliasing the calling process.
+%% @doc     Creates an alias for the calling process. The alias can be used
+%%          to send messages to the process like the PID. The alias can also be
+%%          created along with a monitor - see `monitor/3'. The alias can be
+%%          removed by calling `unalias/1'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec alias() -> Alias when Alias :: reference().
+alias() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Options alias options
+%% @returns A reference aliasing the calling process.
+%% @doc     Creates an alias for the calling process, like `alias/0'.
+%%          With `explicit_unalias' (the default, so `alias([])' is `alias/0')
+%%          the alias stays active until `unalias/1'; with `reply' it is
+%%          deactivated when the first message sent via the alias is delivered.
+%%
+%%          <b>Note:</b> Unlike Erlang/OTP, the `priority' option (OTP 28) is
+%%          not supported and raises `unsupported'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec alias(Options) -> Alias when Options :: [explicit_unalias | reply], Alias :: reference().
+alias(_Options) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Alias the alias to be removed.
+%% @returns `true' if alias was removed, `false' if it was not found
+%% @doc     Removes process alias. See `alias/0' for more information.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec unalias(Alias) -> boolean() when Alias :: reference().
+unalias(_Alias) ->
     erlang:nif_error(undefined).

@@ -246,7 +246,7 @@ static const AtomStringIntPair otp_socket_setopt_level_table[] = {
 
 static ErlNifResourceType *socket_resource_type;
 
-#define SOCKET_MAKE_SELECT_NOTIFICATION_SIZE (TUPLE_SIZE(4) + REF_SIZE + TUPLE_SIZE(2) + REF_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE)
+#define SOCKET_MAKE_SELECT_NOTIFICATION_SIZE (TUPLE_SIZE(4) + TERM_BOXED_REFERENCE_SHORT_SIZE + TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_SHORT_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE)
 static term socket_make_select_notification(struct SocketResource *rsrc_obj, Heap *heap);
 
 //
@@ -644,7 +644,7 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
         term obj = term_from_resource(rsrc_obj, &ctx->heap);
         enif_release_resource(rsrc_obj); // decrement refcount after enif_alloc_resource
 
-        size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(2) + REF_SIZE;
+        size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_SHORT_SIZE;
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &obj, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -695,7 +695,7 @@ bool term_is_otp_socket(term socket_term)
 static int send_closed_notification(Context *ctx, term socket_term, int32_t selecting_process_id, struct SocketResource *rsrc_obj)
 {
     // send a {'$socket', Socket, abort, {Ref | undefined, closed}} message to the pid
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(4) + TUPLE_SIZE(2) + REF_SIZE, 1, &socket_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(4) + TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_SHORT_SIZE, 1, &socket_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
         return -1;
     }
@@ -1032,6 +1032,10 @@ static term nif_socket_select_read(Context *ctx, int argc, term argv[])
     term select_ref_term = argv[1];
     if (select_ref_term != UNDEFINED_ATOM) {
         VALIDATE_VALUE(select_ref_term, term_is_local_reference);
+        // Unlike the BEAM, AtomVM does not support a process alias as a select handle.
+        if (UNLIKELY(term_is_process_reference(select_ref_term))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
     }
     struct SocketResource *rsrc_obj;
     if (UNLIKELY(!term_to_otp_socket(argv[0], &rsrc_obj, ctx))) {
@@ -1814,7 +1818,7 @@ static term nif_socket_listen(Context *ctx, int argc, term argv[])
 #if OTP_SOCKET_LWIP
 static term make_accepted_socket_term(Context *ctx, struct SocketResource *conn_rsrc_obj)
 {
-    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE + TUPLE_SIZE(2) + REF_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE + TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_SHORT_SIZE) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term obj = term_from_resource(conn_rsrc_obj, &ctx->heap);
@@ -1909,7 +1913,7 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
         term new_resource = term_from_resource(conn_rsrc_obj, &ctx->heap);
         enif_release_resource(conn_rsrc_obj); // decrement refcount after enif_alloc_resource
 
-        size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(2) + REF_SIZE;
+        size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_SHORT_SIZE;
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &new_resource, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -1940,7 +1944,7 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
             SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        size_t requested_size = TERM_BOXED_REFERENCE_RESOURCE_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(2) + REF_SIZE;
+        size_t requested_size = TERM_BOXED_REFERENCE_RESOURCE_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_SHORT_SIZE;
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
             LWIP_END();
@@ -2319,7 +2323,7 @@ static term nif_socket_recv_lwip(Context *ctx, term resource_term, struct Socket
     }
 
     size_t ensure_packet_avail = term_binary_heap_size(buffer_size);
-    size_t requested_size = REF_SIZE + 2 * TUPLE_SIZE(2) + ensure_packet_avail + (is_recvfrom ? (TUPLE_SIZE(2) + INET_ADDR4_TUPLE_SIZE + TERM_MAP_SIZE(2)) : 0);
+    size_t requested_size = TERM_BOXED_REFERENCE_SHORT_SIZE + 2 * TUPLE_SIZE(2) + ensure_packet_avail + (is_recvfrom ? (TUPLE_SIZE(2) + INET_ADDR4_TUPLE_SIZE + TERM_MAP_SIZE(2)) : 0);
     // Because resource is locked, we must ensure it's not garbage collected
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &resource_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);

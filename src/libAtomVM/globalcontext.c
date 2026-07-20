@@ -414,6 +414,20 @@ void globalcontext_send_message(GlobalContext *glb, int32_t process_id, term t)
     }
 }
 
+void globalcontext_send_message_to_alias(GlobalContext *glb, int32_t process_id, term ref, term message)
+{
+    Context *p = globalcontext_get_process_lock(glb, process_id);
+    if (p) {
+        BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(2), temp_heap)
+        term tuple = term_alloc_tuple(2, &temp_heap);
+        term_put_tuple_element(tuple, 0, ref);
+        term_put_tuple_element(tuple, 1, message);
+        mailbox_send_term_signal(p, AliasMessageSignal, tuple);
+        END_WITH_STACK_HEAP(temp_heap, glb)
+        globalcontext_get_process_unlock(glb, p);
+    }
+}
+
 void globalcontext_send_message_nolock(GlobalContext *glb, int32_t process_id, term t)
 {
     Context *p = globalcontext_get_process_nolock(glb, process_id);

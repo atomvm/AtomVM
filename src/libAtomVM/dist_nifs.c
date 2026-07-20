@@ -560,6 +560,29 @@ static term nif_erlang_dist_ctrl_put_data(Context *ctx, int argc, term argv[])
             globalcontext_send_message(ctx->global, target_process_id, payload);
             break;
         }
+        case OPERATION_ALIAS_SEND:
+        case OPERATION_ALIAS_SEND_TT: {
+            // {DOP_ALIAS_SEND, FromPid, Alias} or {DOP_ALIAS_SEND_TT, FromPid, Alias, TraceToken},
+            // followed by the message payload. The trace token is ignored.
+            size_t expected_arity = (term_to_int(operation) == OPERATION_ALIAS_SEND) ? 3 : 4;
+            if (UNLIKELY(arity != expected_arity)) {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            term roots[3];
+            roots[0] = argv[0]; // dist handle
+            roots[1] = argv[1];
+            roots[2] = control;
+            term payload = external_term_from_binary_with_roots(ctx, 1, 1 + bytes_read, &bytes_read, 3, roots);
+            control = roots[2];
+            term target = term_get_tuple_element(control, 2);
+            if (LIKELY(term_is_process_reference(target))) {
+                int32_t target_process_id = term_process_ref_to_process_id(target);
+                globalcontext_send_message_to_alias(ctx->global, target_process_id, target, payload);
+            }
+            // A ref minted by a previous incarnation of this node is not an active alias here.
+            // Drop the message instead of crashing the dist connection with badarg.
+            break;
+        }
         case OPERATION_SPAWN_REQUEST: {
             if (UNLIKELY(arity != 6)) {
                 RAISE_ERROR(BADARG_ATOM);

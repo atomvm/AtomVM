@@ -35,7 +35,7 @@ void test_mailbox_send(void)
 
     mailbox_send(ctx, term_from_int(1));
 
-    assert(mailbox_process_outer_list(&ctx->mailbox) == NULL);
+    assert(mailbox_process_outer_list_native(&ctx->mailbox) == NULL);
     assert(mailbox_has_next(&ctx->mailbox));
     assert(mailbox_peek(ctx, &t));
     assert(1 == term_to_int(t));
@@ -58,7 +58,7 @@ void test_mailbox_next(void)
     // 1. send send peek next peek remove peek remove
     mailbox_send(ctx, term_from_int(1));
     mailbox_send(ctx, term_from_int(2));
-    assert(mailbox_process_outer_list(&ctx->mailbox) == NULL);
+    assert(mailbox_process_outer_list_native(&ctx->mailbox) == NULL);
     assert(mailbox_peek(ctx, &t));
     assert(1 == term_to_int(t));
 
@@ -79,12 +79,12 @@ void test_mailbox_next(void)
 
     // 2. send peek send next peek remove peek remove
     mailbox_send(ctx, term_from_int(1));
-    assert(mailbox_process_outer_list(&ctx->mailbox) == NULL);
+    assert(mailbox_process_outer_list_native(&ctx->mailbox) == NULL);
     assert(mailbox_peek(ctx, &t));
     assert(1 == term_to_int(t));
 
     mailbox_send(ctx, term_from_int(2));
-    assert(mailbox_process_outer_list(&ctx->mailbox) == NULL);
+    assert(mailbox_process_outer_list_native(&ctx->mailbox) == NULL);
     assert(mailbox_has_next(&ctx->mailbox));
     mailbox_next(&ctx->mailbox);
 
@@ -102,7 +102,7 @@ void test_mailbox_next(void)
 
     // 3. send peek next send peek remove peek remove
     mailbox_send(ctx, term_from_int(1));
-    assert(mailbox_process_outer_list(&ctx->mailbox) == NULL);
+    assert(mailbox_process_outer_list_native(&ctx->mailbox) == NULL);
     assert(mailbox_peek(ctx, &t));
     assert(1 == term_to_int(t));
 
@@ -110,7 +110,7 @@ void test_mailbox_next(void)
     mailbox_next(&ctx->mailbox);
 
     mailbox_send(ctx, term_from_int(2));
-    assert(mailbox_process_outer_list(&ctx->mailbox) == NULL);
+    assert(mailbox_process_outer_list_native(&ctx->mailbox) == NULL);
 
     assert(mailbox_peek(ctx, &t));
     assert(2 == term_to_int(t));
