@@ -61,6 +61,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reference size, but now emits a compiler warning
 - ESP32 builds now fail at configure time when `boot.avm` does not fit its partition, instead of
   producing an image that is silently truncated at flash time
+- `atomvm:read_priv/2` now raises `invalid_avm` when the requested resource is present but its
+  recorded size does not fit the AVM pack section holding it, instead of reporting the resource as
+  missing. A resource that is genuinely absent still returns `undefined`
 
 ### Removed
 - Removed `ahttp_client` support for obsolete line folding (RFC 9112 §5.2); folded header and

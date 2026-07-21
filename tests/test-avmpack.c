@@ -21,9 +21,18 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "avmpack.h"
+#include "context.h"
+#include "defaultatoms.h"
+#include "globalcontext.h"
+#include "memory.h"
+#include "nifs.h"
+#include "scheduler.h"
+#include "synclist.h"
+#include "term.h"
 #include "utils.h"
 
 static int failures = 0;
@@ -88,6 +97,44 @@ static size_t put_end(uint8_t *buf, size_t off)
     memcpy(buf + off + 12, "end", 4);
 
     return off + 16;
+}
+
+static void test_read_priv_rejects_corrupt_entry(void)
+{
+    static uint32_t pack_words[64];
+    uint8_t *pack = (uint8_t *) pack_words;
+
+    memset(pack, 0, sizeof(pack_words));
+    memcpy(pack, avmpack_header, 24);
+    size_t off = put_section(pack, 24, "myapp/priv/foo.txt", 4, 8);
+    uint32_t pack_size = (uint32_t) put_end(pack, off);
+
+    // 8 payload bytes hold at most a 4 byte file, claim 100
+    put_u32_be(pack + 24 + 12 + 20, 100);
+
+    GlobalContext *glb = globalcontext_new();
+    Context *ctx = context_new(glb);
+
+    struct ConstAVMPack *avm = malloc(sizeof(struct ConstAVMPack));
+    avmpack_data_init(&avm->base, &const_avm_pack_info, pack_size);
+    avm->base.data = pack;
+    avm->base.in_use = true;
+    synclist_append(&glb->avmpack_data, &avm->base.avmpack_head);
+
+    const struct Nif *nif = nifs_get("atomvm:read_priv/2");
+    CHECK(nif != NULL);
+
+    term argv[2];
+    argv[0] = globalcontext_make_atom(glb, ATOM_STR("\x5", "myapp"));
+    CHECK(memory_ensure_free(ctx, term_binary_heap_size(7)) == MEMORY_GC_OK);
+    argv[1] = term_from_literal_binary((const uint8_t *) "foo.txt", 7, &ctx->heap, glb);
+
+    term result = nif->nif_ptr(ctx, 2, argv);
+    CHECK(term_is_invalid_term(result));
+    CHECK(ctx->exception_reason == INVALID_AVM_ATOM);
+
+    scheduler_terminate(ctx);
+    globalcontext_destroy(glb);
 }
 
 int main(void)
@@ -193,6 +240,8 @@ int main(void)
     put_u32_be(buf + 24 + 8, 0);
     memcpy(buf + 24 + 12, "x", 2);
     CHECK(avmpack_compute_size(buf, sizeof(buf), &real_size) == false);
+
+    test_read_priv_rejects_corrupt_entry();
 
     if (failures == 0) {
         fprintf(stderr, "All avmpack tests passed!\n");
