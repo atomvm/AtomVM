@@ -25,6 +25,14 @@
 #include <string.h>
 
 #include "avmpack.h"
+#include "context.h"
+#include "defaultatoms.h"
+#include "globalcontext.h"
+#include "memory.h"
+#include "nifs.h"
+#include "scheduler.h"
+#include "synclist.h"
+#include "term.h"
 #include "utils.h"
 
 static int failures = 0;
@@ -89,6 +97,82 @@ static size_t put_end(uint8_t *buf, size_t off)
     memcpy(buf + off + 12, "end", 4);
 
     return off + 16;
+}
+
+static void register_pack(GlobalContext *glb, const uint8_t *pack, uint32_t pack_size)
+{
+    struct ConstAVMPack *avm = malloc(sizeof(struct ConstAVMPack));
+    if (avm == NULL) {
+        fprintf(stderr, "malloc failed\n");
+        exit(1);
+    }
+    avmpack_data_init(&avm->base, &const_avm_pack_info, pack_size);
+    avm->base.data = pack;
+    avm->base.in_use = true;
+    synclist_append(&glb->avmpack_data, &avm->base.avmpack_head);
+}
+
+static term call_read_priv(Context *ctx, const struct Nif *nif, const char *path)
+{
+    size_t path_len = strlen(path);
+    if (memory_ensure_free(ctx, term_binary_heap_size(path_len)) != MEMORY_GC_OK) {
+        fprintf(stderr, "memory_ensure_free failed\n");
+        exit(1);
+    }
+    term argv[2];
+    argv[0] = globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "myapp"));
+    argv[1] = term_from_literal_binary(path, path_len, &ctx->heap, ctx->global);
+
+    return nif->nif_ptr(ctx, 2, argv);
+}
+
+static void test_read_priv(void)
+{
+    // an aligned pack with a valid entry: <<4:32, "abcd">> in an 8 byte payload
+    static uint32_t aligned_words[64];
+    uint8_t *aligned = (uint8_t *) aligned_words;
+    memset(aligned, 0, sizeof(aligned_words));
+    memcpy(aligned, avmpack_header, 24);
+    size_t off = put_section(aligned, 24, "myapp/priv/foo.txt", 4, 8);
+    uint32_t aligned_size = put_end(aligned, off);
+    put_u32_be(aligned + 24 + 12 + 20, 4);
+    memcpy(aligned + 24 + 12 + 20 + 4, "abcd", 4);
+
+    // a pack at an odd address with a valid entry and a corrupt one
+    static uint8_t odd_storage[256 + 1];
+    uint8_t *odd = odd_storage + 1;
+    memset(odd_storage, 0, sizeof(odd_storage));
+    memcpy(odd, avmpack_header, 24);
+    off = put_section(odd, 24, "myapp/priv/odd.txt", 4, 8);
+    size_t bad_off = off;
+    off = put_section(odd, off, "myapp/priv/bad.txt", 4, 8);
+    uint32_t odd_size = put_end(odd, off);
+    put_u32_be(odd + 24 + 12 + 20, 4);
+    memcpy(odd + 24 + 12 + 20 + 4, "wxyz", 4);
+    put_u32_be(odd + bad_off + 12 + 20, 100); // 8 payload bytes hold at most a 4 byte file
+
+    GlobalContext *glb = globalcontext_new();
+    Context *ctx = context_new(glb);
+    register_pack(glb, aligned, aligned_size);
+    register_pack(glb, odd, odd_size);
+
+    const struct Nif *nif = nifs_get("atomvm:read_priv/2");
+    CHECK(nif != NULL);
+
+    term result = call_read_priv(ctx, nif, "foo.txt");
+    CHECK(term_is_binary(result) && term_binary_size(result) == 4
+        && memcmp(term_binary_data(result), "abcd", 4) == 0);
+    result = call_read_priv(ctx, nif, "odd.txt");
+    CHECK(term_is_binary(result) && term_binary_size(result) == 4
+        && memcmp(term_binary_data(result), "wxyz", 4) == 0);
+    result = call_read_priv(ctx, nif, "missing.txt");
+    CHECK(result == UNDEFINED_ATOM);
+    result = call_read_priv(ctx, nif, "bad.txt");
+    CHECK(term_is_invalid_term(result));
+    CHECK(ctx->exception_reason == INVALID_AVM_ATOM);
+
+    scheduler_terminate(ctx);
+    globalcontext_destroy(glb);
 }
 
 int main(void)
@@ -286,6 +370,8 @@ int main(void)
     // --- A size that 32-bit pack offsets cannot describe ---
     CHECK(avmpack_is_complete(buf, (size_t) UINT32_MAX + 1) == false);
 #endif
+
+    test_read_priv();
 
     if (failures == 0) {
         fprintf(stderr, "All avmpack tests passed!\n");

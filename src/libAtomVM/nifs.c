@@ -5740,7 +5740,7 @@ static term open_avm_error_tuple(Context *ctx, enum OpenAVMResult result)
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             break;
         case AVM_OPEN_INVALID:
-            reason = globalcontext_make_atom(ctx->global, ATOM_STR("\xB", "invalid_avm"));
+            reason = INVALID_AVM_ATOM;
             break;
         case AVM_OPEN_CANNOT_OPEN:
             reason = globalcontext_make_atom(ctx->global, ATOM_STR("\xB", "cannot_open"));
@@ -5933,6 +5933,7 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
     uint32_t size;
     struct ListHead *item;
     term result = UNDEFINED_ATOM;
+    bool invalid_pack = false;
     struct ListHead *avmpack_data = synclist_rdlock(&glb->avmpack_data);
     LIST_FOR_EACH (item, avmpack_data) {
         struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
@@ -5940,23 +5941,40 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
         avmpack_data->in_use = true;
         if (avmpack_find_section_by_name(
                 avmpack_data->data, avmpack_data->size, complete_path, &bin_data, &size)) {
-            uint32_t file_size = READ_32_ALIGNED((uint32_t *) bin_data);
+            // A normal file is <<Size:32, Data>>
+            if (UNLIKELY(size < sizeof(uint32_t))) {
+                avmpack_data->in_use = prev_in_use;
+                invalid_pack = true;
+                break;
+            }
+            uint32_t file_size = READ_32_UNALIGNED(bin_data);
+            if (UNLIKELY(file_size > size - sizeof(uint32_t))) {
+                avmpack_data->in_use = prev_in_use;
+                invalid_pack = true;
+                break;
+            }
             free(complete_path);
             complete_path = NULL;
-            if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFC_BINARY_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFC_BINARY_SIZE, MEMORY_CAN_SHRINK)
+                    != MEMORY_GC_OK)) {
                 avmpack_data->in_use = prev_in_use;
                 synclist_unlock(&glb->avmpack_data);
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
-            result = term_from_const_binary(((uint8_t *) bin_data) + sizeof(uint32_t), file_size, &ctx->heap, ctx->global);
+            result = term_from_const_binary(
+                (const uint8_t *) bin_data + sizeof(uint32_t), file_size, &ctx->heap, ctx->global);
             break;
-        } else {
-            avmpack_data->in_use = prev_in_use;
         }
+        avmpack_data->in_use = prev_in_use;
     }
     synclist_unlock(&glb->avmpack_data);
 
     free(complete_path);
+
+    if (UNLIKELY(invalid_pack)) {
+        RAISE_ERROR(INVALID_AVM_ATOM);
+    }
+
     return result;
 }
 

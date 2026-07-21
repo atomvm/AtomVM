@@ -39,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed truncated AVM packs, such as an image larger than its flash partition, being accepted at
   load and failing later in unpredictable ways; they are now rejected when loaded, with an error
   at boot or from `atomvm:add_avm_pack_file/2` and `atomvm:add_avm_pack_binary/2`
+- Fixed `atomvm:read_priv/2` returning a binary that extends past its pack entry, reading other
+  entries or memory after the pack, when the entry's recorded size is corrupt; it now raises
+  `invalid_avm`. A resource that is genuinely absent still returns `undefined`
 
 ## [0.7.0-beta.0] - 2026-09-28
 
