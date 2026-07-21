@@ -436,6 +436,7 @@ enum OpenAVMResult sys_open_avm_from_file(
         return AVM_OPEN_CANNOT_OPEN;
     }
     if (UNLIKELY(!avmpack_is_complete(mapped->mapped, (uint32_t) mapped->size))) {
+        mapped_file_close(mapped);
         return AVM_OPEN_INVALID;
     }
 
