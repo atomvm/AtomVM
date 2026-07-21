@@ -65,6 +65,7 @@ erlang:binary_to_float/1, &binary_to_float_nif
 erlang:binary_to_integer/1, &binary_to_integer_nif
 erlang:binary_to_integer/2, &binary_to_integer_nif
 erlang:binary_to_list/1, &binary_to_list_nif
+erlang:bitstring_to_list/1, &binary_to_list_nif
 erlang:binary_to_existing_atom/1, &binary_to_existing_atom_1_nif
 erlang:delete_element/2, &delete_element_nif
 erlang:erase/0, &erase_0_nif
@@ -134,6 +135,7 @@ erlang:put/2, &put_nif
 erlang:binary_to_term/1, &binary_to_term_nif
 erlang:binary_to_term/2, &binary_to_term_nif
 erlang:term_to_binary/1, &term_to_binary_nif
+erlang:term_to_binary/2, &term_to_binary_nif
 erlang:split_binary/2, &split_binary_nif
 erlang:throw/1, &throw_nif
 erlang:raise/3, &raise_nif
@@ -143,6 +145,7 @@ erlang:port_to_list/1, &port_to_list_nif
 erlang:ref_to_list/1, &ref_to_list_nif
 erlang:fun_to_list/1, &fun_to_list_nif
 erlang:function_exported/3, &function_exported_nif
+erlang:is_builtin/3, &is_builtin_nif
 erlang:!/2, &send_nif
 erlang:garbage_collect/0, &garbage_collect_nif
 erlang:garbage_collect/1, &garbage_collect_nif

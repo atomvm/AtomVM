@@ -241,6 +241,7 @@ static term nif_erlang_port_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_function_exported(Context *ctx, int argc, term argv[]);
+static term nif_erlang_is_builtin(Context *ctx, int argc, term argv[]);
 static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[]);
 static term nif_erlang_group_leader(Context *ctx, int argc, term argv[]);
 static term nif_erlang_get_module_info(Context *ctx, int argc, term argv[]);
@@ -690,6 +691,10 @@ static const struct Nif fun_to_list_nif = {
 static const struct Nif function_exported_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_function_exported
+};
+static const struct Nif is_builtin_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_is_builtin
 };
 
 static const struct Nif garbage_collect_nif = {
@@ -3562,10 +3567,48 @@ static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
     }
 }
 
+// AtomVM's external term encoding is already deterministic and always uses
+// NEW_FLOAT_EXT (minor_version >= 1).  `compressed' is accepted but ignored:
+// the uncompressed encoding is a valid external term that any
+// binary_to_term can read.
+static bool is_valid_term_to_binary_option(Context *ctx, term opt)
+{
+    if (term_is_atom(opt)) {
+        return globalcontext_is_term_equal_to_atom_string(ctx->global, opt, ATOM_STR("\xD", "deterministic"))
+            || globalcontext_is_term_equal_to_atom_string(ctx->global, opt, ATOM_STR("\xA", "compressed"));
+    }
+    if (term_is_tuple(opt) && term_get_tuple_arity(opt) == 2) {
+        term name = term_get_tuple_element(opt, 0);
+        term value = term_get_tuple_element(opt, 1);
+        if (!term_is_integer(value)) {
+            return false;
+        }
+        avm_int_t int_value = term_to_int(value);
+        if (globalcontext_is_term_equal_to_atom_string(ctx->global, name, ATOM_STR("\xD", "minor_version"))) {
+            return int_value >= 0 && int_value <= 2;
+        }
+        if (globalcontext_is_term_equal_to_atom_string(ctx->global, name, ATOM_STR("\xA", "compressed"))) {
+            return int_value >= 0 && int_value <= 9;
+        }
+    }
+    return false;
+}
+
 static term nif_erlang_term_to_binary(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
     term t = argv[0];
+    if (argc == 2) {
+        term options = argv[1];
+        while (term_is_nonempty_list(options)) {
+            if (UNLIKELY(!is_valid_term_to_binary_option(ctx, term_get_list_head(options)))) {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            options = term_get_list_tail(options);
+        }
+        if (UNLIKELY(!term_is_nil(options))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
     term ret = external_term_to_binary(ctx, t);
     if (term_is_invalid_term(ret)) {
         RAISE_ERROR(BADARG_ATOM);
@@ -4782,6 +4825,36 @@ static term nif_erlang_function_exported(Context *ctx, int argc, term argv[])
     }
 
     return TRUE_ATOM;
+}
+
+static term nif_erlang_is_builtin(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term module = argv[0];
+    term function = argv[1];
+    term arity_term = argv[2];
+
+    VALIDATE_VALUE(module, term_is_atom);
+    VALIDATE_VALUE(function, term_is_atom);
+    VALIDATE_VALUE(arity_term, term_is_integer);
+
+    atom_index_t module_name_ix = term_to_atom_index(module);
+    atom_index_t function_name_ix = term_to_atom_index(function);
+
+    avm_int_t arity = term_to_int(arity_term);
+
+    char mfa[MAX_MFA_NAME_LEN];
+    atom_table_write_mfa(ctx->global->atom_table, mfa, sizeof(mfa), module_name_ix, function_name_ix, arity);
+
+    // A function is a builtin iff it is implemented natively in AtomVM, i.e.
+    // registered as a BIF or a NIF. Unlike function_exported/3, a function
+    // exported by a loaded (Erlang) module is not a builtin.
+    if (bif_registry_get_handler(mfa) != NULL || nifs_get(mfa) != NULL) {
+        return TRUE_ATOM;
+    }
+
+    return FALSE_ATOM;
 }
 
 static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[])

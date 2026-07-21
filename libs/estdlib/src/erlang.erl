@@ -52,6 +52,7 @@
     erase/0,
     erase/1,
     function_exported/3,
+    is_builtin/3,
     loaded/0,
     module_loaded/1,
     display/1,
@@ -71,6 +72,7 @@
     binary_to_integer/1,
     binary_to_integer/2,
     binary_to_list/1,
+    bitstring_to_list/1,
     atom_to_binary/1,
     atom_to_binary/2,
     atom_to_list/1,
@@ -123,6 +125,7 @@
     garbage_collect/1,
     binary_to_term/1,
     term_to_binary/1,
+    term_to_binary/2,
     split_binary/2,
     crc32/1,
     crc32/2,
@@ -187,7 +190,8 @@
     atomvm_heap_growth_strategy/0,
     stacktrace/0,
     stacktrace_extrainfo/0,
-    raise_stacktrace/0
+    raise_stacktrace/0,
+    term_to_binary_option/0
 ]).
 
 -type atom_encoding() :: latin1 | utf8 | unicode.
@@ -205,6 +209,12 @@
     | short.
 
 -type demonitor_option() :: flush | {flush, boolean()} | info | {info, boolean()}.
+
+-type term_to_binary_option() ::
+    compressed
+    | {compressed, Level :: 0..9}
+    | deterministic
+    | {minor_version, Version :: 0..2}.
 
 -type atomvm_heap_growth_strategy() ::
     bounded_free
@@ -687,6 +697,27 @@ function_exported(_Module, _Function, _Arity) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   Module module name
+%% @param   Function function name
+%% @param   Arity function arity
+%% @returns `true' if `Module:Function/Arity' is a builtin, `false' otherwise.
+%% @doc     Determine whether a function is implemented natively (as a BIF or a
+%%          NIF) by AtomVM. As on BEAM, this reflects functions "implemented in
+%%          C" rather than in Erlang, but it is answered against AtomVM's own
+%%          registry. It therefore differs from BEAM whenever the two virtual
+%%          machines disagree on whether a given function is native: for
+%%          example `erlang:atom_to_binary/1' is native on AtomVM but
+%%          Erlang-implemented on BEAM, while `erlang:md5/1' is a BEAM BIF that
+%%          AtomVM implements in Erlang. An arity that no builtin has (including a
+%%          negative integer) returns `false'. Raises `badarg' if `Module' or
+%%          `Function' is not an atom, or `Arity' is not an integer.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_builtin(Module :: module(), Function :: atom(), Arity :: arity()) -> boolean().
+is_builtin(_Module, _Function, _Arity) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @returns list of loaded modules
 %% @doc     Returns all loaded modules.
 %% @end
@@ -898,6 +929,20 @@ binary_to_integer(_Binary, _Base) ->
 %%-----------------------------------------------------------------------------
 -spec binary_to_list(Binary :: binary()) -> [byte()].
 binary_to_list(_Binary) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Bitstring   Bitstring to convert to list
+%% @returns a list of bytes from the bitstring
+%% @doc     Convert a bitstring to a list of bytes.
+%%
+%% Unlike Erlang/OTP, AtomVM only supports byte-aligned bitstrings (binaries),
+%% so the returned list never has a trailing bitstring and this function
+%% behaves like `binary_to_list/1'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec bitstring_to_list(Bitstring :: bitstring()) -> [byte()].
+bitstring_to_list(_Bitstring) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -1555,10 +1600,8 @@ garbage_collect(_Pid) ->
 %%-----------------------------------------------------------------------------
 %% @returns A term decoded from passed binary
 %% @param   Binary  binary to decode
-%% @doc Decode a term that was previously encodes with `term_to_binary/1'
+%% @doc Decode a term that was previously encoded with `term_to_binary/1'.
 %% This function should be mostly compatible with its Erlang/OTP counterpart.
-%% Unlike modern Erlang/OTP, resources are currently serialized as empty
-%% binaries and cannot be unserialized.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec binary_to_term(Binary :: binary()) -> any().
@@ -1570,12 +1613,40 @@ binary_to_term(_Binary) ->
 %% @param   Term    term to encode
 %% @doc Encode a term to a binary that can later be decoded with `binary_to_term/1'.
 %% This function should be mostly compatible with its Erlang/OTP counterpart.
-%% Unlike modern Erlang/OTP, resources are currently serialized as empty
-%% binaries.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec term_to_binary(Term :: any()) -> binary().
 term_to_binary(_Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns A binary encoding passed term.
+%% @param   Term    term to encode
+%% @param   Options encoding options
+%% @doc Encode a term to a binary that can later be decoded with `binary_to_term/1'.
+%%
+%% The following options are accepted:
+%% <ul>
+%%   <li>`compressed' and `{compressed, Level}' (`Level' from 0 to 9): accepted
+%%       for compatibility but ignored. AtomVM's encoding is always
+%%       uncompressed; the resulting binary is still a valid external term that
+%%       `binary_to_term/1' can decode.</li>
+%%   <li>`deterministic': accepted for compatibility. AtomVM's encoding is
+%%       already deterministic, so this option has no effect.</li>
+%%   <li>`{minor_version, Version}' (`Version' from 0 to 2): accepted for
+%%       compatibility. AtomVM always encodes floats using the `NEW_FLOAT_EXT'
+%%       representation (minor version 1 and later).</li>
+%% </ul>
+%%
+%% Unlike Erlang/OTP, the `local' option is not supported: AtomVM never emits
+%% the node-local `LOCAL_EXT' encoding. Passing `local', or any other unknown
+%% option, raises a `badarg' error.
+%%
+%% This function should be mostly compatible with its Erlang/OTP counterpart.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec term_to_binary(Term :: any(), Options :: [term_to_binary_option()]) -> binary().
+term_to_binary(_Term, _Options) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
