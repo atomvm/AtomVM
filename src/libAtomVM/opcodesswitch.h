@@ -4399,7 +4399,6 @@ schedule_in:
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
                 uint32_t live;
-                UNUSED(live);
                 DECODE_LITERAL(live, pc);
                 term size;
                 DECODE_COMPACT_TERM(size, pc);
@@ -4442,7 +4441,8 @@ schedule_in:
                 } else {
                     term_set_match_state_offset(src, bs_offset + increment);
 
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, FLOAT_SIZE, MEMORY_NO_GC) != MEMORY_GC_OK)) {
+                    TRIM_LIVE_REGS(live);
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, FLOAT_SIZE, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     term t = term_from_float(value, &ctx->heap);

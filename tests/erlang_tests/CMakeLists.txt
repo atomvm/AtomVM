@@ -570,6 +570,7 @@ compile_erlang(bs_context_byte_size)
 compile_erlang(bs_get_binary_fixed_size)
 compile_erlang(bs_get_integer_fixed_size)
 compile_erlang(bs_get_float_dynamic_size)
+compile_erlang(bs_get_float_gc)
 compile_erlang(test_is_not_equal)
 compile_assembler(test_is_not_equal_asm)
 compile_erlang(test_make_fun2)
@@ -1139,6 +1140,7 @@ set(erlang_test_beams
     bs_get_binary_fixed_size.beam
     bs_get_integer_fixed_size.beam
     bs_get_float_dynamic_size.beam
+    bs_get_float_gc.beam
     test_is_not_equal.beam
     test_is_not_equal_asm.beam
     test_make_fun2.beam
