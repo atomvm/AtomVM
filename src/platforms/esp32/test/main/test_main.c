@@ -147,7 +147,7 @@ term avm_test_case(const char *test_module)
     struct ConstAVMPack *avmpack_data = malloc(sizeof(struct ConstAVMPack));
     TEST_ASSERT(avmpack_data != NULL);
 
-    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
+    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info, size);
     avmpack_data->base.in_use = true;
     avmpack_data->base.data = main_avm;
     synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
@@ -195,7 +195,7 @@ TEST_CASE("test_jit_compile", "[test_run]")
 
     struct ConstAVMPack *avmpack_data = malloc(sizeof(struct ConstAVMPack));
     TEST_ASSERT(avmpack_data != NULL);
-    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
+    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info, size);
     avmpack_data->base.in_use = true;
     avmpack_data->base.data = main_avm;
     synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);

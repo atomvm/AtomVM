@@ -875,6 +875,21 @@ jobs:
         ulimit -c unlimited
         ./tests/test-structs
 
+    - name: "Test: test-avmpack with valgrind"
+      if: matrix.library-arch == ''
+      timeout-minutes: 10
+      working-directory: build
+      run: |
+        ulimit -c unlimited
+        valgrind --error-exitcode=1 ./tests/test-avmpack
+
+    - name: "Test: test-avmpack"
+      timeout-minutes: 10
+      working-directory: build
+      run: |
+        ulimit -c unlimited
+        ./tests/test-avmpack
+
     - name: "Test: test_etest.avm with valgrind"
       if: matrix.library-arch == ''
       timeout-minutes: 5

@@ -59,6 +59,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from ref ticks, `TERM_BOXED_REFERENCE_PROCESS_SIZE` for process references (aliases), or
   `TERM_BOXED_REFERENCE_MAX_SIZE` to fit any reference. `REF_SIZE` still expands to the short
   reference size, but now emits a compiler warning
+- ESP32 builds now fail at configure time when `boot.avm` does not fit its partition, instead of
+  producing an image that is silently truncated at flash time
+- `atomvm:read_priv/2` now raises `invalid_avm` when the requested resource is present but its
+  recorded size does not fit the AVM pack section holding it, instead of reporting the resource as
+  missing. A resource that is genuinely absent still returns `undefined`
 
 ### Removed
 - Removed `ahttp_client` support for obsolete line folding (RFC 9112 §5.2); folded header and
@@ -86,6 +91,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed a JIT crash (`EXC_BAD_ACCESS`/SIGBUS) on Apple Silicon
 - Fixed the ESP32 event poller re-blocking after running a listener, which could delay a process
   readied by a driver (e.g. an active-mode socket message) until the next event or timer tick
+- Fixed AVM pack lookups not finding sections placed after a data file
+- Fixed an out-of-bounds read crashing the VM on an AVM pack section lookup miss (e.g. `atomvm:read_priv/2` for an unpacked file)
+- Fixed truncated or oversized AVM packs being accepted; they are now rejected at load instead of failing late
+- Fixed generic_unix leaking the file mapping when rejecting an invalid `.avm` file
 
 ## [0.7.0-alpha.1] - 2026-04-06
 

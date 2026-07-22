@@ -201,7 +201,7 @@ int main(int argc, char **argv)
             return EXIT_FAILURE;
         }
 
-        avmpack_data_init(avmpack_data, &embedded_avm_pack_info);
+        avmpack_data_init(avmpack_data, &embedded_avm_pack_info, (uint32_t) embedded_size);
         avmpack_data->data = embedded_data;
         // Set the name for the embedded AVM pack so it can be found by atomvm:get_start_beam/1
         term escript_atom = globalcontext_make_atom(glb, ATOM_STR("\x7", "escript"));
@@ -227,7 +227,9 @@ int main(int argc, char **argv)
                     const void *startup_beam = NULL;
                     const char *startup_module_name;
                     uint32_t startup_beam_size;
-                    avmpack_find_section_by_flag(avmpack_data->data, BEAM_START_FLAG, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name);
+                    avmpack_find_section_by_flag(avmpack_data->data, avmpack_data->size,
+                        BEAM_START_FLAG, BEAM_START_FLAG, &startup_beam, &startup_beam_size,
+                        &startup_module_name);
 
                     if (startup_beam) {
                         avmpack_data->in_use = true;

@@ -5573,7 +5573,8 @@ static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[])
 
     size_t bin_size = term_binary_size(binary);
 
-    if (UNLIKELY(!avmpack_is_valid(term_binary_data(binary), bin_size))) {
+    if (UNLIKELY(bin_size > UINT32_MAX
+            || !avmpack_is_complete(term_binary_data(binary), (uint32_t) bin_size))) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -5589,7 +5590,7 @@ static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[])
             if (IS_NULL_PTR(refc_bin_avm)) {
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
-            avmpack_data_init(&refc_bin_avm->base, &refc_binary_avm_pack_info);
+            avmpack_data_init(&refc_bin_avm->base, &refc_binary_avm_pack_info, (uint32_t) bin_size);
             refc_bin_avm->base.data = (const uint8_t *) term_binary_data(binary);
             struct RefcBinary *refc_bin = (struct RefcBinary *) term_refc_binary_ptr(binary);
             refc_binary_increment_refcount(refc_bin);
@@ -5602,7 +5603,7 @@ static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[])
             if (IS_NULL_PTR(const_avm)) {
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
-            avmpack_data_init(&const_avm->base, &const_avm_pack_info);
+            avmpack_data_init(&const_avm->base, &const_avm_pack_info, (uint32_t) bin_size);
             const_avm->base.data = (const uint8_t *) term_binary_data(binary);
 
             avmpack_data = &const_avm->base;
@@ -5620,7 +5621,7 @@ static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[])
             free(allocated_data);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        avmpack_data_init(&in_memory_avm->base, &in_memory_avm_pack_info);
+        avmpack_data_init(&in_memory_avm->base, &in_memory_avm_pack_info, (uint32_t) bin_size);
         in_memory_avm->base.data = (const uint8_t *) allocated_data;
 
         avmpack_data = &in_memory_avm->base;
@@ -5760,7 +5761,8 @@ static term nif_atomvm_get_start_beam(Context *ctx, int argc, term argv[])
             uint32_t size;
             const void *beam;
             const char *module_name;
-            if (!avmpack_find_section_by_flag(avmpack_data->data, BEAM_START_FLAG, BEAM_START_FLAG, &beam, &size, &module_name)) {
+            if (!avmpack_find_section_by_flag(avmpack_data->data, avmpack_data->size,
+                    BEAM_START_FLAG, BEAM_START_FLAG, &beam, &size, &module_name)) {
                 synclist_unlock(&ctx->global->avmpack_data);
                 if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -5835,29 +5837,47 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
     uint32_t size;
     struct ListHead *item;
     term result = UNDEFINED_ATOM;
+    bool invalid_pack = false;
     struct ListHead *avmpack_data = synclist_rdlock(&glb->avmpack_data);
     LIST_FOR_EACH (item, avmpack_data) {
         struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
         bool prev_in_use = avmpack_data->in_use;
         avmpack_data->in_use = true;
-        if (avmpack_find_section_by_name(avmpack_data->data, complete_path, &bin_data, &size)) {
-            uint32_t file_size = READ_32_ALIGNED((uint32_t *) bin_data);
+        if (avmpack_find_section_by_name(
+                avmpack_data->data, avmpack_data->size, complete_path, &bin_data, &size)) {
+            if (UNLIKELY(size < sizeof(uint32_t))) {
+                avmpack_data->in_use = prev_in_use;
+                invalid_pack = true;
+                break;
+            }
+            uint32_t file_size = READ_32_UNALIGNED(bin_data);
+            if (UNLIKELY(file_size > size - sizeof(uint32_t))) {
+                avmpack_data->in_use = prev_in_use;
+                invalid_pack = true;
+                break;
+            }
             free(complete_path);
             complete_path = NULL;
-            if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFC_BINARY_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFC_BINARY_SIZE, MEMORY_CAN_SHRINK)
+                    != MEMORY_GC_OK)) {
                 avmpack_data->in_use = prev_in_use;
                 synclist_unlock(&glb->avmpack_data);
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
-            result = term_from_const_binary(((uint8_t *) bin_data) + sizeof(uint32_t), file_size, &ctx->heap, ctx->global);
+            result = term_from_const_binary(
+                ((uint8_t *) bin_data) + sizeof(uint32_t), file_size, &ctx->heap, ctx->global);
             break;
-        } else {
-            avmpack_data->in_use = prev_in_use;
         }
+        avmpack_data->in_use = prev_in_use;
     }
     synclist_unlock(&glb->avmpack_data);
 
     free(complete_path);
+
+    if (UNLIKELY(invalid_pack)) {
+        RAISE_ERROR(INVALID_AVM_ATOM);
+    }
+
     return result;
 }
 
@@ -6398,7 +6418,7 @@ static term nif_code_all_available(Context *ctx, int argc, term argv[])
     LIST_FOR_EACH (item, avmpack_data) {
         struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
         acc.avmpack_data = avmpack_data;
-        avmpack_fold(&acc, avmpack_data->data, nif_code_all_available_fold);
+        avmpack_fold(&acc, avmpack_data->data, avmpack_data->size, nif_code_all_available_fold);
     }
 
     size_t available_count = acc.acc_count + ctx->global->loaded_modules_count;
@@ -6414,7 +6434,7 @@ static term nif_code_all_available(Context *ctx, int argc, term argv[])
     LIST_FOR_EACH (item, avmpack_data) {
         struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
         acc.avmpack_data = avmpack_data;
-        avmpack_fold(&acc, avmpack_data->data, nif_code_all_available_fold);
+        avmpack_fold(&acc, avmpack_data->data, avmpack_data->size, nif_code_all_available_fold);
     }
     synclist_unlock(&ctx->global->avmpack_data);
 

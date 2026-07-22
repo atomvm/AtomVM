@@ -236,6 +236,7 @@ jobs:
         make test-heap &&
         make test-mailbox &&
         make test-structs &&
+        make test-avmpack &&
         file ./tests/test-erlang &&
         ./tests/test-erlang -s prime_smp &&
         file ./tests/test-enif &&
@@ -246,6 +247,8 @@ jobs:
         ./tests/test-mailbox &&
         file ./tests/test-structs &&
         ./tests/test-structs &&
+        file ./tests/test-avmpack &&
+        ./tests/test-avmpack &&
         file ./src/AtomVM &&
         ./src/AtomVM tests/libs/etest/test_etest.avm &&
         ./src/AtomVM tests/libs/estdlib/test_estdlib.avm &&

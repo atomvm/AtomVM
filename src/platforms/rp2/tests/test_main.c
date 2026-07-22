@@ -105,7 +105,8 @@ static term avm_test_case(const char *test_module)
 
     struct ConstAVMPack *avmpack_data = malloc(sizeof(struct ConstAVMPack));
     TEST_ASSERT_NOT_NULL(avmpack_data);
-    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
+    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info,
+        (uint32_t) (XIP_SRAM_BASE - (uintptr_t) MAIN_AVM));
     avmpack_data->base.data = MAIN_AVM;
     avmpack_data->base.in_use = true;
 

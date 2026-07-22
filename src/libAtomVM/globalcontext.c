@@ -727,7 +727,8 @@ Module *globalcontext_load_module_from_avm(GlobalContext *global, const char *mo
     LIST_FOR_EACH (item, avmpack_data) {
         struct AVMPackData *avmpack_data = GET_LIST_ENTRY(item, struct AVMPackData, avmpack_head);
         avmpack_data->in_use = true;
-        if (avmpack_find_section_by_name(avmpack_data->data, module_name, &beam_module, &beam_module_size)) {
+        if (avmpack_find_section_by_name(avmpack_data->data, avmpack_data->size, module_name,
+                &beam_module, &beam_module_size)) {
             break;
         }
     }

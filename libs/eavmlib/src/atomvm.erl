@@ -161,11 +161,14 @@ rand_bytes(_Len) ->
 %%-----------------------------------------------------------------------------
 %% @param   App application name.
 %% @param   Path path to the resource.
-%% @returns Binary containing the resource content.
+%% @returns Binary containing the resource content, or `undefined' if it is not in any loaded
+%%          AVM pack.
 %% @doc     This function allows to fetch priv/ resources content.
+%%          Raises `invalid_avm' if the resource is present but its recorded size does not fit
+%%          the AVM pack section holding it.
 %% @end
 %%-----------------------------------------------------------------------------
--spec read_priv(App :: atom(), Path :: list()) -> binary().
+-spec read_priv(App :: atom(), Path :: list()) -> binary() | undefined.
 read_priv(_App, _Path) ->
     erlang:nif_error(undefined).
 
