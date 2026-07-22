@@ -85,8 +85,9 @@ static int app_main()
     const char *startup_module_name;
 
     uint32_t main_avm_size = 0;
-    if (!avmpack_compute_size(
-            MAIN_AVM, (uint32_t) (XIP_SRAM_BASE - (uintptr_t) MAIN_AVM), &main_avm_size)) {
+    if (!avmpack_compute_size(MAIN_AVM,
+            (uint32_t) (XIP_BASE + PICO_FLASH_SIZE_BYTES - (uintptr_t) MAIN_AVM),
+            &main_avm_size)) {
         sleep_ms(5000);
         fprintf(stderr, "main.avm is missing or truncated. Please flash your application.\n");
         if (avmpack_is_valid(LIB_AVM, (uintptr_t) MAIN_AVM - (uintptr_t) LIB_AVM)) {
