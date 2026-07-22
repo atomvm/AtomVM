@@ -160,8 +160,6 @@
     offset :: non_neg_integer(),
     branches :: #{integer() | reference() => [{non_neg_integer(), non_neg_integer()}]},
     jump_table_start :: non_neg_integer(),
-    available_regs :: non_neg_integer(),
-    used_regs :: non_neg_integer(),
     max_scratch :: non_neg_integer(),
     labels :: #{integer() | reference() => integer()},
     variant :: non_neg_integer(),
@@ -220,12 +218,10 @@ new(Variant, StreamModule, Stream) ->
         branches = #{},
         jump_table_start = 0,
         offset = StreamModule:offset(Stream),
-        available_regs = ?AVAILABLE_REGS_MASK,
-        used_regs = 0,
         max_scratch = ?NUM_SCRATCH_LOCALS,
         labels = #{},
         variant = Variant,
-        regs = jit_regs:new(),
+        regs = jit_regs:new(?AVAILABLE_REGS_MASK, 0),
         func_bodies = [],
         current_body = <<>>,
         current_label = undefined,
@@ -265,11 +261,13 @@ flush(#state{stream_module = StreamModule, stream = Stream0} = State) ->
 debugger(State) ->
     emit(State, jit_wasm32_asm:unreachable()).
 
+%% Native-register allocation bookkeeping. Flow through jit_regs so the masks
+%% live inside jit_regs:regs() rather than #state{}.
 -spec used_regs(state()) -> [wasm_local()].
-used_regs(#state{used_regs = Used}) -> mask_to_locals(Used).
+used_regs(#state{regs = Regs}) -> mask_to_locals(jit_regs:used_regs(Regs)).
 
 -spec available_regs(state()) -> [wasm_local()].
-available_regs(#state{available_regs = Available}) -> mask_to_locals(Available).
+available_regs(#state{regs = Regs}) -> mask_to_locals(jit_regs:available_regs(Regs)).
 
 -spec free_native_registers(state(), [value()]) -> state().
 free_native_registers(State, []) ->
@@ -279,17 +277,12 @@ free_native_registers(State, [Val | Rest]) ->
     free_native_registers(State1, Rest).
 
 -spec free_native_register(state(), value()) -> state().
-free_native_register(
-    #state{available_regs = Available0, used_regs = Used0} = State,
-    Local
-) when is_atom(Local) ->
+free_native_register(#state{regs = Regs} = State, Local) when is_atom(Local) ->
     LocalIdx = jit_wasm32_asm:local_index(Local),
     case LocalIdx >= ?FIRST_SCRATCH_LOCAL of
         true ->
             Bit = local_bit(LocalIdx),
-            State#state{
-                available_regs = Available0 bor Bit, used_regs = Used0 band (bnot Bit)
-            };
+            State#state{regs = jit_regs:free_reg(Regs, Bit)};
         false ->
             State
     end;
@@ -299,10 +292,10 @@ free_native_register(State, _Other) ->
     State.
 
 -spec assert_all_native_free(state()) -> ok.
-assert_all_native_free(#state{max_scratch = MS} = State) ->
-    0 = State#state.used_regs,
+assert_all_native_free(#state{max_scratch = MS, regs = Regs}) ->
+    0 = jit_regs:used_regs(Regs),
     AllFree = (1 bsl MS) - 1,
-    AllFree = State#state.available_regs,
+    AllFree = jit_regs:available_regs(Regs),
     ok.
 
 %%=============================================================================
@@ -362,10 +355,9 @@ call_primitive(State0, Primitive, Args) ->
 call_primitive_last(State0, Primitive, Args) ->
     State1 = emit_call_primitive(State0, Primitive, Args, none, true),
     AllFree = (1 bsl State1#state.max_scratch) - 1,
+    Regs1 = jit_regs:unreachable(State1#state.regs),
     State1#state{
-        available_regs = AllFree,
-        used_regs = 0,
-        regs = jit_regs:unreachable(State1#state.regs)
+        regs = jit_regs:set_masks(Regs1, AllFree, 0)
     }.
 
 call_primitive_with_cp(State0, Primitive, Args) ->
@@ -390,14 +382,13 @@ call_primitive_with_cp(State0, Primitive, Args) ->
     NewFuncBodies = [{PrevLabel, FinalizedBody} | FuncBodies],
     ContLabelOff = JumpTableStart + ContLabel * ?JUMP_TABLE_ENTRY_SIZE,
     AllFree = (1 bsl State3#state.max_scratch) - 1,
+    Regs1 = jit_regs:invalidate_all(State3#state.regs),
     State3#state{
         func_bodies = NewFuncBodies,
         current_body = <<>>,
         current_label = ContLabel,
         labels = Labels#{ContLabel => ContLabelOff},
-        available_regs = AllFree,
-        used_regs = 0,
-        regs = jit_regs:invalidate_all(State3#state.regs)
+        regs = jit_regs:set_masks(Regs1, AllFree, 0)
     }.
 
 %%=============================================================================
@@ -405,7 +396,7 @@ call_primitive_with_cp(State0, Primitive, Args) ->
 %%=============================================================================
 
 return_if_not_equal_to_ctx(
-    #state{available_regs = Available0, used_regs = Used0} = State0,
+    #state{regs = Regs0} = State0,
     {free, Local}
 ) ->
     Code = <<
@@ -419,12 +410,10 @@ return_if_not_equal_to_ctx(
         (jit_wasm32_asm:end_())/binary
     >>,
     Bit = local_bit(Local),
-    Regs1 = jit_regs:invalidate_reg(State0#state.regs, Local),
+    Regs1 = jit_regs:invalidate_reg(Regs0, Local),
     State1 = emit(State0, Code),
     State1#state{
-        available_regs = Available0 bor Bit,
-        used_regs = Used0 band (bnot Bit),
-        regs = Regs1
+        regs = jit_regs:free_reg(Regs1, Bit)
     }.
 
 jump_to_label(State0, Label) ->
@@ -479,10 +468,9 @@ jump_to_continuation(State0, {free, OffsetLocal}) ->
     >>,
     State1 = emit(State0, Code),
     AllFree = (1 bsl State1#state.max_scratch) - 1,
+    Regs1 = jit_regs:unreachable(State1#state.regs),
     State1#state{
-        available_regs = AllFree,
-        used_regs = 0,
-        regs = jit_regs:unreachable(State1#state.regs)
+        regs = jit_regs:set_masks(Regs1, AllFree, 0)
     }.
 
 %%=============================================================================
@@ -497,15 +485,17 @@ if_block(State0, {'and', CondList}, BlockFn) ->
     State2 = emit(State1, jit_wasm32_asm:if_(jit_wasm32_asm:blocktype_void())),
     State3 = BlockFn(State2),
     State4 = emit(State3, jit_wasm32_asm:end_()),
-    MergedRegs = jit_regs:merge(State1#state.regs, State4#state.regs),
-    merge_used_regs(State4#state{regs = MergedRegs}, State1#state.used_regs);
+    AllRegsMask = (1 bsl State4#state.max_scratch) - 1,
+    MergedRegs = merge_branch_regs(State1#state.regs, State4#state.regs, AllRegsMask),
+    State4#state{regs = MergedRegs};
 if_block(State0, Cond, BlockFn) ->
     State1 = emit_condition(State0, Cond),
     State2 = emit(State1, jit_wasm32_asm:if_(jit_wasm32_asm:blocktype_void())),
     State3 = BlockFn(State2),
     State4 = emit(State3, jit_wasm32_asm:end_()),
-    MergedRegs = jit_regs:merge(State1#state.regs, State4#state.regs),
-    merge_used_regs(State4#state{regs = MergedRegs}, State1#state.used_regs).
+    AllRegsMask = (1 bsl State4#state.max_scratch) - 1,
+    MergedRegs = merge_branch_regs(State1#state.regs, State4#state.regs, AllRegsMask),
+    State4#state{regs = MergedRegs}.
 
 -spec if_else_block(state(), condition(), fun((state()) -> state()), fun((state()) -> state())) ->
     state().
@@ -515,13 +505,23 @@ if_else_block(State0, Cond, BlockTrueFn, BlockFalseFn) ->
     State3 = BlockTrueFn(State2),
     State4 = emit(State3, jit_wasm32_asm:else_()),
     StateElse = State4#state{
-        used_regs = State1#state.used_regs,
-        available_regs = State1#state.available_regs
+        regs = jit_regs:set_masks(
+            State4#state.regs,
+            jit_regs:available_regs(State1#state.regs),
+            jit_regs:used_regs(State1#state.regs)
+        )
     },
     State5 = BlockFalseFn(StateElse),
     State6 = emit(State5, jit_wasm32_asm:end_()),
-    MergedRegs = jit_regs:merge(State3#state.regs, State5#state.regs),
-    merge_used_regs(State6#state{regs = MergedRegs}, State3#state.used_regs).
+    AllRegsMask = (1 bsl State6#state.max_scratch) - 1,
+    MergedRegs = merge_branch_regs(State3#state.regs, State5#state.regs, AllRegsMask),
+    State6#state{regs = MergedRegs}.
+
+merge_branch_regs(Regs1, Regs2, AllRegsMask) ->
+    Merged = jit_regs:merge(Regs1, Regs2),
+    Used = (jit_regs:used_regs(Regs1) bor jit_regs:used_regs(Regs2)) band AllRegsMask,
+    Available = AllRegsMask band (bnot Used),
+    jit_regs:set_masks(Merged, Available, Used).
 
 %%=============================================================================
 %% Arithmetic and bitwise operations
@@ -1077,14 +1077,13 @@ decrement_reductions_and_maybe_schedule_next(State0) ->
     NewFuncBodies = [{PrevLabel, FinalizedBody} | FuncBodies],
     ContLabelOff = JumpTableStart + ContLabel * ?JUMP_TABLE_ENTRY_SIZE,
     AllFree = (1 bsl State9#state.max_scratch) - 1,
+    Regs1 = jit_regs:invalidate_all(State9#state.regs),
     State9#state{
         func_bodies = NewFuncBodies,
         current_body = <<>>,
         current_label = ContLabel,
         labels = Labels#{ContLabel => ContLabelOff},
-        available_regs = AllFree,
-        used_regs = 0,
-        regs = jit_regs:invalidate_all(State9#state.regs)
+        regs = jit_regs:set_masks(Regs1, AllFree, 0)
     }.
 
 call_or_schedule_next(State0, Label) ->
@@ -1115,14 +1114,13 @@ call_or_schedule_next(State0, Label) ->
     NewFuncBodies = [{PrevLabel, FinalizedBody} | FuncBodies],
     ContLabelOff = JumpTableStart + ContLabel * ?JUMP_TABLE_ENTRY_SIZE,
     AllFree = (1 bsl State3#state.max_scratch) - 1,
+    Regs1 = jit_regs:invalidate_all(State3#state.regs),
     State3#state{
         func_bodies = NewFuncBodies,
         current_body = <<>>,
         current_label = ContLabel,
         labels = Labels#{ContLabel => ContLabelOff},
-        available_regs = AllFree,
-        used_regs = 0,
-        regs = jit_regs:invalidate_all(State3#state.regs)
+        regs = jit_regs:set_masks(Regs1, AllFree, 0)
     }.
 
 call_only_or_schedule_next(State0, Label) ->
@@ -1176,8 +1174,10 @@ call_func_ptr(State0, FuncPtrTuple, Args) ->
     State4 = emit(State3, jit_wasm32_asm:call_indirect(TypeIdx, 0)),
     %% Store result
     State5 = emit(State4, jit_wasm32_asm:local_set(ResultLocal)),
-    Regs1 = jit_regs:invalidate_all(State0#state.regs),
     State6 = free_func_ptr(State5, FuncPtrTuple),
+    %% Invalidate contents tracking but keep the masks from State6: they
+    %% account for ResultLocal being allocated and the freed arguments.
+    Regs1 = jit_regs:invalidate_all(State6#state.regs),
     {State6#state{regs = Regs1}, ResultLocal}.
 
 %%=============================================================================
@@ -1322,9 +1322,7 @@ add_label(
         current_body = <<>>,
         current_label = ContLabel,
         labels = Labels#{ContLabel => ContLabelOff},
-        available_regs = AllFree,
-        used_regs = 0,
-        regs = Regs1
+        regs = jit_regs:set_masks(Regs1, AllFree, 0)
     };
 add_label(
     #state{
@@ -1357,28 +1355,31 @@ emit(#state{current_body = Body} = State, Code) ->
     State#state{current_body = <<Body/binary, Code/binary>>}.
 
 %% Allocate a scratch local, extending the pool if exhausted.
-alloc_local(#state{available_regs = 0, used_regs = Used, max_scratch = MaxScratch} = State) ->
-    LocalIdx = ?FIRST_SCRATCH_LOCAL + MaxScratch,
-    Bit = 1 bsl MaxScratch,
-    LocalAtom = index_to_local(LocalIdx),
-    {
-        State#state{
-            used_regs = Used bor Bit,
-            max_scratch = MaxScratch + 1
-        },
-        LocalAtom
-    };
-alloc_local(#state{available_regs = Available, used_regs = Used} = State) ->
-    LocalIdx = first_avail_local(Available),
-    Bit = local_bit(LocalIdx),
-    LocalAtom = index_to_local(LocalIdx),
-    {
-        State#state{
-            available_regs = Available band (bnot Bit),
-            used_regs = Used bor Bit
-        },
-        LocalAtom
-    }.
+alloc_local(#state{regs = Regs, max_scratch = MaxScratch} = State) ->
+    case jit_regs:available_regs(Regs) of
+        0 ->
+            %% Pool exhausted: grow it by one local. The new local's bit is
+            %% beyond the current available mask, so alloc_reg/2 marks it used
+            %% (available stays 0).
+            LocalIdx = ?FIRST_SCRATCH_LOCAL + MaxScratch,
+            Bit = 1 bsl MaxScratch,
+            LocalAtom = index_to_local(LocalIdx),
+            {
+                State#state{
+                    regs = jit_regs:alloc_reg(Regs, Bit),
+                    max_scratch = MaxScratch + 1
+                },
+                LocalAtom
+            };
+        Available ->
+            LocalIdx = first_avail_local(Available),
+            Bit = local_bit(LocalIdx),
+            LocalAtom = index_to_local(LocalIdx),
+            {
+                State#state{regs = jit_regs:alloc_reg(Regs, Bit)},
+                LocalAtom
+            }
+    end.
 
 %% Get the first available local from bitmask
 first_avail_local(Mask) ->
@@ -1425,12 +1426,6 @@ local_bit(LocalAtom) when is_atom(LocalAtom) ->
     local_bit(jit_wasm32_asm:local_index(LocalAtom));
 local_bit(LocalIdx) when is_integer(LocalIdx), LocalIdx >= ?FIRST_SCRATCH_LOCAL ->
     1 bsl (LocalIdx - ?FIRST_SCRATCH_LOCAL).
-
-merge_used_regs(#state{used_regs = UR, max_scratch = MS} = State, OtherUR) ->
-    MergedUR = UR bor OtherUR,
-    AllFree = (1 bsl MS) - 1,
-    MergedAvail = AllFree band (bnot MergedUR),
-    State#state{used_regs = MergedUR, available_regs = MergedAvail}.
 
 emit_value_to_stack(cp) ->
     <<

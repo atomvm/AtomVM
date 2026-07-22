@@ -2583,8 +2583,10 @@ move_to_array_element_test_() ->
                 ?_test(begin
                     %% a3 = bit 3 = 8, t3 = bit 11 = 2048
                     %% AVAILABLE_REGS_MASK = 16#7F00, remove t3 => 16#7700
-                    State1 = setelement(7, State0, 16#7700),
-                    State2 = setelement(8, State1, 8 bor 2048),
+                    Regs0 = element(9, State0),
+                    State2 = setelement(
+                        9, State0, jit_regs:set_masks(Regs0, 16#7700, 8 bor 2048)
+                    ),
                     [t3, a3] = ?BACKEND:used_regs(State2),
                     State3 = ?BACKEND:move_to_array_element(State2, {x_reg, 0}, a3, t3, 1),
                     Stream = ?BACKEND:stream(State3),
@@ -2601,8 +2603,10 @@ move_to_array_element_test_() ->
                 ?_test(begin
                     %% a3 = bit 3 = 8, t3 = bit 11 = 2048
                     %% AVAILABLE_REGS_MASK = 16#7F00, remove t3 => 16#7700
-                    State1 = setelement(7, State0, 16#7700),
-                    State2 = setelement(8, State1, 8 bor 2048),
+                    Regs0 = element(9, State0),
+                    State2 = setelement(
+                        9, State0, jit_regs:set_masks(Regs0, 16#7700, 8 bor 2048)
+                    ),
                     [t3, a3] = ?BACKEND:used_regs(State2),
                     State3 = ?BACKEND:move_to_array_element(State2, 42, a3, t3, 1),
                     Stream = ?BACKEND:stream(State3),

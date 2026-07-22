@@ -2152,10 +2152,17 @@ move_to_array_element_test_() ->
                 end),
                 %% move_to_array_element/5: x_reg to reg[x+offset]
                 ?_test(begin
-                    State1 = setelement(
-                        7, State0, element(7, State0) band (bnot ((1 bsl 8) bor (1 bsl 9)))
+                    Regs0 = element(9, State0),
+                    State2 = setelement(
+                        9,
+                        State0,
+                        jit_regs:set_masks(
+                            Regs0,
+                            jit_regs:available_regs(Regs0) band
+                                (bnot ((1 bsl 8) bor (1 bsl 9))),
+                            (1 bsl 8) bor (1 bsl 9)
+                        )
                     ),
-                    State2 = setelement(8, State1, (1 bsl 8) bor (1 bsl 9)),
                     [r8, r9] = ?BACKEND:used_regs(State2),
                     State3 = ?BACKEND:move_to_array_element(State2, {x_reg, 0}, r8, r9, 1),
                     Stream = ?BACKEND:stream(State3),
@@ -2168,10 +2175,17 @@ move_to_array_element_test_() ->
                 end),
                 %% move_to_array_element/5: imm to reg[x+offset]
                 ?_test(begin
-                    State1 = setelement(
-                        7, State0, element(7, State0) band (bnot ((1 bsl 8) bor (1 bsl 9)))
+                    Regs0 = element(9, State0),
+                    State2 = setelement(
+                        9,
+                        State0,
+                        jit_regs:set_masks(
+                            Regs0,
+                            jit_regs:available_regs(Regs0) band
+                                (bnot ((1 bsl 8) bor (1 bsl 9))),
+                            (1 bsl 8) bor (1 bsl 9)
+                        )
                     ),
-                    State2 = setelement(8, State1, (1 bsl 8) bor (1 bsl 9)),
                     [r8, r9] = ?BACKEND:used_regs(State2),
                     State3 = ?BACKEND:move_to_array_element(State2, 42, r8, r9, 1),
                     Stream = ?BACKEND:stream(State3),
