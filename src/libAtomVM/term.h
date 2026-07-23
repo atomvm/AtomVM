@@ -3082,7 +3082,7 @@ static inline term term_from_resource(void *resource, Heap *heap)
     boxed_value[0] = TERM_BOXED_REFERENCE_RESOURCE_HEADER;
     boxed_value[1] = (term) refc;
     // Add the resource to the mso list
-    refc_binary_add_refcount(refc, 1);
+    refc_binary_increment_refcount(refc);
     term ret = ((term) boxed_value) | TERM_PRIMARY_BOXED;
     heap->root->mso_list = term_list_init_prepend(boxed_value + REFERENCE_RESOURCE_CONS_OFFSET, ret, heap->root->mso_list);
     return ret;
