@@ -737,6 +737,19 @@ test_groups_from_list() ->
     %% Error cases
     ?ASSERT_ERROR(maps:groups_from_list(not_a_function, []), badarg),
     ?ASSERT_ERROR(maps:groups_from_list(fun(X) -> X end, not_a_list), badarg),
+    %% Callback exceptions must propagate instead of being rewritten as badarg.
+    ?ASSERT_ERROR(
+        maps:groups_from_list(fun(_) -> error(key_fun_failed) end, [a]),
+        key_fun_failed
+    ),
+    ?ASSERT_ERROR(
+        maps:groups_from_list(
+            fun(X) -> X end,
+            fun(_) -> error(value_fun_failed) end,
+            [a]
+        ),
+        value_fun_failed
+    ),
     ok.
 
 test_is_iterator_valid() ->
