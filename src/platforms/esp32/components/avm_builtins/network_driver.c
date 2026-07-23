@@ -1379,7 +1379,7 @@ cleanup:
     return;
 }
 
-static void stop_network(Context *ctx)
+static void stop_network(void)
 {
     // Stop sntp (ignore OK, or not configured error)
     esp_sntp_stop();
@@ -1912,7 +1912,7 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
                 break;
             case NetworkStopCmd:
                 cmd_terminate = true;
-                stop_network(ctx);
+                stop_network();
                 break;
             case NetworkScanCmd:
                 wifi_scan(ctx, pid, ref, config);
@@ -1992,6 +1992,16 @@ Context *network_driver_create_port(GlobalContext *global, term opts)
     return ctx;
 }
 
-REGISTER_PORT_DRIVER(network, network_driver_init, NULL, network_driver_create_port)
+static void network_driver_destroy(GlobalContext *global)
+{
+    UNUSED(global);
+
+    // Unregister the scan handler first, since stop_network() does not handle
+    // it and esp_wifi_stop() may post WIFI_EVENT_SCAN_DONE for an aborted scan.
+    esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_SCAN_DONE, &scan_done_handler);
+    stop_network();
+}
+
+REGISTER_PORT_DRIVER(network, network_driver_init, network_driver_destroy, network_driver_create_port)
 
 #endif

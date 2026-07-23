@@ -680,6 +680,18 @@ TEST_CASE("test_wifi_managed", "[test_run]")
     term ret_value = avm_test_case("test_wifi_managed.beam");
     TEST_ASSERT(ret_value == OK_ATOM);
 }
+
+TEST_CASE("test_wifi_teardown", "[test_run]")
+{
+    // test_wifi_teardown.beam starts WiFi and intentionally returns without
+    // calling network:stop(): the network driver destroy callback must release
+    // all WiFi resources when the GlobalContext is destroyed. Run it twice, as
+    // the second run only succeeds if the first teardown was complete.
+    term ret_value = avm_test_case("test_wifi_teardown.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+    ret_value = avm_test_case("test_wifi_teardown.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
 #endif
 
 TEST_CASE("test_wifi_scan", "[test_run]")
