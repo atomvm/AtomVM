@@ -87,6 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed the ESP32 event poller re-blocking after running a listener, which could delay a process
   readied by a driver (e.g. an active-mode socket message) until the next event or timer tick
 - Fixed `term_from_resource` failing to compile from C++
+- Fixed a bug where negative or oversized segment sizes were not rejected in binary matching
 
 ## [0.7.0-alpha.1] - 2026-04-06
 

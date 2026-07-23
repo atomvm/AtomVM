@@ -216,7 +216,7 @@ struct ModuleNativeInterface
     bool (*catch_end)(Context *ctx, JITState *jit_state);
     bool (*memory_ensure_free_with_roots)(Context *ctx, JITState *jit_state, int sz, int live, int flags);
     term (*term_alloc_bin_match_state)(Context *ctx, term src, int slots);
-    term (*bitstring_extract_integer)(Context *ctx, JITState *jit_state, term *bin_ptr, size_t offset, int n, int bs_flags);
+    term (*bitstring_extract_integer)(Context *ctx, JITState *jit_state, term *bin_ptr, size_t offset, size_t n, int bs_flags);
     size_t (*term_sub_binary_heap_size)(term *bin_ptr, size_t size);
     term (*term_maybe_create_sub_binary)(Context *ctx, term bin, size_t offset, size_t len);
     int (*term_find_map_pos)(Context *ctx, term map, term key);
@@ -234,7 +234,7 @@ struct ModuleNativeInterface
     void *(*malloc)(Context *ctx, JITState *jit_state, size_t sz);
     void (*free)(void *ptr);
     term (*put_map_assoc)(Context *ctx, JITState *jit_state, term src, size_t new_entries, size_t num_elements, term *kv);
-    term (*bitstring_extract_float)(Context *ctx, JITState *jit_state, term *match_state_ptr, int n, int bs_flags, int live);
+    term (*bitstring_extract_float)(Context *ctx, JITState *jit_state, term *match_state_ptr, size_t n, int bs_flags, int live);
     int (*module_get_fun_arity)(Module *fun_module, uint32_t fun_index);
     bool (*bitstring_match_module_str)(Context *ctx, JITState *jit_state, term bin, size_t offset, int str_id, size_t len);
     term (*bitstring_get_utf8)(term src);

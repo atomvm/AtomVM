@@ -216,22 +216,32 @@ term_to_int_verify_is_match_state_typed_optimization_x86_64_test() ->
         jit_x86_64, ?CODE_CHUNK_1, ?ATU8_CHUNK_1, ?TYPE_CHUNK_1
     ),
 
-    % Check the reading of x[1] is immediatly followed by a shift right.
+    % The size is typed as an unbounded integer (possibly a bignum), so
+    % term_to_int does NOT blindly untag x[1]; that unsafe optimized form,
+    % emitted only for a small-integer range, would be:
     % 15c:	4c 8b 5f 38          	mov    0x38(%rdi),%r11
-    % 160:	49 c1 eb 04          	shr    $0x4,%r11
+    % 160:	49 c1 fb 04          	sar    $0x4,%r11
 
-    % As opposed to testing its type
+    % Instead it keeps the immediate-tag check and untags with an arithmetic
+    % shift (sar), so a negative size stays negative:
     % 15c:	4c 8b 5f 38          	mov    0x38(%rdi),%r11
     % 160:	4d 89 da             	mov    %r11,%r10
     % 163:	41 80 e2 0f          	and    $0xf,%r10b
     % 167:	41 80 fa 0f          	cmp    $0xf,%r10b
     % 16b:	74 05                	je     0x172
     % 16d:	e9 ab 00 00 00       	jmpq   0x21d
-    % 172:	49 c1 eb 04          	shr    $0x4,%r11
+    % 172:	49 c1 fb 04          	sar    $0x4,%r11
     ?assertMatch(
-        {_, 8},
-        binary:match(CompiledCode, <<16#4c, 16#8b, 16#5f, 16#38, 16#49, 16#c1, 16#eb, 16#04>>)
+        {_, _},
+        binary:match(
+            CompiledCode,
+            <<16#4c, 16#8b, 16#5f, 16#38, 16#4d, 16#89, 16#da, 16#41, 16#80, 16#e2, 16#0f, 16#41,
+                16#80, 16#fa, 16#0f, 16#74, 16#05>>
+        )
     ),
+    % the untag is an arithmetic shift (sar), not a logical one (shr)
+    ?assertMatch({_, _}, binary:match(CompiledCode, <<16#49, 16#c1, 16#fb, 16#04>>)),
+    ?assertEqual(nomatch, binary:match(CompiledCode, <<16#49, 16#c1, 16#eb, 16#04>>)),
 
     % Check call to bs_start_match3 is followed by a skip of verify_is_boxed
     % The register value cache eliminates the redundant load after the store,
