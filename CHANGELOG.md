@@ -88,6 +88,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   readied by a driver (e.g. an active-mode socket message) until the next event or timer tick
 - Fixed `term_from_resource` failing to compile from C++
 - Fixed a bug where negative or oversized segment sizes were not rejected in binary matching
+- Fixed the `network` mdns configuration to read the documented `host` key; the previously
+  required, undocumented `hostname` key is still accepted
 
 ## [0.7.0-alpha.1] - 2026-04-06
 
