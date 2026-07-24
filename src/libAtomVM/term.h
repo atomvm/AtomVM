@@ -1746,7 +1746,7 @@ static inline bool term_is_uint32(term t)
 #endif
 
 #if BOXED_TERMS_REQUIRED_FOR_INT != BOXED_TERMS_REQUIRED_FOR_INT64
-        } else {
+        } else if (term_boxed_size(t) == BOXED_TERMS_REQUIRED_FOR_INT64) {
             avm_int64_t unboxed64 = term_unbox_int64(t);
             return unboxed64 <= UINT32_MAX;
 #endif
