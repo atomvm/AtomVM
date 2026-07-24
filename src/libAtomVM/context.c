@@ -652,6 +652,26 @@ size_t context_size(Context *ctx)
         + memory_heap_memory_size(&ctx->heap) * BYTES_PER_TERM;
 }
 
+bool context_is_valid_process_info_key(term key)
+{
+    // must accept exactly the keys context_get_process_info handles
+    switch (key) {
+        case HEAP_SIZE_ATOM:
+        case TOTAL_HEAP_SIZE_ATOM:
+        case STACK_SIZE_ATOM:
+        case MESSAGE_QUEUE_LEN_ATOM:
+        case REGISTERED_NAME_ATOM:
+        case MEMORY_ATOM:
+        case TRAP_EXIT_ATOM:
+        case LINKS_ATOM:
+        case MONITORED_BY_ATOM:
+        case CURRENT_STACKTRACE_ATOM:
+            return true;
+        default:
+            return false;
+    }
+}
+
 bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term atom_key, Heap *heap)
 {
     size_t ret_size;

@@ -3347,18 +3347,13 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
     // badarg, not undefined.
     size_t list_len = 0;
     if (!term_is_list(argv[1])) {
-        // NOLINT(allocations-without-ensure-free) NULL heap call, only checks item validity
-        if (UNLIKELY(!term_is_atom(argv[1])
-                || !context_get_process_info(ctx, NULL, NULL, argv[1], NULL))) {
+        if (UNLIKELY(!context_is_valid_process_info_key(argv[1]))) {
             RAISE_ERROR(BADARG_ATOM);
         }
     } else {
         term l = argv[1];
         for (; term_is_nonempty_list(l); l = term_get_list_tail(l), list_len++) {
-            term item = term_get_list_head(l);
-            // NOLINT(allocations-without-ensure-free) NULL heap call, only checks item validity
-            if (UNLIKELY(!term_is_atom(item)
-                    || !context_get_process_info(ctx, NULL, NULL, item, NULL))) {
+            if (UNLIKELY(!context_is_valid_process_info_key(term_get_list_head(l)))) {
                 RAISE_ERROR(BADARG_ATOM);
             }
         }

@@ -520,6 +520,14 @@ term context_process_alias_message_signal(Context *ctx, struct TermSignal *signa
 void context_process_code_server_resume_signal(Context *ctx);
 
 /**
+ * @brief Check a process information key.
+ *
+ * @param key the item key to check
+ * @return \c true if the key is one context_get_process_info can answer
+ */
+bool context_is_valid_process_info_key(term key);
+
+/**
  * @brief Get process information.
  *
  * @param ctx the context being executed
