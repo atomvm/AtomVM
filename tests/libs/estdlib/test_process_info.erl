@@ -68,10 +68,29 @@ test_process_info_1() ->
 
 test_registered_name_first() ->
     erlang:register(process_info_1_test, self()),
-    [{registered_name, process_info_1_test} | _] = process_info(self()),
+    Info = process_info(self()),
+    {registered_name, process_info_1_test} = lists:keyfind(registered_name, 1, Info),
+    assert_registered_name_first(process_info_1_test, Info),
     erlang:unregister(process_info_1_test),
     false = lists:keyfind(registered_name, 1, process_info(self())),
+
+    with_other_pid(fun(Pid) ->
+        erlang:register(process_info_1_other, Pid),
+        OtherInfo = process_info(Pid),
+        {registered_name, process_info_1_other} = lists:keyfind(registered_name, 1, OtherInfo),
+        assert_registered_name_first(process_info_1_other, OtherInfo),
+        erlang:unregister(process_info_1_other)
+    end),
+
     ok.
+
+%% OTP documents no order for the process_info/1 result, so the
+%% first-position check runs on AtomVM only
+assert_registered_name_first(Name, Info) ->
+    case erlang:system_info(machine) of
+        "BEAM" -> ok;
+        _ -> [{registered_name, Name} | _] = Info
+    end.
 
 test_badargs() ->
     assert_badarg(fun() -> process_info(bad_pid) end),

@@ -35,10 +35,12 @@ start() ->
     ok = test_message_queue_len_alias(),
     ok = test_links(),
     ok = test_monitored_by(),
+    ok = test_trap_exit(),
 
     ok = test_list_semantics(),
     ok = test_badargs(),
     ok = test_external_pid(),
+    ok = test_port_badarg(),
 
     0.
 
@@ -76,6 +78,13 @@ get_item(Pid, Item) ->
     [{Item, Val}] = process_info(Pid, [Item]),
     Val.
 
+get_volatile_item(Pid, Item) ->
+    {Item, Val1} = process_info(Pid, Item),
+    [{Item, Val2}] = process_info(Pid, [Item]),
+    true = is_integer(Val1) andalso Val1 >= 0,
+    true = is_integer(Val2) andalso Val2 >= 0,
+    Val2.
+
 test_registered_name() ->
     Check = fun(Pid) ->
         [] = process_info(Pid, registered_name),
@@ -96,12 +105,12 @@ test_registered_name() ->
 
 test_heap_size() ->
     Self = self(),
-    HS = get_item(Self, heap_size),
-    true = is_integer(HS) andalso HS > 0,
+    HS = get_volatile_item(Self, heap_size),
+    true = HS > 0,
 
     with_other_pid(fun(Pid) ->
-        HS2 = get_item(Pid, heap_size),
-        true = is_integer(HS2) andalso HS2 > 0
+        HS2 = get_volatile_item(Pid, heap_size),
+        true = HS2 > 0
     end),
 
     with_dead_pid(fun(DeadPid) ->
@@ -112,12 +121,12 @@ test_heap_size() ->
 
 test_memory() ->
     Self = self(),
-    M = get_item(Self, memory),
-    true = is_integer(M) andalso M > 0,
+    M = get_volatile_item(Self, memory),
+    true = M > 0,
 
     with_other_pid(fun(Pid) ->
-        M2 = get_item(Pid, memory),
-        true = is_integer(M2) andalso M2 > 0
+        M2 = get_volatile_item(Pid, memory),
+        true = M2 > 0
     end),
 
     with_dead_pid(fun(DeadPid) ->
@@ -128,13 +137,15 @@ test_memory() ->
 
 test_total_heap_size() ->
     Self = self(),
-    HS = get_item(Self, heap_size),
-    THS = get_item(Self, total_heap_size),
+    % Take both values from one call: a single list request is an atomic
+    % snapshot, so the invariant cannot be broken by a GC in between
+    [{heap_size, HS}, {total_heap_size, THS}] =
+        process_info(Self, [heap_size, total_heap_size]),
     true = HS =< THS,
 
     with_other_pid(fun(Pid) ->
-        HS2 = get_item(Pid, heap_size),
-        THS2 = get_item(Pid, total_heap_size),
+        [{heap_size, HS2}, {total_heap_size, THS2}] =
+            process_info(Pid, [heap_size, total_heap_size]),
         true = HS2 =< THS2,
         verify_stable_total_heap_size(Pid, THS2, 50)
     end),
@@ -159,13 +170,19 @@ test_message_queue_len() ->
     end,
 
     Q0 = get_item(Pid, message_queue_len),
+    {memory, Memory0} = process_info(Pid, memory),
 
     Pid ! incr,
     Pid ! incr,
     Pid ! incr,
 
     Q1 = get_item(Pid, message_queue_len),
+    {memory, Memory1} = process_info(Pid, memory),
     true = Q0 < Q1,
+    case erlang:system_info(machine) of
+        "BEAM" -> true = Memory0 =< Memory1;
+        _ -> true = Memory0 < Memory1
+    end,
 
     Pid ! unlock,
     Pid ! {Self, ping},
@@ -318,6 +335,22 @@ test_monitored_by() ->
 
     ok.
 
+test_trap_exit() ->
+    Self = self(),
+    false = get_item(Self, trap_exit),
+
+    false = process_flag(trap_exit, true),
+    true = get_item(Self, trap_exit),
+
+    true = process_flag(trap_exit, false),
+    false = get_item(Self, trap_exit),
+
+    with_other_pid(fun(Pid) ->
+        false = get_item(Pid, trap_exit)
+    end),
+
+    ok.
+
 test_list_semantics() ->
     Self = self(),
 
@@ -365,8 +398,14 @@ test_badargs() ->
     assert_badarg(fun() -> process_info(Self, [heap_size, 42]) end),
     assert_badarg(fun() -> process_info(Self, [heap_size, invalid_key]) end),
     assert_badarg(fun() -> process_info(Self, [heap_size | not_a_list]) end),
+    assert_badarg(fun() -> process_info(Self, [[heap_size]]) end),
 
-    % An invalid argument is a badarg even when the process is dead
+    with_other_pid(fun(Pid) ->
+        assert_badarg(fun() -> process_info(Pid, bad_item) end),
+        assert_badarg(fun() -> process_info(Pid, 42) end),
+        assert_badarg(fun() -> process_info(Pid, [heap_size, bad_item]) end)
+    end),
+
     with_dead_pid(fun(DeadPid) ->
         assert_badarg(fun() -> process_info(DeadPid, bad_item) end),
         assert_badarg(fun() -> process_info(DeadPid, 42) end),
@@ -382,6 +421,20 @@ test_external_pid() ->
     true = is_pid(ExternalPid),
     assert_badarg(fun() -> process_info(ExternalPid, heap_size) end),
     assert_badarg(fun() -> process_info(ExternalPid, [heap_size]) end),
+    ok.
+
+test_port_badarg() ->
+    % on AtomVM "echo" is the echo driver; on BEAM it would spawn /bin/echo,
+    % whose output nobody reads, so use a silent command there
+    PortName =
+        case erlang:system_info(machine) of
+            "BEAM" -> "true";
+            _ -> "echo"
+        end,
+    Port = open_port({spawn, PortName}, []),
+    true = is_port(Port),
+    assert_badarg(fun() -> process_info(Port, heap_size) end),
+    assert_badarg(fun() -> process_info(Port, [heap_size]) end),
     ok.
 
 loop(undefined, Accum) ->

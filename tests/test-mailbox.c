@@ -124,6 +124,55 @@ void test_mailbox_next(void)
     assert(!mailbox_has_next(&ctx->mailbox));
     assert(mailbox_len(&ctx->mailbox) == 0);
 
+    // 4. mailbox_len counts signals, mailbox_normal_message_len does not
+    mailbox_send(ctx, term_from_int(1));
+    mailbox_send_empty_body_signal(ctx, GCSignal);
+    mailbox_send(ctx, term_from_int(2));
+    assert(mailbox_len(&ctx->mailbox) == 3);
+    assert(mailbox_normal_message_len(&ctx->mailbox) == 2);
+
+    MailboxMessage *signal = mailbox_process_outer_list_native(&ctx->mailbox);
+    assert(signal != NULL);
+    assert(signal->type == GCSignal);
+    assert(signal->next == NULL);
+    mailbox_message_dispose(signal, &ctx->heap);
+
+    assert(mailbox_len(&ctx->mailbox) == 2);
+    assert(mailbox_normal_message_len(&ctx->mailbox) == 2);
+
+    assert(mailbox_peek(ctx, &t));
+    assert(1 == term_to_int(t));
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+
+    assert(mailbox_peek(ctx, &t));
+    assert(2 == term_to_int(t));
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+
+    assert(mailbox_len(&ctx->mailbox) == 0);
+    assert(mailbox_normal_message_len(&ctx->mailbox) == 0);
+
+    // 5. mailbox_normal_message_len counts unconverted alias messages
+    mailbox_send(ctx, term_from_int(3));
+    mailbox_send_term_signal(ctx, AliasMessageSignal, term_from_int(4));
+    assert(mailbox_len(&ctx->mailbox) == 2);
+    assert(mailbox_normal_message_len(&ctx->mailbox) == 2);
+
+    signal = mailbox_process_outer_list_native(&ctx->mailbox);
+    assert(signal != NULL);
+    assert(signal->type == AliasMessageSignal);
+    assert(signal->next == NULL);
+    mailbox_message_dispose(signal, &ctx->heap);
+
+    assert(mailbox_len(&ctx->mailbox) == 1);
+    assert(mailbox_normal_message_len(&ctx->mailbox) == 1);
+
+    assert(mailbox_peek(ctx, &t));
+    assert(3 == term_to_int(t));
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+
+    assert(mailbox_len(&ctx->mailbox) == 0);
+    assert(mailbox_normal_message_len(&ctx->mailbox) == 0);
+
     context_destroy(ctx);
     globalcontext_destroy(glb);
 }
