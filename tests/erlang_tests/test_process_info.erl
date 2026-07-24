@@ -36,6 +36,7 @@ start() ->
 
     ok = test_list_semantics(),
     ok = test_badargs(),
+    ok = test_external_pid(),
 
     0.
 
@@ -264,6 +265,22 @@ test_badargs() ->
     assert_badarg(fun() -> process_info(Self, [heap_size, invalid_key]) end),
     assert_badarg(fun() -> process_info(Self, [heap_size | not_a_list]) end),
 
+    % An invalid argument is a badarg even when the process is dead
+    with_dead_pid(fun(DeadPid) ->
+        assert_badarg(fun() -> process_info(DeadPid, bad_item) end),
+        assert_badarg(fun() -> process_info(DeadPid, 42) end),
+        assert_badarg(fun() -> process_info(DeadPid, [bad_item]) end),
+        assert_badarg(fun() -> process_info(DeadPid, [heap_size, bad_item]) end),
+        assert_badarg(fun() -> process_info(DeadPid, [heap_size | not_a_list]) end)
+    end),
+
+    ok.
+
+test_external_pid() ->
+    ExternalPid = binary_to_term(<<131, 88, 119, 10, "other@node", 1:32, 0:32, 42:32>>),
+    true = is_pid(ExternalPid),
+    assert_badarg(fun() -> process_info(ExternalPid, heap_size) end),
+    assert_badarg(fun() -> process_info(ExternalPid, [heap_size]) end),
     ok.
 
 loop(undefined, Accum) ->

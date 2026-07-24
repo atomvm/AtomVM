@@ -75,6 +75,11 @@ test_registered_name_first() ->
 
 test_badargs() ->
     assert_badarg(fun() -> process_info(bad_pid) end),
+
+    ExternalPid = binary_to_term(<<131, 88, 119, 10, "other@node", 1:32, 0:32, 42:32>>),
+    true = is_pid(ExternalPid),
+    assert_badarg(fun() -> process_info(ExternalPid) end),
+
     ok.
 
 with_other_pid(Fun) ->
