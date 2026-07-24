@@ -189,6 +189,24 @@ size_t mailbox_len(Mailbox *mbox)
     return result;
 }
 
+size_t mailbox_normal_message_len(Mailbox *mbox)
+{
+    size_t result = 0;
+    MailboxMessage *msg = mbox->outer_first;
+    while (msg) {
+        if (msg->type == NormalMessage || msg->type == AliasMessageSignal) {
+            result++;
+        }
+        msg = msg->next;
+    }
+    msg = mbox->inner_first;
+    while (msg) {
+        result++;
+        msg = msg->next;
+    }
+    return result;
+}
+
 size_t mailbox_size(Mailbox *mbox)
 {
     size_t result = 0;

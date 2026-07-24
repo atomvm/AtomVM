@@ -31,6 +31,8 @@ start() ->
     ok = test_memory(),
     ok = test_total_heap_size(),
     ok = test_message_queue_len(),
+    ok = test_message_queue_len_signals(),
+    ok = test_message_queue_len_alias(),
     ok = test_links(),
     ok = test_monitored_by(),
 
@@ -185,6 +187,91 @@ test_message_queue_len() ->
     undefined = process_info(Pid, message_queue_len),
 
     ok.
+
+test_message_queue_len_signals() ->
+    Self = self(),
+    {Flooder, Ref} = spawn_opt(fun() -> monitor_flood(Self) end, [monitor]),
+    % queue-neutral proof that the flooder completed at least one cycle
+    ok = wait_registered(monitor_flood_started, 1000000),
+    ok = sample_empty_message_queue(Self, 200),
+    Flooder ! stop,
+    normal =
+        receive
+            {'DOWN', Ref, process, Flooder, Reason} -> Reason
+        end,
+    {message_queue_len, 0} = process_info(Self, message_queue_len),
+    ok.
+
+monitor_flood(Target) ->
+    Mon = monitor(process, Target),
+    demonitor(Mon),
+    register(monitor_flood_started, self()),
+    monitor_flood_loop(Target).
+
+monitor_flood_loop(Target) ->
+    Mon = monitor(process, Target),
+    demonitor(Mon),
+    receive
+        stop -> ok
+    after 0 -> monitor_flood_loop(Target)
+    end.
+
+sample_empty_message_queue(_Self, 0) ->
+    ok;
+sample_empty_message_queue(Self, N) ->
+    {message_queue_len, 0} = process_info(Self, message_queue_len),
+    sample_empty_message_queue(Self, N - 1).
+
+test_message_queue_len_alias() ->
+    {Receiver, Ref} = spawn_opt(fun() -> alias_queue_receiver() end, [monitor]),
+    normal =
+        receive
+            {'DOWN', Ref, process, Receiver, Reason} -> Reason
+        end,
+    ok.
+
+alias_queue_receiver() ->
+    Self = self(),
+    Alias = alias(),
+    % the arrival flag must not touch the receiver's queue: receiving would
+    % convert the pending alias messages before the count under test is taken
+    Sender = spawn_opt(
+        fun() ->
+            Alias ! m1,
+            Alias ! m2,
+            Self ! direct,
+            register(alias_queue_sender_done, self()),
+            receive
+                quit -> ok
+            end
+        end,
+        []
+    ),
+    ok = wait_registered(alias_queue_sender_done, 1000000),
+    {message_queue_len, 3} = process_info(Self, message_queue_len),
+    [{message_queue_len, 3}] = process_info(Self, [message_queue_len]),
+    Sender ! quit,
+    m1 =
+        receive
+            First -> First
+        end,
+    m2 =
+        receive
+            Second -> Second
+        end,
+    direct =
+        receive
+            Third -> Third
+        end,
+    {message_queue_len, 0} = process_info(Self, message_queue_len).
+
+wait_registered(_Name, 0) ->
+    timeout;
+wait_registered(Name, N) ->
+    case whereis(Name) of
+        undefined -> wait_registered(Name, N - 1);
+        _Pid -> ok
+    end.
 
 test_links() ->
     Self = self(),

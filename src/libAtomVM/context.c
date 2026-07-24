@@ -638,7 +638,7 @@ void context_update_flags(Context *ctx, int mask, int value) CLANG_THREAD_SANITI
 
 size_t context_message_queue_len(Context *ctx)
 {
-    return mailbox_len(&ctx->mailbox);
+    return mailbox_normal_message_len(&ctx->mailbox);
 }
 
 size_t context_size(Context *ctx)

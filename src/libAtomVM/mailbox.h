@@ -212,6 +212,18 @@ void mailbox_init(Mailbox *mbox);
 size_t mailbox_len(Mailbox *mbox);
 
 /**
+ * @brief Compute the number of queued messages in the mailbox, not counting
+ * signals.
+ *
+ * @details This is what message_queue_len reports: normal messages plus
+ * accepted alias messages not yet converted, which OTP counts as queued even
+ * if the alias is deactivated before reception. To be called from the process
+ * only.
+ * @param mbox the mailbox to get the number of messages of.
+ */
+size_t mailbox_normal_message_len(Mailbox *mbox);
+
+/**
  * @brief Compute the mailbox size, in bytes.
  *
  * @details To be called from the process only.
