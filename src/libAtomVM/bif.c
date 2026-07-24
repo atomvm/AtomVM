@@ -1443,7 +1443,7 @@ static term rem_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
         RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
     }
     if (term_is_boxed_integer(arg2)) {
-        size |= term_boxed_size(arg2);
+        size = MAX(size, (int) term_boxed_size(arg2));
     } else if (UNLIKELY(!term_is_integer(arg2))) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
@@ -1466,8 +1466,7 @@ static term rem_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
         }
 
 #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-        case 2:
-        case 3: {
+        case 2: {
             avm_int64_t val1 = term_maybe_unbox_int64(arg1);
             avm_int64_t val2 = term_maybe_unbox_int64(arg2);
             if (UNLIKELY(val2 == 0)) {

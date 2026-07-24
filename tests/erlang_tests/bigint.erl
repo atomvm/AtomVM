@@ -259,8 +259,27 @@ test_rem() ->
     ),
     <<"E3AE0EA63AE33EA79B071316BC9A7F1B">> = erlang:integer_to_binary(Int8 rem Int9, 16),
 
+    % operands with a 64-bit magnitude take 3 boxed terms on 32-bit builds and
+    % must not be mistaken for regular 2-term boxed int64 values
+    Int10 = erlang:binary_to_integer(?MODULE:id(<<"8000000000000000">>), 16),
+    Int11 = erlang:binary_to_integer(?MODULE:id(<<"8000000000000005">>), 16),
+    Int12 = erlang:binary_to_integer(?MODULE:id(<<"-8000000000000001">>), 16),
+    Int13 = erlang:binary_to_integer(?MODULE:id(<<"FFFFFFFFFFFFFFFF">>), 16),
+    Int14 = erlang:binary_to_integer(?MODULE:id(<<"7FFFFFFFFFFFFFFF">>), 16),
+
+    1 = Int10 rem ?MODULE:id(7),
+    808 = Int10 rem ?MODULE:id(1000),
+    8 = Int10 rem ?MODULE:id(1073741825),
+    -2 = Int12 rem ?MODULE:id(7),
+    5 = ?MODULE:id(5) rem Int13,
+    5 = Int13 rem ?MODULE:id(10),
+    42 = ?MODULE:id(42) rem Int10,
+    <<"7FFFFFFFFFFFFFFF">> = erlang:integer_to_binary(Int14 rem Int11, 16),
+    <<"8000000000000000">> = erlang:integer_to_binary(Int10 rem Int11, 16),
+
     ok = expect_error(badarith, fun() -> Int0 rem ?MODULE:id(0) end),
     ok = expect_error(badarith, fun() -> Int1 rem ?MODULE:id(0) end),
+    ok = expect_error(badarith, fun() -> Int10 rem ?MODULE:id(0) end),
 
     0.
 
