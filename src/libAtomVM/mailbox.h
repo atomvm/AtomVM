@@ -142,7 +142,6 @@ typedef enum
 {
     PROCESS_INFO_SINGLE,
     PROCESS_INFO_LIST,
-    PROCESS_INFO_LIST_OMIT_UNREGISTERED,
 } process_info_mode_t;
 
 struct ProcessInfoRequestSignal

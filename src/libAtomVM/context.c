@@ -398,10 +398,6 @@ void context_process_process_info_request_signal(Context *ctx, struct ProcessInf
                 break;
             }
 
-            if (signal->mode == PROCESS_INFO_LIST_OMIT_UNREGISTERED && signal->atoms[i] == REGISTERED_NAME_ATOM && term_is_nil(term_get_tuple_element(item_result, 1))) {
-                continue;
-            }
-
             result = term_list_prepend(item_result, result, &heap);
         }
         if (LIKELY(build_ok)) {

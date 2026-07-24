@@ -31,6 +31,7 @@
     start_timer/3, start_timer/4,
     cancel_timer/1,
     send_after/3,
+    process_info/1,
     process_info/2,
     system_info/1,
     system_flag/2,
@@ -343,6 +344,26 @@ send_after(Time, Dest, Msg) ->
 %%
 %% @end
 %%-----------------------------------------------------------------------------
+-spec process_info(Pid :: pid()) -> [{atom(), term()}] | undefined.
+process_info(Pid) when erlang:is_pid(Pid) ->
+    case
+        erlang:process_info(Pid, [
+            registered_name,
+            message_queue_len,
+            links,
+            trap_exit,
+            total_heap_size,
+            heap_size,
+            stack_size
+        ])
+    of
+        undefined -> undefined;
+        [{registered_name, []} | Info] -> Info;
+        Info -> Info
+    end;
+process_info(Pid) ->
+    erlang:error(badarg, [Pid]).
+
 -spec process_info
     (Pid :: pid(), heap_size) -> {heap_size, non_neg_integer()};
     (Pid :: pid(), total_heap_size) -> {total_heap_size, non_neg_integer()};
