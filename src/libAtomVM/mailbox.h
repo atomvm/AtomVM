@@ -140,8 +140,8 @@ struct ImmediateSignal
 
 typedef enum
 {
-    PROCESS_INFO_SINGLE,
-    PROCESS_INFO_LIST,
+    ProcessInfoSingle,
+    ProcessInfoList,
 } process_info_mode_t;
 
 struct ProcessInfoRequestSignal
@@ -150,7 +150,7 @@ struct ProcessInfoRequestSignal
 
     int32_t sender_pid;
     process_info_mode_t mode;
-    size_t len;
+    size_t atoms_len;
     term atoms[];
 };
 
@@ -289,12 +289,12 @@ void mailbox_send_immediate_signal(Context *c, enum MessageType type, term immed
  * @param sender_pid the sender of the signal (to get the answer)
  * @param mode whether the answer is a single item tuple or a list of them
  * @param atoms array of atom terms to query
- * @param len number of atoms in the array
+ * @param atoms_len number of atoms in the array
  * @return true if the signal was sent, false on allocation failure, in
  * which case no answer will ever be sent back
  */
 bool mailbox_send_process_info_request_signal(
-    Context *c, int32_t sender_pid, process_info_mode_t mode, const term *atoms, size_t len);
+    Context *c, int32_t sender_pid, process_info_mode_t mode, const term atoms[], size_t atoms_len);
 
 /**
  * @brief Sends a ref signal to a certain mailbox.

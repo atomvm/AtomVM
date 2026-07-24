@@ -3347,7 +3347,7 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
     // badarg, not undefined.
     size_t list_len = 0;
     if (!term_is_list(argv[1])) {
-        // NOLINT(allocations-without-ensure-free) called with NULL heap, only checks item validity
+        // NOLINT(allocations-without-ensure-free) NULL heap call, only checks item validity
         if (UNLIKELY(!term_is_atom(argv[1])
                 || !context_get_process_info(ctx, NULL, NULL, argv[1], NULL))) {
             RAISE_ERROR(BADARG_ATOM);
@@ -3356,7 +3356,7 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
         term l = argv[1];
         for (; term_is_nonempty_list(l); l = term_get_list_tail(l), list_len++) {
             term item = term_get_list_head(l);
-            // NOLINT(allocations-without-ensure-free) called with NULL heap, only checks item validity
+            // NOLINT(allocations-without-ensure-free) NULL heap call, only checks item validity
             if (UNLIKELY(!term_is_atom(item)
                     || !context_get_process_info(ctx, NULL, NULL, item, NULL))) {
                 RAISE_ERROR(BADARG_ATOM);
@@ -3378,12 +3378,13 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
         term ret = term_invalid_term();
         if (ctx == target) {
             size_t term_size;
-            // NOLINT(allocations-without-ensure-free) called with NULL heap, only computes size
+            // NOLINT(allocations-without-ensure-free) NULL heap call, only computes size
             if (UNLIKELY(!context_get_process_info(ctx, NULL, &term_size, item, NULL))) {
                 globalcontext_get_process_unlock(ctx->global, target);
                 RAISE_ERROR(BADARG_ATOM);
             }
-            if (UNLIKELY(memory_ensure_free_opt(ctx, term_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            if (UNLIKELY(
+                    memory_ensure_free_opt(ctx, term_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                 globalcontext_get_process_unlock(ctx->global, target);
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
@@ -3391,15 +3392,13 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
                 globalcontext_get_process_unlock(ctx->global, target);
                 RAISE_ERROR(ret);
             }
-            // return [] when unregistered (BEAM backward compatibility)
+            // return [] when unregistered (BEAM compatibility)
             if (item == REGISTERED_NAME_ATOM && term_is_nil(term_get_tuple_element(ret, 1))) {
                 ret = term_nil();
             }
         } else {
-            // Currently, all items require a signal. We could nevertheless filter
-            // items that do not exist.
             if (UNLIKELY(!mailbox_send_process_info_request_signal(
-                    target, ctx->process_id, PROCESS_INFO_SINGLE, &item, 1))) {
+                    target, ctx->process_id, ProcessInfoSingle, &item, 1))) {
                 globalcontext_get_process_unlock(ctx->global, target);
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
@@ -3432,7 +3431,7 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
 
     if (ctx != target) {
         if (UNLIKELY(!mailbox_send_process_info_request_signal(
-                target, ctx->process_id, PROCESS_INFO_LIST, items, items_len))) {
+                target, ctx->process_id, ProcessInfoList, items, items_len))) {
             free(items_alloc);
             globalcontext_get_process_unlock(ctx->global, target);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -3446,7 +3445,7 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
     size_t total_size = 0;
     for (size_t i = 0; i < items_len; i++) {
         size_t item_size;
-        // NOLINT(allocations-without-ensure-free) called with NULL heap, only computes size
+        // NOLINT(allocations-without-ensure-free) NULL heap call, only computes size
         if (UNLIKELY(!context_get_process_info(ctx, NULL, &item_size, items[i], NULL))) {
             free(items_alloc);
             globalcontext_get_process_unlock(ctx->global, target);
@@ -3469,7 +3468,7 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
 
     // Atoms in `items` are immediate, safe after GC
     term ret = term_nil();
-    for (ssize_t i = (ssize_t) items_len - 1; i >= 0; i--) {
+    for (size_t i = items_len; i-- > 0;) {
         term item_result;
         if (UNLIKELY(!context_get_process_info(ctx, &item_result, NULL, items[i], &ctx->heap))) {
             free(items_alloc);

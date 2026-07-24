@@ -327,7 +327,8 @@ void context_process_kill_signal(Context *ctx, struct TermSignal *signal)
     context_update_flags(ctx, ~NoFlags, Killed);
 }
 
-void context_process_process_info_request_signal(Context *ctx, struct ProcessInfoRequestSignal *signal, bool process_table_locked)
+void context_process_process_info_request_signal(
+    Context *ctx, struct ProcessInfoRequestSignal *signal, bool process_table_locked)
 {
     // TODO: guarantee completion to the trapped requester even under allocation
     // failure, e.g. by reserving a fallback answer signal with the request
@@ -349,7 +350,7 @@ void context_process_process_info_request_signal(Context *ctx, struct ProcessInf
         return;
     }
 
-    if (signal->mode == PROCESS_INFO_SINGLE) {
+    if (signal->mode == ProcessInfoSingle) {
         term atom = signal->atoms[0];
         size_t term_size;
         if (!context_get_process_info(ctx, NULL, &term_size, atom, NULL)) {
@@ -365,8 +366,8 @@ void context_process_process_info_request_signal(Context *ctx, struct ProcessInf
 
         term ret;
         if (context_get_process_info(ctx, &ret, NULL, atom, &heap)) {
-            // return [] when unregistered (BEAM backward compatibility)
-            if (atom == REGISTERED_NAME_ATOM && term_is_tuple(ret) && term_is_nil(term_get_tuple_element(ret, 1))) {
+            // return [] when unregistered (BEAM compatibility)
+            if (atom == REGISTERED_NAME_ATOM && term_is_nil(term_get_tuple_element(ret, 1))) {
                 ret = term_nil();
             }
             mailbox_send_term_signal(target, TrapAnswerSignal, ret);
@@ -375,10 +376,14 @@ void context_process_process_info_request_signal(Context *ctx, struct ProcessInf
         }
         memory_destroy_heap(&heap, ctx->global);
     } else {
+        assert(signal->mode == ProcessInfoList);
+        assert(signal->atoms_len > 0);
+
         size_t total_size = 0;
-        for (size_t i = 0; i < signal->len; i++) {
+        for (size_t i = 0; i < signal->atoms_len; i++) {
             size_t item_size;
-            if (UNLIKELY(!context_get_process_info(ctx, NULL, &item_size, signal->atoms[i], NULL))) {
+            if (UNLIKELY(
+                    !context_get_process_info(ctx, NULL, &item_size, signal->atoms[i], NULL))) {
                 mailbox_send_immediate_signal(target, TrapExceptionSignal, BADARG_ATOM);
                 goto done;
             }
@@ -390,11 +395,6 @@ void context_process_process_info_request_signal(Context *ctx, struct ProcessInf
             total_size += item_size + CONS_SIZE;
         }
 
-        if (signal->len == 0) {
-            mailbox_send_term_signal(target, TrapAnswerSignal, term_nil());
-            goto done;
-        }
-
         Heap heap;
         if (UNLIKELY(memory_init_heap(&heap, total_size) != MEMORY_GC_OK)) {
             mailbox_send_immediate_signal(target, TrapExceptionSignal, OUT_OF_MEMORY_ATOM);
@@ -404,9 +404,10 @@ void context_process_process_info_request_signal(Context *ctx, struct ProcessInf
         // Build list backwards to preserve input order
         term result = term_nil();
         bool build_ok = true;
-        for (ssize_t i = (ssize_t) signal->len - 1; i >= 0; i--) {
+        for (size_t i = signal->atoms_len; i-- > 0;) {
             term item_result;
-            if (UNLIKELY(!context_get_process_info(ctx, &item_result, NULL, signal->atoms[i], &heap))) {
+            if (UNLIKELY(
+                    !context_get_process_info(ctx, &item_result, NULL, signal->atoms[i], &heap))) {
                 mailbox_send_immediate_signal(target, TrapExceptionSignal, item_result);
                 build_ok = false;
                 break;
@@ -764,7 +765,6 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
             break;
         }
 
-        // true if a process traps exits, otherwise false
         case TRAP_EXIT_ATOM: {
             term_put_tuple_element(ret, 0, TRAP_EXIT_ATOM);
             term_put_tuple_element(ret, 1, ctx->trap_exit ? TRUE_ATOM : FALSE_ATOM);
