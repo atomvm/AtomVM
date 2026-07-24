@@ -113,8 +113,12 @@ static const char *const revision_atom = "\x8" "revision";
 QueueHandle_t event_queue = NULL;
 QueueSetHandle_t event_set = NULL;
 
-void esp32_sys_queue_init()
+void esp32_sys_queue_init(void)
 {
+    if (event_set != NULL) {
+        return;
+    }
+
     event_set = xQueueCreateSet(EVENT_QUEUE_LEN * 4);
     event_queue = xQueueCreate(EVENT_QUEUE_LEN, sizeof(void *));
     xQueueAddToSet(event_queue, event_set);
