@@ -66,6 +66,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and returns `{error, timeout}` after 5 s
 - Fixed `esp:nvs_get_binary/1,2` leaking an NVS handle on every read of a missing key, which
   slowly ran the ESP32 out of memory
+- Fixed `rem` returning wrong results on 32-bit builds when an operand is a big integer with
+  a 64-bit magnitude, such as `(1 bsl 63) rem 7`
+- Fixed `rem` crashing the VM when the most negative boxed integer is divided by `-1`, such as
+  `-(1 bsl 63) rem -1` on x86_64
 
 ## [0.7.0-beta.0] - 2026-09-28
 
