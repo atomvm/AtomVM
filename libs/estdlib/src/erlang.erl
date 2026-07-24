@@ -322,26 +322,15 @@ send_after(Time, Dest, Msg) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Pid the process pid.
-%% @param   Key key used to find process information.
-%% @returns process information for the specified pid defined by the specified key.
-%% @doc     Return process information.
+%% @returns a list of `{Key, Value}' tuples, or `undefined' if the process
+%%          is not alive.
+%% @doc     Return information about the specified process.
 %%
-%% This function returns information about the specified process.
-%% The type of information returned is dependent on the specified key.
-%%
-%% The following keys are supported:
-%% <ul>
-%%      <li><b>heap_size</b> the number of words used in the heap (integer), including the stack but excluding fragments</li>
-%%      <li><b>total_heap_size</b> the number of words used in the heap (integer) including fragments</li>
-%%      <li><b>registered_name</b> - returns `{registered_name, RegisteredName}' where `RegisteredName' is the registered name of the port or process. If the port/process has no registered name, `[]' is returned</li>
-%%      <li><b>stack_size</b> the number of words used in the stack (integer)</li>
-%%      <li><b>message_queue_len</b> the number of messages enqueued for the process (integer)</li>
-%%      <li><b>memory</b> the estimated total number of bytes in use by the process (integer)</li>
-%%      <li><b>links</b> the list of linked processes</li>
-%%      <li><b>monitored_by</b> the list of processes, NIF resources or ports that monitor the process</li>
-%% </ul>
-%% Specifying an unsupported term or atom raises a bad_arg error.
-%%
+%% As in Erlang/OTP, the result covers a default set of keys; AtomVM returns
+%% the supported subset of OTP's default set, in the same relative order:
+%% `registered_name' (omitted when the process is not registered, first
+%% otherwise), `message_queue_len', `links', `trap_exit', `total_heap_size',
+%% `heap_size' and `stack_size'.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec process_info(Pid :: pid()) -> [{atom(), term()}] | undefined.
@@ -364,15 +353,45 @@ process_info(Pid) when erlang:is_pid(Pid) ->
 process_info(Pid) ->
     erlang:error(badarg, [Pid]).
 
+%%-----------------------------------------------------------------------------
+%% @param   Pid the process pid.
+%% @param   Key key used to find process information.
+%% @returns process information for the specified pid defined by the specified key.
+%% @doc     Return process information.
+%%
+%% This function returns information about the specified process.
+%% The type of information returned is dependent on the specified key.
+%%
+%% The following keys are supported:
+%% <ul>
+%%      <li><b>heap_size</b> the number of words used in the heap (integer), including the stack but excluding fragments</li>
+%%      <li><b>total_heap_size</b> the number of words used in the heap (integer) including fragments</li>
+%%      <li><b>registered_name</b> - returns `{registered_name, RegisteredName}' where `RegisteredName' is the registered name of the port or process. If the port/process has no registered name, `[]' is returned</li>
+%%      <li><b>stack_size</b> the number of words used in the stack (integer)</li>
+%%      <li><b>message_queue_len</b> the number of messages enqueued for the process (integer)</li>
+%%      <li><b>memory</b> the estimated total number of bytes in use by the process (integer)</li>
+%%      <li><b>links</b> the list of linked processes</li>
+%%      <li><b>monitored_by</b> the list of processes, NIF resources or ports that monitor the process</li>
+%%      <li><b>trap_exit</b> whether the process is trapping exits (boolean)</li>
+%% </ul>
+%% A list of keys may also be specified, in which case the result is a list
+%% with one `{Key, Value}' tuple per requested key, in the same order and
+%% with duplicates preserved, or `undefined' if the process is not alive.
+%% Specifying an unsupported term or atom raises a badarg error.
+%%
+%% @end
+%%-----------------------------------------------------------------------------
 -spec process_info
-    (Pid :: pid(), heap_size) -> {heap_size, non_neg_integer()};
-    (Pid :: pid(), total_heap_size) -> {total_heap_size, non_neg_integer()};
-    (Pid :: pid(), registered_name) -> {registered_name, term()} | [];
-    (Pid :: pid(), stack_size) -> {stack_size, non_neg_integer()};
-    (Pid :: pid(), message_queue_len) -> {message_queue_len, non_neg_integer()};
-    (Pid :: pid(), memory) -> {memory, non_neg_integer()};
-    (Pid :: pid(), links) -> {links, [pid()]};
-    (Pid :: pid(), monitored_by) -> {monitored_by, [pid() | resource() | port()]}.
+    (Pid :: pid(), heap_size) -> {heap_size, non_neg_integer()} | undefined;
+    (Pid :: pid(), total_heap_size) -> {total_heap_size, non_neg_integer()} | undefined;
+    (Pid :: pid(), registered_name) -> {registered_name, term()} | [] | undefined;
+    (Pid :: pid(), stack_size) -> {stack_size, non_neg_integer()} | undefined;
+    (Pid :: pid(), message_queue_len) -> {message_queue_len, non_neg_integer()} | undefined;
+    (Pid :: pid(), memory) -> {memory, non_neg_integer()} | undefined;
+    (Pid :: pid(), links) -> {links, [pid()]} | undefined;
+    (Pid :: pid(), monitored_by) -> {monitored_by, [pid() | resource() | port()]} | undefined;
+    (Pid :: pid(), trap_exit) -> {trap_exit, boolean()} | undefined;
+    (Pid :: pid(), [atom()]) -> [{atom(), term()}] | undefined.
 process_info(_Pid, _Key) ->
     erlang:nif_error(undefined).
 

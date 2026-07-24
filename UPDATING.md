@@ -19,6 +19,10 @@ bitshifts: e.g. `(16#FFFF band 0xF) bsl 252`.
 - `binary_to_integer` and `list_to_integer` do not raise `overflow` error anymore, they instead
 raise `badarg` when trying to parse an integer that exceeds 256 bits. Update any relevant error
 handling code.
+- `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does: calling
+it with a port raises `badarg`. Previous versions accepted any id-carrying term, so it could be
+used to read port information; there is no `erlang:port_info/2` in AtomVM yet, so such calls
+must be removed or guarded when updating.
 - ESP32 builds with Elixir support may be configured without making changes to git-tracked files
 using `idf.py -DATOMVM_ELIXIR_SUPPORT=on set-target ${CHIP}` instead of copying
 partitions-elixir.csv to partitions.csv. This configures the build to use partitions-elixir.csv for

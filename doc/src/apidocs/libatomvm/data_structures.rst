@@ -23,10 +23,6 @@ Data Structures
    :allow-dot-graphs:
 .. doxygenstruct:: AVMPackData
    :allow-dot-graphs:
-.. doxygenstruct:: ProcessInfoRequestSignal
-   :allow-dot-graphs:
-.. doxygenstruct:: BuiltInAtomSignal
-   :allow-dot-graphs:
 .. doxygenstruct:: CharDataToBytesAcc
    :allow-dot-graphs:
 .. doxygenstruct:: CharDataToBytesSizeAcc
@@ -67,6 +63,8 @@ Data Structures
 .. doxygenstruct:: HNodeGroup
    :allow-dot-graphs:
 .. doxygenstruct:: IFFRecord
+   :allow-dot-graphs:
+.. doxygenstruct:: ImmediateSignal
    :allow-dot-graphs:
 .. doxygenstruct:: InMemoryAVMPack
    :allow-dot-graphs:
@@ -116,6 +114,8 @@ Data Structures
 .. doxygenstruct:: Nif
    :allow-dot-graphs:
 .. doxygenstruct:: PrinterFun
+.. doxygenstruct:: ProcessInfoRequestSignal
+   :allow-dot-graphs:
 .. doxygenstruct:: RefcBinary
    :allow-dot-graphs:
 .. doxygenstruct:: RefcBinaryAVMPack
