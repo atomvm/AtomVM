@@ -56,6 +56,11 @@ with_other_pid(Fun) ->
             {'DOWN', Ref, process, Pid, Reason} -> Reason
         end.
 
+repeat(0, _Item) ->
+    [];
+repeat(N, Item) ->
+    [Item | repeat(N - 1, Item)].
+
 with_dead_pid(Fun) ->
     {DeadPid, Ref} = spawn_opt(fun() -> ok end, [monitor]),
     normal =
@@ -237,10 +242,19 @@ test_list_semantics() ->
     [{total_heap_size, THS}, {total_heap_size, THS}] =
         process_info(Self, [total_heap_size, total_heap_size]),
 
+    LongRequest = repeat(100, total_heap_size),
+    [{total_heap_size, SelfTHS} | SelfRest] = process_info(Self, LongRequest),
+    99 = length(SelfRest),
+    [] = [Item || Item <- SelfRest, Item =/= {total_heap_size, SelfTHS}],
+
     with_other_pid(fun(Pid) ->
         [] = process_info(Pid, []),
         [{message_queue_len, _}, {heap_size, _}, {memory, _}] =
-            process_info(Pid, [message_queue_len, heap_size, memory])
+            process_info(Pid, [message_queue_len, heap_size, memory]),
+
+        [{total_heap_size, OtherTHS} | OtherRest] = process_info(Pid, LongRequest),
+        99 = length(OtherRest),
+        [] = [Item || Item <- OtherRest, Item =/= {total_heap_size, OtherTHS}]
     end),
 
     with_dead_pid(fun(DeadPid) ->

@@ -329,6 +329,8 @@ void context_process_kill_signal(Context *ctx, struct TermSignal *signal)
 
 void context_process_process_info_request_signal(Context *ctx, struct ProcessInfoRequestSignal *signal, bool process_table_locked)
 {
+    // TODO: guarantee completion to the trapped requester even under allocation
+    // failure, e.g. by reserving a fallback answer signal with the request
     Context *target;
     if (process_table_locked) {
         target = globalcontext_get_process_nolock(ctx->global, signal->sender_pid);
@@ -371,6 +373,11 @@ void context_process_process_info_request_signal(Context *ctx, struct ProcessInf
             size_t item_size;
             if (UNLIKELY(!context_get_process_info(ctx, NULL, &item_size, signal->atoms[i], NULL))) {
                 mailbox_send_immediate_signal(target, TrapExceptionSignal, BADARG_ATOM);
+                goto done;
+            }
+            if (UNLIKELY(item_size > MEMORY_HEAP_MAX_TERMS - CONS_SIZE
+                    || item_size + CONS_SIZE > MEMORY_HEAP_MAX_TERMS - total_size)) {
+                mailbox_send_immediate_signal(target, TrapExceptionSignal, OUT_OF_MEMORY_ATOM);
                 goto done;
             }
             total_size += item_size + CONS_SIZE;

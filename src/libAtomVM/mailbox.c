@@ -293,14 +293,13 @@ void mailbox_send_immediate_signal(Context *c, enum MessageType type, term immed
     mailbox_post_message(c, &immediate_signal->base);
 }
 
-void mailbox_send_process_info_request_signal(
+bool mailbox_send_process_info_request_signal(
     Context *c, int32_t sender_pid, process_info_mode_t mode, const term *atoms, size_t len)
 {
     struct ProcessInfoRequestSignal *signal = malloc(
         sizeof(struct ProcessInfoRequestSignal) + len * sizeof(term));
     if (IS_NULL_PTR(signal)) {
-        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        return;
+        return false;
     }
     signal->base.type = ProcessInfoRequestSignal;
     signal->sender_pid = sender_pid;
@@ -311,6 +310,7 @@ void mailbox_send_process_info_request_signal(
     }
 
     mailbox_post_message(c, &signal->base);
+    return true;
 }
 
 void mailbox_send_ref_signal(Context *c, enum MessageType type, uint64_t ref_ticks)

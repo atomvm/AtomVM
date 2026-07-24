@@ -3398,7 +3398,11 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
         } else {
             // Currently, all items require a signal. We could nevertheless filter
             // items that do not exist.
-            mailbox_send_process_info_request_signal(target, ctx->process_id, PROCESS_INFO_SINGLE, &item, 1);
+            if (UNLIKELY(!mailbox_send_process_info_request_signal(
+                    target, ctx->process_id, PROCESS_INFO_SINGLE, &item, 1))) {
+                globalcontext_get_process_unlock(ctx->global, target);
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
             context_update_flags(ctx, ~NoFlags, Trap);
         }
         globalcontext_get_process_unlock(ctx->global, target);
@@ -3427,8 +3431,12 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
     size_t items_len = list_len;
 
     if (ctx != target) {
-        mailbox_send_process_info_request_signal(
-            target, ctx->process_id, PROCESS_INFO_LIST, items, items_len);
+        if (UNLIKELY(!mailbox_send_process_info_request_signal(
+                target, ctx->process_id, PROCESS_INFO_LIST, items, items_len))) {
+            free(items_alloc);
+            globalcontext_get_process_unlock(ctx->global, target);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
         context_update_flags(ctx, ~NoFlags, Trap);
         free(items_alloc);
         globalcontext_get_process_unlock(ctx->global, target);
@@ -3443,6 +3451,12 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
             free(items_alloc);
             globalcontext_get_process_unlock(ctx->global, target);
             RAISE_ERROR(BADARG_ATOM);
+        }
+        if (UNLIKELY(item_size > MEMORY_HEAP_MAX_TERMS - CONS_SIZE
+                || item_size + CONS_SIZE > MEMORY_HEAP_MAX_TERMS - total_size)) {
+            free(items_alloc);
+            globalcontext_get_process_unlock(ctx->global, target);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         total_size += item_size + CONS_SIZE;
     }

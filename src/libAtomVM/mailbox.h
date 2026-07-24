@@ -275,11 +275,13 @@ void mailbox_send_immediate_signal(Context *c, enum MessageType type, term immed
  *
  * @param c the process context.
  * @param sender_pid the sender of the signal (to get the answer)
- * @param mode controls result shape and registered_name handling
+ * @param mode whether the answer is a single item tuple or a list of them
  * @param atoms array of atom terms to query
  * @param len number of atoms in the array
+ * @return true if the signal was sent, false on allocation failure, in
+ * which case no answer will ever be sent back
  */
-void mailbox_send_process_info_request_signal(
+bool mailbox_send_process_info_request_signal(
     Context *c, int32_t sender_pid, process_info_mode_t mode, const term *atoms, size_t len);
 
 /**
