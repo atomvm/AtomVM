@@ -454,9 +454,11 @@ compile_erlang(test_match)
 compile_erlang(test_ordering_0)
 compile_erlang(test_ordering_1)
 compile_erlang(test_bs)
+compile_erlang(test_bs_gettail)
 compile_erlang(test_bs_int)
 compile_erlang(test_bs_int_any_flags)
 compile_erlang(test_bs_int_unaligned)
+compile_erlang(test_bs_size_limits)
 compile_erlang(test_bs_start_match_live)
 compile_erlang(test_bs_utf)
 compile_erlang(test_catch)
@@ -1019,9 +1021,11 @@ set(erlang_test_beams
     test_ordering_0.beam
     test_ordering_1.beam
     test_bs.beam
+    test_bs_gettail.beam
     test_bs_int.beam
     test_bs_int_any_flags.beam
     test_bs_int_unaligned.beam
+    test_bs_size_limits.beam
     test_bs_start_match_live.beam
     test_bs_utf.beam
     test_catch.beam

@@ -199,6 +199,7 @@
     | {'(int)', maybe_free_riscv32_register(), '!=', riscv32_register() | integer()}
     | {'(bool)', maybe_free_riscv32_register(), '==', false}
     | {'(bool)', maybe_free_riscv32_register(), '!=', false}
+    | {'(unsigned)', maybe_free_riscv32_register(), '<', riscv32_register()}
     | {maybe_free_riscv32_register(), '&', non_neg_integer(), '!=', integer()}
     | {{free, riscv32_register()}, '==', {free, riscv32_register()}}.
 

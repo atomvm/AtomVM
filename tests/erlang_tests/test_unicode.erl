@@ -27,7 +27,35 @@ start() ->
     ok = test_to_list_utf8(),
     ok = test_to_binary_latin1(),
     ok = test_to_binary_utf8(),
+    ok = test_improper_tail(),
     0.
+
+% Characters are only accepted as list elements: an improper tail may be a
+% binary, but never an integer.
+test_improper_tail() ->
+    "ab" = unicode:characters_to_list(id([$a | <<"b">>])),
+    <<"ab">> = unicode:characters_to_binary(id([$a | <<"b">>])),
+    <<"ab">> = unicode:characters_to_binary(id([[$a | <<"b">>]])),
+
+    ok = raises_badarg(fun() -> unicode:characters_to_list(id([$a | $b])) end),
+    ok = raises_badarg(fun() -> unicode:characters_to_list(id([$a | $b]), latin1) end),
+    ok = raises_badarg(fun() -> unicode:characters_to_list(id([[$a | $b]])) end),
+    ok = raises_badarg(fun() -> unicode:characters_to_binary(id([$a | $b])) end),
+    ok = raises_badarg(fun() -> unicode:characters_to_binary(id([[$a | $b]])) end),
+    ok = raises_badarg(fun() -> unicode:characters_to_binary(id(["x", [$a | $b]])) end),
+    ok = raises_badarg(fun() -> unicode:characters_to_binary(id([$a | $b]), latin1, latin1) end),
+    ok = raises_badarg(fun() -> unicode:characters_to_binary(id([$a | bad])) end),
+    ok.
+
+raises_badarg(Fun) ->
+    try Fun() of
+        Any -> {unexpected, Any}
+    catch
+        error:badarg -> ok;
+        C:E -> {unexpected_exception, C, E}
+    end.
+
+id(X) -> X.
 
 test_to_list_latin1() ->
     "hello" = unicode:characters_to_list(<<"hello">>, latin1),

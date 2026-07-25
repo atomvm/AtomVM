@@ -172,6 +172,7 @@ static term nif_erlang_binary_to_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_float_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_integer(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_bitstring_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_existing_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_display_1(Context *ctx, int argc, term argv[]);
@@ -406,6 +407,11 @@ static const struct Nif binary_to_integer_nif = {
 static const struct Nif binary_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_binary_to_list_1
+};
+
+static const struct Nif bitstring_to_list_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_bitstring_to_list_1
 };
 
 static const struct Nif binary_to_existing_atom_1_nif = {
@@ -2609,19 +2615,37 @@ static term nif_erlang_list_to_float_1(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[])
 {
+    VALIDATE_VALUE(argv[0], term_is_binary);
+    return nif_erlang_bitstring_to_list_1(ctx, argc, argv);
+}
+
+static term nif_erlang_bitstring_to_list_1(Context *ctx, int argc, term argv[])
+{
     UNUSED(argc);
 
     term value = argv[0];
-    VALIDATE_VALUE(value, term_is_binary);
+    VALIDATE_VALUE(value, term_is_bitstring);
 
     int bin_size = term_binary_size(value);
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, bin_size * 2, 1, &value, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    uint8_t trailing_bits = (uint8_t) (term_bit_size(value) % 8);
+
+    size_t heap_needed = (size_t) bin_size * 2;
+    if (trailing_bits != 0) {
+        heap_needed += term_binary_heap_size(1) + TERM_BOXED_SUB_BINARY_SIZE + CONS_SIZE;
+    }
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_needed, 1, &value, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     const uint8_t *bin_data = (const uint8_t *) term_binary_data(value);
 
     term prev = term_nil();
+    if (trailing_bits != 0) {
+        term tbin = term_create_empty_binary(1, &ctx->heap, ctx->global);
+        ((uint8_t *) term_binary_data(tbin))[0] = bin_data[bin_size];
+        term tsub = term_alloc_sub_binary_bits(tbin, 0, 0, trailing_bits, &ctx->heap);
+        prev = term_list_prepend(tsub, prev, &ctx->heap);
+    }
     for (int i = bin_size - 1; i >= 0; i--) {
         prev = term_list_prepend(term_from_int11(bin_data[i]), prev, &ctx->heap);
     }
@@ -3720,7 +3744,7 @@ static term nif_erlang_split_binary(Context *ctx, int argc, term argv[])
     term bin_term = argv[0];
     term pos_term = argv[1];
 
-    VALIDATE_VALUE(bin_term, term_is_binary);
+    VALIDATE_VALUE(bin_term, term_is_bitstring);
     VALIDATE_VALUE(pos_term, term_is_integer);
 
     int32_t size = term_binary_size(bin_term);
@@ -3730,12 +3754,24 @@ static term nif_erlang_split_binary(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    size_t alloc_heap_size = term_sub_binary_heap_size(bin_term, pos) + term_sub_binary_heap_size(bin_term, size - pos) + TUPLE_SIZE(2);
+    uint8_t trailing_bits = (uint8_t) (term_bit_size(bin_term) % 8);
+
+    size_t second_part_heap_size = trailing_bits == 0
+        ? term_sub_binary_heap_size(bin_term, size - pos)
+        : TERM_BOXED_SUB_BINARY_SIZE;
+    size_t alloc_heap_size = term_sub_binary_heap_size(bin_term, pos) + second_part_heap_size + TUPLE_SIZE(2);
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, alloc_heap_size, 1, &bin_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term sub_binary_a = term_maybe_create_sub_binary(bin_term, 0, pos, &ctx->heap, ctx->global);
-    term sub_binary_b = term_maybe_create_sub_binary(bin_term, pos, size - pos, &ctx->heap, ctx->global);
+    term sub_binary_b;
+    if (trailing_bits == 0) {
+        sub_binary_b = term_maybe_create_sub_binary(bin_term, pos, size - pos, &ctx->heap, ctx->global);
+    } else {
+        // only a sub-binary can carry trailing bits
+        size_t offset = term_get_sub_binary_offset(bin_term);
+        sub_binary_b = term_alloc_sub_binary_bits(bin_term, offset + pos, size - pos, trailing_bits, &ctx->heap);
+    }
     term tuple = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(tuple, 0, sub_binary_a);
     term_put_tuple_element(tuple, 1, sub_binary_b);
@@ -7614,10 +7650,139 @@ static term nif_lists_keyfind(Context *ctx, int argc, term argv[])
     return FALSE_ATOM;
 }
 
+enum BitstringFoldResult
+{
+    BitstringFoldOk,
+    BitstringFoldMemoryAllocFail,
+    BitstringFoldBadArg,
+    BitstringFoldSystemLimit
+};
+
+static enum BitstringFoldResult fold_bitstring_append(term t, uint8_t *dst, size_t *bits)
+{
+    size_t n = term_bit_size(t);
+    // The list may reference the same large bitstring several times, so the
+    // total can overflow even for a short list.
+    if (UNLIKELY(n > SIZE_MAX - *bits)) {
+        return BitstringFoldSystemLimit;
+    }
+    if (dst && n != 0) {
+        bitstring_copy_bits(dst, *bits, (const uint8_t *) term_binary_data(t), n);
+    }
+    *bits += n;
+    return BitstringFoldOk;
+}
+
+// Walks a list of bytes and bitstrings, measuring it in bits and, when dst is
+// not NULL, copying it there. Bytes are only accepted as list elements, while
+// an improper tail may be a bitstring: `[1 | <<2>>]' is valid but `[1 | 2]' is
+// not.
+static enum BitstringFoldResult fold_bitstring_list(term t, uint8_t *dst, size_t *total_bits)
+{
+    size_t bits = 0;
+    struct TempStack temp_stack;
+    if (UNLIKELY(temp_stack_init(&temp_stack) != TempStackOk)) {
+        return BitstringFoldMemoryAllocFail;
+    }
+    // t is always in tail position here: the stack holds the tails of the
+    // lists we descended into, and they are resumed in tail position too.
+    for (;;) {
+        if (term_is_nonempty_list(t)) {
+            term head = term_get_list_head(t);
+            if (term_is_integer(head)) {
+                avm_int_t value = term_to_int(head);
+                if (UNLIKELY(value < 0 || value > UCHAR_MAX)) {
+                    temp_stack_destroy(&temp_stack);
+                    return BitstringFoldBadArg;
+                }
+                if (dst) {
+                    uint8_t byte = (uint8_t) value;
+                    bitstring_copy_bits(dst, bits, &byte, 8);
+                }
+                // A list of integers long enough to overflow `bits` cannot be
+                // built: its cons cells alone would not fit in memory. Only
+                // the bitstring case needs an overflow check.
+                bits += 8;
+            } else if (term_is_bitstring(head)) {
+                enum BitstringFoldResult result = fold_bitstring_append(head, dst, &bits);
+                if (UNLIKELY(result != BitstringFoldOk)) {
+                    temp_stack_destroy(&temp_stack);
+                    return result;
+                }
+            } else if (term_is_list(head)) {
+                if (UNLIKELY(temp_stack_push(&temp_stack, term_get_list_tail(t)) != TempStackOk)) {
+                    temp_stack_destroy(&temp_stack);
+                    return BitstringFoldMemoryAllocFail;
+                }
+                t = head;
+                continue;
+            } else {
+                temp_stack_destroy(&temp_stack);
+                return BitstringFoldBadArg;
+            }
+            t = term_get_list_tail(t);
+        } else if (term_is_bitstring(t)) {
+            enum BitstringFoldResult result = fold_bitstring_append(t, dst, &bits);
+            if (UNLIKELY(result != BitstringFoldOk)) {
+                temp_stack_destroy(&temp_stack);
+                return result;
+            }
+            if (temp_stack_is_empty(&temp_stack)) {
+                break;
+            }
+            t = temp_stack_pop(&temp_stack);
+        } else if (term_is_nil(t)) {
+            if (temp_stack_is_empty(&temp_stack)) {
+                break;
+            }
+            t = temp_stack_pop(&temp_stack);
+        } else {
+            temp_stack_destroy(&temp_stack);
+            return BitstringFoldBadArg;
+        }
+    }
+    temp_stack_destroy(&temp_stack);
+    *total_bits = bits;
+    return BitstringFoldOk;
+}
+
 static term nif_erlang_list_to_bitstring_1(Context *ctx, int argc, term argv[])
 {
-    //  TODO: implement proper list_to_bitstring function when the bitstrings are supported
-    return nif_erlang_list_to_binary_1(ctx, argc, argv);
+    VALIDATE_VALUE(argv[0], term_is_list);
+
+    size_t total_bits;
+    enum BitstringFoldResult result = fold_bitstring_list(argv[0], NULL, &total_bits);
+    if (UNLIKELY(result != BitstringFoldOk)) {
+        RAISE_ERROR(result == BitstringFoldBadArg
+                ? BADARG_ATOM
+                : (result == BitstringFoldSystemLimit ? SYSTEM_LIMIT_ATOM : OUT_OF_MEMORY_ATOM));
+    }
+
+    size_t whole_bytes = total_bits / 8;
+    uint8_t trailing_bits = (uint8_t) (total_bits % 8);
+    size_t alloc_bytes = whole_bytes + (trailing_bits != 0 ? 1 : 0);
+    if (UNLIKELY(alloc_bytes > TERM_MAX_BINARY_SIZE)) {
+        RAISE_ERROR(SYSTEM_LIMIT_ATOM);
+    }
+    size_t heap_size = term_binary_heap_size(alloc_bytes)
+        + (trailing_bits != 0 ? TERM_BOXED_SUB_BINARY_SIZE : 0);
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, argc, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term bin = term_create_empty_binary(alloc_bytes, &ctx->heap, ctx->global);
+    if (UNLIKELY(term_is_invalid_term(bin))) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    if (total_bits != 0) {
+        result = fold_bitstring_list(argv[0], (uint8_t *) term_binary_data(bin), &total_bits);
+        if (UNLIKELY(result != BitstringFoldOk)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+    }
+    if (trailing_bits != 0) {
+        return term_alloc_sub_binary_bits(bin, 0, whole_bytes, trailing_bits, &ctx->heap);
+    }
+    return bin;
 }
 
 #ifndef WITH_ZLIB
