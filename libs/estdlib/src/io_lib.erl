@@ -316,6 +316,14 @@ format_spw(#format{control = w} = Format, L) when is_list(L) ->
     [$[, lists:join($,, [format_spw(Format, E) || E <- L]), $]];
 format_spw(#format{control = s}, _) ->
     error(badarg);
+format_spw(_Format, T) when is_bitstring(T) ->
+    TrailingBits = bit_size(T) rem 8,
+    WholeBits = bit_size(T) - TrailingBits,
+    <<Whole:WholeBits/bitstring, Trailing:TrailingBits>> = T,
+    Numbers =
+        [erlang:integer_to_list(B) || <<B:8>> <= Whole] ++
+            [[erlang:integer_to_list(Trailing), $:, erlang:integer_to_list(TrailingBits)]],
+    [$<, $<, lists:join($,, Numbers), $>, $>];
 format_spw(_Format, T) when is_integer(T) ->
     erlang:integer_to_list(T);
 format_spw(_Format, T) when is_float(T) ->

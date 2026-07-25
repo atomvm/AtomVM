@@ -808,6 +808,19 @@ jobs:
         ulimit -c unlimited
         ./tests/test-erlang -s prime_smp
 
+    - name: "Test: test-bitstring with valgrind"
+      if: matrix.library-arch == ''
+      working-directory: build
+      run: |
+        ulimit -c unlimited
+        valgrind --error-exitcode=1 ./tests/test-bitstring
+
+    - name: "Test: test-bitstring"
+      working-directory: build
+      run: |
+        ulimit -c unlimited
+        ./tests/test-bitstring
+
     - name: "Test: test-enif with valgrind"
       if: matrix.library-arch == ''
       working-directory: build

@@ -232,6 +232,7 @@ jobs:
         cp ../build_tests/tests/libs/alisp/*.avm tests/libs/alisp/ &&
         VERBOSE=1 make AtomVM &&
         make test-erlang &&
+        make test-bitstring &&
         make test-enif &&
         make test-heap &&
         make test-mailbox &&
@@ -239,6 +240,8 @@ jobs:
         make test-term &&
         file ./tests/test-erlang &&
         ./tests/test-erlang -s prime_smp &&
+        file ./tests/test-bitstring &&
+        ./tests/test-bitstring &&
         file ./tests/test-enif &&
         ./tests/test-enif &&
         file ./tests/test-heap &&

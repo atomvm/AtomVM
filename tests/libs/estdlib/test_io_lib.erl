@@ -61,6 +61,19 @@ test_format() ->
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [<<1, 2, 3>>])), "foo: <<1,2,3>>\n"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~s~n", [<<1, 2, 3>>])), ?FLT(["foo: ", 1, 2, 3, "\n"])),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [<<1, 2, 3>>])), "foo: <<1,2,3>>\n"),
+    % bitstrings that are not a whole number of bytes are always printed as
+    % numbers, even when the leading bytes would be printable
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [<<1:1>>])), "foo: <<1:1>>\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [<<1:1>>])), "foo: <<1:1>>\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [<<1, 2, 3:4>>])), "foo: <<1,2,3:4>>\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [<<1, 2, 3:4>>])), "foo: <<1,2,3:4>>\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [<<"bar", 1:1>>])), "foo: <<98,97,114,1:1>>\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [<<"bar", 1:1>>])), "foo: <<98,97,114,1:1>>\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~tp~n", [<<1:1>>])), "foo: <<1:1>>\n"),
+    ?ASSERT_ERROR(io_lib:format("foo: ~s~n", [<<1:1>>]), badarg),
+    % nested in other terms
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [{<<1:1>>}])), "foo: {<<1:1>>}\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [[<<1:1>>]])), "foo: [<<1:1>>]\n"),
     % unprintable strings
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [[1, 2, 3]])), "foo: [1,2,3]\n"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~s~n", [[1, 2, 3]])), "foo: \1\2\3\n"),

@@ -1049,6 +1049,32 @@ jge_rel8_test_() ->
         )
     ].
 
+jb_test_() ->
+    [
+        ?_assertAsmEqual(<<16#72, 16#f4>>, "jb .-10", jit_x86_64_asm:jb(-10))
+    ].
+
+jb_rel8_test_() ->
+    [
+        ?_assertEqual(
+            {1, jit_tests_common:asm(x86_64, <<16#72, 16#05>>, "jb .+7")},
+            jit_x86_64_asm:jb_rel8(7)
+        )
+    ].
+
+jae_test_() ->
+    [
+        ?_assertAsmEqual(<<16#73, 16#f4>>, "jae .-10", jit_x86_64_asm:jae(-10))
+    ].
+
+jae_rel8_test_() ->
+    [
+        ?_assertEqual(
+            {1, jit_tests_common:asm(x86_64, <<16#73, 16#05>>, "jae .+7")},
+            jit_x86_64_asm:jae_rel8(7)
+        )
+    ].
+
 jle_test_() ->
     [
         ?_assertAsmEqual(<<16#7e, 16#f4>>, "jle .-10", jit_x86_64_asm:jle(-10))

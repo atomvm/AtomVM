@@ -39,7 +39,8 @@
     put_utf16/1,
     put_utf32/1,
     build_from_list/1,
-    bin_comprehension/1
+    bin_comprehension/1,
+    ext_id/1
 ]).
 
 -if(?OTP_RELEASE =< 27).
@@ -62,6 +63,7 @@ start() ->
     ok = test_put_utf32(),
     ok = test_private_append(),
     ok = test_bin_comprehension(),
+    ok = test_bitstring_source(),
     0.
 
 %% bs_add + bs_init_bits + bs_put_integer with dynamic size.
@@ -132,6 +134,100 @@ test_bin_comprehension() ->
     <<>> = bin_comprehension([]),
     <<42>> = bin_comprehension([42]),
     ok.
+
+%% bs_append / bs_private_append / bs_put_binary with a non-byte-aligned
+%% source. These opcodes are bit-granular: a partial bitstring keeps its
+%% trailing bits in the result and every segment written after it shifts by
+%% that many bits, exactly as bs_create_bin does. A /binary segment (unit 8)
+%% still rejects a partial source with badarg, as on BEAM.
+test_bitstring_source() ->
+    %% a byte-aligned source is unaffected
+    <<1, 2, 3, 4>> = concat_bins(id(<<1, 2>>), id(<<3, 4>>)),
+    <<1, 2, 3>> = build_from_list(id([1, 2, 3])),
+    <<1, 2>> = copy_bitstring(id(<<1, 2>>)),
+    <<>> = copy_bitstring(id(<<>>)),
+    <<1, 2, 3>> = build_from_list_onto(id(<<>>), [1, 2, 3]),
+
+    Bits1 = id(<<1:1>>),
+    Bits3 = id(<<5:3>>),
+    Bits9 = id(<<16#AB:8, 1:1>>),
+
+    %% bs_append: a partial source is copied whole, alone and followed by a
+    %% segment that shifts by the trailing bit count
+    <<1:1>> = copy_bitstring(Bits1),
+    <<5:3>> = copy_bitstring(Bits3),
+    <<16#AB:8, 1:1>> = copy_bitstring(Bits9),
+    <<1:1, 16#AB:8>> = append_byte_to_bitstring(Bits1, 16#AB),
+    <<5:3, 16#AB:8>> = append_byte_to_bitstring(Bits3, 16#AB),
+    <<16#AB:8, 1:1, 16#CD:8>> = append_byte_to_bitstring(Bits9, 16#CD),
+
+    %% bs_put_binary with an explicit bit size, and with a partial source
+    %% written at an already unaligned destination offset
+    <<5:3>> = put_bitstring_sized(Bits3, 3),
+    <<5:3, 1:1>> = append_bits_to_bitstring(Bits3, id(<<1:1>>)),
+    <<16#AB:8, 1:1, 5:3>> = append_bits_to_bitstring(Bits9, Bits3),
+
+    %% bs_private_append: the accumulator itself is a partial bitstring, so it
+    %% cannot be grown in place
+    <<1:1, 1, 2, 3>> = build_from_list_onto(Bits1, [1, 2, 3]),
+    <<5:3>> = build_from_list_onto(Bits3, []),
+
+    %% a /binary segment rejects a partial source rather than truncating it
+    badarg = expect_error(fun() -> append_binary_to(Bits1, id(<<1, 2>>)) end),
+
+    %% a big integer (> 64 bits) written by the legacy bs_put_integer opcode at a
+    %% non-byte-aligned offset is not supported: the whole-byte bignum writer
+    %% cannot place it, so AtomVM rejects it rather than misplacing the bits.
+    %% BEAM builds it, so check only on AtomVM.
+    case erlang:system_info(machine) of
+        "ATOM" ->
+            %% the interpreter raises unsupported, the JIT badarg; either way it
+            %% must reject rather than misplace the bits
+            case expect_error(fun() -> put_wide_int_after(Bits1, id(1 bsl 100)) end) of
+                unsupported -> ok;
+                badarg -> ok
+            end;
+        _ ->
+            ok
+    end,
+    ok.
+
+put_wide_int_after(Bits, V) ->
+    <<Bits/bitstring, V:101>>.
+
+copy_bitstring(Bits) ->
+    <<Bits/bitstring>>.
+
+append_binary_to(Bits, Bin) ->
+    <<Bits/binary, Bin/binary>>.
+
+expect_error(Fun) ->
+    try
+        Fun(),
+        no_error
+    catch
+        error:Reason -> Reason
+    end.
+
+append_byte_to_bitstring(Bits, Byte) ->
+    <<Bits/bitstring, Byte:8>>.
+
+append_bits_to_bitstring(Bits, More) ->
+    <<Bits/bitstring, More/bitstring>>.
+
+put_bitstring_sized(Bits, Size) ->
+    <<Bits:Size/bitstring>>.
+
+build_from_list_onto(Acc, []) ->
+    Acc;
+build_from_list_onto(Acc, [H | T]) ->
+    build_from_list_onto(<<Acc/bitstring, H:8>>, T).
+
+id(X) ->
+    ?MODULE:ext_id(X).
+
+ext_id(X) ->
+    X.
 
 make_bin(Size, Val) ->
     <<Val:Size/unit:8>>.

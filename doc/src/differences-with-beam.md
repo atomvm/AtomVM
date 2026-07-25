@@ -146,17 +146,25 @@ Since `-0` is not allowed, the result is normalized to `0`.
 
 ### Bit syntax
 
-AtomVM supports binaries, binary construction and binary pattern matching. Bit syntax (i.e. with
-sizes not a multiple of 8) is only supported as long as they would not generate bitstrings, i.e.
-binaries with a number if bits that are not multiple of 8.
+AtomVM supports binaries and bitstrings, including construction and pattern matching of bitstrings
+whose size in bits is not a multiple of 8:
 
-The following is supported:
+    <<X:3>> = <<1:3>>
 
-    <<X:3, Y:5>> = <<N>>
+There is one limitation, which follows from the 256-bit integer limit described above: a segment
+holding an integer that does not fit in 64 bits is only supported when it is byte-aligned, meaning
+both its offset in the bitstring and its size in bits are multiples of 8. Otherwise AtomVM raises
+`unsupported`, where BEAM would construct or match the segment.
 
-The following is not:
+The following is supported, as the segment starts at offset 0 and is 72 bits long:
 
-    <<X:3>>
+    <<X:72>> = <<(1 bsl 70):72>>
+
+The following is not, as the 72-bit segment starts at bit offset 1:
+
+    <<_:1, X:72, _:7>> = Bin
+
+Integers that do fit in 64 bits have no such restriction and may be used at any offset and size.
 
 ### Code reloading
 

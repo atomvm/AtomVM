@@ -82,6 +82,14 @@ start() ->
             115, 116>>
     ),
     test_reverse(<<"foobar">>, <<131, 109, 0, 0, 0, 6, 102, 111, 111, 98, 97, 114>>),
+    test_reverse(<<1:1>>, <<131, 77, 0, 0, 0, 1, 1, 128>>),
+    test_reverse(<<5:31>>, <<131, 77, 0, 0, 0, 4, 7, 0, 0, 0, 10>>),
+    test_reverse(<<255, 5:7>>, <<131, 77, 0, 0, 0, 2, 7, 255, 10>>),
+    % BIT_BINARY_EXT: insignificant padding bits in the last byte are accepted
+    % on decode (as OTP does) and canonicalized (zeroed) on re-encode.
+    DirtyBitstring = erlang:binary_to_term(id(<<131, 77, 0, 0, 0, 1, 1, 255>>)),
+    true = DirtyBitstring =:= <<1:1>>,
+    <<131, 77, 0, 0, 0, 1, 1, 128>> = erlang:term_to_binary(DirtyBitstring),
     test_reverse(<<":アトムＶＭ">>, <<131, 109, 0, 0, 0, 6, 58, 162, 200, 224, 54, 45>>),
     test_reverse("", <<131, 106>>),
     test_reverse("foobar", <<131, 107, 0, 6, 102, 111, 111, 98, 97, 114>>),
@@ -159,7 +167,20 @@ start() ->
     ok = test_atom_utf8_ext_node(),
     ok = test_encode_process_ref(),
     ok = test_term_to_binary_options(),
+    ok = test_invalid_bit_binary(),
+    ok = test_bitstring_used_offset(),
     0.
+
+% A bitstring embedded in a compound term: the decoder must advance past the
+% BIT_BINARY_EXT by exactly base + nbytes so the following elements decode at
+% the right offset (regression for a wrap in the reported consumed size).
+test_bitstring_used_offset() ->
+    T = ?MODULE:id({<<5:3>>, <<255, 3:2>>, [<<1:1>>, done], <<1, 2, 3>>}),
+    Bin = erlang:term_to_binary(T),
+    T = erlang:binary_to_term(Bin),
+    {T, Used} = erlang:binary_to_term(Bin, [used]),
+    Used = byte_size(Bin),
+    ok.
 
 test_term_to_binary_options() ->
     T = ?MODULE:id({foo, [1, 2, 3], #{a => <<"b">>}, 3.14}),
@@ -1333,6 +1354,61 @@ test_atom_utf8_ext_node() ->
     Ref = binary_to_term(RefBin),
     true = is_reference(Ref),
     ok.
+
+test_invalid_bit_binary() ->
+    %% BIT_BINARY_EXT (tag 77) layout: <<77, Len:32, Bits:8, Data:Len/bytes>>.
+    %% Bits is the number of significant bits in the trailing byte: it must be
+    %% in 1..8 (8 meaning a byte-aligned last byte) and Len must be at least 1.
+    %% Anything else is a malformed encoding and must be rejected, matching OTP.
+
+    %% Bits = 0 with a non-empty binary
+    ok = expect_badarg(fun() -> binary_to_term(<<131, 77, 0, 0, 0, 1, 0, 128>>) end),
+    %% Bits = 9 (> 8)
+    ok = expect_badarg(fun() -> binary_to_term(<<131, 77, 0, 0, 0, 1, 9, 128>>) end),
+    %% Bits = 255 (> 8)
+    ok = expect_badarg(fun() -> binary_to_term(<<131, 77, 0, 0, 0, 1, 255, 128>>) end),
+    %% Len = 0 with non-zero trailing bits
+    ok = expect_badarg(fun() -> binary_to_term(<<131, 77, 0, 0, 0, 0, 5>>) end),
+
+    ok = test_cve_2026_54890(),
+
+    %% Valid encodings still decode. Bits = 8 is a byte-aligned last byte.
+    <<255>> = binary_to_term(<<131, 77, 0, 0, 0, 1, 8, 255>>),
+    <<1:1>> = binary_to_term(<<131, 77, 0, 0, 0, 1, 1, 128>>),
+    <<255, 5:7>> = binary_to_term(<<131, 77, 0, 0, 0, 2, 7, 255, 10>>),
+    ok.
+
+test_cve_2026_54890() ->
+    case rejects_zero_length_bit_binary() of
+        false ->
+            ok;
+        true ->
+            ok = expect_badarg(fun() -> binary_to_term(<<131, 77, 0, 0, 0, 0, 0>>) end),
+            ok = expect_badarg(fun() -> binary_to_term(<<131, 77, 0, 0, 0, 0, 0>>, [safe]) end)
+    end.
+
+rejects_zero_length_bit_binary() ->
+    case erlang:system_info(machine) of
+        "BEAM" -> erts_has_cve_2026_54890_fix(erts_version());
+        _ -> true
+    end.
+
+%% Fixed in erts 15.2.7.11 (OTP 27.3.4.15), 16.4.0.4 (OTP 28.5.0.4) and
+%% 17.0.4 (OTP 29.0.4). Affected: 15.0-15.2.7.10, 16.0-16.4.0.3, 17.0-17.0.3.
+erts_has_cve_2026_54890_fix(Version) ->
+    (Version >= [15, 2, 7, 11] andalso Version < [16]) orelse
+        (Version >= [16, 4, 0, 4] andalso Version < [17]) orelse
+        Version >= [17, 0, 4].
+
+erts_version() ->
+    erts_version(erlang:system_info(version), 0, []).
+
+erts_version([], Current, Acc) ->
+    lists:reverse([Current | Acc]);
+erts_version([$. | Rest], Current, Acc) ->
+    erts_version(Rest, 0, [Current | Acc]);
+erts_version([C | Rest], Current, Acc) when C >= $0, C =< $9 ->
+    erts_version(Rest, Current * 10 + (C - $0), Acc).
 
 make_binterm_fun(Id) ->
     fun() ->

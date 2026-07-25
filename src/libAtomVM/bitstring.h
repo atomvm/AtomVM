@@ -116,8 +116,8 @@ bool bitstring_insert_any_integer(uint8_t *dst, avm_int_t offset, avm_int64_t va
 static inline bool bitstring_extract_integer(term src_bin, size_t offset, avm_int_t n,
     enum BitstringFlags bs_flags, union maybe_unsigned_int64 *dst)
 {
-    unsigned long capacity = term_binary_size(src_bin);
-    if (8 * capacity - offset < (unsigned long) n) {
+    unsigned long capacity_bits = term_bit_size(src_bin);
+    if (capacity_bits - offset < (unsigned long) n) {
         return false;
     }
 
@@ -487,6 +487,20 @@ static inline bool bitstring_match_utf32(term src_bin, size_t offset, int32_t *c
 void bitstring_copy_bits_incomplete_bytes(uint8_t *dst, size_t bits_offset, const uint8_t *src, size_t bits_count);
 
 /**
+ * @brief Copy bits_count bits starting at bit src_offset of src into dst[0..].
+ *
+ * @details Used to materialize a non-byte-aligned bitstring slice (e.g. a
+ * matched tail whose start is not a byte boundary) into a fresh byte-aligned
+ * buffer. The destination must be pre-zeroed; only set bits are written.
+ *
+ * @param dst           destination buffer (pre-zeroed), receiving bits at offset 0
+ * @param src           source buffer
+ * @param src_offset    offset in bits in the source buffer
+ * @param bits_count    number of bits to copy
+ */
+void bitstring_copy_bits_from(uint8_t *dst, const uint8_t *src, size_t src_offset, size_t bits_count);
+
+/**
  * @brief Copy bits_count bits from src to dst[bits_offset..]
  *
  * @param dst           destination buffer
@@ -518,6 +532,48 @@ bool bitstring_insert_f32(
     term dst_bin, size_t offset, avm_float_t value, enum BitstringFlags bs_flags);
 bool bitstring_insert_f64(
     term dst_bin, size_t offset, avm_float_t value, enum BitstringFlags bs_flags);
+
+/**
+ * @brief Heap words needed to extract a len_bits slice at bit offset offset.
+ * @details Worst case: a byte-aligned offset and length shares storage via a
+ * sub-binary; otherwise the bits are copied into a fresh (possibly bitstring)
+ * binary. Pair with bitstring_slice.
+ */
+size_t bitstring_slice_heap_size(term bs_bin, size_t offset, size_t len_bits);
+
+/**
+ * @brief Extract a len_bits slice of bs_bin starting at bit offset offset.
+ * @details Byte-aligned offset+length shares storage via a sub-binary; a
+ * non-byte-aligned offset or length copies the bits into a fresh bitstring.
+ * Heap must already be reserved (see bitstring_slice_heap_size).
+ * @return the extracted slice, or `term_invalid_term()` if a refc binary buffer
+ * could not be allocated for a copied slice.
+ */
+term bitstring_slice(term bs_bin, size_t offset, size_t len_bits, Heap *heap, GlobalContext *glb);
+
+/**
+ * @brief Heap words needed to extract the tail of a match at bit offset bs_offset.
+ * @details Worst case: a byte-aligned start and length shares storage via a
+ * sub-binary; otherwise the remaining bits are copied into a fresh (possibly
+ * bitstring) binary. Pair with bitstring_get_tail.
+ */
+static inline size_t bitstring_get_tail_heap_size(term bs_bin, size_t bs_offset)
+{
+    return bitstring_slice_heap_size(bs_bin, bs_offset, term_bit_size(bs_bin) - bs_offset);
+}
+
+/**
+ * @brief Materialize the tail of a match at bit offset bs_offset.
+ * @details Byte-aligned start+length shares storage via a sub-binary; a
+ * non-byte-aligned start or length copies the remaining bits into a fresh
+ * bitstring. Heap must already be reserved (see bitstring_get_tail_heap_size).
+ * @return the tail, or `term_invalid_term()` if a refc binary buffer could not
+ * be allocated for a copied tail.
+ */
+static inline term bitstring_get_tail(term bs_bin, size_t bs_offset, Heap *heap, GlobalContext *glb)
+{
+    return bitstring_slice(bs_bin, bs_offset, term_bit_size(bs_bin) - bs_offset, heap, glb);
+}
 
 #ifdef __cplusplus
 }
