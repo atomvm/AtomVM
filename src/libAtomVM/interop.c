@@ -267,8 +267,10 @@ InteropFunctionResult interop_chardata_fold(term t, interop_chardata_fold_fun fo
         return InteropMemoryAllocFail;
     }
 
+    bool tail_position = true;
+
     while (!temp_stack_is_empty(&temp_stack)) {
-        if (term_is_integer(t) || term_is_binary(t)) {
+        if ((term_is_integer(t) && !tail_position) || term_is_binary(t)) {
             InteropFunctionResult result = fold_fun(t, accum);
             if (UNLIKELY(result != InteropOk)) {
                 if (rest_fun) {
@@ -284,10 +286,12 @@ InteropFunctionResult interop_chardata_fold(term t, interop_chardata_fold_fun fo
                 return result;
             } else {
                 t = temp_stack_pop(&temp_stack);
+                tail_position = true;
             }
 
         } else if (term_is_nil(t)) {
             t = temp_stack_pop(&temp_stack);
+            tail_position = true;
 
         } else if (term_is_nonempty_list(t)) {
             if (UNLIKELY(temp_stack_push(&temp_stack, term_get_list_tail(t)) != TempStackOk)) {
@@ -295,6 +299,7 @@ InteropFunctionResult interop_chardata_fold(term t, interop_chardata_fold_fun fo
                 return InteropMemoryAllocFail;
             }
             t = term_get_list_head(t);
+            tail_position = false;
 
         } else {
             if (rest_fun) {
@@ -499,7 +504,7 @@ static InteropFunctionResult chardata_to_bytes_size_fold_fun(term t, void *accum
 static void chardata_to_bytes_size_rest_fun(term t, void *accum)
 {
     struct CharDataToBytesSizeAcc *acc = (struct CharDataToBytesSizeAcc *) accum;
-    if (!term_is_binary(t) && !term_is_integer(t) && !term_is_list(t)) {
+    if (!term_is_binary(t) && !term_is_list(t)) {
         acc->badarg = true;
     }
     if (!acc->badarg) {
@@ -612,7 +617,7 @@ static InteropFunctionResult chardata_to_bytes_fold_fun(term t, void *accum)
 static void chardata_to_bytes_rest_fun(term t, void *accum)
 {
     struct CharDataToBytesAcc *acc = (struct CharDataToBytesAcc *) accum;
-    if (!term_is_binary(t) && !term_is_integer(t) && !term_is_list(t)) {
+    if (!term_is_binary(t) && !term_is_list(t)) {
         acc->badarg = true;
     }
     if (!acc->badarg) {

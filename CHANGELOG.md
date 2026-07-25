@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `gen:start/5,6`, used by Elixir's `GenServer`
 - Added ML-KEM-768 (FIPS 203) key encapsulation to `crypto`, requiring libsodium >= 1.0.22
 - Added `AVM_STATIC_LIBSODIUM` CMake option to statically link libsodium
+- Added support for non-byte-aligned bitstrings
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
@@ -63,6 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   returns `NULL`
 - Fixed the xtensa JIT losing a value held across a call when few registers were free, for
   example corrupting a binary built with a `little` utf16 segment followed by other segments
+- Fixed `erlang:list_to_binary/1`, `erlang:iolist_to_binary/1`, `erlang:iolist_size/1` and the
+  `unicode:characters_to_*` functions accepting an integer improper tail, such as `[1 | 2]`
 
 ## [0.7.0-beta.0] - 2026-09-28
 

@@ -116,8 +116,8 @@ bool bitstring_insert_any_integer(uint8_t *dst, avm_int_t offset, avm_int64_t va
 static inline bool bitstring_extract_integer(term src_bin, size_t offset, avm_int_t n,
     enum BitstringFlags bs_flags, union maybe_unsigned_int64 *dst)
 {
-    unsigned long capacity = term_binary_size(src_bin);
-    if (8 * capacity - offset < (unsigned long) n) {
+    unsigned long capacity_bits = term_bit_size(src_bin);
+    if (capacity_bits - offset < (unsigned long) n) {
         return false;
     }
 
@@ -284,6 +284,32 @@ static inline bool bitstring_insert_integer(term dst_bin, size_t offset, avm_int
 }
 
 /**
+ * @brief Get what a bignum writes to an integer field of at most 64 bits.
+ *
+ * @details A positive bignum below 2^64 (at least 2^63, as smaller values are
+ * not bignums) writes its low 64 bits, which bitstring_insert_integer can
+ * handle at any bit offset. Wider fields are left out, as they would need a
+ * sign fill that assumes a signed value.
+ *
+ * @param big_value digits of the bignum
+ * @param big_len number of digits
+ * @param big_sign sign of the bignum
+ * @param n size of the field, in bits
+ * @param value the bits to write, on output
+ * @return \c true if the bignum fits in a field of n bits written as a 64-bit
+ * integer, \c false otherwise
+ */
+static inline bool bitstring_bigint_to_field64(const intn_digit_t big_value[], size_t big_len,
+    intn_integer_sign_t big_sign, size_t n, avm_int64_t *value)
+{
+    if (big_sign != IntNPositiveInteger || n > 64 || !intn_is_uint64(big_value, big_len)) {
+        return false;
+    }
+    *value = (avm_int64_t) intn_to_uint64(big_value);
+    return true;
+}
+
+/**
  * @brief Encode a character to UTF-8.
  *
  * @param c character to encode
@@ -382,12 +408,7 @@ static inline bool bitstring_utf16_size(uint32_t c, size_t *out_size)
  * @return \c true if encoding was successful, \c false if c is not a valid
  * unicode character
  */
-static inline bool bitstring_insert_utf8(term dst_bin, size_t offset, uint32_t c, size_t *out_size)
-{
-    // size was verified by a bs_utf8_size instruction call
-    uint8_t *dst = (uint8_t *) term_binary_data(dst_bin) + (offset >> 3);
-    return bitstring_utf8_encode(c, dst, out_size);
-}
+bool bitstring_insert_utf8(term dst_bin, size_t offset, uint32_t c, size_t *out_size);
 
 /**
  * @brief Match a character in UTF-8 format
@@ -399,12 +420,7 @@ static inline bool bitstring_insert_utf8(term dst_bin, size_t offset, uint32_t c
  * @return \c true if encoding was successful, \c false if src_bin at offset is not a valid
  * unicode character
  */
-static inline bool bitstring_match_utf8(term src_bin, size_t offset, uint32_t *c, size_t *out_size)
-{
-    size_t byte_offset = offset >> 3; // divide by 8
-    const uint8_t *src = (const uint8_t *) term_binary_data(src_bin) + byte_offset;
-    return unicode_utf8_decode(src, term_binary_size(src_bin) - byte_offset, c, out_size) == UnicodeTransformDecodeSuccess;
-}
+bool bitstring_match_utf8(term src_bin, size_t offset, uint32_t *c, size_t *out_size);
 
 /**
  * @brief Insert a character in UTF-&§ format
@@ -417,12 +433,7 @@ static inline bool bitstring_match_utf8(term src_bin, size_t offset, uint32_t *c
  * @return \c true if encoding was successful, \c false if c is not a valid
  * unicode character
  */
-static inline bool bitstring_insert_utf16(term dst_bin, size_t offset, uint32_t c, enum BitstringFlags bs_flags, size_t *out_size)
-{
-    // size was verified by a bs_utf8_size instruction call
-    uint8_t *dst = (uint8_t *) term_binary_data(dst_bin) + (offset >> 3);
-    return bitstring_utf16_encode(c, dst, bs_flags, out_size);
-}
+bool bitstring_insert_utf16(term dst_bin, size_t offset, uint32_t c, enum BitstringFlags bs_flags, size_t *out_size);
 
 /**
  * @brief Match a character in UTF-16 format
@@ -435,12 +446,7 @@ static inline bool bitstring_insert_utf16(term dst_bin, size_t offset, uint32_t 
  * @return \c true if encoding was successful, \c false if src_bin at offset is not a valid
  * unicode character
  */
-static inline bool bitstring_match_utf16(term src_bin, size_t offset, int32_t *c, size_t *out_size, enum BitstringFlags bs_flags)
-{
-    size_t byte_offset = offset >> 3; // divide by 8
-    const uint8_t *src = (const uint8_t *) term_binary_data(src_bin) + byte_offset;
-    return bitstring_utf16_decode(src, term_binary_size(src_bin) - byte_offset, c, out_size, bs_flags);
-}
+bool bitstring_match_utf16(term src_bin, size_t offset, int32_t *c, size_t *out_size, enum BitstringFlags bs_flags);
 
 /**
  * @brief Insert a character in UTF-32 format
@@ -452,11 +458,7 @@ static inline bool bitstring_match_utf16(term src_bin, size_t offset, int32_t *c
  * @return \c true if encoding was successful, \c false if c is not a valid
  * unicode character
  */
-static inline bool bitstring_insert_utf32(term dst_bin, size_t offset, uint32_t c, enum BitstringFlags bs_flags)
-{
-    uint8_t *dst = (uint8_t *) term_binary_data(dst_bin) + (offset >> 3);
-    return bitstring_utf32_encode(c, dst, bs_flags);
-}
+bool bitstring_insert_utf32(term dst_bin, size_t offset, uint32_t c, enum BitstringFlags bs_flags);
 
 /**
  * @brief Match a character in UTF-32 format
@@ -468,12 +470,7 @@ static inline bool bitstring_insert_utf32(term dst_bin, size_t offset, uint32_t 
  * @return \c true if encoding was successful, \c false if src_bin at offset is not a valid
  * unicode character
  */
-static inline bool bitstring_match_utf32(term src_bin, size_t offset, int32_t *c, enum BitstringFlags bs_flags)
-{
-    size_t byte_offset = offset >> 3; // divide by 8
-    const uint8_t *src = (const uint8_t *) term_binary_data(src_bin) + byte_offset;
-    return bitstring_utf32_decode(src, term_binary_size(src_bin) - byte_offset, c, bs_flags);
-}
+bool bitstring_match_utf32(term src_bin, size_t offset, int32_t *c, enum BitstringFlags bs_flags);
 
 /**
  * @brief Copy bits_count bits from src to dst[bits_offset..]
@@ -485,6 +482,20 @@ static inline bool bitstring_match_utf32(term src_bin, size_t offset, int32_t *c
  * @param bits_count    number of bits
  */
 void bitstring_copy_bits_incomplete_bytes(uint8_t *dst, size_t bits_offset, const uint8_t *src, size_t bits_count);
+
+/**
+ * @brief Copy bits_count bits starting at bit src_offset of src into dst[0..].
+ *
+ * @details Used to materialize a non-byte-aligned bitstring slice (e.g. a
+ * matched tail whose start is not a byte boundary) into a fresh byte-aligned
+ * buffer. The destination must be pre-zeroed; only set bits are written.
+ *
+ * @param dst           destination buffer (pre-zeroed), receiving bits at offset 0
+ * @param src           source buffer
+ * @param src_offset    offset in bits in the source buffer
+ * @param bits_count    number of bits to copy
+ */
+void bitstring_copy_bits_from(uint8_t *dst, const uint8_t *src, size_t src_offset, size_t bits_count);
 
 /**
  * @brief Copy bits_count bits from src to dst[bits_offset..]
@@ -518,6 +529,48 @@ bool bitstring_insert_f32(
     term dst_bin, size_t offset, avm_float_t value, enum BitstringFlags bs_flags);
 bool bitstring_insert_f64(
     term dst_bin, size_t offset, avm_float_t value, enum BitstringFlags bs_flags);
+
+/**
+ * @brief Heap words needed to extract a len_bits slice at bit offset offset.
+ * @details Worst case: a byte-aligned offset and length shares storage via a
+ * sub-binary; otherwise the bits are copied into a fresh (possibly bitstring)
+ * binary. Pair with bitstring_slice.
+ */
+size_t bitstring_slice_heap_size(term bs_bin, size_t offset, size_t len_bits);
+
+/**
+ * @brief Extract a len_bits slice of bs_bin starting at bit offset offset.
+ * @details Byte-aligned offset+length shares storage via a sub-binary; a
+ * non-byte-aligned offset or length copies the bits into a fresh bitstring.
+ * Heap must already be reserved (see bitstring_slice_heap_size).
+ * @return the extracted slice, or `term_invalid_term()` if a refc binary buffer
+ * could not be allocated for a copied slice.
+ */
+term bitstring_slice(term bs_bin, size_t offset, size_t len_bits, Heap *heap, GlobalContext *glb);
+
+/**
+ * @brief Heap words needed to extract the tail of a match at bit offset bs_offset.
+ * @details Worst case: a byte-aligned start and length shares storage via a
+ * sub-binary; otherwise the remaining bits are copied into a fresh (possibly
+ * bitstring) binary. Pair with bitstring_get_tail.
+ */
+static inline size_t bitstring_get_tail_heap_size(term bs_bin, size_t bs_offset)
+{
+    return bitstring_slice_heap_size(bs_bin, bs_offset, term_bit_size(bs_bin) - bs_offset);
+}
+
+/**
+ * @brief Materialize the tail of a match at bit offset bs_offset.
+ * @details Byte-aligned start+length shares storage via a sub-binary; a
+ * non-byte-aligned start or length copies the remaining bits into a fresh
+ * bitstring. Heap must already be reserved (see bitstring_get_tail_heap_size).
+ * @return the tail, or `term_invalid_term()` if a refc binary buffer could not
+ * be allocated for a copied tail.
+ */
+static inline term bitstring_get_tail(term bs_bin, size_t bs_offset, Heap *heap, GlobalContext *glb)
+{
+    return bitstring_slice(bs_bin, bs_offset, term_bit_size(bs_bin) - bs_offset, heap, glb);
+}
 
 #ifdef __cplusplus
 }

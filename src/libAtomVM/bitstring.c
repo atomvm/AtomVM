@@ -24,11 +24,6 @@
 #include <assert.h>
 #include <math.h>
 
-static inline uint64_t from_le64(uint64_t value)
-{
-    return ((((value) &0xFF) << 56) | (((value) &0xFF00) << 40) | (((value) &0xFF0000) << 24) | (((value) &0xFF000000) << 8) | (((value) &0xFF00000000) >> 8) | (((value) &0xFF0000000000) >> 24) | (((value) &0xFF000000000000) >> 40) | (((value) &0xFF00000000000000) >> 56));
-}
-
 bool bitstring_extract_any_integer(const uint8_t *src, size_t offset, avm_int_t n,
     enum BitstringFlags bs_flags, union maybe_unsigned_int64 *dst)
 {
@@ -46,11 +41,22 @@ bool bitstring_extract_any_integer(const uint8_t *src, size_t offset, avm_int_t 
     }
 
     if (bs_flags & LittleEndianIntegerMask) {
-        out = from_le64(out) >> (64 - n);
+        // Inverse of the little-endian insertion layout: the field stores the
+        // complete low-order bytes first (LSB byte first), then the remaining
+        // n rem 8 high-order bits.
+        size_t rem = (size_t) n & 0x7;
+        uint64_t raw = out;
+        uint64_t value = raw & ((((uint64_t) 1) << rem) - 1);
+        raw >>= rem;
+        for (size_t j = 0; j < ((size_t) n >> 3); ++j) {
+            value = (value << 8) | (raw & 0xFF);
+            raw >>= 8;
+        }
+        out = value;
     }
 
-    if ((bs_flags & SignedInteger) && (out & ((uint64_t) 1) << (i - 1))) {
-        dst->u = ((uint64_t) 0xFFFFFFFFFFFFFFFF << i) | out;
+    if ((bs_flags & SignedInteger) && i > 0 && (out & ((uint64_t) 1) << (i - 1))) {
+        dst->u = (i < 64) ? (((uint64_t) 0xFFFFFFFFFFFFFFFF << i) | out) : out;
     } else {
         dst->u = out;
     }
@@ -58,16 +64,45 @@ bool bitstring_extract_any_integer(const uint8_t *src, size_t offset, avm_int_t 
     return true;
 }
 
+static void insert_bits_msb_first(uint8_t *dst, size_t offset, uint64_t value, size_t n)
+{
+    for (size_t i = 0; i < n; ++i) {
+        size_t k = (n - 1) - i;
+        int bit_val = (value & (0x01ULL << k)) >> k;
+        if (bit_val) {
+            size_t bit_pos = offset + i;
+            size_t byte_pos = bit_pos >> 3; // div 8
+            uint8_t *pos = dst + byte_pos;
+            int shift = 7 - (bit_pos & 7); // mod 8
+            *pos ^= (0x01 << shift);
+        }
+    }
+}
+
+static void insert_sign_bits(uint8_t *dst, size_t offset, size_t count, bool negative)
+{
+    if (!negative) {
+        return;
+    }
+    while (count > 0) {
+        size_t chunk = count < 64 ? count : 64;
+        uint64_t ones = (chunk == 64) ? ~UINT64_C(0) : ((UINT64_C(1) << chunk) - 1);
+        insert_bits_msb_first(dst, offset, ones, chunk);
+        offset += chunk;
+        count -= chunk;
+    }
+}
+
 bool bitstring_insert_any_integer(uint8_t *dst, avm_int_t offset, avm_int64_t value, size_t n, enum BitstringFlags bs_flags)
 {
     // SignedInteger flag does not affect insertion (caller handles sign extension)
     bool little_endian = bs_flags & LittleEndianIntegerMask;
+    uint8_t sign_fill = (value < 0) ? 0xFF : 0x00;
 
     if (little_endian && (offset & 0x7) == 0 && (n & 0x7) == 0) {
         // Byte-aligned little-endian: write bytes LSB first
         size_t byte_offset = offset >> 3;
         size_t num_bytes = n >> 3;
-        // value is truncated to 64 bits
         size_t val_bytes = sizeof(value);
         uint64_t uvalue = (uint64_t) value;
         for (size_t i = 0; i < num_bytes; ++i) {
@@ -75,39 +110,33 @@ bool bitstring_insert_any_integer(uint8_t *dst, avm_int_t offset, avm_int64_t va
                 dst[byte_offset + i] = (uint8_t) (uvalue & 0xFF);
                 uvalue >>= 8;
             } else {
-                dst[byte_offset + i] = 0;
+                dst[byte_offset + i] = sign_fill;
             }
+        }
+    } else if (little_endian) {
+        // low-order bytes first (LSB byte first), then remaining high-order bits
+        size_t whole_bytes = n >> 3;
+        size_t rem = n & 0x7;
+        uint64_t uvalue = (uint64_t) value;
+        for (size_t i = 0; i < whole_bytes; ++i) {
+            uint8_t byte = (i < 8) ? (uint8_t) ((uvalue >> (8 * i)) & 0xFF) : sign_fill;
+            insert_bits_msb_first(dst, offset + 8 * i, byte, 8);
+        }
+        if (rem != 0) {
+            uint8_t byte
+                = (whole_bytes < 8) ? (uint8_t) ((uvalue >> (8 * whole_bytes)) & 0xFF) : sign_fill;
+            insert_bits_msb_first(dst, offset + 8 * whole_bytes, byte, rem);
         }
     } else {
-        // Big-endian (or unaligned): write bits MSB first
+        // Big-endian: write bits MSB first, high-order sign bits first
         uint64_t write_value = (uint64_t) value;
-        if (little_endian) {
-            // Byte-swap the value so MSB-first bit writing produces little-endian bytes
-            size_t num_bytes = (n + 7) >> 3;
-            uint64_t swapped = 0;
-            for (size_t i = 0; i < num_bytes; ++i) {
-                swapped = (swapped << 8) | (write_value & 0xFF);
-                write_value >>= 8;
-            }
-            write_value = swapped;
-        }
-
-        // value is truncated to 64 bits
         if (n > 8 * sizeof(value)) {
-            offset += n - (8 * sizeof(value));
+            size_t high_bits = n - (8 * sizeof(value));
+            insert_sign_bits(dst, offset, high_bits, value < 0);
+            offset += high_bits;
             n = 8 * sizeof(value);
         }
-        for (size_t i = 0; i < n; ++i) {
-            size_t k = (n - 1) - i;
-            int bit_val = (write_value & (0x01ULL << k)) >> k;
-            if (bit_val) {
-                int bit_pos = offset + i;
-                int byte_pos = bit_pos >> 3; // div 8
-                uint8_t *pos = (uint8_t *) (dst + byte_pos);
-                int shift = 7 - (bit_pos & 7); // mod 8
-                *pos ^= (0x01 << shift);
-            }
-        }
+        insert_bits_msb_first(dst, offset, write_value, n);
     }
     return true;
 }
@@ -320,43 +349,213 @@ bool bitstring_utf32_decode(const uint8_t *buf, size_t len, int32_t *c, enum Bit
     }
 }
 
+// Get the bytes a UTF-8/16/32 code unit decoder reads at a bit offset: a
+// pointer into src_bin at a byte-aligned offset, otherwise up to 4 whole bytes
+// copied from offset into buf. len is the number of whole bytes available.
+static const uint8_t *bitstring_unit_source(term src_bin, size_t offset, uint8_t buf[4], size_t *len)
+{
+    const uint8_t *data = (const uint8_t *) term_binary_data(src_bin);
+    size_t avail = (term_bit_size(src_bin) - offset) / 8;
+    if ((offset & 0x7) == 0) {
+        *len = avail;
+        return data + (offset >> 3);
+    }
+    if (avail > 4) {
+        avail = 4;
+    }
+    memset(buf, 0, 4);
+    bitstring_copy_bits_from(buf, data, offset, avail * 8);
+    *len = avail;
+    return buf;
+}
+
+bool bitstring_insert_utf8(term dst_bin, size_t offset, uint32_t c, size_t *out_size)
+{
+    // size was verified by a bs_utf8_size instruction call
+    if ((offset & 0x7) == 0) {
+        uint8_t *dst = (uint8_t *) term_binary_data(dst_bin) + (offset >> 3);
+        return bitstring_utf8_encode(c, dst, out_size);
+    }
+    uint8_t buf[4];
+    if (UNLIKELY(!bitstring_utf8_encode(c, buf, out_size))) {
+        return false;
+    }
+    bitstring_copy_bits((uint8_t *) term_binary_data(dst_bin), offset, buf, *out_size * 8);
+    return true;
+}
+
+bool bitstring_match_utf8(term src_bin, size_t offset, uint32_t *c, size_t *out_size)
+{
+    uint8_t buf[4];
+    size_t len;
+    const uint8_t *src = bitstring_unit_source(src_bin, offset, buf, &len);
+    return unicode_utf8_decode(src, len, c, out_size) == UnicodeTransformDecodeSuccess;
+}
+
+bool bitstring_insert_utf16(term dst_bin, size_t offset, uint32_t c, enum BitstringFlags bs_flags, size_t *out_size)
+{
+    // size was verified by a bs_utf16_size instruction call
+    if ((offset & 0x7) == 0) {
+        uint8_t *dst = (uint8_t *) term_binary_data(dst_bin) + (offset >> 3);
+        return bitstring_utf16_encode(c, dst, bs_flags, out_size);
+    }
+    uint8_t buf[4];
+    if (UNLIKELY(!bitstring_utf16_encode(c, buf, bs_flags, out_size))) {
+        return false;
+    }
+    bitstring_copy_bits((uint8_t *) term_binary_data(dst_bin), offset, buf, *out_size * 8);
+    return true;
+}
+
+bool bitstring_match_utf16(term src_bin, size_t offset, int32_t *c, size_t *out_size, enum BitstringFlags bs_flags)
+{
+    uint8_t buf[4];
+    size_t len;
+    const uint8_t *src = bitstring_unit_source(src_bin, offset, buf, &len);
+    return bitstring_utf16_decode(src, len, c, out_size, bs_flags);
+}
+
+bool bitstring_insert_utf32(term dst_bin, size_t offset, uint32_t c, enum BitstringFlags bs_flags)
+{
+    if ((offset & 0x7) == 0) {
+        uint8_t *dst = (uint8_t *) term_binary_data(dst_bin) + (offset >> 3);
+        return bitstring_utf32_encode(c, dst, bs_flags);
+    }
+    uint8_t buf[4];
+    if (UNLIKELY(!bitstring_utf32_encode(c, buf, bs_flags))) {
+        return false;
+    }
+    bitstring_copy_bits((uint8_t *) term_binary_data(dst_bin), offset, buf, 32);
+    return true;
+}
+
+bool bitstring_match_utf32(term src_bin, size_t offset, int32_t *c, enum BitstringFlags bs_flags)
+{
+    uint8_t buf[4];
+    size_t len;
+    const uint8_t *src = bitstring_unit_source(src_bin, offset, buf, &len);
+    return bitstring_utf32_decode(src, len, c, bs_flags);
+}
+
 void bitstring_copy_bits_incomplete_bytes(uint8_t *dst, size_t bits_offset, const uint8_t *src, size_t bits_count)
 {
+    if (bits_count == 0) {
+        return;
+    }
     size_t byte_offset = bits_offset / 8;
-    size_t bit_offset = bits_offset - (8 * byte_offset);
-    if (bits_offset % 8 == 0 && bits_count >= 8) {
-        size_t bytes_count = bits_count / 8;
-        memcpy(dst + byte_offset, src, bytes_count);
-        src += bytes_count;
-        byte_offset += bytes_count;
-        bits_count -= bytes_count * 8;
-    }
-    // Eventually copy bit by bit
+    unsigned int shift = (unsigned int) (bits_offset - (8 * byte_offset));
+    size_t whole_bytes = bits_count / 8;
+    unsigned int rest = (unsigned int) (bits_count % 8);
     dst += byte_offset;
-    uint8_t dest_byte = *dst;
-    uint8_t src_byte = *src++;
-    int dest_bit_ix = 7 - bit_offset;
-    int src_bit_ix = 7;
-    while (bits_count > 0) {
-        if (src_byte & (1 << src_bit_ix)) {
-            dest_byte |= 1 << dest_bit_ix;
-        } else {
-            dest_byte &= ~(1 << dest_bit_ix);
+    if (shift == 0) {
+        memcpy(dst, src, whole_bytes);
+        if (rest != 0) {
+            uint8_t mask = (uint8_t) (0xFF << (8 - rest));
+            dst[whole_bytes] = (uint8_t) ((dst[whole_bytes] & ~mask) | (src[whole_bytes] & mask));
         }
-        if (dest_bit_ix == 0) {
-            *dst++ = dest_byte;
-            dest_byte = *dst;
-            dest_bit_ix = 8;
-        }
-        if (src_bit_ix == 0) {
-            src_byte = *src++;
-            src_bit_ix = 8;
-        }
-        dest_bit_ix--;
-        src_bit_ix--;
-        bits_count--;
+        return;
     }
-    *dst = dest_byte;
+    // Each source byte straddles two destination bytes: its high 8 - shift
+    // bits complete the current one and its low shift bits start the next one.
+    // pending holds the high bits of the current destination byte, starting
+    // with the bits before bits_offset that must be kept.
+    uint8_t pending = (uint8_t) (dst[0] & (0xFF << (8 - shift)));
+    for (size_t i = 0; i < whole_bytes; i++) {
+        dst[i] = (uint8_t) (pending | (src[i] >> shift));
+        pending = (uint8_t) (src[i] << (8 - shift));
+    }
+    // The last destination byte gets the shift pending bits followed by the
+    // rest source bits, which spill into the next byte past 8 bits.
+    uint8_t tail = rest != 0 ? (uint8_t) (src[whole_bytes] & (0xFF << (8 - rest))) : 0;
+    unsigned int last_bits = shift + rest;
+    uint8_t last = (uint8_t) (pending | (tail >> shift));
+    if (last_bits <= 8) {
+        uint8_t mask = (uint8_t) (0xFF << (8 - last_bits));
+        dst[whole_bytes] = (uint8_t) ((dst[whole_bytes] & ~mask) | (last & mask));
+    } else {
+        dst[whole_bytes] = last;
+        uint8_t mask = (uint8_t) (0xFF << (16 - last_bits));
+        dst[whole_bytes + 1] = (uint8_t) ((dst[whole_bytes + 1] & ~mask) | ((uint8_t) (tail << (8 - shift)) & mask));
+    }
+}
+
+void bitstring_copy_bits_from(uint8_t *dst, const uint8_t *src, size_t src_offset, size_t bits_count)
+{
+    src += src_offset / 8;
+    unsigned int shift = (unsigned int) (src_offset % 8);
+    size_t whole_bytes = bits_count / 8;
+    unsigned int rest = (unsigned int) (bits_count % 8);
+    if (shift == 0) {
+        memcpy(dst, src, whole_bytes);
+        if (rest != 0) {
+            dst[whole_bytes] |= (uint8_t) (src[whole_bytes] & (0xFF << (8 - rest)));
+        }
+        return;
+    }
+    // Each destination byte takes the low 8 - shift bits of a source byte and
+    // the high shift bits of the next one.
+    for (size_t i = 0; i < whole_bytes; i++) {
+        dst[i] = (uint8_t) ((src[i] << shift) | (src[i + 1] >> (8 - shift)));
+    }
+    if (rest != 0) {
+        uint8_t last = (uint8_t) (src[whole_bytes] << shift);
+        // only read the next source byte when it holds copied bits
+        if (shift + rest > 8) {
+            last |= (uint8_t) (src[whole_bytes + 1] >> (8 - shift));
+        }
+        dst[whole_bytes] |= (uint8_t) (last & (0xFF << (8 - rest)));
+    }
+}
+
+// A slice with trailing bits at a byte-aligned offset shares the source under
+// the same policy as term_maybe_create_sub_binary for whole bytes.
+static bool bitstring_slice_can_share(term bs_bin, size_t offset, size_t len_bits)
+{
+    return offset % 8 == 0 && len_bits / 8 >= SUB_BINARY_MIN
+        && (term_is_refc_binary(bs_bin) || term_is_sub_binary(bs_bin));
+}
+
+size_t bitstring_slice_heap_size(term bs_bin, size_t offset, size_t len_bits)
+{
+    if (offset % 8 == 0 && len_bits % 8 == 0) {
+        return term_sub_binary_heap_size(bs_bin, len_bits / 8);
+    }
+    if (bitstring_slice_can_share(bs_bin, offset, len_bits)) {
+        return TERM_BOXED_SUB_BINARY_SIZE;
+    }
+    size_t words = term_binary_heap_size((len_bits + 7) / 8);
+    if (len_bits % 8 != 0) {
+        words += TERM_BOXED_SUB_BINARY_SIZE;
+    }
+    return words;
+}
+
+term bitstring_slice(term bs_bin, size_t offset, size_t len_bits, Heap *heap, GlobalContext *glb)
+{
+    if (offset % 8 == 0 && len_bits % 8 == 0) {
+        return term_maybe_create_sub_binary(bs_bin, offset / 8, len_bits / 8, heap, glb);
+    }
+    if (bitstring_slice_can_share(bs_bin, offset, len_bits)) {
+        // term_alloc_sub_binary_bits refers to the binary a sub-binary refers to
+        size_t base = term_is_sub_binary(bs_bin) ? term_get_sub_binary_offset(bs_bin) : 0;
+        return term_alloc_sub_binary_bits(
+            bs_bin, base + offset / 8, len_bits / 8, (uint8_t) (len_bits % 8), heap);
+    }
+    size_t result_bytes = (len_bits + 7) / 8;
+    // term_create_empty_binary zero-fills, as bitstring_copy_bits_from requires
+    term bin = term_create_empty_binary(result_bytes, heap, glb);
+    if (UNLIKELY(term_is_invalid_term(bin))) {
+        // the caller reserved heap words, but a refc binary buffer is allocated
+        // separately and that allocation may still fail
+        return bin;
+    }
+    uint8_t *dst = (uint8_t *) term_binary_data(bin);
+    bitstring_copy_bits_from(dst, (const uint8_t *) term_binary_data(bs_bin), offset, len_bits);
+    size_t trailing = len_bits % 8;
+    if (trailing != 0) {
+        return term_alloc_sub_binary_bits(bin, 0, len_bits / 8, (uint8_t) trailing, heap);
+    }
+    return bin;
 }
 
 bool bitstring_extract_f16(

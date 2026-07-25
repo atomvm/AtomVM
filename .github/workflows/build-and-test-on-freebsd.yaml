@@ -171,6 +171,13 @@ jobs:
         cd build
         ./tests/test-avmpack
 
+    - name: "Test: test-bitstring"
+      shell: freebsd {0}
+      run: |
+        cd $GITHUB_WORKSPACE;
+        cd build
+        ./tests/test-bitstring
+
     - name: "Test: test_etest.avm"
       shell: freebsd {0}
       run: |
