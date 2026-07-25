@@ -815,10 +815,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                 case TrapAnswerSignal: {                                                        \
                     struct TermSignal *trap_answer                                              \
                         = CONTAINER_OF(signal_message, struct TermSignal, base);                \
-                    if (UNLIKELY(!context_process_signal_trap_answer(ctx, trap_answer))) {      \
-                        SET_ERROR(OUT_OF_MEMORY_ATOM);                                          \
-                        handle_error = true;                                                    \
-                    }                                                                           \
+                    context_process_signal_trap_answer(ctx, trap_answer);                       \
                     break;                                                                      \
                 }                                                                               \
                 case TrapExceptionSignal: {                                                     \

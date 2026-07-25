@@ -458,9 +458,8 @@ void context_process_process_info_request_signal(
  *
  * @param ctx the context being executed
  * @param signal the answer message
- * @return \c true if successful, \c false in case of memory error
  */
-bool context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal);
+void context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal);
 
 /**
  * @brief Process a flush monitor signal.

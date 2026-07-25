@@ -427,11 +427,10 @@ done:
     }
 }
 
-bool context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal)
+void context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal)
 {
     context_update_flags(ctx, ~Trap, NoFlags);
     ctx->x[0] = signal->signal_term;
-    return true;
 }
 
 bool context_process_signal_set_group_leader(Context *ctx, const struct TermSignal *signal)

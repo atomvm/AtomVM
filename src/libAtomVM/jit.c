@@ -917,10 +917,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
             case TrapAnswerSignal: {
                 struct TermSignal *trap_answer
                     = CONTAINER_OF(signal_message, struct TermSignal, base);
-                if (UNLIKELY(!context_process_signal_trap_answer(ctx, trap_answer))) {
-                    set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
-                    handle_error = true;
-                }
+                context_process_signal_trap_answer(ctx, trap_answer);
                 break;
             }
             case TrapExceptionSignal: {
