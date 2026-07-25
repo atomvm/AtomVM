@@ -144,10 +144,12 @@ reg_to_num(a15) -> 15.
 %% 24-bit Instruction Format Encoders
 %%=============================================================================
 
-%% RRR format: op1[23:20] | op2[19:16] | r[15:12] | s[11:8] | t[7:4] | op0[3:0]
+%% RRR format: op2[23:20] | op1[19:16] | r[15:12] | s[11:8] | t[7:4] | op0[3:0]
+%% Op2/Op1 are ordered high-to-low to match the ISA field layout above; the
+%% emitted bytes are unchanged from before this parameter rename.
 -spec encode_rrr(integer(), integer(), integer(), integer(), integer(), integer()) -> binary().
-encode_rrr(Op0, T, S, R, Op1, Op2) ->
-    Instr = (Op1 bsl 20) bor (Op2 bsl 16) bor (R bsl 12) bor (S bsl 8) bor (T bsl 4) bor Op0,
+encode_rrr(Op0, T, S, R, Op2, Op1) ->
+    Instr = (Op2 bsl 20) bor (Op1 bsl 16) bor (R bsl 12) bor (S bsl 8) bor (T bsl 4) bor Op0,
     <<Instr:24/little>>.
 
 %% RRI8 format: imm8[23:16] | r[15:12] | s[11:8] | t[7:4] | op0[3:0]
@@ -196,31 +198,31 @@ encode_rrrn(Op0, T, S, R) ->
 %%=============================================================================
 
 %% ADD: AR[r] = AR[s] + AR[t]
-%% op0=0, op1=8, op2=0
+%% op0=0, op1=0, op2=8
 -spec add(xtensa_register(), xtensa_register(), xtensa_register()) -> binary().
 add(Ar, As, At) ->
     encode_rrr(0, reg_to_num(At), reg_to_num(As), reg_to_num(Ar), 16#8, 0).
 
 %% SUB: AR[r] = AR[s] - AR[t]
-%% op0=0, op1=12, op2=0
+%% op0=0, op1=0, op2=12
 -spec sub(xtensa_register(), xtensa_register(), xtensa_register()) -> binary().
 sub(Ar, As, At) ->
     encode_rrr(0, reg_to_num(At), reg_to_num(As), reg_to_num(Ar), 16#C, 0).
 
 %% AND: AR[r] = AR[s] & AR[t]
-%% op0=0, op1=1, op2=0
+%% op0=0, op1=0, op2=1
 -spec and_(xtensa_register(), xtensa_register(), xtensa_register()) -> binary().
 and_(Ar, As, At) ->
     encode_rrr(0, reg_to_num(At), reg_to_num(As), reg_to_num(Ar), 16#1, 0).
 
 %% OR: AR[r] = AR[s] | AR[t]
-%% op0=0, op1=2, op2=0
+%% op0=0, op1=0, op2=2
 -spec or_(xtensa_register(), xtensa_register(), xtensa_register()) -> binary().
 or_(Ar, As, At) ->
     encode_rrr(0, reg_to_num(At), reg_to_num(As), reg_to_num(Ar), 16#2, 0).
 
 %% XOR: AR[r] = AR[s] ^ AR[t]
-%% op0=0, op1=3, op2=0
+%% op0=0, op1=0, op2=3
 -spec xor_(xtensa_register(), xtensa_register(), xtensa_register()) -> binary().
 xor_(Ar, As, At) ->
     encode_rrr(0, reg_to_num(At), reg_to_num(As), reg_to_num(Ar), 16#3, 0).
@@ -243,14 +245,14 @@ srl(Ar, _As, At) ->
     encode_rrr(0, reg_to_num(At), 0, reg_to_num(Ar), 16#9, 16#1).
 
 %% SSR: Set SAR for right shift. SAR = AR[s][4:0]
-%% op0=0, op1=4, op2=0, r=0, t=0
+%% op0=0, op1=0, op2=4, r=0, t=0
 -spec ssr(xtensa_register()) -> binary().
 ssr(As) ->
     encode_rrr(0, 0, reg_to_num(As), 0, 16#4, 0).
 
 %% SLLI: AR[r] = AR[s] << sa (1..31)
 %% op0=0, RRR format with shift amount encoded as (32 - sa).
-%% The encoded value split: sa_enc[4] at bits[23:20], op=1 at bits[19:16],
+%% The encoded value split: sa_enc[4] at bits[23:20], op1=1 at bits[19:16],
 %% r at bits[15:12], s at bits[11:8], sa_enc[3:0] at bits[7:4].
 -spec slli(xtensa_register(), xtensa_register(), 1..31) -> binary().
 slli(Ar, As, Sa) when Sa >= 1, Sa =< 31 ->
@@ -284,19 +286,19 @@ srai(Ar, At, Sa) when Sa >= 0, Sa =< 31 ->
 %%=============================================================================
 
 %% MULL: AR[r] = AR[s] * AR[t] (low 32 bits)
-%% op0=0, op1=8, op2=2
+%% op0=0, op1=2, op2=8
 -spec mull(xtensa_register(), xtensa_register(), xtensa_register()) -> binary().
 mull(Ar, As, At) ->
     encode_rrr(0, reg_to_num(At), reg_to_num(As), reg_to_num(Ar), 16#8, 16#2).
 
 %% QUOS: AR[r] = AR[s] / AR[t] (signed)
-%% op0=0, op1=13, op2=2
+%% op0=0, op1=2, op2=13
 -spec quos(xtensa_register(), xtensa_register(), xtensa_register()) -> binary().
 quos(Ar, As, At) ->
     encode_rrr(0, reg_to_num(At), reg_to_num(As), reg_to_num(Ar), 16#D, 16#2).
 
 %% REMS: AR[r] = AR[s] % AR[t] (signed)
-%% op0=0, op1=15, op2=2
+%% op0=0, op1=2, op2=15
 -spec rems(xtensa_register(), xtensa_register(), xtensa_register()) -> binary().
 rems(Ar, As, At) ->
     encode_rrr(0, reg_to_num(At), reg_to_num(As), reg_to_num(Ar), 16#F, 16#2).

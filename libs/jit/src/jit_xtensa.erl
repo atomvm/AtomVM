@@ -613,7 +613,7 @@ call_primitive_last(
         stream = Stream0
     } = State0,
     Primitive,
-    Args
+    [_, jit_state | _] = Args
 ) ->
     %% Xtensa windowed ABI: CALLX8 to the primitive, move its return value
     %% from a10 (our view of callee's a2) into our a2, then RETW to C.
@@ -652,7 +652,12 @@ call_primitive_last(
                     jit_regs:unreachable(State2#state.regs), ?AVAILABLE_REGS_MASK, 0
                 )
             }
-    end.
+    end;
+%% The windowed-ABI tail-call sequence rewrites the second argument
+%% (jit_state -> jit_state_tail_call), so reject every other shape in the
+%% function head before allocating registers or appending to the stream.
+call_primitive_last(_State, _Primitive, Args) ->
+    error({unsupported_call_primitive_last_args, Args}).
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a return of a value if it's not equal to ctx.
