@@ -25,8 +25,9 @@
 -include("etest.hrl").
 
 test() ->
-    HasSelect = atomvm:platform() =/= emscripten,
-    HasExecve = atomvm:platform() =/= emscripten,
+    Platform = atomvm:platform(),
+    HasSelect = Platform =/= emscripten andalso Platform =/= wasi,
+    HasExecve = Platform =/= emscripten andalso Platform =/= wasi,
     ok = test_basic_file(),
     ok = test_fifo_select(HasSelect),
     ok = test_alias_select_handle_rejected(HasSelect),
@@ -46,8 +47,16 @@ test() ->
     ok = test_subprocess(HasExecve),
     ok.
 
+%% Build a unique temp file path.
+temp_path() ->
+    Suffix = integer_to_list(erlang:system_time(millisecond)),
+    case atomvm:platform() of
+        wasi -> "atomvm.tmp." ++ Suffix;
+        _ -> "/tmp/atomvm.tmp." ++ Suffix
+    end.
+
 test_basic_file() ->
-    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    Path = temp_path(),
     {ok, Fd} = atomvm:posix_open(Path, [o_wronly, o_creat], 8#644),
     {ok, 5} = atomvm:posix_write(Fd, <<"Hello">>),
     ok = atomvm:posix_close(Fd),
@@ -63,7 +72,7 @@ test_basic_file() ->
 test_fifo_select(false) ->
     ok;
 test_fifo_select(_HasSelect) ->
-    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    Path = temp_path(),
     ok = atomvm:posix_mkfifo(Path, 8#644),
     {ok, RdFd} = atomvm:posix_open(Path, [o_rdonly]),
     {ok, WrFd} = atomvm:posix_open(Path, [o_wronly]),
@@ -148,7 +157,7 @@ test_alias_select_handle_rejected(_HasSelect) ->
 
 % Test is based on the fact that `erlang:memory(binary)` count resources.
 test_gc(HasSelect) ->
-    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    Path = temp_path(),
     GCSubPid = spawn(fun() -> gc_loop(Path, undefined) end),
     MemorySize0 = erlang:memory(binary),
     call_gc_loop(GCSubPid, open),
@@ -238,7 +247,7 @@ test_crash_no_leak(false) ->
     ok;
 test_crash_no_leak(true) ->
     Before = erlang:memory(binary),
-    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    Path = temp_path(),
     Pid = spawn(fun() -> crash_leak(Path) end),
     Ref = monitor(process, Pid),
     ok =
@@ -272,7 +281,7 @@ test_select_with_gone_process(false) ->
     ok;
 test_select_with_gone_process(true) ->
     Before = erlang:memory(binary),
-    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    Path = temp_path(),
     test_select_with_gone_process0(Path),
     % GC so Fd's ref count is decremented
     erlang:garbage_collect(),
@@ -323,7 +332,7 @@ test_select_with_listeners(_HasSelect) ->
             out_of_memory -> {error, enomem};
             Result -> Result
         end,
-    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    Path = temp_path(),
     ok = atomvm:posix_mkfifo(Path, 8#644),
     {ok, RdFd} = atomvm:posix_open(Path, [o_rdonly]),
     {ok, WrFd} = atomvm:posix_open(Path, [o_wronly]),
@@ -344,7 +353,7 @@ test_select_with_listeners(_HasSelect) ->
     ok.
 
 test_seek() ->
-    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    Path = temp_path(),
     {ok, Fd} = atomvm:posix_open(Path, [o_rdwr, o_creat], 8#644),
     {ok, 5} = atomvm:posix_write(Fd, <<"Hello">>),
     {ok, 0} = atomvm:posix_seek(Fd, 0, seek_set),
@@ -362,7 +371,7 @@ test_seek() ->
     ok = atomvm:posix_unlink(Path).
 
 test_pread_pwrite() ->
-    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    Path = temp_path(),
     {ok, Fd} = atomvm:posix_open(Path, [o_rdwr, o_creat], 8#644),
     {ok, 5} = atomvm:posix_write(Fd, <<"Hello">>),
     {ok, <<"He">>} = atomvm:posix_pread(Fd, 2, 0),
@@ -376,7 +385,7 @@ test_pread_pwrite() ->
     ok = atomvm:posix_unlink(Path).
 
 test_fsync() ->
-    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    Path = temp_path(),
     {ok, Fd} = atomvm:posix_open(Path, [o_rdwr, o_creat], 8#644),
     {ok, 5} = atomvm:posix_write(Fd, <<"Hello">>),
     ok = atomvm:posix_fsync(Fd),
@@ -384,7 +393,7 @@ test_fsync() ->
     ok = atomvm:posix_unlink(Path).
 
 test_ftruncate() ->
-    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    Path = temp_path(),
     {ok, Fd} = atomvm:posix_open(Path, [o_rdwr, o_creat], 8#644),
     {ok, 11} = atomvm:posix_write(Fd, <<"Hello World">>),
     %% Truncate to shorter length
@@ -404,7 +413,7 @@ test_ftruncate() ->
     ok = atomvm:posix_unlink(Path).
 
 test_rename() ->
-    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    Path = temp_path(),
     NewPath = Path ++ ".renamed",
     {ok, Fd} = atomvm:posix_open(Path, [o_rdwr, o_creat], 8#644),
     {ok, 5} = atomvm:posix_write(Fd, <<"Hello">>),
@@ -422,7 +431,7 @@ test_rename() ->
     ok = atomvm:posix_unlink(NewPath).
 
 test_stat() ->
-    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    Path = temp_path(),
     {ok, Fd} = atomvm:posix_open(Path, [o_rdwr, o_creat], 8#644),
     {ok, 11} = atomvm:posix_write(Fd, <<"Hello World">>),
     ok = atomvm:posix_close(Fd),
@@ -451,7 +460,7 @@ test_stat() ->
     ok = atomvm:posix_unlink(Path).
 
 test_fstat() ->
-    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    Path = temp_path(),
     {ok, Fd} = atomvm:posix_open(Path, [o_rdwr, o_creat], 8#644),
     {ok, 11} = atomvm:posix_write(Fd, <<"Hello World">>),
     {ok, #{
@@ -472,7 +481,7 @@ test_fstat() ->
     ok = atomvm:posix_unlink(Path).
 
 test_mkdir_rmdir() ->
-    Base = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    Base = temp_path(),
     Dir = Base ++ ".dir",
     ok = atomvm:posix_mkdir(Dir, 8#755),
     {ok, #{st_mode := _}} = atomvm:posix_stat(Dir),
@@ -490,7 +499,7 @@ test_mkdir_rmdir() ->
     ok.
 
 test_validation() ->
-    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    Path = temp_path(),
     {ok, Fd} = atomvm:posix_open(Path, [o_rdwr, o_creat], 8#644),
     {ok, 5} = atomvm:posix_write(Fd, <<"Hello">>),
     ok = expect_badarg(fun() -> atomvm:posix_read(Fd, -1) end),

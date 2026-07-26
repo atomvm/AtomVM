@@ -31,6 +31,7 @@ test() ->
     ok = test_recv_nowait(),
     ok = test_accept_nowait(),
     ok = test_setopt_getopt(),
+    ok = test_send_empty(),
     case erlang:system_info(machine) of
         "ATOM" ->
             ok = test_abandon_select();
@@ -528,6 +529,23 @@ test_setopt_getopt() ->
     {error, closed} = socket:getopt(Socket, {socket, type}),
     {error, closed} = socket:setopt(Socket, {socket, reuseaddr}, true),
     ok.
+
+test_send_empty() ->
+    etest:flush_msg_queue(),
+
+    {ListenSocket, Port} = start_echo_server(0),
+
+    {ok, Client} = socket:open(inet, stream, tcp),
+    ok = socket:connect(Client, #{family => inet, addr => loopback, port => Port}),
+
+    ok = socket:send(Client, <<>>),
+    ok = socket:send(Client, []),
+
+    ok = socket:send(Client, <<"echo:01">>),
+    {ok, <<"echo:01">>} = socket:recv(Client, ?PACKET_SIZE),
+
+    ok = socket:close(Client),
+    ok = close_listen_socket(ListenSocket).
 
 %%
 %% abandon_select test

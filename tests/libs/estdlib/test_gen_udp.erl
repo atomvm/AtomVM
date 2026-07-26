@@ -25,12 +25,22 @@
 -include("etest.hrl").
 
 test() ->
+    Backends =
+        case test_inet:is_inet_driver_available() of
+            true ->
+                [[{inet_backend, inet}], [{inet_backend, socket}]];
+            false ->
+                io:format(
+                    "Warning: inet port driver not available, skipping inet backend in test_gen_udp~n"
+                ),
+                [[{inet_backend, socket}]]
+        end,
     [
         ok = test_send_receive(SpawnControllingProcess, IsActive, Mode, BackendOption)
      || SpawnControllingProcess <- [false, true],
         IsActive <- [false, true],
         Mode <- [binary, list],
-        BackendOption <- [[{inet_backend, inet}], [{inet_backend, socket}]]
+        BackendOption <- Backends
     ],
     ok.
 
