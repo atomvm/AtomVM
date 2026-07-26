@@ -50,6 +50,7 @@ set(ERLANG_MODULES
     mock_uart_hal
     file_uart_hal
     test_proc_lib
+    test_process_info
     test_sets
     test_spawn
     test_ssl

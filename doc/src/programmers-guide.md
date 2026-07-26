@@ -576,22 +576,27 @@ You can obtain a list of all processes in the system via [`erlang:processes/0`](
 Pids = erlang:processes().
 ```
 
-And for each process, you can get detailed process information via the [`erlang:process_info/2`](./apidocs/erlang/estdlib/erlang.md#process_info2) function:
+And for each process, you can get detailed process information via the [`erlang:process_info/1`](./apidocs/erlang/estdlib/erlang.md#process_info1) and [`erlang:process_info/2`](./apidocs/erlang/estdlib/erlang.md#process_info2) functions:
 
 ```erlang
 io:format("Heap size for Pid ~p: ~p~n", [Pid, erlang:process_info(Pid, heap_size)]).
 ```
 
-The return value is a tuple containing the key passed into the `erlang:process_info/2` function and its associated value.
+The return value is a tuple containing the key passed into the `erlang:process_info/2` function and its associated value, e.g. `{heap_size, 170}`. A list of keys may be passed instead of a single key, in which case the result is a list with one `{Key, Value}` tuple per requested key, in request order. `erlang:process_info/1` returns the default key set in one call. As in Erlang/OTP, these functions return `undefined` if the process is not alive, and querying the single key `registered_name` on a process without a registered name returns `[]`.
 
 The currently supported keys are enumerated in the following table:
 
 | Key | Value Type | Description |
 |-----|------------|-------------|
 | `heap_size` | `non_neg_integer()` | Number of terms (in machine words) used in the process heap |
+| `total_heap_size` | `non_neg_integer()` | Number of terms (in machine words) used in the process heap, including heap fragments |
 | `stack_size` | `non_neg_integer()` | Number of terms (in machine words) used in the process stack |
 | `message_queue_len` | `non_neg_integer()` | Number of unprocessed messages in the process mailbox |
 | `memory` | `non_neg_integer()` | Total number of bytes used by the process (estimate) |
+| `registered_name` | `atom()` | The registered name of the process |
+| `links` | `[pid()]` | The processes and ports the process is linked to |
+| `monitored_by` | `[pid() \| port() \| resource()]` | The processes, ports and NIF resources monitoring the process |
+| `trap_exit` | `boolean()` | Whether the process is trapping exits |
 
 See the `word_size` key in the [System APIs](#system-apis) section for information about how to find the number of bytes used in a machine word on the current platform.
 

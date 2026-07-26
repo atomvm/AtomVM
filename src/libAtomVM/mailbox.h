@@ -138,12 +138,20 @@ struct ImmediateSignal
     term immediate;
 };
 
-struct BuiltInAtomRequestSignal
+typedef enum
+{
+    ProcessInfoSingle,
+    ProcessInfoList,
+} process_info_mode_t;
+
+struct ProcessInfoRequestSignal
 {
     MailboxMessage base;
 
     int32_t sender_pid;
-    term atom;
+    process_info_mode_t mode;
+    size_t atoms_len;
+    term atoms[];
 };
 
 struct RefSignal
@@ -202,6 +210,18 @@ void mailbox_init(Mailbox *mbox);
  * @param mbox the mailbox to get the length of.
  */
 size_t mailbox_len(Mailbox *mbox);
+
+/**
+ * @brief Compute the number of queued messages in the mailbox, not counting
+ * signals.
+ *
+ * @details This is what message_queue_len reports: normal messages plus
+ * accepted alias messages not yet converted, which OTP counts as queued even
+ * if the alias is deactivated before reception. To be called from the process
+ * only.
+ * @param mbox the mailbox to get the number of messages of.
+ */
+size_t mailbox_normal_message_len(Mailbox *mbox);
 
 /**
  * @brief Compute the mailbox size, in bytes.
@@ -263,15 +283,18 @@ void mailbox_send_term_signal(Context *c, enum MessageType type, term t);
 void mailbox_send_immediate_signal(Context *c, enum MessageType type, term immediate);
 
 /**
- * @brief Sends a built-in atom-based request signal to a certain mailbox.
+ * @brief Sends a process info request signal to a certain mailbox.
  *
  * @param c the process context.
- * @param type the type of the signal
  * @param sender_pid the sender of the signal (to get the answer)
- * @param atom the built-in atom
+ * @param mode whether the answer is a single item tuple or a list of them
+ * @param atoms array of atom terms to query
+ * @param atoms_len number of atoms in the array
+ * @return true if the signal was sent, false on allocation failure, in
+ * which case no answer will ever be sent back
  */
-void mailbox_send_built_in_atom_request_signal(
-    Context *c, enum MessageType type, int32_t sender_pid, term atom);
+bool mailbox_send_process_info_request_signal(
+    Context *c, int32_t sender_pid, process_info_mode_t mode, const term atoms[], size_t atoms_len);
 
 /**
  * @brief Sends a ref signal to a certain mailbox.

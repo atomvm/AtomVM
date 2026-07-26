@@ -909,23 +909,21 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
                 break;
             }
             case ProcessInfoRequestSignal: {
-                struct BuiltInAtomRequestSignal *request_signal
-                    = CONTAINER_OF(signal_message, struct BuiltInAtomRequestSignal, base);
+                struct ProcessInfoRequestSignal *request_signal
+                    = CONTAINER_OF(signal_message, struct ProcessInfoRequestSignal, base);
                 context_process_process_info_request_signal(ctx, request_signal, false);
                 break;
             }
             case TrapAnswerSignal: {
                 struct TermSignal *trap_answer
                     = CONTAINER_OF(signal_message, struct TermSignal, base);
-                if (UNLIKELY(!context_process_signal_trap_answer(ctx, trap_answer))) {
-                    set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
-                    handle_error = true;
-                }
+                context_process_signal_trap_answer(ctx, trap_answer);
                 break;
             }
             case TrapExceptionSignal: {
                 struct ImmediateSignal *trap_exception
                     = CONTAINER_OF(signal_message, struct ImmediateSignal, base);
+                context_update_flags(ctx, ~Trap, NoFlags);
                 set_error(ctx, jit_state, 0, trap_exception->immediate);
                 handle_error = true;
                 break;

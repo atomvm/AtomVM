@@ -31,6 +31,7 @@
     start_timer/3, start_timer/4,
     cancel_timer/1,
     send_after/3,
+    process_info/1,
     process_info/2,
     system_info/1,
     system_flag/2,
@@ -321,6 +322,39 @@ send_after(Time, Dest, Msg) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Pid the process pid.
+%% @returns a list of `{Key, Value}' tuples, or `undefined' if the process
+%%          is not alive.
+%% @doc     Return information about the specified process.
+%%
+%% As in Erlang/OTP, the result covers a default set of keys; AtomVM returns
+%% the supported subset of OTP's default set, in the same relative order:
+%% `registered_name' (omitted when the process is not registered, first
+%% otherwise), `message_queue_len', `links', `trap_exit', `total_heap_size',
+%% `heap_size' and `stack_size'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec process_info(Pid :: pid()) -> [{atom(), term()}] | undefined.
+process_info(Pid) when erlang:is_pid(Pid) ->
+    case
+        erlang:process_info(Pid, [
+            registered_name,
+            message_queue_len,
+            links,
+            trap_exit,
+            total_heap_size,
+            heap_size,
+            stack_size
+        ])
+    of
+        undefined -> undefined;
+        [{registered_name, []} | Info] -> Info;
+        Info -> Info
+    end;
+process_info(Pid) ->
+    erlang:error(badarg, [Pid]).
+
+%%-----------------------------------------------------------------------------
+%% @param   Pid the process pid.
 %% @param   Key key used to find process information.
 %% @returns process information for the specified pid defined by the specified key.
 %% @doc     Return process information.
@@ -338,20 +372,26 @@ send_after(Time, Dest, Msg) ->
 %%      <li><b>memory</b> the estimated total number of bytes in use by the process (integer)</li>
 %%      <li><b>links</b> the list of linked processes</li>
 %%      <li><b>monitored_by</b> the list of processes, NIF resources or ports that monitor the process</li>
+%%      <li><b>trap_exit</b> whether the process is trapping exits (boolean)</li>
 %% </ul>
-%% Specifying an unsupported term or atom raises a bad_arg error.
+%% A list of keys may also be specified, in which case the result is a list
+%% with one `{Key, Value}' tuple per requested key, in the same order and
+%% with duplicates preserved, or `undefined' if the process is not alive.
+%% Specifying an unsupported term or atom raises a badarg error.
 %%
 %% @end
 %%-----------------------------------------------------------------------------
 -spec process_info
-    (Pid :: pid(), heap_size) -> {heap_size, non_neg_integer()};
-    (Pid :: pid(), total_heap_size) -> {total_heap_size, non_neg_integer()};
-    (Pid :: pid(), registered_name) -> {registered_name, term()} | [];
-    (Pid :: pid(), stack_size) -> {stack_size, non_neg_integer()};
-    (Pid :: pid(), message_queue_len) -> {message_queue_len, non_neg_integer()};
-    (Pid :: pid(), memory) -> {memory, non_neg_integer()};
-    (Pid :: pid(), links) -> {links, [pid()]};
-    (Pid :: pid(), monitored_by) -> {monitored_by, [pid() | resource() | port()]}.
+    (Pid :: pid(), heap_size) -> {heap_size, non_neg_integer()} | undefined;
+    (Pid :: pid(), total_heap_size) -> {total_heap_size, non_neg_integer()} | undefined;
+    (Pid :: pid(), registered_name) -> {registered_name, term()} | [] | undefined;
+    (Pid :: pid(), stack_size) -> {stack_size, non_neg_integer()} | undefined;
+    (Pid :: pid(), message_queue_len) -> {message_queue_len, non_neg_integer()} | undefined;
+    (Pid :: pid(), memory) -> {memory, non_neg_integer()} | undefined;
+    (Pid :: pid(), links) -> {links, [pid()]} | undefined;
+    (Pid :: pid(), monitored_by) -> {monitored_by, [pid() | resource() | port()]} | undefined;
+    (Pid :: pid(), trap_exit) -> {trap_exit, boolean()} | undefined;
+    (Pid :: pid(), [atom()]) -> [{atom(), term()}] | undefined.
 process_info(_Pid, _Key) ->
     erlang:nif_error(undefined).
 

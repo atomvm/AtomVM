@@ -172,8 +172,8 @@ void context_destroy(Context *ctx)
     while (signal_message) {
         switch (signal_message->type) {
             case ProcessInfoRequestSignal: {
-                struct BuiltInAtomRequestSignal *request_signal
-                    = CONTAINER_OF(signal_message, struct BuiltInAtomRequestSignal, base);
+                struct ProcessInfoRequestSignal *request_signal
+                    = CONTAINER_OF(signal_message, struct ProcessInfoRequestSignal, base);
                 context_process_process_info_request_signal(ctx, request_signal, true);
                 break;
             }
@@ -327,43 +327,110 @@ void context_process_kill_signal(Context *ctx, struct TermSignal *signal)
     context_update_flags(ctx, ~NoFlags, Killed);
 }
 
-void context_process_process_info_request_signal(Context *ctx, struct BuiltInAtomRequestSignal *signal, bool process_table_locked)
+void context_process_process_info_request_signal(
+    Context *ctx, struct ProcessInfoRequestSignal *signal, bool process_table_locked)
 {
+    // TODO: guarantee completion to the trapped requester even under allocation
+    // failure, e.g. by reserving a fallback answer signal with the request
     Context *target;
     if (process_table_locked) {
         target = globalcontext_get_process_nolock(ctx->global, signal->sender_pid);
     } else {
         target = globalcontext_get_process_lock(ctx->global, signal->sender_pid);
     }
-    if (LIKELY(target)) {
+
+    if (UNLIKELY(!target)) {
+        return;
+    }
+
+    if (process_table_locked) {
+        // Called from context_destroy: this process has already been removed
+        // from the process table
+        mailbox_send_term_signal(target, TrapAnswerSignal, UNDEFINED_ATOM);
+        return;
+    }
+
+    if (signal->mode == ProcessInfoSingle) {
+        term atom = signal->atoms[0];
         size_t term_size;
-        if (context_get_process_info(ctx, NULL, &term_size, signal->atom, NULL)) {
-            Heap heap;
-            if (UNLIKELY(memory_init_heap(&heap, term_size) != MEMORY_GC_OK)) {
-                mailbox_send_immediate_signal(target, TrapExceptionSignal, OUT_OF_MEMORY_ATOM);
-            } else {
-                term ret;
-                if (context_get_process_info(ctx, &ret, NULL, signal->atom, &heap)) {
-                    mailbox_send_term_signal(target, TrapAnswerSignal, ret);
-                } else {
-                    mailbox_send_immediate_signal(target, TrapExceptionSignal, ret);
-                }
-                memory_destroy_heap(&heap, ctx->global);
-            }
-        } else {
+        if (!context_get_process_info(ctx, NULL, &term_size, atom, NULL)) {
             mailbox_send_immediate_signal(target, TrapExceptionSignal, BADARG_ATOM);
+            goto done;
         }
-        if (!process_table_locked) {
-            globalcontext_get_process_unlock(ctx->global, target);
+
+        Heap heap;
+        if (UNLIKELY(memory_init_heap(&heap, term_size) != MEMORY_GC_OK)) {
+            mailbox_send_immediate_signal(target, TrapExceptionSignal, OUT_OF_MEMORY_ATOM);
+            goto done;
         }
-    } // else: sender died
+
+        term ret;
+        if (context_get_process_info(ctx, &ret, NULL, atom, &heap)) {
+            // return [] when unregistered (BEAM compatibility)
+            if (atom == REGISTERED_NAME_ATOM && term_is_nil(term_get_tuple_element(ret, 1))) {
+                ret = term_nil();
+            }
+            mailbox_send_term_signal(target, TrapAnswerSignal, ret);
+        } else {
+            mailbox_send_immediate_signal(target, TrapExceptionSignal, ret);
+        }
+        memory_destroy_heap(&heap, ctx->global);
+    } else {
+        assert(signal->mode == ProcessInfoList);
+        assert(signal->atoms_len > 0);
+
+        size_t total_size = 0;
+        for (size_t i = 0; i < signal->atoms_len; i++) {
+            size_t item_size;
+            if (UNLIKELY(
+                    !context_get_process_info(ctx, NULL, &item_size, signal->atoms[i], NULL))) {
+                mailbox_send_immediate_signal(target, TrapExceptionSignal, BADARG_ATOM);
+                goto done;
+            }
+            if (UNLIKELY(item_size > MEMORY_HEAP_MAX_TERMS - CONS_SIZE
+                    || item_size + CONS_SIZE > MEMORY_HEAP_MAX_TERMS - total_size)) {
+                mailbox_send_immediate_signal(target, TrapExceptionSignal, OUT_OF_MEMORY_ATOM);
+                goto done;
+            }
+            total_size += item_size + CONS_SIZE;
+        }
+
+        Heap heap;
+        if (UNLIKELY(memory_init_heap(&heap, total_size) != MEMORY_GC_OK)) {
+            mailbox_send_immediate_signal(target, TrapExceptionSignal, OUT_OF_MEMORY_ATOM);
+            goto done;
+        }
+
+        // Build list backwards to preserve input order
+        term result = term_nil();
+        bool build_ok = true;
+        for (size_t i = signal->atoms_len; i-- > 0;) {
+            term item_result;
+            if (UNLIKELY(
+                    !context_get_process_info(ctx, &item_result, NULL, signal->atoms[i], &heap))) {
+                mailbox_send_immediate_signal(target, TrapExceptionSignal, item_result);
+                build_ok = false;
+                break;
+            }
+
+            result = term_list_prepend(item_result, result, &heap);
+        }
+        if (LIKELY(build_ok)) {
+            mailbox_send_term_signal(target, TrapAnswerSignal, result);
+        }
+        memory_destroy_heap(&heap, ctx->global);
+    }
+
+done:
+    if (!process_table_locked) {
+        globalcontext_get_process_unlock(ctx->global, target);
+    }
 }
 
-bool context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal)
+void context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal)
 {
     context_update_flags(ctx, ~Trap, NoFlags);
     ctx->x[0] = signal->signal_term;
-    return true;
 }
 
 bool context_process_signal_set_group_leader(Context *ctx, const struct TermSignal *signal)
@@ -571,7 +638,7 @@ void context_update_flags(Context *ctx, int mask, int value) CLANG_THREAD_SANITI
 
 size_t context_message_queue_len(Context *ctx)
 {
-    return mailbox_len(&ctx->mailbox);
+    return mailbox_normal_message_len(&ctx->mailbox);
 }
 
 size_t context_size(Context *ctx)
@@ -584,6 +651,26 @@ size_t context_size(Context *ctx)
         + memory_heap_memory_size(&ctx->heap) * BYTES_PER_TERM;
 }
 
+bool context_is_valid_process_info_key(term key)
+{
+    // must accept exactly the keys context_get_process_info handles
+    switch (key) {
+        case HEAP_SIZE_ATOM:
+        case TOTAL_HEAP_SIZE_ATOM:
+        case STACK_SIZE_ATOM:
+        case MESSAGE_QUEUE_LEN_ATOM:
+        case REGISTERED_NAME_ATOM:
+        case MEMORY_ATOM:
+        case TRAP_EXIT_ATOM:
+        case LINKS_ATOM:
+        case MONITORED_BY_ATOM:
+        case CURRENT_STACKTRACE_ATOM:
+            return true;
+        default:
+            return false;
+    }
+}
+
 bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term atom_key, Heap *heap)
 {
     size_t ret_size;
@@ -594,6 +681,7 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
         case MESSAGE_QUEUE_LEN_ATOM:
         case REGISTERED_NAME_ATOM:
         case MEMORY_ATOM:
+        case TRAP_EXIT_ATOM:
             ret_size = TUPLE_SIZE(2);
             break;
         case LINKS_ATOM: {
@@ -659,12 +747,8 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
         // registered_name for process or port..
         case REGISTERED_NAME_ATOM: {
             term name = globalcontext_get_registered_name_process(ctx->global, ctx->process_id);
-            if (term_is_invalid_term((name))) {
-                ret = term_nil(); // Set ret to an empty list to match erlang behaviour
-            } else {
-                term_put_tuple_element(ret, 0, REGISTERED_NAME_ATOM);
-                term_put_tuple_element(ret, 1, name);
-            }
+            term_put_tuple_element(ret, 0, REGISTERED_NAME_ATOM);
+            term_put_tuple_element(ret, 1, term_is_invalid_term(name) ? term_nil() : name);
             break;
         }
 
@@ -697,6 +781,12 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
             term_put_tuple_element(ret, 0, MEMORY_ATOM);
             unsigned long value = context_size(ctx);
             term_put_tuple_element(ret, 1, term_from_int(value));
+            break;
+        }
+
+        case TRAP_EXIT_ATOM: {
+            term_put_tuple_element(ret, 0, TRAP_EXIT_ATOM);
+            term_put_tuple_element(ret, 1, ctx->trap_exit ? TRUE_ATOM : FALSE_ATOM);
             break;
         }
 

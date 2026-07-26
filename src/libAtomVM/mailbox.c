@@ -112,8 +112,8 @@ void mailbox_message_dispose(MailboxMessage *m, Heap *heap)
             break;
         }
         case ProcessInfoRequestSignal: {
-            struct BuiltInAtomRequestSignal *request_signal
-                = CONTAINER_OF(m, struct BuiltInAtomRequestSignal, base);
+            struct ProcessInfoRequestSignal *request_signal
+                = CONTAINER_OF(m, struct ProcessInfoRequestSignal, base);
             free(request_signal);
             break;
         }
@@ -179,6 +179,24 @@ size_t mailbox_len(Mailbox *mbox)
     MailboxMessage *msg = mbox->outer_first;
     while (msg) {
         result++;
+        msg = msg->next;
+    }
+    msg = mbox->inner_first;
+    while (msg) {
+        result++;
+        msg = msg->next;
+    }
+    return result;
+}
+
+size_t mailbox_normal_message_len(Mailbox *mbox)
+{
+    size_t result = 0;
+    MailboxMessage *msg = mbox->outer_first;
+    while (msg) {
+        if (msg->type == NormalMessage || msg->type == AliasMessageSignal) {
+            result++;
+        }
         msg = msg->next;
     }
     msg = mbox->inner_first;
@@ -293,19 +311,24 @@ void mailbox_send_immediate_signal(Context *c, enum MessageType type, term immed
     mailbox_post_message(c, &immediate_signal->base);
 }
 
-void mailbox_send_built_in_atom_request_signal(
-    Context *c, enum MessageType type, int32_t pid, term atom)
+bool mailbox_send_process_info_request_signal(
+    Context *c, int32_t sender_pid, process_info_mode_t mode, const term atoms[], size_t atoms_len)
 {
-    struct BuiltInAtomRequestSignal *atom_request = malloc(sizeof(struct BuiltInAtomRequestSignal));
-    if (IS_NULL_PTR(atom_request)) {
-        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        return;
+    struct ProcessInfoRequestSignal *signal
+        = malloc(sizeof(struct ProcessInfoRequestSignal) + atoms_len * sizeof(term));
+    if (IS_NULL_PTR(signal)) {
+        return false;
     }
-    atom_request->base.type = type;
-    atom_request->sender_pid = pid;
-    atom_request->atom = atom;
+    signal->base.type = ProcessInfoRequestSignal;
+    signal->sender_pid = sender_pid;
+    signal->mode = mode;
+    signal->atoms_len = atoms_len;
+    for (size_t i = 0; i < atoms_len; i++) {
+        signal->atoms[i] = atoms[i];
+    }
 
-    mailbox_post_message(c, &atom_request->base);
+    mailbox_post_message(c, &signal->base);
+    return true;
 }
 
 void mailbox_send_ref_signal(Context *c, enum MessageType type, uint64_t ref_ticks)

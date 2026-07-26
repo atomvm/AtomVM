@@ -447,19 +447,19 @@ void context_process_kill_signal(Context *ctx, struct TermSignal *signal);
  * @brief Process a process info request signal.
  *
  * @param ctx the context being executed
- * @param signal the process info signal
+ * @param signal the process info request signal
  * @param process_table_locked whether process table is already locked
  */
-void context_process_process_info_request_signal(Context *ctx, struct BuiltInAtomRequestSignal *signal, bool process_table_locked);
+void context_process_process_info_request_signal(
+    Context *ctx, struct ProcessInfoRequestSignal *signal, bool process_table_locked);
 
 /**
  * @brief Process a trap answer signal.
  *
  * @param ctx the context being executed
  * @param signal the answer message
- * @return \c true if successful, \c false in case of memory error
  */
-bool context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal);
+void context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal);
 
 /**
  * @brief Process a flush monitor signal.
@@ -517,6 +517,14 @@ term context_process_alias_message_signal(Context *ctx, struct TermSignal *signa
  * @param ctx the context being executed
  */
 void context_process_code_server_resume_signal(Context *ctx);
+
+/**
+ * @brief Check a process information key.
+ *
+ * @param key the item key to check
+ * @return \c true if the key is one context_get_process_info can answer
+ */
+bool context_is_valid_process_info_key(term key);
 
 /**
  * @brief Get process information.

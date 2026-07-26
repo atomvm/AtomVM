@@ -3340,14 +3340,27 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
     UNUSED(argc);
 
     term pid = argv[0];
-    term item_or_item_info = argv[1];
+    VALIDATE_VALUE(pid, term_is_local_pid);
 
-    if (!term_is_atom(item_or_item_info)) {
-        RAISE_ERROR(BADARG_ATOM);
+    // OTP compatibility: the second argument is validated before the target
+    // aliveness is considered, so a dead pid with an invalid argument is a
+    // badarg, not undefined.
+    size_t list_len = 0;
+    if (!term_is_list(argv[1])) {
+        if (UNLIKELY(!context_is_valid_process_info_key(argv[1]))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    } else {
+        term l = argv[1];
+        for (; term_is_nonempty_list(l); l = term_get_list_tail(l), list_len++) {
+            if (UNLIKELY(!context_is_valid_process_info_key(term_get_list_head(l)))) {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+        }
+        if (UNLIKELY(!term_is_nil(l))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
     }
-    // TODO add support for process_info/1
-    // and process_info/2 when second argument is a list
-    term item = item_or_item_info;
 
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
@@ -3355,30 +3368,114 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
         return UNDEFINED_ATOM;
     }
 
-    term ret = term_invalid_term();
-    if (ctx == target) {
-        size_t term_size;
-        // NOLINT(allocations-without-ensure-free) called with NULL heap, only computes size
-        if (UNLIKELY(!context_get_process_info(ctx, NULL, &term_size, item, NULL))) {
-            globalcontext_get_process_unlock(ctx->global, target);
-            RAISE_ERROR(BADARG_ATOM);
+    if (!term_is_list(argv[1])) {
+        term item = argv[1];
+        term ret = term_invalid_term();
+        if (ctx == target) {
+            size_t term_size;
+            // NOLINT(allocations-without-ensure-free) NULL heap call, only computes size
+            if (UNLIKELY(!context_get_process_info(ctx, NULL, &term_size, item, NULL))) {
+                globalcontext_get_process_unlock(ctx->global, target);
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            if (UNLIKELY(
+                    memory_ensure_free_opt(ctx, term_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                globalcontext_get_process_unlock(ctx->global, target);
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            if (UNLIKELY(!context_get_process_info(ctx, &ret, NULL, item, &ctx->heap))) {
+                globalcontext_get_process_unlock(ctx->global, target);
+                RAISE_ERROR(ret);
+            }
+            // return [] when unregistered (BEAM compatibility)
+            if (item == REGISTERED_NAME_ATOM && term_is_nil(term_get_tuple_element(ret, 1))) {
+                ret = term_nil();
+            }
+        } else {
+            if (UNLIKELY(!mailbox_send_process_info_request_signal(
+                    target, ctx->process_id, ProcessInfoSingle, &item, 1))) {
+                globalcontext_get_process_unlock(ctx->global, target);
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            context_update_flags(ctx, ~NoFlags, Trap);
         }
-        if (UNLIKELY(memory_ensure_free_opt(ctx, term_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        globalcontext_get_process_unlock(ctx->global, target);
+        return ret;
+    }
+
+    term item_list = argv[1];
+
+    if (list_len == 0) {
+        globalcontext_get_process_unlock(ctx->global, target);
+        return term_nil();
+    }
+
+    term *items_alloc = malloc(list_len * sizeof(term));
+    if (IS_NULL_PTR(items_alloc)) {
+        globalcontext_get_process_unlock(ctx->global, target);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term l = item_list;
+    for (size_t i = 0; i < list_len; i++) {
+        items_alloc[i] = term_get_list_head(l);
+        l = term_get_list_tail(l);
+    }
+
+    const term *items = items_alloc;
+    size_t items_len = list_len;
+
+    if (ctx != target) {
+        if (UNLIKELY(!mailbox_send_process_info_request_signal(
+                target, ctx->process_id, ProcessInfoList, items, items_len))) {
+            free(items_alloc);
             globalcontext_get_process_unlock(ctx->global, target);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        if (UNLIKELY(!context_get_process_info(ctx, &ret, NULL, item, &ctx->heap))) {
-            globalcontext_get_process_unlock(ctx->global, target);
-            RAISE_ERROR(ret);
-        }
-    } else {
-        // Currently, all items require a signal. We could nevertheless filter
-        // items that do not exist.
-        mailbox_send_built_in_atom_request_signal(target, ProcessInfoRequestSignal, ctx->process_id, item);
         context_update_flags(ctx, ~NoFlags, Trap);
+        free(items_alloc);
+        globalcontext_get_process_unlock(ctx->global, target);
+        return term_invalid_term();
     }
-    globalcontext_get_process_unlock(ctx->global, target);
 
+    size_t total_size = 0;
+    for (size_t i = 0; i < items_len; i++) {
+        size_t item_size;
+        // NOLINT(allocations-without-ensure-free) NULL heap call, only computes size
+        if (UNLIKELY(!context_get_process_info(ctx, NULL, &item_size, items[i], NULL))) {
+            free(items_alloc);
+            globalcontext_get_process_unlock(ctx->global, target);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        if (UNLIKELY(item_size > MEMORY_HEAP_MAX_TERMS - CONS_SIZE
+                || item_size + CONS_SIZE > MEMORY_HEAP_MAX_TERMS - total_size)) {
+            free(items_alloc);
+            globalcontext_get_process_unlock(ctx->global, target);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        total_size += item_size + CONS_SIZE;
+    }
+
+    if (UNLIKELY(memory_ensure_free_opt(ctx, total_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        free(items_alloc);
+        globalcontext_get_process_unlock(ctx->global, target);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    // Atoms in `items` are immediate, safe after GC
+    term ret = term_nil();
+    for (size_t i = items_len; i-- > 0;) {
+        term item_result;
+        if (UNLIKELY(!context_get_process_info(ctx, &item_result, NULL, items[i], &ctx->heap))) {
+            free(items_alloc);
+            globalcontext_get_process_unlock(ctx->global, target);
+            RAISE_ERROR(item_result);
+        }
+
+        ret = term_list_prepend(item_result, ret, &ctx->heap);
+    }
+
+    free(items_alloc);
+    globalcontext_get_process_unlock(ctx->global, target);
     return ret;
 }
 

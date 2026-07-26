@@ -32,10 +32,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added USB CDC port drivers for ESP32, RP2, and STM32 platforms
 - Added a Linux `gpio` driver for the generic_unix port (in `avm_unix`) using sysfs
 - Added `console:print_err/1` to write to standard error
+- Added support for `process_info/1` and `process_info/2` with list argument
 - Added `erlang:term_to_binary/2`, `erlang:is_builtin/3` and `erlang:bitstring_to_list/1`
 - Added `lists:mapfoldr/3`
 
 ### Changed
+- `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does:
+  calling it with a port now raises `badarg` (previous versions accepted any id-carrying
+  term, so it could be used to read port information; there is no `erlang:port_info/2`
+  in AtomVM yet to migrate such code to)
 - Updated network type db() to dbm() to reflect the actual representation of the type
 - Use ES6 modules for emscripten port, using .mjs suffix
 - `ahttp_client` now returns `{error, {parser, incomplete_response}}` when a socket closes mid-response
@@ -77,6 +82,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `ahttp_client` crash on headers with empty or all-whitespace values
 - Fixed a bug in `supervisor` handling of failing child
 - Fixed two bugs related to closing fds in `atomvm:subprocess/4`
+- Fixed `message_queue_len` (as reported by `erlang:process_info/2`): unprocessed signals,
+  such as monitor or unlink requests, were counted as queued messages
+- Fixed a process hanging forever after catching an exception raised asynchronously by a
+  trapping BIF: the trap flag was left set, so the process parked at the next scheduling
+  point and never ran again
 - Fixed `erlang:localtime/1` memory leak, use-after-free, and TZ restore bugs on newlib/picolibc
 - Fixed ESP32 I2C driver resource leaks, half-closed state, and close-during-transmission errors
 - Fixed several underallocation issues that could trigger data corruption on `binary:replace`, `zlib:compress` and bsd socket recv code.

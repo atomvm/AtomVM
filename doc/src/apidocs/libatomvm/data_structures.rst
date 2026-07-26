@@ -15,17 +15,11 @@ Data Structures
    :maxdepth: 4
    :caption: Structs
 
-.. doxygenstruct:: AtomsHashTable
-   :allow-dot-graphs:
 .. doxygenstruct:: AtomStringIntPair
    :allow-dot-graphs:
 .. doxygenstruct:: AtomTable
    :allow-dot-graphs:
 .. doxygenstruct:: AVMPackData
-   :allow-dot-graphs:
-.. doxygenstruct:: BuiltInAtomRequestSignal
-   :allow-dot-graphs:
-.. doxygenstruct:: BuiltInAtomSignal
    :allow-dot-graphs:
 .. doxygenstruct:: CharDataToBytesAcc
    :allow-dot-graphs:
@@ -67,6 +61,8 @@ Data Structures
 .. doxygenstruct:: HNodeGroup
    :allow-dot-graphs:
 .. doxygenstruct:: IFFRecord
+   :allow-dot-graphs:
+.. doxygenstruct:: ImmediateSignal
    :allow-dot-graphs:
 .. doxygenstruct:: InMemoryAVMPack
    :allow-dot-graphs:
@@ -116,6 +112,8 @@ Data Structures
 .. doxygenstruct:: Nif
    :allow-dot-graphs:
 .. doxygenstruct:: PrinterFun
+.. doxygenstruct:: ProcessInfoRequestSignal
+   :allow-dot-graphs:
 .. doxygenstruct:: RefcBinary
    :allow-dot-graphs:
 .. doxygenstruct:: RefcBinaryAVMPack

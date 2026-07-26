@@ -807,23 +807,21 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                     break;                                                                      \
                 }                                                                               \
                 case ProcessInfoRequestSignal: {                                                \
-                    struct BuiltInAtomRequestSignal *request_signal                             \
-                        = CONTAINER_OF(signal_message, struct BuiltInAtomRequestSignal, base);  \
+                    struct ProcessInfoRequestSignal *request_signal                             \
+                        = CONTAINER_OF(signal_message, struct ProcessInfoRequestSignal, base);  \
                     context_process_process_info_request_signal(ctx, request_signal, false);    \
                     break;                                                                      \
                 }                                                                               \
                 case TrapAnswerSignal: {                                                        \
                     struct TermSignal *trap_answer                                              \
                         = CONTAINER_OF(signal_message, struct TermSignal, base);                \
-                    if (UNLIKELY(!context_process_signal_trap_answer(ctx, trap_answer))) {      \
-                        SET_ERROR(OUT_OF_MEMORY_ATOM);                                          \
-                        handle_error = true;                                                    \
-                    }                                                                           \
+                    context_process_signal_trap_answer(ctx, trap_answer);                       \
                     break;                                                                      \
                 }                                                                               \
                 case TrapExceptionSignal: {                                                     \
                     struct ImmediateSignal *trap_exception                                      \
                         = CONTAINER_OF(signal_message, struct ImmediateSignal, base);           \
+                    context_update_flags(ctx, ~Trap, NoFlags);                                  \
                     SET_ERROR(trap_exception->immediate);                                       \
                     handle_error = true;                                                        \
                     break;                                                                      \
