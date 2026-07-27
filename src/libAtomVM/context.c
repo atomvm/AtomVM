@@ -86,6 +86,12 @@ Context *context_new(GlobalContext *glb)
     ctx->min_heap_size = 0;
     ctx->max_heap_size = 0;
     ctx->heap_growth_strategy = BoundedFreeHeapGrowth;
+    // Same default as BEAM: a full sweep every 65535 collections, minor
+    // (generational) collections in between. 0 disables the generational
+    // collector (always full-sweep); both can be set per process via
+    // spawn_opt/process_flag fullsweep_after.
+    ctx->fullsweep_after = 65535;
+    ctx->gc_count = 0;
     ctx->has_min_heap_size = 0;
     ctx->has_max_heap_size = 0;
     ctx->active_alias_count = 0;
@@ -662,6 +668,7 @@ bool context_is_valid_process_info_key(term key)
         case REGISTERED_NAME_ATOM:
         case MEMORY_ATOM:
         case TRAP_EXIT_ATOM:
+        case FULLSWEEP_AFTER_ATOM:
         case LINKS_ATOM:
         case MONITORED_BY_ATOM:
         case CURRENT_STACKTRACE_ATOM:
@@ -682,6 +689,7 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
         case REGISTERED_NAME_ATOM:
         case MEMORY_ATOM:
         case TRAP_EXIT_ATOM:
+        case FULLSWEEP_AFTER_ATOM:
             ret_size = TUPLE_SIZE(2);
             break;
         case LINKS_ATOM: {
@@ -833,6 +841,12 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
                 }
             }
             term_put_tuple_element(ret, 1, list);
+            break;
+        }
+
+        case FULLSWEEP_AFTER_ATOM: {
+            term_put_tuple_element(ret, 0, FULLSWEEP_AFTER_ATOM);
+            term_put_tuple_element(ret, 1, term_from_int(ctx->fullsweep_after));
             break;
         }
 
@@ -1489,6 +1503,14 @@ COLD_FUNC void context_dump(Context *ctx)
         }
 
         ct++;
+    }
+
+    fprintf(stderr, "\n\nHeap\n----\n");
+    fprintf(stderr, "young heap: %zu words\n", (size_t) (ctx->heap.heap_end - ctx->heap.heap_start));
+    if (ctx->heap.old_heap_start) {
+        fprintf(stderr, "old heap: %zu words (used: %zu)\n",
+            (size_t) (ctx->heap.old_heap_end - ctx->heap.old_heap_start),
+            (size_t) (ctx->heap.old_heap_ptr - ctx->heap.old_heap_start));
     }
 
     fprintf(stderr, "\n\nMailbox\n-------\n");

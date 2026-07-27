@@ -115,9 +115,9 @@ call_primitive_6_args_test() ->
     Stream = ?BACKEND:stream(State4),
     Dump =
         <<
-            "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+            "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
             "   4:	927ef4e7 	and	x7, x7, #0xfffffffffffffffc\n"
-            "   8:	f9401c08 	ldr	x8, [x0, #56]\n"
+            "   8:	f9403008 	ldr	x8, [x0, #96]\n"
             "   c:	f940b850 	ldr	x16, [x2, #368]\n"
             "  10:	a9bf03fe 	stp	x30, x0, [sp, #-16]!\n"
             "  14:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
@@ -258,7 +258,7 @@ call_primitive_last_5_args_test() ->
     ]),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
         "   4:	f9404c48 	ldr	x8, [x2, #152]\n"
         "   8:	d2800102 	mov	x2, #0x8                   	// #8\n"
         "   c:	d2805963 	mov	x3, #0x2cb                 	// #715\n"
@@ -328,7 +328,7 @@ call_primitive_last_if_block_preserves_cache_test() ->
     Stream = ?BACKEND:stream(State0),
     Dump = <<
         "   0:	d2800027 	mov	x7, #0x1\n"
-        "   4:	f9401808 	ldr	x8, [x0, #48]\n"
+        "   4:	f9402c08 	ldr	x8, [x0, #88]\n"
         "   8:	b5000067 	cbnz	x7, 0x14\n"
         "   c:	f9400047 	ldr	x7, [x2]\n"
         "  10:	d61f00e0 	br	x7"
@@ -342,7 +342,7 @@ jump_to_label_if_block_preserves_cache_test() ->
     Stream = ?BACKEND:stream(State0),
     Dump = <<
         "   0:	d2800027 	mov	x7, #0x1\n"
-        "   4:	f9401808 	ldr	x8, [x0, #48]\n"
+        "   4:	f9402c08 	ldr	x8, [x0, #88]\n"
         "   8:	b5000047 	cbnz	x7, 0x10\n"
         "   c:	14000000 	b	0xc"
     >>,
@@ -355,7 +355,7 @@ jump_to_offset_if_block_preserves_cache_test() ->
     Stream = ?BACKEND:stream(State0),
     Dump = <<
         "   0:	d2800027 	mov	x7, #0x1\n"
-        "   4:	f9401808 	ldr	x8, [x0, #48]\n"
+        "   4:	f9402c08 	ldr	x8, [x0, #88]\n"
         "   8:	b5000047 	cbnz	x7, 0x10\n"
         "   c:	1400003d 	b	0x100"
     >>,
@@ -376,7 +376,7 @@ jump_to_continuation_if_block_preserves_cache_test() ->
     Dump = <<
         "   0:	d2802007 	mov	x7, #0x100\n"
         "   4:	d2800028 	mov	x8, #0x1\n"
-        "   8:	f9401809 	ldr	x9, [x0, #48]\n"
+        "   8:	f9402c09 	ldr	x9, [x0, #88]\n"
         "   c:	b5000088 	cbnz	x8, 0x1c\n"
         "  10:	10ffff88 	adr	x8, 0x0\n"
         "  14:	8b070108 	add	x8, x8, x7\n"
@@ -392,10 +392,10 @@ move_array_element_x_reg_invalidates_vm_loc_cache_test() ->
     {State4, _Reg} = ?BACKEND:move_to_native_register(State3, {x_reg, 5}),
     Stream = ?BACKEND:stream(State4),
     Dump = <<
-        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
-        "   4:	f9401808 	ldr	x8, [x0, #48]\n"
+        "   0:	f9404007 	ldr	x7, [x0, #128]\n"
+        "   4:	f9402c08 	ldr	x8, [x0, #88]\n"
         "   8:	f9400109 	ldr	x9, [x8]\n"
-        "   c:	f9002c09 	str	x9, [x0, #88]"
+        "   c:	f9004009 	str	x9, [x0, #128]"
     >>,
     ?assertStream(aarch64, Dump, Stream).
 
@@ -468,9 +468,9 @@ move_to_cp_test() ->
     Stream = ?BACKEND:stream(State1),
     Dump =
         <<
-            "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+            "   0:	f9402807 	ldr	x7, [x0, #80]\n"
             "   4:	f94000e7 	ldr	x7, [x7]\n"
-            "   8:	f9005c07 	str	x7, [x0, #184]"
+            "   8:	f9007007 	str	x7, [x0, #224]"
         >>,
     ?assertStream(aarch64, Dump, Stream).
 
@@ -480,9 +480,9 @@ increment_sp_test() ->
     Stream = ?BACKEND:stream(State1),
     Dump =
         <<
-            "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+            "   0:	f9402807 	ldr	x7, [x0, #80]\n"
             "   4:	9100e0e7 	add	x7, x7, #0x38\n"
-            "   8:	f9001407 	str	x7, [x0, #40]"
+            "   8:	f9002807 	str	x7, [x0, #80]"
         >>,
     ?assertStream(aarch64, Dump, Stream).
 
@@ -506,8 +506,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	b6f80047 	tbz	x7, #63, 0x10\n"
                         "   c:	91000908 	add	x8, x8, #0x2"
                     >>,
@@ -524,8 +524,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	eb0800ff 	cmp	x7, x8\n"
                         "   c:	5400004a 	b.ge	0x14  // b.tcont\n"
                         "  10:	91000908 	add	x8, x8, #0x2"
@@ -543,8 +543,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	b5000047 	cbnz	x7, 0x10\n"
                         "   c:	91000908 	add	x8, x8, #0x2"
                     >>,
@@ -561,8 +561,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	b5000047 	cbnz	x7, 0x10\n"
                         "   c:	91000908 	add	x8, x8, #0x2"
                     >>,
@@ -579,8 +579,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	35000047 	cbnz	w7, 0x10\n"
                         "   c:	91000908 	add	x8, x8, #0x2"
                     >>,
@@ -597,8 +597,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	35000047 	cbnz	w7, 0x10\n"
                         "   c:	91000908 	add	x8, x8, #0x2"
                     >>,
@@ -615,8 +615,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	b4000047 	cbz	x7, 0x10\n"
                         "   c:	91000908 	add	x8, x8, #0x2"
                     >>,
@@ -633,8 +633,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	b4000047 	cbz	x7, 0x10\n"
                         "   c:	91000908 	add	x8, x8, #0x2"
                     >>,
@@ -651,8 +651,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	34000047 	cbz	w7, 0x10\n"
                         "   c:	91000908 	add	x8, x8, #0x2"
                     >>,
@@ -669,8 +669,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	34000047 	cbz	w7, 0x10\n"
                         "   c:	91000908 	add	x8, x8, #0x2"
                     >>,
@@ -687,8 +687,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	f100ecff 	cmp	x7, #0x3b\n"
                         "   c:	54000040 	b.eq	0x14  // b.none\n"
                         "  10:	91000908 	add	x8, x8, #0x2"
@@ -706,8 +706,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	f100ecff 	cmp	x7, #0x3b\n"
                         "   c:	54000040 	b.eq	0x14  // b.none\n"
                         "  10:	91000908 	add	x8, x8, #0x2"
@@ -725,8 +725,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	7100a8ff 	cmp	w7, #0x2a\n"
                         "   c:	54000040 	b.eq	0x14  // b.none\n"
                         "  10:	91000908 	add	x8, x8, #0x2"
@@ -744,8 +744,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	7100a8ff 	cmp	w7, #0x2a\n"
                         "   c:	54000040 	b.eq	0x14  // b.none\n"
                         "  10:	91000908 	add	x8, x8, #0x2"
@@ -763,8 +763,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	f100ecff 	cmp	x7, #0x3b\n"
                         "   c:	54000041 	b.ne	0x14  // b.any\n"
                         "  10:	91000908 	add	x8, x8, #0x2"
@@ -782,8 +782,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	f100ecff 	cmp	x7, #0x3b\n"
                         "   c:	54000041 	b.ne	0x14  // b.any\n"
                         "  10:	91000908 	add	x8, x8, #0x2"
@@ -801,8 +801,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	7100a8ff 	cmp	w7, #0x2a\n"
                         "   c:	54000041 	b.ne	0x14  // b.any\n"
                         "  10:	91000908 	add	x8, x8, #0x2"
@@ -820,8 +820,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	7100a8ff 	cmp	w7, #0x2a\n"
                         "   c:	54000041 	b.ne	0x14  // b.any\n"
                         "  10:	91000908 	add	x8, x8, #0x2"
@@ -839,8 +839,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	37000047 	tbnz	w7, #0, 0x10\n"
                         "   c:	91000908 	add	x8, x8, #0x2"
                     >>,
@@ -857,8 +857,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	37000047 	tbnz	w7, #0, 0x10\n"
                         "   c:	91000908 	add	x8, x8, #0x2"
                     >>,
@@ -875,8 +875,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	36000047 	tbz	w7, #0, 0x10\n"
                         "   c:	91000908 	add	x8, x8, #0x2"
                     >>,
@@ -893,8 +893,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	36000047 	tbz	w7, #0, 0x10\n"
                         "   c:	91000908 	add	x8, x8, #0x2"
                     >>,
@@ -911,8 +911,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	f24008ff 	tst	x7, #0x7\n"
                         "   c:	54000040 	b.eq	0x14  // b.none\n"
                         "  10:	91000908 	add	x8, x8, #0x2"
@@ -930,8 +930,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	d28000a9 	mov	x9, #0x5                   	// #5\n"
                         "   c:	ea0900ff 	tst	x7, x9\n"
                         "  10:	54000040 	b.eq	0x18  // b.none\n"
@@ -950,8 +950,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	f24008ff 	tst	x7, #0x7\n"
                         "   c:	54000040 	b.eq	0x14  // b.none\n"
                         "  10:	91000908 	add	x8, x8, #0x2"
@@ -969,8 +969,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	92400ce9 	and	x9, x7, #0xf\n"
                         "   c:	f1003d3f 	cmp	x9, #0xf\n"
                         "  10:	54000040 	b.eq	0x18  // b.none\n"
@@ -989,8 +989,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	92400ce7 	and	x7, x7, #0xf\n"
                         "   c:	f1003cff 	cmp	x7, #0xf\n"
                         "  10:	54000040 	b.eq	0x18  // b.none\n"
@@ -1009,8 +1009,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	f10190ff 	cmp	x7, #0x64\n"
                         "   c:	5400004d 	b.le	0x14\n"
                         "  10:	91000908 	add	x8, x8, #0x2"
@@ -1028,8 +1028,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	f10190ff 	cmp	x7, #0x64\n"
                         "   c:	5400004d 	b.le	0x14\n"
                         "  10:	91000908 	add	x8, x8, #0x2"
@@ -1047,8 +1047,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	f10190ff 	cmp	x7, #0x64\n"
                         "   c:	5400004a 	b.ge	0x14  // b.tcont\n"
                         "  10:	91000908 	add	x8, x8, #0x2"
@@ -1066,8 +1066,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9403008 	ldr	x8, [x0, #96]\n"
                         "   8:	f10190ff 	cmp	x7, #0x64\n"
                         "   c:	5400004a 	b.ge	0x14  // b.tcont\n"
                         "  10:	91000908 	add	x8, x8, #0x2"
@@ -1095,8 +1095,8 @@ if_else_block_test() ->
     Stream = ?BACKEND:stream(State3),
     Dump =
         <<
-            "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-            "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+            "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+            "   4:	f9403008 	ldr	x8, [x0, #96]\n"
             "   8:	f100ecff 	cmp	x7, #0x3b\n"
             "   c:	54000061 	b.ne	0x18  // b.any\n"
             "  10:	91000908 	add	x8, x8, #0x2\n"
@@ -1114,7 +1114,7 @@ shift_right_test_() ->
             Stream = ?BACKEND:stream(State2),
             Dump =
                 <<
-                    "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                    "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
                     "   4:	d343fce7 	lsr	x7, x7, #3"
                 >>,
             ?assertStream(aarch64, Dump, Stream)
@@ -1127,7 +1127,7 @@ shift_right_test_() ->
             Stream = ?BACKEND:stream(State2),
             Dump =
                 <<
-                    "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                    "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
                     "   4:	d343fce8 	lsr	x8, x7, #3"
                 >>,
             ?assertStream(aarch64, Dump, Stream)
@@ -1141,7 +1141,7 @@ shift_left_test() ->
     Stream = ?BACKEND:stream(State2),
     Dump =
         <<
-            "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+            "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
             "   4:	d37df0e7 	lsl	x7, x7, #3"
         >>,
     ?assertStream(aarch64, Dump, Stream).
@@ -1252,7 +1252,7 @@ call_bif_with_large_literal_integer_test() ->
             "  5c:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
             "  60:	d2800001 	mov	x1, #0x0                   	// #0\n"
             "  64:	d2800022 	mov	x2, #0x1                   	// #1\n"
-            "  68:	f9401803 	ldr	x3, [x0, #48]\n"
+            "  68:	f9402c03 	ldr	x3, [x0, #88]\n"
             "  6c:	aa0803e4 	mov	x4, x8\n"
             "  70:	d63f00e0 	blr	x7\n"
             "  74:	aa0003e7 	mov	x7, x0\n"
@@ -1262,7 +1262,7 @@ call_bif_with_large_literal_integer_test() ->
             "  84:	f9401847 	ldr	x7, [x2, #48]\n"
             "  88:	d2801102 	mov	x2, #0x88                  	// #136\n"
             "  8c:	d61f00e0 	br	x7\n"
-            "  90:	f9001807 	str	x7, [x0, #48]"
+            "  90:	f9002c07 	str	x7, [x0, #88]"
         >>,
     ?assertStream(aarch64, Dump, Stream).
 
@@ -1276,12 +1276,12 @@ get_list_test() ->
     ?BACKEND:assert_all_native_free(State5),
     Stream = ?BACKEND:stream(State5),
     Dump = <<
-        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
         "   4:	927ef4e7 	and	x7, x7, #0xfffffffffffffffc\n"
-        "   8:	f9401408 	ldr	x8, [x0, #40]\n"
+        "   8:	f9402808 	ldr	x8, [x0, #80]\n"
         "   c:	f94004e9 	ldr	x9, [x7, #8]\n"
         "  10:	f9000509 	str	x9, [x8, #8]\n"
-        "  14:	f9401408 	ldr	x8, [x0, #40]\n"
+        "  14:	f9402808 	ldr	x8, [x0, #80]\n"
         "  18:	f94000e9 	ldr	x9, [x7]\n"
         "  1c:	f9000109 	str	x9, [x8]"
     >>,
@@ -1326,7 +1326,7 @@ is_integer_test() ->
     Dump = <<
         "   0:	14000001 	b	0x4\n"
         "   4:	14000050 	b	0x144\n"
-        "   8:	f9401807 	ldr	x7, [x0, #48]\n"
+        "   8:	f9402c07 	ldr	x7, [x0, #88]\n"
         "   c:	92400ce8 	and	x8, x7, #0xf\n"
         "  10:	f1003d1f 	cmp	x8, #0xf\n"
         "  14:	54000180 	b.eq	0x44  // b.none\n"
@@ -1382,7 +1382,7 @@ is_number_test() ->
     Dump = <<
         "   0:	14000001 	b	0x4\n"
         "   4:	14000053 	b	0x150\n"
-        "   8:	f9401807 	ldr	x7, [x0, #48]\n"
+        "   8:	f9402c07 	ldr	x7, [x0, #88]\n"
         "   c:	92400ce8 	and	x8, x7, #0xf\n"
         "  10:	f1003d1f 	cmp	x8, #0xf\n"
         "  14:	540001e0 	b.eq	0x50  // b.none\n"
@@ -1422,7 +1422,7 @@ is_boolean_test() ->
     Dump = <<
         "   0:	14000001 	b	0x4\n"
         "   4:	14000047 	b	0x120\n"
-        "   8:	f9401807 	ldr	x7, [x0, #48]\n"
+        "   8:	f9402c07 	ldr	x7, [x0, #88]\n"
         "   c:	f1012cff 	cmp	x7, #0x4b\n"
         "  10:	54000080 	b.eq	0x20\n"
         "  14:	f1002cff 	cmp	x7, #0xb\n"
@@ -1601,9 +1601,9 @@ gc_bif2_test() ->
         "  28:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
         "  2c:	d2800001 	mov	x1, #0x0                   	// #0\n"
         "  30:	d2800062 	mov	x2, #0x3                   	// #3\n"
-        "  34:	f9401403 	ldr	x3, [x0, #40]\n"
+        "  34:	f9402803 	ldr	x3, [x0, #80]\n"
         "  38:	f9400063 	ldr	x3, [x3]\n"
-        "  3c:	f9401804 	ldr	x4, [x0, #48]\n"
+        "  3c:	f9402c04 	ldr	x4, [x0, #88]\n"
         "  40:	d63f00e0 	blr	x7\n"
         "  44:	aa0003e7 	mov	x7, x0\n"
         "  48:	a8c10be1 	ldp	x1, x2, [sp], #16\n"
@@ -1653,7 +1653,7 @@ call_ext_test() ->
         "  28:	d3689ce7 	lsl	x7, x7, #24\n"
         "  2c:	d2802610 	mov	x16, #0x130                 	// #304\n"
         "  30:	aa1000e7 	orr	x7, x7, x16\n"
-        "  34:	f9005c07 	str	x7, [x0, #184]\n"
+        "  34:	f9007007 	str	x7, [x0, #224]\n"
         "  38:	f9401047 	ldr	x7, [x2, #32]\n"
         "  3c:	d2800042 	mov	x2, #0x2                   	// #2\n"
         "  40:	d28000a3 	mov	x3, #0x5                   	// #5\n"
@@ -1700,7 +1700,7 @@ call_fun_test() ->
         "  14:	f9000427 	str	x7, [x1, #8]\n"
         "  18:	f9400847 	ldr	x7, [x2, #16]\n"
         "  1c:	d61f00e0 	br	x7\n"
-        "  20:	f9401807 	ldr	x7, [x0, #48]\n"
+        "  20:	f9402c07 	ldr	x7, [x0, #88]\n"
         "  24:	aa0703e8 	mov	x8, x7\n"
         "  28:	92400509 	and	x9, x8, #0x3\n"
         "  2c:	f100093f 	cmp	x9, #0x2\n"
@@ -1725,7 +1725,7 @@ call_fun_test() ->
         "  78:	d3689d08 	lsl	x8, x8, #24\n"
         "  7c:	d2804c10 	mov	x16, #0x260                 	// #608\n"
         "  80:	aa100108 	orr	x8, x8, x16\n"
-        "  84:	f9005c08 	str	x8, [x0, #184]\n"
+        "  84:	f9007008 	str	x8, [x0, #224]\n"
         "  88:	f9408048 	ldr	x8, [x2, #256]\n"
         "  8c:	aa0703e2 	mov	x2, x7\n"
         "  90:	d2800003 	mov	x3, #0x0                   	// #0\n"
@@ -1741,7 +1741,7 @@ decrement_reductions_invalidates_cache_test() ->
     {State4, Reg} = ?BACKEND:move_to_native_register(State3, {x_reg, 0}),
     Stream = ?BACKEND:stream(State4),
     Dump = <<
-        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
         "   4:	b9401027 	ldr	w7, [x1, #16]\n"
         "   8:	f10004e7 	subs	x7, x7, #0x1\n"
         "   c:	b9001027 	str	w7, [x1, #16]\n"
@@ -1750,7 +1750,7 @@ decrement_reductions_invalidates_cache_test() ->
         "  18:	f9000427 	str	x7, [x1, #8]\n"
         "  1c:	f9400847 	ldr	x7, [x2, #16]\n"
         "  20:	d61f00e0 	br	x7\n"
-        "  24:	f9401807 	ldr	x7, [x0, #48]"
+        "  24:	f9402c07 	ldr	x7, [x0, #88]"
     >>,
     ?assertStream(aarch64, Dump, Stream).
 
@@ -1768,12 +1768,12 @@ move_to_vm_register_test_() ->
             [
                 ?_test(begin
                     move_to_vm_register_test0(State0, 0, {x_reg, 0}, <<
-                        "   0:	f900181f 	str	xzr, [x0, #48]"
+                        "   0:	f9002c1f 	str	xzr, [x0, #88]"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 0, {x_reg, extra}, <<
-                        "   0:	f900581f 	str	xzr, [x0, #176]"
+                        "   0:	f9006c1f 	str	xzr, [x0, #216]"
                     >>)
                 end),
                 ?_test(begin
@@ -1783,13 +1783,13 @@ move_to_vm_register_test_() ->
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 0, {y_reg, 2}, <<
-                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+                        "   0:	f9402807 	ldr	x7, [x0, #80]\n"
                         "   4:	f90008ff 	str	xzr, [x7, #16]"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 0, {y_reg, 20}, <<
-                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+                        "   0:	f9402807 	ldr	x7, [x0, #80]\n"
                         "   4:	f90050ff 	str	xzr, [x7, #160]"
                     >>)
                 end),
@@ -1797,26 +1797,26 @@ move_to_vm_register_test_() ->
                 ?_test(begin
                     move_to_vm_register_test0(State0, 42, {x_reg, 0}, <<
                         "   0:	d2800547 	mov	x7, #0x2a                  	// #42\n"
-                        "   4:	f9001807 	str	x7, [x0, #48]"
+                        "   4:	f9002c07 	str	x7, [x0, #88]"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 42, {x_reg, extra}, <<
                         "   0:	d2800547 	mov	x7, #0x2a                  	// #42\n"
-                        "   4:	f9005807 	str	x7, [x0, #176]"
+                        "   4:	f9006c07 	str	x7, [x0, #216]"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 42, {y_reg, 2}, <<
                         "   0:	d2800547 	mov	x7, #0x2a                  	// #42\n"
-                        "   4:	f9401408 	ldr	x8, [x0, #40]\n"
+                        "   4:	f9402808 	ldr	x8, [x0, #80]\n"
                         "   8:	f9000907 	str	x7, [x8, #16]"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 42, {y_reg, 20}, <<
                         "   0:	d2800547 	mov	x7, #0x2a                  	// #42\n"
-                        "   4:	f9401408 	ldr	x8, [x0, #40]\n"
+                        "   4:	f9402808 	ldr	x8, [x0, #80]\n"
                         "   8:	f9005107 	str	x7, [x8, #160]"
                     >>)
                 end),
@@ -1830,14 +1830,14 @@ move_to_vm_register_test_() ->
                 %% Test: x_reg to x_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, {x_reg, 1}, {x_reg, 2}, <<
-                        "   0:	f9401c07 	ldr	x7, [x0, #56]\n"
-                        "   4:	f9002007 	str	x7, [x0, #64]"
+                        "   0:	f9403007 	ldr	x7, [x0, #96]\n"
+                        "   4:	f9003407 	str	x7, [x0, #104]"
                     >>)
                 end),
                 %% Test: x_reg to ptr
                 ?_test(begin
                     move_to_vm_register_test0(State0, {x_reg, 1}, {ptr, r8}, <<
-                        "   0:	f9401c07 	ldr	x7, [x0, #56]\n"
+                        "   0:	f9403007 	ldr	x7, [x0, #96]\n"
                         "   4:	f9000107 	str	x7, [x8]"
                     >>)
                 end),
@@ -1845,42 +1845,42 @@ move_to_vm_register_test_() ->
                 ?_test(begin
                     move_to_vm_register_test0(State0, {ptr, r9}, {x_reg, 3}, <<
                         "   0:	f9400127 	ldr	x7, [x9]\n"
-                        "   4:	f9002407 	str	x7, [x0, #72]"
+                        "   4:	f9003807 	str	x7, [x0, #112]"
                     >>)
                 end),
                 %% Test: x_reg to y_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, {x_reg, 0}, {y_reg, 1}, <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401408 	ldr	x8, [x0, #40]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+                        "   4:	f9402808 	ldr	x8, [x0, #80]\n"
                         "   8:	f9000507 	str	x7, [x8, #8]"
                     >>)
                 end),
                 %% Test: y_reg to x_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, {y_reg, 0}, {x_reg, 3}, <<
-                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+                        "   0:	f9402807 	ldr	x7, [x0, #80]\n"
                         "   4:	f94000e7 	ldr	x7, [x7]\n"
-                        "   8:	f9002407 	str	x7, [x0, #72]"
+                        "   8:	f9003807 	str	x7, [x0, #112]"
                     >>)
                 end),
                 %% Test: y_reg to y_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, {y_reg, 1}, {x_reg, 3}, <<
-                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+                        "   0:	f9402807 	ldr	x7, [x0, #80]\n"
                         "   4:	f94004e7 	ldr	x7, [x7, #8]\n"
-                        "   8:	f9002407 	str	x7, [x0, #72]"
+                        "   8:	f9003807 	str	x7, [x0, #112]"
                     >>)
                 end),
                 %% Test: Native register to x_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, r10, {x_reg, 0}, <<
-                        "   0:	f900180a 	str	x10, [x0, #48]"
+                        "   0:	f9002c0a 	str	x10, [x0, #88]"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, r10, {x_reg, extra}, <<
-                        "   0:	f900580a 	str	x10, [x0, #176]"
+                        "   0:	f9006c0a 	str	x10, [x0, #216]"
                     >>)
                 end),
                 %% Test: Native register to ptr
@@ -1892,7 +1892,7 @@ move_to_vm_register_test_() ->
                 %% Test: Native register to y_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, r10, {y_reg, 0}, <<
-                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+                        "   0:	f9402807 	ldr	x7, [x0, #80]\n"
                         "   4:	f90000ea 	str	x10, [x7]"
                     >>)
                 end),
@@ -1903,7 +1903,7 @@ move_to_vm_register_test_() ->
                         "   4:	f2b35787 	movk	x7, #0x9abc, lsl #16\n"
                         "   8:	f2cacf07 	movk	x7, #0x5678, lsl #32\n"
                         "   c:	f2e24687 	movk	x7, #0x1234, lsl #48\n"
-                        "  10:	f9001807 	str	x7, [x0, #48]"
+                        "  10:	f9002c07 	str	x7, [x0, #88]"
                     >>)
                 end),
                 ?_test(begin
@@ -1912,7 +1912,7 @@ move_to_vm_register_test_() ->
                         "   4:	f2b35787 	movk	x7, #0x9abc, lsl #16\n"
                         "   8:	f2cacf07 	movk	x7, #0x5678, lsl #32\n"
                         "   c:	f2e24687 	movk	x7, #0x1234, lsl #48\n"
-                        "  10:	f9005807 	str	x7, [x0, #176]\n"
+                        "  10:	f9006c07 	str	x7, [x0, #216]\n"
                     >>)
                 end),
                 ?_test(begin
@@ -1921,7 +1921,7 @@ move_to_vm_register_test_() ->
                         "   4:	f2b35787 	movk	x7, #0x9abc, lsl #16\n"
                         "   8:	f2cacf07 	movk	x7, #0x5678, lsl #32\n"
                         "   c:	f2e24687 	movk	x7, #0x1234, lsl #48\n"
-                        "  10:	f9401408 	ldr	x8, [x0, #40]\n"
+                        "  10:	f9402808 	ldr	x8, [x0, #80]\n"
                         "  14:	f9000907 	str	x7, [x8, #16]"
                     >>)
                 end),
@@ -1931,7 +1931,7 @@ move_to_vm_register_test_() ->
                         "   4:	f2b35787 	movk	x7, #0x9abc, lsl #16\n"
                         "   8:	f2cacf07 	movk	x7, #0x5678, lsl #32\n"
                         "   c:	f2e24687 	movk	x7, #0x1234, lsl #48\n"
-                        "  10:	f9401408 	ldr	x8, [x0, #40]\n"
+                        "  10:	f9402808 	ldr	x8, [x0, #80]\n"
                         "  14:	f9005107 	str	x7, [x8, #160]"
                     >>)
                 end),
@@ -1948,24 +1948,24 @@ move_to_vm_register_test_() ->
                 %% Test: x_reg to y_reg (high index)
                 ?_test(begin
                     move_to_vm_register_test0(State0, {x_reg, 15}, {y_reg, 31}, <<
-                        "   0:	f9405407 	ldr	x7, [x0, #168]\n"
-                        "   4:	f9401408 	ldr	x8, [x0, #40]\n"
+                        "   0:	f9406807 	ldr	x7, [x0, #208]\n"
+                        "   4:	f9402808 	ldr	x8, [x0, #80]\n"
                         "   8:	f9007d07 	str	x7, [x8, #248]"
                     >>)
                 end),
                 %% Test: y_reg to x_reg (high index)
                 ?_test(begin
                     move_to_vm_register_test0(State0, {y_reg, 31}, {x_reg, 15}, <<
-                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+                        "   0:	f9402807 	ldr	x7, [x0, #80]\n"
                         "   4:	f9407ce7 	ldr	x7, [x7, #248]\n"
-                        "   8:	f9005407 	str	x7, [x0, #168]"
+                        "   8:	f9006807 	str	x7, [x0, #208]"
                     >>)
                 end),
                 %% Test: Negative immediate to x_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, -1, {x_reg, 0}, <<
                         "   0:	92800007 	mov	x7, #0xffffffffffffffff    	// #-1\n"
-                        "   4:	f9001807 	str	x7, [x0, #48]"
+                        "   4:	f9002c07 	str	x7, [x0, #88]"
                     >>)
                 end),
                 %% Test: ptr with offset to fp_reg (term_to_float)
@@ -1976,9 +1976,9 @@ move_to_vm_register_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State2),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
                         "   4:	f94004e7 	ldr	x7, [x7, #8]\n"
-                        "   8:	f9406008 	ldr	x8, [x0, #192]\n"
+                        "   8:	f9407408 	ldr	x8, [x0, #232]\n"
                         "   c:	f9000d07 	str	x7, [x8, #24]"
                     >>,
                     ?assertStream(aarch64, Dump, Stream)
@@ -2002,7 +2002,7 @@ move_array_element_test_() ->
                 ?_test(begin
                     move_array_element_test0(State0, r8, 2, {x_reg, 0}, <<
                         "   0:	f9400907 	ldr	x7, [x8, #16]\n"
-                        "   4:	f9001807 	str	x7, [x0, #48]"
+                        "   4:	f9002c07 	str	x7, [x0, #88]"
                     >>)
                 end),
                 %% move_array_element: reg[x] to ptr
@@ -2015,7 +2015,7 @@ move_array_element_test_() ->
                 %% move_array_element: reg[x] to y_reg
                 ?_test(begin
                     move_array_element_test0(State0, r8, 1, {y_reg, 2}, <<
-                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+                        "   0:	f9402807 	ldr	x7, [x0, #80]\n"
                         "   4:	f9400508 	ldr	x8, [x8, #8]\n"
                         "   8:	f90008e8 	str	x8, [x7, #16]"
                     >>)
@@ -2029,7 +2029,7 @@ move_array_element_test_() ->
                 %% move_array_element: reg[x] to y_reg
                 ?_test(begin
                     move_array_element_test0(State0, r8, 7, {y_reg, 31}, <<
-                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+                        "   0:	f9402807 	ldr	x7, [x0, #80]\n"
                         "   4:	f9401d08 	ldr	x8, [x8, #56]\n"
                         "   8:	f9007ce8 	str	x8, [x7, #248]"
                     >>)
@@ -2038,7 +2038,7 @@ move_array_element_test_() ->
                 ?_test(begin
                     move_array_element_test0(State0, r8, 7, {x_reg, 15}, <<
                         "   0:	f9401d07 	ldr	x7, [x8, #56]\n"
-                        "   4:	f9005407 	str	x7, [x0, #168]"
+                        "   4:	f9006807 	str	x7, [x0, #208]"
                     >>)
                 end),
                 %% move_array_element: reg_x[reg_y] to x_reg
@@ -2047,7 +2047,7 @@ move_array_element_test_() ->
                     move_array_element_test0(State1, r8, {free, Reg}, {x_reg, 2}, <<
                         "   0:	f9401107 	ldr	x7, [x8, #32]\n"
                         "   4:	f8677907 	ldr	x7, [x8, x7, lsl #3]\n"
-                        "   8:	f9002007 	str	x7, [x0, #64]"
+                        "   8:	f9003407 	str	x7, [x0, #104]"
                     >>)
                 end),
                 %% move_array_element: reg_x[reg_y] to pointer (large x reg)
@@ -2064,7 +2064,7 @@ move_array_element_test_() ->
                     {State1, Reg} = ?BACKEND:get_array_element(State0, r8, 4),
                     move_array_element_test0(State1, r8, {free, Reg}, {y_reg, 31}, <<
                         "   0:	f9401107 	ldr	x7, [x8, #32]\n"
-                        "   4:	f9401408 	ldr	x8, [x0, #40]\n"
+                        "   4:	f9402808 	ldr	x8, [x0, #80]\n"
                         "   8:	f8677907 	ldr	x7, [x8, x7, lsl #3]\n"
                         "   c:	f9007d07 	str	x7, [x8, #248]"
                     >>)
@@ -2104,7 +2104,7 @@ move_to_array_element_test_() ->
                     State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r8, 2),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
                         "   4:	f9000907 	str	x7, [x8, #16]"
                     >>,
                     ?assertStream(aarch64, Dump, Stream)
@@ -2114,7 +2114,7 @@ move_to_array_element_test_() ->
                     State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r8, r9),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "  0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "  0:	f9402c07 	ldr	x7, [x0, #88]\n"
                         "   4:	f8297907 	str	x7, [x8, x9, lsl #3]"
                     >>,
                     ?assertStream(aarch64, Dump, Stream)
@@ -2134,7 +2134,7 @@ move_to_array_element_test_() ->
                     State1 = ?BACKEND:move_to_array_element(State0, {y_reg, 2}, r8, r9),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+                        "   0:	f9402807 	ldr	x7, [x0, #80]\n"
                         "   4:	f94008e7 	ldr	x7, [x7, #16]\n"
                         "   8:	f8297907 	str	x7, [x8, x9, lsl #3]"
                     >>,
@@ -2145,7 +2145,7 @@ move_to_array_element_test_() ->
                     State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r8, 2, 1),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
                         "   4:	f9000d07 	str	x7, [x8, #24]"
                     >>,
                     ?assertStream(aarch64, Dump, Stream)
@@ -2167,7 +2167,7 @@ move_to_array_element_test_() ->
                     State3 = ?BACKEND:move_to_array_element(State2, {x_reg, 0}, r8, r9, 1),
                     Stream = ?BACKEND:stream(State3),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
                         "   4:	9100052a 	add	x10, x9, #0x1\n"
                         "   8:	f82a7907 	str	x7, [x8, x10, lsl #3]"
                     >>,
@@ -2232,7 +2232,7 @@ move_to_native_register_test_() ->
                     Stream = ?BACKEND:stream(State1),
                     ?assertEqual(r7, Reg),
                     Dump = <<
-                        "   0:	f9402407 	ldr	x7, [x0, #72]"
+                        "   0:	f9403807 	ldr	x7, [x0, #112]"
                     >>,
                     ?assertStream(aarch64, Dump, Stream)
                 end),
@@ -2242,7 +2242,7 @@ move_to_native_register_test_() ->
                     Stream = ?BACKEND:stream(State1),
                     ?assertEqual(r7, Reg),
                     Dump = <<
-                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+                        "   0:	f9402807 	ldr	x7, [x0, #80]\n"
                         "   4:	f9400ce7 	ldr	x7, [x7, #24]"
                     >>,
                     ?assertStream(aarch64, Dump, Stream)
@@ -2279,7 +2279,7 @@ move_to_native_register_test_() ->
                     State1 = ?BACKEND:move_to_native_register(State0, {x_reg, 2}, r8),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9402008 	ldr	x8, [x0, #64]"
+                        "   0:	f9403408 	ldr	x8, [x0, #104]"
                     >>,
                     ?assertStream(aarch64, Dump, Stream)
                 end),
@@ -2288,7 +2288,7 @@ move_to_native_register_test_() ->
                     State1 = ?BACKEND:move_to_native_register(State0, {y_reg, 2}, r8),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401408 	ldr	x8, [x0, #40]\n"
+                        "   0:	f9402808 	ldr	x8, [x0, #80]\n"
                         "   4:	f9400908 	ldr	x8, [x8, #16]"
                     >>,
                     ?assertStream(aarch64, Dump, Stream)
@@ -2454,7 +2454,7 @@ cached_load_after_free_test() ->
     Stream = ?BACKEND:stream(State3),
     Dump =
         <<
-            "   0:	f9401807 	ldr	x7, [x0, #48]"
+            "   0:	f9402c07 	ldr	x7, [x0, #88]"
         >>,
     ?assertStream(aarch64, Dump, Stream).
 
@@ -2467,7 +2467,7 @@ fixed_dst_x_reg_load_preserves_cache_test() ->
     ?assertEqual(Offset1, ?BACKEND:offset(State2)),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	f9402008 	ldr	x8, [x0, #64]"
+        "   0:	f9403408 	ldr	x8, [x0, #104]"
     >>,
     ?assertStream(aarch64, Dump, Stream).
 
@@ -2480,7 +2480,7 @@ fixed_dst_y_reg_load_preserves_cache_test() ->
     ?assertEqual(Offset1, ?BACKEND:offset(State2)),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	f9401408 	ldr	x8, [x0, #40]\n"
+        "   0:	f9402808 	ldr	x8, [x0, #80]\n"
         "   4:	f9400908 	ldr	x8, [x8, #16]"
     >>,
     ?assertStream(aarch64, Dump, Stream).
@@ -2495,8 +2495,8 @@ cached_move_to_vm_x_reg_reuse_test() ->
     ?assertEqual(Offset1, ?BACKEND:offset(State2)),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	f9401c07 	ldr	x7, [x0, #56]\n"
-        "   4:	f9001807 	str	x7, [x0, #48]"
+        "   0:	f9403007 	ldr	x7, [x0, #96]\n"
+        "   4:	f9002c07 	str	x7, [x0, #88]"
     >>,
     ?assertStream(aarch64, Dump, Stream).
 
@@ -2510,8 +2510,8 @@ cached_move_to_vm_y_reg_reuse_test() ->
     ?assertEqual(Offset1, ?BACKEND:offset(State2)),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+        "   0:	f9402807 	ldr	x7, [x0, #80]\n"
         "   4:	f94000e7 	ldr	x7, [x7]\n"
-        "   8:	f9001807 	str	x7, [x0, #48]"
+        "   8:	f9002c07 	str	x7, [x0, #88]"
     >>,
     ?assertStream(aarch64, Dump, Stream).

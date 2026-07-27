@@ -148,23 +148,23 @@ _Static_assert(
 
 // Verify offsets in jit_x86_64.erl
 #if JIT_ARCH_TARGET == JIT_ARCH_X86_64 || JIT_ARCH_TARGET == JIT_ARCH_AARCH64 || JIT_ARCH_TARGET == JIT_ARCH_RISCV64
-_Static_assert(offsetof(Context, e) == 0x28, "ctx->e is 0x28 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
-_Static_assert(offsetof(Context, x) == 0x30, "ctx->x is 0x30 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
-_Static_assert(offsetof(Context, cp) == 0xB8, "ctx->cp is 0xB8 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
-_Static_assert(offsetof(Context, fr) == 0xC0, "ctx->fr is 0xC0 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
-_Static_assert(offsetof(Context, bs) == 0xC8, "ctx->bs is 0xC8 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
-_Static_assert(offsetof(Context, bs_offset) == 0xD0, "ctx->bs_offset is 0xD0 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(Context, e) == 0x50, "ctx->e is 0x50 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(Context, x) == 0x58, "ctx->x is 0x58 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(Context, cp) == 0xE0, "ctx->cp is 0xE0 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(Context, fr) == 0xE8, "ctx->fr is 0xE8 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(Context, bs) == 0xF0, "ctx->bs is 0xF0 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(Context, bs_offset) == 0xF8, "ctx->bs_offset is 0xF8 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
 
 _Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
 _Static_assert(offsetof(JITState, continuation) == 0x8, "jit_state->continuation is 0x8 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
 _Static_assert(offsetof(JITState, remaining_reductions) == 0x10, "jit_state->remaining_reductions is 0x10 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
 #elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M || JIT_ARCH_TARGET == JIT_ARCH_ARM32 || JIT_ARCH_TARGET == JIT_ARCH_RISCV32 || JIT_ARCH_TARGET == JIT_ARCH_WASM32 || JIT_ARCH_TARGET == JIT_ARCH_XTENSA
-_Static_assert(offsetof(Context, e) == 0x14, "ctx->e is 0x14 in 32-bit backends");
-_Static_assert(offsetof(Context, x) == 0x18, "ctx->x is 0x18 in 32-bit backends");
-_Static_assert(offsetof(Context, cp) == 0x5C, "ctx->cp is 0x5C in 32-bit backends");
-_Static_assert(offsetof(Context, fr) == 0x60, "ctx->fr is 0x60 in 32-bit backends");
-_Static_assert(offsetof(Context, bs) == 0x64, "ctx->bs is 0x64 in 32-bit backends");
-_Static_assert(offsetof(Context, bs_offset) == 0x68, "ctx->bs_offset is 0x68 in 32-bit backends");
+_Static_assert(offsetof(Context, e) == 0x28, "ctx->e is 0x28 in 32-bit backends");
+_Static_assert(offsetof(Context, x) == 0x2C, "ctx->x is 0x2C in 32-bit backends");
+_Static_assert(offsetof(Context, cp) == 0x70, "ctx->cp is 0x70 in 32-bit backends");
+_Static_assert(offsetof(Context, fr) == 0x74, "ctx->fr is 0x74 in 32-bit backends");
+_Static_assert(offsetof(Context, bs) == 0x78, "ctx->bs is 0x78 in 32-bit backends");
+_Static_assert(offsetof(Context, bs_offset) == 0x7C, "ctx->bs_offset is 0x7C in 32-bit backends");
 
 _Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in 32-bit backends");
 _Static_assert(offsetof(JITState, continuation) == 0x4, "jit_state->continuation is 0x4 in 32-bit backends");
@@ -515,7 +515,7 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
             }
 
             if (ctx->heap.root->next) {
-                if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, ctx->x, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
+                if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                     return jit_raise_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
                 }
             }
@@ -680,7 +680,7 @@ static bool jit_deallocate(Context *ctx, JITState *jit_state, uint32_t n_words)
     ctx->e += n_words + 1;
     // Hopefully, we only need x[0]
     if (ctx->heap.root->next) {
-        if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, ctx->x, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
             return false;
         }
@@ -1217,7 +1217,7 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term
             PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value, offset);
             ctx->x[0] = return_value;
             if (ctx->heap.root->next) {
-                if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, ctx->x, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
+                if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                     return jit_raise_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
                 }
             }
@@ -1732,7 +1732,7 @@ static Context *jit_apply(Context *ctx, JITState *jit_state, int offset, term mo
         PROCESS_MAYBE_TRAP_RETURN_VALUE(native_return, offset);
         ctx->x[0] = native_return;
         if (ctx->heap.root->next) {
-            if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, ctx->x, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
+            if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                 return jit_raise_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
             }
         }
