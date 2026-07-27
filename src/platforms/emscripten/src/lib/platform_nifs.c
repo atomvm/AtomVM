@@ -546,10 +546,21 @@ static void do_get_tracked_objects(uint32_t *ref_keys, size_t keys_n, int32_t pr
             send_tracked_trap_oom(global, process_id);
             return;
         }
-        // FIXME: a whole-call failure yields the bare atom badvalue,
-        // inconsistent with the {error, badvalue} shape of the per-element
-        // results. Documented as an unstable return in emscripten.erl.
-        sys_enqueue_emscripten_tracked_answer_message(global, process_id, BADVALUE_ATOM, NULL);
+        // the hook broke its contract and told us nothing about any single
+        // key: every element fails, so callers always get a list
+        Heap error_heap;
+        if (UNLIKELY(memory_init_heap(&error_heap, LIST_SIZE(keys_n, TUPLE_SIZE(2))) != MEMORY_GC_OK)) {
+            send_tracked_trap_oom(global, process_id);
+            return;
+        }
+        term errors = term_nil();
+        for (size_t i = 0; i < keys_n; ++i) {
+            term tuple = term_alloc_tuple(2, &error_heap);
+            term_put_tuple_element(tuple, 0, ERROR_ATOM);
+            term_put_tuple_element(tuple, 1, BADVALUE_ATOM);
+            errors = term_list_prepend(tuple, errors, &error_heap);
+        }
+        sys_enqueue_emscripten_tracked_answer_message(global, process_id, errors, error_heap.root);
         return;
     }
 

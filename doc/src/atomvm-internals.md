@@ -512,7 +512,7 @@ AtomVM:
 | `Module.trackedObjectsMap` | a `Map` from integer keys to values | storage used by the default hooks |
 | `Module.nextTrackedObjectKey()` | returns a fresh key from a VM-wide counter | must return an unused key in the range 0 to 4294967294; 4294967295 is reserved and means that the key space is exhausted |
 | `Module.onRunTrackedJs(script, isDebug)` | evaluates `script` with an indirect `eval` and tracks each element of the resulting array | must return an array of keys in the range above, each of them unique within the array and not owned by a live handle, or `null` on error; must not throw (a throw, a repeated key, or a key outside the range is treated as an evaluation error) |
-| `Module.onGetTrackedObjects(keys)` | returns `keys.map((k) => Module.trackedObjectsMap.get(k))` | must return exactly one entry per key: a string, or `undefined` for an unknown key (any other value maps to `{error, badvalue}`); must not throw (a throw or a wrong-length result fails the whole call) |
+| `Module.onGetTrackedObjects(keys)` | returns `keys.map((k) => Module.trackedObjectsMap.get(k))` | must return exactly one entry per key: a string, or `undefined` for an unknown key (any other value maps to `{error, badvalue}`); must not throw (a throw or a wrong-length result makes every element of the result `{error, badvalue}`) |
 | `Module.onTrackedObjectDelete(key)` | deletes the key from `Module.trackedObjectsMap` | called on the main thread when a handle is garbage collected; must not throw (a throw is logged and swallowed) |
 
 Hook overrides must be assigned on the module instance returned by the factory

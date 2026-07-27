@@ -395,18 +395,17 @@ run_script_tracked(_Script) ->
 %% and `out_of_memory' if the VM runs out of memory while building the
 %% result, on either side of the JavaScript boundary.
 %%
-%% Note: with `value', if the `Module.onGetTrackedObjects' hook violates
-%% its contract (throws, or does not return one entry per requested key),
-%% the current implementation returns the bare atom `badvalue'; this
-%% abnormal return is not part of the stable contract and may become an
-%% exception in a future release.
+%% With `value', a `Module.onGetTrackedObjects' hook that violates its
+%% contract (throws, or does not return one entry per requested key) tells
+%% the VM nothing about any single key, so every element of the result is
+%% `{error, badvalue}'.
 %% @param _TrackedObjects Proper, non-empty list of tracked object handles
 %% @param _Type `key' or `value'
 %% @returns A list of integer keys, or a list of `{ok, Value}' /
 %% `{error, badkey}' / `{error, badvalue}' tuples
 -spec get_tracked
     (_TrackedObjects :: [tracked_object(), ...], key) -> [non_neg_integer()];
-    (_TrackedObjects :: [tracked_object(), ...], value) -> [get_tracked_result()] | badvalue.
+    (_TrackedObjects :: [tracked_object(), ...], value) -> [get_tracked_result()].
 get_tracked(_TrackedObjects, _Type) ->
     erlang:nif_error(undefined).
 

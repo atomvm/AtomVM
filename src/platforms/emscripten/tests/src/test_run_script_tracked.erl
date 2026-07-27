@@ -170,7 +170,7 @@ test_throwing_get_hook_is_whole_call_error(Ra) ->
         >>,
         [main_thread]
     ),
-    badvalue = emscripten:get_tracked([Ra], value),
+    [{error, badvalue}] = emscripten:get_tracked([Ra], value),
     ok = restore_get_hook(),
     [{ok, <<"keep">>}] = emscripten:get_tracked([Ra], value),
     ok.
@@ -183,7 +183,7 @@ test_wrong_length_get_hook_is_whole_call_error(Ra) ->
         >>,
         [main_thread]
     ),
-    badvalue = emscripten:get_tracked([Ra], value),
+    [{error, badvalue}] = emscripten:get_tracked([Ra], value),
     ok = restore_get_hook(),
     ok.
 
@@ -203,7 +203,7 @@ test_getter_throwing_get_hook_is_whole_call_error(Ra) ->
         >>,
         [main_thread]
     ),
-    badvalue = emscripten:get_tracked([Ra], value),
+    [{error, badvalue}] = emscripten:get_tracked([Ra], value),
     ok = restore_get_hook(),
     [{ok, <<"keep">>}] = emscripten:get_tracked([Ra], value),
     ok.
