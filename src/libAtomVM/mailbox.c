@@ -231,7 +231,7 @@ size_t mailbox_size(Mailbox *mbox)
 // Messages are enqueued using atomics (or emulation) unless this is a no-smp
 // build with no support for driver tasks
 #if !defined(AVM_NO_SMP) || defined(AVM_TASK_DRIVER_ENABLED)
-inline void mailbox_enqueue_message(Context *c, MailboxMessage *m)
+void mailbox_enqueue_message(Context *c, MailboxMessage *m)
 {
     // Append message at the beginning of outer_first.
     MailboxMessage *current_first = NULL;
