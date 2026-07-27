@@ -390,22 +390,26 @@ run_script_tracked(_Script) ->
 %% default hooks a stored `undefined' value is indistinguishable from a
 %% missing key). Results are in the same order as the input list.
 %%
-%% Raises `badarg' if the first argument is not a proper, non-empty list of
-%% tracked objects, or if the second argument is neither `key' nor `value',
-%% and `out_of_memory' if the VM runs out of memory while building the
-%% result, on either side of the JavaScript boundary.
+%% An empty list yields an empty list, on either type, so the `{ok, []}' of
+%% a `run_script_tracked/1' call that tracked nothing can be passed on
+%% unguarded. With `value' this answers without reaching the main thread.
+%%
+%% Raises `badarg' if the first argument is not a proper list of tracked
+%% objects, or if the second argument is neither `key' nor `value', and
+%% `out_of_memory' if the VM runs out of memory while building the result,
+%% on either side of the JavaScript boundary.
 %%
 %% With `value', a `Module.onGetTrackedObjects' hook that violates its
 %% contract (throws, or does not return one entry per requested key) tells
 %% the VM nothing about any single key, so every element of the result is
 %% `{error, badvalue}'.
-%% @param _TrackedObjects Proper, non-empty list of tracked object handles
+%% @param _TrackedObjects Proper list of tracked object handles
 %% @param _Type `key' or `value'
 %% @returns A list of integer keys, or a list of `{ok, Value}' /
 %% `{error, badkey}' / `{error, badvalue}' tuples
 -spec get_tracked
-    (_TrackedObjects :: [tracked_object(), ...], key) -> [non_neg_integer()];
-    (_TrackedObjects :: [tracked_object(), ...], value) -> [get_tracked_result()].
+    (_TrackedObjects :: [tracked_object()], key) -> [non_neg_integer()];
+    (_TrackedObjects :: [tracked_object()], value) -> [get_tracked_result()].
 get_tracked(_TrackedObjects, _Type) ->
     erlang:nif_error(undefined).
 

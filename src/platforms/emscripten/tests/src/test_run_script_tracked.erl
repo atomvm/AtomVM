@@ -40,6 +40,7 @@ start() ->
         ok = test_many_large_values_round_trip(),
         Ra = test_deleted_key_is_badkey(),
         ok = test_invalid_get_tracked_args_raise(Ra),
+        ok = test_empty_handle_list_yields_empty_list(),
         ok = test_throwing_get_hook_is_whole_call_error(Ra),
         ok = test_wrong_length_get_hook_is_whole_call_error(Ra),
         ok = test_getter_throwing_get_hook_is_whole_call_error(Ra),
@@ -155,10 +156,16 @@ test_deleted_key_is_badkey() ->
 
 test_invalid_get_tracked_args_raise(Ra) ->
     ok = expect_badarg(fun() -> emscripten:get_tracked(not_a_list, key) end),
-    ok = expect_badarg(fun() -> emscripten:get_tracked([], key) end),
     ok = expect_badarg(fun() -> emscripten:get_tracked([Ra], bogus) end),
     ok = expect_badarg(fun() -> emscripten:get_tracked([1, 2], key) end),
     ok = expect_badarg(fun() -> emscripten:get_tracked([Ra | Ra], key) end),
+    ok.
+
+% the {ok, []} of a script that tracked nothing must be usable as input
+test_empty_handle_list_yields_empty_list() ->
+    [] = emscripten:get_tracked([], key),
+    [] = emscripten:get_tracked([], value),
+    {ok, []} = emscripten:run_script_tracked(<<"[]">>),
     ok.
 
 % a throwing override must yield the whole-call error, not hang the caller

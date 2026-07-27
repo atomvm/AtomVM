@@ -643,8 +643,10 @@ static term nif_emscripten_get_tracked(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
+    // {ok, []} from run_script_tracked/1 must be usable here. Answering now
+    // also keeps the value arm from a round trip and from malloc(0)
     if (n == 0) {
-        RAISE_ERROR(BADARG_ATOM);
+        return term_nil();
     }
 
     uint32_t *ref_keys = malloc(n * sizeof(uint32_t));

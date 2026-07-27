@@ -494,14 +494,16 @@ behind. Values that a hook tracks under keys it does not return are invisible to
 stay its own responsibility.
 
 [`emscripten:get_tracked/2`](./apidocs/erlang/avm_emscripten/emscripten.md#get_tracked2) maps a
-(non-empty) list of handles back to JavaScript: with `key`, it returns the integer keys
+list of handles back to JavaScript: with `key`, it returns the integer keys
 identifying the entries of `Module.trackedObjectsMap`, without involving the main thread; with
 `value`, it fetches the current values on the main thread, waiting for completion. Fetched
 values must be JavaScript strings: each element of the result is `{ok, Binary}` with the UTF-8
 bytes of the string, `{error, badvalue}` if the stored value is not a string, or
 `{error, badkey}` if the key is no longer in the map (with the default hooks a stored
 `undefined` value is indistinguishable from a missing key). Non-string values are typically
-serialized to JSON, either by the tracked script itself or by an overridden hook.
+serialized to JSON, either by the tracked script itself or by an overridden hook. An empty
+list of handles yields an empty list of results, so the `{ok, []}` of a script that tracked
+nothing can be passed on unguarded.
 
 The JavaScript side is implemented by the following members of the emscripten module object,
 defined in `atomvm.pre.js`, which embedders may override to customize behavior without patching
