@@ -293,6 +293,7 @@ static term nif_lists_keymember(Context *ctx, int argc, term argv[]);
 static term nif_lists_member(Context *ctx, int argc, term argv[]);
 static term nif_maps_from_keys(Context *ctx, int argc, term argv[]);
 static term nif_maps_next(Context *ctx, int argc, term argv[]);
+static term nif_maps_take(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_list(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_lists_subtract(Context *ctx, int argc, term argv[]);
@@ -954,6 +955,10 @@ static const struct Nif maps_from_keys_nif = {
 static const struct Nif maps_next_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_maps_next
+};
+static const struct Nif maps_take_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_maps_take
 };
 static const struct Nif unicode_characters_to_list_nif = {
     .base.type = NIFFunctionType,
@@ -7131,6 +7136,9 @@ static term nif_maps_next(Context *ctx, int argc, term argv[])
     }
 
     term iterator = argv[0];
+    if (term_is_tuple(iterator) && term_get_tuple_arity(iterator) == 3) {
+        return iterator;
+    }
     VALIDATE_VALUE(iterator, term_is_nonempty_list);
 
     term post = term_get_list_head(iterator);
@@ -7144,16 +7152,34 @@ static term nif_maps_next(Context *ctx, int argc, term argv[])
     int pos;
     if (term_is_integer(post)) {
         int size = term_get_map_size(map);
-        pos = term_to_int(post);
-        if (pos >= size) {
+        avm_int_t requested_pos = term_to_int(post);
+        if (UNLIKELY(requested_pos < 0 || requested_pos > size)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        if (requested_pos == size) {
             return NONE_ATOM;
         }
+        pos = (int) requested_pos;
     } else if (term_is_nil(post)) {
         return NONE_ATOM;
     } else {
-        pos = term_find_map_pos(map, term_get_list_head(post), ctx->global);
-        if (pos == TERM_MAP_NOT_FOUND) {
-            return NONE_ATOM;
+        term remaining_keys = post;
+        pos = TERM_MAP_NOT_FOUND;
+        while (term_is_nonempty_list(remaining_keys)) {
+            int key_pos = term_find_map_pos(map, term_get_list_head(remaining_keys), ctx->global);
+            if (UNLIKELY(key_pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            if (UNLIKELY(key_pos == TERM_MAP_NOT_FOUND)) {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            if (pos == TERM_MAP_NOT_FOUND) {
+                pos = key_pos;
+            }
+            remaining_keys = term_get_list_tail(remaining_keys);
+        }
+        if (UNLIKELY(!term_is_nil(remaining_keys))) {
+            RAISE_ERROR(BADARG_ATOM);
         }
     }
 
@@ -7180,6 +7206,66 @@ static term nif_maps_next(Context *ctx, int argc, term argv[])
     term_put_tuple_element(ret, 2, next_iterator);
 
     return ret;
+}
+
+static term nif_maps_take(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term key = argv[0];
+    term map = argv[1];
+
+    if (UNLIKELY(!term_is_map(map))) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &map, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term err = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(err, 0, BADMAP_ATOM);
+        term_put_tuple_element(err, 1, map);
+        RAISE_ERROR(err);
+    }
+
+    int pos = term_find_map_pos(map, key, ctx->global);
+    if (pos == TERM_MAP_MEMORY_ALLOC_FAIL) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    if (pos == TERM_MAP_NOT_FOUND) {
+        return ERROR_ATOM;
+    }
+
+    int old_size = term_get_map_size(map);
+    int new_size = old_size - 1;
+
+    // Allocate space for new map + result tuple {Value, NewMap}
+    size_t heap_needed = term_map_size_in_terms(new_size) + TUPLE_SIZE(2);
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_needed, 2, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    // Recompute after possible GC
+    key = argv[0];
+    map = argv[1];
+    pos = term_find_map_pos(map, key, ctx->global);
+    if (pos == TERM_MAP_MEMORY_ALLOC_FAIL) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term value = term_get_map_value(map, pos);
+
+    // Create new map without the key
+    term new_map = term_alloc_map(new_size, &ctx->heap);
+    for (int i = 0, j = 0; i < old_size; i++) {
+        if (i != pos) {
+            term_set_map_assoc(new_map, j, term_get_map_key(map, i), term_get_map_value(map, i));
+            j++;
+        }
+    }
+
+    // Return {Value, NewMap}
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, value);
+    term_put_tuple_element(result, 1, new_map);
+
+    return result;
 }
 
 static bool encoding_from_atom(term encoding_atom, enum CharDataEncoding *encoding)

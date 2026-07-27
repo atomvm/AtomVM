@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for `process_info/1` and `process_info/2` with list argument
 - Added `erlang:term_to_binary/2`, `erlang:is_builtin/3` and `erlang:bitstring_to_list/1`
 - Added `lists:mapfoldr/3`
+- Added more OTP-compatible functions to the estdlib `maps` module, including
+  `maps:take/2`, `maps:update_with/3,4`, `maps:with/2`, `maps:without/2`,
+  `maps:filtermap/2`, `maps:intersect/2`, `maps:intersect_with/3`,
+  `maps:groups_from_list/2,3`, and `maps:is_iterator_valid/1`
 
 ### Changed
 - `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does:
