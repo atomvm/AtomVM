@@ -464,3 +464,72 @@ Call allows Javascript code to wait for the result and is based on Javascript pr
 Values currently can only be integers or strings.
 
 If the scheduler cannot find the target process, the promise is rejected with "noproc" as a value. As the promise is encapsulated into an Erlang resource, if the resource object's reference count reaches 0, the promise is rejected with "noproc" as the value.
+
+### Tracked JavaScript values
+
+Erlang processes can hold handles to arbitrary JavaScript values using
+[`emscripten:run_script_tracked/1`](./apidocs/erlang/avm_emscripten/emscripten.md#run_script_tracked1).
+Like `emscripten:run_script/2` with `[main_thread]`, the script is executed on the browser's main
+thread and the caller waits for completion, but the script is expected to evaluate to a JavaScript
+array, and each element of the array is retained: the default hooks store every element in the
+`Module.trackedObjectsMap` map under a fresh integer key, and the caller gets
+`{ok, TrackedObjects}` with one opaque handle (an Erlang resource) per element, in the same order.
+A script evaluating to `null` or `undefined` yields `{ok, []}`; a script that throws or evaluates
+to anything else yields `{error, badarg}`.
+
+The retained JavaScript value lives as long as the Erlang handle: when a handle is garbage
+collected by the VM, the resource destructor dispatches a call to
+`Module.onTrackedObjectDelete(key)` on the main thread, and the default hook removes the entry
+from `Module.trackedObjectsMap`. This makes it possible to tie non-serializable JavaScript
+values, such as DOM nodes or callback functions, to the lifetime of Erlang terms.
+
+Returning a key hands it over to the VM until `Module.onTrackedObjectDelete` is called for it,
+so a hook must return each key once and must not return a key that a live handle still owns;
+the VM rejects a key repeated within one result, but cannot detect reuse across calls.
+
+Whenever a call fails after the hook returned keys, whether it ran out of memory before every
+key got a handle or the keys themselves violated the contract, every returned key is deleted
+again through the same hook, each distinct key once, so a failed call leaves nothing tracked
+behind. Values that a hook tracks under keys it does not return are invisible to the VM and
+stay its own responsibility.
+
+[`emscripten:get_tracked/2`](./apidocs/erlang/avm_emscripten/emscripten.md#get_tracked2) maps a
+(non-empty) list of handles back to JavaScript: with `key`, it returns the integer keys
+identifying the entries of `Module.trackedObjectsMap`, without involving the main thread; with
+`value`, it fetches the current values on the main thread, waiting for completion. Fetched
+values must be JavaScript strings: each element of the result is `{ok, Binary}` with the UTF-8
+bytes of the string, `{error, badvalue}` if the stored value is not a string, or
+`{error, badkey}` if the key is no longer in the map (with the default hooks a stored
+`undefined` value is indistinguishable from a missing key). Non-string values are typically
+serialized to JSON, either by the tracked script itself or by an overridden hook.
+
+The JavaScript side is implemented by the following members of the emscripten module object,
+defined in `atomvm.pre.js`, which embedders may override to customize behavior without patching
+AtomVM:
+
+| Member | Default behavior | Contract for overrides |
+|--------|------------------|------------------------|
+| `Module.trackedObjectsMap` | a `Map` from integer keys to values | storage used by the default hooks |
+| `Module.nextTrackedObjectKey()` | returns a fresh key from a VM-wide counter | must return an unused key in the range 0 to 4294967294; 4294967295 is reserved and means that the key space is exhausted |
+| `Module.onRunTrackedJs(script, isDebug)` | evaluates `script` with an indirect `eval` and tracks each element of the resulting array | must return an array of keys in the range above, each of them unique within the array and not owned by a live handle, or `null` on error; must not throw (a throw, a repeated key, or a key outside the range is treated as an evaluation error) |
+| `Module.onGetTrackedObjects(keys)` | returns `keys.map((k) => Module.trackedObjectsMap.get(k))` | must return exactly one entry per key: a string, or `undefined` for an unknown key (any other value maps to `{error, badvalue}`); must not throw (a throw or a wrong-length result fails the whole call) |
+| `Module.onTrackedObjectDelete(key)` | deletes the key from `Module.trackedObjectsMap` | called on the main thread when a handle is garbage collected; must not throw (a throw is logged and swallowed) |
+
+Hook overrides must be assigned on the module instance returned by the factory
+(`const module = await AtomVM(...); module.onRunTrackedJs = ...;`): `atomvm.pre.js` assigns the
+defaults unconditionally when the factory runs, so hooks passed in the factory configuration
+object are overwritten. They must also be assigned **synchronously** once the promise resolves,
+with nothing awaited in between: `main` already runs on its worker by then, and every `await`
+gives the browser main thread a chance to run a tracked call it has already dispatched, which
+would still find the defaults installed. `Module.nextTrackedObjectKey()` and the underlying
+`_next_tracked_object_key` C export read VM state; before AtomVM's `main` has started they
+report the exhausted key rather than a usable one (the pre-existing `_cast` and `_call` exports
+have no such guard and must not be called that early).
+
+A script is a sequence of bytes rather than text, so it has to be UTF-8 encoded and free of NUL
+bytes: a binary reaches JavaScript unchanged and is cut at its first NUL, while a character list
+is written one byte per element, so an element above 255 raises `badarg` and one between 128 and
+255 becomes a single byte that decodes as U+FFFD.
+
+`isDebug` is true in builds without `NDEBUG`; the default hooks only use it to log diagnostics
+with `console.error`.

@@ -43,12 +43,20 @@
 %% Promise should be passed to `promise_resolve/1,2' or `promise_reject/1,2' as
 %% documented below.
 %%
+%% JavaScript values can also be tracked: `run_script_tracked/1' evaluates a
+%% script on the main thread and returns opaque handles to the values it
+%% evaluates to, keeping those JavaScript values alive until the handles are
+%% garbage collected by the Erlang VM. `get_tracked/2' maps handles back to
+%% their keys or current values.
+%%
 %% @end
 %%-----------------------------------------------------------------------------
 -module(emscripten).
 -export([
     run_script/1,
     run_script/2,
+    run_script_tracked/1,
+    get_tracked/2,
     promise_resolve/1,
     promise_resolve/2,
     promise_reject/1,
@@ -157,6 +165,8 @@
     promise/0,
     html5_target/0,
     listener_handle/0,
+    tracked_object/0,
+    get_tracked_result/0,
     keyboard_event/0,
     mouse_event/0,
     wheel_event/0,
@@ -170,6 +180,8 @@
 -opaque promise() :: binary().
 -type html5_target() :: window | document | screen | iodata().
 -opaque listener_handle() :: binary().
+-opaque tracked_object() :: reference().
+-type get_tracked_result() :: {ok, binary()} | {error, badkey} | {error, badvalue}.
 -type register_option() :: {use_capture, boolean()} | {prevent_default, boolean()}.
 -type register_options() :: boolean() | [register_option()].
 -type register_error_reason() ::
@@ -300,6 +312,102 @@ run_script(_Script) ->
 %% @returns ok
 -spec run_script(_Script :: iodata(), _Options :: [run_script_opt()]) -> ok.
 run_script(_Script, _Options) ->
+    erlang:nif_error(undefined).
+
+%% @doc Run a script and track the JavaScript values it evaluates to.
+%%
+%% The script is always run on the main thread and the caller waits for
+%% completion.
+%%
+%% The script is evaluated by the `Module.onRunTrackedJs' JavaScript hook.
+%% The default hook evaluates the script with an indirect `eval' and expects
+%% it to evaluate to a JavaScript array. Each element of the array is stored
+%% in `Module.trackedObjectsMap' under a fresh integer key, and the function
+%% returns `{ok, TrackedObjects}' with one opaque handle per element, in the
+%% same order.
+%%
+%% The JavaScript values are kept alive as long as the returned handles are
+%% alive on the Erlang side: when a handle is garbage collected, the
+%% `Module.onTrackedObjectDelete' hook is eventually called with the
+%% corresponding key on the main thread, and the default hook then drops the
+%% value from `Module.trackedObjectsMap'. This ties the lifetime of otherwise
+%% non-serializable JavaScript values (such as DOM nodes) to Erlang terms.
+%%
+%% With the default hook, a script that evaluates to `null' or `undefined'
+%% yields `{ok, []}'; a script that throws or evaluates to anything else
+%% yields `{error, badarg}'.
+%%
+%% The script is a sequence of bytes, not text: it must be UTF-8 encoded
+%% and free of NUL bytes. A binary is passed through unchanged, so a NUL in
+%% it truncates the script there, while a character list is written one
+%% byte per element, so an element above 255 raises `badarg' and one in the
+%% 128 to 255 range becomes a single byte that JavaScript decodes as U+FFFD
+%% rather than the character it stood for.
+%%
+%% Embedders may override the hooks on the resolved emscripten module
+%% instance, after the module factory promise resolves (hooks passed in the
+%% factory configuration are overwritten by the defaults). The overrides
+%% must be assigned synchronously once the promise resolves: awaiting
+%% anything in between lets the browser run a tracked call the VM already
+%% dispatched, which would still reach the defaults. An overridden
+%% `Module.onRunTrackedJs' must return an array of unsigned 32 bit integer
+%% keys (0 to 4294967294, the last value of the range being reserved), or
+%% `null' on error, and must not throw; a throw, a key outside that range,
+%% or a key repeated within the array, is treated as an evaluation error
+%% and yields `{error, badarg}'. Returning a key hands it over to the VM
+%% until `Module.onTrackedObjectDelete' is called for it, so a key that a
+%% live handle still owns must not be returned again: the VM cannot detect
+%% that across calls, and the two handles would then share one value, the
+%% first of them collected deleting it for both.
+%%
+%% Raises `badarg' if `_Script' is not iodata, and `out_of_memory' if the
+%% VM runs out of memory while tracking the values or building the result.
+%% Whenever the call fails after the hook returned keys, the values it
+%% tracked under them are dropped again, as if their handles had been
+%% garbage collected.
+%% @param _Script Script to run, as iodata
+%% @returns `{ok, TrackedObjects}' or `{error, badarg}'
+-spec run_script_tracked(_Script :: iodata()) -> {ok, [tracked_object()]} | {error, badarg}.
+run_script_tracked(_Script) ->
+    erlang:nif_error(undefined).
+
+%% @doc Get the keys or the current values of tracked objects.
+%%
+%% With `key', returns the integer key of each handle, in the same order as
+%% the input list. Keys identify entries of `Module.trackedObjectsMap' and
+%% are only meaningful inside the current VM instance. This call does not
+%% involve the main thread.
+%%
+%% With `value', fetches the current JavaScript value of each handle by
+%% calling the `Module.onGetTrackedObjects' hook on the main thread; the
+%% caller waits for completion. Values must be JavaScript strings: the
+%% default hook returns the stored values unchanged, so only string values
+%% can be fetched. Embedders typically serialize values to JSON, either in
+%% the tracked script itself or in an overridden hook. Each element of the
+%% result is `{ok, Binary}' with the UTF-8 bytes of the string,
+%% `{error, badvalue}' if the stored value is not a string, or
+%% `{error, badkey}' if the key is not (or no longer) in the map (with the
+%% default hooks a stored `undefined' value is indistinguishable from a
+%% missing key). Results are in the same order as the input list.
+%%
+%% Raises `badarg' if the first argument is not a proper, non-empty list of
+%% tracked objects, or if the second argument is neither `key' nor `value',
+%% and `out_of_memory' if the VM runs out of memory while building the
+%% result, on either side of the JavaScript boundary.
+%%
+%% Note: with `value', if the `Module.onGetTrackedObjects' hook violates
+%% its contract (throws, or does not return one entry per requested key),
+%% the current implementation returns the bare atom `badvalue'; this
+%% abnormal return is not part of the stable contract and may become an
+%% exception in a future release.
+%% @param _TrackedObjects Proper, non-empty list of tracked object handles
+%% @param _Type `key' or `value'
+%% @returns A list of integer keys, or a list of `{ok, Value}' /
+%% `{error, badkey}' / `{error, badvalue}' tuples
+-spec get_tracked
+    (_TrackedObjects :: [tracked_object(), ...], key) -> [non_neg_integer()];
+    (_TrackedObjects :: [tracked_object(), ...], value) -> [get_tracked_result()] | badvalue.
+get_tracked(_TrackedObjects, _Type) ->
     erlang:nif_error(undefined).
 
 %% @equiv promise_resolve(_Promise, 0)
