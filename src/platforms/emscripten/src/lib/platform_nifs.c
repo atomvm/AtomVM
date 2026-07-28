@@ -18,6 +18,7 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#include <assert.h>
 #include <defaultatoms.h>
 #include <erl_nif.h>
 #include <erl_nif_priv.h>
@@ -161,84 +162,219 @@ static term nif_emscripten_promise_reject(Context *ctx, int argc, term argv[])
     return nif_emscripten_promise_resolve_reject(ctx, argc, argv, EM_PROMISE_REJECT);
 }
 
-static term term_tracked_object_from_key(Context *ctx, atomic_size_t key)
+static term term_tracked_object_from_key(GlobalContext *global, uint32_t key, Heap *heap)
 {
-    struct EmscriptenPlatformData *platform = ctx->global->platform_data;
+    struct EmscriptenPlatformData *platform = global->platform_data;
     struct TrackedObjectResource *rsrc_obj = enif_alloc_resource(platform->tracked_object_resource_type, sizeof(struct TrackedObjectResource));
     if (IS_NULL_PTR(rsrc_obj)) {
         return term_invalid_term();
     }
     rsrc_obj->key = key;
-    term obj = enif_make_resource(erl_nif_env_from_context(ctx), rsrc_obj);
+    term obj = term_from_resource(rsrc_obj, heap);
     enif_release_resource(rsrc_obj);
     return obj;
 }
 
+// The tracked calls below run on the browser main thread, which is not a
+// scheduler thread: the web flavor proxies main() to a worker. Posting the
+// answer signal and destroying the heap it was built in are both scheduler
+// only, so they are handed over to sys_poll_events instead.
+//
+// The answer is built in a private heap rather than in the caller's: the
+// process table read lock keeps the caller from being destroyed, but not from
+// being scheduled and mutating its own heap concurrently.
+
+static void send_tracked_trap_oom(GlobalContext *global, int32_t process_id)
+{
+    sys_enqueue_emscripten_tracked_answer_message(global, process_id, term_invalid_term(), NULL);
+}
+
+// Outcome of a call dispatched to the main thread, telling a JavaScript side
+// failure apart from an allocation failure. EM_JS bodies cannot see C
+// declarations: the constants mirroring this enum below must be kept in sync.
+enum TrackedCallStatus
+{
+    TRACKED_CALL_OK = 0,
+    TRACKED_CALL_ERROR = 1,
+    TRACKED_CALL_OOM = 2
+};
+
 // clang-format off
-EM_JS(uint32_t *, js_tracked_eval, (const char *code, uint32_t *size, bool debug), {
-    const keys = Module['onRunTrackedJs'](UTF8ToString(code), debug);
-    const error = keys === null;
-    if (error) {
-        HEAPU32[size / HEAPU32.BYTES_PER_ELEMENT] = 0;
+EM_JS(uint32_t *, js_tracked_eval, (const char *code, uint32_t *size, uint8_t *status, bool debug), {
+    // mirror of enum TrackedCallStatus
+    const OK = 0;
+    const ERROR = 1;
+    const OOM = 2;
+
+    const setOutcome = (outcome, keysN) => {
+        HEAPU8[status / HEAPU8.BYTES_PER_ELEMENT] = outcome;
+        HEAPU32[size / HEAPU32.BYTES_PER_ELEMENT] = keysN;
+    };
+    // an evaluated script can replace console: a diagnostic must not decide the outcome
+    const logError = (message, detail) => {
+        try {
+            console.error(message, detail);
+        } catch (e) {
+        }
+    };
+    // Drops the values the hook tracked that no resource owns yet. A deletion
+    // hook is not required to be idempotent, so a repeated key is dropped
+    // once, the way one resource per key would have done it.
+    const dropKeys = (keys) => {
+        for (let i = 0; i < keys.length; ++i) {
+            const key = keys[i];
+            let dropped = false;
+            for (let j = 0; j < i && !dropped; ++j) {
+                // SameValueZero, the identity a Map gives its keys
+                dropped = keys[j] === key || (keys[j] !== keys[j] && key !== key);
+            }
+            if (dropped) {
+                continue;
+            }
+            try {
+                Module['onTrackedObjectDelete'](key);
+            } catch (e) {
+                logError("onTrackedObjectDelete threw", e);
+            }
+        }
+    };
+
+    // The scripts this API evaluates share this realm and may replace any
+    // global the body reaches, so it is wrapped as a whole: whatever throws,
+    // an outcome is still set and the caller is never left trapped. _malloc
+    // and _free are module bindings, not the replaceable Module properties.
+    let keys = null;
+    let ptr = 0;
+    try {
+        try {
+            // Array.from copies an exotic array into a plain one, so nothing
+            // below can run hook code again through an iterator or a getter
+            const result = Module['onRunTrackedJs'](UTF8ToString(code), debug);
+            keys = Array.isArray(result) ? Array.from(result) : null;
+        } catch (e) {
+            logError("onRunTrackedJs threw", e);
+            keys = null;
+        }
+        if (keys === null) {
+            setOutcome(ERROR, 0);
+            return 0;
+        }
+        // keys are unsigned 32 bit and their last value is reserved: anything
+        // else is coerced silently by HEAPU32 (-1 to 4294967295, 2 ** 32 to 0,
+        // a fraction to its truncation) and aliases an unrelated entry, and a
+        // repeated key gets one handle each, the first collected deleting the
+        // value the others still address. Operators only below: a replaced
+        // intrinsic would break every later call, not just this one.
+        const isKey = (key) =>
+            typeof key === "number" && key % 1 === 0 && key >= 0 && key <= 0xfffffffe;
+        let invalid = false;
+        for (let i = 0; i < keys.length && !invalid; ++i) {
+            invalid = !isKey(keys[i]);
+            for (let j = 0; j < i && !invalid; ++j) {
+                invalid = keys[j] === keys[i];
+            }
+        }
+        if (invalid) {
+            logError("onRunTrackedJs returned invalid keys", keys);
+            // every returned key is an ownership claim, malformed ones
+            // included: the hook may have stored a value under them too
+            dropKeys(keys);
+            setOutcome(ERROR, 0);
+            return 0;
+        }
+        if (keys.length === 0) {
+            // malloc(0) may return null, which C cannot tell from a failure
+            setOutcome(OK, 0);
+            return 0;
+        }
+
+        ptr = _malloc(keys.length * HEAPU32.BYTES_PER_ELEMENT);
+        if (ptr === 0) {
+            dropKeys(keys);
+            setOutcome(OOM, 0);
+            return 0;
+        }
+        // indexed writes: HEAPU32.set is a replaceable prototype method
+        const offset = ptr / HEAPU32.BYTES_PER_ELEMENT;
+        for (let i = 0; i < keys.length; ++i) {
+            HEAPU32[offset + i] = keys[i];
+        }
+        setOutcome(OK, keys.length);
+        return ptr;
+    } catch (e) {
+        logError("tracked evaluation failed", e);
+        _free(ptr);
+        if (keys !== null) {
+            dropKeys(keys);
+        }
+        setOutcome(ERROR, 0);
         return 0;
     }
-
-    const ptr = Module['_malloc'](keys.length * HEAPU32.BYTES_PER_ELEMENT);
-    HEAPU32[size / HEAPU32.BYTES_PER_ELEMENT] = keys.length;
-    HEAPU32.set(keys, ptr / HEAPU32.BYTES_PER_ELEMENT);
-    return ptr;
-});
+})
 // clang-format on
 
-static void do_run_script_tracked(const char *script, int32_t sync_caller_pid, GlobalContext *global)
+// Only the keys the hook returned can be dropped: values it tracked under
+// keys it kept to itself are not visible from here.
+static void delete_unowned_tracked_objects(const uint32_t *keys, size_t keys_n)
+{
+    for (size_t i = 0; i < keys_n; ++i) {
+        sys_remove_tracked_object(keys[i]);
+    }
+}
+
+static void do_run_script_tracked(const char *script, int32_t process_id, GlobalContext *global)
 {
 #ifdef NDEBUG
     bool debug = false;
 #else
     bool debug = true;
 #endif
-    uint32_t keys_n;
-    uint32_t *keys = js_tracked_eval(script, &keys_n, debug);
-    Context *target_ctx = globalcontext_get_process_lock(global, sync_caller_pid);
-    if (target_ctx) {
-        term result = term_invalid_term();
+    uint32_t keys_n = 0;
+    uint8_t eval_status = TRACKED_CALL_ERROR;
+    uint32_t *keys = js_tracked_eval(script, &keys_n, &eval_status, debug);
+
+    if (UNLIKELY(eval_status == TRACKED_CALL_OOM)) {
+        send_tracked_trap_oom(global, process_id);
+        return;
+    }
+
+    Heap heap;
+    if (UNLIKELY(memory_init_heap(&heap, TUPLE_SIZE(2) + LIST_SIZE(keys_n, TERM_BOXED_REFERENCE_RESOURCE_SIZE)) != MEMORY_GC_OK)) {
+        delete_unowned_tracked_objects(keys, keys_n);
+        free(keys);
+        send_tracked_trap_oom(global, process_id);
+        return;
+    }
+
+    term result;
+    if (eval_status == TRACKED_CALL_ERROR) {
+        // FIXME: badarg conflates JavaScript evaluation errors with argument
+        // errors, but existing users match {error, badarg}, so changing it is
+        // an incompatible change.
+        result = term_alloc_tuple(2, &heap);
+        term_put_tuple_element(result, 0, ERROR_ATOM);
+        term_put_tuple_element(result, 1, BADARG_ATOM);
+    } else {
         term refs = term_nil();
-        if (UNLIKELY(memory_ensure_free_opt(target_ctx, TUPLE_SIZE(2) + LIST_SIZE(keys_n, TERM_BOXED_REFC_BINARY_SIZE), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            // TODO: how to raise?
-            result = OUT_OF_MEMORY_ATOM;
-            goto send_result;
-        }
-        result = term_alloc_tuple(2, &target_ctx->heap);
-
-        if (IS_NULL_PTR(keys)) {
-            term_put_tuple_element(result, 0, ERROR_ATOM);
-            term_put_tuple_element(result, 1, BADARG_ATOM);
-            goto send_result;
-        }
-
-        if (keys_n == 0) {
-            term_put_tuple_element(result, 0, OK_ATOM);
-            term_put_tuple_element(result, 1, term_nil());
-            goto send_result;
-        }
-
         for (long i = keys_n - 1; i >= 0; --i) {
-            term tracked_object = term_tracked_object_from_key(target_ctx, keys[i]);
-            // we can't easily recover from OOM here
-            assert(!term_is_invalid_term(tracked_object));
-            refs = term_list_prepend(tracked_object, refs, &target_ctx->heap);
+            term tracked_object = term_tracked_object_from_key(global, keys[i], &heap);
+            if (UNLIKELY(term_is_invalid_term(tracked_object))) {
+                // the keys that already got a resource are dropped with the
+                // heap, whose destructors delete their JS-side values
+                delete_unowned_tracked_objects(keys, i + 1);
+                free(keys);
+                sys_enqueue_emscripten_tracked_answer_message(global, process_id, term_invalid_term(), heap.root);
+                return;
+            }
+            refs = term_list_prepend(tracked_object, refs, &heap);
         }
+        result = term_alloc_tuple(2, &heap);
         term_put_tuple_element(result, 0, OK_ATOM);
         term_put_tuple_element(result, 1, refs);
-
-    send_result:
-        free(keys);
-        mailbox_send_term_signal(target_ctx, TrapAnswerSignal, result);
-        globalcontext_get_process_unlock(global, target_ctx);
-    } else {
-        // sender died
-        free(keys);
     }
+    free(keys);
+
+    sys_enqueue_emscripten_tracked_answer_message(global, process_id, result, heap.root);
 }
 
 static term nif_emscripten_run_script_tracked(Context *ctx, int argc, term argv[])
@@ -258,133 +394,224 @@ static term nif_emscripten_run_script_tracked(Context *ctx, int argc, term argv[
     return term_invalid_term();
 }
 
+// Per-object status of a fetch. EM_JS bodies cannot see C declarations: the
+// constants mirroring this enum below must be kept in sync.
+enum TrackedObjectStatus
+{
+    TRACKED_OBJECT_OK = 0,
+    TRACKED_OBJECT_BAD_KEY = 1,
+    TRACKED_OBJECT_NOT_STRING = 2
+};
+
 // clang-format off
-EM_JS(char *, js_get_tracked_objects, (uint32_t *keys_ptr, uint32_t keys_n, uint32_t **sizes, uint8_t **statuses, uint32_t *objects_n, uint32_t *strings_n, uint32_t *all_byte_size), {
+EM_JS(char *, js_get_tracked_objects, (uint32_t *keys_ptr, uint32_t keys_n, uint32_t **sizes, uint8_t **statuses, uint32_t *objects_n, uint32_t *all_byte_size, uint8_t *get_status), {
+    // mirror of enum TrackedObjectStatus
     const OK = 0;
     const BAD_KEY = 1;
     const NOT_STRING = 2;
+    // mirror of enum TrackedCallStatus
+    const CALL_OK = 0;
+    const CALL_ERROR = 1;
+    const CALL_OOM = 2;
 
-    const keysOffset = keys_ptr / HEAPU32.BYTES_PER_ELEMENT;
-    const keys = [...HEAPU32.subarray(keysOffset, keysOffset + keys_n)];
+    const setOutcome = (outcome) => {
+        HEAPU8[get_status / HEAPU8.BYTES_PER_ELEMENT] = outcome;
+    };
+    // an evaluated script can replace console: a diagnostic must not decide the outcome
+    const logError = (message, detail) => {
+        try {
+            console.error(message, detail);
+        } catch (e) {
+        }
+    };
 
-    const objects = Module['onGetTrackedObjects'](keys);
-        if (!Array.isArray(objects)) {
+    // A script evaluated by an earlier call may have replaced any global the
+    // body reaches, so it is wrapped as a whole: whatever throws, an outcome
+    // is still set and the caller is never left trapped. _malloc and _free
+    // are module bindings, not the replaceable Module properties.
+    let sizesPtr = 0;
+    let statusPtr = 0;
+    let stringsPtr = 0;
+    try {
+        // indexed reads: the typed array iterator is replaceable
+        const keysOffset = keys_ptr / HEAPU32.BYTES_PER_ELEMENT;
+        const keys = [];
+        for (let i = 0; i < keys_n; ++i) {
+            keys[i] = HEAPU32[keysOffset + i];
+        }
+
+        let objects;
+        try {
+            // Array.from copies an exotic array into a plain one, so nothing
+            // below can run hook code again through a getter
+            const result = Module['onGetTrackedObjects'](keys);
+            objects = Array.isArray(result) ? Array.from(result) : null;
+        } catch (e) {
+            logError("onGetTrackedObjects threw", e);
+            objects = null;
+        }
+        if (objects === null || objects.length !== keys_n) {
+            setOutcome(CALL_ERROR);
+            return 0;
+        }
+        const n = objects.length;
+
+        sizesPtr = _malloc(n * HEAPU32.BYTES_PER_ELEMENT);
+        statusPtr = _malloc(n * HEAPU8.BYTES_PER_ELEMENT);
+        if (sizesPtr === 0 || statusPtr === 0) {
+            _free(sizesPtr);
+            _free(statusPtr);
+            setOutcome(CALL_OOM);
+            return 0;
+        }
+        let allByteSize = 0;
+
+        for (let i = 0; i < n; ++i) {
+            let status = OK;
+            let byteSize = 0;
+            const object = objects[i];
+            if (object === undefined) {
+                status = BAD_KEY;
+            } else if (typeof object !== "string") {
+                status = NOT_STRING;
+            } else {
+                byteSize = lengthBytesUTF8(object);
+            }
+            HEAPU8[statusPtr / HEAPU8.BYTES_PER_ELEMENT + i] = status;
+            HEAPU32[sizesPtr / HEAPU32.BYTES_PER_ELEMENT + i] = byteSize;
+            allByteSize += byteSize;
+        }
+        // _malloc truncates its argument to 32 bits: a larger total would
+        // allocate a small buffer and then write the strings past its end
+        if (allByteSize >= 0xffffffff) {
+            _free(sizesPtr);
+            _free(statusPtr);
+            setOutcome(CALL_OOM);
+            return 0;
+        }
+
+        // one extra byte: stringToUTF8 writes a trailing NUL after the last string
+        stringsPtr = _malloc(allByteSize * HEAPU8.BYTES_PER_ELEMENT + 1);
+        if (stringsPtr === 0) {
+            _free(sizesPtr);
+            _free(statusPtr);
+            setOutcome(CALL_OOM);
+            return 0;
+        }
+        let currentStringsPtr = stringsPtr;
+        for (let i = 0; i < n; ++i) {
+            const status = HEAPU8[statusPtr / HEAPU8.BYTES_PER_ELEMENT + i];
+            if (status !== OK) {
+                continue;
+            }
+            const string = objects[i];
+            const size = HEAPU32[sizesPtr / HEAPU32.BYTES_PER_ELEMENT + i];
+            // stringToUTF8 includes null byte which we don't need
+            stringToUTF8(string, currentStringsPtr, size+1);
+            currentStringsPtr += size;
+        }
+
+        HEAPU32[statuses / HEAPU32.BYTES_PER_ELEMENT] = statusPtr;
+        HEAPU32[sizes / HEAPU32.BYTES_PER_ELEMENT] = sizesPtr;
+        HEAPU32[objects_n / HEAPU32.BYTES_PER_ELEMENT] = n;
+        HEAPU32[all_byte_size / HEAPU32.BYTES_PER_ELEMENT] = allByteSize;
+        setOutcome(CALL_OK);
+
+        return stringsPtr;
+    } catch (e) {
+        logError("tracked fetch failed", e);
+        _free(sizesPtr);
+        _free(statusPtr);
+        _free(stringsPtr);
+        setOutcome(CALL_ERROR);
         return 0;
     }
-    const n = objects.length;
-
-    if (n === 0) {
-        return 0;
-    }
-
-    const sizesPtr = Module['_malloc'](n * HEAPU32.BYTES_PER_ELEMENT);
-    const statusPtr = Module['_malloc'](n * HEAPU8.BYTES_PER_ELEMENT);
-    let allByteSize = 0;
-    let stringsN = 0;
-
-    for (let i = 0; i < n; ++i) {
-        let status = OK;
-        let byteSize = 0;
-        const object = objects[i];
-                if (object === undefined) {
-            status = BAD_KEY;
-        } else if (typeof object !== "string") {
-            status = NOT_STRING;
-        } else {
-            byteSize = lengthBytesUTF8(object);
-            stringsN += 1;
-        }
-        HEAPU8[statusPtr / HEAPU8.BYTES_PER_ELEMENT + i] = status;
-        HEAPU32[sizesPtr / HEAPU32.BYTES_PER_ELEMENT + i] = byteSize;
-        allByteSize += byteSize;
-    }
-
-    const stringsPtr = Module['_malloc'](allByteSize * HEAPU8.BYTES_PER_ELEMENT);
-    let currentStringsPtr = stringsPtr;
-    for (let i = 0; i < n; ++i) {
-        const status = HEAPU8[statusPtr / HEAPU8.BYTES_PER_ELEMENT + i];
-        if (status !== OK) {
-            continue;
-        }
-        const string = objects[i];
-        const size = HEAPU32[sizesPtr / HEAPU32.BYTES_PER_ELEMENT + i];
-        // stringToUTF8 includes null byte which we don't need
-        stringToUTF8(string, currentStringsPtr, size+1);
-        currentStringsPtr += size;
-    }
-
-    HEAPU32[statuses / HEAPU32.BYTES_PER_ELEMENT] = statusPtr;
-    HEAPU32[sizes / HEAPU32.BYTES_PER_ELEMENT] = sizesPtr;
-    HEAPU32[objects_n / HEAPU32.BYTES_PER_ELEMENT] = n;
-    HEAPU32[strings_n / HEAPU32.BYTES_PER_ELEMENT] = stringsN;
-    HEAPU32[all_byte_size / HEAPU32.BYTES_PER_ELEMENT] = allByteSize;
-
-    return stringsPtr;
-});
+})
 // clang-format on
 
-static void do_get_tracked_objects(uint32_t *ref_keys, size_t keys_n, int32_t sync_caller_pid, GlobalContext *global)
+static void do_get_tracked_objects(uint32_t *ref_keys, size_t keys_n, int32_t process_id, GlobalContext *global)
 {
-    static const uint8_t OK = 0;
-    static const uint8_t BAD_KEY = 1;
-    static const uint8_t NOT_STRING = 2;
-    UNUSED(BAD_KEY);
-
     uint32_t objects_n = 0;
-    uint32_t strings_n = 0;
     uint32_t all_byte_size = 0;
     uint32_t *sizes = NULL;
     uint8_t *statuses = NULL;
+    uint8_t get_status = TRACKED_CALL_ERROR;
 
-    char *strings = js_get_tracked_objects(ref_keys, keys_n, &sizes, &statuses, &objects_n, &strings_n, &all_byte_size);
-    assert(strings_n <= objects_n);
-    Context *target_ctx = globalcontext_get_process_lock(global, sync_caller_pid);
-    if (target_ctx) {
-        term result = term_invalid_term();
-        if (IS_NULL_PTR(strings)) {
-            result = BADVALUE_ATOM;
-            goto send_result;
+    char *strings = js_get_tracked_objects(ref_keys, keys_n, &sizes, &statuses, &objects_n, &all_byte_size, &get_status);
+
+    if (IS_NULL_PTR(strings)) {
+        free(sizes);
+        free(statuses);
+        if (UNLIKELY(get_status == TRACKED_CALL_OOM)) {
+            send_tracked_trap_oom(global, process_id);
+            return;
         }
-        size_t size = LIST_SIZE(objects_n, TUPLE_SIZE(2)) + LIST_SIZE(strings_n, BINARY_HEADER_SIZE) + term_binary_data_size_in_terms(all_byte_size);
-        if (UNLIKELY(memory_ensure_free_opt(target_ctx, size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            result = OUT_OF_MEMORY_ATOM;
-            goto send_result;
+        // FIXME: a whole-call failure yields the bare atom badvalue,
+        // inconsistent with the {error, badvalue} shape of the per-element
+        // results. Documented as an unstable return in emscripten.erl.
+        sys_enqueue_emscripten_tracked_answer_message(global, process_id, BADVALUE_ATOM, NULL);
+        return;
+    }
+
+    Heap heap;
+    // the sizes come from the hook, so this capacity is bounded like every
+    // other one computed from a size a caller can influence
+    size_t heap_size = LIST_SIZE(objects_n, TUPLE_SIZE(2));
+    bool heap_size_overflow = false;
+    for (uint32_t i = 0; i < objects_n && !heap_size_overflow; ++i) {
+        if (statuses[i] == TRACKED_OBJECT_OK) {
+            size_t value_size = term_binary_heap_size(sizes[i]);
+            heap_size_overflow = value_size > MEMORY_HEAP_MAX_TERMS - heap_size;
+            heap_size += value_size;
         }
-
-        // move pointer to one byte past buffer
-        const char *current_string = strings + all_byte_size;
-        result = term_nil();
-        for (long i = objects_n - 1; i >= 0; --i) {
-            uint8_t status = statuses[i];
-
-            term tuple = term_alloc_tuple(2, &target_ctx->heap);
-            if (status == OK) {
-                size_t size = sizes[i];
-                current_string -= size;
-
-                term binary = term_create_uninitialized_binary(size, &target_ctx->heap, global);
-                char *data = (char *) term_binary_data(binary);
-                memcpy(data, current_string, size);
-
-                term_put_tuple_element(tuple, 0, OK_ATOM);
-                term_put_tuple_element(tuple, 1, binary);
-            } else if (status == NOT_STRING) {
-                term_put_tuple_element(tuple, 0, ERROR_ATOM);
-                term_put_tuple_element(tuple, 1, BADVALUE_ATOM);
-            } else /* BAD_KEY */ {
-                term_put_tuple_element(tuple, 0, ERROR_ATOM);
-                term_put_tuple_element(tuple, 1, BADKEY_ATOM);
-            }
-            result = term_list_prepend(tuple, result, &target_ctx->heap);
-        }
-
-    send_result:
+    }
+    if (UNLIKELY(heap_size_overflow || memory_init_heap(&heap, heap_size) != MEMORY_GC_OK)) {
         free(sizes);
         free(statuses);
         free(strings);
-        mailbox_send_term_signal(target_ctx, TrapAnswerSignal, result);
-        globalcontext_get_process_unlock(global, target_ctx);
-    } // else: sender died
+        send_tracked_trap_oom(global, process_id);
+        return;
+    }
+
+    // move pointer to one byte past buffer
+    const char *current_string = strings + all_byte_size;
+    term result = term_nil();
+    for (long i = objects_n - 1; i >= 0; --i) {
+        enum TrackedObjectStatus status = (enum TrackedObjectStatus) statuses[i];
+
+        term tuple = term_alloc_tuple(2, &heap);
+        if (status == TRACKED_OBJECT_OK) {
+            size_t size = sizes[i];
+            current_string -= size;
+
+            term binary = term_create_uninitialized_binary(size, &heap, global);
+            if (UNLIKELY(term_is_invalid_term(binary))) {
+                // a large binary is a refc binary and its buffer alloc can fail
+                free(sizes);
+                free(statuses);
+                free(strings);
+                sys_enqueue_emscripten_tracked_answer_message(global, process_id, term_invalid_term(), heap.root);
+                return;
+            }
+            char *data = (char *) term_binary_data(binary);
+            memcpy(data, current_string, size);
+
+            term_put_tuple_element(tuple, 0, OK_ATOM);
+            term_put_tuple_element(tuple, 1, binary);
+        } else if (status == TRACKED_OBJECT_NOT_STRING) {
+            term_put_tuple_element(tuple, 0, ERROR_ATOM);
+            term_put_tuple_element(tuple, 1, BADVALUE_ATOM);
+        } else /* TRACKED_OBJECT_BAD_KEY */ {
+            term_put_tuple_element(tuple, 0, ERROR_ATOM);
+            term_put_tuple_element(tuple, 1, BADKEY_ATOM);
+        }
+        result = term_list_prepend(tuple, result, &heap);
+    }
+    free(sizes);
+    free(statuses);
+    free(strings);
+
+    sys_enqueue_emscripten_tracked_answer_message(global, process_id, result, heap.root);
 }
 
 static term nif_emscripten_get_tracked(Context *ctx, int argc, term argv[])
@@ -409,7 +636,7 @@ static term nif_emscripten_get_tracked(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    int32_t *ref_keys = malloc(n * sizeof(int32_t));
+    uint32_t *ref_keys = malloc(n * sizeof(uint32_t));
     if (IS_NULL_PTR(ref_keys)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
@@ -427,20 +654,23 @@ static term nif_emscripten_get_tracked(Context *ctx, int argc, term argv[])
     }
 
     if (type == KEY_ATOM) {
-        if (UNLIKELY(memory_ensure_free_opt(ctx, LIST_SIZE(n, 1), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, LIST_SIZE(n, BOXED_INT64_SIZE), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            free(ref_keys);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 
         term keys = term_nil();
         for (long i = n - 1; i >= 0; --i) {
-            keys = term_list_prepend(term_from_int32(ref_keys[i]), keys, &ctx->heap);
+            keys = term_list_prepend(term_make_maybe_boxed_int64(ref_keys[i], &ctx->heap), keys, &ctx->heap);
         }
+        free(ref_keys);
         return keys;
     }
     assert(type == VALUE_ATOM);
     // Trap caller waiting for completion
     context_update_flags(ctx, ~NoFlags, Trap);
-    emscripten_dispatch_to_thread(emscripten_main_runtime_thread_id(), EM_FUNC_SIG_VIIII, do_get_tracked_objects, NULL, ref_keys, n, ctx->process_id, ctx->global);
+    // ref_keys will be freed as it's passed as satellite
+    emscripten_dispatch_to_thread(emscripten_main_runtime_thread_id(), EM_FUNC_SIG_VIIII, do_get_tracked_objects, ref_keys, ref_keys, n, ctx->process_id, ctx->global);
     return term_invalid_term();
 }
 
