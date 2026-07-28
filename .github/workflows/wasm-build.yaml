@@ -244,8 +244,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        jit: ["", "-DAVM_DISABLE_JIT=OFF"]
-        language: ["javascript-typescript"]
+        include:
+          - jit: ""
+            flavor: ""
+            language: "javascript-typescript"
+          - jit: "-DAVM_DISABLE_JIT=OFF"
+            flavor: "-jit"
+            language: "javascript-typescript"
 
     steps:
     - name: Checkout repo
@@ -277,18 +282,29 @@ jobs:
       uses: github/codeql-action/analyze@v3
 
     - name: Upload wasm build for web
-      if: matrix.jit == ''
       uses: actions/upload-artifact@v4
       with:
-        name: atomvm-js-web
+        name: atomvm-js-web${{ matrix.flavor }}
         path: |
             src/platforms/emscripten/build/**/*.wasm
             src/platforms/emscripten/build/**/*.mjs
         retention-days: 1
 
   wasm_test_web:
-    needs: [compile_tests, wasm_build_web]
+    needs: [compile_tests, compile_tests_jit, wasm_build_web]
     runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flavor: ""
+            # a JIT build has no interpreter, so it can only run the specs
+            # whose pages load the bundle carrying the wasm32 backend
+            cypress_args: ""
+          - flavor: "-jit"
+            cypress_args: "--env JIT=1 --spec cypress/e2e/run_script_tracked.spec.cy.js,cypress/e2e/tracked_hook_overrides.spec.cy.js"
+
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
@@ -299,10 +315,19 @@ jobs:
         name: atomvm-and-test-modules
         path: build
 
+    # only source of atomvmlib-emscripten-wasm32.avm; unpacked over the non-JIT
+    # set, which carries the host AtomVM and wasm_webserver.avm
+    - name: Download AtomVM and test modules (JIT)
+      if: matrix.flavor != ''
+      uses: actions/download-artifact@v4
+      with:
+        name: atomvm-and-test-modules-jit
+        path: build
+
     - name: Download wasm build for web
       uses: actions/download-artifact@v4
       with:
-        name: atomvm-js-web
+        name: atomvm-js-web${{ matrix.flavor }}
         path: src/platforms/emscripten/build
 
     - name: Download emscripten test modules
@@ -324,20 +349,20 @@ jobs:
         chmod +x ./src/AtomVM
         ./src/AtomVM examples/emscripten/wasm_webserver.avm &
         cd ../src/platforms/emscripten/tests/
-        docker run --network host -v $PWD:/mnt -w /mnt -e CYPRESS_CI=true cypress/included:12.17.1 --browser chrome
+        docker run --network host -v $PWD:/mnt -w /mnt -e CYPRESS_CI=true cypress/included:12.17.1 --browser chrome ${{ matrix.cypress_args }}
         killall AtomVM
 
     - name: "Publish screenshots of failures"
       if: failure()
       uses: actions/upload-artifact@v4
       with:
-        name: cypress-screenshots
+        name: cypress-screenshots${{ matrix.flavor }}
         path: |
             src/platforms/emscripten/tests/cypress/screenshots/**/*.png
         retention-days: 7
 
     - name: "Rename and write sha256sum (web)"
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') && matrix.flavor == ''
       shell: bash
       working-directory: src/platforms/emscripten/build/src
       run: |
@@ -350,7 +375,7 @@ jobs:
 
     - name: "Release (web)"
       uses: softprops/action-gh-release@v3.0.0
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') && matrix.flavor == ''
       with:
         draft: true
         fail_on_unmatched_files: true

@@ -19,7 +19,10 @@
  */
 describe("run_script_tracked", () => {
   beforeEach(() => {
-    cy.visit("/tests/src/test_run_script_tracked.html");
+    cy.visit(
+      "/tests/src/test_run_script_tracked.html" +
+        (Cypress.env("JIT") ? "#jit" : ""),
+    );
   });
 
   it("should track, fetch and garbage collect JS values", () => {

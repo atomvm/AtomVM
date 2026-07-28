@@ -43,8 +43,16 @@ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
     // Arguments are loaded using fetch API.
     // wasm_webserver serves under /tests/build/ files in src/platform/escripten/build/tests/src subdirectory
     // and under /build/ files in build/ subdirectory.
+    // A JIT build has no interpreter, so it needs the bundle carrying the
+    // wasm32 backend rather than the individual libraries. The flavor travels
+    // in the fragment because wasm_webserver would take a query string as part
+    // of the file name to serve.
+    const jit = window.location.hash === "#jit";
+    const libraries = jit
+        ? ['/build/libs/atomvmlib-emscripten-wasm32.avm']
+        : ['/build/libs/eavmlib/src/eavmlib.avm', '/build/libs/avm_emscripten/src/avm_emscripten.avm', '/build/libs/estdlib/src/estdlib.avm'];
     const module = await AtomVM({
-        arguments: ['/tests/build/test_tracked_hook_overrides.beam', '/build/libs/eavmlib/src/eavmlib.avm', '/build/libs/avm_emscripten/src/avm_emscripten.avm', '/build/libs/estdlib/src/estdlib.avm']
+        arguments: ['/tests/build/test_tracked_hook_overrides.beam', ...libraries]
     });
     window.Module = module;
 

@@ -19,7 +19,10 @@
  */
 describe("tracked hook overrides", () => {
   beforeEach(() => {
-    cy.visit("/tests/src/test_tracked_hook_overrides.html");
+    cy.visit(
+      "/tests/src/test_tracked_hook_overrides.html" +
+        (Cypress.env("JIT") ? "#jit" : ""),
+    );
   });
 
   it("should drive the tracked API through overridden hooks", () => {
