@@ -83,6 +83,7 @@ set(ERLANG_LIBS
     eavmlib
     alisp
     etest
+    avm_emscripten
 )
 
 foreach(ERLANG_LIB ${ERLANG_LIBS})
