@@ -1,0 +1,38 @@
+/*
+ * This file is part of AtomVM.
+ *
+ * Copyright 2026 Davide Bettio <davide@uninstall.it>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+ */
+describe("tracked hook overrides", () => {
+  beforeEach(() => {
+    cy.visit("/tests/src/test_tracked_hook_overrides.html");
+  });
+
+  it("should drive the tracked API through overridden hooks", () => {
+    // The Erlang module asserts the contract and reports here.
+    cy.get("#result", { timeout: 60000 }).should("contain", "Test success");
+    // Asserted here because they are JavaScript side effects the Erlang module
+    // cannot observe.
+    cy.window({ timeout: 10000 }).should((win) => {
+      expect(win.cleanupRan).to.equal(1);
+      const values = [...win.Module.trackedObjectsMap.values()];
+      expect(values).to.include("kept");
+      expect(values).to.not.include("collectable");
+      expect(win.Module.cleanupFunctions.size).to.equal(0);
+    });
+  });
+});

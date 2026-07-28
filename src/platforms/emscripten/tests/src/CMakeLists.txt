@@ -33,6 +33,7 @@ compile_erlang(test_atomvm)
 compile_erlang(test_call)
 compile_erlang(test_html5)
 compile_erlang(test_run_script_tracked)
+compile_erlang(test_tracked_hook_overrides)
 compile_erlang(test_websockets)
 
 add_custom_target(emscripten_erlang_test_modules DEPENDS
@@ -40,5 +41,6 @@ add_custom_target(emscripten_erlang_test_modules DEPENDS
     test_call.beam
     test_html5.beam
     test_run_script_tracked.beam
+    test_tracked_hook_overrides.beam
     test_websockets.beam
 )
