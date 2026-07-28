@@ -3632,9 +3632,10 @@ static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
     GlobalContext *glb = ctx->global;
 
     size_t required_heap;
+    size_t required_stack;
     size_t bytes_read;
     external_term_read_result_t res = external_term_validate_buf(term_binary_data(binary),
-        term_binary_size(binary), read_opts, &required_heap, &bytes_read, glb);
+        term_binary_size(binary), read_opts, &required_heap, &required_stack, &bytes_read, glb);
     if (UNLIKELY(res != ExternalTermReadOk)) {
         RAISE_ERROR(BADARG_ATOM);
     }
@@ -3649,7 +3650,7 @@ static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
 
     term dst;
     res = external_term_deserialize_buf(term_binary_data(binary), term_binary_size(binary),
-        read_opts, &ctx->heap, &dst, glb);
+        read_opts, required_stack, &ctx->heap, &dst, glb);
     if (UNLIKELY(res != ExternalTermReadOk)) {
         RAISE_ERROR(BADARG_ATOM);
     }
