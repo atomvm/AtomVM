@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for `process_info/1` and `process_info/2` with list argument
 - Added `erlang:term_to_binary/2`, `erlang:is_builtin/3` and `erlang:bitstring_to_list/1`
 - Added `lists:mapfoldr/3`
+- Added `emscripten:run_script_tracked/1` and `emscripten:get_tracked/2` to hold handles to
+  JavaScript values from Erlang, tying the JavaScript value lifetime to the Erlang term lifetime.
+  The emscripten module object gained `trackedObjectsMap`, `nextTrackedObjectKey()` and the
+  `onRunTrackedJs`, `onGetTrackedObjects` and `onTrackedObjectDelete` hooks, which embedders may
+  override to customize what tracking means
 
 ### Changed
 - `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does:

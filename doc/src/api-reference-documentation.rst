@@ -52,6 +52,16 @@ etest
 
    apidocs/erlang/etest/*
 
+---------------------
+avm_emscripten
+---------------------
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   apidocs/erlang/avm_emscripten/*
+
 =========================================
 AtomVM 'C' APIs
 =========================================

@@ -48,6 +48,20 @@
 #include "platform_defaultatoms.h"
 #include "websocket_nifs.h"
 
+uint32_t sys_get_next_tracked_object_key(GlobalContext *glb)
+{
+    struct EmscriptenPlatformData *platform = glb->platform_data;
+    // saturate rather than wrap: a wrapped counter hands out a key that a
+    // live handle still owns, and both then share the same tracked value
+    uint32_t key = atomic_load(&platform->next_tracked_object_key);
+    while (key != TRACKED_OBJECT_KEY_EXHAUSTED) {
+        if (atomic_compare_exchange_weak(&platform->next_tracked_object_key, &key, key + 1)) {
+            return key;
+        }
+    }
+    return TRACKED_OBJECT_KEY_EXHAUSTED;
+}
+
 /**
  * @brief resolve a promise with an int value and destroy it
  * @details called on the main thread using `emscripten_dispatch_to_thread`
@@ -130,6 +144,32 @@ static void htmlevent_user_data_down(ErlNifEnv *caller_env, void *obj, ErlNifPid
     }
 }
 
+void sys_remove_tracked_object(uint32_t key)
+{
+    // clang-format off
+    EM_ASM({
+        try {
+            Module['onTrackedObjectDelete']($0);
+        } catch (e) {
+            // hooks must not throw; a throw escaping here would land in the
+            // proxied call queue
+            try {
+                console.error("onTrackedObjectDelete threw", e);
+            } catch (ignored) {
+            }
+        }
+    }, key);
+    // clang-format on
+}
+
+static void tracked_object_dtor(ErlNifEnv *caller_env, void *obj)
+{
+    UNUSED(caller_env);
+
+    struct TrackedObjectResource *tracked_object_rsrc = (struct TrackedObjectResource *) obj;
+    emscripten_dispatch_to_thread(emscripten_main_runtime_thread_id(), EM_FUNC_SIG_VI, sys_remove_tracked_object, NULL, tracked_object_rsrc->key);
+}
+
 static const ErlNifResourceTypeInit promise_resource_type_init = {
     .members = 1,
     .dtor = promise_dtor,
@@ -140,6 +180,11 @@ static const ErlNifResourceTypeInit htmlevent_user_data_resource_type_init = {
     .dtor = htmlevent_user_data_dtor,
     .stop = NULL,
     .down = htmlevent_user_data_down,
+};
+
+static const ErlNifResourceTypeInit tracked_object_resource_type_init = {
+    .members = 1,
+    .dtor = tracked_object_dtor
 };
 
 void sys_init_platform(GlobalContext *glb)
@@ -158,6 +203,7 @@ void sys_init_platform(GlobalContext *glb)
         AVM_ABORT();
     }
     list_init(&platform->messages);
+    platform->next_tracked_object_key = 0;
     ErlNifEnv env;
     erl_nif_env_partial_init_from_globalcontext(&env, glb);
     platform->promise_resource_type = enif_init_resource_type(&env, "promise", &promise_resource_type_init, ERL_NIF_RT_CREATE, NULL);
@@ -173,6 +219,12 @@ void sys_init_platform(GlobalContext *glb)
     platform->websocket_resource_type = enif_init_resource_type(&env, "websocket", &websocket_resource_type_init, ERL_NIF_RT_CREATE, NULL);
     if (IS_NULL_PTR(platform->websocket_resource_type)) {
         fprintf(stderr, "Cannot initialize websocket_resource_type");
+        AVM_ABORT();
+    }
+
+    platform->tracked_object_resource_type = enif_init_resource_type(&env, "tracked_object", &tracked_object_resource_type_init, ERL_NIF_RT_CREATE, NULL);
+    if (IS_NULL_PTR(platform->tracked_object_resource_type)) {
+        fprintf(stderr, "Cannot initialize tracked_object resource type");
         AVM_ABORT();
     }
 
@@ -304,6 +356,29 @@ void sys_enqueue_emscripten_unregister_htmlevent_message(GlobalContext *glb, str
     }
     message->base.message_type = UnregisterHTMLEvent;
     message->rsrc = rsrc;
+    sys_enqueue_emscripten_message(glb, &message->base);
+}
+
+/**
+ * @brief Enqueue the answer of a tracked call
+ * @details Posting the answer signal and destroying the heap it was built in
+ * are scheduler only, while tracked calls run on the browser main thread.
+ * @param glb the global context
+ * @param target_pid the trapped caller waiting for the answer
+ * @param answer the answer term, or an invalid term to raise `out_of_memory`
+ * @param heap the heap the answer was built in, or NULL if it needed none
+ */
+void sys_enqueue_emscripten_tracked_answer_message(GlobalContext *glb, int32_t target_pid, term answer, HeapFragment *heap)
+{
+    struct EmscriptenMessageTrackedAnswer *message = malloc(sizeof(struct EmscriptenMessageTrackedAnswer));
+    if (IS_NULL_PTR(message)) {
+        fprintf(stderr, "Cannot allocate message");
+        AVM_ABORT();
+    }
+    message->base.message_type = TrackedAnswer;
+    message->target_pid = target_pid;
+    message->answer = answer;
+    message->answer_heap = heap;
     sys_enqueue_emscripten_message(glb, &message->base);
 }
 
@@ -525,6 +600,31 @@ static void sys_process_emscripten_message(GlobalContext *glb, struct Emscripten
         case UnregisterHTMLEvent: {
             struct EmscriptenMessageUnregisterHTMLEvent *message_unregister = (struct EmscriptenMessageUnregisterHTMLEvent *) message;
             emscripten_dispatch_to_thread(emscripten_main_runtime_thread_id(), EM_FUNC_SIG_VI, sys_unregister_htmlevent_handler, NULL, message_unregister->rsrc);
+        } break;
+
+        case TrackedAnswer: {
+            struct EmscriptenMessageTrackedAnswer *message_answer = (struct EmscriptenMessageTrackedAnswer *) message;
+            Context *target_ctx = globalcontext_get_process_lock(glb, message_answer->target_pid);
+            if (target_ctx) {
+                MailboxMessage *signal = NULL;
+                if (LIKELY(!term_is_invalid_term(message_answer->answer))) {
+                    // not mailbox_send_term_signal: copying the answer into
+                    // the signal allocates and it does not report a failure
+                    signal = mailbox_message_create_from_term(TrapAnswerSignal, message_answer->answer);
+                }
+                if (signal) {
+                    mailbox_post_message(target_ctx, signal);
+                } else {
+                    mailbox_send_immediate_signal(target_ctx, TrapExceptionSignal, OUT_OF_MEMORY_ATOM);
+                }
+                globalcontext_get_process_unlock(glb, target_ctx);
+            } // else: caller died, nobody is waiting
+            if (message_answer->answer_heap) {
+                // if the caller died, this drops the resources the answer
+                // holds and their destructors delete the JS-side values
+                memory_sweep_mso_list(message_answer->answer_heap->mso_list, glb, false);
+                memory_destroy_heap_fragment(message_answer->answer_heap);
+            }
         } break;
 
         case Signal:
