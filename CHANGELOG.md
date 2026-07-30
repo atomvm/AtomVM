@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The emscripten module object gained `trackedObjectsMap`, `nextTrackedObjectKey()` and the
   `onRunTrackedJs`, `onGetTrackedObjects` and `onTrackedObjectDelete` hooks, which embedders may
   override to customize what tracking means
+- Added support for non-byte-aligned bitstrings
 
 ### Changed
 - `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does:
@@ -109,6 +110,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `term_is_uint32` accepting big integers whose low 64 bits are within range on 32-bit
   builds, which made `erlang:crc32/2`, `erlang:crc32_combine/3` and `crypto:pbkdf2_hmac/5`
   silently truncate huge integer arguments instead of raising `badarg`
+- Fixed `erlang:list_to_binary/1`, `erlang:iolist_to_binary/1`, `erlang:iolist_size/1` and the
+  `unicode:characters_to_*` functions accepting an integer improper tail, such as `[1 | 2]`
 
 ## [0.7.0-alpha.1] - 2026-04-06
 

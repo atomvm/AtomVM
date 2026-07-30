@@ -32,14 +32,9 @@ start() ->
     %% expressions that traverse a byte boundary
     ok = test_pack_unpack(13, 3, 1, 7, false),
     ok = test_pack_unpack(3, 13, 1, 7, false),
-    %% expressions not aligned on 8 bit boundary (expect failure with AtomVM)
-    ExpectFailure =
-        case erlang:system_info(machine) of
-            "BEAM" -> false;
-            _ -> true
-        end,
-    ok = test_pack_unpack(1, 1, 1, 1, ExpectFailure),
-    ok = test_pack_unpack(3, 13, 1, 1, ExpectFailure),
+    %% expressions not aligned on 8 bit boundary
+    ok = test_pack_unpack(1, 1, 1, 1, false),
+    ok = test_pack_unpack(3, 13, 1, 1, false),
     0.
 
 test_pack_unpack(ALen, BLen, CLen, DLen, ExpectFailure) ->

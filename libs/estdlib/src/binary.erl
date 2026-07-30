@@ -77,11 +77,13 @@ copy(_Binary, _N) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec decode_hex(Data :: <<_:_*16>>) -> binary().
-decode_hex(Data) ->
+decode_hex(Data) when is_binary(Data) ->
     case byte_size(Data) rem 2 of
         0 -> <<<<(binary_to_integer(B, 16))>> || <<B:2/binary>> <= Data>>;
         _ -> erlang:error(badarg)
-    end.
+    end;
+decode_hex(_Data) ->
+    erlang:error(badarg).
 
 %%-----------------------------------------------------------------------------
 %% @param   Data binary data to convert into hex encoded binary
@@ -101,10 +103,12 @@ encode_hex(Data) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec encode_hex(Data :: binary(), Case :: lowercase | uppercase) -> binary().
-encode_hex(Data, uppercase) ->
+encode_hex(Data, uppercase) when is_binary(Data) ->
     <<(integer_to_binary(B, 16)) || <<B:4>> <= Data>>;
-encode_hex(Data, lowercase) ->
-    <<<<(hd(string:to_lower(integer_to_list(B, 16)))):8>> || <<B:4>> <= Data>>.
+encode_hex(Data, lowercase) when is_binary(Data) ->
+    <<<<(hd(string:to_lower(integer_to_list(B, 16)))):8>> || <<B:4>> <= Data>>;
+encode_hex(_Data, _Case) ->
+    erlang:error(badarg).
 
 %%-----------------------------------------------------------------------------
 %% @param   Binaries non-empty list of binaries

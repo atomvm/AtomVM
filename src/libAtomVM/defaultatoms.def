@@ -39,12 +39,12 @@ X(UNSUPPORTED_ATOM, "\xB", "unsupported")
 X(ALL_ATOM, "\x3", "all")
 X(LOWERCASE_EXIT_ATOM, "\x4", "exit")
 X(BADRECORD_ATOM, "\x9", "badrecord")
+X(SYSTEM_LIMIT_ATOM, "\xC", "system_limit")
 // End of atoms used in jit compiler
 
 X(UNDEFINED_ATOM, "\x9", "undefined")
 
 X(BADARITY_ATOM, "\x08", "badarity")
-X(SYSTEM_LIMIT_ATOM, "\xC", "system_limit")
 X(OVERFLOW_ATOM, "\x8", "overflow")
 
 X(FLUSH_ATOM, "\x5", "flush")

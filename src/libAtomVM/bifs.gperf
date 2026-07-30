@@ -49,7 +49,7 @@ erlang:bit_size/1, {.gcbif.base.type = GCBIFFunctionType, .gcbif.gcbif1_ptr = bi
 erlang:binary_part/3, {.gcbif.base.type = GCBIFFunctionType, .gcbif.gcbif3_ptr = bif_erlang_binary_part_3}
 erlang:get/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_get_1}
 erlang:is_atom/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_atom_1}
-erlang:is_bitstring/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_binary_1}
+erlang:is_bitstring/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_bitstring_1}
 erlang:is_binary/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_binary_1}
 erlang:is_boolean/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_boolean_1}
 erlang:is_float/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_float_1}

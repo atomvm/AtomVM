@@ -181,6 +181,7 @@
     | {'(int)', maybe_free_aarch64_register(), '!=', aarch64_register() | integer()}
     | {'(bool)', maybe_free_aarch64_register(), '==', false}
     | {'(bool)', maybe_free_aarch64_register(), '!=', false}
+    | {'(unsigned)', maybe_free_aarch64_register(), '<', aarch64_register()}
     | {maybe_free_aarch64_register(), '&', non_neg_integer(), '!=', integer()}
     | {{free, aarch64_register()}, '==', {free, aarch64_register()}}.
 
@@ -843,6 +844,26 @@ if_block_cond(
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
     {State2, ge, byte_size(I1)};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {'(unsigned)', RegOrTuple, '<', RegB}
+) when is_atom(RegB) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I1 = jit_aarch64_asm:cmp(Reg, RegB),
+    % cs (aka hs) = carry set = greater than or equal, unsigned
+    I2 = jit_aarch64_asm:bcc(cs, 0),
+    Code = <<
+        I1/binary,
+        I2/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, cs, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '<', RegB}

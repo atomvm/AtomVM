@@ -43,6 +43,8 @@
     beq/3,
     bne/3,
     blt/3,
+    bltu/3,
+    bgeu/3,
     beqz/2,
     bnez/2,
     bltz/2,
@@ -382,6 +384,18 @@ bne(As, At, Offset) when Offset >= -128, Offset =< 127 ->
 -spec blt(xtensa_register(), xtensa_register(), integer()) -> binary().
 blt(As, At, Offset) when Offset >= -128, Offset =< 127 ->
     encode_bri8(16#7, reg_to_num(At), reg_to_num(As), 16#2, Offset).
+
+%% BLTU: if AR[s] < AR[t] (unsigned) then PC += sign_extend(imm8)
+%% op0=7, r=3
+-spec bltu(xtensa_register(), xtensa_register(), integer()) -> binary().
+bltu(As, At, Offset) when Offset >= -128, Offset =< 127 ->
+    encode_bri8(16#7, reg_to_num(At), reg_to_num(As), 16#3, Offset).
+
+%% BGEU: if AR[s] >= AR[t] (unsigned) then PC += sign_extend(imm8)
+%% op0=7, r=11
+-spec bgeu(xtensa_register(), xtensa_register(), integer()) -> binary().
+bgeu(As, At, Offset) when Offset >= -128, Offset =< 127 ->
+    encode_bri8(16#7, reg_to_num(At), reg_to_num(As), 16#B, Offset).
 
 %% BEQZ: if AR[s] == 0 then PC += sign_extend(imm12)
 %% Encoding: imm12[11:0] in bits[23:12], s[11:8], t=0001b[7:4], op0=0110b[3:0]

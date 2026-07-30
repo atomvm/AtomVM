@@ -801,10 +801,19 @@ first_pass(<<?OP_IS_BINARY, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
     ?TRACE("OP_IS_BINARY ~p, ~p\n", [Label, Arg1]),
-    MSt2 = verify_is_binary(Arg1, Label, MMod, MSt1),
-    MSt3 = MMod:free_native_registers(MSt2, [Arg1]),
-    ?ASSERT_ALL_NATIVE_FREE(MSt3),
-    first_pass(Rest2, MMod, MSt3, State0);
+    MSt2 = verify_is_bitstring(Arg1, Label, MMod, MSt1),
+    {MSt3, Reg} = MMod:move_to_native_register(MSt2, Arg1),
+    {MSt4, Reg} = MMod:and_(MSt3, {free, Reg}, ?TERM_PRIMARY_CLEAR_MASK),
+    {MSt5, TagReg} = MMod:get_array_element(MSt4, Reg, 0),
+    {MSt6, TagReg} = MMod:and_(MSt5, {free, TagReg}, ?TERM_BOXED_TAG_MASK),
+    %% is_binary/1 is false for a non-byte-aligned bitstring
+    MSt7 = MMod:if_block(MSt6, {{free, TagReg}, '==', ?TERM_BOXED_SUB_BINARY}, fun(BSt0) ->
+        {BSt1, OffsetReg} = MMod:get_array_element(BSt0, Reg, 2),
+        cond_jump_to_label({{free, OffsetReg}, '&', 16#7, '!=', 0}, Label, MMod, BSt1)
+    end),
+    MSt8 = MMod:free_native_registers(MSt7, [Reg]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt8),
+    first_pass(Rest2, MMod, MSt8, State0);
 % 55
 first_pass(<<?OP_IS_LIST, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -1375,10 +1384,6 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt5, BSOffsetReg0} = MMod:get_array_element(MSt4, MatchStateRegPtr, 2),
     MSt6 =
         if
-            Unit =/= 8 ->
-                MMod:call_primitive_last(MSt5, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, offset, ?UNSUPPORTED_ATOM
-                ]);
             FlagsValue =/= 0 ->
                 MMod:call_primitive_last(MSt5, ?PRIM_RAISE_ERROR, [
                     ctx, jit_state, offset, ?UNSUPPORTED_ATOM
@@ -1386,48 +1391,46 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, State0) ->
             true ->
                 MSt5
         end,
-    MSt7 = MMod:if_block(MSt6, {BSOffsetReg0, '&', 16#7, '!=', 0}, fun(BlockSt) ->
-        MMod:call_primitive_last(BlockSt, ?PRIM_RAISE_ERROR, [ctx, jit_state, offset, ?BADARG_ATOM])
-    end),
-    {MSt8, BSOffsetReg1} = MMod:shift_right(MSt7, {free, BSOffsetReg0}, 3),
-    {MSt9, BSBinaryReg0} = MMod:and_(MSt8, {free, BSBinaryReg0}, ?TERM_PRIMARY_CLEAR_MASK),
-    {MSt10, SizeReg} = MMod:get_array_element(MSt9, {free, BSBinaryReg0}, 1),
-    {MSt13, SizeValue} =
+    {MSt7, BinPtrReg} = MMod:and_(MSt6, {free, BSBinaryReg0}, ?TERM_PRIMARY_CLEAR_MASK),
+    {MSt8, RemainingReg} = term_bit_size({ptr, BinPtrReg}, MMod, MSt7),
+    MSt9 = MMod:free_native_registers(MSt8, [BinPtrReg]),
+    MSt10 = MMod:sub(MSt9, RemainingReg, BSOffsetReg0),
+    {MSt14, SizeBits} =
         if
             Size =:= ?ALL_ATOM ->
-                MSt11 = MMod:sub(MSt10, SizeReg, BSOffsetReg1),
-                {MSt11, SizeReg};
+                MSt11 = bs_fail_or_badarg_unless_multiple_of_unit(
+                    RemainingReg, Unit, Fail, MMod, MSt10
+                ),
+                {MSt11, RemainingReg};
             is_integer(Size) ->
-                % SizeReg is binary size
                 % Size is a tagged integer: (N bsl 4) bor 0xF
-                % SizeBytes is the raw byte count
-                SizeBytes = Size bsr 4,
-                MSt11 = MMod:sub(MSt10, SizeReg, SizeBytes),
-                MSt12 = cond_jump_to_label({{free, SizeReg}, '<', BSOffsetReg1}, Fail, MMod, MSt11),
-                {MSt12, SizeBytes};
+                SizeBitsLit = (Size bsr 4) * Unit,
+                MSt11 = cond_jump_to_label(
+                    {{free, RemainingReg}, '<', SizeBitsLit}, Fail, MMod, MSt10
+                ),
+                {MSt11, SizeBitsLit};
             true ->
                 {MSt11, SizeValReg} = MMod:move_to_native_register(MSt10, Size),
                 MSt12 = MMod:if_else_block(
                     MSt11,
                     {SizeValReg, '==', ?ALL_ATOM},
                     fun(BSt0) ->
-                        BSt1 = MMod:sub(BSt0, SizeReg, BSOffsetReg1),
-                        MMod:free_native_registers(BSt1, [SizeValReg])
+                        BSt1 = bs_fail_or_badarg_unless_multiple_of_unit(
+                            RemainingReg, Unit, Fail, MMod, BSt0
+                        ),
+                        MMod:move_to_native_register(BSt1, RemainingReg, SizeValReg)
                     end,
                     fun(BSt0) ->
                         {BSt1, SizeValReg} = term_to_int(SizeValReg, Fail, MMod, BSt0),
-                        BSt2 = cond_jump_to_label({SizeValReg, '<', 0}, Fail, MMod, BSt1),
-                        BSt3 = MMod:sub(BSt2, SizeReg, SizeValReg),
-                        BSt4 = cond_jump_to_label({SizeReg, '<', BSOffsetReg1}, Fail, MMod, BSt3),
-                        BSt5 = MMod:move_to_native_register(BSt4, SizeValReg, SizeReg),
-                        MMod:free_native_registers(BSt5, [SizeValReg])
+                        BSt2 = scale_size_by_unit(SizeValReg, Unit, Fail, MMod, BSt1),
+                        cond_jump_to_label({RemainingReg, '<', SizeValReg}, Fail, MMod, BSt2)
                     end
                 ),
-                {MSt12, SizeReg}
+                MSt13 = MMod:free_native_registers(MSt12, [RemainingReg]),
+                {MSt13, SizeValReg}
         end,
-    {MSt14, NewOffsetReg} = MMod:copy_to_native_register(MSt13, BSOffsetReg1),
-    MSt15 = MMod:add(MSt14, NewOffsetReg, SizeValue),
-    MSt16 = MMod:shift_left(MSt15, NewOffsetReg, 3),
+    {MSt15, NewOffsetReg} = MMod:copy_to_native_register(MSt14, BSOffsetReg0),
+    MSt16 = MMod:add(MSt15, NewOffsetReg, SizeBits),
     % Write new offset
     MSt17 = MMod:move_to_array_element(MSt16, NewOffsetReg, MatchStateRegPtr, 2),
     MSt18 = MMod:free_native_registers(MSt17, [NewOffsetReg]),
@@ -1435,23 +1438,31 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt20 = MMod:free_native_registers(MSt19, [TrimResultReg]),
     {MSt21, BSBinaryReg1} = MMod:get_array_element(MSt20, {free, MatchStateRegPtr}, 1),
     MSt22 = MMod:or_(MSt21, BSBinaryReg1, ?TERM_PRIMARY_BOXED),
-    {MSt23, HeapSizeReg} = MMod:call_primitive(MSt22, ?PRIM_TERM_SUB_BINARY_HEAP_SIZE, [
-        BSBinaryReg1, SizeValue
+    {MSt23, TmpPtrReg} = MMod:copy_to_native_register(MSt22, BSBinaryReg1),
+    {MSt24, TmpPtrReg} = MMod:and_(MSt23, {free, TmpPtrReg}, ?TERM_PRIMARY_CLEAR_MASK),
+    {MSt25, HeapSizeReg} = MMod:call_primitive(MSt24, ?PRIM_BITSTRING_SLICE_HEAP_SIZE, [
+        {free, TmpPtrReg}, BSOffsetReg0, SizeBits
     ]),
-    {MSt24, BSBinaryReg2} = memory_ensure_free_with_extra_root(
-        BSBinaryReg1, Live, {free, HeapSizeReg}, MMod, MSt23
+    {MSt26, BSBinaryReg2} = memory_ensure_free_with_extra_root(
+        BSBinaryReg1, Live, {free, HeapSizeReg}, MMod, MSt25
     ),
-    {MSt25, ResultTerm} = MMod:call_primitive(MSt24, ?PRIM_TERM_MAYBE_CREATE_SUB_BINARY, [
-        ctx, {free, BSBinaryReg2}, {free, BSOffsetReg1}, {free, SizeValue}
+    SizeBitsArg =
+        if
+            is_integer(SizeBits) -> SizeBits;
+            true -> {free, SizeBits}
+        end,
+    {MSt27, ResultTerm} = MMod:call_primitive(MSt26, ?PRIM_BITSTRING_SLICE, [
+        ctx, {free, BSBinaryReg2}, {free, BSOffsetReg0}, SizeBitsArg
     ]),
-    {MSt26, Dest, Rest7} = decode_dest(Rest6, MMod, MSt25),
+    MSt28 = raise_out_of_memory_if_invalid(ResultTerm, MMod, MSt27),
+    {MSt29, Dest, Rest7} = decode_dest(Rest6, MMod, MSt28),
     ?TRACE("OP_BS_GET_BINARY2 ~p,~p,~p,~p,~p,~p,~p\n", [
         Fail, Src, Live, Size, Unit, FlagsValue, Dest
     ]),
-    MSt27 = MMod:move_to_vm_register(MSt26, ResultTerm, Dest),
-    MSt28 = MMod:free_native_registers(MSt27, [ResultTerm, Dest]),
-    ?ASSERT_ALL_NATIVE_FREE(MSt28),
-    first_pass(Rest7, MMod, MSt28, State0);
+    MSt30 = MMod:move_to_vm_register(MSt29, ResultTerm, Dest),
+    MSt31 = MMod:free_native_registers(MSt30, [ResultTerm, Dest]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt31),
+    first_pass(Rest7, MMod, MSt31, State0);
 % 120
 first_pass(<<?OP_BS_SKIP_BITS2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -1475,13 +1486,12 @@ first_pass(<<?OP_BS_SKIP_BITS2, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt8, BSOffsetReg} = MMod:get_array_element(MSt7, MatchStateRegPtr, 2),
     MSt9 = MMod:add(MSt8, BSOffsetReg, NumBits),
     MSt10 = MMod:free_native_registers(MSt9, [NumBits]),
-    {MSt11, BSBinarySize} = term_binary_size({free, BSBinaryReg}, MMod, MSt10),
-    MSt12 = MMod:shift_left(MSt11, BSBinarySize, 3),
-    MSt13 = cond_jump_to_label({{free, BSBinarySize}, '<', BSOffsetReg}, Fail, MMod, MSt12),
-    MSt14 = MMod:move_to_array_element(MSt13, BSOffsetReg, MatchStateRegPtr, 2),
-    MSt15 = MMod:free_native_registers(MSt14, [BSOffsetReg, MatchStateRegPtr]),
-    ?ASSERT_ALL_NATIVE_FREE(MSt15),
-    first_pass(Rest5, MMod, MSt15, State0);
+    {MSt11, BSBinarySize} = term_bit_size({free, BSBinaryReg}, MMod, MSt10),
+    MSt12 = cond_jump_to_label({{free, BSBinarySize}, '<', BSOffsetReg}, Fail, MMod, MSt11),
+    MSt13 = MMod:move_to_array_element(MSt12, BSOffsetReg, MatchStateRegPtr, 2),
+    MSt14 = MMod:free_native_registers(MSt13, [BSOffsetReg, MatchStateRegPtr]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt14),
+    first_pass(Rest5, MMod, MSt14, State0);
 % 121
 first_pass(<<?OP_BS_TEST_TAIL2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -1494,12 +1504,11 @@ first_pass(<<?OP_BS_TEST_TAIL2, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt4, BSOffsetReg} = MMod:get_array_element(MSt3, MatchStateRegPtr, 2),
     MSt5 = MMod:free_native_registers(MSt4, [MatchStateRegPtr]),
     MSt6 = MMod:add(MSt5, BSOffsetReg, Bits),
-    {MSt7, BSBinarySize} = term_binary_size({free, BSBinaryReg}, MMod, MSt6),
-    MSt8 = MMod:shift_left(MSt7, BSBinarySize, 3),
-    MSt9 = cond_jump_to_label({{free, BSBinarySize}, '!=', BSOffsetReg}, Fail, MMod, MSt8),
-    MSt10 = MMod:free_native_registers(MSt9, [BSOffsetReg]),
-    ?ASSERT_ALL_NATIVE_FREE(MSt10),
-    first_pass(Rest3, MMod, MSt10, State0);
+    {MSt7, BSBinarySize} = term_bit_size({free, BSBinaryReg}, MMod, MSt6),
+    MSt8 = cond_jump_to_label({{free, BSBinarySize}, '!=', BSOffsetReg}, Fail, MMod, MSt7),
+    MSt9 = MMod:free_native_registers(MSt8, [BSOffsetReg]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt9),
+    first_pass(Rest3, MMod, MSt9, State0);
 % 124
 first_pass(
     <<?OP_GC_BIF1, Rest0/binary>>, MMod, MSt0, #state{import_resolver = ImportResolver} = State0
@@ -1568,16 +1577,15 @@ first_pass(<<?OP_BS_TEST_UNIT, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt3, BSBinaryReg} = MMod:get_array_element(MSt2, MatchStateRegPtr, 1),
     {MSt4, BSOffsetReg} = MMod:get_array_element(MSt3, MatchStateRegPtr, 2),
     MSt5 = MMod:free_native_registers(MSt4, [MatchStateRegPtr]),
-    {MSt6, BSBinarySize} = term_binary_size({free, BSBinaryReg}, MMod, MSt5),
-    MSt7 = MMod:shift_left(MSt6, BSBinarySize, 3),
-    % BSBinarySize = binary_size * 8
-    MSt8 = MMod:sub(MSt7, BSBinarySize, BSOffsetReg),
+    {MSt6, BSBinarySize} = term_bit_size({free, BSBinaryReg}, MMod, MSt5),
+    % BSBinarySize = source bit size
+    MSt7 = MMod:sub(MSt6, BSBinarySize, BSOffsetReg),
     % BSBinarySize = (binary_size * 8) - offset = remaining bits
-    MSt9 = MMod:free_native_registers(MSt8, [BSOffsetReg]),
-    {MSt10, BSBinarySize1} = MMod:and_(MSt9, {free, BSBinarySize}, Unit - 1),
-    MSt11 = cond_jump_to_label({{free, BSBinarySize1}, '!=', 0}, Fail, MMod, MSt10),
-    ?ASSERT_ALL_NATIVE_FREE(MSt11),
-    first_pass(Rest3, MMod, MSt11, State0);
+    MSt8 = MMod:free_native_registers(MSt7, [BSOffsetReg]),
+    MSt9 = bs_fail_or_badarg_unless_multiple_of_unit(BSBinarySize, Unit, Fail, MMod, MSt8),
+    MSt10 = MMod:free_native_registers(MSt9, [BSBinarySize]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt10),
+    first_pass(Rest3, MMod, MSt10, State0);
 % 132
 first_pass(<<?OP_BS_MATCH_STRING, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -2356,83 +2364,86 @@ first_pass(
         {Rest6, MSt1, 0, undefined, State0, false},
         lists:seq(1, NBSegments)
     ),
-    {MSt4, BinaryTotalSize} =
+    MaxBinarySize = max_binary_size_in_bytes(MMod),
+    {MSt6, BinaryTotalSize} =
         case {BinaryLitSize, BinaryRegSize} of
+            {_, _} when BinaryLitSize > MaxBinarySize * 8 ->
+                {raise_system_limit(MMod, MSt2), BinaryLitSize};
             {_, undefined} ->
                 {MSt2, BinaryLitSize};
             {0, Reg} ->
                 {MSt2, Reg};
             {_, _} ->
-                MSt3 = MMod:add(MSt2, BinaryRegSize, BinaryLitSize),
-                {MSt3, BinaryRegSize}
+                {MSt3, LitReg} = MMod:move_to_native_register(MSt2, BinaryLitSize),
+                MSt4 = MMod:add(MSt3, BinaryRegSize, LitReg),
+                MSt5 = MMod:if_block(MSt4, {'(unsigned)', BinaryRegSize, '<', LitReg}, fun(BSt0) ->
+                    raise_system_limit(MMod, BSt0)
+                end),
+                {MMod:free_native_registers(MSt5, [LitReg]), BinaryRegSize}
         end,
-    MSt5 =
-        if
-            is_integer(BinaryTotalSize) andalso BinaryTotalSize band 16#7 =/= 0 ->
-                MMod:call_primitive_last(MSt4, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, offset, ?UNSUPPORTED_ATOM
-                ]);
-            is_integer(BinaryTotalSize) ->
-                MSt4;
-            true ->
-                MMod:if_block(MSt4, {BinaryTotalSize, '&', 16#7, '!=', 0}, fun(BlockSt) ->
-                    MMod:call_primitive_last(BlockSt, ?PRIM_RAISE_ERROR, [
-                        ctx, jit_state, offset, ?UNSUPPORTED_ATOM
-                    ])
-                end)
-        end,
-    {MSt6, TrimResultReg} = MMod:call_primitive(MSt5, ?PRIM_TRIM_LIVE_REGS, [ctx, Live]),
-    MSt7 = MMod:free_native_registers(MSt6, [TrimResultReg]),
-    {MSt12, BinaryTotalSizeInBytes, AllocSize} =
+    {MSt7, TrimResultReg} = MMod:call_primitive(MSt6, ?PRIM_TRIM_LIVE_REGS, [ctx, Live]),
+    MSt8 = MMod:free_native_registers(MSt7, [TrimResultReg]),
+    {MSt19, BinaryTotalSizeInBytes, AllocSize, WrapInfo} =
         if
             is_integer(BinaryTotalSize) ->
-                {MSt7, (BinaryTotalSize div 8),
-                    term_binary_heap_size((BinaryTotalSize div 8), MMod) + Alloc};
+                Trailing = BinaryTotalSize rem 8,
+                ByteSize = (BinaryTotalSize + 7) div 8,
+                {Extra, Wrap} =
+                    case Trailing of
+                        0 -> {0, no_wrap};
+                        _ -> {?TERM_BOXED_SUB_BINARY_SIZE, {wrap_lit, BinaryTotalSize}}
+                    end,
+                MSt9 =
+                    case ByteSize > MaxBinarySize of
+                        true -> raise_system_limit(MMod, MSt8);
+                        false -> MSt8
+                    end,
+                {MSt9, ByteSize, term_binary_heap_size(ByteSize, MMod) + Alloc + Extra, Wrap};
             true ->
-                {MSt8, BinaryTotalSizeBytes} = MMod:shift_right(MSt7, {free, BinaryTotalSize}, 3),
-                {MSt9, BinaryTotalSizeBytes0} = MMod:copy_to_native_register(
-                    MSt8, BinaryTotalSizeBytes
-                ),
-                {MSt10, AllocSizeReg} = term_binary_heap_size(
-                    {free, BinaryTotalSizeBytes0}, MMod, MSt9
-                ),
-                case Alloc of
-                    0 ->
-                        {MSt10, BinaryTotalSizeBytes, AllocSizeReg};
-                    _ ->
-                        MSt11 = MMod:add(MSt10, AllocSizeReg, Alloc),
-                        {MSt11, BinaryTotalSizeBytes, AllocSizeReg}
-                end
+                {MSt9, SevenReg} = MMod:move_to_native_register(MSt8, 7),
+                MSt10 = MMod:add(MSt9, BinaryTotalSize, SevenReg),
+                MSt11 = MMod:if_block(MSt10, {'(unsigned)', BinaryTotalSize, '<', SevenReg}, fun(
+                    BSt0
+                ) ->
+                    raise_system_limit(MMod, BSt0)
+                end),
+                MSt12 = MMod:free_native_registers(MSt11, [SevenReg]),
+                {MSt13, CeilBytes} = MMod:shift_right(MSt12, {free, BinaryTotalSize}, 3),
+                MSt14 = MMod:if_block(MSt13, {MaxBinarySize, '<', CeilBytes}, fun(BSt0) ->
+                    raise_system_limit(MMod, BSt0)
+                end),
+                {MSt15, CeilCopy} = MMod:copy_to_native_register(MSt14, CeilBytes),
+                {MSt16, AllocSizeReg} = term_binary_heap_size({free, CeilCopy}, MMod, MSt15),
+                MSt17 = MMod:add(MSt16, AllocSizeReg, ?TERM_BOXED_SUB_BINARY_SIZE),
+                MSt18 =
+                    case Alloc of
+                        0 -> MSt17;
+                        _ -> MMod:add(MSt17, AllocSizeReg, Alloc)
+                    end,
+                {MSt18, CeilBytes, AllocSizeReg, wrap_dyn}
         end,
-    {MSt13, MemoryEnsureFreeReg} = MMod:call_primitive(
-        MSt12, ?PRIM_MEMORY_ENSURE_FREE_WITH_ROOTS, [
+    {MSt20, MemoryEnsureFreeReg} = MMod:call_primitive(
+        MSt19, ?PRIM_MEMORY_ENSURE_FREE_WITH_ROOTS, [
             ctx, jit_state, {free, AllocSize}, Live, ?MEMORY_CAN_SHRINK
         ]
     ),
-    MSt14 = handle_error_if({'(bool)', {free, MemoryEnsureFreeReg}, '==', false}, MMod, MSt13),
-    {MSt17, InitialCreatedBin} =
+    MSt21 = handle_error_if({'(bool)', {free, MemoryEnsureFreeReg}, '==', false}, MMod, MSt20),
+    {MSt23, InitialCreatedBin} =
         case ReuseSourceBinary of
             false ->
                 % No reuse - create the binary now
-                {MSt15, CreatedBinResult} = MMod:call_primitive(
-                    MSt14, ?PRIM_TERM_CREATE_EMPTY_BINARY, [
+                {MSt22, CreatedBinResult} = MMod:call_primitive(
+                    MSt21, ?PRIM_TERM_CREATE_EMPTY_BINARY, [
                         ctx, {free, BinaryTotalSizeInBytes}
                     ]
                 ),
-                MSt16 = MMod:if_block(MSt15, {CreatedBinResult, '==', ?TERM_INVALID_TERM}, fun(
-                    BSt0
-                ) ->
-                    MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR, [
-                        ctx, jit_state, offset, ?OUT_OF_MEMORY_ATOM
-                    ])
-                end),
-                {MSt16, CreatedBinResult};
+                {raise_out_of_memory_if_invalid(CreatedBinResult, MMod, MSt22), CreatedBinResult};
             true ->
                 % Will reuse - defer creation until first segment
-                {MSt14, {private_append, BinaryTotalSizeInBytes}}
+                {MSt21, {private_append, BinaryTotalSizeInBytes}}
         end,
     % We redo the decoding. Rest7 should still be equal to previous value.
-    {Rest7, MSt18, FinalOffset, CreatedBin} = lists:foldl(
+    {Rest7, MSt24, FinalOffset, CreatedBin} = lists:foldl(
         fun(_Index, {AccRest0, AccMSt0, AccOffset0, AccCreatedBin}) ->
             {AtomTypeIndex, AccRest1} = decode_atom(AccRest0),
             AtomType = AtomResolver(AtomTypeIndex),
@@ -2454,18 +2465,31 @@ first_pass(
                 MMod,
                 AccMSt3
             ),
-            AccMSt5 = MMod:free_native_registers(AccMSt4, [Flags, Src, Size]),
+            AccMSt5 = MMod:free_native_registers(AccMSt4, [Flags, Size]),
             {AccRest6, AccMSt5, AccOffset1, AccCreatedBin1}
         end,
-        {Rest6, MSt17, 0, InitialCreatedBin},
+        {Rest6, MSt23, 0, InitialCreatedBin},
         lists:seq(1, NBSegments)
     ),
     ?TRACE("]\n", []),
-    MSt19 = MMod:free_native_registers(MSt18, [FinalOffset]),
-    MSt20 = MMod:move_to_vm_register(MSt19, CreatedBin, Dest),
-    MSt21 = MMod:free_native_registers(MSt20, [CreatedBin, Dest]),
-    ?ASSERT_ALL_NATIVE_FREE(MSt21),
-    first_pass(Rest7, MMod, MSt21, State1);
+    {MSt25, CreatedBin1} =
+        case WrapInfo of
+            no_wrap ->
+                {MSt24, CreatedBin};
+            {wrap_lit, TotalBits} ->
+                MMod:call_primitive(MSt24, ?PRIM_BS_CREATE_BIN_WRAP, [
+                    ctx, {free, CreatedBin}, TotalBits
+                ]);
+            wrap_dyn ->
+                MMod:call_primitive(MSt24, ?PRIM_BS_CREATE_BIN_WRAP, [
+                    ctx, {free, CreatedBin}, FinalOffset
+                ])
+        end,
+    MSt26 = MMod:free_native_registers(MSt25, [FinalOffset]),
+    MSt27 = MMod:move_to_vm_register(MSt26, CreatedBin1, Dest),
+    MSt28 = MMod:free_native_registers(MSt27, [CreatedBin1, Dest]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt28),
+    first_pass(Rest7, MMod, MSt28, State1);
 % 178
 first_pass(<<?OP_CALL_FUN2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -2663,14 +2687,8 @@ first_pass_bs_create_bin_compute_size(
         {ResultReg, '==', 0}, Fail, MMod, MSt2
     ),
     MSt4 = MMod:shift_left(MSt3, ResultReg, 3),
-    case AccSizeReg0 of
-        undefined ->
-            {MSt4, AccLiteralSize0, ResultReg, State0};
-        _ ->
-            MSt5 = MMod:add(MSt4, AccSizeReg0, ResultReg),
-            MSt6 = MMod:free_native_registers(MSt5, [ResultReg]),
-            {MSt6, AccLiteralSize0, AccSizeReg0, State0}
-    end;
+    {MSt5, AccSizeReg1} = accumulate_segment_size(AccSizeReg0, ResultReg, MMod, MSt4),
+    {MSt5, AccLiteralSize0, AccSizeReg1, State0};
 first_pass_bs_create_bin_compute_size(
     utf32, Src, _Size, _SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt0, State0
 ) ->
@@ -2695,14 +2713,8 @@ first_pass_bs_create_bin_compute_size(
                 MMod,
                 MSt2
             ),
-            case AccSizeReg0 of
-                undefined ->
-                    {MSt3, AccLiteralSize0, SizeValue, State0};
-                _ ->
-                    MSt4 = MMod:add(MSt3, AccSizeReg0, SizeValue),
-                    MSt5 = MMod:free_native_registers(MSt4, [SizeValue]),
-                    {MSt5, AccLiteralSize0, AccSizeReg0, State0}
-            end
+            {MSt4, AccSizeReg1} = accumulate_segment_size(AccSizeReg0, SizeValue, MMod, MSt3),
+            {MSt4, AccLiteralSize0, AccSizeReg1, State0}
     end;
 first_pass_bs_create_bin_compute_size(
     integer, Src, Size, SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt0, State0
@@ -2729,15 +2741,9 @@ first_pass_bs_create_bin_compute_size(
         is_integer(SizeValue) ->
             {MSt5, AccLiteralSize0 + (SizeValue * SegmentUnit), AccSizeReg0, State0};
         true ->
-            MSt6 = MMod:mul(MSt5, SizeValue, SegmentUnit),
-            case AccSizeReg0 of
-                undefined ->
-                    {MSt6, AccLiteralSize0, SizeValue, State0};
-                _ ->
-                    MSt7 = MMod:add(MSt6, AccSizeReg0, SizeValue),
-                    MSt8 = MMod:free_native_registers(MSt7, [SizeValue]),
-                    {MSt8, AccLiteralSize0, AccSizeReg0, State0}
-            end
+            MSt6 = scale_size_by_unit_raising(SizeValue, SegmentUnit, Fail, MMod, MSt5),
+            {MSt7, AccSizeReg1} = accumulate_segment_size(AccSizeReg0, SizeValue, MMod, MSt6),
+            {MSt7, AccLiteralSize0, AccSizeReg1, State0}
     end;
 first_pass_bs_create_bin_compute_size(
     string, _Src, Size, SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt1, State0
@@ -2757,59 +2763,47 @@ first_pass_bs_create_bin_compute_size(
         end,
     {MSt5, AccLiteralSize0 + (SizeValue * SegmentUnit), AccSizeReg0, State0};
 first_pass_bs_create_bin_compute_size(
-    AtomType, Src, ?ALL_ATOM, _SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt0, State0
+    AtomType, Src, ?ALL_ATOM, SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt0, State0
 ) when AtomType =:= binary orelse AtomType =:= append orelse AtomType =:= private_append ->
-    MSt1 = verify_is_binary(Src, Fail, MMod, MSt0),
-    {MSt2, Reg} = MMod:copy_to_native_register(MSt1, Src),
-    {MSt3, Reg} = MMod:and_(MSt2, {free, Reg}, ?TERM_PRIMARY_CLEAR_MASK),
-    MSt4 = MMod:move_array_element(MSt3, Reg, 1, Reg),
-    MSt5 = MMod:shift_left(MSt4, Reg, 3),
-    case AccSizeReg0 of
-        undefined ->
-            {MSt5, AccLiteralSize0, Reg, State0};
-        _ ->
-            MSt6 = MMod:add(MSt5, AccSizeReg0, Reg),
-            MSt7 = MMod:free_native_registers(MSt6, [Reg]),
-            {MSt7, AccLiteralSize0, AccSizeReg0, State0}
-    end;
+    MSt1 = verify_is_bitstring(Src, Fail, MMod, MSt0),
+    {MSt2, Reg0} = MMod:copy_to_native_register(MSt1, Src),
+    {MSt3, Reg1} = term_bit_size({free, Reg0}, MMod, MSt2),
+    MSt4 = bs_fail_or_badarg_unless_multiple_of_unit(Reg1, SegmentUnit, Fail, MMod, MSt3),
+    {MSt5, AccSizeReg1} = accumulate_segment_size(AccSizeReg0, Reg1, MMod, MSt4),
+    {MSt5, AccLiteralSize0, AccSizeReg1, State0};
 first_pass_bs_create_bin_compute_size(
     AtomType, Src, Size, SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt0, State0
 ) when
     (AtomType =:= binary orelse AtomType =:= append orelse
         AtomType =:= private_append) andalso is_integer(Size) andalso Size > 0
 ->
-    MSt1 = verify_is_binary(Src, Fail, MMod, MSt0),
+    MSt1 = verify_is_bitstring(Src, Fail, MMod, MSt0),
     {MSt2, SizeValue} = term_to_int(Size, 0, MMod, MSt1),
-    {MSt2, AccLiteralSize0 + (SizeValue * SegmentUnit), AccSizeReg0, State0};
+    RequiredBits = SizeValue * SegmentUnit,
+    {MSt3, SrcBitsReg0} = MMod:copy_to_native_register(MSt2, Src),
+    {MSt4, SrcBitsReg} = term_bit_size({free, SrcBitsReg0}, MMod, MSt3),
+    MSt5 = cond_raise_badarg_or_jump_to_fail_label(
+        {{free, SrcBitsReg}, '<', RequiredBits}, Fail, MMod, MSt4
+    ),
+    {MSt5, AccLiteralSize0 + RequiredBits, AccSizeReg0, State0};
 first_pass_bs_create_bin_compute_size(
     AtomType, Src, Size, SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt0, State0
 ) when AtomType =:= binary orelse AtomType =:= append orelse AtomType =:= private_append ->
-    MSt1 = verify_is_binary(Src, Fail, MMod, MSt0),
+    MSt1 = verify_is_bitstring(Src, Fail, MMod, MSt0),
     {MSt2, Reg0} = MMod:copy_to_native_register(MSt1, Size),
     {MSt3, Reg1} = MMod:copy_to_native_register(MSt2, Src),
-    {MSt4, Reg1} = MMod:and_(MSt3, {free, Reg1}, ?TERM_PRIMARY_CLEAR_MASK),
-    MSt5 = MMod:move_array_element(MSt4, Reg1, 1, Reg1),
-    MSt6 = MMod:shift_left(MSt5, Reg1, 3),
-    MSt7 = MMod:if_block(MSt6, {{free, Reg0}, '!=', ?ALL_ATOM}, fun(BSt0) ->
+    {MSt4, Reg2} = term_bit_size({free, Reg1}, MMod, MSt3),
+    MSt5 = MMod:if_block(MSt4, {{free, Reg0}, '!=', ?ALL_ATOM}, fun(BSt0) ->
         {BSt1, SizeReg} = term_to_int(Size, Fail, MMod, BSt0),
-        BSt2 = cond_raise_badarg_or_jump_to_fail_label(
-            {SizeReg, '<', 0}, Fail, MMod, BSt1
-        ),
-        BSt3 = MMod:mul(BSt2, SizeReg, SegmentUnit),
+        BSt3 = scale_size_by_unit_raising(SizeReg, SegmentUnit, Fail, MMod, BSt1),
         BSt4 = cond_raise_badarg_or_jump_to_fail_label(
-            {Reg1, '<', SizeReg}, Fail, MMod, BSt3
+            {Reg2, '<', SizeReg}, Fail, MMod, BSt3
         ),
-        BSt5 = MMod:move_to_native_register(BSt4, SizeReg, Reg1),
+        BSt5 = MMod:move_to_native_register(BSt4, SizeReg, Reg2),
         MMod:free_native_registers(BSt5, [SizeReg])
     end),
-    case AccSizeReg0 of
-        undefined ->
-            {MSt7, AccLiteralSize0, Reg1, State0};
-        _ ->
-            MSt8 = MMod:add(MSt7, AccSizeReg0, Reg1),
-            MSt9 = MMod:free_native_registers(MSt8, [Reg1]),
-            {MSt9, AccLiteralSize0, AccSizeReg0, State0}
-    end.
+    {MSt6, AccSizeReg1} = accumulate_segment_size(AccSizeReg0, Reg2, MMod, MSt5),
+    {MSt6, AccLiteralSize0, AccSizeReg1, State0}.
 
 first_pass_bs_create_bin_insert_value(
     utf8, _Flags, Src, _Size, _SegmentUnit, Fail, CreatedBin, Offset, MMod, MSt0
@@ -2855,8 +2849,6 @@ first_pass_bs_create_bin_insert_value(
     % term_to_int can raise a badarg and use a temp register for this, start
     % with it.
     {MSt1, SizeValue} = term_to_int(Size, Fail, MMod, MSt0),
-    % Because we're calling a function without ctx as an arg, we need to move
-    % the value now to a register
     {MSt2, SrcReg} = MMod:move_to_native_register(MSt1, Src),
     {MSt3, FlagsValue} = decode_flags_list(Flags, MMod, MSt2),
     MSt4 = MMod:mul(MSt3, SizeValue, SegmentUnit),
@@ -2916,22 +2908,16 @@ first_pass_bs_create_bin_insert_value(
 ) ->
     % Special case: first segment is private_append with undefined CreatedBin
     % Get original size before reusing
-    {MSt1, OriginalSize} = term_binary_size(Src, MMod, MSt0),
+    {MSt1, OriginalBits} = term_bit_size(Src, MMod, MSt0),
     % Reuse the source binary (content is already there, no need to copy)
     {MSt2, CreatedBin} = MMod:call_primitive(MSt1, ?PRIM_TERM_REUSE_BINARY, [
         ctx, {free, Src}, {free, BinaryTotalSizeInBytes}
     ]),
-    MSt3 = MMod:if_block(MSt2, {CreatedBin, '==', ?TERM_INVALID_TERM}, fun(BSt0) ->
-        MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR, [
-            ctx, jit_state, offset, ?OUT_OF_MEMORY_ATOM
-        ])
-    end),
-    % Convert original size to bits and update offset
-    MSt4 = MMod:shift_left(MSt3, OriginalSize, 3),
-    {MSt5, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
-        MMod, MSt4, Offset, OriginalSize, 1
+    MSt3 = raise_out_of_memory_if_invalid(CreatedBin, MMod, MSt2),
+    {MSt4, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
+        MMod, MSt3, Offset, OriginalBits, 1
     ),
-    {MSt5, NewOffset, CreatedBin};
+    {MSt4, NewOffset, CreatedBin};
 first_pass_bs_create_bin_insert_value(
     AtomType, _Flags, Src, Size, SegmentUnit, Fail, CreatedBin, Offset, MMod, MSt0
 ) when AtomType =:= binary orelse AtomType =:= append orelse AtomType =:= private_append ->
@@ -2953,22 +2939,24 @@ first_pass_bs_create_bin_insert_value(
                 {MSt3, SizeReg} = term_from_int(SizeReg, MMod, MSt2),
                 {MSt3, {free, SizeReg}}
         end,
-    {MSt5, SizeValue} = MMod:call_primitive(MSt4, ?PRIM_BITSTRING_COPY_BINARY, [
-        ctx, jit_state, CreatedBin, Offset, Src, SizeInBits
+    {MSt5, SrcReg} = MMod:move_to_native_register(MSt4, Src),
+    {MSt6, SizeValue} = MMod:call_primitive(MSt5, ?PRIM_BITSTRING_COPY_BINARY, [
+        CreatedBin, Offset, {free, SrcReg}, SizeInBits
     ]),
-    MSt6 = MMod:if_block(MSt5, {SizeValue, '<', 0}, fun(BlockSt) ->
+    MSt7 = MMod:if_block(MSt6, {SizeValue, '<', 0}, fun(BlockSt) ->
         MMod:call_primitive_last(BlockSt, ?PRIM_HANDLE_ERROR, [
             ctx, jit_state, offset
         ])
     end),
-    {MSt7, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
-        MMod, MSt6, Offset, SizeValue, 1
+    {MSt8, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
+        MMod, MSt7, Offset, SizeValue, 1
     ),
-    {MSt7, NewOffset, CreatedBin};
+    {MSt8, NewOffset, CreatedBin};
 first_pass_bs_create_bin_insert_value(
-    _OtherType, _Flag, _Src, _Size, _SegmentUnit, _Fail, CreatedBin, Offset, _MMod, MSt0
+    _OtherType, _Flag, Src, _Size, _SegmentUnit, _Fail, CreatedBin, Offset, MMod, MSt0
 ) ->
-    {MSt0, Offset, CreatedBin}.
+    MSt1 = MMod:free_native_registers(MSt0, [Src]),
+    {MSt1, Offset, CreatedBin}.
 
 first_pass_bs_create_bin_insert_value_increment_offset(_MMod, MSt0, Offset, Size, Unit) when
     is_integer(Offset) andalso is_integer(Size) andalso is_integer(Unit)
@@ -3073,22 +3061,22 @@ first_pass_bs_match_ensure_at_least(
         true ->
             {Unit, Rest2} = decode_literal(Rest1),
             ?TRACE("{ensure_at_least,~p,~p},", [Stride, Unit]),
-            {MSt1, Reg} = MMod:get_array_element(MSt0, BSBinaryReg, 1),
-            MSt2 = MMod:shift_left(MSt1, Reg, 3),
-            % Reg is bs_bin_size * 8
-            MSt3 = MMod:sub(MSt2, Reg, BSOffsetReg),
+            {MSt1, Reg} = term_bit_size({ptr, BSBinaryReg}, MMod, MSt0),
+            % Reg is the source bit size
+            MSt2 = MMod:sub(MSt1, Reg, BSOffsetReg),
             % Reg is (bs_bin_size * 8) - bs_offset = remaining bits
-            MSt4 = cond_jump_to_label({Reg, '<', Stride}, Fail, MMod, MSt3),
+            MSt3 = cond_jump_to_label({Reg, '<', Stride}, Fail, MMod, MSt2),
             % Also check unit alignment: (remaining - stride) % unit == 0
             MSt7 =
                 if
                     Unit > 1 ->
-                        MSt4b = MMod:sub(MSt4, Reg, Stride),
-                        {MSt5, UnitReg} = MMod:and_(MSt4b, {free, Reg}, Unit - 1),
-                        MSt6 = cond_jump_to_label({{free, UnitReg}, '!=', 0}, Fail, MMod, MSt5),
-                        MSt6;
+                        MSt4 = MMod:sub(MSt3, Reg, Stride),
+                        MSt5 = bs_fail_or_badarg_unless_multiple_of_unit(
+                            Reg, Unit, Fail, MMod, MSt4
+                        ),
+                        MMod:free_native_registers(MSt5, [Reg]);
                     true ->
-                        MMod:free_native_registers(MSt4, [Reg])
+                        MMod:free_native_registers(MSt3, [Reg])
                 end,
             {J0 - 2, Rest2, MatchState, BSOffsetReg, MSt7}
     end.
@@ -3105,14 +3093,13 @@ first_pass_bs_match_ensure_exactly(
             {J0, Rest0, MatchState, BSOffsetReg, MSt1};
         true ->
             ?TRACE("{ensure_exactly,~p},", [Stride]),
-            {MSt1, Reg} = MMod:get_array_element(MSt0, BSBinaryReg, 1),
-            MSt2 = MMod:shift_left(MSt1, Reg, 3),
-            % Reg is bs_bin_size * 8 (use unit instead ??)
-            MSt3 = MMod:sub(MSt2, Reg, BSOffsetReg),
+            {MSt1, Reg} = term_bit_size({ptr, BSBinaryReg}, MMod, MSt0),
+            % Reg is the source bit size
+            MSt2 = MMod:sub(MSt1, Reg, BSOffsetReg),
             % Reg is (bs_bin_size * 8) - bs_offset
-            MSt4 = cond_jump_to_label({Reg, '!=', Stride}, Fail, MMod, MSt3),
-            MSt5 = MMod:free_native_registers(MSt4, [Reg]),
-            {J0 - 1, Rest1, MatchState, BSOffsetReg, MSt5}
+            MSt3 = cond_jump_to_label({Reg, '!=', Stride}, Fail, MMod, MSt2),
+            MSt4 = MMod:free_native_registers(MSt3, [Reg]),
+            {J0 - 1, Rest1, MatchState, BSOffsetReg, MSt4}
     end.
 
 first_pass_bs_match_integer(
@@ -3121,46 +3108,38 @@ first_pass_bs_match_integer(
     {_Live, Rest1} = decode_literal(Rest0),
     {Flags, Rest2} = decode_compile_time_literal(Rest1, State0),
     {MSt1, FlagsValue} = decode_flags_list(Flags, MMod, MSt0),
-    {MSt2, Size, Rest3} = decode_typed_compact_term(Rest2, MMod, MSt0, State0),
+    {Size, Rest3} = decode_literal(Rest2),
     {Unit, Rest4} = decode_literal(Rest3),
     ?TRACE("{integer,~p,~p,~p, ", [Flags, Size, Unit]),
-    {MSt3, SizeReg} = term_to_int(Size, 0, MMod, MSt1),
-    {MSt6, NumBits} =
-        if
-            is_integer(SizeReg) ->
-                {MSt2, SizeReg * Unit};
-            true ->
-                MSt3 = MMod:mul(SizeReg, Unit),
-                {MSt3, SizeReg}
-        end,
-    {MSt7, Result} = MMod:call_primitive(MSt6, ?PRIM_BITSTRING_EXTRACT_INTEGER, [
+    NumBits = Size * Unit,
+    {MSt2, Result} = MMod:call_primitive(MSt1, ?PRIM_BITSTRING_EXTRACT_INTEGER, [
         ctx, jit_state, BSBinaryReg, BSOffsetReg, NumBits, {free, FlagsValue}
     ]),
-    MSt8 = handle_error_if({Result, '==', 0}, MMod, MSt7),
-    MSt9 = cond_jump_to_label({Result, '==', ?FALSE_ATOM}, Fail, MMod, MSt8),
-    MSt10 =
-        case MMod:available_regs(MSt9) of
+    MSt3 = handle_error_if({Result, '==', 0}, MMod, MSt2),
+    MSt4 = cond_jump_to_label({Result, '==', ?FALSE_ATOM}, Fail, MMod, MSt3),
+    MSt5 =
+        case MMod:available_regs(MSt4) of
             [] ->
-                MMod:free_native_registers(MSt9, [BSOffsetReg]);
+                MMod:free_native_registers(MSt4, [BSOffsetReg]);
             _ ->
-                MSt9
+                MSt4
         end,
-    {MSt11, Dest, Rest5} = decode_dest(Rest4, MMod, MSt10),
+    {MSt6, Dest, Rest5} = decode_dest(Rest4, MMod, MSt5),
     ?TRACE("~p},", [Dest]),
-    MSt12 = MMod:move_to_vm_register(MSt11, Result, Dest),
-    MSt13 = MMod:free_native_registers(MSt12, [Result, Dest]),
-    case MMod:available_regs(MSt9) of
+    MSt7 = MMod:move_to_vm_register(MSt6, Result, Dest),
+    MSt8 = MMod:free_native_registers(MSt7, [Result, Dest]),
+    case MMod:available_regs(MSt4) of
         [] ->
-            {MSt14, MatchState} = MMod:and_(MSt13, {free, MatchState}, ?TERM_PRIMARY_CLEAR_MASK),
-            {MSt15, NewBSOffsetReg} = MMod:get_array_element(MSt14, MatchState, 2),
-            MSt16 = MMod:or_(MSt15, MatchState, ?TERM_PRIMARY_BOXED),
-            MSt17 = MMod:add(MSt16, NewBSOffsetReg, NumBits),
-            MSt18 = MMod:free_native_registers(MSt17, [NumBits]),
-            {J0 - 5, Rest5, MatchState, NewBSOffsetReg, MSt18};
+            {MSt9, MatchState} = MMod:and_(MSt8, {free, MatchState}, ?TERM_PRIMARY_CLEAR_MASK),
+            {MSt10, NewBSOffsetReg} = MMod:get_array_element(MSt9, MatchState, 2),
+            MSt11 = MMod:or_(MSt10, MatchState, ?TERM_PRIMARY_BOXED),
+            MSt12 = MMod:add(MSt11, NewBSOffsetReg, NumBits),
+            MSt13 = MMod:free_native_registers(MSt12, [NumBits]),
+            {J0 - 5, Rest5, MatchState, NewBSOffsetReg, MSt13};
         _ ->
-            MSt14 = MMod:add(MSt13, BSOffsetReg, NumBits),
-            MSt15 = MMod:free_native_registers(MSt14, [NumBits]),
-            {J0 - 5, Rest5, MatchState, BSOffsetReg, MSt15}
+            MSt9 = MMod:add(MSt8, BSOffsetReg, NumBits),
+            MSt10 = MMod:free_native_registers(MSt9, [NumBits]),
+            {J0 - 5, Rest5, MatchState, BSOffsetReg, MSt10}
     end.
 
 first_pass_bs_match_binary(
@@ -3181,42 +3160,31 @@ first_pass_bs_match_binary(
     {Unit, Rest4} = decode_literal(Rest3),
     ?TRACE("{binary,~p,~p,~p,~p", [Live, _Flags, Size, Unit]),
     MatchedBits = Size * Unit,
-    MSt1 =
-        if
-            MatchedBits rem 8 =:= 0 ->
-                cond_raise_badarg({BSOffsetReg, '&', 2#111, '!=', 0}, MMod, MSt0);
-            true ->
-                MMod:call_primitive_last(MSt0, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, offset, ?BADARG_ATOM
-                ])
-        end,
-    MatchedBytes = MatchedBits div 8,
-    {MSt2, BSOffseBytesReg} = MMod:shift_right(MSt1, BSOffsetReg, 3),
-    {MSt3, RemainingBytesReg} = MMod:get_array_element(MSt2, BSBinaryReg, 1),
-    MSt4 = MMod:sub(MSt3, RemainingBytesReg, BSOffseBytesReg),
-    MSt5 = cond_jump_to_label({RemainingBytesReg, '<', MatchedBytes}, Fail, MMod, MSt4),
-    MSt6 = MMod:free_native_registers(MSt5, [RemainingBytesReg]),
-    {MSt7, HeapSizeReg} = MMod:call_primitive(MSt6, ?PRIM_TERM_SUB_BINARY_HEAP_SIZE, [
-        BSBinaryReg, MatchedBytes
+    {MSt1, RemainingBitsReg} = term_bit_size({ptr, BSBinaryReg}, MMod, MSt0),
+    MSt2 = MMod:sub(MSt1, RemainingBitsReg, BSOffsetReg),
+    MSt3 = cond_jump_to_label({{free, RemainingBitsReg}, '<', MatchedBits}, Fail, MMod, MSt2),
+    {MSt4, HeapSizeReg} = MMod:call_primitive(MSt3, ?PRIM_BITSTRING_SLICE_HEAP_SIZE, [
+        BSBinaryReg, BSOffsetReg, MatchedBits
     ]),
-    {MSt8, NewMatchState} = memory_ensure_free_with_extra_root(
-        MatchState, Live, {free, HeapSizeReg}, MMod, MSt7
+    {MSt5, NewMatchState} = memory_ensure_free_with_extra_root(
+        MatchState, Live, {free, HeapSizeReg}, MMod, MSt4
     ),
     % Restore BSBinaryReg as it may have been gc'd as well
-    {MSt9, MatchStateReg0} = MMod:copy_to_native_register(MSt8, NewMatchState),
-    {MSt10, MatchStateReg0} = MMod:and_(MSt9, {free, MatchStateReg0}, ?TERM_PRIMARY_CLEAR_MASK),
-    MSt11 = MMod:move_array_element(MSt10, MatchStateReg0, 1, BSBinaryReg),
-    MSt12 = MMod:free_native_registers(MSt11, [MatchStateReg0]),
-    {MSt13, ResultTerm} = MMod:call_primitive(MSt12, ?PRIM_TERM_MAYBE_CREATE_SUB_BINARY, [
-        ctx, BSBinaryReg, {free, BSOffseBytesReg}, MatchedBytes
+    {MSt6, MatchStateReg0} = MMod:copy_to_native_register(MSt5, NewMatchState),
+    {MSt7, MatchStateReg0} = MMod:and_(MSt6, {free, MatchStateReg0}, ?TERM_PRIMARY_CLEAR_MASK),
+    MSt8 = MMod:move_array_element(MSt7, MatchStateReg0, 1, BSBinaryReg),
+    MSt9 = MMod:free_native_registers(MSt8, [MatchStateReg0]),
+    {MSt10, ResultTerm} = MMod:call_primitive(MSt9, ?PRIM_BITSTRING_SLICE, [
+        ctx, BSBinaryReg, BSOffsetReg, MatchedBits
     ]),
-    {MSt14, BSBinaryReg} = MMod:and_(MSt13, {free, BSBinaryReg}, ?TERM_PRIMARY_CLEAR_MASK),
-    {MSt15, Dest, Rest5} = decode_dest(Rest4, MMod, MSt14),
+    MSt11 = raise_out_of_memory_if_invalid(ResultTerm, MMod, MSt10),
+    {MSt12, BSBinaryReg} = MMod:and_(MSt11, {free, BSBinaryReg}, ?TERM_PRIMARY_CLEAR_MASK),
+    {MSt13, Dest, Rest5} = decode_dest(Rest4, MMod, MSt12),
     ?TRACE("~p},", [Dest]),
-    MSt16 = MMod:move_to_vm_register(MSt15, ResultTerm, Dest),
-    MSt17 = MMod:free_native_registers(MSt16, [ResultTerm]),
-    MSt18 = MMod:add(MSt17, BSOffsetReg, MatchedBits),
-    {J0 - 5, Rest5, NewMatchState, BSOffsetReg, MSt18}.
+    MSt14 = MMod:move_to_vm_register(MSt13, ResultTerm, Dest),
+    MSt15 = MMod:free_native_registers(MSt14, [ResultTerm]),
+    MSt16 = MMod:add(MSt15, BSOffsetReg, MatchedBits),
+    {J0 - 5, Rest5, NewMatchState, BSOffsetReg, MSt16}.
 
 first_pass_bs_match_get_tail(MatchState, BSBinaryReg, BSOffsetReg, J0, Rest0, MMod, MSt0) ->
     {Live, Rest1} = decode_literal(Rest0),
@@ -3235,29 +3203,22 @@ first_pass_bs_match_get_tail(MatchState, BSBinaryReg, BSOffsetReg, J0, Rest0, MM
 do_get_tail(
     MatchState, Live, BSOffsetReg, BSBinaryReg, MMod, MSt0
 ) ->
-    MSt1 = cond_raise_badarg({BSOffsetReg, '&', 2#111, '!=', 0}, MMod, MSt0),
-    {MSt2, BSOffseBytesReg} = MMod:shift_right(MSt1, BSOffsetReg, 3),
-    {MSt3, TailBytesReg0} = MMod:get_array_element(MSt2, BSBinaryReg, 1),
-    MSt4 = MMod:sub(MSt3, TailBytesReg0, BSOffseBytesReg),
-    {MSt5, HeapSizeReg} = MMod:call_primitive(MSt4, ?PRIM_TERM_SUB_BINARY_HEAP_SIZE, [
-        BSBinaryReg, {free, TailBytesReg0}
+    {MSt1, HeapSizeReg} = MMod:call_primitive(MSt0, ?PRIM_BITSTRING_GET_TAIL_HEAP_SIZE, [
+        BSBinaryReg, BSOffsetReg
     ]),
-    {MSt6, NewMatchState} = memory_ensure_free_with_extra_root(
-        MatchState, Live, {free, HeapSizeReg}, MMod, MSt5
+    {MSt2, NewMatchState} = memory_ensure_free_with_extra_root(
+        MatchState, Live, {free, HeapSizeReg}, MMod, MSt1
     ),
     % Restore BSBinaryReg as it may have been gc'd as well
-    {MSt7, MatchStateReg0} = MMod:copy_to_native_register(MSt6, NewMatchState),
-    {MSt8, MatchStateReg0} = MMod:and_(MSt7, {free, MatchStateReg0}, ?TERM_PRIMARY_CLEAR_MASK),
-    MSt9 = MMod:move_array_element(MSt8, MatchStateReg0, 1, BSBinaryReg),
-    MSt10 = MMod:free_native_registers(MSt9, [MatchStateReg0]),
-    {MSt11, BSBinaryReg} = MMod:and_(MSt10, {free, BSBinaryReg}, ?TERM_PRIMARY_CLEAR_MASK),
-    {MSt12, TailBytesReg1} = MMod:get_array_element(MSt11, BSBinaryReg, 1),
-    MSt13 = MMod:sub(MSt12, TailBytesReg1, BSOffseBytesReg),
-    MSt14 = MMod:add(MSt13, BSBinaryReg, ?TERM_PRIMARY_BOXED),
-    {MSt15, ResultTerm} = MMod:call_primitive(MSt14, ?PRIM_TERM_MAYBE_CREATE_SUB_BINARY, [
-        ctx, BSBinaryReg, {free, BSOffseBytesReg}, {free, TailBytesReg1}
+    {MSt3, MatchStateReg0} = MMod:copy_to_native_register(MSt2, NewMatchState),
+    {MSt4, MatchStateReg0} = MMod:and_(MSt3, {free, MatchStateReg0}, ?TERM_PRIMARY_CLEAR_MASK),
+    MSt5 = MMod:move_array_element(MSt4, MatchStateReg0, 1, BSBinaryReg),
+    MSt6 = MMod:free_native_registers(MSt5, [MatchStateReg0]),
+    {MSt7, ResultTerm} = MMod:call_primitive(MSt6, ?PRIM_BITSTRING_CREATE_TAIL, [
+        ctx, BSBinaryReg, BSOffsetReg
     ]),
-    {MSt15, ResultTerm, NewMatchState}.
+    MSt8 = raise_out_of_memory_if_invalid(ResultTerm, MMod, MSt7),
+    {MSt8, ResultTerm, NewMatchState}.
 
 first_pass_bs_match_equal_colon_equal(
     Fail, MatchState, BSBinaryReg, BSOffsetReg, J0, Rest0, MMod, MSt0
@@ -4462,7 +4423,7 @@ verify_is_number(Arg1, Fail, MMod, MSt0) ->
 %% @param MSt0 backend state
 %% @return new backend state
 %%-----------------------------------------------------------------------------
-verify_is_binary(Arg1, FailLabel, MMod, MSt0) ->
+verify_is_bitstring(Arg1, FailLabel, MMod, MSt0) ->
     {MSt1, Reg} = MMod:copy_to_native_register(MSt0, Arg1),
     MSt2 = verify_is_boxed(MMod, MSt1, Reg, FailLabel),
     {MSt3, Reg} = MMod:and_(MSt2, {free, Reg}, ?TERM_PRIMARY_CLEAR_MASK),
@@ -4505,6 +4466,23 @@ scale_size_by_unit(SizeReg, Unit, Fail, MMod, MSt0) ->
             true ->
                 {MSt1a, MaxReg} = MMod:move_to_native_register(MSt1, MaxSize),
                 cond_jump_to_label({{free, MaxReg}, '<', SizeReg}, Fail, MMod, MSt1a)
+        end,
+    MMod:mul(MSt2, SizeReg, Unit).
+
+% As scale_size_by_unit, but raising for negative or overflow.
+scale_size_by_unit_raising(SizeReg, Unit, Fail, MMod, MSt0) ->
+    MSt1 = cond_raise_badarg_or_jump_to_fail_label({SizeReg, '<', 0}, Fail, MMod, MSt0),
+    {_MinSmall, MaxSmall} = small_integer_bounds(MMod),
+    MaxSize = (1 bsl (MMod:word_size() * 8 - 2)) div max(Unit, 1),
+    MSt2 =
+        if
+            MaxSize >= MaxSmall ->
+                MSt1;
+            true ->
+                {MSt1a, MaxReg} = MMod:move_to_native_register(MSt1, MaxSize),
+                cond_raise_badarg_or_jump_to_fail_label(
+                    {{free, MaxReg}, '<', SizeReg}, Fail, MMod, MSt1a
+                )
         end,
     MMod:mul(MSt2, SizeReg, Unit).
 
@@ -4998,6 +4976,45 @@ cond_jump_to_label(Cond, Label, MMod, MSt0) ->
         MMod:jump_to_label(BSt0, Label)
     end).
 
+%% Largest binary size in bytes, matching TERM_MAX_BINARY_SIZE in term.h: a
+%% sub-binary packs its byte offset shifted left by 3, so a larger offset would
+%% be truncated.
+max_binary_size_in_bytes(MMod) ->
+    (1 bsl (MMod:word_size() * 8 - 3)) - 1.
+
+%% Raise system_limit unconditionally, for a size known at compile time to be
+%% unrepresentable.
+raise_system_limit(MMod, MSt0) ->
+    MMod:call_primitive_last(MSt0, ?PRIM_RAISE_ERROR, [
+        ctx, jit_state, offset, ?SYSTEM_LIMIT_ATOM
+    ]).
+
+%% Accumulate a segment bit size held in a register into the running total,
+%% rejecting a total that no longer fits in a machine word.
+%%
+%% An unsigned addition wraps exactly when the result is below either operand,
+%% which is the same test the interpreter performs as
+%% `binary_size > SIZE_MAX - segment_bits`. Without it the total would silently
+%% wrap, the binary would be allocated too small, and the segments would be
+%% written past its end.
+accumulate_segment_size(undefined, SizeReg, _MMod, MSt0) ->
+    {MSt0, SizeReg};
+accumulate_segment_size(AccSizeReg, SizeReg, MMod, MSt0) ->
+    MSt1 = MMod:add(MSt0, AccSizeReg, SizeReg),
+    MSt2 = MMod:if_block(MSt1, {'(unsigned)', AccSizeReg, '<', SizeReg}, fun(BSt0) ->
+        raise_system_limit(MMod, BSt0)
+    end),
+    {MMod:free_native_registers(MSt2, [SizeReg]), AccSizeReg}.
+
+%% Reserving heap words does not reserve the buffer of a refc binary, which is
+%% allocated separately and may still fail.
+raise_out_of_memory_if_invalid(Reg, MMod, MSt0) ->
+    MMod:if_block(MSt0, {Reg, '==', ?TERM_INVALID_TERM}, fun(BSt0) ->
+        MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR, [
+            ctx, jit_state, offset, ?OUT_OF_MEMORY_ATOM
+        ])
+    end).
+
 term_binary_heap_size(Size, MMod) when is_integer(Size) ->
     case MMod:word_size() of
         4 when Size < ?REFC_BINARY_MIN_32 ->
@@ -5047,16 +5064,6 @@ term_binary_heap_size({free, Reg}, MMod, MSt0) ->
         end,
     {MSt1, Reg}.
 
-term_binary_size({free, BinReg}, MMod, MSt0) ->
-    {MSt1, BinReg} = MMod:and_(MSt0, {free, BinReg}, ?TERM_PRIMARY_CLEAR_MASK),
-    MSt2 = MMod:move_array_element(MSt1, BinReg, 1, BinReg),
-    {MSt2, BinReg};
-term_binary_size(Src, MMod, MSt0) ->
-    {MSt1, SrcReg} = MMod:move_to_native_register(MSt0, Src),
-    {MSt2, SrcReg} = MMod:and_(MSt1, {free, SrcReg}, ?TERM_PRIMARY_CLEAR_MASK),
-    MSt3 = MMod:move_array_element(MSt2, SrcReg, 1, SrcReg),
-    {MSt3, SrcReg}.
-
 term_set_map_assoc(MapPtrReg, {free, PosReg}, {free, Key}, {free, Value}, MMod, MSt0) ->
     {MSt1, MapKeysReg} = MMod:get_array_element(MSt0, MapPtrReg, 1),
     MSt2 = term_put_tuple_element({free, MapKeysReg}, PosReg, {free, Key}, MMod, MSt1),
@@ -5067,6 +5074,47 @@ term_put_tuple_element({free, TupleReg}, PosReg, {free, Value}, MMod, MSt0) ->
     {MSt1, TupleReg} = MMod:and_(MSt0, {free, TupleReg}, ?TERM_PRIMARY_CLEAR_MASK),
     MSt2 = MMod:move_to_array_element(MSt1, Value, TupleReg, PosReg, 1),
     MMod:free_native_registers(MSt2, [TupleReg, Value]).
+
+%% Total bit size = binary_size * 8 + sub-binary trailing bit count.
+%% {free, BinReg} takes a tagged boxed term and consumes it; {ptr, PtrReg}
+%% takes an already-tag-cleared pointer and leaves it allocated for the caller;
+%% any other source is copied first and left untouched.
+term_bit_size({free, BinReg}, MMod, MSt0) ->
+    {MSt1, PtrReg} = MMod:and_(MSt0, {free, BinReg}, ?TERM_PRIMARY_CLEAR_MASK),
+    {MSt2, BitsReg} = term_bit_size({ptr, PtrReg}, MMod, MSt1),
+    MSt3 = MMod:free_native_registers(MSt2, [PtrReg]),
+    {MSt3, BitsReg};
+term_bit_size({ptr, PtrReg}, MMod, MSt0) ->
+    {MSt1, BitsReg} = MMod:get_array_element(MSt0, PtrReg, 1),
+    MSt2 = MMod:shift_left(MSt1, BitsReg, 3),
+    {MSt3, TagReg} = MMod:get_array_element(MSt2, PtrReg, 0),
+    {MSt4, TagReg} = MMod:and_(MSt3, {free, TagReg}, ?TERM_BOXED_TAG_MASK),
+    MSt5 = MMod:if_block(MSt4, {{free, TagReg}, '==', ?TERM_BOXED_SUB_BINARY}, fun(BSt0) ->
+        {BSt1, TrailReg} = MMod:get_array_element(BSt0, PtrReg, 2),
+        {BSt2, TrailReg} = MMod:and_(BSt1, {free, TrailReg}, 16#7),
+        BSt3 = MMod:add(BSt2, BitsReg, TrailReg),
+        MMod:free_native_registers(BSt3, [TrailReg])
+    end),
+    {MSt5, BitsReg};
+term_bit_size(Src, MMod, MSt0) ->
+    {MSt1, SrcReg} = MMod:copy_to_native_register(MSt0, Src),
+    term_bit_size({free, SrcReg}, MMod, MSt1).
+
+bs_fail_or_badarg_unless_multiple_of_unit(_BitsReg, 1, _Fail, _MMod, MSt0) ->
+    MSt0;
+bs_fail_or_badarg_unless_multiple_of_unit(BitsReg, Unit, Fail, MMod, MSt0) when
+    Unit band (Unit - 1) =:= 0
+->
+    cond_raise_badarg_or_jump_to_fail_label(
+        {BitsReg, '&', Unit - 1, '!=', 0}, Fail, MMod, MSt0
+    );
+bs_fail_or_badarg_unless_multiple_of_unit(BitsReg, Unit, Fail, MMod, MSt0) ->
+    {MSt1, ResultReg} = MMod:call_primitive(MSt0, ?PRIM_BITSTRING_IS_MULTIPLE_OF, [
+        BitsReg, Unit
+    ]),
+    cond_raise_badarg_or_jump_to_fail_label(
+        {'(bool)', {free, ResultReg}, '==', false}, Fail, MMod, MSt1
+    ).
 
 %% @doc Get the stream module
 %% @return The stream module for jit on this platform

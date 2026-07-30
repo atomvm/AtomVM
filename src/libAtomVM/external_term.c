@@ -53,6 +53,7 @@
 #define STRING_EXT 107
 #define LIST_EXT 108
 #define BINARY_EXT 109
+#define BIT_BINARY_EXT 77
 #define SMALL_BIG_EXT 110
 #define NEW_FUN_EXT 112
 #define EXPORT_EXT 113
@@ -70,6 +71,7 @@
 #define STRING_EXT_BASE_SIZE 3
 #define LIST_EXT_BASE_SIZE 5
 #define BINARY_EXT_BASE_SIZE 5
+#define BIT_BINARY_EXT_BASE_SIZE 6
 #define MAP_EXT_BASE_SIZE 5
 #define SMALL_ATOM_EXT_BASE_SIZE 2
 
@@ -83,7 +85,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
 static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaining, size_t *eterm_size, bool copy, external_term_read_opts_t opts, GlobalContext *glb);
 static size_t compute_external_size(term t, GlobalContext *glb);
 static int external_term_from_term(uint8_t **buf, size_t *len, term t, GlobalContext *glb);
-static int serialize_term(uint8_t *buf, term t, GlobalContext *glb);
+static size_t serialize_term(uint8_t *buf, term t, GlobalContext *glb);
 
 external_term_read_result_t external_term_validate_buf_raw(const void *buf, size_t buf_size,
     external_term_read_opts_t opts, size_t *required_heap, size_t *bytes_read, GlobalContext *glb)
@@ -233,7 +235,7 @@ static void write_bytes(uint8_t *buf, avm_uint64_t val)
     }
 }
 
-static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
+static size_t serialize_term(uint8_t *buf, term t, GlobalContext *glb)
 {
     if (term_is_uint8(t)) {
         if (!IS_NULL_PTR(buf)) {
@@ -380,17 +382,31 @@ static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
         }
         return k;
 
-    } else if (term_is_binary(t)) {
-        if (!IS_NULL_PTR(buf)) {
-            buf[0] = BINARY_EXT;
+    } else if (term_is_bitstring(t)) {
+        if (term_is_binary(t)) {
+            size_t len = term_binary_size(t);
+            if (!IS_NULL_PTR(buf)) {
+                buf[0] = BINARY_EXT;
+                const uint8_t *data = (const uint8_t *) term_binary_data(t);
+                WRITE_32_UNALIGNED(buf + 1, len);
+                memcpy(buf + 5, data, len);
+            }
+            return 5 + len;
+        } else {
+            size_t total_bits = term_bit_size(t);
+            // ceil(total_bits / 8) without a `total_bits + 7` that could wrap
+            size_t nbytes = total_bits / 8 + (total_bits % 8 != 0);
+            uint8_t last_byte_bits = (uint8_t) (total_bits % 8);
+            if (!IS_NULL_PTR(buf)) {
+                buf[0] = BIT_BINARY_EXT;
+                const uint8_t *data = (const uint8_t *) term_binary_data(t);
+                WRITE_32_UNALIGNED(buf + 1, nbytes);
+                buf[5] = last_byte_bits;
+                memcpy(buf + 6, data, nbytes);
+                buf[6 + nbytes - 1] &= (uint8_t) (0xFF << (8 - last_byte_bits));
+            }
+            return 6 + nbytes;
         }
-        size_t len = term_binary_size(t);
-        if (!IS_NULL_PTR(buf)) {
-            const uint8_t *data = (const uint8_t *) term_binary_data(t);
-            WRITE_32_UNALIGNED(buf + 1, len);
-            memcpy(buf + 5, data, len);
-        }
-        return 5 + len;
 
     } else if (term_is_map(t)) {
         size_t size = term_get_map_size(t);
@@ -659,6 +675,28 @@ static term insert_latin1_atom_ext(
     return globalcontext_insert_atom_maybe_copy(glb, utf8_buf, required_buf_size, true);
 }
 
+static term parse_bigint(
+    const uint8_t *int_bytes, uint8_t int_len, bool is_negative, Heap *heap)
+{
+    intn_digit_t bigint[INTN_MAX_RES_LEN];
+    int count = intn_from_integer_bytes(int_bytes, int_len, IntnLittleEndian, bigint, NULL);
+    if (UNLIKELY(count < 0)) {
+        // this means a bug, `calculate_heap_usage` already checks this
+        AVM_ABORT();
+    }
+
+    size_t intn_data_size;
+    size_t rounded_res_len;
+    term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
+
+    intn_integer_sign_t sign = is_negative ? IntNNegativeInteger : IntNPositiveInteger;
+    term bigint_term
+        = term_create_uninitialized_bigint(intn_data_size, (term_integer_sign_t) sign, heap);
+    term_initialize_bigint(bigint_term, bigint, count, rounded_res_len);
+
+    return bigint_term;
+}
+
 static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm_size, bool copy, Heap *heap, GlobalContext *glb, external_term_read_opts_t opts)
 {
     // The safe flag is enforced in calculate_heap_usage (which must run first);
@@ -705,23 +743,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             }
 
             // int_len > 8 || uint64_does_overflow_int64
-            intn_digit_t bigint[INTN_MAX_RES_LEN];
-            int count = intn_from_integer_bytes(int_bytes, int_len, IntnLittleEndian, bigint, NULL);
-            if (UNLIKELY(count < 0)) {
-                // this means a bug, `calculate_heap_usage` already checks this
-                AVM_ABORT();
-            }
-
-            size_t intn_data_size;
-            size_t rounded_res_len;
-            term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
-
-            intn_integer_sign_t sign = is_negative ? IntNNegativeInteger : IntNPositiveInteger;
-            term bigint_term
-                = term_create_uninitialized_bigint(intn_data_size, (term_integer_sign_t) sign, heap);
-            term_initialize_bigint(bigint_term, bigint, count, rounded_res_len);
-
-            return bigint_term;
+            return parse_bigint(int_bytes, int_len, is_negative, heap);
         }
 
         case ATOM_EXT: {
@@ -837,6 +859,33 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             } else {
                 return term_from_const_binary((uint8_t *) external_term_buf + 5, binary_size, heap, glb);
             }
+        }
+
+        case BIT_BINARY_EXT: {
+            uint32_t binary_size = READ_32_UNALIGNED(external_term_buf + 1);
+            uint8_t last_byte_bits = external_term_buf[5];
+            // last_byte_bits is the number of significant bits in the trailing
+            // byte and must be in 1..8 (8 meaning byte-aligned), over at least
+            // one byte. A zero length is what underflowed the size computation
+            // in OTP (CVE-2026-54890); the fixed decoders reject it, as do we.
+            if (UNLIKELY(last_byte_bits < 1 || last_byte_bits > 8 || binary_size == 0)) {
+                return term_invalid_term();
+            }
+            *eterm_size = (size_t) BIT_BINARY_EXT_BASE_SIZE + (size_t) binary_size;
+            term bin;
+            if (copy) {
+                bin = term_from_literal_binary((uint8_t *) external_term_buf + 6, binary_size, heap, glb);
+            } else {
+                bin = term_from_const_binary((uint8_t *) external_term_buf + 6, binary_size, heap, glb);
+            }
+            if (UNLIKELY(term_is_invalid_term(bin))) {
+                return bin;
+            }
+            // 8 significant bits means byte-aligned.
+            if (last_byte_bits == 8) {
+                return bin;
+            }
+            return term_alloc_sub_binary_bits(bin, 0, binary_size - 1, last_byte_bits, heap);
         }
 
         case EXPORT_EXT: {
@@ -1312,6 +1361,43 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             } else {
                 return TERM_BOXED_REFC_BINARY_SIZE;
             }
+        }
+
+        case BIT_BINARY_EXT: {
+            if (UNLIKELY(remaining < BIT_BINARY_EXT_BASE_SIZE)) {
+                return INVALID_TERM_SIZE;
+            }
+            uint32_t binary_size = READ_32_UNALIGNED(external_term_buf + 1);
+            uint8_t last_byte_bits = external_term_buf[5];
+            // See BIT_BINARY_EXT in parse_external_terms: 1..8 significant bits
+            // over at least one byte.
+            if (UNLIKELY(last_byte_bits < 1 || last_byte_bits > 8 || binary_size == 0)) {
+                return INVALID_TERM_SIZE;
+            }
+            remaining -= BIT_BINARY_EXT_BASE_SIZE;
+            if (UNLIKELY(remaining < binary_size)) {
+                return INVALID_TERM_SIZE;
+            }
+            *eterm_size = (size_t) BIT_BINARY_EXT_BASE_SIZE + (size_t) binary_size;
+
+#if TERM_BYTES == 4
+            int size_in_terms = ((binary_size + 4 - 1) >> 2);
+#elif TERM_BYTES == 8
+            int size_in_terms = ((binary_size + 8 - 1) >> 3);
+#else
+#error
+#endif
+
+            size_t words;
+            if (copy && term_binary_size_is_heap_binary(binary_size)) {
+                words = 2 + size_in_terms;
+            } else {
+                words = TERM_BOXED_REFC_BINARY_SIZE;
+            }
+            if (last_byte_bits < 8) {
+                words += TERM_BOXED_SUB_BINARY_SIZE;
+            }
+            return words;
         }
 
         case EXPORT_EXT: {
