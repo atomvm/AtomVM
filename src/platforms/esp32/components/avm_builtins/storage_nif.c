@@ -19,7 +19,7 @@
  */
 
 #include <sdkconfig.h>
-#ifdef CONFIG_AVM_ENABLE_STORAGE_NIFS
+#if defined(CONFIG_AVM_ENABLE_STORAGE_NIFS) || defined(CONFIG_AVM_ENABLE_RAW_SDCARD_NIFS)
 
 #include <atom.h>
 #include <defaultatoms.h>
@@ -38,7 +38,11 @@
 #include <driver/gpio.h>
 #include <driver/sdmmc_host.h>
 #include <driver/sdspi_host.h>
+#ifdef CONFIG_AVM_ENABLE_STORAGE_NIFS
 #include <esp_vfs_fat.h>
+#endif
+#include <esp_log.h>
+#include <sdmmc_cmd.h>
 #include <soc/soc_caps.h>
 
 #include <trace.h>
@@ -57,6 +61,7 @@
 #define SMP_UNLOCK(mounted_fs)
 #endif
 
+#ifdef CONFIG_AVM_ENABLE_STORAGE_NIFS
 // TODO: allow ro option
 enum mount_type
 {
@@ -86,6 +91,7 @@ const ErlNifResourceTypeInit mounted_fs_resource_type_init = {
     .members = 1,
     .dtor = mounted_fs_dtor
 };
+#endif
 
 static term make_esp_error_tuple(esp_err_t err, Context *ctx)
 {
@@ -98,6 +104,7 @@ static term make_esp_error_tuple(esp_err_t err, Context *ctx)
     return result;
 }
 
+#ifdef CONFIG_AVM_ENABLE_STORAGE_NIFS
 static void opts_to_fatfs_mount_config(term opts_term, esp_vfs_fat_mount_config_t *mount_config)
 {
     mount_config->format_if_mount_failed = true;
@@ -105,6 +112,7 @@ static void opts_to_fatfs_mount_config(term opts_term, esp_vfs_fat_mount_config_
     mount_config->allocation_unit_size = 512;
     // TODO: make it configurable: disk_status_check_enable = false
 }
+#endif
 
 #ifdef SDMMC_SLOT_CONFIG_DEFAULT
 #if defined(SOC_SDMMC_USE_GPIO_MATRIX) && SOC_SDMMC_USE_GPIO_MATRIX
@@ -216,6 +224,101 @@ static bool storage_nif_configure_sdmmc_slot(
 }
 #endif
 
+enum sdcard_interface
+{
+    SDCardSDMMC,
+    SDCardSDSPI
+};
+
+struct SDCardConfig
+{
+    enum sdcard_interface interface;
+    sdmmc_host_t host;
+    union
+    {
+#ifdef SDMMC_SLOT_CONFIG_DEFAULT
+        sdmmc_slot_config_t mmc_slot;
+#endif
+        sdspi_device_config_t spi_dev;
+    } slot;
+};
+
+static bool sdcard_config_from_source(
+    const char *source, term opts_term, struct SDCardConfig *cfg, GlobalContext *glb)
+{
+#ifdef SDMMC_SLOT_CONFIG_DEFAULT
+    if (!strcmp(source, "sdmmc")) {
+        sdmmc_host_t host_config = SDMMC_HOST_DEFAULT();
+        sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+        if (UNLIKELY(!storage_nif_configure_sdmmc_slot(opts_term, &slot_config, glb))) {
+            return false;
+        }
+        cfg->interface = SDCardSDMMC;
+        cfg->host = host_config;
+        cfg->slot.mmc_slot = slot_config;
+        return true;
+    }
+#endif
+
+#ifdef CONFIG_AVM_ENABLE_SPI_PORT_DRIVER
+    if (!strcmp(source, "sdspi")) {
+        sdmmc_host_t host_config = SDSPI_HOST_DEFAULT();
+        sdspi_device_config_t spi_slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
+
+        term spi_port = interop_kv_get_value(opts_term, ATOM_STR("\x8", "spi_host"), glb);
+        spi_host_device_t host_dev;
+        // spi_driver_get_peripheral already checks if spi_port is valid
+        if (!spi_driver_get_peripheral(spi_port, &host_dev, glb)) {
+            return false;
+        }
+        spi_slot_config.host_id = host_dev;
+
+        term cs_term = interop_kv_get_value(opts_term, ATOM_STR("\x2", "cs"), glb);
+        if (UNLIKELY(!term_is_integer(cs_term))) {
+            return false;
+        }
+        spi_slot_config.gpio_cs = term_to_int(cs_term);
+
+        term cd_term
+            = interop_kv_get_value_default(opts_term, ATOM_STR("\x2", "cd"), UNDEFINED_ATOM, glb);
+        if (cd_term != UNDEFINED_ATOM) {
+            if (UNLIKELY(!term_is_integer(cd_term))) {
+                return false;
+            }
+            spi_slot_config.gpio_cd = term_to_int(cd_term);
+        }
+
+        cfg->interface = SDCardSDSPI;
+        cfg->host = host_config;
+        cfg->slot.spi_dev = spi_slot_config;
+        return true;
+    }
+#endif
+
+    return false;
+}
+
+#ifdef CONFIG_AVM_ENABLE_RAW_SDCARD_NIFS
+struct SDCardBlockDevice
+{
+#ifndef AVM_NO_SMP
+    Mutex *lock;
+#endif
+    bool open;
+    uint32_t sector_size;
+    uint32_t sector_count;
+    sdmmc_card_t *card;
+};
+
+static void sdcard_dtor(ErlNifEnv *caller_env, void *obj);
+
+const ErlNifResourceTypeInit sdcard_resource_type_init = {
+    .members = 1,
+    .dtor = sdcard_dtor
+};
+#endif
+
+#ifdef CONFIG_AVM_ENABLE_STORAGE_NIFS
 static term nif_esp_mount(Context *ctx, int argc, term argv[])
 {
     GlobalContext *glb = ctx->global;
@@ -287,84 +390,37 @@ static term nif_esp_mount(Context *ctx, int argc, term argv[])
             mount->base_path, source + part_by_name_len, &mount_config, &mount->handle.wl);
 #endif
 
-// C3 doesn't support this
+    } else if (!strcmp(source, "sdmmc") || !strcmp(source, "sdspi")) {
+        mount_config.allocation_unit_size = 512;
+
+        struct SDCardConfig cfg;
+        if (!sdcard_config_from_source(source, opts_term, &cfg, ctx->global)) {
+            free(source);
+            free(target);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+
+        mount = enif_alloc_resource(platform->mounted_fs_resource_type, sizeof(struct MountedFS));
+        if (IS_NULL_PTR(mount)) {
+            free(source);
+            free(target);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        SMP_LOCK_INIT(mount);
+        mount->base_path = target;
+        target = NULL;
+
+        if (cfg.interface == SDCardSDSPI) {
+            mount->mount_type = FATSDSPI;
+            ret = esp_vfs_fat_sdspi_mount(
+                mount->base_path, &cfg.host, &cfg.slot.spi_dev, &mount_config, &mount->handle.card);
 #ifdef SDMMC_SLOT_CONFIG_DEFAULT
-    } else if (!strcmp(source, "sdmmc")) {
-        mount_config.allocation_unit_size = 512;
-
-        sdmmc_host_t host_config = SDMMC_HOST_DEFAULT();
-        sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
-
-        if (UNLIKELY(!storage_nif_configure_sdmmc_slot(opts_term, &slot_config, ctx->global))) {
-            free(source);
-            free(target);
-            RAISE_ERROR(BADARG_ATOM);
-        }
-
-        mount = enif_alloc_resource(platform->mounted_fs_resource_type, sizeof(struct MountedFS));
-        if (IS_NULL_PTR(mount)) {
-            free(source);
-            free(target);
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-        SMP_LOCK_INIT(mount);
-        mount->base_path = target;
-        target = NULL;
-        mount->mount_type = FATSDMMC;
-
-        ret = esp_vfs_fat_sdmmc_mount(
-            mount->base_path, &host_config, &slot_config, &mount_config, &mount->handle.card);
+        } else {
+            mount->mount_type = FATSDMMC;
+            ret = esp_vfs_fat_sdmmc_mount(mount->base_path, &cfg.host, &cfg.slot.mmc_slot,
+                &mount_config, &mount->handle.card);
 #endif
-
-    } else if (!strcmp(source, "sdspi")) {
-        mount_config.allocation_unit_size = 512;
-
-        sdmmc_host_t host_config = SDSPI_HOST_DEFAULT();
-        sdspi_device_config_t spi_slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-
-        term spi_port = interop_kv_get_value(opts_term, ATOM_STR("\x8", "spi_host"), ctx->global);
-        spi_host_device_t host_dev;
-        // spi_driver_get_peripheral already checks if spi_port is valid
-        bool ok = spi_driver_get_peripheral(spi_port, &host_dev, ctx->global);
-        if (!ok) {
-            free(source);
-            free(target);
-            RAISE_ERROR(BADARG_ATOM);
         }
-        spi_slot_config.host_id = host_dev;
-
-        term cs_term = interop_kv_get_value(opts_term, ATOM_STR("\x2", "cs"), ctx->global);
-        if (UNLIKELY(!term_is_integer(cs_term))) {
-            free(source);
-            free(target);
-            RAISE_ERROR(BADARG_ATOM);
-        }
-        spi_slot_config.gpio_cs = term_to_int(cs_term);
-
-        term cd_term = interop_kv_get_value_default(
-            opts_term, ATOM_STR("\x2", "cd"), UNDEFINED_ATOM, ctx->global);
-        if (cd_term != UNDEFINED_ATOM) {
-            if (UNLIKELY(!term_is_integer(cd_term))) {
-                free(source);
-                free(target);
-                RAISE_ERROR(BADARG_ATOM);
-            }
-            spi_slot_config.gpio_cd = term_to_int(cd_term);
-        }
-
-        mount = enif_alloc_resource(platform->mounted_fs_resource_type, sizeof(struct MountedFS));
-        if (IS_NULL_PTR(mount)) {
-            free(source);
-            free(target);
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-        SMP_LOCK_INIT(mount);
-        mount->base_path = target;
-        target = NULL;
-        mount->mount_type = FATSDSPI;
-
-        ret = esp_vfs_fat_sdspi_mount(
-            mount->base_path, &host_config, &spi_slot_config, &mount_config, &mount->handle.card);
     } else {
         free(source);
         free(target);
@@ -464,6 +520,389 @@ static void mounted_fs_dtor(ErlNifEnv *caller_env, void *obj)
 
     free(mounted_fs->base_path);
 }
+#endif
+
+#ifdef CONFIG_AVM_ENABLE_RAW_SDCARD_NIFS
+// TODO: switch to the new ESP-IDF blockdev API once the API issues are fixed and it is
+// proven working: https://github.com/espressif/esp-idf/issues/18875
+static esp_err_t sdcard_blockdev_read_sector(
+    struct SDCardBlockDevice *dev, void *dst, size_t sector)
+{
+    return sdmmc_read_sectors(dev->card, dst, sector, 1);
+}
+
+static esp_err_t sdcard_blockdev_write_sector(
+    struct SDCardBlockDevice *dev, const void *src, size_t sector)
+{
+    return sdmmc_write_sectors(dev->card, src, sector, 1);
+}
+
+// Mirrors call_host_deinit() in ESP-IDF's vfs_fat_sdmmc.c: per-device/per-slot
+// teardown where the host provides it (IDF >= 5.3), forceful host deinit otherwise.
+static esp_err_t sdcard_host_deinit(const sdmmc_host_t *host)
+{
+    if (host->flags & SDMMC_HOST_FLAG_DEINIT_ARG) {
+        return host->deinit_p(host->slot);
+    }
+    return host->deinit();
+}
+
+static esp_err_t sdcard_blockdev_close(struct SDCardBlockDevice *dev)
+{
+    esp_err_t ret = sdcard_host_deinit(&dev->card->host);
+
+    free(dev->card);
+    dev->card = NULL;
+
+    return ret;
+}
+
+static esp_err_t sdcard_blockdev_init(struct SDCardConfig *cfg, struct SDCardBlockDevice *dev)
+{
+    esp_err_t err;
+
+    dev->card = malloc(sizeof(sdmmc_card_t));
+    if (IS_NULL_PTR(dev->card)) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    if (cfg->interface == SDCardSDSPI) {
+        err = sdspi_host_init();
+        if (UNLIKELY(err != ESP_OK)) {
+            free(dev->card);
+            dev->card = NULL;
+            return err;
+        }
+        sdspi_dev_handle_t spi_handle;
+        err = sdspi_host_init_device(&cfg->slot.spi_dev, &spi_handle);
+        if (UNLIKELY(err != ESP_OK)) {
+            // No device was added and sdspi_host_init() is stateless: nothing to
+            // undo here, and sdspi_host_deinit() would destroy unrelated SDSPI
+            // slots, including any FAT-mounted card.
+            free(dev->card);
+            dev->card = NULL;
+            return err;
+        }
+        cfg->host.slot = spi_handle;
+        err = sdmmc_card_init(&cfg->host, dev->card);
+        if (UNLIKELY(err != ESP_OK)) {
+            sdcard_host_deinit(&cfg->host);
+            free(dev->card);
+            dev->card = NULL;
+            return err;
+        }
+#ifdef SDMMC_SLOT_CONFIG_DEFAULT
+    } else {
+        err = (*cfg->host.init)();
+        if (UNLIKELY(err != ESP_OK)) {
+            free(dev->card);
+            dev->card = NULL;
+            return err;
+        }
+        err = sdmmc_host_init_slot(cfg->host.slot, &cfg->slot.mmc_slot);
+        if (UNLIKELY(err != ESP_OK)) {
+            if (!(cfg->host.flags & SDMMC_HOST_FLAG_DEINIT_ARG)) {
+                // Pre-5.3 IDF: the exclusive sdmmc_host_init() succeeded, so this
+                // is the only host user and the host must be released. With
+                // per-slot refcounting (IDF >= 5.3) no slot reference was taken:
+                // a deinit here could tear down another slot's user, and the
+                // tolerant host init recovers on the next open.
+                cfg->host.deinit();
+            }
+            free(dev->card);
+            dev->card = NULL;
+            return err;
+        }
+        err = sdmmc_card_init(&cfg->host, dev->card);
+        if (UNLIKELY(err != ESP_OK)) {
+            sdcard_host_deinit(&cfg->host);
+            free(dev->card);
+            dev->card = NULL;
+            return err;
+        }
+#else
+    } else {
+        free(dev->card);
+        dev->card = NULL;
+        return ESP_ERR_NOT_SUPPORTED;
+#endif
+    }
+
+    dev->sector_size = dev->card->csd.sector_size;
+    dev->sector_count = dev->card->csd.capacity;
+
+    return ESP_OK;
+}
+
+static term nif_esp_sdcard_open(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
+    int str_ok;
+    char *source = interop_term_to_string(argv[0], &str_ok);
+    if (!str_ok) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    term opts_term = argv[1];
+    if (!term_is_list(opts_term) && !term_is_map(opts_term)) {
+        free(source);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    struct SDCardConfig cfg;
+    bool ok = sdcard_config_from_source(source, opts_term, &cfg, glb);
+    free(source);
+    if (!ok) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    struct SDCardBlockDevice *dev
+        = enif_alloc_resource(platform->sdcard_resource_type, sizeof(struct SDCardBlockDevice));
+    if (IS_NULL_PTR(dev)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    dev->open = false;
+    dev->card = NULL;
+    dev->sector_size = 0;
+    dev->sector_count = 0;
+#ifndef AVM_NO_SMP
+    dev->lock = smp_mutex_create();
+    if (IS_NULL_PTR(dev->lock)) {
+        enif_release_resource(dev);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+#endif
+
+    esp_err_t err = sdcard_blockdev_init(&cfg, dev);
+
+    term return_term;
+    if (UNLIKELY(err != ESP_OK)) {
+        return_term = make_esp_error_tuple(err, ctx);
+    } else {
+        dev->open = true;
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + TERM_BOXED_RESOURCE_SIZE)
+                != MEMORY_GC_OK)) {
+            enif_release_resource(dev);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term dev_term = term_from_resource(dev, &ctx->heap);
+        return_term = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(return_term, 0, OK_ATOM);
+        term_put_tuple_element(return_term, 1, dev_term);
+    }
+    enif_release_resource(dev);
+
+    return return_term;
+}
+
+static term nif_esp_sdcard_read(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
+    void *dev_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0],
+            platform->sdcard_resource_type, &dev_obj_ptr))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    struct SDCardBlockDevice *dev = (struct SDCardBlockDevice *) dev_obj_ptr;
+
+    if (UNLIKELY(!term_is_uint32(argv[1]))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    uint32_t sector = term_to_uint32(argv[1]);
+
+    SMP_MUTEX_LOCK(dev->lock);
+    if (UNLIKELY(!dev->open)) {
+        SMP_MUTEX_UNLOCK(dev->lock);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (UNLIKELY(sector >= dev->sector_count)) {
+        SMP_MUTEX_UNLOCK(dev->lock);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    size_t sector_size = dev->sector_size;
+
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(sector_size) + TUPLE_SIZE(2))
+            != MEMORY_GC_OK)) {
+        SMP_MUTEX_UNLOCK(dev->lock);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term binary = term_create_uninitialized_binary(sector_size, &ctx->heap, ctx->global);
+    // term_create_uninitialized_binary returns an invalid term if the refc binary
+    // allocation fails; memory_ensure_free only covers the boxed header words.
+    if (UNLIKELY(term_is_invalid_term(binary))) {
+        SMP_MUTEX_UNLOCK(dev->lock);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    // sdmmc_read_sectors bounces non-DMA-capable / unaligned destinations (e.g. a
+    // binary in PSRAM) internally, so the binary is passed directly; it may fail
+    // with ESP_ERR_NO_MEM under DMA heap pressure.
+    esp_err_t err = sdcard_blockdev_read_sector(
+        dev, (void *) term_binary_data(binary), (size_t) sector);
+    SMP_MUTEX_UNLOCK(dev->lock);
+
+    if (UNLIKELY(err != ESP_OK)) {
+        return make_esp_error_tuple(err, ctx);
+    }
+
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, OK_ATOM);
+    term_put_tuple_element(result, 1, binary);
+
+    return result;
+}
+
+static term nif_esp_sdcard_write(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
+    void *dev_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0],
+            platform->sdcard_resource_type, &dev_obj_ptr))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    struct SDCardBlockDevice *dev = (struct SDCardBlockDevice *) dev_obj_ptr;
+
+    if (UNLIKELY(!term_is_uint32(argv[1]))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    uint32_t sector = term_to_uint32(argv[1]);
+
+    VALIDATE_VALUE(argv[2], term_is_binary);
+    term data = argv[2];
+
+    SMP_MUTEX_LOCK(dev->lock);
+    if (UNLIKELY(!dev->open)) {
+        SMP_MUTEX_UNLOCK(dev->lock);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (UNLIKELY(term_binary_size(data) != dev->sector_size)) {
+        SMP_MUTEX_UNLOCK(dev->lock);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (UNLIKELY(sector >= dev->sector_count)) {
+        SMP_MUTEX_UNLOCK(dev->lock);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    esp_err_t err = sdcard_blockdev_write_sector(dev, term_binary_data(data), (size_t) sector);
+    SMP_MUTEX_UNLOCK(dev->lock);
+
+    if (UNLIKELY(err != ESP_OK)) {
+        return make_esp_error_tuple(err, ctx);
+    }
+
+    return OK_ATOM;
+}
+
+static term nif_esp_sdcard_info(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
+    void *dev_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0],
+            platform->sdcard_resource_type, &dev_obj_ptr))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    struct SDCardBlockDevice *dev = (struct SDCardBlockDevice *) dev_obj_ptr;
+
+    SMP_MUTEX_LOCK(dev->lock);
+    if (UNLIKELY(!dev->open)) {
+        SMP_MUTEX_UNLOCK(dev->lock);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    uint32_t sector_size = dev->sector_size;
+    uint32_t sector_count = dev->sector_count;
+    SMP_MUTEX_UNLOCK(dev->lock);
+
+    size_t needed = TUPLE_SIZE(2) + term_map_size_in_terms(2)
+        + term_boxed_integer_size(sector_size) + term_boxed_integer_size(sector_count);
+    if (UNLIKELY(memory_ensure_free(ctx, needed) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term sector_count_value = term_make_maybe_boxed_int64(sector_count, &ctx->heap);
+    term sector_size_value = term_make_maybe_boxed_int64(sector_size, &ctx->heap);
+
+    term info = term_alloc_map(2, &ctx->heap);
+    term_set_map_assoc(
+        info, 0, globalcontext_make_atom(glb, ATOM_STR("\xC", "sector_count")), sector_count_value);
+    term_set_map_assoc(
+        info, 1, globalcontext_make_atom(glb, ATOM_STR("\xB", "sector_size")), sector_size_value);
+
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, OK_ATOM);
+    term_put_tuple_element(result, 1, info);
+
+    return result;
+}
+
+static term nif_esp_sdcard_close(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    GlobalContext *glb = ctx->global;
+    struct ESP32PlatformData *platform = glb->platform_data;
+
+    void *dev_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0],
+            platform->sdcard_resource_type, &dev_obj_ptr))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    struct SDCardBlockDevice *dev = (struct SDCardBlockDevice *) dev_obj_ptr;
+
+    SMP_MUTEX_LOCK(dev->lock);
+    if (UNLIKELY(!dev->open)) {
+        SMP_MUTEX_UNLOCK(dev->lock);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    esp_err_t err = sdcard_blockdev_close(dev);
+    dev->open = false;
+    SMP_MUTEX_UNLOCK(dev->lock);
+
+    if (UNLIKELY(err != ESP_OK)) {
+        return make_esp_error_tuple(err, ctx);
+    }
+
+    return OK_ATOM;
+}
+
+static void sdcard_dtor(ErlNifEnv *caller_env, void *obj)
+{
+    UNUSED(caller_env);
+
+    struct SDCardBlockDevice *dev = (struct SDCardBlockDevice *) obj;
+    if (dev->open) {
+        esp_err_t err = sdcard_blockdev_close(dev);
+        dev->open = false;
+        if (UNLIKELY(err != ESP_OK)) {
+            ESP_LOGW(TAG,
+                "Failed to close SD card block device in resource dtor. "
+                "Please use esp:sdcard_close/1.");
+        }
+    }
+
+#ifndef AVM_NO_SMP
+    if (dev->lock) {
+        smp_mutex_destroy(dev->lock);
+        dev->lock = NULL;
+    }
+#endif
+}
+#endif
 
 void storage_nif_init(GlobalContext *global)
 {
@@ -471,10 +910,17 @@ void storage_nif_init(GlobalContext *global)
 
     ErlNifEnv env;
     erl_nif_env_partial_init_from_globalcontext(&env, global);
+#ifdef CONFIG_AVM_ENABLE_STORAGE_NIFS
     platform->mounted_fs_resource_type = enif_init_resource_type(
         &env, "mounted_fs", &mounted_fs_resource_type_init, ERL_NIF_RT_CREATE, NULL);
+#endif
+#ifdef CONFIG_AVM_ENABLE_RAW_SDCARD_NIFS
+    platform->sdcard_resource_type = enif_init_resource_type(
+        &env, "sdcard", &sdcard_resource_type_init, ERL_NIF_RT_CREATE, NULL);
+#endif
 }
 
+#ifdef CONFIG_AVM_ENABLE_STORAGE_NIFS
 static const struct Nif esp_mount_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_mount
@@ -484,16 +930,69 @@ static const struct Nif esp_umount_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_umount
 };
+#endif
+
+#ifdef CONFIG_AVM_ENABLE_RAW_SDCARD_NIFS
+static const struct Nif esp_sdcard_open_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_sdcard_open
+};
+
+static const struct Nif esp_sdcard_read_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_sdcard_read
+};
+
+static const struct Nif esp_sdcard_write_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_sdcard_write
+};
+
+static const struct Nif esp_sdcard_info_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_sdcard_info
+};
+
+static const struct Nif esp_sdcard_close_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_sdcard_close
+};
+#endif
 
 const struct Nif *storage_nif_get_nif(const char *nifname)
 {
+#ifdef CONFIG_AVM_ENABLE_STORAGE_NIFS
     if (strcmp("esp:mount/4", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_mount_nif;
-    } else if (strcmp("esp:umount/1", nifname) == 0) {
+    }
+    if (strcmp("esp:umount/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_umount_nif;
     }
+#endif
+#ifdef CONFIG_AVM_ENABLE_RAW_SDCARD_NIFS
+    if (strcmp("esp:sdcard_open/2", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_sdcard_open_nif;
+    }
+    if (strcmp("esp:sdcard_read/2", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_sdcard_read_nif;
+    }
+    if (strcmp("esp:sdcard_write/3", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_sdcard_write_nif;
+    }
+    if (strcmp("esp:sdcard_info/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_sdcard_info_nif;
+    }
+    if (strcmp("esp:sdcard_close/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_sdcard_close_nif;
+    }
+#endif
 
     return NULL;
 }

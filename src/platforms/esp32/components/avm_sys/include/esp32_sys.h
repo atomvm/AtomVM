@@ -84,6 +84,9 @@ struct ESP32PlatformData
 #ifdef CONFIG_AVM_ENABLE_STORAGE_NIFS
     ErlNifResourceType *mounted_fs_resource_type;
 #endif
+#ifdef CONFIG_AVM_ENABLE_RAW_SDCARD_NIFS
+    ErlNifResourceType *sdcard_resource_type;
+#endif
     ErlNifResourceType *partition_mmap_resource_type;
 };
 
