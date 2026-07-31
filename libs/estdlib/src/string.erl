@@ -34,6 +34,7 @@
     trim/1, trim/2,
     find/2, find/3,
     length/1,
+    to_integer/1,
     jaro_similarity/2
 ]).
 
@@ -56,6 +57,251 @@ upper_char(C) when is_integer(C) andalso C >= $a andalso C =< $z ->
     C - 32;
 upper_char(C) when is_integer(C) ->
     C.
+
+%%-----------------------------------------------------------------------------
+%% @param String a chardata value possibly beginning with an integer
+%% @returns `{Int, Rest}' where `Rest' is the unconsumed chardata suffix, or
+%%          `{error, no_integer}' if it does not begin with an integer, or
+%%          `{error, badarg}' if malformed chardata or invalid UTF-8 is
+%%          encountered while parsing
+%% @doc Parse a leading (optionally signed) integer from a `unicode:chardata()'
+%% value. Digits and sign are ASCII. The remainder keeps binary form when the
+%% original argument is a binary.
+%%
+%% Matching OTP, the maximal leading run of ASCII `+', `-', and digits is
+%% validated before the integer grammar is applied, so leftover signs in that
+%% run are examined for chardata errors even when they become part of `Rest'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec to_integer(String :: unicode:chardata()) ->
+    {integer(), unicode:chardata()} | {error, no_integer | badarg}.
+to_integer(String) ->
+    try to_integer_cd(String) of
+        {error, _} = Err ->
+            Err;
+        {Int, Rest} ->
+            {Int, Rest}
+    catch
+        error:badarg ->
+            {error, badarg}
+    end.
+
+%% @private
+to_integer_cd(Bin) when is_binary(Bin) ->
+    case take_int_bin(Bin) of
+        no_integer ->
+            {error, no_integer};
+        {Int, Rest} ->
+            {Int, Rest}
+    end;
+to_integer_cd(List) when is_list(List) ->
+    case take_int_cd(List) of
+        no_integer ->
+            {error, no_integer};
+        {Int, Rest} ->
+            {Int, Rest}
+    end;
+to_integer_cd(_) ->
+    {error, badarg}.
+
+%% Take the maximal leading run of ASCII + - digits (OTP string:take/2 set),
+%% validate the first codepoint after that run, then apply integer grammar.
+%% @private
+take_int_bin(Bin) ->
+    {PrefLen, Tail} = take_set_bin(Bin, 0),
+    case ensure_utf8_boundary(Tail) of
+        ok when PrefLen =:= 0 ->
+            no_integer;
+        ok ->
+            Pref = binary:part(Bin, 0, PrefLen),
+            case parse_int_bin(Pref) of
+                no_integer ->
+                    no_integer;
+                {Int, RestPref} ->
+                    {Int, <<RestPref/binary, Tail/binary>>}
+            end;
+        error ->
+            erlang:error(badarg)
+    end.
+
+%% @private
+take_set_bin(<<C, Rest/binary>>, N) when
+    C =:= $+ orelse C =:= $- orelse (C >= $0 andalso C =< $9)
+->
+    take_set_bin(Rest, N + 1);
+take_set_bin(Rest, N) ->
+    {N, Rest}.
+
+%% @private
+parse_int_bin(<<$+, Rest/binary>>) ->
+    parse_int_digits_bin(Rest, 1);
+parse_int_bin(<<$-, Rest/binary>>) ->
+    parse_int_digits_bin(Rest, -1);
+parse_int_bin(Bin) ->
+    parse_int_digits_bin(Bin, 1).
+
+%% @private
+parse_int_digits_bin(Bin, Sign) ->
+    {N, Rest} = take_digits_bin(Bin, 0),
+    case N of
+        0 ->
+            no_integer;
+        _ ->
+            Digits = binary:part(Bin, 0, N),
+            {Sign * binary_to_integer(Digits), Rest}
+    end.
+
+%% @private
+take_digits_bin(<<C, Rest/binary>>, N) when C >= $0 andalso C =< $9 ->
+    take_digits_bin(Rest, N + 1);
+take_digits_bin(Rest, N) ->
+    {N, Rest}.
+
+%% @private
+ensure_utf8_boundary(<<>>) ->
+    ok;
+ensure_utf8_boundary(<<C, _/binary>>) when C =< 16#7F ->
+    ok;
+ensure_utf8_boundary(<<_/utf8, _/binary>>) ->
+    ok;
+ensure_utf8_boundary(_) ->
+    error.
+
+%% @private
+take_int_cd(CD) ->
+    {HeadChars, Tail0} = take_set_cd(CD, []),
+    Tail = normalize_empty_cd(Tail0),
+    case HeadChars of
+        [] ->
+            no_integer;
+        _ ->
+            case parse_int_chars(HeadChars) of
+                no_integer ->
+                    no_integer;
+                {Int, RestChars} ->
+                    {Int, append_cd(RestChars, Tail)}
+            end
+    end.
+
+%% Collect leading + - digit codepoints; stop before first non-member.
+%% @private
+take_set_cd(CD, Acc) ->
+    case next_cp(CD) of
+        empty ->
+            {lists:reverse(Acc), CD};
+        {C, Rest} when C =:= $+ orelse C =:= $- orelse (C >= $0 andalso C =< $9) ->
+            take_set_cd(Rest, [C | Acc]);
+        {_C, _Rest} ->
+            {lists:reverse(Acc), CD}
+    end.
+
+%% @private
+parse_int_chars([$+ | Rest]) ->
+    parse_int_digits_chars(Rest, 1);
+parse_int_chars([$- | Rest]) ->
+    parse_int_digits_chars(Rest, -1);
+parse_int_chars(Chars) ->
+    parse_int_digits_chars(Chars, 1).
+
+%% @private
+parse_int_digits_chars([C | Rest], Sign) when C >= $0 andalso C =< $9 ->
+    parse_int_more_chars(Rest, Sign, [C]);
+parse_int_digits_chars(_Rest, _Sign) ->
+    no_integer.
+
+%% @private
+parse_int_more_chars([C | Rest], Sign, Acc) when C >= $0 andalso C =< $9 ->
+    parse_int_more_chars(Rest, Sign, [C | Acc]);
+parse_int_more_chars(Rest, Sign, Acc) ->
+    {Sign * list_to_integer(lists:reverse(Acc)), Rest}.
+
+%% @private
+append_cd([], Tail) ->
+    Tail;
+append_cd(RestChars, Tail) ->
+    RestChars ++ Tail.
+
+%% @private
+normalize_empty_cd(CD) ->
+    case is_empty_cd(CD) of
+        true ->
+            [];
+        false ->
+            CD
+    end.
+
+%% @private
+is_empty_cd([]) ->
+    true;
+is_empty_cd(<<>>) ->
+    true;
+is_empty_cd([H | T]) ->
+    is_empty_cd(H) andalso is_empty_cd(T);
+is_empty_cd(_) ->
+    false.
+
+%% next_cp(Chardata) -> {Codepoint, Rest} | empty
+%% Raises error:badarg on malformed UTF-8 / non-chardata, including improper
+%% list continuations that are not a list or binary.
+%% @private
+next_cp([]) ->
+    empty;
+next_cp(<<>>) ->
+    empty;
+next_cp([H | T]) when is_integer(H) ->
+    if
+        H >= 0 andalso H =< 16#10FFFF ->
+            {H, ensure_cd_cont(T)};
+        true ->
+            erlang:error(badarg)
+    end;
+next_cp([H | T]) when is_binary(H) ->
+    case next_cp_bin(H) of
+        empty ->
+            next_cp(ensure_cd_cont(T));
+        {C, RestBin} ->
+            {C, stack_rest(RestBin, T)}
+    end;
+next_cp([H | T]) when is_list(H) ->
+    case next_cp(H) of
+        empty ->
+            next_cp(ensure_cd_cont(T));
+        {C, RestH} ->
+            {C, stack_rest(RestH, T)}
+    end;
+next_cp(Bin) when is_binary(Bin) ->
+    next_cp_bin(Bin);
+next_cp(_) ->
+    erlang:error(badarg).
+
+%% @private
+next_cp_bin(<<>>) ->
+    empty;
+next_cp_bin(<<C/utf8, Rest/binary>>) ->
+    {C, Rest};
+next_cp_bin(_) ->
+    erlang:error(badarg).
+
+%% @private
+stack_rest([], T) ->
+    ensure_cd_cont(T);
+stack_rest(<<>>, T) ->
+    ensure_cd_cont(T);
+stack_rest(H, []) ->
+    H;
+stack_rest(H, T) ->
+    [H | ensure_cd_cont(T)].
+
+%% A chardata continuation must be [] | binary() | list().
+%% @private
+ensure_cd_cont([]) ->
+    [];
+ensure_cd_cont(T) when is_binary(T) ->
+    T;
+ensure_cd_cont(T) when is_list(T) ->
+    T;
+ensure_cd_cont(_) ->
+    erlang:error(badarg).
 
 %%-----------------------------------------------------------------------------
 %% @param Input a string or character to convert
