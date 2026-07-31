@@ -1572,6 +1572,11 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
 #ifndef AVM_NO_EMU
     static term make_bigint_from_digits(Context *ctx, intn_digit_t *bigint, intn_integer_sign_t sign, size_t count)
     {
+        count = intn_count_digits(bigint, count);
+        if (intn_fits_int64(bigint, count, sign)) {
+            return maybe_alloc_boxed_integer_fragment(ctx, intn_to_int64(bigint, count, sign));
+        }
+
         size_t intn_data_size;
         size_t rounded_res_len;
         term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
