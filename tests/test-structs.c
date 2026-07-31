@@ -20,6 +20,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "atom_table.h"
 #include "utils.h"
@@ -479,6 +480,62 @@ void test_atom_table(void)
     atom_table_destroy(table);
 }
 
+static void test_atom_table_bulk_grow(void)
+{
+    struct AtomTable *table = atom_table_new();
+
+    const int batches = 40;
+#define PER_BATCH 17
+    int next_id = 0;
+
+    // Bulk atom_table_ensure_atoms does not copy the atom bytes: the stored keys
+    // point into the supplied buffer (modules keep their binary alive). Use a
+    // single buffer that outlives the table for all batches.
+    uint8_t *buf = malloc(batches * PER_BATCH * 64);
+    assert(buf != NULL);
+    uint8_t *p = buf;
+
+    for (int b = 0; b < batches; b++) {
+        uint8_t *batch_start = p;
+        char name[64];
+        for (int i = 0; i < PER_BATCH; i++) {
+            int len = snprintf(name, sizeof(name), "bulk_atom_%d", next_id++);
+            *p++ = (uint8_t) len;
+            memcpy(p, name, len);
+            p += len;
+        }
+        atom_index_t translate[PER_BATCH];
+        enum AtomTableEnsureAtomResult r
+            = atom_table_ensure_atoms(table, batch_start, PER_BATCH, translate, 0);
+        assert(r == AtomTableEnsureAtomOk);
+    }
+
+    int total = batches * PER_BATCH;
+    assert((int) atom_table_count(table) == total);
+
+    // Every atom must still be retrievable both by index and by name.
+    for (int id = 0; id < total; id++) {
+        char name[64];
+        int len = snprintf(name, sizeof(name), "bulk_atom_%d", id);
+
+        size_t got_len;
+        const uint8_t *got = atom_table_get_atom_string(table, id, &got_len);
+        assert(got != NULL);
+        assert((int) got_len == len);
+        assert(memcmp(got, name, len) == 0);
+
+        atom_index_t found;
+        enum AtomTableEnsureAtomResult r = atom_table_ensure_atom(
+            table, (const uint8_t *) name, len, AtomTableAlreadyExisting, &found);
+        assert(r == AtomTableEnsureAtomOk);
+        assert((int) found == id);
+    }
+
+    atom_table_destroy(table);
+    free(buf);
+#undef PER_BATCH
+}
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
@@ -486,6 +543,7 @@ int main(int argc, char **argv)
 
     test_valueshashtable();
     test_atom_table();
+    test_atom_table_bulk_grow();
 
     return EXIT_SUCCESS;
 }

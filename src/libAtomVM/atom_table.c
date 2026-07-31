@@ -352,7 +352,7 @@ static inline bool maybe_rehash(struct AtomTable *table, int new_entries)
 {
     int new_count = table->count + new_entries;
     int threshold = ATOM_TABLE_THRESHOLD(table->capacity);
-    if (new_count > threshold) {
+    if (new_count <= threshold) {
         return false;
     }
 
