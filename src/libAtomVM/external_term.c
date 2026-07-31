@@ -712,11 +712,16 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
                 AVM_ABORT();
             }
 
+            intn_integer_sign_t sign = is_negative ? IntNNegativeInteger : IntNPositiveInteger;
+            count = (int) intn_count_digits(bigint, count);
+            if (intn_fits_int64(bigint, count, sign)) {
+                return term_make_maybe_boxed_int64(intn_to_int64(bigint, count, sign), heap);
+            }
+
             size_t intn_data_size;
             size_t rounded_res_len;
             term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
 
-            intn_integer_sign_t sign = is_negative ? IntNNegativeInteger : IntNPositiveInteger;
             term bigint_term
                 = term_create_uninitialized_bigint(intn_data_size, (term_integer_sign_t) sign, heap);
             term_initialize_bigint(bigint_term, bigint, count, rounded_res_len);

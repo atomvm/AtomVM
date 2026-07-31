@@ -1446,6 +1446,16 @@ static term jit_term_alloc_bin_match_state(Context *ctx, term src, int slots)
 static term make_bigint_from_digits(
     Context *ctx, JITState *jit_state, intn_digit_t *bigint, intn_integer_sign_t sign, int count)
 {
+    count = (int) intn_count_digits(bigint, count);
+    if (intn_fits_int64(bigint, count, sign)) {
+        term t = maybe_alloc_boxed_integer_fragment(ctx, intn_to_int64(bigint, count, sign));
+        if (UNLIKELY(term_is_invalid_term(t))) {
+            set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
+            return FALSE_ATOM;
+        }
+        return t;
+    }
+
     size_t intn_data_size;
     size_t rounded_res_len;
     term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);

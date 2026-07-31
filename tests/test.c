@@ -395,6 +395,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_ref_eq, 1),
     TEST_CASE_EXPECTED(test_binary_eq, 1),
     TEST_CASE_EXPECTED(test_bigint_eq, 1),
+    TEST_CASE(test_bigint_normalization),
 
     TEST_CASE_EXPECTED(test_binaries_ordering, 15),
     TEST_CASE_EXPECTED(test_lists_ordering, 7),

@@ -438,6 +438,7 @@ compile_erlang(test_list_tuple_eq)
 compile_erlang(test_ref_eq)
 compile_erlang(test_binary_eq)
 compile_erlang(test_bigint_eq)
+compile_erlang(test_bigint_normalization)
 
 compile_erlang(test_binaries_ordering)
 compile_erlang(test_lists_ordering)
@@ -1003,6 +1004,7 @@ set(erlang_test_beams
     test_ref_eq.beam
     test_binary_eq.beam
     test_bigint_eq.beam
+    test_bigint_normalization.beam
 
     test_binaries_ordering.beam
     test_lists_ordering.beam
