@@ -45,6 +45,17 @@ typedef uintptr_t term;
 #define TERM_U_FMT PRIuPTR
 #define TERM_X_FMT PRIXPTR
 
+/**
+ * A continuation pointer (return address). It packs a module identifier and an
+ * instruction/code offset. It is always 64 bits wide so that on 32-bit `term`
+ * platforms it can hold a full Module pointer plus the offset; on such platforms
+ * it occupies two stack slots, on 64-bit platforms a single one. See the cp
+ * helpers (make_cp, STORE_CP, LOAD_CP, CP_SIZE_IN_TERMS) in module.h.
+ */
+typedef uint64_t cp_t;
+
+#define CP_X_FMT PRIX64
+
 #if ((UINT32_MAX != 4294967295ULL) || (UINT64_MAX != 18446744073709551615ULL) \
     || (INT32_MAX != 2147483647LL) || (INT64_MAX != 9223372036854775807LL))
 #error "limits.h or preprocessor is not sane."

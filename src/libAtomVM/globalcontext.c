@@ -99,6 +99,7 @@ GlobalContext *globalcontext_new(void)
 
     glb->modules_by_index = NULL;
     glb->loaded_modules_count = 0;
+    glb->catch_labels_count = 0;
     glb->modules_table = valueshashtable_new();
     if (IS_NULL_PTR(glb->modules_table)) {
         atom_table_destroy(glb->atom_table);
@@ -687,6 +688,13 @@ int globalcontext_insert_module(GlobalContext *global, Module *module)
 {
     term module_name = module_get_name(module);
     SMP_RWLOCK_WRLOCK(global->modules_lock);
+
+    if (UNLIKELY(module->labels_count > TERM_MAX_CATCH_ID - global->catch_labels_count)) {
+        fprintf(stderr, "Too many labels in loaded modules to install exception handlers.\n");
+        SMP_RWLOCK_UNLOCK(global->modules_lock);
+        return -1;
+    }
+
     if (!valueshashtable_insert(global->modules_table, term_to_atom_index(module_name), TO_VALUESHASHTABLE_VALUE(module))) {
         SMP_RWLOCK_UNLOCK(global->modules_lock);
         return -1;
@@ -708,6 +716,8 @@ int globalcontext_insert_module(GlobalContext *global, Module *module)
     }
 
     module->module_index = module_index;
+    module->catch_labels_base = global->catch_labels_count;
+    global->catch_labels_count += module->labels_count;
 
     global->modules_by_index = new_modules_by_index;
     global->modules_by_index[module_index] = module;
@@ -715,6 +725,26 @@ int globalcontext_insert_module(GlobalContext *global, Module *module)
     SMP_RWLOCK_UNLOCK(global->modules_lock);
 
     return module_index;
+}
+
+Module *globalcontext_get_module_by_catch_id(GlobalContext *global, unsigned int catch_id, int *label)
+{
+    SMP_RWLOCK_RDLOCK(global->modules_lock);
+    int low = 0;
+    int high = global->loaded_modules_count - 1;
+    while (low < high) {
+        int middle = low + (high - low + 1) / 2;
+        if (global->modules_by_index[middle]->catch_labels_base <= catch_id) {
+            low = middle;
+        } else {
+            high = middle - 1;
+        }
+    }
+    Module *result = global->modules_by_index[low];
+    SMP_RWLOCK_UNLOCK(global->modules_lock);
+
+    *label = (int) (catch_id - result->catch_labels_base);
+    return result;
 }
 
 Module *globalcontext_load_module_from_avm(GlobalContext *global, const char *module_name)

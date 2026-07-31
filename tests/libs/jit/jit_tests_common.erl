@@ -154,6 +154,7 @@ toolchain_prefixes(xtensa) ->
     %% whose objdump displays raw bytes rather than instruction words,
     %% breaking hex_to_bin/3's little-endian conversion.
     ["xtensa-esp32-elf", "xtensa-esp32s2-elf", "xtensa-esp32s3-elf"] ++
+        ["xtensa-lx106-elf"] ++
         ["xtensa" ++ V || V <- ["-unknown-elf", "-elf", "-linux-gnu"]] ++
         ["xtensa-lx6-linux-gnu"];
 toolchain_prefixes(Arch) ->

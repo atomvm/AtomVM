@@ -1758,7 +1758,7 @@ static term nif_erlang_spawn_fun_opt(Context *ctx, int argc, term argv[])
 #ifndef AVM_NO_JIT
     }
 #endif
-    new_ctx->cp = module_address(fun_module->module_index, fun_module->end_instruction_ii);
+    new_ctx->cp = make_cp(fun_module, fun_module->end_instruction_ii);
 
     return do_spawn(ctx, new_ctx, arity, n_freeze, opts_term);
 }
@@ -1815,7 +1815,7 @@ term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
 #ifndef AVM_NO_JIT
     }
 #endif
-    new_ctx->cp = module_address(found_module->module_index, found_module->end_instruction_ii);
+    new_ctx->cp = make_cp(found_module, found_module->end_instruction_ii);
 
     // TODO: check available registers count
     int reg_index = 0;

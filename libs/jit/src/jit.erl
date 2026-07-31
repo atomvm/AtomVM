@@ -272,7 +272,8 @@ first_pass(<<?OP_CALL_LAST, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} 
         false ->
             Offset0 = MMod:offset(MSt0),
             MSt1 = MMod:move_to_cp(MSt0, {y_reg, NWords}),
-            MSt2 = MMod:increment_sp(MSt1, NWords + 1),
+            % The saved cp occupies one stack slot on 64-bit, two on 32-bit.
+            MSt2 = MMod:increment_sp(MSt1, NWords + (8 div MMod:word_size())),
             TailCacheKey1 = {op_call_only, Label},
             case tail_cache_find(TailCacheKey1, TC) of
                 false ->
@@ -443,25 +444,48 @@ first_pass(<<?OP_DEALLOCATE, Rest0/binary>>, MMod, MSt0, State0) ->
 first_pass(<<?OP_RETURN, Rest/binary>>, MMod, MSt0, #state{tail_cache = TC} = State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     ?TRACE("OP_RETURN\n", []),
-    % Optimized return: check if returning within same module
-    {MSt1, CpReg0} = MMod:move_to_native_register(MSt0, cp),
-    {MSt2, ModuleIndexReg} = MMod:get_module_index(MSt1),
-    % Extract module index from cp (upper 8 bits: cp >> 24)
-    {MSt3, CpReg1} = MMod:shift_right(MSt2, CpReg0, 24),
-    % Compare extracted module index with current module index
-    MSt4 = MMod:if_block(
-        MSt3,
-        {{free, CpReg1}, '==', {free, ModuleIndexReg}},
-        % Same module: fast intra-module return
-        fun(BSt0) ->
-            % Mask to get lower 24 bits and shift right by 2 for offset
-            {BSt1, CpReg0} = MMod:and_(BSt0, {free, CpReg0}, 16#FFFFFF),
-            {BSt3, CPReg1} = MMod:shift_right(BSt1, {free, CpReg0}, 2),
-            % Jump to continuation (this is a tail call)
-            MMod:jump_to_continuation(BSt3, {free, CPReg1})
-        end
-    ),
-    MSt5 = MMod:free_native_registers(MSt4, [CpReg0]),
+    % Optimized return: check if returning within the same module, in which case
+    % we jump directly to the continuation rather than going through PRIM_RETURN.
+    MSt5 =
+        case MMod:word_size() of
+            8 ->
+                % 64-bit: cp packs (module_index << 24) | (offset << 2) in one word.
+                {MSt1, CpReg0} = MMod:move_to_native_register(MSt0, cp),
+                {MSt2, ModuleIndexReg} = MMod:get_module_index(MSt1),
+                % Extract module index from cp (upper 8 bits: cp >> 24)
+                {MSt3, CpReg1} = MMod:shift_right(MSt2, CpReg0, 24),
+                % Compare extracted module index with current module index
+                MSt4 = MMod:if_block(
+                    MSt3,
+                    {{free, CpReg1}, '==', {free, ModuleIndexReg}},
+                    % Same module: fast intra-module return
+                    fun(BSt0) ->
+                        % Mask to get lower 24 bits and shift right by 2 for offset
+                        {BSt1, CpReg0} = MMod:and_(BSt0, {free, CpReg0}, 16#FFFFFF),
+                        {BSt3, CPReg1} = MMod:shift_right(BSt1, {free, CpReg0}, 2),
+                        % Jump to continuation (this is a tail call)
+                        MMod:jump_to_continuation(BSt3, {free, CPReg1})
+                    end
+                ),
+                MMod:free_native_registers(MSt4, [CpReg0]);
+            4 ->
+                % 32-bit: cp spans two words, the Module pointer (?CP_MODULE) and
+                % the offset << 2 (?CP_OFFSET). Compare the saved Module pointer
+                % with the current module pointer (jit_state->module).
+                {MSt1, CpModReg} = MMod:get_cp_module(MSt0),
+                {MSt2, CurModReg} = MMod:get_module(MSt1),
+                MMod:if_block(
+                    MSt2,
+                    {{free, CpModReg}, '==', {free, CurModReg}},
+                    % Same module: fast intra-module return
+                    fun(BSt0) ->
+                        {BSt1, OffReg} = MMod:get_cp_offset(BSt0),
+                        {BSt2, OffReg2} = MMod:shift_right(BSt1, {free, OffReg}, 2),
+                        % Jump to continuation (this is a tail call)
+                        MMod:jump_to_continuation(BSt2, {free, OffReg2})
+                    end
+                )
+        end,
     % Different module: use existing slow path
     TailCacheKey = {call_primitive_last, ?PRIM_RETURN},
     case tail_cache_find(TailCacheKey, TC) of
@@ -1241,7 +1265,8 @@ first_pass(<<?OP_APPLY_LAST, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt4 = verify_is_atom(Module, 0, MMod, MSt3),
     MSt5 = verify_is_atom(Function, 0, MMod, MSt4),
     MSt6 = MMod:move_to_cp(MSt5, {y_reg, NWords}),
-    MSt7 = MMod:increment_sp(MSt6, NWords + 1),
+    % The saved cp occupies one stack slot on 64-bit, two on 32-bit.
+    MSt7 = MMod:increment_sp(MSt6, NWords + (8 div MMod:word_size())),
     MSt8 = MMod:call_primitive_last(MSt7, ?PRIM_APPLY, [
         ctx, jit_state, offset, {free, Module}, {free, Function}, Arity
     ]),
@@ -4185,10 +4210,11 @@ term_alloc_bin_match_state(Live, Src, Dest, MMod, MSt0) ->
     MSt6 = MMod:free_native_registers(MSt5, [AllocMatchStateReg]),
     {MSt6, NewSrc}.
 
-term_from_catch_label(Dest, Label, MMod, MSt1) ->
-    {MSt2, Reg} = MMod:get_module_index(MSt1),
-    MSt3 = MMod:shift_left(MSt2, Reg, 24),
-    MSt4 = MMod:or_(MSt3, Reg, (Label bsl ?TERM_IMMED2_TAG_SIZE) bor ?TERM_IMMED2_CATCH),
+term_from_catch_label(Dest, Label, MMod, MSt0) ->
+    {MSt1, Reg} = MMod:get_module_catch_labels_base(MSt0),
+    MSt2 = MMod:add(MSt1, Reg, Label),
+    MSt3 = MMod:shift_left(MSt2, Reg, ?TERM_IMMED2_TAG_SIZE),
+    MSt4 = MMod:or_(MSt3, Reg, ?TERM_IMMED2_CATCH),
     MSt5 = MMod:move_to_vm_register(MSt4, Reg, Dest),
     MMod:free_native_registers(MSt5, [Reg, Dest]).
 

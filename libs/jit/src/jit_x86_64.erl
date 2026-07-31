@@ -60,6 +60,7 @@
     set_continuation_to_offset/1,
     continuation_entry_point/1,
     get_module_index/1,
+    get_module_catch_labels_base/1,
     and_/3,
     or_/3,
     add/3,
@@ -197,6 +198,7 @@
 -define(JITSTATE_REMAINING_REDUCTIONS, {16#10, ?JITSTATE_REG}).
 -define(PRIMITIVE(N), {N * ?WORD_SIZE, ?NATIVE_INTERFACE_REG}).
 -define(MODULE_INDEX(ModuleReg), {0, ModuleReg}).
+-define(MODULE_CATCH_LABELS_BASE(ModuleReg), {4, ModuleReg}).
 
 -define(IS_SINT8_T(X), is_integer(X) andalso X >= -128 andalso X =< 127).
 -define(IS_SINT32_T(X), is_integer(X) andalso X >= -16#80000000 andalso X < 16#80000000).
@@ -2399,6 +2401,30 @@ get_module_index(
     Code = <<I1/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     Regs1 = jit_regs:set_contents(Regs0, Reg, module_index),
+    {
+        State#state{
+            stream = Stream1,
+            regs = jit_regs:alloc_reg(Regs1, Bit)
+        },
+        Reg
+    }.
+
+%% @doc Load the catch id of the current module's label 0 into a native register.
+get_module_catch_labels_base(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        regs = Regs0
+    } = State
+) ->
+    Avail = jit_regs:available_regs(Regs0),
+    Reg = first_avail(Avail),
+    Bit = reg_bit(Reg),
+    I1 = jit_x86_64_asm:movq(?JITSTATE_MODULE, Reg),
+    I2 = jit_x86_64_asm:movl(?MODULE_CATCH_LABELS_BASE(Reg), Reg),
+    Code = <<I1/binary, I2/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    Regs1 = jit_regs:set_contents(Regs0, Reg, catch_labels_base),
     {
         State#state{
             stream = Stream1,

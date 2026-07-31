@@ -978,9 +978,12 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         }                                                       \
     }
 
-#if AVM_NO_JIT
-
-#define DO_RETURN()                                                     \
+// Resolve the destination module of a return from ctx->cp, keeping the
+// prev_mod/mod cache so an intra-module return needs no lookup. On 64-bit the
+// module is identified by its packed index (historical layout); on 32-bit the
+// cp carries the Module pointer directly (high word), so no index lookup at all.
+#if TERM_BITS == 64
+#define DO_RETURN_RESOLVE_MODULE()                                      \
     {                                                                   \
         int module_index = ((uintptr_t) ctx->cp) >> 24;                 \
         if (module_index == prev_mod->module_index) {                   \
@@ -993,7 +996,30 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
             mod = globalcontext_get_module_by_index(glb, module_index); \
             code = mod->code->code;                                     \
         }                                                               \
-        pc = code + ((((uintptr_t) ctx->cp) & 0xFFFFFF) >> 2);          \
+    }
+#else
+#define DO_RETURN_RESOLVE_MODULE()                                      \
+    {                                                                   \
+        Module *cp_mod = (Module *) (uintptr_t) (ctx->cp >> 32);        \
+        if (cp_mod == prev_mod) {                                       \
+            Module *t = mod;                                            \
+            mod = prev_mod;                                             \
+            prev_mod = t;                                               \
+            code = mod->code->code;                                     \
+        } else if (cp_mod != mod) {                                     \
+            prev_mod = mod;                                             \
+            mod = cp_mod;                                               \
+            code = mod->code->code;                                     \
+        }                                                               \
+    }
+#endif
+
+#if AVM_NO_JIT
+
+#define DO_RETURN()                                                     \
+    {                                                                   \
+        DO_RETURN_RESOLVE_MODULE();                                     \
+        pc = code + cp_to_offset(ctx->cp);                              \
     }
 
 #else
@@ -1001,35 +1027,25 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 #ifdef JIT_JUMPTABLE_IS_DATA
 static inline ModuleNativeEntryPoint do_return_native(Module *mod, Context *ctx)
 {
-    int label = (int) ((ctx->cp & 0xFFFFFF) >> 2) / JIT_JUMPTABLE_ENTRY_SIZE;
+    int label = (int) cp_to_offset(ctx->cp) / JIT_JUMPTABLE_ENTRY_SIZE;
     return module_get_native_entry_point(mod, label);
 }
 #else
 static inline ModuleNativeEntryPoint do_return_native(Module *mod, Context *ctx)
 {
     return (ModuleNativeEntryPoint) ((const uint8_t *) mod->native_code)
-        + ((ctx->cp & 0xFFFFFF) >> 2);
+        + cp_to_offset(ctx->cp);
 }
 #endif
 
 #define DO_RETURN()                                                     \
     {                                                                   \
-        int module_index = ((uintptr_t) ctx->cp) >> 24;                 \
-        if (module_index == prev_mod->module_index) {                   \
-            Module *t = mod;                                            \
-            mod = prev_mod;                                             \
-            prev_mod = t;                                               \
-            code = mod->code->code;                                     \
-        } else if (module_index != mod->module_index) {                 \
-            prev_mod = mod;                                             \
-            mod = globalcontext_get_module_by_index(glb, module_index); \
-            code = mod->code->code;                                     \
-        }                                                               \
+        DO_RETURN_RESOLVE_MODULE();                                     \
         if (mod->native_code) {                                         \
             native_pc = do_return_native(mod, ctx);                     \
         } else {                                                        \
             native_pc = NULL;                                           \
-            pc = code + ((((uintptr_t) ctx->cp) & 0xFFFFFF) >> 2);      \
+            pc = code + cp_to_offset(ctx->cp);                          \
         }                                                               \
     }
 
@@ -1147,7 +1163,7 @@ static inline ModuleNativeEntryPoint do_return_native(Module *mod, Context *ctx)
         dreg_t ext_reg = extended_register_ptr(ctx, i);                 \
         *ext_reg = boxed_value[i - fun_arity + 3];                      \
     }                                                                   \
-    ctx->cp = module_address(mod->module_index, pc - code);             \
+    ctx->cp = make_cp(mod, pc - code);             \
     JUMP_TO_LABEL(fun_module, label);
 
 #define DECODE_FLAGS_LIST(flags_value, flags, opcode)                   \
@@ -1653,7 +1669,7 @@ int context_execute_loop(Context *ctx, Module *mod, const char *function_name, i
         return 0;
     }
 
-    ctx->cp = module_address(mod->module_index, mod->end_instruction_ii);
+    ctx->cp = make_cp(mod, mod->end_instruction_ii);
     ctx->saved_module = mod;
 
 #if AVM_NO_JIT
@@ -1865,7 +1881,7 @@ schedule_in:
                 TRACE("call/2, arity=%i, label=%i\n", arity, label);
                 USED_BY_TRACE(arity);
 
-                ctx->cp = module_address(mod->module_index, pc - code);
+                ctx->cp = make_cp(mod, pc - code);
 
                 remaining_reductions--;
                 if (LIKELY(remaining_reductions)) {
@@ -1889,8 +1905,8 @@ schedule_in:
                 TRACE("call_last/3, arity=%i, label=%i, dellocate=%i\n", arity, label, n_words);
                 USED_BY_TRACE(arity);
 
-                ctx->cp = ctx->e[n_words];
-                ctx->e += (n_words + 1);
+                ctx->cp = load_cp(ctx->e + n_words);
+                ctx->e += (n_words + CP_SIZE_IN_TERMS);
 
                 DEBUG_DUMP_STACK(ctx);
 
@@ -1962,7 +1978,7 @@ schedule_in:
                     case ModuleFunction: {
                         const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
 
-                        ctx->cp = module_address(mod->module_index, pc - code);
+                        ctx->cp = make_cp(mod, pc - code);
                         JUMP_TO_LABEL(jump->target, jump->label);
 
                         break;
@@ -1971,7 +1987,7 @@ schedule_in:
                     case ModuleNativeFunction: {
                         const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
 
-                        ctx->cp = module_address(mod->module_index, pc - code);
+                        ctx->cp = make_cp(mod, pc - code);
                         if (jump->target != mod) {
                             prev_mod = mod;
                             mod = jump->target;
@@ -2074,8 +2090,8 @@ schedule_in:
                         // workaround for issue
                         // https://github.com/erlang/otp/issues/7152
 
-                        ctx->cp = ctx->e[n_words];
-                        ctx->e += (n_words + 1);
+                        ctx->cp = load_cp(ctx->e + n_words);
+                        ctx->e += (n_words + CP_SIZE_IN_TERMS);
 
                         if (ctx->heap.root->next) {
                             if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, x_regs, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
@@ -2091,8 +2107,8 @@ schedule_in:
                         // (and it doesn't matter as the code below does
                         // not access ctx->e or ctx->cp)
 
-                        ctx->cp = ctx->e[n_words];
-                        ctx->e += (n_words + 1);
+                        ctx->cp = load_cp(ctx->e + n_words);
+                        ctx->e += (n_words + CP_SIZE_IN_TERMS);
 
                         const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
                         JUMP_TO_LABEL(jump->target, jump->label);
@@ -2103,8 +2119,8 @@ schedule_in:
                     case ModuleNativeFunction: {
                         const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
 
-                        ctx->cp = ctx->e[n_words];
-                        ctx->e += (n_words + 1);
+                        ctx->cp = load_cp(ctx->e + n_words);
+                        ctx->e += (n_words + CP_SIZE_IN_TERMS);
 
                         if (jump->target != mod) {
                             prev_mod = mod;
@@ -2116,8 +2132,8 @@ schedule_in:
                     }
 #endif
                     case BIFFunctionType: {
-                        ctx->cp = ctx->e[n_words];
-                        ctx->e += (n_words + 1);
+                        ctx->cp = load_cp(ctx->e + n_words);
+                        ctx->e += (n_words + CP_SIZE_IN_TERMS);
 
                         const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(func);
                         term return_value;
@@ -2149,8 +2165,8 @@ schedule_in:
                         // Regular CALL_EXT_LASTs to those functions are generated as well
                         // even on OTP28, so it is required to allow calling them using
                         // CALL_EXT_LAST even on OTP28: BIFs are used for try ... catch.
-                        ctx->cp = ctx->e[n_words];
-                        ctx->e += (n_words + 1);
+                        ctx->cp = load_cp(ctx->e + n_words);
+                        ctx->e += (n_words + CP_SIZE_IN_TERMS);
 
                         const struct GCBif *gcbif = EXPORTED_FUNCTION_TO_GCBIF(func);
                         term return_value;
@@ -2264,14 +2280,14 @@ schedule_in:
                 DECODE_LITERAL(live, pc);
                 TRACE("allocate/2 stack_need=%i, live=%i\n", stack_need, live);
 
-                if (ctx->heap.root->next || ((ctx->heap.heap_ptr > ctx->e - (stack_need + 1)))) {
+                if (ctx->heap.root->next || ((ctx->heap.heap_ptr > ctx->e - (stack_need + CP_SIZE_IN_TERMS)))) {
                     TRIM_LIVE_REGS(live);
-                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, stack_need + CP_SIZE_IN_TERMS, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 }
-                ctx->e -= stack_need + 1;
-                ctx->e[stack_need] = ctx->cp;
+                ctx->e -= stack_need + CP_SIZE_IN_TERMS;
+                store_cp(ctx->e + stack_need, ctx->cp);
                 break;
             }
 
@@ -2284,14 +2300,14 @@ schedule_in:
                 DECODE_LITERAL(live, pc);
                 TRACE("allocate_heap/2 stack_need=%i, heap_need=%i, live=%i\n", stack_need, heap_need, live);
 
-                if (ctx->heap.root->next || ((ctx->heap.heap_ptr + heap_need) > ctx->e - (stack_need + 1))) {
+                if (ctx->heap.root->next || ((ctx->heap.heap_ptr + heap_need) > ctx->e - (stack_need + CP_SIZE_IN_TERMS))) {
                     TRIM_LIVE_REGS(live);
-                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need + stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need + stack_need + CP_SIZE_IN_TERMS, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 }
-                ctx->e -= stack_need + 1;
-                ctx->e[stack_need] = ctx->cp;
+                ctx->e -= stack_need + CP_SIZE_IN_TERMS;
+                store_cp(ctx->e + stack_need, ctx->cp);
                 break;
             }
 
@@ -2302,18 +2318,18 @@ schedule_in:
                 DECODE_LITERAL(live, pc);
                 TRACE("allocate_zero/2 stack_need=%i, live=%i\n", stack_need, live);
 
-                if (ctx->heap.root->next || ((ctx->heap.heap_ptr > ctx->e - (stack_need + 1)))) {
+                if (ctx->heap.root->next || ((ctx->heap.heap_ptr > ctx->e - (stack_need + CP_SIZE_IN_TERMS)))) {
                     TRIM_LIVE_REGS(live);
-                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, stack_need + CP_SIZE_IN_TERMS, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 }
 
-                ctx->e -= stack_need + 1;
+                ctx->e -= stack_need + CP_SIZE_IN_TERMS;
                 for (uint32_t s = 0; s < stack_need; s++) {
                     ctx->e[s] = term_nil();
                 }
-                ctx->e[stack_need] = ctx->cp;
+                store_cp(ctx->e + stack_need, ctx->cp);
                 break;
             }
 
@@ -2362,8 +2378,8 @@ schedule_in:
 
                 DEBUG_DUMP_STACK(ctx);
 
-                ctx->cp = ctx->e[n_words];
-                ctx->e += n_words + 1;
+                ctx->cp = load_cp(ctx->e + n_words);
+                ctx->e += n_words + CP_SIZE_IN_TERMS;
                 DEBUG_DUMP_STACK(ctx);
                 // Hopefully, we only need x[0]
                 if (ctx->heap.root->next) {
@@ -2379,7 +2395,7 @@ schedule_in:
 
                 TRACE_RETURN(ctx);
 
-                if ((intptr_t) ctx->cp == -1) {
+                if (cp_is_terminate(ctx->cp)) {
                     return 0;
                 }
 
@@ -3180,7 +3196,7 @@ schedule_in:
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
                         }
-                        if ((intptr_t) ctx->cp == -1) {
+                        if (cp_is_terminate(ctx->cp)) {
                             return 0;
                         }
 
@@ -3275,7 +3291,7 @@ schedule_in:
 
                 TRACE("try/2, label=%i, reg=%c%i\n", label, T_DEST_REG(dreg));
 
-                term catch_term = term_from_catch_label(mod->module_index, label);
+                term catch_term = module_term_from_catch_label(mod, label);
                 WRITE_REGISTER(dreg, catch_term);
                 break;
             }
@@ -3345,7 +3361,7 @@ schedule_in:
 
                 TRACE("catch/2, label=%i, reg=%c%i\n", label, T_DEST_REG(dreg));
 
-                term catch_term = term_from_catch_label(mod->module_index, label);
+                term catch_term = module_term_from_catch_label(mod, label);
                 WRITE_REGISTER(dreg, catch_term);
                 break;
             }
@@ -4621,7 +4637,7 @@ schedule_in:
                         SET_ERROR(UNDEF_ATOM);
                         HANDLE_ERROR();
                     }
-                    ctx->cp = module_address(mod->module_index, pc - code);
+                    ctx->cp = make_cp(mod, pc - code);
                     JUMP_TO_LABEL(target_module, target_label);
                 }
                 break;
@@ -4646,8 +4662,8 @@ schedule_in:
                     RAISE_ERROR(BADARG_ATOM);
                 }
 
-                ctx->cp = ctx->e[n_words];
-                ctx->e += (n_words + 1);
+                ctx->cp = load_cp(ctx->e + n_words);
+                ctx->e += (n_words + CP_SIZE_IN_TERMS);
 
                 atom_index_t module_name = term_to_atom_index(module);
                 atom_index_t function_name = term_to_atom_index(function);

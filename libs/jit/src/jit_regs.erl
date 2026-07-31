@@ -81,6 +81,8 @@
     | cp
     %% Register holds the module index
     | module_index
+    %% Register holds the catch id of the module's label 0
+    | catch_labels_base
     %% Unknown / clobbered
     | unknown.
 

@@ -85,6 +85,10 @@
     set_continuation_to_offset/1,
     continuation_entry_point/1,
     get_module_index/1,
+    get_module_catch_labels_base/1,
+    get_module/1,
+    get_cp_module/1,
+    get_cp_offset/1,
     and_/3,
     or_/3,
     add/3,
@@ -131,10 +135,16 @@
 %% Context struct offsets (32-bit architecture, same as armv6m/riscv32)
 -define(CTX_E_OFFSET, 16#14).
 -define(CTX_X_OFFSET, 16#18).
+%% ctx->cp is a 64-bit cp_t spanning two words (little-endian): low word at
+%% 0x5C = offset << 2 (?CTX_CP_OFFSET), high word at 0x60 = Module* (?CTX_CP_MODULE_OFFSET).
 -define(CTX_CP_OFFSET, 16#5C).
--define(CTX_FR_OFFSET, 16#60).
--define(CTX_BS_OFFSET, 16#64).
--define(CTX_BS_OFFSET_OFFSET, 16#68).
+-define(CTX_CP_MODULE_OFFSET, 16#60).
+-define(CTX_FR_OFFSET, 16#64).
+-define(CTX_BS_OFFSET, 16#68).
+-define(CTX_BS_OFFSET_OFFSET, 16#6C).
+
+%% Module struct offsets
+-define(MODULE_CATCH_LABELS_BASE_OFFSET, 16#4).
 
 %% JITState struct offsets
 -define(JITSTATE_MODULE_OFFSET, 16#0).
@@ -800,24 +810,32 @@ move_to_native_register(State0, Value, Local) ->
     State1#state{regs = Regs1}.
 
 move_to_cp(State0, {y_reg, Y}) ->
-    %% Load y register and store to ctx->cp
-    {State1, TempLocal} = alloc_local(State0),
+    %% The saved cp spans two slots: e[Y] = offset word (-> ctx->cp), e[Y+1] =
+    %% Module* (-> ctx->cp_module). Copy both into ctx->cp.
+    {State1, BaseLocal} = alloc_local(State0),
+    {State2, TempLocal} = alloc_local(State1),
     Code = <<
-        %% Load ctx->e
+        %% BaseLocal = ctx->e
         (jit_wasm32_asm:local_get(?CTX_LOCAL))/binary,
         (jit_wasm32_asm:i32_load(2, ?CTX_E_OFFSET))/binary,
-        (jit_wasm32_asm:local_set(TempLocal))/binary,
-        %% Load e[Y]
-        (jit_wasm32_asm:local_get(TempLocal))/binary,
+        (jit_wasm32_asm:local_set(BaseLocal))/binary,
+        %% ctx->cp = e[Y] (offset word)
+        (jit_wasm32_asm:local_get(BaseLocal))/binary,
         (jit_wasm32_asm:i32_load(2, Y * 4))/binary,
         (jit_wasm32_asm:local_set(TempLocal))/binary,
-        %% Store to ctx->cp
         (jit_wasm32_asm:local_get(?CTX_LOCAL))/binary,
         (jit_wasm32_asm:local_get(TempLocal))/binary,
-        (jit_wasm32_asm:i32_store(2, ?CTX_CP_OFFSET))/binary
+        (jit_wasm32_asm:i32_store(2, ?CTX_CP_OFFSET))/binary,
+        %% ctx->cp_module = e[Y+1] (Module*)
+        (jit_wasm32_asm:local_get(BaseLocal))/binary,
+        (jit_wasm32_asm:i32_load(2, (Y + 1) * 4))/binary,
+        (jit_wasm32_asm:local_set(TempLocal))/binary,
+        (jit_wasm32_asm:local_get(?CTX_LOCAL))/binary,
+        (jit_wasm32_asm:local_get(TempLocal))/binary,
+        (jit_wasm32_asm:i32_store(2, ?CTX_CP_MODULE_OFFSET))/binary
     >>,
-    State2 = emit(State1, Code),
-    free_native_register(State2, TempLocal).
+    State3 = emit(State2, Code),
+    free_native_register(free_native_register(State3, TempLocal), BaseLocal).
 
 move_array_element(State0, Base, Index, {ptr, Dest}) when is_integer(Index) ->
     %% Load Base[Index] and store to [Dest]
@@ -1019,6 +1037,20 @@ get_module_index(State0) ->
         (jit_wasm32_asm:local_get(?JITSTATE_LOCAL))/binary,
         (jit_wasm32_asm:i32_load(2, ?JITSTATE_MODULE_OFFSET))/binary,
         (jit_wasm32_asm:i32_load(2, 0))/binary,
+        (jit_wasm32_asm:local_set(Local))/binary
+    >>,
+    Regs1 = jit_regs:invalidate_reg(State1#state.regs, Local),
+    State2 = emit(State1, Code),
+    {State2#state{regs = Regs1}, Local}.
+
+%% @doc Load the catch id of the current module's label 0 into a native register.
+get_module_catch_labels_base(State0) ->
+    {State1, Local} = alloc_local(State0),
+    %% Load jit_state->module, then load module->catch_labels_base
+    Code = <<
+        (jit_wasm32_asm:local_get(?JITSTATE_LOCAL))/binary,
+        (jit_wasm32_asm:i32_load(2, ?JITSTATE_MODULE_OFFSET))/binary,
+        (jit_wasm32_asm:i32_load(2, ?MODULE_CATCH_LABELS_BASE_OFFSET))/binary,
         (jit_wasm32_asm:local_set(Local))/binary
     >>,
     Regs1 = jit_regs:invalidate_reg(State1#state.regs, Local),
@@ -1478,30 +1510,61 @@ emit_set_continuation_for_label(State, _RefLabel) ->
     emit(State, Code).
 
 %% Emit code to set up CP (continuation pointer for returns).
-%% CP format: (module_index << 24) | (label_offset << 2)
+%% cp is two words: ctx->cp = label_offset << 2, ctx->cp_module = Module*.
 emit_set_cp_for_label(State0, Label) ->
     LabelOffset = Label * ?JUMP_TABLE_ENTRY_SIZE,
     emit_set_cp_for_offset(State0, LabelOffset).
 
 emit_set_cp_for_offset(State0, LabelOffset) ->
-    {State1, ModIdxLocal} = get_module_index(State0),
-    State2 = shift_left(State1, ModIdxLocal, 24),
-    {State3, OffsetLocal} = alloc_local(State2),
+    {State1, ModLocal} = get_module(State0),
     Code = <<
-        (jit_wasm32_asm:i32_const(LabelOffset bsl 2))/binary,
-        (jit_wasm32_asm:local_set(OffsetLocal))/binary
-    >>,
-    State4 = emit(State3, Code),
-    State5 = or_(State4, ModIdxLocal, OffsetLocal),
-    State6 = free_native_register(State5, OffsetLocal),
-    %% Store CP to ctx->cp
-    Code2 = <<
+        %% ctx->cp = label_offset << 2
         (jit_wasm32_asm:local_get(?CTX_LOCAL))/binary,
-        (jit_wasm32_asm:local_get(ModIdxLocal))/binary,
-        (jit_wasm32_asm:i32_store(2, ?CTX_CP_OFFSET))/binary
+        (jit_wasm32_asm:i32_const(LabelOffset bsl 2))/binary,
+        (jit_wasm32_asm:i32_store(2, ?CTX_CP_OFFSET))/binary,
+        %% ctx->cp_module = Module*
+        (jit_wasm32_asm:local_get(?CTX_LOCAL))/binary,
+        (jit_wasm32_asm:local_get(ModLocal))/binary,
+        (jit_wasm32_asm:i32_store(2, ?CTX_CP_MODULE_OFFSET))/binary
     >>,
-    State7 = emit(State6, Code2),
-    free_native_register(State7, ModIdxLocal).
+    State2 = emit(State1, Code),
+    free_native_register(State2, ModLocal).
+
+%% Load the current module pointer (jit_state->module) into a fresh local.
+get_module(State0) ->
+    {State1, Local} = alloc_local(State0),
+    Code = <<
+        (jit_wasm32_asm:local_get(?JITSTATE_LOCAL))/binary,
+        (jit_wasm32_asm:i32_load(2, ?JITSTATE_MODULE_OFFSET))/binary,
+        (jit_wasm32_asm:local_set(Local))/binary
+    >>,
+    Regs1 = jit_regs:invalidate_reg(State1#state.regs, Local),
+    State2 = emit(State1, Code),
+    {State2#state{regs = Regs1}, Local}.
+
+%% Load the Module pointer stored in ctx->cp_module into a fresh local.
+get_cp_module(State0) ->
+    {State1, Local} = alloc_local(State0),
+    Code = <<
+        (jit_wasm32_asm:local_get(?CTX_LOCAL))/binary,
+        (jit_wasm32_asm:i32_load(2, ?CTX_CP_MODULE_OFFSET))/binary,
+        (jit_wasm32_asm:local_set(Local))/binary
+    >>,
+    Regs1 = jit_regs:invalidate_reg(State1#state.regs, Local),
+    State2 = emit(State1, Code),
+    {State2#state{regs = Regs1}, Local}.
+
+%% Load the offset word (offset << 2) stored in ctx->cp into a fresh local.
+get_cp_offset(State0) ->
+    {State1, Local} = alloc_local(State0),
+    Code = <<
+        (jit_wasm32_asm:local_get(?CTX_LOCAL))/binary,
+        (jit_wasm32_asm:i32_load(2, ?CTX_CP_OFFSET))/binary,
+        (jit_wasm32_asm:local_set(Local))/binary
+    >>,
+    Regs1 = jit_regs:invalidate_reg(State1#state.regs, Local),
+    State2 = emit(State1, Code),
+    {State2#state{regs = Regs1}, Local}.
 
 emit_call_primitive(State0, Primitive, Args, ResultLocal, IsTailCall) ->
     WasmArgCount = count_wasm_args(Args),

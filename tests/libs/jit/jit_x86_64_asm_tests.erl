@@ -300,6 +300,43 @@ movl_test_() ->
         ),
         ?_assertAsmEqual(
             <<16#45, 16#8B, 16#01>>, "movl (%r9),%r8d", jit_x86_64_asm:movl({0, r9}, r8)
+        ),
+
+        % movl({Offset, SrcReg}, DestReg) - memory with displacement to register
+        ?_assertAsmEqual(
+            <<16#8B, 16#40, 16#04>>, "movl 0x4(%rax),%eax", jit_x86_64_asm:movl({4, rax}, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#8B, 16#49, 16#04>>, "movl 0x4(%rcx),%ecx", jit_x86_64_asm:movl({4, rcx}, rcx)
+        ),
+        ?_assertAsmEqual(
+            <<16#8B, 16#48, 16#7F>>, "movl 0x7f(%rax),%ecx", jit_x86_64_asm:movl({127, rax}, rcx)
+        ),
+        ?_assertAsmEqual(
+            <<16#44, 16#8B, 16#40, 16#04>>,
+            "movl 0x4(%rax),%r8d",
+            jit_x86_64_asm:movl({4, rax}, r8)
+        ),
+        ?_assertAsmEqual(
+            <<16#41, 16#8B, 16#40, 16#04>>,
+            "movl 0x4(%r8),%eax",
+            jit_x86_64_asm:movl({4, r8}, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#45, 16#8B, 16#49, 16#04>>,
+            "movl 0x4(%r9),%r9d",
+            jit_x86_64_asm:movl({4, r9}, r9)
+        ),
+        % disp32 as soon as the displacement no longer fits a signed byte
+        ?_assertAsmEqual(
+            <<16#8B, 16#80, 16#80, 16#00, 16#00, 16#00>>,
+            "movl 0x80(%rax),%eax",
+            jit_x86_64_asm:movl({128, rax}, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#45, 16#8B, 16#89, 16#78, 16#56, 16#34, 16#12>>,
+            "movl 0x12345678(%r9),%r9d",
+            jit_x86_64_asm:movl({16#12345678, r9}, r9)
         )
     ].
 

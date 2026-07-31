@@ -59,6 +59,7 @@
     set_continuation_to_offset/1,
     continuation_entry_point/1,
     get_module_index/1,
+    get_module_catch_labels_base/1,
     and_/3,
     or_/3,
     add/3,
@@ -208,6 +209,7 @@
 -define(JITSTATE_REDUCTIONCOUNT, {?JITSTATE_REG, 16#10}).
 -define(PRIMITIVE(N), {?NATIVE_INTERFACE_REG, N * ?WORD_SIZE}).
 -define(MODULE_INDEX(ModuleReg), {ModuleReg, 0}).
+-define(MODULE_CATCH_LABELS_BASE(ModuleReg), {ModuleReg, 4}).
 
 % aarch64 ABI specific
 -define(LR_REG, r30).
@@ -2368,6 +2370,37 @@ get_module_index(
     Code = <<I1/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     Regs1 = jit_regs:set_contents(Regs0, Reg, module_index),
+    {
+        State#state{
+            stream = Stream1,
+            regs = jit_regs:alloc_reg(Regs1, Bit)
+        },
+        Reg
+    }.
+
+%%-----------------------------------------------------------------------------
+%% @doc Load the catch id of the current module's label 0 into a native
+%% register.
+%% @end
+%% @param State current backend state
+%% @return Tuple of {Updated backend state, Native register containing the base}
+%%-----------------------------------------------------------------------------
+-spec get_module_catch_labels_base(state()) -> {state(), aarch64_register()}.
+get_module_catch_labels_base(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        regs = Regs0
+    } = State
+) ->
+    Avail = jit_regs:available_regs(Regs0),
+    Reg = first_avail(Avail),
+    Bit = reg_bit(Reg),
+    I1 = jit_aarch64_asm:ldr(Reg, ?JITSTATE_MODULE),
+    I2 = jit_aarch64_asm:ldr_w(Reg, ?MODULE_CATCH_LABELS_BASE(Reg)),
+    Code = <<I1/binary, I2/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    Regs1 = jit_regs:set_contents(Regs0, Reg, catch_labels_base),
     {
         State#state{
             stream = Stream1,

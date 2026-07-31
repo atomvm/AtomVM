@@ -123,6 +123,7 @@ extern "C" {
 #define TERM_IMMED2_CATCH 0x1B
 #define TERM_NIL 0x3B
 
+#define TERM_MAX_CATCH_ID ((unsigned int) ((~((term) 0)) >> TERM_IMMED2_TAG_SIZE))
 #define TERM_UNUSED 0x2B
 #define TERM_RESERVED_MARKER(x) ((x << 6) | TERM_UNUSED)
 
@@ -1129,10 +1130,22 @@ static inline uint8_t term_to_uint8(term t)
     return ((uint16_t) t) >> 4;
 }
 
-static inline int term_to_catch_label_and_module(term t, int *module_index)
+/**
+ * @brief Gets the catch id of a catch term
+ *
+ * @details A catch term encodes a single catch id, which identifies both the
+ * module and the label of the exception handler. C.f.
+ * globalcontext_get_module_by_catch_id() to resolve it back. Packing a module
+ * index and a label in separate bit fields instead would cap both, as a 32-bit
+ * term only leaves the bits below TERM_MAX_CATCH_ID for the two of them.
+ * @param t the catch term, term type is not checked.
+ * @return the catch id of the exception handler.
+ */
+static inline unsigned int term_to_catch_id(term t)
 {
-    *module_index = t >> 24;
-    return (t >> 6) & 0x3FFFF;
+    TERM_DEBUG_ASSERT(term_is_catch_label(t));
+
+    return (unsigned int) (t >> TERM_IMMED2_TAG_SIZE);
 }
 
 /**
@@ -1864,9 +1877,20 @@ static inline uint64_t term_to_uint64(term t)
     }
 }
 
-static inline term term_from_catch_label(unsigned int module_index, unsigned int label)
+/**
+ * @brief Term from a catch id
+ *
+ * @details Builds the term that `try`/`catch` stores in a stack slot to install
+ * an exception handler. C.f. term_to_catch_id().
+ * @param catch_id the catch id of the exception handler, which must not be
+ * greater than TERM_MAX_CATCH_ID.
+ * @return a term that encapsulates the catch id.
+ */
+static inline term term_from_catch_id(unsigned int catch_id)
 {
-    return (term) ((module_index << 24) | (label << 6) | TERM_IMMED2_CATCH);
+    TERM_DEBUG_ASSERT(catch_id <= TERM_MAX_CATCH_ID);
+
+    return (term) (((term) catch_id << TERM_IMMED2_TAG_SIZE) | TERM_IMMED2_CATCH);
 }
 
 /**
