@@ -45,6 +45,7 @@
     pbkdf2_hmac/5,
     hash_equals/2,
     strong_rand_bytes/1,
+    mlkem768_encapsulate/1,
     info_lib/0
 ]).
 
@@ -422,6 +423,26 @@ generate_key(_Type, _Param) ->
     Param :: ecdh_params()
 ) -> binary().
 compute_key(_Type, _OtherPublicKey, _MyPrivateKey, _Param) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   PublicKey the ML-KEM-768 encapsulation (public) key, 1184 bytes
+%% @returns `{Ciphertext, SharedSecret}' where `Ciphertext' is 1088 bytes and
+%%          `SharedSecret' is 32 bytes
+%% @doc     ML-KEM-768 (FIPS 203) key encapsulation.
+%%
+%%          Encapsulates a freshly generated shared secret to `PublicKey',
+%%          returning the ciphertext to send to the key's owner and the shared
+%%          secret. Used to implement post-quantum hybrid SSH key exchange
+%%          (`mlkem768x25519-sha256').
+%%
+%%          Only available when AtomVM was built with a libsodium that provides
+%%          ML-KEM (>= 1.0.22); otherwise this raises.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec mlkem768_encapsulate(PublicKey :: binary()) ->
+    {Ciphertext :: binary(), SharedSecret :: binary()}.
+mlkem768_encapsulate(_PublicKey) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

@@ -34,7 +34,8 @@
     test_ed25519_verify_malformed_key/0,
     test_ed25519_sign_bad_digest/0,
     test_ed25519_verify_bad_digest/0,
-    test_x25519_mutual_key_agreement/0
+    test_x25519_mutual_key_agreement/0,
+    test_mlkem768_encapsulate/0
 ]).
 
 start() ->
@@ -57,6 +58,8 @@ start() ->
     ok = libsodium_conditional_run(test_ed25519_sign_bad_digest),
     ok = libsodium_conditional_run(test_ed25519_verify_bad_digest),
     ok = libsodium_conditional_run(test_x25519_mutual_key_agreement),
+    % libsodium_conditional_run/1 also passes for OpenSSL; gated inside instead.
+    ok = test_mlkem768_encapsulate(),
     0.
 
 otp_version() ->
@@ -425,3 +428,35 @@ test_x25519_mutual_key_agreement() ->
     32 = byte_size(ThirdShared),
 
     ok.
+
+test_mlkem768_encapsulate() ->
+    Pk = <<0:(1184 * 8)>>,
+    case mlkem768_available(Pk) of
+        false ->
+            ok;
+        true ->
+            {Ct, Ss} = crypto:mlkem768_encapsulate(Pk),
+            1088 = byte_size(Ct),
+            32 = byte_size(Ss),
+            %% Encapsulation is randomized.
+            {Ct2, Ss2} = crypto:mlkem768_encapsulate(Pk),
+            true = (Ct =/= Ct2),
+            true = (Ss =/= Ss2),
+            ok = expect_badarg(fun() -> crypto:mlkem768_encapsulate(<<0:8>>) end),
+            ok
+    end.
+
+%% Only undef means ML-KEM is absent; anything else must propagate.
+mlkem768_available(Pk) ->
+    try crypto:mlkem768_encapsulate(Pk) of
+        {_Ct, _Ss} -> true
+    catch
+        error:undef -> false
+    end.
+
+expect_badarg(F) ->
+    try F() of
+        _ -> error
+    catch
+        error:badarg -> ok
+    end.
