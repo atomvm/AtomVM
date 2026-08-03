@@ -515,6 +515,11 @@ defmodule Tests do
     false = pid in links
     GenServer.stop(pid)
 
+    # test "start/3 honours :timeout"
+    {:error, :timeout} = GenServer.start(GenServerTest.Stack, :hang, timeout: 100)
+    {:error, :timeout} = GenServer.start(GenServerTest.Stack, :hang, timeout: 100, name: :hang)
+    nil = GenServer.whereis(:hang)
+
     # test "whereis/1"
     name = :whereis_server
 
