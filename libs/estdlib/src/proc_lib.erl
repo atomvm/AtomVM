@@ -140,7 +140,7 @@ start(Module, Function, Args, Timeout) ->
 %%-----------------------------------------------------------------------------
 -spec start(module(), atom(), [any()], timeout(), [start_spawn_option()]) -> any().
 start(Module, Function, Args, Timeout, SpawnOpts) ->
-    start0(Module, Function, Args, Timeout, SpawnOpts, false, false).
+    start0(Module, Function, Args, Timeout, SpawnOpts, false).
 
 %% @equiv start_link(Module, Function, Args, infinity)
 -spec start_link(module(), atom(), [any()]) -> any().
@@ -164,7 +164,7 @@ start_link(Module, Function, Args, Timeout) ->
 %%-----------------------------------------------------------------------------
 -spec start_link(module(), atom(), [any()], timeout(), [start_spawn_option()]) -> any().
 start_link(Module, Function, Args, Timeout, SpawnOpts) ->
-    start0(Module, Function, Args, Timeout, [link | SpawnOpts], true, false).
+    start0(Module, Function, Args, Timeout, [link | SpawnOpts], false).
 
 %% @equiv start_monitor(Module, Function, Args, infinity)
 -spec start_monitor(module(), atom(), [any()]) -> any().
@@ -188,11 +188,11 @@ start_monitor(Module, Function, Args, Timeout) ->
 %%-----------------------------------------------------------------------------
 -spec start_monitor(module(), atom(), [any()], timeout(), [start_spawn_option()]) -> any().
 start_monitor(Module, Function, Args, Timeout, SpawnOpts) ->
-    start0(Module, Function, Args, Timeout, SpawnOpts, true, true).
+    start0(Module, Function, Args, Timeout, SpawnOpts, true).
 
 %% @private
-start0(Module, Function, Args, Timeout, SpawnOpts, Link, Monitor) ->
-    case lists:member(monitor, SpawnOpts) of
+start0(Module, Function, Args, Timeout, SpawnOpts, Monitor) ->
+    case lists:member(monitor, SpawnOpts) orelse lists:keymember(monitor, 1, SpawnOpts) of
         true -> error(badarg);
         false -> ok
     end,
@@ -211,42 +211,27 @@ start0(Module, Function, Args, Timeout, SpawnOpts, Link, Monitor) ->
         %% so its registered name is freed and linked children have got their
         %% EXIT signal.
         {nack, Pid, Result} when Monitor ->
+            flush_exit(Pid),
             receive
                 {'DOWN', MonitorRef, process, Pid, _} -> ok
             end,
-            flush_exit(Pid, Link),
             {Result, MonitorRef};
         {nack, Pid, Result} ->
+            flush_exit(Pid),
             receive
                 {'DOWN', MonitorRef, process, Pid, _} -> ok
             end,
-            flush_exit(Pid, Link),
             Result;
-        {'DOWN', MonitorRef, process, Pid, Reason} when Link ->
-            receive
-                {'EXIT', Pid, _} -> ok
-            after 0 -> ok
-            end,
-            receive
-                {'DOWN', MonitorRef, process, Pid, _} -> ok
-            end,
-            {error, Reason};
         {'DOWN', MonitorRef, process, Pid, Reason} when Monitor ->
+            flush_exit(Pid),
             {{error, Reason}, MonitorRef};
         {'DOWN', MonitorRef, process, Pid, Reason} ->
+            flush_exit(Pid),
             {error, Reason}
     after Timeout ->
-        if
-            Link ->
-                unlink(Pid),
-                exit(Pid, kill),
-                receive
-                    {'EXIT', Pid, _} -> ok
-                after 0 -> ok
-                end;
-            true ->
-                exit(Pid, kill)
-        end,
+        unlink(Pid),
+        exit(Pid, kill),
+        flush_exit_message(Pid),
         receive
             {'DOWN', MonitorRef, process, Pid, _} -> ok
         end,
@@ -259,9 +244,12 @@ start0(Module, Function, Args, Timeout, SpawnOpts, Link, Monitor) ->
     end.
 
 %% @private
-flush_exit(_Pid, false) ->
-    ok;
-flush_exit(Pid, true) ->
+%% unlink as spawn_opt may have linked.
+flush_exit(Pid) ->
+    unlink(Pid),
+    flush_exit_message(Pid).
+
+flush_exit_message(Pid) ->
     receive
         {'EXIT', Pid, _} -> ok
     after 0 -> ok

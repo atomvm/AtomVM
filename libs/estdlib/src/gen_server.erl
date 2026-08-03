@@ -68,15 +68,17 @@
 }).
 
 -type options() :: list({atom(), term()}).
--type start_ret() :: {ok, pid()} | {error, Reason :: term()}.
--type start_mon_ret() :: {ok, {Pid :: pid(), MonRef :: reference()}} | {error, Reason :: term()}.
+-type start_ret() :: {ok, pid()} | ignore | {error, Reason :: term()}.
+-type start_mon_ret() ::
+    {ok, {Pid :: pid(), MonRef :: reference()}} | ignore | {error, Reason :: term()}.
 -type server_ref() :: atom() | pid().
 -type from() :: {pid(), reference()}.
 
 -type init_result(StateType) ::
     {ok, State :: StateType}
     | {ok, State :: StateType, timeout() | {timeout, timeout(), Msg :: any()} | {continue, term()}}
-    | {stop, Reason :: any()}.
+    | {stop, Reason :: any()}
+    | ignore.
 
 -type handle_continue_result(StateType) ::
     {noreply, NewState :: StateType}
@@ -137,9 +139,11 @@ init_it(Starter, Name, Module, Args, Options) ->
                         badarg,
                         S
                     ),
-                    proc_lib:init_ack(Starter, {error, badarg});
+                    proc_lib:init_fail(Starter, {error, badarg}, {exit, normal});
                 Pid when is_pid(Pid) ->
-                    proc_lib:init_ack(Starter, {error, {already_started, Pid}})
+                    proc_lib:init_fail(
+                        Starter, {error, {already_started, Pid}}, {exit, normal}
+                    )
             end
     end.
 
@@ -169,6 +173,8 @@ init_it(Starter, Module, Args, Options) ->
                 }};
             {stop, Reason} ->
                 {fail, {error, Reason}, {exit, Reason}};
+            ignore ->
+                {fail, ignore, {exit, normal}};
             Reply ->
                 {fail, {error, {unexpected_reply_from_init, Reply}},
                     {exit, {bad_return_value, Reply}}}

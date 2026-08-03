@@ -59,6 +59,15 @@ test_start_monitor_badarg() ->
             error:badarg ->
                 ok
         end,
+    %% OTP rejects the tuple form too
+    ok =
+        try
+            proc_lib:start(?MODULE, init_ok, [Parent], infinity, [{monitor, []}]),
+            unexpected
+        catch
+            error:badarg ->
+                ok
+        end,
     ok.
 
 test_start_link_sync() ->

@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `onRunTrackedJs`, `onGetTrackedObjects` and `onTrackedObjectDelete` hooks, which embedders may
   override to customize what tracking means
 - Added `string:to_integer/1`
+- Added `gen:start/5,6`, used by Elixir's `GenServer`
 
 ### Changed
 - `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does:
@@ -111,6 +112,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   builds, which made `erlang:crc32/2`, `erlang:crc32_combine/3` and `crypto:pbkdf2_hmac/5`
   silently truncate huge integer arguments instead of raising `badarg`
 - Fixed a bug where bigints were not normalized, yielding equality errors
+- Fixed `gen_server` returning an error instead of `ignore` when `init/1` returns `ignore`
+- Fixed a failed named `gen_server` start leaving a stray `EXIT` or `DOWN` in the caller's mailbox
+- Fixed `proc_lib:start/5` killing a linked caller when a start passing `{spawn_opt, [link]}`
+  timed out, and `proc_lib:start_link/5,start_monitor/5` hanging when the child died before
+  acknowledging
+- Fixed `proc_lib:start*/5` accepting the `{monitor, _}` spawn option, which is not allowed
 
 ## [0.7.0-alpha.1] - 2026-04-06
 
