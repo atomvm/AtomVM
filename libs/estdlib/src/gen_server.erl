@@ -68,15 +68,17 @@
 }).
 
 -type options() :: list({atom(), term()}).
--type start_ret() :: {ok, pid()} | {error, Reason :: term()}.
--type start_mon_ret() :: {ok, {Pid :: pid(), MonRef :: reference()}} | {error, Reason :: term()}.
+-type start_ret() :: {ok, pid()} | ignore | {error, Reason :: term()}.
+-type start_mon_ret() ::
+    {ok, {Pid :: pid(), MonRef :: reference()}} | ignore | {error, Reason :: term()}.
 -type server_ref() :: atom() | pid().
 -type from() :: {pid(), reference()}.
 
 -type init_result(StateType) ::
     {ok, State :: StateType}
     | {ok, State :: StateType, timeout() | {timeout, timeout(), Msg :: any()} | {continue, term()}}
-    | {stop, Reason :: any()}.
+    | {stop, Reason :: any()}
+    | ignore.
 
 -type handle_continue_result(StateType) ::
     {noreply, NewState :: StateType}
@@ -137,9 +139,11 @@ init_it(Starter, Name, Module, Args, Options) ->
                         badarg,
                         S
                     ),
-                    proc_lib:init_ack(Starter, {error, badarg});
+                    proc_lib:init_fail(Starter, {error, badarg}, {exit, normal});
                 Pid when is_pid(Pid) ->
-                    proc_lib:init_ack(Starter, {error, {already_started, Pid}})
+                    proc_lib:init_fail(
+                        Starter, {error, {already_started, Pid}}, {exit, normal}
+                    )
             end
     end.
 
@@ -169,6 +173,8 @@ init_it(Starter, Module, Args, Options) ->
                 }};
             {stop, Reason} ->
                 {fail, {error, Reason}, {exit, Reason}};
+            ignore ->
+                {fail, ignore, {exit, normal}};
             Reply ->
                 {fail, {error, {unexpected_reply_from_init, Reply}},
                     {exit, {bad_return_value, Reply}}}
@@ -312,13 +318,7 @@ start_link(Module, Args, Options) ->
 -spec start_monitor(Module :: module(), Args :: term(), Options :: options()) ->
     start_mon_ret().
 start_monitor(Module, Args, Options) ->
-    {Result, Monitor} = proc_lib:start_monitor(?MODULE, init_it, [self(), Module, Args, Options]),
-    case Result of
-        {ok, Pid} ->
-            {ok, {Pid, Monitor}};
-        _ ->
-            Result
-    end.
+    gen:monitor_return(proc_lib:start_monitor(?MODULE, init_it, [self(), Module, Args, Options])).
 
 %%-----------------------------------------------------------------------------
 %% @param   ServerName the name with which to register the gen_server
@@ -345,15 +345,11 @@ start_monitor(Module, Args, Options) ->
 start_monitor({local, Name}, Module, Args, Options) when is_atom(Name) ->
     case erlang:whereis(Name) of
         undefined ->
-            {Result, Monitor} = proc_lib:start_monitor(?MODULE, init_it, [
-                self(), Name, Module, Args, [{name, Name} | Options]
-            ]),
-            case Result of
-                {ok, Pid} ->
-                    {ok, {Pid, Monitor}};
-                _ ->
-                    Result
-            end;
+            gen:monitor_return(
+                proc_lib:start_monitor(?MODULE, init_it, [
+                    self(), Name, Module, Args, [{name, Name} | Options]
+                ])
+            );
         Pid ->
             {error, {already_started, Pid}}
     end.
