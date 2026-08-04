@@ -2037,7 +2037,7 @@ The Erlang-side API is the platform-specific `usb_cdc` module ([`libs/avm_esp32/
 
 | Platform | Notes |
 |----------|-------|
-| ESP32 | Enable `CONFIG_USE_USB_SERIAL` and `CONFIG_AVM_ENABLE_USB_CDC_PORT_DRIVER` in `menuconfig`. The ESP-IDF `esp_tinyusb` component must be installed. |
+| ESP32 | Enable `CONFIG_AVM_ENABLE_USB_CDC_PORT_DRIVER` in `menuconfig` (it pulls in TinyUSB CDC automatically). The ESP-IDF `esp_tinyusb` managed component must be installed: `idf.py add-dependency "espressif/esp_tinyusb^2.0.0"` (or list it in `main/idf_component.yml`). `CONFIG_USE_USB_SERIAL` is a separate option that routes the system console over USB CDC. |
 | RP2040/RP2350 | Set `-DAVM_USB_CDC_PORT_DRIVER_ENABLED=ON` in CMake. You must also disable stdio over USB (`pico_enable_stdio_usb(AtomVM 0)`) so that the CDC interface is available for the port driver. |
 | STM32 | Set `-DAVM_USB_CDC_PORT_DRIVER_ENABLED=ON` in CMake. TinyUSB is fetched automatically by default; set the `TINYUSB_PATH` environment variable to use a local checkout. |
 
