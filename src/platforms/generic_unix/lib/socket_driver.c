@@ -47,6 +47,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+void sys_register_listener_nolock(GlobalContext *global, struct EventListener *listener);
+void sys_unregister_listener_nolock(GlobalContext *global, struct EventListener *listener);
+
 // #define ENABLE_TRACE
 #include "trace.h"
 
@@ -82,6 +85,22 @@ typedef struct SocketDriverData
     ActiveRecvListener *active_listener;
     PassiveRecvListener *passive_listener;
 } SocketDriverData;
+
+static void register_active_listener(GlobalContext *glb, SocketDriverData *socket_data, ActiveRecvListener *listener)
+{
+    synclist_wrlock(&glb->listeners);
+    socket_data->active_listener = listener;
+    sys_register_listener_nolock(glb, &listener->base);
+    synclist_unlock(&glb->listeners);
+}
+
+static void register_passive_listener(GlobalContext *glb, SocketDriverData *socket_data, PassiveRecvListener *listener)
+{
+    synclist_wrlock(&glb->listeners);
+    socket_data->passive_listener = listener;
+    sys_register_listener_nolock(glb, &listener->base);
+    synclist_unlock(&glb->listeners);
+}
 
 // clang-format off
 // TODO define in defaultatoms
@@ -253,8 +272,7 @@ static term init_udp_socket(Context *ctx, SocketDriverData *socket_data, term pa
             listener->base.handler = active_recvfrom_callback;
             listener->buf_size = socket_data->buffer;
             listener->process_id = ctx->process_id;
-            sys_register_listener(glb, &listener->base);
-            socket_data->active_listener = listener;
+            register_active_listener(glb, socket_data, listener);
         }
     }
     return ret;
@@ -338,8 +356,7 @@ static term init_client_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
             listener->base.handler = active_recv_callback;
             listener->buf_size = socket_data->buffer;
             listener->process_id = ctx->process_id;
-            sys_register_listener(glb, &listener->base);
-            socket_data->active_listener = listener;
+            register_active_listener(glb, socket_data, listener);
         }
     }
     return ret;
@@ -722,10 +739,10 @@ static EventListener *active_recv_callback(GlobalContext *glb, EventListener *ba
         port_send_message_nolock(glb, pid, msg);
         mailbox_send(ctx, globalcontext_make_atom(glb, close_internal));
         // See socket_consume_mailbox close path below
-        if (socket_data->active_listener) {
+        if (socket_data->active_listener == listener) {
             socket_data->active_listener = NULL;
-            free(listener);
         }
+        free(listener);
         result = NULL;
         END_WITH_STACK_HEAP(heap, glb);
     } else {
@@ -826,12 +843,12 @@ static EventListener *passive_recv_callback(GlobalContext *glb, EventListener *b
         port_send_message_nolock(glb, pid, reply);
         memory_destroy_heap(&heap, glb);
     }
-    globalcontext_get_process_unlock(glb, ctx);
     // See socket_consume_mailbox close path below
-    if (socket_data->passive_listener) {
+    if (socket_data->passive_listener == listener) {
         socket_data->passive_listener = NULL;
-        free(listener);
     }
+    globalcontext_get_process_unlock(glb, ctx);
+    free(listener);
     free(buf);
     // remove the EventListener from the global list
     return NULL;
@@ -966,12 +983,12 @@ static EventListener *passive_recvfrom_callback(GlobalContext *glb, EventListene
         port_send_message_nolock(glb, pid, reply);
         memory_destroy_heap(&heap, glb);
     }
-    globalcontext_get_process_unlock(glb, ctx);
     // See socket_consume_mailbox close path below
-    if (socket_data->passive_listener) {
+    if (socket_data->passive_listener == listener) {
         socket_data->passive_listener = NULL;
-        free(listener);
     }
+    globalcontext_get_process_unlock(glb, ctx);
+    free(listener);
     free(buf);
     // remove the EventListener from the global list and clean up
     return NULL;
@@ -1006,8 +1023,7 @@ static void do_recv(Context *ctx, term pid, term ref, term length, term timeout,
     listener->length = term_to_int(length);
     listener->buffer = socket_data->buffer;
     listener->ref_ticks = term_to_ref_ticks(ref);
-    sys_register_listener(glb, &listener->base);
-    socket_data->passive_listener = listener;
+    register_passive_listener(glb, socket_data, listener);
 }
 
 void socket_driver_do_recvfrom(Context *ctx, term pid, term ref, term length, term timeout)
@@ -1035,6 +1051,13 @@ static EventListener *accept_callback(GlobalContext *glb, EventListener *base_li
     socklen_t clientlen = sizeof(clientaddr);
     int fd = accept(listener->base.fd, (struct sockaddr *) &clientaddr, &clientlen);
     Context *ctx = globalcontext_get_process_lock(glb, listener->process_id);
+    if (UNLIKELY(ctx == NULL)) {
+        if (fd != -1) {
+            close(fd);
+        }
+        free(listener);
+        return NULL;
+    }
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     EventListener *result = NULL;
     if (fd == -1) {
@@ -1049,6 +1072,21 @@ static EventListener *accept_callback(GlobalContext *glb, EventListener *base_li
         TRACE("socket_driver|accept_callback: accepted connection.  fd: %i\n", fd);
 
         term pid = listener->pid;
+        if (UNLIKELY(fcntl(fd, F_SETFL, O_NONBLOCK) == -1)) {
+            int err = errno;
+            close(fd);
+            BEGIN_WITH_STACK_HEAP(12, heap);
+            term ref = term_from_ref_ticks(listener->ref_ticks, &heap);
+            term reply = port_heap_create_reply(&heap, ref, port_heap_create_sys_error_tuple(&heap, FCNTL_ATOM, err));
+            port_send_message_nolock(glb, pid, reply);
+            END_WITH_STACK_HEAP(heap, glb);
+            if (socket_data->passive_listener == listener) {
+                socket_data->passive_listener = NULL;
+            }
+            globalcontext_get_process_unlock(glb, ctx);
+            free(listener);
+            return NULL;
+        }
         SocketDriverData *new_socket_data = socket_driver_create_data();
         new_socket_data->sockfd = fd;
         new_socket_data->proto = socket_data->proto;
@@ -1061,9 +1099,12 @@ static EventListener *accept_callback(GlobalContext *glb, EventListener *base_li
         Context *new_ctx = create_accepting_socket(glb, new_socket_data);
         ctx = globalcontext_get_process_lock(glb, listener->process_id);
         if (UNLIKELY(ctx == NULL)) {
+            socket_driver_do_close(new_ctx);
+            scheduler_terminate(new_ctx);
             free(listener);
             return NULL;
         }
+        socket_data = (SocketDriverData *) ctx->platform_data;
         if (new_socket_data->active) {
             result = &create_accepting_socket_listener(new_ctx, new_socket_data)->base;
         }
@@ -1077,12 +1118,12 @@ static EventListener *accept_callback(GlobalContext *glb, EventListener *base_li
         port_send_message_nolock(glb, pid, reply);
         END_WITH_STACK_HEAP(heap, glb);
     }
-    globalcontext_get_process_unlock(glb, ctx);
     // See socket_consume_mailbox close path below
-    if (socket_data->passive_listener) {
+    if (socket_data->passive_listener == listener) {
         socket_data->passive_listener = NULL;
-        free(listener);
     }
+    globalcontext_get_process_unlock(glb, ctx);
+    free(listener);
     // remove the EventListener from the global list and replace it if needed
     return result;
 }
@@ -1108,8 +1149,7 @@ void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
     listener->length = 0;
     listener->buffer = 0;
     listener->ref_ticks = term_to_ref_ticks(ref);
-    sys_register_listener(glb, &listener->base);
-    socket_data->passive_listener = listener;
+    register_passive_listener(glb, socket_data, listener);
 }
 
 static NativeHandlerResult socket_consume_mailbox(Context *ctx)
@@ -1185,31 +1225,26 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx)
         TRACE("close\n");
         port_send_reply(ctx, pid, ref, OK_ATOM);
         SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-        // Callbacks (active_recv_callback, passive_recv_callback) are called
-        // while glb->listeners lock is held. They may want to free the
-        // listener, causing a potential double free here.
-        // We acquire the lock on listeners here and set the listeners
-        // to NULL in the socket_data structure to prevent them from freeing
-        // the listeners.
+        // Callbacks (active_recv_callback, passive_recv_callback, accept_callback)
+        // are called while glb->listeners lock is held. They may free the
+        // listener and set the socket_data pointer to NULL.
+        // We must atomically detach the pointers AND unlink from the listeners
+        // list under the same lock hold, to prevent a race where the callback
+        // also unlinks the same listener node.
         synclist_wrlock(&glb->listeners);
         ActiveRecvListener *active_listener = socket_data->active_listener;
         PassiveRecvListener *passive_listener = socket_data->passive_listener;
         socket_data->active_listener = NULL;
         socket_data->passive_listener = NULL;
-        synclist_unlock(&glb->listeners);
         if (active_listener) {
-            // Then we unregister, which also acquires the lock. The callbacks
-            // may have returned NULL which means the listener would no longer
-            // be registered, but this will work.
-            sys_unregister_listener(glb, &active_listener->base);
-            // After the listener is unregistered, the callbacks can no longer
-            // be called, so we can eventually free the listener
-            free(active_listener);
+            sys_unregister_listener_nolock(glb, &active_listener->base);
         }
         if (passive_listener) {
-            sys_unregister_listener(glb, &passive_listener->base);
-            free(passive_listener);
+            sys_unregister_listener_nolock(glb, &passive_listener->base);
         }
+        synclist_unlock(&glb->listeners);
+        free(active_listener);
+        free(passive_listener);
         socket_driver_do_close(ctx);
         // We don't need to remove message.
         return NativeTerminate;
