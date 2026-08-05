@@ -46,6 +46,10 @@ test() ->
     ok = test_start_link(),
     ok = test_start_monitor(),
     ok = test_start_name(),
+    ok = test_gen_start(),
+    ok = test_gen_start_named_occupied(),
+    ok = test_gen_start_ignore(),
+    ok = test_gen_start_timeout(),
     ok = test_continue(),
     ok = test_init_exception(),
     ok = test_late_reply(),
@@ -132,6 +136,108 @@ test_start_name() ->
     ok = gen_server:stop(Pid3),
     undefined = whereis(?MODULE),
     ok.
+
+%% gen:start/5,6 is the OTP-private entry point Elixir's GenServer.start*
+%% functions call.
+test_gen_start() ->
+    {ok, Pid1} = gen:start(gen_server, nolink, ?MODULE, [], []),
+    pong = gen_server:call(Pid1, ping),
+    ok = gen_server:stop(Pid1),
+
+    PreviousTrapExit = erlang:process_flag(trap_exit, true),
+    {ok, Pid2} = gen:start(gen_server, link, ?MODULE, [], []),
+    pong = gen_server:call(Pid2, ping),
+    ok = gen_server:stop(Pid2),
+    normal =
+        receive
+            {'EXIT', Pid2, Reason} -> Reason
+        after 5000 -> timeout
+        end,
+    true = erlang:process_flag(trap_exit, PreviousTrapExit),
+
+    {ok, {Pid3, Ref3}} = gen:start(gen_server, monitor, ?MODULE, [], []),
+    true = is_pid(Pid3),
+    true = is_reference(Ref3),
+    pong = gen_server:call(Pid3, ping),
+    ok = gen_server:cast(Pid3, crash),
+    ok =
+        receive
+            {'DOWN', Ref3, process, Pid3, _Reason} -> ok
+        after 30000 -> timeout
+        end,
+
+    undefined = whereis(?MODULE),
+    {ok, Pid4} = gen:start(gen_server, nolink, {local, ?MODULE}, ?MODULE, [], []),
+    Pid4 = whereis(?MODULE),
+    {error, {already_started, Pid4}} = gen:start(
+        gen_server, nolink, {local, ?MODULE}, ?MODULE, [], []
+    ),
+    ok = gen_server:stop(Pid4),
+    undefined = whereis(?MODULE),
+    ok.
+
+%% The caller's mailbox must be left empty: a failed start leaks no EXIT or DOWN.
+test_gen_start_named_occupied() ->
+    {ok, Pid} = gen:start(gen_server, nolink, {local, ?MODULE}, ?MODULE, [], []),
+    PreviousTrapExit = erlang:process_flag(trap_exit, true),
+    {error, {already_started, Pid}} = gen:start(
+        gen_server, link, {local, ?MODULE}, ?MODULE, [], []
+    ),
+    [] = drain_mailbox(),
+    {error, {already_started, Pid}} = gen:start(
+        gen_server, monitor, {local, ?MODULE}, ?MODULE, [], []
+    ),
+    [] = drain_mailbox(),
+    ok = gen_server:stop(Pid),
+    _ = drain_mailbox(),
+    true = erlang:process_flag(trap_exit, PreviousTrapExit),
+    undefined = whereis(?MODULE),
+    ok.
+
+test_gen_start_ignore() ->
+    ignore = gen:start(gen_server, nolink, ?MODULE, ignore_me, []),
+    [] = drain_mailbox(),
+    ignore = gen:start(gen_server, nolink, {local, ?MODULE}, ?MODULE, ignore_me, []),
+    undefined = whereis(?MODULE),
+    [] = drain_mailbox(),
+    ignore = gen:start(gen_server, monitor, ?MODULE, ignore_me, []),
+    [] = drain_mailbox(),
+    PreviousTrapExit = erlang:process_flag(trap_exit, true),
+    ignore = gen:start(gen_server, link, ?MODULE, ignore_me, []),
+    [] = drain_mailbox(),
+    true = erlang:process_flag(trap_exit, PreviousTrapExit),
+    ok.
+
+%% Start isolated and non-trapping so a stray exit signal shows up as a kill.
+test_gen_start_timeout() ->
+    {survived, {error, timeout}} = isolated_start(nolink, [{timeout, 200}]),
+    {survived, {error, timeout}} = isolated_start(link, [{timeout, 200}]),
+    {survived, {error, timeout}} = isolated_start(monitor, [{timeout, 200}]),
+    {survived, {error, timeout}} = isolated_start(nolink, [{timeout, 200}, {spawn_opt, [link]}]),
+    ok.
+
+isolated_start(LinkP, Options) ->
+    Self = self(),
+    Pid = spawn(fun() ->
+        Result = gen:start(gen_server, LinkP, ?MODULE, hang, Options),
+        Self ! {done, self(), Result}
+    end),
+    Ref = monitor(process, Pid),
+    receive
+        {done, Pid, Result} ->
+            demonitor(Ref, [flush]),
+            {survived, Result};
+        {'DOWN', Ref, process, Pid, Reason} ->
+            {killed, Reason}
+    after 8000 ->
+        {no_reply, Pid}
+    end.
+
+drain_mailbox() ->
+    receive
+        M -> [M | drain_mailbox()]
+    after 100 -> []
+    end.
 
 test_continue() ->
     {ok, Pid} = gen_server:start_link(?MODULE, {continue, self()}, []),
@@ -585,6 +691,13 @@ get_otp_version() ->
 %% callbacks
 %%
 
+init(ignore_me) ->
+    ignore;
+init(hang) ->
+    receive
+    after 5000 -> ok
+    end,
+    {ok, #state{}};
 init(throwme) ->
     throw(throwme);
 init({continue, Pid}) ->
