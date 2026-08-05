@@ -257,6 +257,19 @@ jobs:
         idf.py set-target ${{matrix.esp-idf-target}}
         idf.py build
 
+    - name: Start local servers for qemu network tests
+      if: matrix.esp-idf-target != 'esp32p4'
+      working-directory: ./src/platforms/esp32/test/
+      run: |
+        set -e
+        nohup escript local_test_servers.escript --certdir /tmp > /tmp/local_test_servers.log 2>&1 &
+        for i in $(seq 1 20); do
+          grep -q listening /tmp/local_test_servers.log && break
+          sleep 0.5
+        done
+        cat /tmp/local_test_servers.log
+        grep -q listening /tmp/local_test_servers.log || { echo "local test servers failed to start"; exit 1; }
+
     - name: Run ESP32 tests using qemu with memory checks build
       # TODO: remove the following exclusion when ESP32P4 support is added to espressif/qemu
       if: matrix.esp-idf-target != 'esp32p4'
