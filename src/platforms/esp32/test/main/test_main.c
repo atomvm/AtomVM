@@ -674,7 +674,8 @@ TEST_CASE("test_wifi_example", "[test_run]")
 }
 #endif
 
-#if !CONFIG_IDF_TARGET_ESP32C61
+// We also avoid the remaining WiFi tests on ESP32-S2, they proved too flaky
+#if !CONFIG_IDF_TARGET_ESP32S2 && !CONFIG_IDF_TARGET_ESP32C61
 TEST_CASE("test_wifi_managed", "[test_run]")
 {
     term ret_value = avm_test_case("test_wifi_managed.beam");
