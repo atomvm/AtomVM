@@ -63,6 +63,7 @@ static inline void erl_nif_env_partial_init_from_globalcontext(ErlNifEnv *env, G
     env->heap.heap_start = NULL;
     env->heap.heap_ptr = NULL;
     env->heap.heap_end = NULL;
+    env->heap.fragments_words = 0;
     env->stack_pointer = NULL;
     env->x[0] = term_nil();
     env->x[1] = term_nil();
@@ -76,6 +77,7 @@ static inline void erl_nif_env_partial_init_from_resource(ErlNifEnv *env, void *
     env->heap.heap_start = NULL;
     env->heap.heap_ptr = NULL;
     env->heap.heap_end = NULL;
+    env->heap.fragments_words = 0;
     env->stack_pointer = NULL;
     env->x[0] = term_nil();
     env->x[1] = term_nil();

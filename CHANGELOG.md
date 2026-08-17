@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Exact-equality opcodes (`is_eq_exact`, `is_not_eq_exact`, `select_val`) decide two immediates
   without `term_compare`; atom `case` clauses no longer compare atom names through the atom table
+- Heap fragments (decoded literals, NIF results, messages) no longer force a collection at the next
+  return / NIF call / allocation; they are folded in once large or at the next natural collection
 - Updated network type db() to dbm() to reflect the actual representation of the type
 - Use ES6 modules for emscripten port, using .mjs suffix
 - `ahttp_client` now returns `{error, {parser, incomplete_response}}` when a socket closes mid-response

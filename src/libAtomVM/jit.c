@@ -514,7 +514,7 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
                 ctx->e += (n_words + 1);
             }
 
-            if (ctx->heap.root->next) {
+            if (memory_heap_fragments_need_gc(&ctx->heap)) {
                 if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, ctx->x, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
                     return jit_raise_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
                 }
@@ -679,7 +679,7 @@ static bool jit_deallocate(Context *ctx, JITState *jit_state, uint32_t n_words)
     ctx->cp = ctx->e[n_words];
     ctx->e += n_words + 1;
     // Hopefully, we only need x[0]
-    if (ctx->heap.root->next) {
+    if (memory_heap_fragments_need_gc(&ctx->heap)) {
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, ctx->x, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
             set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
             return false;
@@ -1210,7 +1210,7 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term
         if (maybe_call_native(ctx, module_name, function_name, fun_arity, &return_value)) {
             PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value, offset);
             ctx->x[0] = return_value;
-            if (ctx->heap.root->next) {
+            if (memory_heap_fragments_need_gc(&ctx->heap)) {
                 if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, ctx->x, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
                     return jit_raise_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
                 }
@@ -1718,7 +1718,7 @@ static Context *jit_apply(Context *ctx, JITState *jit_state, int offset, term mo
     if (maybe_call_native(ctx, module_name, function_name, arity, &native_return)) {
         PROCESS_MAYBE_TRAP_RETURN_VALUE(native_return, offset);
         ctx->x[0] = native_return;
-        if (ctx->heap.root->next) {
+        if (memory_heap_fragments_need_gc(&ctx->heap)) {
             if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, ctx->x, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
                 return jit_raise_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
             }
