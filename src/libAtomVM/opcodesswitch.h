@@ -2617,11 +2617,18 @@ schedule_in:
 
                 TRACE("is_eq_exact/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
 
-                TermCompareResult result = term_compare(arg1, arg2, TermCompareExact, ctx->global);
-                if (result & (TermLessThan | TermGreaterThan)) {
-                    pc = mod->labels[label];
-                } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
-                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                bool fast_equal;
+                if (term_exact_eq_fast(arg1, arg2, &fast_equal)) {
+                    if (!fast_equal) {
+                        pc = mod->labels[label];
+                    }
+                } else {
+                    TermCompareResult result = term_compare(arg1, arg2, TermCompareExact, ctx->global);
+                    if (result & (TermLessThan | TermGreaterThan)) {
+                        pc = mod->labels[label];
+                    } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
                 }
 
                 break;
@@ -2637,11 +2644,18 @@ schedule_in:
 
                 TRACE("is_not_eq_exact/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
 
-                TermCompareResult result = term_compare(arg1, arg2, TermCompareExact, ctx->global);
-                if (result == TermEquals) {
-                    pc = mod->labels[label];
-                } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
-                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                bool fast_equal;
+                if (term_exact_eq_fast(arg1, arg2, &fast_equal)) {
+                    if (fast_equal) {
+                        pc = mod->labels[label];
+                    }
+                } else {
+                    TermCompareResult result = term_compare(arg1, arg2, TermCompareExact, ctx->global);
+                    if (result == TermEquals) {
+                        pc = mod->labels[label];
+                    } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
                 }
 
                 break;
@@ -2865,12 +2879,19 @@ schedule_in:
                     DECODE_LABEL(jmp_label, pc)
 
                     if (!jump_to_address) {
-                        TermCompareResult result = term_compare(
-                            src_value, cmp_value, TermCompareExact, ctx->global);
-                        if (result == TermEquals) {
-                            jump_to_address = mod->labels[jmp_label];
-                        } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                        bool fast_equal;
+                        if (term_exact_eq_fast(src_value, cmp_value, &fast_equal)) {
+                            if (fast_equal) {
+                                jump_to_address = mod->labels[jmp_label];
+                            }
+                        } else {
+                            TermCompareResult result = term_compare(
+                                src_value, cmp_value, TermCompareExact, ctx->global);
+                            if (result == TermEquals) {
+                                jump_to_address = mod->labels[jmp_label];
+                            } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                            }
                         }
                     }
                 }

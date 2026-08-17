@@ -440,6 +440,34 @@ static inline bool term_is_boxed(term t)
 }
 
 /**
+ * @brief Exact-equality fast path for immediates.
+ *
+ * @details Two terms with the same bits are `=:=` equal. Two immediate terms
+ * (atoms, small integers, nil, local pids, ...) with different bits are never
+ * `=:=` equal, because immediates are canonical (a small integer is never
+ * boxed). Only when at least one side is boxed or a list must the caller fall
+ * back to term_compare, which for two different atoms fetches both names from
+ * the atom table and compares them: previously the dominant cost of every
+ * `case` on atoms (OP_SELECT_VAL) in Gleam-compiled code.
+ * @param a first term
+ * @param b second term
+ * @param equal set to the answer when the function returns true
+ * @return true if the answer is decided (in *equal), false if term_compare is needed
+ */
+static inline bool term_exact_eq_fast(term a, term b, bool *equal)
+{
+    if (a == b) {
+        *equal = true;
+        return true;
+    }
+    if (((a & TERM_PRIMARY_MASK) == TERM_PRIMARY_IMMED) && ((b & TERM_PRIMARY_MASK) == TERM_PRIMARY_IMMED)) {
+        *equal = false;
+        return true;
+    }
+    return false;
+}
+
+/**
  * @brief Returns size of a boxed term from its header
  *
  * @details Returns the size that is stored in boxed term header most significant bits for variable size boxed terms.
