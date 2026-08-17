@@ -53,6 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   calling it with a port now raises `badarg` (previous versions accepted any id-carrying
   term, so it could be used to read port information; there is no `erlang:port_info/2`
   in AtomVM yet to migrate such code to)
+- Exact-equality opcodes (`is_eq_exact`, `is_not_eq_exact`, `select_val`) decide two immediates
+  without `term_compare`; atom `case` clauses no longer compare atom names through the atom table
 - Updated network type db() to dbm() to reflect the actual representation of the type
 - Use ES6 modules for emscripten port, using .mjs suffix
 - `ahttp_client` now returns `{error, {parser, incomplete_response}}` when a socket closes mid-response
