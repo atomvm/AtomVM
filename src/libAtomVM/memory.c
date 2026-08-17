@@ -73,6 +73,7 @@ void memory_init_heap_root_fragment(Heap *heap, HeapFragment *root, size_t size)
     heap->root = root;
     root->next = NULL;
     root->mso_list = term_nil();
+    heap->fragments_words = 0;
     heap->heap_start = root->storage;
     heap->heap_ptr = heap->heap_start;
     heap->heap_end = heap->heap_start + size;
@@ -99,10 +100,14 @@ static inline enum MemoryGCResult memory_heap_alloc_new_fragment(Heap *heap, siz
     HeapFragment *root_fragment = heap->root;
     term *old_end = heap->heap_end;
     term mso_list = root_fragment->mso_list;
+    // The old root (holding everything allocated so far) becomes a non-root
+    // fragment below; memory_init_heap resets the running total, so carry it.
+    size_t old_fragments_words = heap->fragments_words + (size_t) (heap->heap_ptr - heap->heap_start);
     if (UNLIKELY(memory_init_heap(heap, size) != MEMORY_GC_OK)) {
         TRACE("Unable to allocate memory fragment.  size=%u\n", (unsigned int) size);
         return MEMORY_GC_ERROR_FAILED_ALLOCATION;
     }
+    heap->fragments_words = old_fragments_words;
     // Convert root fragment to non-root fragment.
     root_fragment->heap_end = old_end; // used to hold mso_list when it was the root fragment
     heap->root->next = root_fragment;
@@ -159,7 +164,10 @@ enum MemoryGCResult memory_ensure_free_with_roots(Context *c, size_t size, size_
         // Target heap size depends on:
         // - alloc_mode (MEMORY_FORCE_SHRINK takes precedence)
         // - heap growth strategy
-        bool should_gc = free_space < size || (alloc_mode == MEMORY_FORCE_SHRINK) || c->heap.root->next != NULL;
+        // Heap fragments (literals decoded from the module literal table, NIF
+        // results, received messages) are folded in only once they are large
+        // (see memory_heap_fragments_need_gc), otherwise at the next natural GC.
+        bool should_gc = free_space < size || (alloc_mode == MEMORY_FORCE_SHRINK) || memory_heap_fragments_need_gc(&c->heap);
         size_t memory_size = 0;
         if (!should_gc) {
             switch (c->heap_growth_strategy) {
@@ -906,6 +914,7 @@ HOT_FUNC static term memory_shallow_copy_term(HeapFragment *old_fragment, term t
 
 void memory_heap_append_fragment(Heap *heap, HeapFragment *fragment, term mso_list)
 {
+    heap->fragments_words += memory_heap_fragment_memory_size(fragment);
     // The fragment we are appending may have next fragments
     // So we take our current next and we add it to the tail of the passed list
     if (heap->root->next) {

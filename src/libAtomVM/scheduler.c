@@ -296,7 +296,7 @@ Context *scheduler_run(GlobalContext *global)
                     if (result->native_handler(result) == NativeContinue) {
                         // If native handler has memory fragments, garbage collect
                         // them
-                        if (result->heap.root->next) {
+                        if (memory_heap_fragments_need_gc(&result->heap)) {
                             if (UNLIKELY(memory_ensure_free_opt(result, 0, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
                                 fprintf(stderr, "Out of memory error in native handler\n");
                                 AVM_ABORT();

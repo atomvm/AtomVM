@@ -85,6 +85,10 @@ struct Heap
     term *heap_start;
     term *heap_ptr;
     term *heap_end;
+    // Running total of the words held in the fragments chained off root
+    // (root->next...), so heap size and the fold-in decision are O(1) per
+    // allocation instead of a chain walk.
+    size_t fragments_words;
 };
 
 #ifndef TYPEDEF_HEAP
@@ -176,11 +180,34 @@ static inline size_t memory_heap_youngest_size(const Heap *heap)
  */
 static inline size_t memory_heap_memory_size(const Heap *heap)
 {
-    size_t result = memory_heap_youngest_size(heap);
-    if (heap->root->next) {
-        result += memory_heap_fragment_memory_size(heap->root->next);
+    // Called on every allocation under the fibonacci growth policy: keep it
+    // O(1) via the running fragment total.
+    return memory_heap_youngest_size(heap) + heap->fragments_words;
+}
+
+/**
+ * @brief Whether the heap's fragments are worth folding in right now.
+ *
+ * @details Fragments come from decoded literals (every use of a compound
+ * literal), NIF results and received messages. Any fragment at all used to
+ * force a shrinking GC at the next return / NIF call / allocation; for code
+ * that references compound literals in nearly every function (Gleam- and
+ * Elixir-compiled code in particular) that was a full copying collection
+ * every few instructions. Fragments are valid heap memory the collector
+ * copies out of like anything else, so they are folded in only once they are
+ * large relative to the heap or in absolute terms; otherwise they wait for
+ * the next natural collection.
+ * @param heap the heap
+ * @return true if a collection should be forced to merge the fragments
+ */
+static inline bool memory_heap_fragments_need_gc(const Heap *heap)
+{
+    if (heap->root->next == NULL) {
+        return false;
     }
-    return result;
+    size_t frag_size = heap->fragments_words;
+    size_t young_size = memory_heap_youngest_size(heap);
+    return frag_size > young_size / 4 || frag_size > 65536;
 }
 
 /**
