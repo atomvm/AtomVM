@@ -104,13 +104,13 @@ get(Key, Map) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec get(Key, Map :: #{Key => Value}, Default :: Value) -> Value.
-get(Key, Map, Default) ->
-    try
-        ?MODULE:get(Key, Map)
-    catch
-        error:{badkey, _} ->
-            Default
-    end.
+get(Key, Map, Default) when is_map(Map) ->
+    case erlang:is_map_key(Key, Map) of
+        true -> erlang:map_get(Key, Map);
+        false -> Default
+    end;
+get(_Key, Map, _Default) ->
+    error({badmap, Map}).
 
 %%-----------------------------------------------------------------------------
 %% @param   Key     the key
@@ -291,13 +291,13 @@ size(Map) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec find(Key, Map :: #{Key => Value}) -> {ok, Value} | error.
-find(Key, Map) ->
-    try
-        {ok, ?MODULE:get(Key, Map)}
-    catch
-        _:{badkey, _} ->
-            error
-    end.
+find(Key, Map) when is_map(Map) ->
+    case erlang:is_map_key(Key, Map) of
+        true -> {ok, erlang:map_get(Key, Map)};
+        false -> error
+    end;
+find(_Key, Map) ->
+    error({badmap, Map}).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pred    a function used to filter entries from the map
