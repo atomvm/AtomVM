@@ -134,7 +134,13 @@ target_include_directories(app PRIVATE
 set(AVM_PORT_ZEPHYR ON CACHE BOOL "Build for Zephyr" FORCE)
 set(AVM_DISABLE_JIT ON CACHE BOOL "Disable JIT" FORCE)
 include(SystemArchitecture)
-avm_get_system_architecture_string(AVM_SYSTEM_ARCHITECTURE_STRING PLATFORM_OS zephyr)
+if(CONFIG_SOC_FAMILY_ESPRESSIF_ESP32 AND CONFIG_RISCV)
+    # Zephyr's RISC-V compiler triple identifies the vendor as "zephyr" rather
+    # than Espressif, so provide the platform vendor explicitly.
+    avm_get_system_architecture_string(AVM_SYSTEM_ARCHITECTURE_STRING PLATFORM_VENDOR espressif PLATFORM_OS zephyr)
+else()
+    avm_get_system_architecture_string(AVM_SYSTEM_ARCHITECTURE_STRING PLATFORM_OS zephyr)
+endif()
 add_subdirectory(${ATOMVM_ZEPHYR_ROOT}/../../libAtomVM ${CMAKE_CURRENT_BINARY_DIR}/libAtomVM)
 target_include_directories(libAtomVM PUBLIC ${ATOMVM_ZEPHYR_ROOT}/src/lib)
 add_dependencies(libAtomVM zephyr_generated_headers)
