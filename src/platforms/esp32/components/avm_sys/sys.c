@@ -29,6 +29,8 @@
 #include "otp_socket.h"
 #include "scheduler.h"
 #include "utils.h"
+#include <sys/stat.h>
+#include <unistd.h>
 
 // #define ENABLE_TRACE
 #include "trace.h"
@@ -58,11 +60,7 @@
 #include "soc/soc_caps.h"
 #endif
 
-#if defined(MBEDTLS_VERSION_NUMBER) && (MBEDTLS_VERSION_NUMBER >= 0x03000000)
-#include <mbedtls/build_info.h>
-#else
-#include <mbedtls/config.h>
-#endif
+#include <mbedtls/version.h>
 
 // Platform uses listeners
 #include "listeners.h"
@@ -289,6 +287,13 @@ void sys_init_platform(GlobalContext *glb)
     platform->entropy_is_initialized = false;
     platform->random_is_initialized = false;
 
+#if defined(MBEDTLS_PSA_CRYPTO_C) || MBEDTLS_VERSION_NUMBER >= 0x04000000
+    psa_status_t status = psa_crypto_init();
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        AVM_ABORT();
+    }
+#endif
+
     ErlNifResourceFlags flags;
     ErlNifEnv env;
     erl_nif_env_partial_init_from_globalcontext(&env, glb);
@@ -314,7 +319,7 @@ void sys_free_platform(GlobalContext *glb)
             AVM_ABORT();
         }
     }
-
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     if (platform->random_is_initialized) {
         mbedtls_ctr_drbg_free(&platform->random_ctx);
     }
@@ -322,6 +327,7 @@ void sys_free_platform(GlobalContext *glb)
     if (platform->entropy_is_initialized) {
         mbedtls_entropy_free(&platform->entropy_ctx);
     }
+#endif
 
 #ifndef AVM_NO_SMP
     smp_mutex_destroy(platform->entropy_mutex);
@@ -364,7 +370,7 @@ const void *esp32_sys_mmap_partition(const char *partition_name, spi_flash_mmap_
         ESP_LOGE(TAG, "Failed to map BEAM partition for %s", partition_name);
         return NULL;
     }
-    ESP_LOGI(TAG, "Loaded BEAM partition %s at address 0x%"PRIx32" (size=%"PRIu32" bytes)",
+    ESP_LOGI(TAG, "Loaded BEAM partition %s at address 0x%" PRIx32 " (size=%" PRIu32 " bytes)",
         partition_name, partition->address, partition->size);
 
 #ifndef CONFIG_IDF_TARGET_ARCH_RISCV
@@ -830,6 +836,7 @@ term esp_err_to_term(GlobalContext *glb, esp_err_t status)
     }
 }
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 int sys_mbedtls_entropy_func(void *entropy, unsigned char *buf, size_t size)
 {
 #if !defined(MBEDTLS_THREADING_C) && !defined(AVM_NO_SMP)
@@ -915,6 +922,7 @@ void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
     UNUSED(global);
 #endif
 }
+#endif
 
 #ifndef AVM_NO_JIT
 #include <soc/soc.h>
