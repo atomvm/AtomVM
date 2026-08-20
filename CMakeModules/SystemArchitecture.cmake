@@ -59,6 +59,10 @@ function(avm_get_system_architecture_string out_var)
         string(REPLACE ";" "_" avm_os "${avm_system_architecture_parts}")
     endif()
 
+    if (DEFINED AVM_PLATFORM_VENDOR)
+        set(avm_vendor "${AVM_PLATFORM_VENDOR}")
+    endif()
+
     if (DEFINED AVM_PLATFORM_OS)
         set(avm_os "${AVM_PLATFORM_OS}")
     endif()

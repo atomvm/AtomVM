@@ -3,7 +3,7 @@
 Guidelines and rules for coding agents working on the AtomVM Zephyr port.
 
 ## Target Version
-- The Zephyr port targets Zephyr version **v4.4.0** (defined in [west.yml](file:///Users/petermm/OSScontrib/AtomVM/src/platforms/zephyr/west.yml#L13)). Do not change this version unless explicitly requested.
+- The Zephyr port targets Zephyr version **v4.4.2** (defined in [west.yml](file:///Users/petermm/OSScontrib/AtomVM/src/platforms/zephyr/west.yml#L13)). Do not change this version unless explicitly requested.
 
 ## JIT (Just-in-Time) Compilation
 - JIT is disabled under the Zephyr platform (`AVM_NO_JIT` compile definition in [AtomVMZephyrApp.cmake](file:///Users/petermm/OSScontrib/AtomVM/src/platforms/zephyr/cmake/AtomVMZephyrApp.cmake#L46)). Ensure all code compiles cleanly without JIT support.

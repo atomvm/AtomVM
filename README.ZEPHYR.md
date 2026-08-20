@@ -11,7 +11,7 @@ This is an experimental port that will hopefully replace the current STM32 `libo
 
 Not all boards supported by Zephyr are capable of running AtomVM. The most likely excluding factor will be lack of flash storage space to accommodate both the VM and user BEAM applications. Currently a build can be attempted for any board supported by the Zephyr SDK, and the user will need to determine if the final build can fit onto the device and still have space left for a user application partition (on STM32 devices this is typically a 128K block size).
 
-This port is currently configured to target **Zephyr RTOS v4.4.0** and **Zephyr SDK v1.0.1**.
+This port is currently configured to target **Zephyr RTOS v4.4.2** and **Zephyr SDK v1.0.1**.
 
 ## Prerequisites (Local Build)
 
