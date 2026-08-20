@@ -46,7 +46,9 @@ jobs:
         os_release: ["13.5", "14.3", "15.0"]
         mbedtls: ["mbedtls@3"]
         include:
-          - os_release: "14.3"
+          # MbedTLS 4 comes from the latest package repository, so use the
+          # newest FreeBSD 14 point release to keep the userland in sync.
+          - os_release: "14"
             mbedtls: "mbedtls@4"
 
     steps:
