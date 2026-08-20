@@ -25,7 +25,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    container: ghcr.io/zephyrproject-rtos/ci:v0.29.2
+    container: ghcr.io/zephyrproject-rtos/ci:v0.29.3
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -246,7 +246,7 @@ jobs:
 
   test:
     runs-on: ubuntu-24.04
-    container: ghcr.io/zephyrproject-rtos/ci:v0.29.2
+    container: ghcr.io/zephyrproject-rtos/ci:v0.29.3
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
