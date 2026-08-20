@@ -657,11 +657,13 @@ TEST_CASE("test_ssl", "[test_run]")
 }
 #endif
 
+#ifdef CONFIG_AVM_ENABLE_RTC_SLOW_NIFS
 TEST_CASE("test_rtc_slow", "[test_run]")
 {
     term ret_value = avm_test_case("test_rtc_slow.beam");
     TEST_ASSERT(term_to_int(ret_value) == 0);
 }
+#endif
 
 // Only test wifi on simulator, not on QEMU
 #if !CONFIG_ETH_USE_OPENETH && !CONFIG_IDF_TARGET_ESP32H2 && !CONFIG_IDF_TARGET_ESP32P4
