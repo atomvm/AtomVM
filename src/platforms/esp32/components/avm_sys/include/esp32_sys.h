@@ -69,6 +69,9 @@ struct ESP32PlatformData
     struct SyncList sockets;
     struct ListHead ready_connections;
 
+    // network_driver
+    void *network_driver_data;
+
 #ifndef AVM_NO_SMP
     Mutex *entropy_mutex;
 #endif
