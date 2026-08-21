@@ -232,6 +232,7 @@ void sys_init_platform(GlobalContext *glb)
     glb->platform_data = platform;
     platform->select_thread_exit = false;
     platform->select_events_poll_count = -1;
+    platform->network_driver_data = NULL;
     esp_vfs_eventfd_config_t eventfd_config = ESP_VFS_EVENTD_CONFIG_DEFAULT();
     esp_err_t err = esp_vfs_eventfd_register(&eventfd_config);
     if (err == ESP_OK) {
