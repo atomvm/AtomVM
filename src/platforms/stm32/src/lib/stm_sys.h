@@ -27,8 +27,11 @@
 #include "stm32_hal_platform.h"
 
 #ifdef ATOMVM_HAS_MBEDTLS
+#include <mbedtls/version.h>
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
+#endif
 #endif
 
 #define STM32_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "stm32"))
@@ -53,10 +56,12 @@ struct STM32PlatformData
     struct ListHead locked_pins;
 #ifdef ATOMVM_HAS_MBEDTLS
     RNG_HandleTypeDef rng;
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     mbedtls_entropy_context entropy_ctx;
     mbedtls_ctr_drbg_context random_ctx;
     bool entropy_is_initialized;
     bool random_is_initialized;
+#endif
 #endif
 };
 

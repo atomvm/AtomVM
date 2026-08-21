@@ -132,9 +132,27 @@ static void eth_stop(esp_netif_t *eth_netif)
 }
 #endif
 
-term avm_test_case(const char *test_module)
+static void prepare_event_queue(void)
 {
     esp32_sys_queue_init();
+
+    QueueSetMemberHandle_t source;
+    while ((source = xQueueSelectFromSet(event_set, 0)) != NULL) {
+        if (UNLIKELY(source != event_queue)) {
+            fprintf(stderr, "Stale member in ESP32 event queue set.\n");
+            AVM_ABORT();
+        }
+
+        void *ignored;
+        if (UNLIKELY(xQueueReceive(event_queue, &ignored, 0) != pdTRUE)) {
+            AVM_ABORT();
+        }
+    }
+}
+
+term avm_test_case(const char *test_module)
+{
+    prepare_event_queue();
 
     GlobalContext *glb = globalcontext_new();
     TEST_ASSERT(glb != NULL);
@@ -183,7 +201,7 @@ term avm_test_case(const char *test_module)
 #ifndef AVM_NO_JIT
 TEST_CASE("test_jit_compile", "[test_run]")
 {
-    esp32_sys_queue_init();
+    prepare_event_queue();
 
     GlobalContext *glb = globalcontext_new();
     TEST_ASSERT(glb != NULL);
@@ -657,11 +675,13 @@ TEST_CASE("test_ssl", "[test_run]")
 }
 #endif
 
+#ifdef CONFIG_AVM_ENABLE_RTC_SLOW_NIFS
 TEST_CASE("test_rtc_slow", "[test_run]")
 {
     term ret_value = avm_test_case("test_rtc_slow.beam");
     TEST_ASSERT(term_to_int(ret_value) == 0);
 }
+#endif
 
 // Only test wifi on simulator, not on QEMU
 #if !CONFIG_ETH_USE_OPENETH && !CONFIG_IDF_TARGET_ESP32H2 && !CONFIG_IDF_TARGET_ESP32P4
