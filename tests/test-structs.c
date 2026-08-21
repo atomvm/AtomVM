@@ -180,6 +180,8 @@ void test_valueshashtable(void)
         assert(valueshashtable_get_value(htable, 0xBBDDBBDD + i, 0xCAFEBABE) == 0xEEFFEEFFL + i);
         assert(valueshashtable_get_value(htable, 0xABDDBBDD + i, 0xCAFEBABE) == 0xCAFEBABE);
     }
+
+    valueshashtable_destroy(htable);
 }
 
 atom_index_t insert_atoms_into_atom_table(struct AtomTable *table)
