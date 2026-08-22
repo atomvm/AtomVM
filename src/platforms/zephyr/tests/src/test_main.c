@@ -268,3 +268,9 @@ ZTEST(atomvm_tests, test_twdt)
     zassert_equal(ret_value, OK_ATOM, "test_twdt did not return 'ok'");
 }
 #endif
+
+ZTEST(atomvm_tests, test_platform)
+{
+    term ret_value = avm_test_case("test_platform.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_platform did not return 'ok'");
+}
