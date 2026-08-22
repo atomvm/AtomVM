@@ -89,10 +89,12 @@ These tests check platform-independent core/NIF functionalities that are fully s
 
 These tests require network or Wi-Fi emulation or a physical device board to execute successfully (though they can be built as build-only tests on QEMU).
 
-* [ ] **`test_socket` / `test_net` / `test_ssl` (Network Sockets)**
+* [ ] **`test_socket` / `test_net` (Network Sockets)**
   * *test_socket*: Uses the deprecated/unsupported old `socket` port driver (not implemented for Zephyr, which uses modern socket NIFs instead).
   * *test_net*: Requires an active internet connection. It cannot be run as a standalone ZTEST before Wi-Fi is established, but it is successfully executed and verified inside `test_wifi_example` (after Wi-Fi connection is up).
-  * *test_ssl*: Requires an active internet connection and Zephyr mbedTLS/PSA support, and is executed inside `test_wifi_example` after Wi-Fi connection is up.
+* [x] **`test_ssl` (TLS client)**
+  * *Purpose*: Verifies otp_ssl handshake, HTTP over TLS, and socket select against github.com.
+  * *Dependencies*: Wi-Fi STA, TCP, DNS, and mbedTLS/PSA. Runs as its own ZTEST after the other Wi-Fi cases.
 * [x] **`test_wifi_scan` / `test_wifi_managed` (Wi-Fi Driver)**
   * *Purpose*: Verifies Wi-Fi access point scanning, connection events, and SSID listing.
   * *Dependencies*: Zephyr Wi-Fi management (`CONFIG_WIFI=y`). Also tested via `test_wifi_example` (covering TCP sockets/DNS).
