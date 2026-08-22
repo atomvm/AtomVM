@@ -11,7 +11,7 @@
 %% This module wraps platform NIFs that are not part of a portable HAL:
 %% reboot, reset cause, MAC address, boot time, persistent settings,
 %% filesystem mount helpers, POSIX socketpair, power-management state
-%% forcing, and the task watchdog.
+%% forcing, deep sleep / wakeup, and the task watchdog.
 -module(zephyr).
 
 -export([
@@ -20,6 +20,10 @@
     get_mac/1,
     get_default_mac/0,
     timer_get_time/0,
+    deep_sleep/0,
+    deep_sleep/1,
+    sleep_enable_gpio_wakeup/2,
+    sleep_get_wakeup_cause/0,
     settings_get/2,
     settings_get/3,
     settings_put/3,
@@ -44,6 +48,8 @@
     pm_state/0,
     pm_state_info/0,
     reset_reason/0,
+    wakeup_cause/0,
+    gpio_wakeup_level/0,
     interface/0,
     mac/0,
     task_wdt_config/0,
@@ -92,6 +98,8 @@
     | bootloader
     | flash
     | unknown.
+-type wakeup_cause() :: undefined | timer | gpio | reset | unknown.
+-type gpio_wakeup_level() :: 0 | 1 | low | high.
 -type interface() :: default | wifi_sta.
 -type mac() :: binary().
 
@@ -113,6 +121,30 @@ get_default_mac() ->
 
 -spec timer_get_time() -> non_neg_integer().
 timer_get_time() ->
+    erlang:nif_error(undefined).
+
+%% @doc Enter deep sleep. Does not return on boards that support power-off.
+-spec deep_sleep() -> no_return() | {error, not_supported | term()}.
+deep_sleep() ->
+    erlang:nif_error(undefined).
+
+%% @doc Arm a millisecond timer wakeup and enter deep sleep.
+-spec deep_sleep(TimeoutMs :: non_neg_integer()) -> no_return() | {error, not_supported | term()}.
+deep_sleep(_TimeoutMs) ->
+    erlang:nif_error(undefined).
+
+%% @doc Wake from deep sleep when Pin is at Level.
+%%
+%% Pin is a GPIO number on the default controller, or `{Controller, Pin}'.
+%% Level is `0'/`low' or `1'/`high'.
+-spec sleep_enable_gpio_wakeup(Pin :: non_neg_integer() | {term(), non_neg_integer()}, Level :: gpio_wakeup_level()) ->
+    ok | {error, term()}.
+sleep_enable_gpio_wakeup(_Pin, _Level) ->
+    erlang:nif_error(undefined).
+
+%% @doc Why the last boot happened after sleep, if known.
+-spec sleep_get_wakeup_cause() -> wakeup_cause().
+sleep_get_wakeup_cause() ->
     erlang:nif_error(undefined).
 
 -spec settings_get(Namespace :: atom(), Key :: atom()) -> {ok, binary()} | {error, not_found | term()}.

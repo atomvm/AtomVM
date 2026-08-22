@@ -7,6 +7,8 @@
 #include <erl_nif_priv.h>
 #include <port.h>
 
+#include <stdlib.h>
+
 #include <zephyr/kernel.h>
 #ifdef CONFIG_REBOOT
 #include <zephyr/sys/reboot.h>
@@ -16,6 +18,18 @@
 #endif
 #ifdef CONFIG_NETWORKING
 #include <zephyr/net/net_if.h>
+#endif
+#ifdef CONFIG_POWEROFF
+#include <zephyr/sys/poweroff.h>
+#endif
+#ifdef CONFIG_GPIO
+#include <zephyr/device.h>
+#include <zephyr/devicetree.h>
+#include <zephyr/drivers/gpio.h>
+#endif
+#ifdef CONFIG_SOC_FAMILY_ESPRESSIF_ESP32
+#include <esp_sleep.h>
+#include <soc/soc_caps.h>
 #endif
 
 #ifdef CONFIG_FAT_FILESYSTEM_ELM
@@ -594,6 +608,211 @@ static term nif_zephyr_pm_state_next_get(Context *ctx, int argc, term argv[])
 }
 #endif
 
+static term sleep_error_tuple(Context *ctx, AtomString reason)
+{
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term error_tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+    term_put_tuple_element(error_tuple, 1, globalcontext_make_atom(ctx->global, reason));
+    return error_tuple;
+}
+
+#ifdef CONFIG_GPIO
+static const struct device *sleep_gpio_device_by_index(int index)
+{
+    switch (index) {
+#if defined(DT_N_NODELABEL_gpio0) && DT_NODE_HAS_STATUS(DT_NODELABEL(gpio0), okay)
+        case 0:
+            return DEVICE_DT_GET(DT_NODELABEL(gpio0));
+#endif
+#if defined(DT_N_NODELABEL_gpio1) && DT_NODE_HAS_STATUS(DT_NODELABEL(gpio1), okay)
+        case 1:
+            return DEVICE_DT_GET(DT_NODELABEL(gpio1));
+#endif
+        default:
+            return NULL;
+    }
+}
+
+static const struct device *sleep_default_gpio_device(void)
+{
+#if DT_HAS_CHOSEN(atomvm_gpio)
+    return DEVICE_DT_GET(DT_CHOSEN(atomvm_gpio));
+#else
+    return sleep_gpio_device_by_index(0);
+#endif
+}
+
+static const struct device *sleep_gpio_device(term controller)
+{
+    if (term_is_integer(controller)) {
+        avm_int_t index = term_to_int(controller);
+        return index >= 0 ? sleep_gpio_device_by_index((int) index) : NULL;
+    }
+    int ok;
+    char *name = interop_term_to_string(controller, &ok);
+    if (!ok) {
+        return NULL;
+    }
+    const struct device *dev = device_get_binding(name);
+    free(name);
+    return dev;
+}
+
+static bool sleep_get_gpio_pin(term pin_term, const struct device **dev, gpio_pin_t *pin)
+{
+    term number_term = pin_term;
+    const struct device *resolved = sleep_default_gpio_device();
+    if (term_is_tuple(pin_term) && term_get_tuple_arity(pin_term) == 2) {
+        resolved = sleep_gpio_device(term_get_tuple_element(pin_term, 0));
+        number_term = term_get_tuple_element(pin_term, 1);
+    }
+    if (IS_NULL_PTR(resolved) || !term_is_integer(number_term)) {
+        return false;
+    }
+    avm_int_t pin_num = term_to_int(number_term);
+    if (pin_num < 0 || pin_num > UINT8_MAX) {
+        return false;
+    }
+    *dev = resolved;
+    *pin = (gpio_pin_t) pin_num;
+    return true;
+}
+#endif
+
+#ifdef CONFIG_SOC_FAMILY_ESPRESSIF_ESP32
+static term nif_zephyr_sleep_get_wakeup_cause(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    uint32_t causes = esp_sleep_get_wakeup_causes();
+    if (causes == 0) {
+        return UNDEFINED_ATOM;
+    }
+    if ((causes & BIT(ESP_SLEEP_WAKEUP_TIMER)) != 0) {
+        return globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "timer"));
+    }
+    if ((causes & (BIT(ESP_SLEEP_WAKEUP_GPIO) | BIT(ESP_SLEEP_WAKEUP_EXT0) | BIT(ESP_SLEEP_WAKEUP_EXT1))) != 0) {
+        return globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "gpio"));
+    }
+    return globalcontext_make_atom(ctx->global, ATOM_STR("\x7", "unknown"));
+}
+#elif defined(CONFIG_HWINFO)
+static term nif_zephyr_sleep_get_wakeup_cause(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    uint32_t cause = 0;
+    if (hwinfo_get_reset_cause(&cause) != 0) {
+        return UNDEFINED_ATOM;
+    }
+    if ((cause & RESET_LOW_POWER_WAKE) != 0) {
+        return globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "reset"));
+    }
+    return UNDEFINED_ATOM;
+}
+#else
+static term nif_zephyr_sleep_get_wakeup_cause(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
+    return UNDEFINED_ATOM;
+}
+#endif
+
+#ifdef CONFIG_GPIO
+static term nif_zephyr_sleep_enable_gpio_wakeup(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    const struct device *dev;
+    gpio_pin_t pin;
+    if (!sleep_get_gpio_pin(argv[0], &dev, &pin) || !device_is_ready(dev)) {
+        return sleep_error_tuple(ctx, ATOM_STR("\x6", "enodev"));
+    }
+
+    gpio_flags_t level_flags;
+    if ((term_is_integer(argv[1]) && term_to_int(argv[1]) == 0)
+        || argv[1] == globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "low"))) {
+        level_flags = GPIO_INT_LEVEL_LOW;
+    } else if ((term_is_integer(argv[1]) && term_to_int(argv[1]) == 1)
+        || argv[1] == globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "high"))) {
+        level_flags = GPIO_INT_LEVEL_HIGH;
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+#ifdef CONFIG_SOC_FAMILY_ESPRESSIF_ESP32
+#if defined(SOC_PM_SUPPORT_EXT1_WAKEUP)
+    esp_sleep_ext1_wakeup_mode_t mode = (level_flags == GPIO_INT_LEVEL_HIGH) ? ESP_EXT1_WAKEUP_ANY_HIGH :
+#ifdef ESP_EXT1_WAKEUP_ANY_LOW
+        ESP_EXT1_WAKEUP_ANY_LOW
+#else
+        ESP_EXT1_WAKEUP_ALL_LOW
+#endif
+        ;
+    if (esp_sleep_enable_ext1_wakeup(BIT64(pin), mode) != ESP_OK) {
+        return sleep_error_tuple(ctx, ATOM_STR("\x7", "enotsup"));
+    }
+#elif defined(SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP)
+    esp_sleep_gpio_wake_up_mode_t mode = (level_flags == GPIO_INT_LEVEL_HIGH) ? ESP_GPIO_WAKEUP_GPIO_HIGH : ESP_GPIO_WAKEUP_GPIO_LOW;
+    if (esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown(BIT64(pin), mode) != ESP_OK) {
+        return sleep_error_tuple(ctx, ATOM_STR("\x7", "enotsup"));
+    }
+#endif
+#endif
+
+#ifdef GPIO_INT_WAKEUP
+    gpio_flags_t wake_flags = GPIO_INT_ENABLE | GPIO_INT_WAKEUP | level_flags;
+#else
+    gpio_flags_t wake_flags = GPIO_INT_ENABLE | level_flags;
+#endif
+    int err = gpio_pin_interrupt_configure(dev, pin, wake_flags);
+    if (err != 0) {
+        return sleep_error_tuple(ctx, ATOM_STR("\x7", "enotsup"));
+    }
+    return OK_ATOM;
+}
+#endif
+
+#ifdef CONFIG_POWEROFF
+static term nif_zephyr_deep_sleep(Context *ctx, int argc, term argv[])
+{
+    if (argc == 1) {
+        if (!term_is_any_integer(argv[0])) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        avm_int64_t timeout_ms = term_maybe_unbox_int64(argv[0]);
+        if (timeout_ms < 0) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+#ifdef CONFIG_SOC_FAMILY_ESPRESSIF_ESP32
+        if (esp_sleep_enable_timer_wakeup((uint64_t) timeout_ms * 1000ULL) != ESP_OK) {
+            return sleep_error_tuple(ctx, ATOM_STR("\x7", "enotsup"));
+        }
+#else
+        UNUSED(timeout_ms);
+        return sleep_error_tuple(ctx, ATOM_STR("\xe", "not_supported"));
+#endif
+    }
+
+    sys_poweroff();
+    return sleep_error_tuple(ctx, ATOM_STR("\xe", "not_supported"));
+}
+#else
+static term nif_zephyr_deep_sleep(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+    return sleep_error_tuple(ctx, ATOM_STR("\xe", "not_supported"));
+}
+#endif
+
 #ifdef CONFIG_TASK_WDT
 #include <zephyr/task_wdt/task_wdt.h>
 
@@ -847,6 +1066,36 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         };
         return &zephyr_timer_get_time_nif;
     }
+    if (strcmp("zephyr:deep_sleep/0", nifname) == 0) {
+        static const struct Nif zephyr_deep_sleep0_nif = {
+            .base.type = NIFFunctionType,
+            .nif_ptr = nif_zephyr_deep_sleep
+        };
+        return &zephyr_deep_sleep0_nif;
+    }
+    if (strcmp("zephyr:deep_sleep/1", nifname) == 0) {
+        static const struct Nif zephyr_deep_sleep1_nif = {
+            .base.type = NIFFunctionType,
+            .nif_ptr = nif_zephyr_deep_sleep
+        };
+        return &zephyr_deep_sleep1_nif;
+    }
+    if (strcmp("zephyr:sleep_get_wakeup_cause/0", nifname) == 0) {
+        static const struct Nif zephyr_sleep_get_wakeup_cause_nif = {
+            .base.type = NIFFunctionType,
+            .nif_ptr = nif_zephyr_sleep_get_wakeup_cause
+        };
+        return &zephyr_sleep_get_wakeup_cause_nif;
+    }
+#ifdef CONFIG_GPIO
+    if (strcmp("zephyr:sleep_enable_gpio_wakeup/2", nifname) == 0) {
+        static const struct Nif zephyr_sleep_enable_gpio_wakeup_nif = {
+            .base.type = NIFFunctionType,
+            .nif_ptr = nif_zephyr_sleep_enable_gpio_wakeup
+        };
+        return &zephyr_sleep_enable_gpio_wakeup_nif;
+    }
+#endif
 #ifdef CONFIG_PM
     if (strcmp("zephyr:pm_state_force/2", nifname) == 0) {
         static const struct Nif zephyr_pm_state_force_nif = {
