@@ -9,8 +9,9 @@
 %% @doc Zephyr-specific AtomVM APIs.
 %%
 %% This module wraps platform NIFs that are not part of a portable HAL:
-%% reboot, reset cause, MAC address, boot time, filesystem mount helpers,
-%% POSIX socketpair, power-management state forcing, and the task watchdog.
+%% reboot, reset cause, MAC address, boot time, persistent settings,
+%% filesystem mount helpers, POSIX socketpair, power-management state
+%% forcing, and the task watchdog.
 -module(zephyr).
 
 -export([
@@ -19,6 +20,10 @@
     get_mac/1,
     get_default_mac/0,
     timer_get_time/0,
+    settings_get/2,
+    settings_get/3,
+    settings_put/3,
+    settings_erase/2,
     mkfs/2,
     mount/4,
     umount/1,
@@ -108,6 +113,25 @@ get_default_mac() ->
 
 -spec timer_get_time() -> non_neg_integer().
 timer_get_time() ->
+    erlang:nif_error(undefined).
+
+-spec settings_get(Namespace :: atom(), Key :: atom()) -> {ok, binary()} | {error, not_found | term()}.
+settings_get(_Namespace, _Key) ->
+    erlang:nif_error(undefined).
+
+-spec settings_get(Namespace :: atom(), Key :: atom(), Default :: binary()) -> binary().
+settings_get(Namespace, Key, Default) when is_binary(Default) ->
+    case ?MODULE:settings_get(Namespace, Key) of
+        {ok, Value} -> Value;
+        {error, not_found} -> Default
+    end.
+
+-spec settings_put(Namespace :: atom(), Key :: atom(), Value :: binary()) -> ok | {error, term()}.
+settings_put(_Namespace, _Key, _Value) ->
+    erlang:nif_error(undefined).
+
+-spec settings_erase(Namespace :: atom(), Key :: atom()) -> ok | {error, term()}.
+settings_erase(_Namespace, _Key) ->
     erlang:nif_error(undefined).
 
 -spec mkfs(Source :: iodata(), fat) -> ok | {error, term()}.

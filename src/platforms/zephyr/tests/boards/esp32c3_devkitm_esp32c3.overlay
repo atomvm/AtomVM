@@ -5,6 +5,7 @@
 		atomvm,retention = &atomvm_retention;
 		zephyr,console = &uart0;
 		zephyr,shell-uart = &uart0;
+		zephyr,settings-partition = &storage_partition;
 	};
 
 	memory@50001f00 {
