@@ -121,6 +121,8 @@ These test ESP32-specific registers, partition managers, or RTC hardware feature
   * *Adaptation*: Map to Zephyr's Power Management subsystem (`CONFIG_PM=y` / `pm_state`).
   * App-facing sleep is `zephyr:deep_sleep/0,1`, `sleep_enable_gpio_wakeup/2`,
     and `sleep_get_wakeup_cause/0`. ESP32 uses `sys_poweroff()` plus the
-    Espressif timer/GPIO wakeup sources. Tests do not enter sleep on Wokwi.
+    Espressif timer/GPIO wakeup sources.
+  * `test_deep_sleep` is the first ZTEST on ESP32: first boot sleeps 500 ms,
+    reboot continues the suite after `sleep_get_wakeup_cause()` returns `timer`.
 * [x] **`test_twdt` (Watchdog Timers)**
   * *Adaptation*: Map to Zephyr's standard Task Watchdog driver API (`CONFIG_TASK_WDT=y`).

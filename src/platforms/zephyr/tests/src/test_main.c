@@ -82,6 +82,14 @@ term avm_test_case(const char *test_module)
 
 ZTEST_SUITE(atomvm_tests, NULL, NULL, NULL, NULL, NULL);
 
+#if defined(CONFIG_SOC_FAMILY_ESPRESSIF_ESP32) && defined(CONFIG_POWEROFF)
+ZTEST(atomvm_tests, test_deep_sleep)
+{
+    term ret_value = avm_test_case("test_deep_sleep.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_deep_sleep did not return 'ok'");
+}
+#endif
+
 #if defined(CONFIG_ADC) && DT_NODE_HAS_PROP(DT_PATH(zephyr_user), io_channels)
 ZTEST(atomvm_tests, test_adc)
 {

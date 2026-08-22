@@ -689,6 +689,8 @@ static term nif_zephyr_sleep_get_wakeup_cause(Context *ctx, int argc, term argv[
     UNUSED(argv);
 
     uint32_t causes = esp_sleep_get_wakeup_causes();
+    /* ESP_SLEEP_WAKEUP_UNDEFINED is 0; BIT(0) is not a real wakeup source. */
+    causes &= ~BIT(ESP_SLEEP_WAKEUP_UNDEFINED);
     if (causes == 0) {
         return UNDEFINED_ATOM;
     }
