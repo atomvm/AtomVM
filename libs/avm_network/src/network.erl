@@ -785,7 +785,13 @@ handle_cast(_Msg, State) ->
 %% @hidden
 handle_info({Ref, sta_connected} = _Msg, #state{ref = Ref, config = Config} = State) ->
     self() ! {Ref, {invoke_callback, sta_connected, Config}},
-    {noreply, State#state{sta_state = associated}};
+    NextState =
+        case State#state.sta_state of
+            connected -> connected;
+            degraded -> degraded;
+            _ -> associated
+        end,
+    {noreply, State#state{sta_state = NextState}};
 handle_info({Ref, sta_beacon_timeout} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_sta_beacon_timeout_callback(Config),
     {noreply, State#state{sta_state = degraded}};
