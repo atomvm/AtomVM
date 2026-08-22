@@ -9,11 +9,16 @@
 %% @doc Zephyr-specific AtomVM APIs.
 %%
 %% This module wraps platform NIFs that are not part of a portable HAL:
-%% filesystem mount helpers, POSIX socketpair, power-management state
-%% forcing, and the task watchdog.
+%% reboot, reset cause, MAC address, boot time, filesystem mount helpers,
+%% POSIX socketpair, power-management state forcing, and the task watchdog.
 -module(zephyr).
 
 -export([
+    restart/0,
+    reset_reason/0,
+    get_mac/1,
+    get_default_mac/0,
+    timer_get_time/0,
     mkfs/2,
     mount/4,
     umount/1,
@@ -33,6 +38,9 @@
     posix_fd/0,
     pm_state/0,
     pm_state_info/0,
+    reset_reason/0,
+    interface/0,
+    mac/0,
     task_wdt_config/0,
     task_wdt_user_handle/0
 ]).
@@ -60,6 +68,47 @@
     TriggerPanic :: boolean()
 }.
 -opaque task_wdt_user_handle() :: binary().
+-type reset_reason() ::
+    pin
+    | software
+    | brownout
+    | por
+    | watchdog
+    | debug
+    | security
+    | low_power_wake
+    | cpu_lockup
+    | parity
+    | pll
+    | clock
+    | hardware
+    | user
+    | temperature
+    | bootloader
+    | flash
+    | unknown.
+-type interface() :: default | wifi_sta.
+-type mac() :: binary().
+
+-spec restart() -> no_return().
+restart() ->
+    erlang:nif_error(undefined).
+
+-spec reset_reason() -> [reset_reason()] | undefined.
+reset_reason() ->
+    erlang:nif_error(undefined).
+
+-spec get_mac(Interface :: interface()) -> mac().
+get_mac(_Interface) ->
+    erlang:nif_error(undefined).
+
+-spec get_default_mac() -> {ok, mac()} | {error, atom()}.
+get_default_mac() ->
+    erlang:nif_error(undefined).
+
+-spec timer_get_time() -> non_neg_integer().
+timer_get_time() ->
+    erlang:nif_error(undefined).
 
 -spec mkfs(Source :: iodata(), fat) -> ok | {error, term()}.
 mkfs(_Source, _FS) ->
