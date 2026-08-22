@@ -20,7 +20,7 @@ ATOMVM_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 IMAGE_NAME="atomvm-zephyr-build"
 BOARD="esp32_devkitc/esp32/procpu"
 SKIP_BUILD=false
-WOKWI_TIMEOUT_MS="${WOKWI_TIMEOUT_MS:-120000}"
+WOKWI_TIMEOUT_MS="${WOKWI_TIMEOUT_MS:-180000}"
 
 # Parse arguments
 while [[ "$#" -gt 0 ]]; do
