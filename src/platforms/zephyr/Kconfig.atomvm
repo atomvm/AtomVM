@@ -63,4 +63,7 @@ config NET_SOCKETS_SERVICE_STACK_SIZE
     default 3072 if AVM_ENABLE_WIFI
 
 config ZVFS_EVENTFD_MAX
-    default 2 if AVM_ENABLE_WIFI
+    default 4 if AVM_ENABLE_WIFI
+
+config ZVFS_POLL_MAX
+    default 8 if AVM_ENABLE_WIFI
