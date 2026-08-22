@@ -8,6 +8,7 @@
 		atomvm,retention = &atomvm_retention;
 		zephyr,console = &usb_serial;
 		zephyr,shell-uart = &usb_serial;
+		zephyr,settings-partition = &storage_partition;
 	};
 
 	memory@50001f00 {

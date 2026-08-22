@@ -5,6 +5,7 @@
 	chosen {
 		atomvm,retention = &atomvm_retention;
 		atomvm,spi = &spi3;
+		zephyr,settings-partition = &storage_partition;
 	};
 
 	memory@50001f00 {

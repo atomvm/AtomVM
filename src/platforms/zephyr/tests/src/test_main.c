@@ -274,3 +274,11 @@ ZTEST(atomvm_tests, test_platform)
     term ret_value = avm_test_case("test_platform.beam");
     zassert_equal(ret_value, OK_ATOM, "test_platform did not return 'ok'");
 }
+
+#if defined(CONFIG_SETTINGS)
+ZTEST(atomvm_tests, test_settings)
+{
+    term ret_value = avm_test_case("test_settings.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_settings did not return 'ok'");
+}
+#endif

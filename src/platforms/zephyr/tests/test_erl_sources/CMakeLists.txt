@@ -55,6 +55,7 @@ compile_erlang(test_deep_sleep_hold)
 compile_erlang(test_twdt)
 compile_erlang(test_uart)
 compile_erlang(test_platform)
+compile_erlang(test_settings)
 
 set(erlang_test_beams
     test_list_to_atom.beam
@@ -83,6 +84,7 @@ set(erlang_test_beams
     test_twdt.beam
     test_uart.beam
     test_platform.beam
+    test_settings.beam
 )
 
 
