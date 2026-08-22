@@ -5,6 +5,18 @@
 #include <interop.h>
 #include <erl_nif.h>
 #include <erl_nif_priv.h>
+#include <port.h>
+
+#include <zephyr/kernel.h>
+#ifdef CONFIG_REBOOT
+#include <zephyr/sys/reboot.h>
+#endif
+#ifdef CONFIG_HWINFO
+#include <zephyr/drivers/hwinfo.h>
+#endif
+#ifdef CONFIG_NETWORKING
+#include <zephyr/net/net_if.h>
+#endif
 
 #ifdef CONFIG_FAT_FILESYSTEM_ELM
 #include <zephyr/fs/fs.h>
@@ -276,6 +288,163 @@ static const struct Nif atomvm_platform_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_platform
 };
+
+#ifdef CONFIG_REBOOT
+static term nif_zephyr_restart(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
+    sys_reboot(SYS_REBOOT_COLD);
+    return OK_ATOM;
+}
+#endif
+
+#ifdef CONFIG_HWINFO
+static void reset_cause_maybe_prepend(uint32_t cause, uint32_t flag, const char *atom, term *acc, Heap *heap, GlobalContext *glb)
+{
+    if ((cause & flag) != 0) {
+        *acc = term_list_prepend(globalcontext_make_atom(glb, atom), *acc, heap);
+    }
+}
+
+static term nif_zephyr_reset_reason(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    uint32_t cause = 0;
+    int err = hwinfo_get_reset_cause(&cause);
+    if (err != 0) {
+        return UNDEFINED_ATOM;
+    }
+
+    // One list cons cell per documented reset-cause flag, plus unknown.
+    if (UNLIKELY(memory_ensure_free(ctx, LIST_SIZE(17, 0)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term acc = term_nil();
+    reset_cause_maybe_prepend(cause, RESET_PIN, ATOM_STR("\x3", "pin"), &acc, &ctx->heap, ctx->global);
+    reset_cause_maybe_prepend(cause, RESET_SOFTWARE, ATOM_STR("\x8", "software"), &acc, &ctx->heap, ctx->global);
+    reset_cause_maybe_prepend(cause, RESET_BROWNOUT, ATOM_STR("\x8", "brownout"), &acc, &ctx->heap, ctx->global);
+    reset_cause_maybe_prepend(cause, RESET_POR, ATOM_STR("\x3", "por"), &acc, &ctx->heap, ctx->global);
+    reset_cause_maybe_prepend(cause, RESET_WATCHDOG, ATOM_STR("\x8", "watchdog"), &acc, &ctx->heap, ctx->global);
+    reset_cause_maybe_prepend(cause, RESET_DEBUG, ATOM_STR("\x5", "debug"), &acc, &ctx->heap, ctx->global);
+    reset_cause_maybe_prepend(cause, RESET_SECURITY, ATOM_STR("\x8", "security"), &acc, &ctx->heap, ctx->global);
+    reset_cause_maybe_prepend(cause, RESET_LOW_POWER_WAKE, ATOM_STR("\xe", "low_power_wake"), &acc, &ctx->heap, ctx->global);
+    reset_cause_maybe_prepend(cause, RESET_CPU_LOCKUP, ATOM_STR("\xa", "cpu_lockup"), &acc, &ctx->heap, ctx->global);
+    reset_cause_maybe_prepend(cause, RESET_PARITY, ATOM_STR("\x6", "parity"), &acc, &ctx->heap, ctx->global);
+    reset_cause_maybe_prepend(cause, RESET_PLL, ATOM_STR("\x3", "pll"), &acc, &ctx->heap, ctx->global);
+    reset_cause_maybe_prepend(cause, RESET_CLOCK, ATOM_STR("\x5", "clock"), &acc, &ctx->heap, ctx->global);
+#ifdef RESET_HARDWARE
+    reset_cause_maybe_prepend(cause, RESET_HARDWARE, ATOM_STR("\x8", "hardware"), &acc, &ctx->heap, ctx->global);
+#endif
+#ifdef RESET_USER
+    reset_cause_maybe_prepend(cause, RESET_USER, ATOM_STR("\x4", "user"), &acc, &ctx->heap, ctx->global);
+#endif
+#ifdef RESET_TEMPERATURE
+    reset_cause_maybe_prepend(cause, RESET_TEMPERATURE, ATOM_STR("\xb", "temperature"), &acc, &ctx->heap, ctx->global);
+#endif
+#ifdef RESET_BOOTLOADER
+    reset_cause_maybe_prepend(cause, RESET_BOOTLOADER, ATOM_STR("\xa", "bootloader"), &acc, &ctx->heap, ctx->global);
+#endif
+#ifdef RESET_FLASH
+    reset_cause_maybe_prepend(cause, RESET_FLASH, ATOM_STR("\x5", "flash"), &acc, &ctx->heap, ctx->global);
+#endif
+    if (term_is_nil(acc) && cause != 0) {
+        acc = term_list_prepend(globalcontext_make_atom(ctx->global, ATOM_STR("\x7", "unknown")), acc, &ctx->heap);
+    }
+    return acc;
+}
+#endif
+
+#ifdef CONFIG_NETWORKING
+static term mac_from_iface(Context *ctx, struct net_if *iface)
+{
+    if (iface == NULL) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    struct net_linkaddr *linkaddr = net_if_get_link_addr(iface);
+    if (linkaddr == NULL || linkaddr->len == 0) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(linkaddr->len)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    return term_from_literal_binary(linkaddr->addr, linkaddr->len, &ctx->heap, ctx->global);
+}
+
+static term nif_zephyr_get_mac(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    struct net_if *iface = NULL;
+    if (globalcontext_is_term_equal_to_atom_string(ctx->global, argv[0], ATOM_STR("\x7", "default"))) {
+        iface = net_if_get_default();
+    } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, argv[0], ATOM_STR("\x8", "wifi_sta"))) {
+#ifdef CONFIG_WIFI
+        iface = net_if_get_first_wifi();
+#else
+        RAISE_ERROR(BADARG_ATOM);
+#endif
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    return mac_from_iface(ctx, iface);
+}
+
+static term nif_zephyr_get_default_mac(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    struct net_if *iface = net_if_get_default();
+#ifdef CONFIG_WIFI
+    if (iface == NULL) {
+        iface = net_if_get_first_wifi();
+    }
+#endif
+    if (iface == NULL) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return port_create_error_tuple(ctx, UNDEFINED_ATOM);
+    }
+
+    struct net_linkaddr *linkaddr = net_if_get_link_addr(iface);
+    if (linkaddr == NULL || linkaddr->len == 0) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return port_create_error_tuple(ctx, UNDEFINED_ATOM);
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + term_binary_heap_size(linkaddr->len)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term mac_term = term_from_literal_binary(linkaddr->addr, linkaddr->len, &ctx->heap, ctx->global);
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, OK_ATOM);
+    term_put_tuple_element(result, 1, mac_term);
+    return result;
+}
+#endif
+
+static term nif_zephyr_timer_get_time(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    uint64_t val = k_ticks_to_us_floor64(k_uptime_ticks());
+    size_t term_size = term_boxed_integer_size(val);
+    if (UNLIKELY(memory_ensure_free_opt(ctx, term_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    return term_make_maybe_boxed_int64(val, &ctx->heap);
+}
 
 #ifdef CONFIG_PM
 #include <zephyr/pm/pm.h>
@@ -636,6 +805,47 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     if (strcmp("atomvm:platform/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &atomvm_platform_nif;
+    }
+#ifdef CONFIG_REBOOT
+    if (strcmp("zephyr:restart/0", nifname) == 0) {
+        static const struct Nif zephyr_restart_nif = {
+            .base.type = NIFFunctionType,
+            .nif_ptr = nif_zephyr_restart
+        };
+        return &zephyr_restart_nif;
+    }
+#endif
+#ifdef CONFIG_HWINFO
+    if (strcmp("zephyr:reset_reason/0", nifname) == 0) {
+        static const struct Nif zephyr_reset_reason_nif = {
+            .base.type = NIFFunctionType,
+            .nif_ptr = nif_zephyr_reset_reason
+        };
+        return &zephyr_reset_reason_nif;
+    }
+#endif
+#ifdef CONFIG_NETWORKING
+    if (strcmp("zephyr:get_mac/1", nifname) == 0) {
+        static const struct Nif zephyr_get_mac_nif = {
+            .base.type = NIFFunctionType,
+            .nif_ptr = nif_zephyr_get_mac
+        };
+        return &zephyr_get_mac_nif;
+    }
+    if (strcmp("zephyr:get_default_mac/0", nifname) == 0) {
+        static const struct Nif zephyr_get_default_mac_nif = {
+            .base.type = NIFFunctionType,
+            .nif_ptr = nif_zephyr_get_default_mac
+        };
+        return &zephyr_get_default_mac_nif;
+    }
+#endif
+    if (strcmp("zephyr:timer_get_time/0", nifname) == 0) {
+        static const struct Nif zephyr_timer_get_time_nif = {
+            .base.type = NIFFunctionType,
+            .nif_ptr = nif_zephyr_timer_get_time
+        };
+        return &zephyr_timer_get_time_nif;
     }
 #ifdef CONFIG_PM
     if (strcmp("zephyr:pm_state_force/2", nifname) == 0) {
