@@ -44,7 +44,7 @@
 #include <psa/crypto.h>
 #endif
 
-#define ENABLE_TRACE
+// #define ENABLE_TRACE
 #include <trace.h>
 
 #define TAG "otp_ssl"
