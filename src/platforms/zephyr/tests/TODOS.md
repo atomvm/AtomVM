@@ -63,8 +63,15 @@ selects, and other wiring remain in application/test overlays.
   * Evaluate a common `usb_cdc` API over Zephyr's USB device stack. Do not add
     a separate module when the configured CDC ACM device is adequately exposed
     through the eventual UART API.
-* [ ] **Flash map / storage — lower priority**
-  * Expose Zephyr's Flash Map or NVS APIs where the generic file API is not
+* [x] **Settings / NVS**
+  * `zephyr:settings_get/2,3`, `settings_put/3`, and `settings_erase/2` store
+    binary values under `Namespace/Key` via Zephyr Settings + NVS.
+  * ESP32 boards use the existing `storage` partition. Pico W carves 24 KiB
+    from the end of the 2 MiB flash (ESP-IDF default NVS size). native_sim uses
+    the board's simulated-flash `storage` partition (16 KiB). This is not a
+    clone of `esp:nvs_*`.
+* [ ] **Flash map — lower priority**
+  * Expose Zephyr's Flash Map API where the settings and file APIs are not
     sufficient. Do not copy ESP32 partition APIs verbatim.
 
 ## 2. High Priority Test Candidates (Ready to Port)
