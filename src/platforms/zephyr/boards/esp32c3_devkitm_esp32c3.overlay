@@ -11,6 +11,11 @@
 		zephyr,settings-partition = &storage_partition;
 	};
 
+	wifi_ap: wifi_ap {
+		compatible = "espressif,esp32-wifi";
+		status = "okay";
+	};
+
 	memory@50001f00 {
 		compatible = "zephyr,memory-region", "mmio-sram";
 		reg = <0x50001f00 0x100>;

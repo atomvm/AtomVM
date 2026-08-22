@@ -108,6 +108,13 @@ These tests require network or Wi-Fi emulation or a physical device board to exe
 * [x] **`test_wifi_scan` / `test_wifi_managed` (Wi-Fi Driver)**
   * *Purpose*: Verifies Wi-Fi access point scanning, connection events, and SSID listing.
   * *Dependencies*: Zephyr Wi-Fi management (`CONFIG_WIFI=y`). Also tested via `test_wifi_example` (covering TCP sockets/DNS).
+* [x] **`test_wifi_ap` (SoftAP)**
+  * `network:start([{ap, ...}])` enables Zephyr AP mode and waits for
+    `ap_started`. The AP iface is given `192.168.4.1`. With
+    `CONFIG_NET_DHCPV4_SERVER`, clients are leased from `192.168.4.2` and
+    `sta_ip_assigned` is emitted. Station connect/disconnect events fire
+    when a client joins or leaves. ESP32 uses `WIFI_USAGE_MODE_STA_AP`
+    plus `WIFI_NM` so STA and AP can run on separate interfaces.
 
 ---
 
