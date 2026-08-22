@@ -30,6 +30,7 @@ set(ERLANG_MODULES
     retention
     spi
     uart
+    zephyr
 )
 
 pack_archive(avm_zephyr DEPENDS_ON eavmlib ERLC_FLAGS +warnings_as_errors MODULES ${ERLANG_MODULES})
