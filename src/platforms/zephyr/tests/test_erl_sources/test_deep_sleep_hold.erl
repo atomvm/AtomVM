@@ -21,6 +21,8 @@ start() ->
     end,
     erlang:display({is_esp32, IsESP32}),
 
+    ok = test_sleep_api(),
+
     % We should be able to get the next PM state (can be undefined or active initially depending on platform/policy)
     InitialState = zephyr:pm_state_next_get(0),
     erlang:display({initial_state, InitialState}),
@@ -70,4 +72,18 @@ start() ->
             ok
     end,
 
+    ok.
+
+test_sleep_api() ->
+    Cause = zephyr:sleep_get_wakeup_cause(),
+    true = lists:member(Cause, [undefined, timer, gpio, reset, unknown]),
+    try zephyr:sleep_enable_gpio_wakeup(0, 1) of
+        ok ->
+            ok;
+        {error, _} ->
+            ok
+    catch
+        error:undef ->
+            ok
+    end,
     ok.
