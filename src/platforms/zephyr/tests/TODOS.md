@@ -5,7 +5,8 @@ test cases from ESP32 (`src/platforms/esp32/test/main/test_main.c`).
 
 ## 1. Zephyr Erlang Hardware APIs
 
-`libs/avm_zephyr` currently packages only `adc` and `i2c`. This does not need to
+`libs/avm_zephyr` packages the portable hardware HALs plus `zephyr.erl` for
+platform NIFs (mount, socketpair, PM, task watchdog). This does not need to
 mirror every module from a chip-specific library: modules such as `esp`, `pico`,
 and ESP32 `ledc` expose vendor-specific functionality. However, the common
 hardware interfaces supported by Zephyr should have Erlang APIs and tests.
