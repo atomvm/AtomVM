@@ -38,6 +38,11 @@
 #include <zephyr/net/wifi_mgmt.h>
 #include <zephyr/net/net_event.h>
 #include <zephyr/net/dhcpv4.h>
+#ifdef CONFIG_NET_DHCPV4_SERVER
+#include <zephyr/net/dhcpv4_server.h>
+#define ATOMVM_ZEPHYR_AP_LEASE_POLL_MS 500
+#define ATOMVM_ZEPHYR_AP_LEASE_MAX 4
+#endif
 
 #include <errno.h>
 #include <stdint.h>
@@ -59,8 +64,14 @@
 #define ZEPHYR_WIFI_SCAN_MAX_RESULTS 10
 
 static const char *const sta_atom = ATOM_STR("\x3", "sta");
+static const char *const ap_atom = ATOM_STR("\x2", "ap");
 static const char *const ssid_atom = ATOM_STR("\x4", "ssid");
 static const char *const psk_atom = ATOM_STR("\x3", "psk");
+static const char *const ap_channel_atom = ATOM_STR("\xA", "ap_channel");
+static const char *const ap_started_atom = ATOM_STR("\xA", "ap_started");
+static const char *const ap_sta_connected_atom = ATOM_STR("\x10", "ap_sta_connected");
+static const char *const ap_sta_disconnected_atom = ATOM_STR("\x13", "ap_sta_disconnected");
+static const char *const ap_sta_ip_assigned_atom = ATOM_STR("\x12", "ap_sta_ip_assigned");
 static const char *const rssi_atom = ATOM_STR("\x4", "rssi");
 static const char *const scan_results_atom = ATOM_STR("\xC", "scan_results");
 static const char *const scan_canceled_atom = ATOM_STR("\xD", "scan_canceled");
@@ -128,8 +139,17 @@ struct NetworkDriverData
     struct net_mgmt_event_callback ipv4_cb;
     struct net_mgmt_event_callback scan_cb;
     struct net_if *iface;
+    struct net_if *ap_iface;
     char *ssid;
     char *psk;
+    char *ap_ssid;
+    char *ap_psk;
+    bool ap_enabled;
+#ifdef CONFIG_NET_DHCPV4_SERVER
+    struct k_work_delayable ap_lease_work;
+    uint32_t ap_reported_leases[ATOMVM_ZEPHYR_AP_LEASE_MAX];
+    uint8_t ap_reported_lease_count;
+#endif
     bool connected;
     bool got_ip;
     bool managed;
@@ -145,6 +165,10 @@ struct NetworkDriverData
     term sta_connected_term;
     term sta_disconnected_term;
     term sta_got_ip_term;
+    term ap_started_term;
+    term ap_sta_connected_term;
+    term ap_sta_disconnected_term;
+    term ap_sta_ip_assigned_term;
 #if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
     char *sntp_host;
     char *sntp_dns_query_host;
@@ -303,9 +327,21 @@ static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb,
                                     uint64_t mgmt_event,
                                     struct net_if *iface)
 {
-    UNUSED(cb);
+    if (!driver_data) {
+        return;
+    }
 
-    if (!driver_data || iface != driver_data->iface) {
+    bool is_sta_event = (mgmt_event == NET_EVENT_WIFI_CONNECT_RESULT
+        || mgmt_event == NET_EVENT_WIFI_DISCONNECT_RESULT);
+    bool is_ap_event = (mgmt_event == NET_EVENT_WIFI_AP_ENABLE_RESULT
+        || mgmt_event == NET_EVENT_WIFI_AP_DISABLE_RESULT
+        || mgmt_event == NET_EVENT_WIFI_AP_STA_CONNECTED
+        || mgmt_event == NET_EVENT_WIFI_AP_STA_DISCONNECTED);
+
+    if (is_sta_event && iface != driver_data->iface) {
+        return;
+    }
+    if (is_ap_event && driver_data->ap_iface != NULL && iface != driver_data->ap_iface) {
         return;
     }
 
@@ -417,6 +453,51 @@ static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb,
         {
             term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
             term msg = port_heap_create_tuple2(&heap, ref, driver_data->sta_disconnected_term);
+            globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
+        }
+        END_WITH_STACK_HEAP(heap, driver_data->global);
+    } else if (mgmt_event == NET_EVENT_WIFI_AP_ENABLE_RESULT) {
+        const struct wifi_status *status = (const struct wifi_status *) cb->info;
+        if (status != NULL && status->status != WIFI_STATUS_AP_SUCCESS) {
+            return;
+        }
+        driver_data->ap_enabled = true;
+        BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
+        {
+            term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+            term msg = port_heap_create_tuple2(&heap, ref, driver_data->ap_started_term);
+            globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
+        }
+        END_WITH_STACK_HEAP(heap, driver_data->global);
+    } else if (mgmt_event == NET_EVENT_WIFI_AP_DISABLE_RESULT) {
+        driver_data->ap_enabled = false;
+    } else if (mgmt_event == NET_EVENT_WIFI_AP_STA_CONNECTED) {
+        const struct wifi_ap_sta_info *sta_info = (const struct wifi_ap_sta_info *) cb->info;
+        if (sta_info == NULL || sta_info->mac_length == 0) {
+            return;
+        }
+        size_t heap_size = PORT_REPLY_SIZE + TUPLE_SIZE(2) + term_binary_heap_size(sta_info->mac_length);
+        BEGIN_WITH_STACK_HEAP(heap_size, heap);
+        {
+            term mac = term_from_literal_binary(sta_info->mac, sta_info->mac_length, &heap, driver_data->global);
+            term payload = port_heap_create_tuple2(&heap, driver_data->ap_sta_connected_term, mac);
+            term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+            term msg = port_heap_create_tuple2(&heap, ref, payload);
+            globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
+        }
+        END_WITH_STACK_HEAP(heap, driver_data->global);
+    } else if (mgmt_event == NET_EVENT_WIFI_AP_STA_DISCONNECTED) {
+        const struct wifi_ap_sta_info *sta_info = (const struct wifi_ap_sta_info *) cb->info;
+        if (sta_info == NULL || sta_info->mac_length == 0) {
+            return;
+        }
+        size_t heap_size = PORT_REPLY_SIZE + TUPLE_SIZE(2) + term_binary_heap_size(sta_info->mac_length);
+        BEGIN_WITH_STACK_HEAP(heap_size, heap);
+        {
+            term mac = term_from_literal_binary(sta_info->mac, sta_info->mac_length, &heap, driver_data->global);
+            term payload = port_heap_create_tuple2(&heap, driver_data->ap_sta_disconnected_term, mac);
+            term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+            term msg = port_heap_create_tuple2(&heap, ref, payload);
             globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
         }
         END_WITH_STACK_HEAP(heap, driver_data->global);
@@ -879,6 +960,241 @@ static void ipv4_mgmt_event_handler(struct net_mgmt_event_callback *cb,
     }
 }
 
+static struct net_if *find_sta_iface(void)
+{
+    struct net_if *sta_iface = net_if_get_wifi_sta();
+    return sta_iface != NULL ? sta_iface : net_if_get_first_wifi();
+}
+
+static struct net_if *find_ap_iface(struct net_if *sta_iface)
+{
+    struct net_if *ap_iface = net_if_get_wifi_sap();
+    if (ap_iface != NULL && ap_iface != sta_iface) {
+        return ap_iface;
+    }
+
+    STRUCT_SECTION_FOREACH (net_if, iface) {
+        if (!net_if_is_wifi(iface) || iface == sta_iface) {
+            continue;
+        }
+        return iface;
+    }
+
+    return sta_iface;
+}
+
+static void assign_ap_ipv4(struct net_if *iface)
+{
+    struct net_in_addr addr;
+    if (net_addr_pton(AF_INET, "192.168.4.1", &addr) != 0) {
+        return;
+    }
+    struct net_if *existing = iface;
+    if (net_if_ipv4_addr_lookup(&addr, &existing) == NULL || existing != iface) {
+        if (net_if_ipv4_addr_add(iface, &addr, NET_ADDR_MANUAL, 0) == NULL) {
+            return;
+        }
+    }
+    struct net_in_addr netmask;
+    if (net_addr_pton(AF_INET, "255.255.255.0", &netmask) == 0) {
+        net_if_ipv4_set_netmask_by_addr(iface, &addr, &netmask);
+    }
+    net_if_ipv4_set_gw(iface, &addr);
+}
+
+#ifdef CONFIG_NET_DHCPV4_SERVER
+static term ip4_tuple_from_addr(struct net_in_addr addr, Heap *heap)
+{
+    uint32_t ip_val = ntohl(addr.s_addr);
+    term ip_elements[4] = {
+        term_from_int((ip_val >> 24) & 0xFF),
+        term_from_int((ip_val >> 16) & 0xFF),
+        term_from_int((ip_val >> 8) & 0xFF),
+        term_from_int(ip_val & 0xFF)
+    };
+    return port_heap_create_tuple_n(heap, 4, ip_elements);
+}
+
+static bool ap_lease_already_reported(uint32_t addr)
+{
+    for (uint8_t i = 0; i < driver_data->ap_reported_lease_count; i++) {
+        if (driver_data->ap_reported_leases[i] == addr) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void ap_lease_remember(uint32_t addr)
+{
+    if (driver_data->ap_reported_lease_count < ATOMVM_ZEPHYR_AP_LEASE_MAX) {
+        driver_data->ap_reported_leases[driver_data->ap_reported_lease_count++] = addr;
+        return;
+    }
+    driver_data->ap_reported_leases[ATOMVM_ZEPHYR_AP_LEASE_MAX - 1] = addr;
+}
+
+static void send_ap_sta_ip_assigned(struct net_in_addr addr)
+{
+    BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(4), heap);
+    {
+        term ip_term = ip4_tuple_from_addr(addr, &heap);
+        term payload = port_heap_create_tuple2(&heap, driver_data->ap_sta_ip_assigned_term, ip_term);
+        term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+        term msg = port_heap_create_tuple2(&heap, ref, payload);
+        globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
+    }
+    END_WITH_STACK_HEAP(heap, driver_data->global);
+}
+
+static void ap_lease_foreach_cb(struct net_if *iface, struct dhcpv4_addr_slot *lease, void *user_data)
+{
+    UNUSED(iface);
+    UNUSED(user_data);
+
+    if (lease == NULL || lease->state != DHCPV4_SERVER_ADDR_ALLOCATED) {
+        return;
+    }
+    if (ap_lease_already_reported(lease->addr.s_addr)) {
+        return;
+    }
+    ap_lease_remember(lease->addr.s_addr);
+    send_ap_sta_ip_assigned(lease->addr);
+}
+
+static void ap_lease_work_handler(struct k_work *work)
+{
+    UNUSED(work);
+
+    if (!driver_data || !driver_data->ap_enabled || driver_data->ap_iface == NULL) {
+        return;
+    }
+
+    (void) net_dhcpv4_server_foreach_lease(driver_data->ap_iface, ap_lease_foreach_cb, NULL);
+    k_work_reschedule(&driver_data->ap_lease_work, K_MSEC(ATOMVM_ZEPHYR_AP_LEASE_POLL_MS));
+}
+
+static void start_ap_dhcp_server(struct net_if *iface)
+{
+    assign_ap_ipv4(iface);
+
+    struct net_in_addr pool;
+    if (net_addr_pton(AF_INET, "192.168.4.2", &pool) != 0) {
+        return;
+    }
+    (void) net_dhcpv4_server_start(iface, &pool);
+    driver_data->ap_reported_lease_count = 0;
+    k_work_reschedule(&driver_data->ap_lease_work, K_MSEC(ATOMVM_ZEPHYR_AP_LEASE_POLL_MS));
+}
+
+static void stop_ap_dhcp_server(struct net_if *iface)
+{
+    k_work_cancel_delayable(&driver_data->ap_lease_work);
+    driver_data->ap_reported_lease_count = 0;
+    (void) net_dhcpv4_server_stop(iface);
+}
+#endif
+
+static term start_ap(Context *ctx, term ap_config)
+{
+    UNUSED(ctx);
+
+    if (UNLIKELY(!driver_data || !driver_data->ap_iface)) {
+        return BADARG_ATOM;
+    }
+
+    term ssid_term = interop_kv_get_value(ap_config, ssid_atom, ctx->global);
+    term psk_term = interop_kv_get_value(ap_config, psk_atom, ctx->global);
+    term channel_term = interop_kv_get_value(ap_config, ap_channel_atom, ctx->global);
+
+    char *ssid = NULL;
+    int ok = 0;
+    if (term_is_invalid_term(ssid_term)) {
+        ssid = strdup("atomvm-ap");
+        if (IS_NULL_PTR(ssid)) {
+            return OUT_OF_MEMORY_ATOM;
+        }
+    } else {
+        ssid = interop_term_to_string(ssid_term, &ok);
+        if (!ok || IS_NULL_PTR(ssid) || ssid[0] == '\0') {
+            free(ssid);
+            return BADARG_ATOM;
+        }
+    }
+
+    char *psk = NULL;
+    if (!term_is_invalid_term(psk_term)) {
+        psk = interop_term_to_string(psk_term, &ok);
+        if (!ok || IS_NULL_PTR(psk) || strlen(psk) < 8) {
+            free(ssid);
+            free(psk);
+            return BADARG_ATOM;
+        }
+    }
+
+    uint8_t channel = WIFI_CHANNEL_ANY;
+    if (!term_is_invalid_term(channel_term)) {
+        if (!term_is_integer(channel_term)) {
+            free(ssid);
+            free(psk);
+            return BADARG_ATOM;
+        }
+        avm_int_t channel_value = term_to_int(channel_term);
+        if (channel_value < 1 || channel_value > 14) {
+            free(ssid);
+            free(psk);
+            return BADARG_ATOM;
+        }
+        channel = (uint8_t) channel_value;
+    }
+
+    if (driver_data->ap_ssid) {
+        free(driver_data->ap_ssid);
+    }
+    driver_data->ap_ssid = ssid;
+    if (driver_data->ap_psk) {
+        free(driver_data->ap_psk);
+    }
+    driver_data->ap_psk = psk;
+
+    struct wifi_connect_req_params params = { 0 };
+    params.ssid = (const uint8_t *) driver_data->ap_ssid;
+    params.ssid_length = strlen(driver_data->ap_ssid);
+    if (driver_data->ap_psk != NULL) {
+        params.psk = (const uint8_t *) driver_data->ap_psk;
+        params.psk_length = strlen(driver_data->ap_psk);
+        params.security = WIFI_SECURITY_TYPE_PSK;
+    } else {
+        params.security = WIFI_SECURITY_TYPE_NONE;
+    }
+    params.channel = channel;
+    params.band = WIFI_FREQ_BAND_2_4_GHZ;
+    params.mfp = WIFI_MFP_OPTIONAL;
+    params.timeout = SYS_FOREVER_MS;
+
+    int err = net_mgmt(NET_REQUEST_WIFI_AP_ENABLE, driver_data->ap_iface, &params, sizeof(params));
+    if (err != 0 && err != -EALREADY) {
+        return ERROR_ATOM;
+    }
+    if (err == -EALREADY) {
+        driver_data->ap_enabled = true;
+        BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
+        {
+            term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+            term msg = port_heap_create_tuple2(&heap, ref, driver_data->ap_started_term);
+            globalcontext_send_message(driver_data->global, driver_data->owner_process_id, msg);
+        }
+        END_WITH_STACK_HEAP(heap, driver_data->global);
+    }
+
+#ifdef CONFIG_NET_DHCPV4_SERVER
+    start_ap_dhcp_server(driver_data->ap_iface);
+#else
+    assign_ap_ipv4(driver_data->ap_iface);
+#endif
+    return OK_ATOM;
+}
+
 static term start_network(Context *ctx, term pid, term ref, term config)
 {
     if (UNLIKELY(!driver_data || !driver_data->iface)) {
@@ -890,8 +1206,26 @@ static term start_network(Context *ctx, term pid, term ref, term config)
     }
 
     term sta_config = interop_kv_get_value(config, sta_atom, ctx->global);
-    if (term_is_invalid_term(sta_config)) {
+    term ap_config = interop_kv_get_value(config, ap_atom, ctx->global);
+    if (term_is_invalid_term(sta_config) && term_is_invalid_term(ap_config)) {
         return BADARG_ATOM;
+    }
+
+    if (term_is_invalid_term(sta_config)) {
+        driver_data->owner_process_id = term_to_local_process_id(pid);
+        driver_data->ref_ticks = term_to_ref_ticks(ref);
+        if (!driver_data->cb_registered) {
+            net_mgmt_init_event_callback(&driver_data->wifi_cb, wifi_mgmt_event_handler,
+                NET_EVENT_WIFI_CONNECT_RESULT | NET_EVENT_WIFI_DISCONNECT_RESULT
+                    | NET_EVENT_WIFI_AP_ENABLE_RESULT | NET_EVENT_WIFI_AP_DISABLE_RESULT
+                    | NET_EVENT_WIFI_AP_STA_CONNECTED | NET_EVENT_WIFI_AP_STA_DISCONNECTED);
+            net_mgmt_add_event_callback(&driver_data->wifi_cb);
+            net_mgmt_init_event_callback(&driver_data->ipv4_cb, ipv4_mgmt_event_handler,
+                NET_EVENT_IPV4_ADDR_ADD);
+            net_mgmt_add_event_callback(&driver_data->ipv4_cb);
+            driver_data->cb_registered = true;
+        }
+        return start_ap(ctx, ap_config);
     }
 
     term ssid_term = interop_kv_get_value(sta_config, ssid_atom, ctx->global);
@@ -968,7 +1302,9 @@ static term start_network(Context *ctx, term pid, term ref, term config)
     // Register callbacks if not registered yet
     if (!driver_data->cb_registered) {
         net_mgmt_init_event_callback(&driver_data->wifi_cb, wifi_mgmt_event_handler,
-                                     NET_EVENT_WIFI_CONNECT_RESULT | NET_EVENT_WIFI_DISCONNECT_RESULT);
+            NET_EVENT_WIFI_CONNECT_RESULT | NET_EVENT_WIFI_DISCONNECT_RESULT
+                | NET_EVENT_WIFI_AP_ENABLE_RESULT | NET_EVENT_WIFI_AP_DISABLE_RESULT
+                | NET_EVENT_WIFI_AP_STA_CONNECTED | NET_EVENT_WIFI_AP_STA_DISCONNECTED);
         net_mgmt_add_event_callback(&driver_data->wifi_cb);
 
         net_mgmt_init_event_callback(&driver_data->ipv4_cb, ipv4_mgmt_event_handler,
@@ -976,6 +1312,16 @@ static term start_network(Context *ctx, term pid, term ref, term config)
         net_mgmt_add_event_callback(&driver_data->ipv4_cb);
 
         driver_data->cb_registered = true;
+    }
+
+    /* Enable AP before STA so APSTA mode is set before the station
+     * association starts. Enabling AP after CONNECT restarts the radio.
+     */
+    if (!term_is_invalid_term(ap_config) && driver_data->ap_iface != driver_data->iface) {
+        term ap_ret = start_ap(ctx, ap_config);
+        if (ap_ret != OK_ATOM) {
+            return ap_ret;
+        }
     }
 
     if (!managed) {
@@ -1254,6 +1600,13 @@ static void stop_network(void)
 #endif
         net_mgmt(NET_REQUEST_WIFI_DISCONNECT, driver_data->iface, NULL, 0);
     }
+    if (driver_data->ap_iface) {
+#ifdef CONFIG_NET_DHCPV4_SERVER
+        stop_ap_dhcp_server(driver_data->ap_iface);
+#endif
+        net_mgmt(NET_REQUEST_WIFI_AP_DISABLE, driver_data->ap_iface, NULL, 0);
+        driver_data->ap_enabled = false;
+    }
 
 #if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
     disable_sntp_sync();
@@ -1369,14 +1722,22 @@ void network_driver_init(GlobalContext *global)
     }
 
     data->global = global;
-    data->iface = net_if_get_first_wifi();
+    data->iface = find_sta_iface();
     if (!data->iface) {
         free(data);
         return;
     }
+    data->ap_iface = find_ap_iface(data->iface);
     data->sta_connected_term = globalcontext_make_atom(global, sta_connected_atom);
     data->sta_disconnected_term = globalcontext_make_atom(global, sta_disconnected_atom);
     data->sta_got_ip_term = globalcontext_make_atom(global, sta_got_ip_atom);
+    data->ap_started_term = globalcontext_make_atom(global, ap_started_atom);
+    data->ap_sta_connected_term = globalcontext_make_atom(global, ap_sta_connected_atom);
+    data->ap_sta_disconnected_term = globalcontext_make_atom(global, ap_sta_disconnected_atom);
+    data->ap_sta_ip_assigned_term = globalcontext_make_atom(global, ap_sta_ip_assigned_atom);
+#ifdef CONFIG_NET_DHCPV4_SERVER
+    k_work_init_delayable(&data->ap_lease_work, ap_lease_work_handler);
+#endif
 #if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
     data->sntp_sync_term = globalcontext_make_atom(global, sntp_sync_atom);
     k_mutex_init(&data->sntp_lock);
@@ -1398,11 +1759,16 @@ void network_driver_destroy(GlobalContext *global)
         if (driver_data->scan_cb_registered) {
             net_mgmt_del_event_callback(&driver_data->scan_cb);
         }
+#ifdef CONFIG_NET_DHCPV4_SERVER
+        k_work_cancel_delayable(&driver_data->ap_lease_work);
+#endif
 #if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
         disable_sntp_sync();
 #endif
         free(driver_data->ssid);
         free(driver_data->psk);
+        free(driver_data->ap_ssid);
+        free(driver_data->ap_psk);
         free(driver_data);
         driver_data = NULL;
     }

@@ -188,6 +188,12 @@ ZTEST(atomvm_tests, test_crypto)
 }
 
 #if defined(CONFIG_WIFI)
+ZTEST(atomvm_tests, test_wifi_ap)
+{
+    term ret_value = avm_test_case("test_wifi_ap.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_wifi_ap did not return 'ok'");
+}
+
 ZTEST(atomvm_tests, test_wifi_scan)
 {
     term ret_value = avm_test_case("test_wifi_scan.beam");
