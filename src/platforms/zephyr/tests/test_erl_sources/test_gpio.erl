@@ -10,7 +10,7 @@
 -export([start/0]).
 
 start() ->
-    Pin = {0, 0},
+    Pin = test_pin(),
     ok = gpio:init(Pin),
     ok = gpio:set_pin_mode(Pin, output),
     ok = gpio:digital_write(Pin, low),
@@ -28,3 +28,15 @@ start() ->
     ok = gpio:set_pin_pull(Pin, floating),
     ok = gpio:deinit(Pin),
     ok.
+
+%% GPIO0 is fine on classic ESP32. On ESP32-C3 it is not a reliable
+%% Wokwi GPIO; GPIO10 is a spare digital pin (not strapping, USB-JTAG,
+%% UART, or the ADC pot on GPIO3).
+test_pin() ->
+    Architecture = erlang:system_info(system_architecture),
+    case binary:match(Architecture, <<"esp32c3">>) of
+        nomatch ->
+            {0, 0};
+        _ ->
+            {0, 10}
+    end.
