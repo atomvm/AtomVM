@@ -57,8 +57,12 @@ selects, and other wiring remain in application/test overlays.
     `set_cycles`, and `get_cycles_per_sec`). Controllers are selected by
     `atomvm,pwm`, index (`pwm0`/`ledc0` as 0), or device name.
   * Native simulator coverage uses Zephyr's fake PWM driver.
-* [ ] **DAC — medium priority**
-  * Add an API using Zephyr's DAC subsystem on boards that expose a DAC.
+* [x] **DAC**
+  * `dac.erl` exposes Zephyr's portable DAC API (`open`, `write` raw codes,
+    `close`). Controllers are selected by `atomvm,dac`, index (`dac0`/`dac`
+    as 0), or device name.
+  * native_sim coverage uses `zephyr,dac-emul`. Classic ESP32 enables the
+    on-chip DAC (GPIO25 channel 0). ESP32-C3 and ESP32-S3 have no DAC.
 * [ ] **USB CDC — lower priority**
   * Evaluate a common `usb_cdc` API over Zephyr's USB device stack. Do not add
     a separate module when the configured CDC ACM device is adequately exposed
