@@ -387,11 +387,11 @@ Also install Espressif pytest's extensions for embedded testing with:
 ```shell
 $ cd <ESP-IDF-ROOT-DIR>
 $ . ./export.sh
-$ pip install pytest==7.0.1 \
-    pytest-embedded==1.2.5 \
-    pytest-embedded-serial-esp==1.2.5 \
-    pytest-embedded-idf==1.2.5 \
-    pytest-embedded-qemu==1.2.5
+$ pip install pytest==8.3.4 \
+    pytest-embedded==2.8.1 \
+    pytest-embedded-serial-esp==2.8.1 \
+    pytest-embedded-idf==2.8.1 \
+    pytest-embedded-qemu==2.8.1
 ```
 
 Change directory to the `src/platforms/esp32/test` directory under the AtomVM source tree root:
