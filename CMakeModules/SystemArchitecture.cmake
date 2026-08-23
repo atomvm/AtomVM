@@ -14,7 +14,7 @@
 
 function(avm_get_system_architecture_string out_var)
     set(options)
-    set(one_value_args PLATFORM_VENDOR PLATFORM_OS)
+    set(one_value_args PLATFORM_ARCH PLATFORM_VENDOR PLATFORM_OS)
     cmake_parse_arguments(PARSE_ARGV 1 AVM "${options}" "${one_value_args}" "")
 
     execute_process(
@@ -57,6 +57,10 @@ function(avm_get_system_architecture_string out_var)
 
         list(REMOVE_AT avm_system_architecture_parts 0 1)
         string(REPLACE ";" "_" avm_os "${avm_system_architecture_parts}")
+    endif()
+
+    if (DEFINED AVM_PLATFORM_ARCH)
+        set(avm_architecture "${AVM_PLATFORM_ARCH}")
     endif()
 
     if (DEFINED AVM_PLATFORM_VENDOR)
