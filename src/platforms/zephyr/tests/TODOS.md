@@ -108,7 +108,8 @@ These tests require network or Wi-Fi emulation or a physical device board to exe
   * *Purpose*: Verifies otp_ssl handshake, HTTP over TLS, and socket select against github.com.
   * *Dependencies*: Wi-Fi STA, TCP, DNS, and mbedTLS/PSA. Runs as its own ZTEST after the other Wi-Fi cases.
   * ESP32-C3 Wokwi is skipped: GitHub resets the TCP connection (`ECONNRESET`)
-    mid-handshake after ~75s. Classic ESP32 completes the same case.
+    mid-handshake after ~75s. ESP32-S3 Wokwi is skipped: handshake returns
+    `{error,-2}` after ~7s. Classic ESP32 completes the same case.
 * [x] **`test_wifi_scan` / `test_wifi_managed` (Wi-Fi Driver)**
   * *Purpose*: Verifies Wi-Fi access point scanning, connection events, and SSID listing.
   * *Dependencies*: Zephyr Wi-Fi management (`CONFIG_WIFI=y`). Also tested via `test_wifi_example` (covering TCP sockets/DNS).

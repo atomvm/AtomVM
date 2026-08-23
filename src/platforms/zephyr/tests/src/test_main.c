@@ -222,7 +222,7 @@ ZTEST(atomvm_tests, test_wifi_example)
 #endif
 
 #if defined(CONFIG_WIFI) && defined(CONFIG_AVM_ENABLE_CRYPTO) && defined(CONFIG_NET_SOCKETS) \
-    && !defined(CONFIG_SOC_SERIES_ESP32C3)
+    && !defined(CONFIG_SOC_SERIES_ESP32C3) && !defined(CONFIG_SOC_SERIES_ESP32S3)
 ZTEST(atomvm_tests, test_ssl)
 {
     term ret_value = avm_test_case("test_ssl.beam");
