@@ -26,8 +26,8 @@ start() ->
     try
         SystemArchitecture = erlang:system_info(system_architecture),
         IsESP32 = case binary:split(SystemArchitecture, <<"-">>, [global]) of
-            [<<"xtensa">>, Vendor | _] ->
-                nomatch =/= binary:match(Vendor, <<"espressif">>);
+            [<<"xtensa">>, <<"esp">> | _] ->
+                true;
             _ ->
                 false
         end,
