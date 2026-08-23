@@ -476,8 +476,114 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
     return new_ctx;
 }
 
+#ifdef CONFIG_SOC_FAMILY_ESPRESSIF_ESP32
+// clang-format off
+static const char *const esp_chip_info_atom = "\xF" "esp32_chip_info";
+#if defined(CONFIG_SOC_SERIES_ESP32)
+static const char *const esp32_model_atom = "\x5" "esp32";
+#elif defined(CONFIG_SOC_SERIES_ESP32S2)
+static const char *const esp32_model_atom = "\x8" "esp32_s2";
+#elif defined(CONFIG_SOC_SERIES_ESP32S3)
+static const char *const esp32_model_atom = "\x8" "esp32_s3";
+#elif defined(CONFIG_SOC_SERIES_ESP32C2)
+static const char *const esp32_model_atom = "\x8" "esp32_c2";
+#elif defined(CONFIG_SOC_SERIES_ESP32C3)
+static const char *const esp32_model_atom = "\x8" "esp32_c3";
+#elif defined(CONFIG_SOC_SERIES_ESP32C5)
+static const char *const esp32_model_atom = "\x8" "esp32_c5";
+#elif defined(CONFIG_SOC_SERIES_ESP32C6)
+static const char *const esp32_model_atom = "\x8" "esp32_c6";
+#elif defined(CONFIG_SOC_SERIES_ESP32H2)
+static const char *const esp32_model_atom = "\x8" "esp32_h2";
+#endif
+static const char *const emb_flash_atom = "\x9" "emb_flash";
+static const char *const bgn_atom = "\x3" "bgn";
+static const char *const ble_atom = "\x3" "ble";
+static const char *const bt_atom = "\x2" "bt";
+static const char *const cores_atom = "\x5" "cores";
+static const char *const features_atom = "\x8" "features";
+static const char *const model_atom = "\x5" "model";
+static const char *const revision_atom = "\x8" "revision";
+// clang-format on
+
+#define CHIP_FEATURE_EMB_FLASH (1U << 0)
+#define CHIP_FEATURE_WIFI_BGN (1U << 1)
+#define CHIP_FEATURE_BLE (1U << 4)
+#define CHIP_FEATURE_BT (1U << 5)
+
+static term get_esp32_features(Context *ctx, uint32_t features)
+{
+    term ret = term_nil();
+    GlobalContext *glb = ctx->global;
+
+    if (features & CHIP_FEATURE_EMB_FLASH) {
+        ret = term_list_prepend(globalcontext_make_atom(glb, emb_flash_atom), ret, &ctx->heap);
+    }
+    if (features & CHIP_FEATURE_WIFI_BGN) {
+        ret = term_list_prepend(globalcontext_make_atom(glb, bgn_atom), ret, &ctx->heap);
+    }
+    if (features & CHIP_FEATURE_BLE) {
+        ret = term_list_prepend(globalcontext_make_atom(glb, ble_atom), ret, &ctx->heap);
+    }
+    if (features & CHIP_FEATURE_BT) {
+        ret = term_list_prepend(globalcontext_make_atom(glb, bt_atom), ret, &ctx->heap);
+    }
+
+    return ret;
+}
+
+#if defined(CONFIG_SOC_SERIES_ESP32) || defined(CONFIG_SOC_SERIES_ESP32S2) \
+    || defined(CONFIG_SOC_SERIES_ESP32S3) || defined(CONFIG_SOC_SERIES_ESP32C2) \
+    || defined(CONFIG_SOC_SERIES_ESP32C3) || defined(CONFIG_SOC_SERIES_ESP32C5) \
+    || defined(CONFIG_SOC_SERIES_ESP32C6) || defined(CONFIG_SOC_SERIES_ESP32H2)
+static term get_esp32_chip_info(Context *ctx)
+{
+#if defined(CONFIG_SOC_SERIES_ESP32)
+    const int cores = 2;
+    const uint32_t features = CHIP_FEATURE_WIFI_BGN | CHIP_FEATURE_BT | CHIP_FEATURE_BLE;
+#elif defined(CONFIG_SOC_SERIES_ESP32S2)
+    const int cores = 1;
+    const uint32_t features = CHIP_FEATURE_WIFI_BGN;
+#elif defined(CONFIG_SOC_SERIES_ESP32S3)
+    const int cores = 2;
+    const uint32_t features = CHIP_FEATURE_WIFI_BGN | CHIP_FEATURE_BLE;
+#elif defined(CONFIG_SOC_SERIES_ESP32H2)
+    const int cores = 1;
+    const uint32_t features = CHIP_FEATURE_BLE;
+#else
+    const int cores = 1;
+    const uint32_t features = CHIP_FEATURE_WIFI_BGN | CHIP_FEATURE_BLE;
+#endif
+
+    GlobalContext *glb = ctx->global;
+    if (memory_ensure_free(ctx, term_map_size_in_terms(4) + 4 * CONS_SIZE) != MEMORY_GC_OK) {
+        return OUT_OF_MEMORY_ATOM;
+    }
+
+    term ret = term_alloc_map(4, &ctx->heap);
+    term_set_map_assoc(ret, 0, globalcontext_make_atom(glb, cores_atom), term_from_int4(cores));
+    term_set_map_assoc(ret, 1, globalcontext_make_atom(glb, features_atom), get_esp32_features(ctx, features));
+    term_set_map_assoc(ret, 2, globalcontext_make_atom(glb, model_atom), globalcontext_make_atom(glb, esp32_model_atom));
+    term_set_map_assoc(ret, 3, globalcontext_make_atom(glb, revision_atom), term_from_int11(0));
+    return ret;
+}
+#endif
+#endif
+
 term sys_get_info(Context *ctx, term key)
 {
+#if defined(CONFIG_SOC_SERIES_ESP32) || defined(CONFIG_SOC_SERIES_ESP32S2) \
+    || defined(CONFIG_SOC_SERIES_ESP32S3) || defined(CONFIG_SOC_SERIES_ESP32C2) \
+    || defined(CONFIG_SOC_SERIES_ESP32C3) || defined(CONFIG_SOC_SERIES_ESP32C5) \
+    || defined(CONFIG_SOC_SERIES_ESP32C6) || defined(CONFIG_SOC_SERIES_ESP32H2)
+    GlobalContext *glb = ctx->global;
+    if (key == globalcontext_make_atom(glb, esp_chip_info_atom)) {
+        return get_esp32_chip_info(ctx);
+    }
+#else
+    UNUSED(ctx);
+    UNUSED(key);
+#endif
     return UNDEFINED_ATOM;
 }
 
