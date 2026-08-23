@@ -27,8 +27,9 @@
 %% `clock_speed_hz'.
 %%
 %% The low-level API maps to AtomVM Zephyr I2C resource NIFs and operates on a
-%% resource returned by {@link init/1}. Slave-mode functions are present for API
-%% symmetry but return `{error, enotsup}' until target-mode support is added.
+%% resource returned by {@link init/1}. Slave-mode functions use Zephyr I2C
+%% target callbacks when `CONFIG_I2C_TARGET' is enabled and `{own_address, Addr}'
+%% is passed to {@link init/1}. Otherwise they return `{error, enotsup}'.
 %% @end
 %%-----------------------------------------------------------------------------
 -module(i2c).
@@ -52,8 +53,10 @@
     deinit/1,
     master_transmit/4,
     master_receive/4,
-    slave_transmit/3,
-    slave_receive/3,
+    target_transmit/3,
+    target_receive/3,
+    target_transmit_nif/3,
+    target_receive_nif/3,
     mem_read/6,
     mem_write/6,
     is_device_ready/4
@@ -65,6 +68,7 @@
 -type param() ::
     {clock_speed_hz, freq_hz()}
     | {peripheral, peripheral()}
+    | {own_address, address()}
     | {send_timeout_ms, timeout()}.
 -type params() :: [param()].
 -type i2c_resource() :: reference().
@@ -94,6 +98,9 @@
 %%                  `atomvm,i2c' chosen node when present, otherwise `i2c0'.</li>
 %%              <li>`{clock_speed_hz, Hz}' - requested I2C clock speed. Zephyr
 %%                  maps this to one of its standard speed tiers.</li>
+%%              <li>`{own_address, Addr}' - 7-bit own address for target
+%%                  mode. Required for {@link target_transmit/3} and
+%%                  {@link target_receive/3}.</li>
 %%              <li>`{send_timeout_ms, Ms | infinity}' - send timeout stored in
 %%                  the high-level server state. Zephyr controller drivers own
 %%                  the actual synchronous transfer timeout.</li>
@@ -286,31 +293,71 @@ master_receive(_Resource, _Addr, _Count, _TimeoutMs) ->
 %% @param   Data Binary data to transmit
 %% @param   TimeoutMs Timeout in milliseconds or `infinity'
 %% @returns Number of bytes written, or `{error, Reason}'
-%% @doc     Slave transmit. Currently returns `{error, enotsup}' on Zephyr.
+%% @doc     Target transmit.
+%%
+%%          Waits for a controller to read `Data'. The own address must be set
+%%          via `{own_address, Addr}' when calling {@link init/1}. Returns
+%%          `{error, enotsup}' when Zephyr I2C target mode is unavailable.
 %% @end
 %%-----------------------------------------------------------------------------
--spec slave_transmit(
+-spec target_transmit(
     Resource :: i2c_resource(), Data :: binary(), TimeoutMs :: timeout()
 ) ->
     non_neg_integer() | {error, Reason :: term()}.
-slave_transmit(_Resource, _Data, _TimeoutMs) ->
-    erlang:nif_error(undefined).
+target_transmit(Resource, Data, TimeoutMs) ->
+    case target_transmit_nif(Resource, Data, TimeoutMs) of
+        ok ->
+            wait_target_result(TimeoutMs);
+        Error ->
+            Error
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   Resource I2C resource returned by `init/1'
 %% @param   Count Number of bytes to receive
 %% @param   TimeoutMs Timeout in milliseconds or `infinity'
 %% @returns `{ok, Data}' or `{error, Reason}'
-%% @doc     Slave receive. Currently returns `{error, enotsup}' on Zephyr.
+%% @doc     Target receive.
+%%
+%%          Waits for a controller to write up to `Count' bytes. The own address
+%%          must be set via `{own_address, Addr}' when calling {@link init/1}.
+%%          Returns `{error, enotsup}' when Zephyr I2C target mode is unavailable.
 %% @end
 %%-----------------------------------------------------------------------------
--spec slave_receive(
+-spec target_receive(
     Resource :: i2c_resource(),
     Count :: non_neg_integer(),
     TimeoutMs :: timeout()
 ) ->
     {ok, binary()} | {error, Reason :: term()}.
-slave_receive(_Resource, _Count, _TimeoutMs) ->
+target_receive(Resource, Count, TimeoutMs) ->
+    case target_receive_nif(Resource, Count, TimeoutMs) of
+        ok ->
+            wait_target_result(TimeoutMs);
+        Error ->
+            Error
+    end.
+
+%% @private
+wait_target_result(infinity) ->
+    receive
+        Result ->
+            Result
+    end;
+wait_target_result(TimeoutMs) ->
+    receive
+        Result ->
+            Result
+    after TimeoutMs ->
+        {error, timeout}
+    end.
+
+%% @hidden
+target_transmit_nif(_Resource, _Data, _TimeoutMs) ->
+    erlang:nif_error(undefined).
+
+%% @hidden
+target_receive_nif(_Resource, _Count, _TimeoutMs) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

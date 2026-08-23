@@ -90,6 +90,7 @@ include(${ATOMVM_ZEPHYR_ROOT}/cmake/AtomVMZephyrApp.cmake)
 
 if(AVM_ZEPHYR_NATIVE_SIM_I2C_TEST)
     target_sources(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/i2c_native_sim_emul.c)
+    target_compile_definitions(app PRIVATE AVM_ZEPHYR_NATIVE_SIM_I2C_TEST)
 endif()
 
 # Zephyr's fake PWM driver (used on native_sim) needs FFF globals linked in.
