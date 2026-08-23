@@ -115,6 +115,14 @@ These tests require network or Wi-Fi emulation or a physical device board to exe
     `sta_ip_assigned` is emitted. Station connect/disconnect events fire
     when a client joins or leaves. ESP32 uses `WIFI_USAGE_MODE_STA_AP`
     plus `WIFI_NM` so STA and AP can run on separate interfaces.
+* [x] **`test_devmode` (SoftAP onboarding)**
+  * `esp32devmode:start_network()` waits for AP, then binds the HTTP
+    config page and ALISP console. Persistence uses `zephyr:settings_*`
+    on Zephyr. Wokwi checks the `started` return, not a client join.
+  * Default `gen_tcp`/`gen_udp` on Zephyr uses `{inet_backend, socket}`
+    because there is no legacy `"socket"` port driver. The ZTEST is
+    named `test_wifi_z_devmode` so it sorts after `test_ssl` and the
+    other Wi-Fi cases; leftover AP sockets starve later STA.
 
 ---
 

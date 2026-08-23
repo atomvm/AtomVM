@@ -12,11 +12,17 @@ on:
       - ".github/workflows/zephyr-build.yaml"
       - "src/platforms/zephyr/**"
       - "src/libAtomVM/**"
+      - "libs/esp32devmode/**"
+      - "libs/avm_zephyr/**"
+      - "libs/avm_network/**"
   pull_request:
     paths:
       - ".github/workflows/zephyr-build.yaml"
       - "src/platforms/zephyr/**"
       - "src/libAtomVM/**"
+      - "libs/esp32devmode/**"
+      - "libs/avm_zephyr/**"
+      - "libs/avm_network/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}

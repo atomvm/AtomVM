@@ -184,9 +184,18 @@ controlling_process({?GEN_UDP_MONIKER, Socket, Module}, Pid) ->
 get_inet_backend_module(Options) ->
     case proplists:get_value(inet_backend, Options) of
         undefined ->
-            gen_udp_inet;
+            default_inet_backend_module();
         inet ->
             gen_udp_inet;
         socket ->
             gen_udp_socket
+    end.
+
+%% Zephyr has otp_socket NIFs but no legacy "socket" port driver.
+default_inet_backend_module() ->
+    case atomvm:platform() of
+        zephyr ->
+            gen_udp_socket;
+        _ ->
+            gen_udp_inet
     end.
