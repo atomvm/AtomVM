@@ -18,6 +18,11 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
+%% @doc Captive SoftAP / STA onboarding, HTTP config page, and ALISP console.
+%%
+%% Persistence uses `esp:nvs_*` on ESP32 and `zephyr:settings_*` on Zephyr.
+%% The module and archive stay `esp32devmode` so existing ESP32 boot images
+%% keep working unchanged.
 -module(esp32devmode).
 
 -export([
@@ -47,20 +52,20 @@ start_dev_mode() ->
 
 erase_net_config() ->
     io:format("Erasing net config.~n"),
-    esp:nvs_erase_key(atomvm, sta_ssid),
-    esp:nvs_erase_key(atomvm, sta_psk).
+    erase_setting(sta_ssid),
+    erase_setting(sta_psk).
 
 save_net_config(SSID, Pass) ->
     io:format("Saving config: SSID: ~p Pass: ~p.~n", [SSID, Pass]),
-    esp:nvs_set_binary(atomvm, sta_ssid, erlang:list_to_binary(SSID)),
-    esp:nvs_set_binary(atomvm, sta_psk, erlang:list_to_binary(Pass)).
+    put_setting(sta_ssid, erlang:list_to_binary(SSID)),
+    put_setting(sta_psk, erlang:list_to_binary(Pass)).
 
 get_net_config() ->
-    case esp:nvs_get_binary(atomvm, sta_ssid) of
+    case get_setting(sta_ssid) of
         undefined ->
             get_default_net_config();
         SSID ->
-            case esp:nvs_get_binary(atomvm, sta_psk) of
+            case get_setting(sta_psk) of
                 undefined ->
                     get_default_net_config();
                 Psk ->
@@ -83,7 +88,7 @@ get_net_config(SSID, Psk) ->
     {wait_for_sta, Creds}.
 
 maybe_start_network() ->
-    case esp:nvs_get_binary(atomvm, wlan_enabled) of
+    case get_setting(wlan_enabled) of
         undefined ->
             start_network();
         <<"always">> ->
@@ -156,7 +161,7 @@ listen(Port) ->
 
 get_console_config() ->
     Enable =
-        case esp:nvs_get_binary(atomvm, console_enable) of
+        case get_setting(console_enable) of
             undefined ->
                 always;
             <<"always">> ->
@@ -165,7 +170,7 @@ get_console_config() ->
                 never
         end,
     Port =
-        case esp:nvs_get_binary(atomvm, console_port) of
+        case get_setting(console_port) of
             undefined ->
                 ?DEFAULT_CONSOLE_PORT;
             PortBinary ->
@@ -251,7 +256,7 @@ maybe_start_web_server() ->
 
 get_web_server_config() ->
     Enable =
-        case esp:nvs_get_binary(atomvm, web_server_enable) of
+        case get_setting(web_server_enable) of
             undefined ->
                 always;
             <<"always">> ->
@@ -260,7 +265,7 @@ get_web_server_config() ->
                 never
         end,
     Port =
-        case esp:nvs_get_binary(atomvm, web_server_port) of
+        case get_setting(web_server_port) of
             undefined ->
                 ?DEFAULT_WEB_SERVER_PORT;
             PortBinary ->
@@ -273,6 +278,40 @@ get_web_server_config() ->
                 end
         end,
     {Enable, Port}.
+
+%%
+%% Persistent settings. Same keys as the original ESP32 NVS usage.
+%%
+
+get_setting(Key) ->
+    case atomvm:platform() of
+        zephyr ->
+            case zephyr:settings_get(atomvm, Key) of
+                {ok, Value} ->
+                    Value;
+                {error, _} ->
+                    undefined
+            end;
+        _ ->
+            esp:nvs_get_binary(atomvm, Key)
+    end.
+
+put_setting(Key, Value) ->
+    case atomvm:platform() of
+        zephyr ->
+            zephyr:settings_put(atomvm, Key, Value);
+        _ ->
+            esp:nvs_set_binary(atomvm, Key, Value)
+    end.
+
+erase_setting(Key) ->
+    case atomvm:platform() of
+        zephyr ->
+            _ = zephyr:settings_erase(atomvm, Key),
+            ok;
+        _ ->
+            esp:nvs_erase_key(atomvm, Key)
+    end.
 
 handle_req("GET", [], Conn) ->
     Body =

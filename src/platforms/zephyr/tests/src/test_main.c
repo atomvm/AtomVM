@@ -222,6 +222,16 @@ ZTEST(atomvm_tests, test_ssl)
 }
 #endif
 
+#if defined(CONFIG_WIFI)
+/* Named so ZTEST sorts after test_ssl / test_wifi_*. Leftover AP
+ * sockets starve later STA cases if this runs first. */
+ZTEST(atomvm_tests, test_wifi_z_devmode)
+{
+    term ret_value = avm_test_case("test_devmode.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_devmode did not return 'ok'");
+}
+#endif
+
 #if defined(CONFIG_NET_SOCKETPAIR) && !defined(CONFIG_BOARD_NATIVE_SIM)
 ZTEST(atomvm_tests, test_select)
 {
