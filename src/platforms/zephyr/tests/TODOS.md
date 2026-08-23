@@ -23,6 +23,9 @@ selects, and other wiring remain in application/test overlays.
 * [x] **I2C**
   * `i2c.erl` implements `i2c_hal` on top of the Zephyr I2C NIF driver.
   * `native_sim` coverage uses Zephyr's I2C target emulator.
+  * `target_transmit/3` and `target_receive/3` use Zephyr I2C target callbacks
+    when `CONFIG_I2C_TARGET` and `{own_address, Addr}` are set. native_sim
+    loopback covers both. Classic ESP32 has no target mode.
 * [x] **UART**
   * `uart_driver.c` already implements the Zephyr resource NIFs (`init`,
     `deinit`, `read`, `write`, `abort`, and state/error queries).

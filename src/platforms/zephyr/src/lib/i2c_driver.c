@@ -37,7 +37,9 @@
 #include <interop.h>
 #include <memory.h>
 #include <nifs.h>
+#include <port.h>
 #include <term.h>
+#include <utils.h>
 
 // #define ENABLE_TRACE
 #include <trace.h>
@@ -47,12 +49,61 @@
 
 #define TAG "i2c_driver"
 
+#ifdef CONFIG_I2C_TARGET
+#define I2C_TARGET_MAX 256
+#endif
+
 static ErlNifResourceType *i2c_resource_type;
+
+#ifdef CONFIG_I2C_TARGET
+enum I2CTargetOp
+{
+    I2C_TARGET_IDLE,
+    I2C_TARGET_TRANSMIT,
+    I2C_TARGET_RECEIVE
+};
+
+struct I2CResource;
+
+static int i2c_target_write_requested(struct i2c_target_config *config);
+static int i2c_target_write_received(struct i2c_target_config *config, uint8_t val);
+static int i2c_target_read_requested(struct i2c_target_config *config, uint8_t *val);
+static int i2c_target_read_processed(struct i2c_target_config *config, uint8_t *val);
+#ifdef CONFIG_I2C_TARGET_BUFFER_MODE
+static void i2c_target_buf_write_received(struct i2c_target_config *config, uint8_t *ptr, uint32_t len);
+static int i2c_target_buf_read_requested(struct i2c_target_config *config, uint8_t **ptr, uint32_t *len);
+#endif
+static int i2c_target_stop(struct i2c_target_config *config);
+static void i2c_unregister_target(struct I2CResource *rsrc);
+
+static const struct i2c_target_callbacks i2c_target_cbs = {
+    .write_requested = i2c_target_write_requested,
+    .write_received = i2c_target_write_received,
+    .read_requested = i2c_target_read_requested,
+    .read_processed = i2c_target_read_processed,
+#ifdef CONFIG_I2C_TARGET_BUFFER_MODE
+    .buf_write_received = i2c_target_buf_write_received,
+    .buf_read_requested = i2c_target_buf_read_requested,
+#endif
+    .stop = i2c_target_stop,
+};
+#endif
 
 struct I2CResource
 {
     const struct device *dev;
     bool closed;
+#ifdef CONFIG_I2C_TARGET
+    bool target_registered;
+    uint16_t own_address;
+    struct i2c_target_config target_cfg;
+    enum I2CTargetOp op;
+    uint8_t buf[I2C_TARGET_MAX];
+    size_t buf_len;
+    size_t buf_pos;
+    int32_t waiter_pid;
+    GlobalContext *global;
+#endif
 };
 
 static term create_pair(Context *ctx, term term1, term term2)
@@ -313,6 +364,137 @@ static bool clock_speed_hz_to_zephyr_speed(uint32_t clock_speed_hz, uint32_t *ou
     return true;
 }
 
+#ifdef CONFIG_I2C_TARGET
+static struct I2CResource *i2c_resource_from_target(struct i2c_target_config *config)
+{
+    return CONTAINER_OF(config, struct I2CResource, target_cfg);
+}
+
+static int i2c_target_write_requested(struct i2c_target_config *config)
+{
+    struct I2CResource *rsrc = i2c_resource_from_target(config);
+    if (rsrc->op != I2C_TARGET_RECEIVE) {
+        return -EINVAL;
+    }
+    rsrc->buf_pos = 0;
+    return 0;
+}
+
+static int i2c_target_write_received(struct i2c_target_config *config, uint8_t val)
+{
+    struct I2CResource *rsrc = i2c_resource_from_target(config);
+    if (rsrc->op != I2C_TARGET_RECEIVE || rsrc->buf_pos >= rsrc->buf_len) {
+        return -ENOMEM;
+    }
+    rsrc->buf[rsrc->buf_pos++] = val;
+    return 0;
+}
+
+static int i2c_target_read_requested(struct i2c_target_config *config, uint8_t *val)
+{
+    struct I2CResource *rsrc = i2c_resource_from_target(config);
+    if (rsrc->op != I2C_TARGET_TRANSMIT || rsrc->buf_pos >= rsrc->buf_len) {
+        return -ENODATA;
+    }
+    *val = rsrc->buf[rsrc->buf_pos++];
+    return 0;
+}
+
+static int i2c_target_read_processed(struct i2c_target_config *config, uint8_t *val)
+{
+    return i2c_target_read_requested(config, val);
+}
+
+#ifdef CONFIG_I2C_TARGET_BUFFER_MODE
+static void i2c_target_buf_write_received(struct i2c_target_config *config, uint8_t *ptr, uint32_t len)
+{
+    struct I2CResource *rsrc = i2c_resource_from_target(config);
+    if (rsrc->op != I2C_TARGET_RECEIVE) {
+        return;
+    }
+    if (len > rsrc->buf_len) {
+        len = (uint32_t) rsrc->buf_len;
+    }
+    memcpy(rsrc->buf, ptr, len);
+    rsrc->buf_pos = len;
+}
+
+static int i2c_target_buf_read_requested(struct i2c_target_config *config, uint8_t **ptr, uint32_t *len)
+{
+    struct I2CResource *rsrc = i2c_resource_from_target(config);
+    if (rsrc->op != I2C_TARGET_TRANSMIT) {
+        return -ENODATA;
+    }
+    *ptr = rsrc->buf;
+    *len = (uint32_t) rsrc->buf_len;
+    rsrc->buf_pos = rsrc->buf_len;
+    return 0;
+}
+#endif
+
+static void i2c_target_complete(struct I2CResource *rsrc, term result)
+{
+    int32_t waiter_pid = rsrc->waiter_pid;
+    rsrc->op = I2C_TARGET_IDLE;
+    rsrc->waiter_pid = 0;
+    rsrc->buf_len = 0;
+    rsrc->buf_pos = 0;
+    i2c_unregister_target(rsrc);
+    if (waiter_pid != 0 && rsrc->global != NULL) {
+        globalcontext_send_message(rsrc->global, waiter_pid, result);
+    }
+}
+
+static int i2c_target_stop(struct i2c_target_config *config)
+{
+    struct I2CResource *rsrc = i2c_resource_from_target(config);
+    if (rsrc->op == I2C_TARGET_IDLE || rsrc->waiter_pid == 0) {
+        return 0;
+    }
+
+    if (rsrc->op == I2C_TARGET_TRANSMIT) {
+        BEGIN_WITH_STACK_HEAP(1, heap);
+        UNUSED(heap);
+        i2c_target_complete(rsrc, term_from_int((avm_int_t) rsrc->buf_len));
+        END_WITH_STACK_HEAP(heap, rsrc->global);
+        return 0;
+    }
+
+    size_t received = rsrc->buf_pos;
+    BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(2) + term_binary_heap_size(received), heap);
+    term data = term_from_literal_binary(rsrc->buf, received, &heap, rsrc->global);
+    term result = port_heap_create_tuple2(&heap, OK_ATOM, data);
+    i2c_target_complete(rsrc, result);
+    END_WITH_STACK_HEAP(heap, rsrc->global);
+    return 0;
+}
+
+static int i2c_ensure_target(struct I2CResource *rsrc)
+{
+    if (rsrc->target_registered) {
+        return 0;
+    }
+    rsrc->target_cfg.address = rsrc->own_address;
+    rsrc->target_cfg.flags = 0;
+    rsrc->target_cfg.callbacks = &i2c_target_cbs;
+    int err = i2c_target_register(rsrc->dev, &rsrc->target_cfg);
+    if (err != 0) {
+        return err;
+    }
+    rsrc->target_registered = true;
+    return 0;
+}
+
+static void i2c_unregister_target(struct I2CResource *rsrc)
+{
+    if (!rsrc->target_registered) {
+        return;
+    }
+    (void) i2c_target_unregister(rsrc->dev, &rsrc->target_cfg);
+    rsrc->target_registered = false;
+}
+#endif
+
 static term configure_i2c(Context *ctx, const struct device *dev, term opts)
 {
     static const char *const clock_speed_hz_str = ATOM_STR("\xE", "clock_speed_hz");
@@ -398,6 +580,23 @@ static term nif_i2c_init(Context *ctx, int argc, term argv[])
     }
     rsrc_obj->dev = dev;
     rsrc_obj->closed = false;
+#ifdef CONFIG_I2C_TARGET
+    static const char *const own_address_str = ATOM_STR("\xB", "own_address");
+    term own_address_term = interop_kv_get_value_default(opts, own_address_str, term_from_int(0), ctx->global);
+    uint16_t own_address;
+    if (UNLIKELY(!term_to_i2c_addr(own_address_term, &own_address))) {
+        enif_release_resource(rsrc_obj);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    rsrc_obj->target_registered = false;
+    rsrc_obj->own_address = own_address;
+    memset(&rsrc_obj->target_cfg, 0, sizeof(rsrc_obj->target_cfg));
+    rsrc_obj->op = I2C_TARGET_IDLE;
+    rsrc_obj->buf_len = 0;
+    rsrc_obj->buf_pos = 0;
+    rsrc_obj->waiter_pid = 0;
+    rsrc_obj->global = ctx->global;
+#endif
 
     if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_RESOURCE_SIZE) != MEMORY_GC_OK)) {
         enif_release_resource(rsrc_obj);
@@ -421,6 +620,9 @@ static term nif_i2c_deinit(Context *ctx, int argc, term argv[])
     if (UNLIKELY(!get_i2c_resource(ctx, argv[0], &rsrc_obj))) {
         RAISE_ERROR(BADARG_ATOM);
     }
+#ifdef CONFIG_I2C_TARGET
+    i2c_unregister_target(rsrc_obj);
+#endif
     rsrc_obj->closed = true;
     rsrc_obj->dev = NULL;
 
@@ -632,7 +834,8 @@ static term nif_i2c_is_device_ready(Context *ctx, int argc, term argv[])
     return make_transfer_error(ctx, err);
 }
 
-static term nif_i2c_slave_transmit(Context *ctx, int argc, term argv[])
+#ifdef CONFIG_I2C_TARGET
+static term nif_i2c_target_transmit(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
@@ -647,13 +850,84 @@ static term nif_i2c_slave_transmit(Context *ctx, int argc, term argv[])
     }
     UNUSED(timeout_ms);
 
+    size_t len = term_binary_size(argv[1]);
+    if (UNLIKELY(len == 0 || len > I2C_TARGET_MAX)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (rsrc_obj->op != I2C_TARGET_IDLE) {
+        return make_transfer_error(ctx, -EBUSY);
+    }
+
+    int err = i2c_ensure_target(rsrc_obj);
+    if (err != 0) {
+        return make_transfer_error(ctx, err);
+    }
+
+    memcpy(rsrc_obj->buf, term_binary_data(argv[1]), len);
+    rsrc_obj->buf_len = len;
+    rsrc_obj->buf_pos = 0;
+    rsrc_obj->waiter_pid = ctx->process_id;
+    rsrc_obj->global = ctx->global;
+    rsrc_obj->op = I2C_TARGET_TRANSMIT;
+    return OK_ATOM;
+}
+
+static term nif_i2c_target_receive(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    struct I2CResource *rsrc_obj;
+    if (UNLIKELY(!get_i2c_resource(ctx, argv[0], &rsrc_obj))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    VALIDATE_VALUE(argv[1], term_is_integer);
+    avm_int_t count = term_to_int(argv[1]);
+    if (UNLIKELY(count <= 0 || count > I2C_TARGET_MAX)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    int64_t timeout_ms;
+    if (UNLIKELY(!get_timeout_ms(argv[2], &timeout_ms))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    UNUSED(timeout_ms);
+    if (rsrc_obj->op != I2C_TARGET_IDLE) {
+        return make_transfer_error(ctx, -EBUSY);
+    }
+
+    int err = i2c_ensure_target(rsrc_obj);
+    if (err != 0) {
+        return make_transfer_error(ctx, err);
+    }
+
+    rsrc_obj->buf_len = (size_t) count;
+    rsrc_obj->buf_pos = 0;
+    rsrc_obj->waiter_pid = ctx->process_id;
+    rsrc_obj->global = ctx->global;
+    rsrc_obj->op = I2C_TARGET_RECEIVE;
+    return OK_ATOM;
+}
+#else
+static term nif_i2c_target_transmit(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    struct I2CResource *rsrc_obj;
+    if (UNLIKELY(!get_i2c_resource(ctx, argv[0], &rsrc_obj))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    VALIDATE_VALUE(argv[1], term_is_binary);
+    int64_t timeout_ms;
+    if (UNLIKELY(!get_timeout_ms(argv[2], &timeout_ms))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
     if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     return make_error_tuple(ctx, ATOM_STR("\x7", "enotsup"));
 }
 
-static term nif_i2c_slave_receive(Context *ctx, int argc, term argv[])
+static term nif_i2c_target_receive(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
@@ -670,18 +944,21 @@ static term nif_i2c_slave_receive(Context *ctx, int argc, term argv[])
     if (UNLIKELY(!get_timeout_ms(argv[2], &timeout_ms))) {
         RAISE_ERROR(BADARG_ATOM);
     }
-    UNUSED(timeout_ms);
 
     if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     return make_error_tuple(ctx, ATOM_STR("\x7", "enotsup"));
 }
+#endif
 
 static void i2c_resource_dtor(ErlNifEnv *caller_env, void *obj)
 {
     UNUSED(caller_env);
     struct I2CResource *rsrc_obj = (struct I2CResource *) obj;
+#ifdef CONFIG_I2C_TARGET
+    i2c_unregister_target(rsrc_obj);
+#endif
     rsrc_obj->closed = true;
     rsrc_obj->dev = NULL;
 }
@@ -719,13 +996,13 @@ static const struct Nif i2c_is_device_ready_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_i2c_is_device_ready
 };
-static const struct Nif i2c_slave_transmit_nif = {
+static const struct Nif i2c_target_transmit_nif = {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_i2c_slave_transmit
+    .nif_ptr = nif_i2c_target_transmit
 };
-static const struct Nif i2c_slave_receive_nif = {
+static const struct Nif i2c_target_receive_nif = {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_i2c_slave_receive
+    .nif_ptr = nif_i2c_target_receive
 };
 
 static void i2c_nif_init(GlobalContext *global)
@@ -769,13 +1046,13 @@ static const struct Nif *i2c_nif_get_nif(const char *nifname)
         TRACE("Resolved i2c nif %s ...\n", nifname);
         return &i2c_is_device_ready_nif;
     }
-    if (strcmp("slave_transmit/3", rest) == 0) {
+    if (strcmp("target_transmit_nif/3", rest) == 0) {
         TRACE("Resolved i2c nif %s ...\n", nifname);
-        return &i2c_slave_transmit_nif;
+        return &i2c_target_transmit_nif;
     }
-    if (strcmp("slave_receive/3", rest) == 0) {
+    if (strcmp("target_receive_nif/3", rest) == 0) {
         TRACE("Resolved i2c nif %s ...\n", nifname);
-        return &i2c_slave_receive_nif;
+        return &i2c_target_receive_nif;
     }
     return NULL;
 }
