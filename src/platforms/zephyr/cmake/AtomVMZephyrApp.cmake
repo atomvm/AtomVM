@@ -134,15 +134,23 @@ target_include_directories(app PRIVATE
 set(AVM_PORT_ZEPHYR ON CACHE BOOL "Build for Zephyr" FORCE)
 set(AVM_DISABLE_JIT ON CACHE BOOL "Disable JIT" FORCE)
 include(SystemArchitecture)
+# Zephyr's RISC-V compiler is always named riscv64-zephyr-elf, even for
+# RV32 SoCs such as ESP32-C3. Xtensa dumpmachine is
+# xtensa-espressif_esp32_zephyr-elf. Override both so Espressif chips
+# report riscv32-esp-zephyr / xtensa-esp-zephyr.
+set(_avm_system_architecture_args PLATFORM_OS zephyr)
 if(CONFIG_SOC_FAMILY_ESPRESSIF_ESP32)
-    # Zephyr RISC-V dumpmachine is "riscv64-zephyr-elf" (vendor "zephyr").
-    # Xtensa dumpmachine is "xtensa-espressif_esp32_zephyr-elf", which would
-    # become "xtensa-espressif_esp32_zephyr-zephyr". Force vendor "esp" so
-    # chips report riscv64-esp-zephyr / xtensa-esp-zephyr.
-    avm_get_system_architecture_string(AVM_SYSTEM_ARCHITECTURE_STRING PLATFORM_VENDOR esp PLATFORM_OS zephyr)
-else()
-    avm_get_system_architecture_string(AVM_SYSTEM_ARCHITECTURE_STRING PLATFORM_OS zephyr)
+    list(APPEND _avm_system_architecture_args PLATFORM_VENDOR esp)
 endif()
+if(CONFIG_RISCV)
+    if(CONFIG_64BIT)
+        list(APPEND _avm_system_architecture_args PLATFORM_ARCH riscv64)
+    else()
+        list(APPEND _avm_system_architecture_args PLATFORM_ARCH riscv32)
+    endif()
+endif()
+avm_get_system_architecture_string(AVM_SYSTEM_ARCHITECTURE_STRING ${_avm_system_architecture_args})
+unset(_avm_system_architecture_args)
 add_subdirectory(${ATOMVM_ZEPHYR_ROOT}/../../libAtomVM ${CMAKE_CURRENT_BINARY_DIR}/libAtomVM)
 target_include_directories(libAtomVM PUBLIC ${ATOMVM_ZEPHYR_ROOT}/src/lib)
 add_dependencies(libAtomVM zephyr_generated_headers)
