@@ -155,6 +155,12 @@ if(CONFIG_SETTINGS)
     )
 endif()
 
+if(CONFIG_FLASH_MAP)
+    zephyr_library_sources(
+        flash_map_driver.c
+    )
+endif()
+
 if(CMAKE_COMPILER_IS_GNUCC)
     target_compile_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC -Wall -pedantic -Wextra -ggdb)
 endif()

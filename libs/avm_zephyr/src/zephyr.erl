@@ -10,8 +10,9 @@
 %%
 %% This module wraps platform NIFs that are not part of a portable HAL:
 %% reboot, reset cause, MAC address, boot time, persistent settings,
-%% filesystem mount helpers, POSIX socketpair, power-management state
-%% forcing, deep sleep / wakeup, and the task watchdog.
+%% flash map, filesystem mount helpers, POSIX socketpair,
+%% power-management state forcing, deep sleep / wakeup, and the task
+%% watchdog.
 -module(zephyr).
 
 -export([
@@ -28,6 +29,12 @@
     settings_get/3,
     settings_put/3,
     settings_erase/2,
+    flash_list/0,
+    flash_read/3,
+    flash_write/3,
+    flash_erase/2,
+    flash_erase/3,
+    flash_mmap/3,
     mkfs/2,
     mount/4,
     umount/1,
@@ -52,6 +59,8 @@
     gpio_wakeup_level/0,
     interface/0,
     mac/0,
+    flash_area/0,
+    flash_area_id/0,
     task_wdt_config/0,
     task_wdt_user_handle/0
 ]).
@@ -102,6 +111,13 @@
 -type gpio_wakeup_level() :: 0 | 1 | low | high.
 -type interface() :: default | wifi_sta.
 -type mac() :: binary().
+-type flash_area_id() :: non_neg_integer() | iodata().
+-type flash_area() :: #{
+    id := non_neg_integer(),
+    offset := non_neg_integer(),
+    size := non_neg_integer(),
+    label => binary() | undefined
+}.
 
 -spec restart() -> no_return().
 restart() ->
@@ -164,6 +180,46 @@ settings_put(_Namespace, _Key, _Value) ->
 
 -spec settings_erase(Namespace :: atom(), Key :: atom()) -> ok | {error, term()}.
 settings_erase(_Namespace, _Key) ->
+    erlang:nif_error(undefined).
+
+%% @doc List fixed flash partitions from Zephyr's Flash Map.
+-spec flash_list() -> [flash_area()].
+flash_list() ->
+    erlang:nif_error(undefined).
+
+%% @doc Read Size bytes from Area at Offset.
+%%
+%% Area is a flash-map id or, when labels are enabled, a partition label
+%% such as `<<"storage">>' or `<<"image-scratch">>'.
+-spec flash_read(Area :: flash_area_id(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
+    {ok, binary()} | {error, term()}.
+flash_read(_Area, _Offset, _Size) ->
+    erlang:nif_error(undefined).
+
+%% @doc Write Data to Area at Offset. The range must already be erased.
+-spec flash_write(Area :: flash_area_id(), Offset :: non_neg_integer(), Data :: binary()) ->
+    ok | {error, term()}.
+flash_write(_Area, _Offset, _Data) ->
+    erlang:nif_error(undefined).
+
+%% @doc Erase from Offset to the end of Area.
+-spec flash_erase(Area :: flash_area_id(), Offset :: non_neg_integer()) -> ok | {error, term()}.
+flash_erase(_Area, _Offset) ->
+    erlang:nif_error(undefined).
+
+%% @doc Erase Size bytes of Area starting at Offset.
+-spec flash_erase(Area :: flash_area_id(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
+    ok | {error, term()}.
+flash_erase(_Area, _Offset, _Size) ->
+    erlang:nif_error(undefined).
+
+%% @doc Map Size bytes of Area at Offset as a binary.
+%%
+%% Available on Espressif SoCs via `spi_flash_mmap`. The binary stays valid
+%% until it is garbage collected. Other platforms return `{error, not_supported}'.
+-spec flash_mmap(Area :: flash_area_id(), Offset :: non_neg_integer(), Size :: non_neg_integer()) ->
+    {ok, binary()} | {error, term()}.
+flash_mmap(_Area, _Offset, _Size) ->
     erlang:nif_error(undefined).
 
 -spec mkfs(Source :: iodata(), fat) -> ok | {error, term()}.

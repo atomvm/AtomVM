@@ -74,9 +74,14 @@ selects, and other wiring remain in application/test overlays.
     from the end of the 2 MiB flash (ESP-IDF default NVS size). native_sim uses
     the board's simulated-flash `storage` partition (16 KiB). This is not a
     clone of `esp:nvs_*`.
-* [ ] **Flash map — lower priority**
-  * Expose Zephyr's Flash Map API where the settings and file APIs are not
-    sufficient. Do not copy ESP32 partition APIs verbatim.
+* [x] **Flash map**
+  * `zephyr:flash_list/0`, `flash_read/3`, `flash_write/3`, and
+    `flash_erase/2,3` wrap Zephyr's Flash Map (`flash_area`). Areas are
+    selected by id or, with `CONFIG_FLASH_MAP_LABELS`, by partition label.
+  * native_sim write/erase coverage uses `image-scratch` so Settings/NVS
+    can keep `storage`. This is not a clone of `esp:partition_*`.
+  * `zephyr:flash_mmap/3` maps flash through `spi_flash_mmap` on Espressif
+    SoCs. Other boards return `{error, not_supported}`.
 
 ## 2. High Priority Test Candidates (Ready to Port)
 
@@ -135,8 +140,9 @@ These tests require network or Wi-Fi emulation or a physical device board to exe
 
 These test ESP32-specific registers, partition managers, or RTC hardware features and will require adaptation or custom drivers on Zephyr.
 
-* [ ] **`test_esp_partition` (Flash Partitions)**
-  * *Adaptation*: Map to Zephyr's Flash Map API (`flash_area` / `CONFIG_FLASH_MAP=y`) or NVS.
+* [x] **`test_esp_partition` (Flash Partitions)**
+  * *Adaptation*: `test_flash_map` covers Zephyr Flash Map list/read/write/erase
+    on native_sim (`image-scratch`). Not an ESP-IDF partition-table clone.
 * [x] **`test_deep_sleep_hold` (Power Management)**
   * *Adaptation*: Map to Zephyr's Power Management subsystem (`CONFIG_PM=y` / `pm_state`).
   * App-facing sleep is `zephyr:deep_sleep/0,1`, `sleep_enable_gpio_wakeup/2`,
