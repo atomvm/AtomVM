@@ -11,9 +11,15 @@
 
 start() ->
     ok = test_timer_get_time(),
+    ok = test_freq_hz(),
     ok = test_reset_reason(),
     ok = test_mac(),
     ok = test_chip_info(),
+    ok.
+
+test_freq_hz() ->
+    Freq = zephyr:freq_hz(),
+    true = is_integer(Freq) andalso Freq > 0,
     ok.
 
 test_timer_get_time() ->
