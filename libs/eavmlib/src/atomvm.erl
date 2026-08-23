@@ -85,7 +85,8 @@
     | emscripten
     | esp32
     | pico
-    | stm32.
+    | stm32
+    | zephyr.
 
 -type avm_path() :: iodata().
 

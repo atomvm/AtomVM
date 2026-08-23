@@ -14,7 +14,7 @@ ExternalProject_Add(HostAtomVM
     SOURCE_DIR "${ATOMVM_ROOT}"
     CMAKE_ARGS -DAVM_DISABLE_JIT=ON
     INSTALL_COMMAND cmake -E echo "Skipping install step."
-    BUILD_COMMAND cmake --build . --target=atomvmlib-zephyr --target=PackBEAM
+    BUILD_COMMAND cmake --build . --target=atomvmlib-zephyr --target=esp32devmode --target=PackBEAM
 )
 
 function(compile_erlang module_name)
@@ -46,6 +46,7 @@ compile_erlang(test_select)
 compile_erlang(test_spi)
 compile_erlang(test_pwm)
 compile_erlang(test_wifi_ap)
+compile_erlang(test_devmode)
 compile_erlang(test_wifi_scan)
 compile_erlang(test_wifi_managed)
 compile_erlang(test_wifi_example)
@@ -77,6 +78,7 @@ set(erlang_test_beams
     test_spi.beam
     test_pwm.beam
     test_wifi_ap.beam
+    test_devmode.beam
     test_wifi_scan.beam
     test_wifi_managed.beam
     test_wifi_example.beam
@@ -97,6 +99,7 @@ add_custom_command(
     COMMAND HostAtomVM-prefix/src/HostAtomVM-build/tools/packbeam/packbeam create zephyr_test_modules.avm
         ${erlang_test_beams}
         HostAtomVM-prefix/src/HostAtomVM-build/libs/atomvmlib-zephyr.avm
+        HostAtomVM-prefix/src/HostAtomVM-build/libs/esp32devmode/src/esp32devmode.avm
     DEPENDS
         HostAtomVM
         ${erlang_test_beams}
