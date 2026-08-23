@@ -32,6 +32,6 @@ check_validity(false, _Expected, Actual) when is_boolean(Actual) -> ok.
 is_espressif() ->
     Architecture = erlang:system_info(system_architecture),
     case binary:split(Architecture, <<"-">>, [global]) of
-        [_Architecture, Vendor | _] -> nomatch =/= binary:match(Vendor, <<"espressif">>);
+        [_Architecture, Vendor | _] -> Vendor =:= <<"esp">>;
         _ -> false
     end.
