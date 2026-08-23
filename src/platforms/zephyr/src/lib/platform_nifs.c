@@ -460,6 +460,19 @@ static term nif_zephyr_timer_get_time(Context *ctx, int argc, term argv[])
     return term_make_maybe_boxed_int64(val, &ctx->heap);
 }
 
+static term nif_zephyr_freq_hz(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    uint32_t freq = sys_clock_hw_cycles_per_sec();
+    size_t term_size = term_boxed_integer_size(freq);
+    if (UNLIKELY(memory_ensure_free_opt(ctx, term_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    return term_make_maybe_boxed_int64(freq, &ctx->heap);
+}
+
 #ifdef CONFIG_PM
 #include <zephyr/pm/pm.h>
 
@@ -1067,6 +1080,13 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
             .nif_ptr = nif_zephyr_timer_get_time
         };
         return &zephyr_timer_get_time_nif;
+    }
+    if (strcmp("zephyr:freq_hz/0", nifname) == 0) {
+        static const struct Nif zephyr_freq_hz_nif = {
+            .base.type = NIFFunctionType,
+            .nif_ptr = nif_zephyr_freq_hz
+        };
+        return &zephyr_freq_hz_nif;
     }
     if (strcmp("zephyr:deep_sleep/0", nifname) == 0) {
         static const struct Nif zephyr_deep_sleep0_nif = {
