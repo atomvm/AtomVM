@@ -30,13 +30,13 @@ start() ->
     ok.
 
 %% GPIO0 is fine on classic ESP32. ESP32-C3 reports
-%% `riscv64-esp-zephyr`; GPIO0 does not read back a driven low
+%% `riscv32-esp-zephyr`; GPIO0 does not read back a driven low
 %% on Wokwi. GPIO10 is a spare digital pin (not strapping, USB-JTAG,
 %% UART, or the ADC pot on GPIO3).
 test_pin() ->
     Architecture = erlang:system_info(system_architecture),
     case binary:split(Architecture, <<"-">>, [global]) of
-        [<<"riscv64">>, <<"esp">> | _] ->
+        [<<"riscv32">>, <<"esp">> | _] ->
             {0, 10};
         _ ->
             {0, 0}
