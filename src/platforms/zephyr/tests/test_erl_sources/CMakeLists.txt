@@ -60,6 +60,7 @@ compile_erlang(test_twdt)
 compile_erlang(test_uart)
 compile_erlang(test_platform)
 compile_erlang(test_settings)
+compile_erlang(test_flash_map)
 
 set(erlang_test_beams
     test_list_to_atom.beam
@@ -93,6 +94,7 @@ set(erlang_test_beams
     test_uart.beam
     test_platform.beam
     test_settings.beam
+    test_flash_map.beam
 )
 
 
