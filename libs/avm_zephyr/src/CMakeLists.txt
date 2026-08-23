@@ -24,6 +24,7 @@ include(BuildErlang)
 
 set(ERLANG_MODULES
     adc
+    dac
     gpio
     i2c
     pwm

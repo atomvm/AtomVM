@@ -1,6 +1,7 @@
 / {
 	chosen {
 		atomvm,retention = &atomvm_retention;
+		atomvm,dac = &dac;
 		zephyr,settings-partition = &storage_partition;
 	};
 
@@ -38,4 +39,15 @@
 
 &rtc_slow_ram {
 	reg = <0x50000000 0x1f00>;
+};
+
+&dac {
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@0 {
+		reg = <0>;
+		zephyr,resolution = <8>;
+	};
 };
