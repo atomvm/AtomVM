@@ -137,6 +137,12 @@ if(CONFIG_ADC)
     )
 endif()
 
+if(CONFIG_DAC)
+    zephyr_library_sources(
+        dac_driver.c
+    )
+endif()
+
 if(CONFIG_GPIO)
     zephyr_library_sources(
         gpio_driver.c

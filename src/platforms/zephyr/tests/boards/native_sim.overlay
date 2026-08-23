@@ -11,6 +11,7 @@
         atomvm,i2c = &i2c0;
         atomvm,spi = &spi0;
         atomvm,pwm = &pwm0;
+        atomvm,dac = &dac0;
         zephyr,settings-partition = &storage_partition;
     };
 
@@ -19,5 +20,12 @@
         status = "okay";
         #pwm-cells = <2>;
         frequency = <10000000>;
+    };
+
+    dac0: dac0 {
+        compatible = "zephyr,dac-emul";
+        status = "okay";
+        nchannels = <2>;
+        #io-channel-cells = <1>;
     };
 };
