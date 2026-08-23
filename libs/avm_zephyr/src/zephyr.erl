@@ -9,7 +9,7 @@
 %% @doc Zephyr-specific AtomVM APIs.
 %%
 %% This module wraps platform NIFs that are not part of a portable HAL:
-%% reboot, reset cause, MAC address, boot time, persistent settings,
+%% reboot, reset cause, MAC address, boot time, clock frequency, persistent settings,
 %% flash map, filesystem mount helpers, POSIX socketpair,
 %% power-management state forcing, deep sleep / wakeup, and the task
 %% watchdog.
@@ -21,6 +21,7 @@
     get_mac/1,
     get_default_mac/0,
     timer_get_time/0,
+    freq_hz/0,
     deep_sleep/0,
     deep_sleep/1,
     sleep_enable_gpio_wakeup/2,
@@ -137,6 +138,11 @@ get_default_mac() ->
 
 -spec timer_get_time() -> non_neg_integer().
 timer_get_time() ->
+    erlang:nif_error(undefined).
+
+%% @doc Return the hardware cycle-counter frequency in Hz.
+-spec freq_hz() -> non_neg_integer().
+freq_hz() ->
     erlang:nif_error(undefined).
 
 %% @doc Enter deep sleep. Does not return on boards that support power-off.
