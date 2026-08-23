@@ -45,6 +45,7 @@ compile_erlang(test_file)
 compile_erlang(test_select)
 compile_erlang(test_spi)
 compile_erlang(test_pwm)
+compile_erlang(test_dac)
 compile_erlang(test_wifi_ap)
 compile_erlang(test_devmode)
 compile_erlang(test_wifi_scan)
@@ -77,6 +78,7 @@ set(erlang_test_beams
     test_select.beam
     test_spi.beam
     test_pwm.beam
+    test_dac.beam
     test_wifi_ap.beam
     test_devmode.beam
     test_wifi_scan.beam

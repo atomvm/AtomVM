@@ -130,6 +130,14 @@ ZTEST(atomvm_tests, test_pwm)
 }
 #endif
 
+#if defined(CONFIG_DAC) && DT_HAS_CHOSEN(atomvm_dac)
+ZTEST(atomvm_tests, test_dac)
+{
+    term ret_value = avm_test_case("test_dac.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_dac did not return 'ok'");
+}
+#endif
+
 #if defined(CONFIG_SERIAL)
 ZTEST(atomvm_tests, test_uart)
 {
