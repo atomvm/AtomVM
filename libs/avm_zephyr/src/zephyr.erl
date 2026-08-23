@@ -30,6 +30,8 @@
     settings_get/3,
     settings_put/3,
     settings_erase/2,
+    settings_erase_all/1,
+    settings_reformat/0,
     flash_list/0,
     flash_read/3,
     flash_write/3,
@@ -186,6 +188,16 @@ settings_put(_Namespace, _Key, _Value) ->
 
 -spec settings_erase(Namespace :: atom(), Key :: atom()) -> ok | {error, term()}.
 settings_erase(_Namespace, _Key) ->
+    erlang:nif_error(undefined).
+
+%% @doc Erase every key stored under Namespace.
+-spec settings_erase_all(Namespace :: atom()) -> ok | {error, term()}.
+settings_erase_all(_Namespace) ->
+    erlang:nif_error(undefined).
+
+%% @doc Wipe the Settings backend. All namespaces are removed.
+-spec settings_reformat() -> ok | {error, term()}.
+settings_reformat() ->
     erlang:nif_error(undefined).
 
 %% @doc List fixed flash partitions from Zephyr's Flash Map.

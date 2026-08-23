@@ -8,6 +8,8 @@
 
 #ifdef CONFIG_SETTINGS
 
+#include <errno.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -25,6 +27,7 @@
 #define SETTINGS_KEY_MAX 31
 #define SETTINGS_NAME_MAX (SETTINGS_KEY_MAX + 1 + SETTINGS_KEY_MAX)
 #define SETTINGS_VALUE_MAX 1024
+#define SETTINGS_ERASE_MAX 512
 
 static bool settings_ready = false;
 static bool settings_init_attempted = false;
@@ -173,6 +176,118 @@ static term nif_zephyr_settings_erase(Context *ctx, int argc, term argv[])
     return OK_ATOM;
 }
 
+struct settings_capture_ctx
+{
+    const char *prefix;
+    char *name;
+    size_t name_size;
+    bool found;
+    int err;
+};
+
+static int settings_full_name(const char *prefix, const char *key, char *out, size_t out_size)
+{
+    if (prefix != NULL) {
+        int written = snprintf(out, out_size, "%s%s%s", prefix, key ? "/" : "", key ? key : "");
+        if (written < 0 || (size_t) written >= out_size) {
+            return -ENAMETOOLONG;
+        }
+        return 0;
+    }
+    if (key == NULL) {
+        return -ENOENT;
+    }
+    if (strlen(key) >= out_size) {
+        return -ENAMETOOLONG;
+    }
+    memcpy(out, key, strlen(key) + 1);
+    return 0;
+}
+
+static int settings_capture_one_cb(const char *key, size_t len, settings_read_cb read_cb, void *cb_arg, void *param)
+{
+    UNUSED(len);
+    UNUSED(read_cb);
+    UNUSED(cb_arg);
+
+    struct settings_capture_ctx *capture = param;
+    int err = settings_full_name(capture->prefix, key, capture->name, capture->name_size);
+    if (err == -ENOENT) {
+        return 0;
+    }
+    if (err != 0) {
+        capture->err = err;
+        return 1;
+    }
+    capture->found = true;
+    return 1;
+}
+
+static int settings_erase_subtree(const char *subtree)
+{
+    char name[SETTINGS_NAME_MAX + 1];
+
+    for (int i = 0; i < SETTINGS_ERASE_MAX; i++) {
+        struct settings_capture_ctx capture = {
+            .prefix = subtree,
+            .name = name,
+            .name_size = sizeof(name),
+            .found = false,
+            .err = 0
+        };
+        (void) settings_load_subtree_direct(subtree, settings_capture_one_cb, &capture);
+        if (capture.err != 0) {
+            return capture.err;
+        }
+        if (!capture.found) {
+            return 0;
+        }
+
+        int err = settings_delete(name);
+        if (err != 0) {
+            return err;
+        }
+    }
+    return -ENOMEM;
+}
+
+static term nif_zephyr_settings_erase_all(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    VALIDATE_VALUE(argv[0], term_is_atom);
+
+    if (!ensure_settings()) {
+        return settings_error_tuple(ctx, ATOM_STR("\xe", "not_supported"));
+    }
+
+    char namespace[SETTINGS_KEY_MAX + 1];
+    if (write_atom_c_string(ctx, namespace, sizeof(namespace), argv[0]) != 0) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int err = settings_erase_subtree(namespace);
+    if (err != 0) {
+        return settings_error_tuple(ctx, ATOM_STR("\xc", "erase_failed"));
+    }
+    return OK_ATOM;
+}
+
+static term nif_zephyr_settings_reformat(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    if (!ensure_settings()) {
+        return settings_error_tuple(ctx, ATOM_STR("\xe", "not_supported"));
+    }
+
+    int err = settings_erase_subtree(NULL);
+    if (err != 0) {
+        return settings_error_tuple(ctx, ATOM_STR("\xc", "erase_failed"));
+    }
+    return OK_ATOM;
+}
+
 static const struct Nif *settings_nif_get_nif(const char *nifname)
 {
     if (strncmp("zephyr:", nifname, 7) != 0) {
@@ -189,6 +304,14 @@ static const struct Nif *settings_nif_get_nif(const char *nifname)
     }
     if (strcmp("settings_erase/2", rest) == 0) {
         static const struct Nif nif = { .base.type = NIFFunctionType, .nif_ptr = nif_zephyr_settings_erase };
+        return &nif;
+    }
+    if (strcmp("settings_erase_all/1", rest) == 0) {
+        static const struct Nif nif = { .base.type = NIFFunctionType, .nif_ptr = nif_zephyr_settings_erase_all };
+        return &nif;
+    }
+    if (strcmp("settings_reformat/0", rest) == 0) {
+        static const struct Nif nif = { .base.type = NIFFunctionType, .nif_ptr = nif_zephyr_settings_reformat };
         return &nif;
     }
     return NULL;

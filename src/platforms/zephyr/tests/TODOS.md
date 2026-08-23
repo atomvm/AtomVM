@@ -68,8 +68,10 @@ selects, and other wiring remain in application/test overlays.
     a separate module when the configured CDC ACM device is adequately exposed
     through the eventual UART API.
 * [x] **Settings / NVS**
-  * `zephyr:settings_get/2,3`, `settings_put/3`, and `settings_erase/2` store
-    binary values under `Namespace/Key` via Zephyr Settings + NVS.
+  * `zephyr:settings_get/2,3`, `settings_put/3`, `settings_erase/2`,
+    `settings_erase_all/1`, and `settings_reformat/0` store binary values
+    under `Namespace/Key` via Zephyr Settings + NVS. Reformat deletes
+    through the Settings API so NVS metadata stays consistent.
   * ESP32 boards use the existing `storage` partition. Pico W carves 24 KiB
     from the end of the 2 MiB flash (ESP-IDF default NVS size). native_sim uses
     the board's simulated-flash `storage` partition (16 KiB). This is not a
