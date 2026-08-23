@@ -315,3 +315,11 @@ ZTEST(atomvm_tests, test_settings)
     zassert_equal(ret_value, OK_ATOM, "test_settings did not return 'ok'");
 }
 #endif
+
+#if defined(CONFIG_FLASH_MAP)
+ZTEST(atomvm_tests, test_flash_map)
+{
+    term ret_value = avm_test_case("test_flash_map.beam");
+    zassert_equal(ret_value, OK_ATOM, "test_flash_map did not return 'ok'");
+}
+#endif
