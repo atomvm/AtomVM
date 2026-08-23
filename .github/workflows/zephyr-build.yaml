@@ -432,7 +432,7 @@ jobs:
           echo -e "[wokwi]\nversion = 1\nfirmware = \"zephyr.bin\"\nelf = \"zephyr.elf\"" > wokwi.toml
           cp "../src/platforms/zephyr/tests/sim_boards/$DIAGRAM" diagram.json
           set +e
-          wokwi-cli --timeout 180000 --expect-text "PROJECT EXECUTION SUCCESSFUL" . | tee wokwi.log
+          wokwi-cli --timeout 180000 --expect-text "PROJECT EXECUTION SUCCESSFUL" --fail-text "PROJECT EXECUTION FAILED" . | tee wokwi.log
           WOKWI_EXIT=${PIPESTATUS[0]}
           set -e
           python3 -c '
