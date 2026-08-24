@@ -22,7 +22,6 @@
  * @file posix_nifs.c
  * @brief Implementation of NIFs based on POSIX functions
  */
-
 #if HAVE_OPEN && HAVE_CLOSE
 #include <fcntl.h>
 #endif
@@ -41,9 +40,21 @@
 #endif
 
 #if HAVE_CLOCK_SETTIME
+#ifdef __ZEPHYR__
 #include <time.h>
+#define _LOCALE_T_DECLARED
+#define _ITIMERSPEC_DECLARED
+#include <zephyr/posix/posix_time.h>
+#else
+#include <time.h>
+#endif
 #elif HAVE_SETTIMEOFDAY
+#ifdef __ZEPHYR__
 #include <sys/time.h>
+#include <zephyr/posix/sys/time.h>
+#else
+#include <sys/time.h>
+#endif
 #endif
 
 #include <errno.h>

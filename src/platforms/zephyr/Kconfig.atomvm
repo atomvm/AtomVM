@@ -1,0 +1,69 @@
+#
+# Copyright 2026 Peter M <petermm@gmail.com>
+#
+# SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+menu "AtomVM Settings"
+
+config AVM_ENABLE_WIFI
+    bool "Enable Wi-Fi and Networking support"
+    default y if SOC_WIFI_SUPPORTED
+    default n
+    imply NETWORKING
+    imply NET_L2_ETHERNET
+    imply NET_IPV4
+    imply NET_DHCPV4
+    imply DNS_RESOLVER
+    imply NET_TCP
+    imply NET_UDP
+    imply NET_SOCKETS
+    imply SNTP
+    imply NET_SOCKETS_SERVICE
+    imply NET_CONNECTION_MANAGER
+    imply WIFI
+    imply NET_L2_WIFI_MGMT
+    imply NET_MGMT
+    imply NET_MGMT_EVENT
+    imply NET_MGMT_EVENT_INFO
+    imply EVENTFD
+    imply ZVFS
+    help
+      Enable WiFi networking and socket support in AtomVM.
+
+config AVM_ENABLE_CRYPTO
+    bool "Enable Crypto support (MBEDTLS/PSA)"
+    default y
+    imply MBEDTLS
+    imply PSA_CRYPTO
+    imply MBEDTLS_HASH_ALL_ENABLED
+    imply MBEDTLS_CIPHER_ALL_ENABLED
+    imply MBEDTLS_CIPHER
+    imply PSA_WANT_ALG_CFB
+    imply PSA_WANT_ALG_ECB_NO_PADDING
+    imply MBEDTLS_CTR_DRBG_C
+    imply MBEDTLS_SSL_PROTO_TLS1_2 if NETWORKING
+    imply MBEDTLS_SSL_PROTO_TLS1_3 if NETWORKING
+    imply MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED if NETWORKING
+    imply MBEDTLS_KEY_EXCHANGE_PSK_ENABLED if NETWORKING
+    imply MBEDTLS_SSL_SERVER_NAME_INDICATION if NETWORKING
+    imply MBEDTLS_X509_CRT_PARSE_C if NETWORKING
+    imply MBEDTLS_HAVE_TIME_DATE if NETWORKING
+    imply PSA_WANT_ALG_ECDH
+    imply PSA_WANT_ALG_ECDSA
+    imply PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_IMPORT
+    imply PSA_WANT_ECC_SECP_R1_256
+    help
+      Enable mbedTLS and PSA Cryptography support for AtomVM.
+
+endmenu
+
+# Override defaults of Zephyr options when AVM_ENABLE_WIFI is active
+config NET_SOCKETS_SERVICE_STACK_SIZE
+    default 3072 if AVM_ENABLE_WIFI
+
+config ZVFS_EVENTFD_MAX
+    default 4 if AVM_ENABLE_WIFI
+
+config ZVFS_POLL_MAX
+    default 8 if AVM_ENABLE_WIFI

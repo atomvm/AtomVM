@@ -1,0 +1,540 @@
+#
+#  Copyright 2026 Peter M <petermm@gmail.com>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: Zephyr Build
+
+on:
+  push:
+    paths:
+      - ".github/workflows/zephyr-build.yaml"
+      - "src/platforms/zephyr/**"
+      - "src/libAtomVM/**"
+      - "libs/esp32devmode/**"
+      - "libs/avm_zephyr/**"
+      - "libs/avm_network/**"
+  pull_request:
+    paths:
+      - ".github/workflows/zephyr-build.yaml"
+      - "src/platforms/zephyr/**"
+      - "src/libAtomVM/**"
+      - "libs/esp32devmode/**"
+      - "libs/avm_zephyr/**"
+      - "libs/avm_network/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    container: ghcr.io/zephyrproject-rtos/ci:v0.29.3
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+
+      - name: Configure Git Safe Directory
+        run: |
+          git config --global --add safe.directory '*'
+
+      - name: Configure Zephyr SDK Path
+        run: |
+          echo "ZEPHYR_SDK_INSTALL_DIR=/opt/toolchains/zephyr-sdk-${ZSDK_VERSION}" >> $GITHUB_ENV
+
+      - name: Cache West Workspace
+        if: ${{ !env.ACT }}
+        uses: actions/cache@v5
+        with:
+          path: |
+            .west
+            zephyr
+            modules
+          key: ${{ runner.os }}-west-${{ hashFiles('src/platforms/zephyr/west.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-west-
+
+      - name: Initialize West Workspace
+        working-directory: ./
+        run: |
+          mkdir -p .west
+          printf "[manifest]\npath = src/platforms/zephyr\nfile = west.yml\n" > .west/config
+          west update --narrow
+          west blobs fetch hal_espressif
+          west blobs fetch hal_infineon
+
+      - name: "Set ImageOS for erlef/setup-beam"
+        run: |
+          sed -n -E -e 's|VERSION_ID="(.+)\..+"|ImageOS=ubuntu\1|p' /etc/os-release >> ${GITHUB_ENV}
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28"
+          rebar3-version: "3.25.1"
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://repo.hex.pm
+            https://cdn.jsdelivr.net/hex
+
+      - name: Build for nucleo_f429zi
+        id: build_nucleo_f429zi
+        continue-on-error: true
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b nucleo_f429zi -p=auto .
+
+      - name: Build for esp32_devkitc/esp32/procpu
+        id: build_esp32
+        continue-on-error: true
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b esp32_devkitc/esp32/procpu -p=auto .
+
+      - name: Build for esp32s3_devkitc/esp32s3/procpu
+        id: build_esp32s3
+        continue-on-error: true
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b esp32s3_devkitc/esp32s3/procpu -p=auto .
+
+      - name: Build for rpi_pico/rp2040
+        id: build_pico
+        continue-on-error: true
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b rpi_pico/rp2040 -p=auto .
+
+      - name: Build for rpi_pico/rp2040/w
+        id: build_pico_w
+        continue-on-error: true
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b rpi_pico/rp2040/w -p=auto .
+
+      - name: Build for rpi_pico2/rp2350a/m33
+        id: build_pico2_m33
+        continue-on-error: true
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b rpi_pico2/rp2350a/m33 -p=auto .
+
+      - name: Build for rpi_pico2/rp2350a/m33/w
+        id: build_pico2_m33_w
+        continue-on-error: true
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b rpi_pico2/rp2350a/m33/w -p=auto .
+
+      - name: Build for rpi_pico2/rp2350a/hazard3
+        id: build_pico2_hazard3
+        continue-on-error: true
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b rpi_pico2/rp2350a/hazard3 -p=auto .
+
+      - name: Build Wokwi Test for ESP32
+        id: build_wokwi_esp32
+        continue-on-error: true
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b esp32_devkitc/esp32/procpu -p=auto -d build-esp32-test tests
+
+      - name: Build Wokwi Test for ESP32-C3
+        id: build_wokwi_esp32c3
+        continue-on-error: true
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b esp32c3_devkitm/esp32c3 -p=auto -d build-esp32c3-test tests
+
+      - name: Build Wokwi Test for ESP32-S3
+        id: build_wokwi_esp32s3
+        continue-on-error: true
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b esp32s3_devkitc/esp32s3/procpu -p=auto -d build-esp32s3-test tests
+
+      - name: Build Wokwi Test for Pico
+        id: build_wokwi_pico
+        continue-on-error: true
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b rpi_pico/rp2040 -p=auto -d build-pico-test tests
+
+      - name: Report build failures
+        if: ${{ always() }}
+        env:
+          NUCLEO_F429ZI: ${{ steps.build_nucleo_f429zi.outcome }}
+          ESP32: ${{ steps.build_esp32.outcome }}
+          ESP32S3: ${{ steps.build_esp32s3.outcome }}
+          PICO: ${{ steps.build_pico.outcome }}
+          PICO_W: ${{ steps.build_pico_w.outcome }}
+          PICO2_M33: ${{ steps.build_pico2_m33.outcome }}
+          PICO2_M33_W: ${{ steps.build_pico2_m33_w.outcome }}
+          PICO2_HAZARD3: ${{ steps.build_pico2_hazard3.outcome }}
+          WOKWI_ESP32: ${{ steps.build_wokwi_esp32.outcome }}
+          WOKWI_ESP32C3: ${{ steps.build_wokwi_esp32c3.outcome }}
+          WOKWI_ESP32S3: ${{ steps.build_wokwi_esp32s3.outcome }}
+          WOKWI_PICO: ${{ steps.build_wokwi_pico.outcome }}
+        run: |
+          failed=0
+
+          check_build() {
+            if [ "$2" != "success" ]; then
+              echo "::error::$1 build $2"
+              failed=1
+            fi
+          }
+
+          check_build "nucleo_f429zi" "$NUCLEO_F429ZI"
+          check_build "esp32_devkitc/esp32/procpu" "$ESP32"
+          check_build "esp32s3_devkitc/esp32s3/procpu" "$ESP32S3"
+          check_build "rpi_pico/rp2040" "$PICO"
+          check_build "rpi_pico/rp2040/w" "$PICO_W"
+          check_build "rpi_pico2/rp2350a/m33" "$PICO2_M33"
+          check_build "rpi_pico2/rp2350a/m33/w" "$PICO2_M33_W"
+          check_build "rpi_pico2/rp2350a/hazard3" "$PICO2_HAZARD3"
+          check_build "Wokwi ESP32 test" "$WOKWI_ESP32"
+          check_build "Wokwi ESP32-C3 test" "$WOKWI_ESP32C3"
+          check_build "Wokwi ESP32-S3 test" "$WOKWI_ESP32S3"
+          check_build "Wokwi Pico test" "$WOKWI_PICO"
+
+          exit "$failed"
+
+      - name: Stage ESP32 Test Files
+        run: |
+          mkdir -p esp32-test-artifact
+          cp src/platforms/zephyr/build-esp32-test/zephyr/zephyr.elf esp32-test-artifact/
+          cp src/platforms/zephyr/build-esp32-test/zephyr/zephyr.bin esp32-test-artifact/
+
+      - name: Upload ESP32 Test Files
+        uses: actions/upload-artifact@v7
+        with:
+          name: zephyr-esp32-test-elf
+          path: esp32-test-artifact/
+
+      - name: Stage ESP32-C3 Test Files
+        run: |
+          mkdir -p esp32c3-test-artifact
+          cp src/platforms/zephyr/build-esp32c3-test/zephyr/zephyr.elf esp32c3-test-artifact/
+          cp src/platforms/zephyr/build-esp32c3-test/zephyr/zephyr.bin esp32c3-test-artifact/
+
+      - name: Upload ESP32-C3 Test Files
+        uses: actions/upload-artifact@v7
+        with:
+          name: zephyr-esp32c3-test-elf
+          path: esp32c3-test-artifact/
+
+      - name: Stage ESP32-S3 Test Files
+        run: |
+          mkdir -p esp32s3-test-artifact
+          cp src/platforms/zephyr/build-esp32s3-test/zephyr/zephyr.elf esp32s3-test-artifact/
+          cp src/platforms/zephyr/build-esp32s3-test/zephyr/zephyr.bin esp32s3-test-artifact/
+
+      - name: Upload ESP32-S3 Test Files
+        uses: actions/upload-artifact@v7
+        with:
+          name: zephyr-esp32s3-test-elf
+          path: esp32s3-test-artifact/
+
+      - name: Stage Pico Test Files
+        run: |
+          mkdir -p pico-test-artifact
+          cp src/platforms/zephyr/build-pico-test/zephyr/zephyr.elf pico-test-artifact/
+          cp src/platforms/zephyr/build-pico-test/zephyr/zephyr.uf2 pico-test-artifact/
+
+      - name: Upload Pico Test Files
+        uses: actions/upload-artifact@v7
+        with:
+          name: zephyr-pico-test-elf
+          path: pico-test-artifact/
+
+  test:
+    runs-on: ubuntu-24.04
+    container: ghcr.io/zephyrproject-rtos/ci:v0.29.3
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+
+      - name: Configure Git Safe Directory
+        run: |
+          git config --global --add safe.directory '*'
+
+      - name: Configure Zephyr SDK Path
+        run: |
+          echo "ZEPHYR_SDK_INSTALL_DIR=/opt/toolchains/zephyr-sdk-${ZSDK_VERSION}" >> $GITHUB_ENV
+
+      - name: Cache West Workspace
+        if: ${{ !env.ACT }}
+        uses: actions/cache@v5
+        with:
+          path: |
+            .west
+            zephyr
+            modules
+          key: ${{ runner.os }}-west-${{ hashFiles('src/platforms/zephyr/west.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-west-
+
+      - name: Initialize West Workspace
+        working-directory: ./
+        run: |
+          mkdir -p .west
+          printf "[manifest]\npath = src/platforms/zephyr\nfile = west.yml\n" > .west/config
+          west update --narrow
+          west blobs fetch hal_espressif
+          west blobs fetch hal_infineon
+
+      - name: "Set ImageOS for erlef/setup-beam"
+        run: |
+          sed -n -E -e 's|VERSION_ID="(.+)\..+"|ImageOS=ubuntu\1|p' /etc/os-release >> ${GITHUB_ENV}
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28"
+          rebar3-version: "3.25.1"
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://repo.hex.pm
+            https://cdn.jsdelivr.net/hex
+
+      - name: Run Zephyr simulator tests
+        working-directory: ./
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+          LSAN_OPTIONS: exitcode=0
+        run: |
+          west twister -T src/platforms/zephyr/tests -p qemu_x86_64 -p native_sim/native/64 --inline-logs -W
+
+      - name: Generate Test Summary
+        if: always()
+        run: |
+          python -c '
+          import json
+          import os
+
+          report_path = "twister-out/twister.json"
+          if not os.path.exists(report_path):
+              print(f"No test report found at {report_path}")
+              exit(0)
+
+          with open(report_path) as f:
+              data = json.load(f)
+
+          suites = data.get("testsuites", [])
+          total = len(suites)
+          passed = sum(1 for s in suites if s.get("status") == "passed")
+          failed = sum(1 for s in suites if s.get("status") == "failed")
+          error = sum(1 for s in suites if s.get("status") == "error")
+          skipped = sum(1 for s in suites if s.get("status") == "skipped")
+
+          # Visual status badges
+          status_badge = "🔴 Failed" if (failed > 0 or error > 0) else "🟢 Passed"
+          if total == skipped:
+              status_badge = "⚪ Skipped"
+
+          summary = [
+              f"## 🧪 Zephyr Twister Test Results: {status_badge}",
+              "",
+              "| Metric | Count |",
+              "| :--- | :--- |",
+              f"| ✅ **Passed** | {passed} |",
+              f"| ❌ **Failed** | {failed} |",
+              f"| ⚠️ **Errors** | {error} |",
+              f"| ⚪ **Skipped** | {skipped} |",
+              f"| **Total** | {total} |",
+              "",
+              "<details>",
+              "<summary>🔍 Click to expand/collapse full test suite checklist</summary>",
+              "",
+              "| Suite Name | Platform | Status | Reason / Note |",
+              "| :--- | :--- | :--- | :--- |"
+          ]
+
+          # Map statuses to checkmarks
+          status_icons = {
+              "passed": "✅ Passed",
+              "failed": "❌ Failed",
+              "error": "⚠️ Error",
+              "skipped": "⚪ Skipped"
+          }
+
+          for s in suites:
+              name = s.get("name", "unknown")
+              platform = s.get("platform", "unknown")
+              status_str = s.get("status", "unknown")
+              icon = status_icons.get(status_str, f"❓ {status_str.upper()}")
+              reason = s.get("reason", "")
+              summary.append(f"| `{name}` | `{platform}` | {icon} | {reason} |")
+
+          summary.append("</details>")
+
+          summary_file = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary_file:
+              with open(summary_file, "a") as sf:
+                  sf.write("\n".join(summary))
+          else:
+              print("\n".join(summary))
+          '
+
+      - name: Upload Twister Reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: twister-reports
+          path: |
+            twister-out/twister.json
+            twister-out/twister.xml
+            twister-out/twister_report.xml
+
+  wokwi-test:
+    needs: [build]
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: ESP32
+            artifact: zephyr-esp32-test-elf
+            sim_dir: esp32-sim
+            diagram: diagram.esp32.json
+          - target: ESP32-C3
+            artifact: zephyr-esp32c3-test-elf
+            sim_dir: esp32c3-sim
+            diagram: diagram.esp32c3.json
+          - target: ESP32-S3
+            artifact: zephyr-esp32s3-test-elf
+            sim_dir: esp32s3-sim
+            diagram: diagram.esp32s3.json
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+
+      - name: Download ${{ matrix.target }} Test ELF
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.sim_dir }}/
+
+      - name: Install Wokwi CLI
+        run: curl -L https://wokwi.com/ci/install.sh | sh
+
+      - name: Run ${{ matrix.target }} Wokwi Test
+        env:
+          WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
+          SIM_DIR: ${{ matrix.sim_dir }}
+          DIAGRAM: ${{ matrix.diagram }}
+          TARGET_NAME: ${{ matrix.target }}
+        run: |
+          cd "$SIM_DIR"
+          echo -e "[wokwi]\nversion = 1\nfirmware = \"zephyr.bin\"\nelf = \"zephyr.elf\"" > wokwi.toml
+          cp "../src/platforms/zephyr/tests/sim_boards/$DIAGRAM" diagram.json
+          set +e
+          wokwi-cli --timeout 180000 --expect-text "PROJECT EXECUTION SUCCESSFUL" --fail-text "PROJECT EXECUTION FAILED" . | tee wokwi.log
+          WOKWI_EXIT=${PIPESTATUS[0]}
+          set -e
+          python3 -c '
+          import sys, re
+          log_file = sys.argv[1]
+          summary_file = sys.argv[2]
+          target_name = sys.argv[3]
+          try:
+              with open(log_file, "r", errors="ignore") as f:
+                  lines = f.readlines()
+          except Exception as e:
+              lines = []
+          test_cases = []
+          summary_block = []
+          in_summary = False
+          seen_tests = set()
+          for line in lines:
+              line_str = line.strip()
+              m_case = re.search(r"\b(PASS|FAIL|SKIP)\b\s*-\s*\[?([\w\._\d]+)\]?\s*(?:in|duration\s*=)\s*([\d\.]+)\s*(?:seconds)?", line_str)
+              if m_case:
+                  status, name, duration = m_case.groups()
+                  short_name = name.split(".")[-1]
+                  if short_name not in seen_tests:
+                      seen_tests.add(short_name)
+                      test_cases.append((short_name, status, duration))
+              if "------ TESTSUITE SUMMARY START ------" in line_str:
+                  in_summary = True
+                  continue
+              if "------ TESTSUITE SUMMARY END ------" in line_str:
+                  in_summary = False
+                  continue
+              if in_summary:
+                  summary_block.append(line_str)
+          with open(summary_file, "a") as sf:
+              sf.write(f"\n### Wokwi Test Results: {target_name}\n")
+              if test_cases:
+                  sf.write("| Test Case | Status | Duration |\n")
+                  sf.write("| --- | --- | --- |\n")
+                  for name, status, duration in test_cases:
+                      status_icon = "✅ PASS" if status == "PASS" else ("❌ FAIL" if status == "FAIL" else "⚠️ SKIP")
+                      sf.write(f"| {name} | {status_icon} | {duration}s |\n")
+              else:
+                  sf.write("❌ No test cases were detected. The simulation may have crashed or timed out.\n")
+                  if summary_block:
+                      sf.write("\n#### Summary Log\n```\n" + "\n".join(summary_block) + "\n```\n")
+          ' wokwi.log "$GITHUB_STEP_SUMMARY" "$TARGET_NAME"
+          exit $WOKWI_EXIT
+
+      # - name: Run Pico Wokwi Test
+      #   if: ${{ !cancelled() }}
+      #   env:
+      #     WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
+      #   run: |
+      #     cd pico-sim
+      #     echo -e "[wokwi]\nversion = 1\nfirmware = \"zephyr.elf\"\nelf = \"zephyr.elf\"" > wokwi.toml
+      #     echo '{"version": 1, "author": "AtomVM", "editor": "wokwi", "parts": [{"type": "wokwi-pi-pico", "id": "pico", "top": 0, "left": 0}], "connections": [["pico:GP0", "$serialMonitor:RX", "", []], ["pico:GP1", "$serialMonitor:TX", "", []]]}' > diagram.json
+      #     set +e
+      #     wokwi-cli --timeout 20000 --expect-text "PROJECT EXECUTION SUCCESSFUL" . | tee wokwi.log
+      #     WOKWI_EXIT=${PIPESTATUS[0]}
+      #     set -e
+      #     python3 -c '
+      #     import sys, re
+      #     log_file = sys.argv[1]
+      #     summary_file = sys.argv[2]
+      #     target_name = sys.argv[3]
+      #     try:
+      #         with open(log_file, "r", errors="ignore") as f:
+      #             lines = f.readlines()
+      #     except Exception as e:
+      #         lines = []
+      #     test_cases = []
+      #     summary_block = []
+      #     in_summary = False
+      #     seen_tests = set()
+      #     for line in lines:
+      #         line_str = line.strip()
+      #         m_case = re.search(r"\b(PASS|FAIL|SKIP)\b\s*-\s*\[?([\w\._\d]+)\]?\s*(?:in|duration\s*=)\s*([\d\.]+)\s*(?:seconds)?", line_str)
+      #         if m_case:
+      #             status, name, duration = m_case.groups()
+      #             short_name = name.split(".")[-1]
+      #             if short_name not in seen_tests:
+      #                 seen_tests.add(short_name)
+      #                 test_cases.append((short_name, status, duration))
+      #         if "------ TESTSUITE SUMMARY START ------" in line_str:
+      #             in_summary = True
+      #             continue
+      #         if "------ TESTSUITE SUMMARY END ------" in line_str:
+      #             in_summary = False
+      #             continue
+      #         if in_summary:
+      #             summary_block.append(line_str)
+      #     with open(summary_file, "a") as sf:
+      #         sf.write(f"\n### Wokwi Test Results: {target_name}\n")
+      #         if test_cases:
+      #             sf.write("| Test Case | Status | Duration |\n")
+      #             sf.write("| --- | --- | --- |\n")
+      #             for name, status, duration in test_cases:
+      #                 status_icon = "✅ PASS" if status == "PASS" else ("❌ FAIL" if status == "FAIL" else "⚠️ SKIP")
+      #                 sf.write(f"| {name} | {status_icon} | {duration}s |\n")
+      #         else:
+      #             sf.write("❌ No test cases were detected. The simulation may have crashed or timed out.\n")
+      #             if summary_block:
+      #                 sf.write("\n#### Summary Log\n```\n" + "\n".join(summary_block) + "\n```\n")
+      #     ' wokwi.log "$GITHUB_STEP_SUMMARY" "Pico"
+      #     exit $WOKWI_EXIT

@@ -1,0 +1,8 @@
+# Copyright 2023 Winford (Uncle Grumpy) <winford@object.stream>
+#
+# SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+
+build/
+twister-out*/
+build-esp32-test/
+build-wokwi-test/

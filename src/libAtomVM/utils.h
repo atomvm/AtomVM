@@ -309,8 +309,10 @@ static inline __attribute__((always_inline)) func_ptr_t cast_void_to_func_ptr(vo
  * It makes use of offsetof() from stddef.h.
  */
 
+#ifndef CONTAINER_OF
 #define CONTAINER_OF(ptr, type, member) \
     ((type *) (((char *) (ptr)) - offsetof(type, member)))
+#endif
 
 #ifdef __GNUC__
 #define PRINTF_FORMAT_ARGS(str_pos, arg_pos) \
