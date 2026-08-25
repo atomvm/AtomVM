@@ -33,11 +33,29 @@
 #include <term.h>
 #include <term_typedef.h>
 
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
+#include <mbedtls/net_sockets.h>
 #include <mbedtls/ssl.h>
+#if defined(MBEDTLS_VERSION_NUMBER) && (MBEDTLS_VERSION_NUMBER >= 0x03000000)
+#include <mbedtls/build_info.h>
+#else
+#include <mbedtls/version.h>
+#endif
+#ifdef MBEDTLS_X509_CRT_PARSE_C
+#include <mbedtls/x509_crt.h>
+#endif
+#ifdef ESP_PLATFORM
+#include <sdkconfig.h>
+#ifdef CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
+#include <esp_crt_bundle.h>
+#endif
+#endif
 
 #if defined(HAVE_PSA_CRYPTO)
 #include <psa/crypto.h>
@@ -91,7 +109,58 @@ struct SSLContextResource
 struct SSLConfigResource
 {
     mbedtls_ssl_config config;
+#ifdef MBEDTLS_X509_CRT_PARSE_C
+    mbedtls_x509_crt *cacert;
+#endif
 };
+
+#ifdef MBEDTLS_X509_CRT_PARSE_C
+static void ssl_free_cacert(mbedtls_x509_crt *cacert)
+{
+    if (cacert) {
+        mbedtls_x509_crt_free(cacert);
+        free(cacert);
+    }
+}
+
+static bool ssl_is_pem_cacert(const unsigned char *buf, size_t len)
+{
+    static const char pem_header[] = "-----BEGIN CERTIFICATE-----";
+    const size_t pem_header_len = sizeof(pem_header) - 1;
+    if (len < pem_header_len) {
+        return false;
+    }
+
+    for (size_t i = 0; i <= len - pem_header_len; i++) {
+        if (memcmp(buf + i, pem_header, pem_header_len) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static int ssl_parse_cacert(mbedtls_x509_crt *cacert, const unsigned char *buf, size_t len)
+{
+    if (!ssl_is_pem_cacert(buf, len)) {
+        return mbedtls_x509_crt_parse_der(cacert, buf, len);
+    }
+    if (len == SIZE_MAX) {
+        return MBEDTLS_ERR_X509_ALLOC_FAILED;
+    }
+
+    unsigned char *with_nul = malloc(len + 1);
+    if (IS_NULL_PTR(with_nul)) {
+        return MBEDTLS_ERR_X509_ALLOC_FAILED;
+    }
+    memcpy(with_nul, buf, len);
+    with_nul[len] = '\0';
+    int err = mbedtls_x509_crt_parse(cacert, with_nul, len + 1);
+    free(with_nul);
+
+    return err;
+}
+#endif
 
 static void entropycontext_dtor(ErlNifEnv *caller_env, void *obj)
 {
@@ -143,6 +212,10 @@ static void sslconfig_dtor(ErlNifEnv *caller_env, void *obj)
     struct SSLConfigResource *rsrc_obj = (struct SSLConfigResource *) obj;
     const mbedtls_ctr_drbg_context *ctr_drbg_context = rsrc_obj->config.MBEDTLS_PRIVATE(p_rng);
     mbedtls_ssl_config_free(&rsrc_obj->config);
+#ifdef MBEDTLS_X509_CRT_PARSE_C
+    ssl_free_cacert(rsrc_obj->cacert);
+    rsrc_obj->cacert = NULL;
+#endif
 
     // Eventually release the ctrdrbg
     if (ctr_drbg_context) {
@@ -184,6 +257,12 @@ int mbedtls_ssl_send_cb(void *ctx, const unsigned char *buf, size_t len)
     if (res == SocketWouldBlock) {
         return MBEDTLS_ERR_SSL_WANT_WRITE;
     }
+    if (res == SocketClosed) {
+        return MBEDTLS_ERR_NET_CONN_RESET;
+    }
+    if (res == SocketOtherError) {
+        return MBEDTLS_ERR_NET_SEND_FAILED;
+    }
     return res;
 }
 
@@ -193,6 +272,12 @@ int mbedtls_ssl_recv_cb(void *ctx, unsigned char *buf, size_t len)
     ssize_t res = socket_recv((struct SocketResource *) ctx, buf, len, 0, NULL, NULL);
     if (res == SocketWouldBlock) {
         return MBEDTLS_ERR_SSL_WANT_READ;
+    }
+    if (res == SocketClosed) {
+        return 0;
+    }
+    if (res == SocketOtherError) {
+        return MBEDTLS_ERR_NET_RECV_FAILED;
     }
     return res;
 }
@@ -367,6 +452,9 @@ static term nif_ssl_config_init(Context *ctx, int argc, term argv[])
     enif_release_resource(rsrc_obj); // decrement refcount after enif_alloc_resource
 
     mbedtls_ssl_config_init(&rsrc_obj->config);
+#ifdef MBEDTLS_X509_CRT_PARSE_C
+    rsrc_obj->cacert = NULL;
+#endif
 
 #if defined(MBEDTLS_DEBUG_C) && defined(ENABLE_TRACE)
     mbedtls_ssl_conf_dbg(&rsrc_obj->config, mbedtls_debug_cb, NULL);
@@ -492,6 +580,78 @@ static term nif_ssl_conf_rng(Context *ctx, int argc, term argv[])
     return OK_ATOM;
 }
 
+#ifdef MBEDTLS_X509_CRT_PARSE_C
+static term nif_ssl_conf_ca_chain(Context *ctx, int argc, term argv[])
+{
+    TRACE("%s\n", __func__);
+    UNUSED(argc);
+
+    void *rsrc_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0], sslconfig_resource_type, &rsrc_obj_ptr))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    struct SSLConfigResource *rsrc_obj = (struct SSLConfigResource *) rsrc_obj_ptr;
+    term certs = argv[1];
+
+#ifdef CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
+    if (term_is_atom(certs)
+        && globalcontext_is_term_equal_to_atom_string(ctx->global, certs, ATOM_STR("\xA", "crt_bundle"))) {
+        if (UNLIKELY(esp_crt_bundle_attach(&rsrc_obj->config) != ESP_OK)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        ssl_free_cacert(rsrc_obj->cacert);
+        rsrc_obj->cacert = NULL;
+
+        return OK_ATOM;
+    }
+#endif
+
+    if (UNLIKELY(!term_is_list(certs))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    mbedtls_x509_crt *cacert = malloc(sizeof(mbedtls_x509_crt));
+    if (IS_NULL_PTR(cacert)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    mbedtls_x509_crt_init(cacert);
+
+    term remaining = certs;
+    while (term_is_nonempty_list(remaining)) {
+        term cert = term_get_list_head(remaining);
+        if (UNLIKELY(!term_is_binary(cert))) {
+            ssl_free_cacert(cacert);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        const unsigned char *buf = (const unsigned char *) term_binary_data(cert);
+        size_t len = term_binary_size(cert);
+        int err = ssl_parse_cacert(cacert, buf, len);
+        if (UNLIKELY(err == MBEDTLS_ERR_X509_ALLOC_FAILED)) {
+            ssl_free_cacert(cacert);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        if (UNLIKELY(err != 0)) {
+            ssl_free_cacert(cacert);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        remaining = term_get_list_tail(remaining);
+    }
+    if (UNLIKELY(!term_is_nil(remaining))) {
+        ssl_free_cacert(cacert);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+#ifdef CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
+    mbedtls_ssl_conf_verify(&rsrc_obj->config, NULL, NULL);
+#endif
+    mbedtls_ssl_conf_ca_chain(&rsrc_obj->config, cacert, NULL);
+    ssl_free_cacert(rsrc_obj->cacert);
+    rsrc_obj->cacert = cacert;
+
+    return OK_ATOM;
+}
+#endif
+
 static term nif_ssl_setup(Context *ctx, int argc, term argv[])
 {
     TRACE("%s\n", __func__);
@@ -531,6 +691,18 @@ static term make_err_result(int err, Context *ctx)
             return globalcontext_make_atom(ctx->global, ATOM_STR("\x9", "want_read"));
         case MBEDTLS_ERR_SSL_WANT_WRITE:
             return globalcontext_make_atom(ctx->global, ATOM_STR("\xA", "want_write"));
+        case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
+        case MBEDTLS_ERR_SSL_CONN_EOF:
+        case MBEDTLS_ERR_NET_CONN_RESET: {
+            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            term error_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
+            term_put_tuple_element(error_tuple, 1, globalcontext_make_atom(ctx->global, ATOM_STR("\x6", "closed")));
+            return error_tuple;
+        }
 #if MBEDTLS_VERSION_NUMBER >= 0x020B0000
         case MBEDTLS_ERR_SSL_ASYNC_IN_PROGRESS:
             return globalcontext_make_atom(ctx->global, ATOM_STR("\x11", "async_in_progress"));
@@ -665,6 +837,9 @@ static term nif_ssl_read(Context *ctx, int argc, term argv[])
     uint8_t *buffer = (uint8_t *) term_binary_data(data);
 
     int res = mbedtls_ssl_read(&context_rsrc->context, buffer, len);
+    if (res == 0) {
+        return make_err_result(MBEDTLS_ERR_SSL_CONN_EOF, ctx);
+    }
 
     if (res == len) {
         return port_create_tuple2(ctx, OK_ATOM, data);
@@ -720,6 +895,12 @@ static const struct Nif ssl_conf_rng_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ssl_conf_rng
 };
+#ifdef MBEDTLS_X509_CRT_PARSE_C
+static const struct Nif ssl_conf_ca_chain_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_ssl_conf_ca_chain
+};
+#endif
 static const struct Nif ssl_set_hostname_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ssl_set_hostname
@@ -789,6 +970,12 @@ const struct Nif *otp_ssl_nif_get_nif(const char *nifname)
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &ssl_conf_rng_nif;
         }
+#ifdef MBEDTLS_X509_CRT_PARSE_C
+        if (strcmp("nif_conf_ca_chain/2", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &ssl_conf_ca_chain_nif;
+        }
+#endif
         if (strcmp("nif_set_hostname/2", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &ssl_set_hostname_nif;

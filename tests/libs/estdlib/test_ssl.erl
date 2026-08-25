@@ -50,15 +50,73 @@ is_ssl_available() ->
 test_ssl() ->
     ok = ssl:start(),
     ok = test_start_twice(),
+    ok = test_verify_peer_ip_requires_verification_name(),
+    ok = test_cacert_errors(),
+    ok = test_cacerts_override_cacertfile(),
     ok = test_connect_close(),
     ok = test_connect_error(),
     ok = test_send_recv(),
     ok = test_send_recv_zero(),
+    ok = test_verify_peer_cacertfile(),
     ok = ssl:stop(),
     ok.
 
 test_start_twice() ->
     ok = ssl:start().
+
+test_verify_peer_ip_requires_verification_name() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            ok;
+        _ ->
+            {error, {options, missing_verification_name}} = ssl:connect({127, 0, 0, 1}, 443, [
+                {verify, verify_peer}, {cacerts, []}, {active, false}
+            ]),
+            ok
+    end.
+
+test_cacert_errors() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            ok;
+        _ ->
+            {error, enoent} = ssl:connect("test.atomvm.org", 443, [
+                {verify, verify_peer},
+                {cacertfile, "/atomvm-test-missing/cacert.pem"},
+                {active, false}
+            ]),
+            {error, invalid_cacert} = ssl:connect("test.atomvm.org", 443, [
+                {verify, verify_peer}, {cacerts, [<<"invalid">>]}, {active, false}
+            ]),
+            ok
+    end.
+
+test_cacerts_override_cacertfile() ->
+    case default_cacertfile() of
+        undefined ->
+            io:format("Warning: skipping CA precedence test, no system CA file~n"),
+            ok;
+        Path ->
+            {ok, PemOrDer} = read_file(Path),
+            CACerts =
+                case erlang:system_info(machine) of
+                    "BEAM" ->
+                        [
+                            Der
+                         || {'Certificate', Der, not_encrypted} <- public_key:pem_decode(PemOrDer)
+                        ];
+                    _ ->
+                        [PemOrDer]
+                end,
+            {ok, SSLSocket} = ssl:connect("test.atomvm.org", 443, [
+                {verify, verify_peer},
+                {cacerts, CACerts},
+                {cacertfile, "unused"},
+                {active, false}
+            ]),
+            ok = ssl:close(SSLSocket),
+            ok
+    end.
 
 test_connect_close() ->
     {ok, SSLSocket} = ssl:connect("test.atomvm.org", 443, [{verify, verify_none}, {active, false}]),
@@ -91,3 +149,66 @@ test_send_recv_zero() ->
     {ok, <<"HTTP/1.1 200 OK", _/binary>>} = ssl:recv(SSLSocket, 0),
     ok = ssl:close(SSLSocket),
     ok.
+
+test_verify_peer_cacertfile() ->
+    case default_cacertfile() of
+        undefined ->
+            io:format("Warning: skipping verify_peer, no system CA file~n"),
+            ok;
+        Path ->
+            {ok, SSLSocket} = ssl:connect("test.atomvm.org", 443, [
+                {verify, verify_peer}, {cacertfile, Path}, {active, false}, {binary, true}
+            ]),
+            ok = ssl:close(SSLSocket),
+            ok
+    end.
+
+default_cacertfile() ->
+    Candidates = [
+        "/etc/ssl/cert.pem",
+        "/etc/ssl/certs/ca-certificates.crt",
+        "/etc/pki/tls/certs/ca-bundle.crt",
+        "/etc/ssl/ca-bundle.pem"
+    ],
+    first_readable(Candidates).
+
+first_readable([]) ->
+    undefined;
+first_readable([Path | Rest]) ->
+    case readable_file(Path) of
+        true -> Path;
+        false -> first_readable(Rest)
+    end.
+
+readable_file(Path) ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            filelib:is_regular(Path);
+        _ ->
+            case atomvm:posix_open(Path, [o_rdonly]) of
+                {ok, Fd} ->
+                    _ = atomvm:posix_close(Fd),
+                    true;
+                {error, _} ->
+                    false
+            end
+    end.
+
+read_file(Path) ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            file:read_file(Path);
+        _ ->
+            {ok, Fd} = atomvm:posix_open(Path, [o_rdonly]),
+            try
+                read_file(Fd, [])
+            after
+                _ = atomvm:posix_close(Fd)
+            end
+    end.
+
+read_file(Fd, Acc) ->
+    case atomvm:posix_read(Fd, 4096) of
+        {ok, Chunk} -> read_file(Fd, [Chunk | Acc]);
+        eof -> {ok, iolist_to_binary(lists:reverse(Acc))}
+    end.
