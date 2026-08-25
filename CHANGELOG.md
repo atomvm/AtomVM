@@ -51,6 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   describing the functions and the BEAM instructions supported by the configured build
 - Added a `check-native-stubs` build target, run in CI, that verifies every function
   registered in `bifs.gperf` or `nifs.gperf` has a matching Erlang export
+- Added `ssl:connect/3` `{verify, verify_peer}` with `{cacerts, [PemOrDer]}`,
+  `{cacertfile, Path}`, and ESP32 `{cacerts, crt_bundle}` (common IDF trust store by default;
+  full and custom bundles remain configurable at build time)
 
 ### Changed
 - `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does:
@@ -116,6 +119,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed a JIT crash (`EXC_BAD_ACCESS`/SIGBUS) on Apple Silicon
 - Fixed the ESP32 event poller re-blocking after running a listener, which could delay a process
   readied by a driver (e.g. an active-mode socket message) until the next event or timer tick
+- Fixed `ssl` mapping peer close-notify / connection reset to `{error, closed}`
+  instead of a raw MbedTLS integer, and mapping socket send/recv failures to
+  `MBEDTLS_ERR_NET_*` instead of leaking `SocketOtherError` (`-2`)
 - Fixed `term_from_resource` failing to compile from C++
 - Fixed a bug where negative or oversized segment sizes were not rejected in binary matching
 - Fixed the `network` mdns configuration to read the documented `host` key; the previously

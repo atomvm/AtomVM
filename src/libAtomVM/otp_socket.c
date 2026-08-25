@@ -2030,6 +2030,9 @@ static ssize_t do_socket_recv(struct SocketResource *rsrc_obj, uint8_t *buf, siz
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
             return SocketWouldBlock;
         }
+        if (errno == ECONNRESET) {
+            return SocketClosed;
+        }
         return SocketOtherError;
     }
     return res;
@@ -2111,7 +2114,7 @@ static ssize_t do_socket_recv(struct SocketResource *rsrc_obj, uint8_t *buf, siz
 
         return len - remaining;
     }
-    if (closed) {
+    if (closed || err == ERR_RST || err == ERR_ABRT || err == ERR_CLSD) {
         return SocketClosed;
     }
     return err == ERR_OK ? SocketWouldBlock : SocketOtherError;
