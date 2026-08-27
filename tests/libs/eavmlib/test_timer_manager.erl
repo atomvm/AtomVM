@@ -28,6 +28,8 @@ test() ->
     ok = test_cancel_timer_after_expiry(),
     ok = test_erlang_cancel_timer(),
     pong = test_send_after(),
+    ok = test_cancel_send_after(),
+    ok = test_cancel_send_after_suppresses_message(),
     ok.
 
 -include("etest.hrl").
@@ -72,6 +74,31 @@ test_erlang_cancel_timer() ->
 test_send_after() ->
     timer_manager:send_after(100, self(), ping),
     pong = wait_for_timeout(ping, 5000).
+
+test_cancel_send_after() ->
+    ?ASSERT_MATCH(timer_manager:get_timer_refs(), []),
+    TimerRef = timer_manager:send_after(60000, self(), test_cancel_send_after),
+    ?ASSERT_MATCH(timer_manager:get_timer_refs(), [TimerRef]),
+    R = timer_manager:cancel_timer(TimerRef),
+    ?ASSERT_TRUE(is_integer(R)),
+    ?ASSERT_TRUE(R > 0),
+    ?ASSERT_MATCH(timer_manager:get_timer_refs(), []),
+    R2 = timer_manager:cancel_timer(TimerRef),
+    ?ASSERT_EQUALS(false, R2),
+    ok.
+
+test_cancel_send_after_suppresses_message() ->
+    ?ASSERT_MATCH(timer_manager:get_timer_refs(), []),
+    TimerRef = timer_manager:send_after(100, self(), should_not_arrive),
+    receive
+    after 50 -> ok
+    end,
+    _ = timer_manager:cancel_timer(TimerRef),
+    receive
+        should_not_arrive -> throw(timer_fired_despite_cancel)
+    after 500 -> ok
+    end,
+    ok.
 
 wait_for_timeout(Msg, Timeout) ->
     receive
