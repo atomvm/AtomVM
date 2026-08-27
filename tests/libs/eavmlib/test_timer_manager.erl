@@ -75,9 +75,6 @@ test_send_after() ->
     timer_manager:send_after(100, self(), ping),
     pong = wait_for_timeout(ping, 5000).
 
-%% Regression: the reference returned by send_after/3 must be a registered,
-%% cancellable timer. It previously returned a throwaway ref that was never
-%% in the timer table, so cancel_timer/1 always returned false.
 test_cancel_send_after() ->
     ?ASSERT_MATCH(timer_manager:get_timer_refs(), []),
     TimerRef = timer_manager:send_after(60000, self(), test_cancel_send_after),
@@ -90,11 +87,12 @@ test_cancel_send_after() ->
     ?ASSERT_EQUALS(false, R2),
     ok.
 
-%% Regression: cancelling a send_after/3 timer must actually stop the message
-%% from being delivered. It previously fired regardless of the cancel.
 test_cancel_send_after_suppresses_message() ->
     ?ASSERT_MATCH(timer_manager:get_timer_refs(), []),
     TimerRef = timer_manager:send_after(100, self(), should_not_arrive),
+    receive
+    after 50 -> ok
+    end,
     _ = timer_manager:cancel_timer(TimerRef),
     receive
         should_not_arrive -> throw(timer_fired_despite_cancel)
