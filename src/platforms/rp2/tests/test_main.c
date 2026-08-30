@@ -162,6 +162,14 @@ TEST_CASE(test_crypto)
     TEST_ASSERT_EQUAL_INT(OK_ATOM, ret_value);
 }
 
+#ifdef AVM_RP2_SSL_TEST
+TEST_CASE(test_ssl_pem)
+{
+    term ret_value = avm_test_case("test_ssl_pem.beam");
+    TEST_ASSERT_EQUAL_INT(OK_ATOM, ret_value);
+}
+#endif
+
 TEST_CASE(test_smp)
 {
     term ret_value = avm_test_case("test_smp.beam");

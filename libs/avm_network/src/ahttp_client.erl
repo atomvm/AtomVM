@@ -101,8 +101,10 @@
 %%          supported). `Host' can be also a binary.
 %%
 %%          The `Options' can be used for providing connection options such as SSL
-%%          `{verify, verify_none}', `gen_tcp' options such as `{active, false}' and `ahttp_client'
-%%          `{parse_headers, [<<"HeaderName">>]}'.
+%%          `{verify, verify_peer}' with `{cacerts, Certs}' or `{cacertfile, Path}',
+%%          `gen_tcp' options such as `{active, false}' and `ahttp_client'
+%%          `{parse_headers, [<<"HeaderName">>]}'. `{verify, verify_none}' disables peer
+%%          authentication and should only be used for testing.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec connect(
