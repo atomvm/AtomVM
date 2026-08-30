@@ -25,6 +25,10 @@ include(FetchUnity)
 
 add_executable(rp2_tests test_main.c)
 
+if(PICO_CYW43_SUPPORTED)
+    target_compile_definitions(rp2_tests PRIVATE AVM_RP2_SSL_TEST)
+endif()
+
 target_compile_features(rp2_tests PUBLIC c_std_11)
 if(CMAKE_COMPILER_IS_GNUCC)
     target_compile_options(rp2_tests PUBLIC -ggdb)

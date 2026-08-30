@@ -477,6 +477,23 @@ Use `idf.py menuconfig` in `src/platforms/esp32`
 
 See [MBEDTLS_ECP_FIXED_POINT_OPTIM](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/kconfig-reference.html#config-mbedtls-ecp-fixed-point-optim)
 
+AtomVM ESP32 builds also enable mbedTLS certificate validity-date checks. This requires the system
+clock to be set to a trustworthy value before using `ssl:connect/3` with
+`{verify, verify_peer}`.
+
+For deployments that cannot obtain trustworthy time, disable this check in a custom build with
+`idf.py menuconfig` in `src/platforms/esp32`:
+`Component config ---> mbedTLS ---> Enable mbedtls certificate expiry check`
+
+See [CONFIG_MBEDTLS_HAVE_TIME_DATE](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/kconfig-reference.html#config-mbedtls-have-time-date)
+
+```{warning}
+Disabling `CONFIG_MBEDTLS_HAVE_TIME_DATE` leaves trust-chain and hostname verification enabled with
+`verify_peer`, but expired and not-yet-valid certificates will be accepted. This is a build-time
+setting and cannot be changed in a prebuilt AtomVM release image. Do not use `verify_none` merely
+to avoid synchronizing the clock, as it disables all peer authentication.
+```
+
 ### Flash Layout
 
 The AtomVM Flash memory is partitioned to include areas for the above binary artifacts created from the build, as well areas for runtime information used by the ESP32 and compiled Erlang/Elixir code.

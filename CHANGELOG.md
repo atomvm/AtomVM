@@ -43,7 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `string:to_integer/1`
 - Added `ssl:connect/3` `{verify, verify_peer}` with `{cacerts, [PemOrDer]}`,
   `{cacertfile, Path}`, and ESP32 `{cacerts, crt_bundle}` (common IDF trust store by default;
-  full and custom bundles remain configurable at build time)
+  full and custom bundles remain configurable at build time). ESP32 and RP2 builds check
+  certificate validity dates by default, so `verify_peer` requires a valid system clock.
 
 ### Changed
 - `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does:

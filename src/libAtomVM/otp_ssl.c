@@ -630,7 +630,7 @@ static term nif_ssl_conf_ca_chain(Context *ctx, int argc, term argv[])
             ssl_free_cacert(cacert);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        if (UNLIKELY(err != 0)) {
+        if (UNLIKELY(err < 0)) {
             ssl_free_cacert(cacert);
             RAISE_ERROR(BADARG_ATOM);
         }

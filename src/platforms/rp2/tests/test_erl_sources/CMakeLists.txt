@@ -62,12 +62,18 @@ endfunction()
 compile_erlang(test_clocks "")
 compile_erlang(test_smp "")
 compile_erlang(test_crypto ../../../esp32/test/main/test_erl_sources/)
+if(PICO_CYW43_SUPPORTED)
+    compile_erlang(test_ssl_pem "")
+endif()
 
 set(erlang_test_beams
     test_clocks.beam
     test_smp.beam
     test_crypto.beam
 )
+if(PICO_CYW43_SUPPORTED)
+    list(APPEND erlang_test_beams test_ssl_pem.beam)
+endif()
 
 if(NOT AVM_DISABLE_JIT)
     list(TRANSFORM erlang_test_beams PREPEND ${AVM_JIT_TARGET_ARCH}/)

@@ -52,6 +52,7 @@ test_ssl() ->
     ok = test_start_twice(),
     ok = test_verify_peer_ip_requires_verification_name(),
     ok = test_cacert_errors(),
+    ok = test_partially_valid_pem_bundle(),
     ok = test_cacerts_override_cacertfile(),
     ok = test_connect_close(),
     ok = test_connect_error(),
@@ -72,6 +73,12 @@ test_verify_peer_ip_requires_verification_name() ->
             {error, {options, missing_verification_name}} = ssl:connect({127, 0, 0, 1}, 443, [
                 {verify, verify_peer}, {cacerts, []}, {active, false}
             ]),
+            {error, {options, missing_verification_name}} = ssl:connect({127, 0, 0, 1}, 443, [
+                {cacerts, []}, {active, false}
+            ]),
+            {error, {options, missing_verification_name}} = ssl:connect({127, 0, 0, 1}, 443, [
+                {server_name_indication, disabled}, {cacerts, []}, {active, false}
+            ]),
             ok
     end.
 
@@ -80,14 +87,34 @@ test_cacert_errors() ->
         "BEAM" ->
             ok;
         _ ->
-            {error, enoent} = ssl:connect("test.atomvm.org", 443, [
-                {verify, verify_peer},
+            {error, enoent} = ssl:connect("ssl-options.invalid", 443, [
                 {cacertfile, "/atomvm-test-missing/cacert.pem"},
                 {active, false}
             ]),
-            {error, invalid_cacert} = ssl:connect("test.atomvm.org", 443, [
-                {verify, verify_peer}, {cacerts, [<<"invalid">>]}, {active, false}
+            {error, invalid_cacert} = ssl:connect({127, 0, 0, 1}, 0, [
+                {server_name_indication, "ssl-options.invalid"},
+                {cacerts, [<<"invalid">>]},
+                {active, false}
             ]),
+            ok
+    end.
+
+test_partially_valid_pem_bundle() ->
+    case {erlang:system_info(machine), default_cacertfile()} of
+        {"BEAM", _} ->
+            ok;
+        {_, undefined} ->
+            io:format("Warning: skipping partial PEM bundle test, no system CA file~n"),
+            ok;
+        {_, Path} ->
+            {ok, PemBundle} = read_file(Path),
+            PartiallyValidBundle = iolist_to_binary([
+                PemBundle,
+                <<"\n-----BEGIN CERTIFICATE-----\ninvalid\n-----END CERTIFICATE-----\n">>
+            ]),
+            SSLConfig = ssl:nif_config_init(),
+            ok = ssl:nif_config_defaults(SSLConfig, client, stream),
+            ok = ssl:nif_conf_ca_chain(SSLConfig, [PartiallyValidBundle]),
             ok
     end.
 
