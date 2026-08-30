@@ -65,6 +65,9 @@ compile_erlang(test_crypto ../../../esp32/test/main/test_erl_sources/)
 if(PICO_CYW43_SUPPORTED)
     compile_erlang(test_ssl_pem "")
 endif()
+if(AVM_RP2_WOKWI_TEST)
+    compile_erlang(test_picow_wifi_ssl "")
+endif()
 
 set(erlang_test_beams
     test_clocks.beam
@@ -73,6 +76,9 @@ set(erlang_test_beams
 )
 if(PICO_CYW43_SUPPORTED)
     list(APPEND erlang_test_beams test_ssl_pem.beam)
+endif()
+if(AVM_RP2_WOKWI_TEST)
+    list(APPEND erlang_test_beams test_picow_wifi_ssl.beam)
 endif()
 
 if(NOT AVM_DISABLE_JIT)
@@ -98,7 +104,7 @@ add_custom_command(
     COMMAND HostAtomVM-prefix/src/HostAtomVM-build/tools/uf2tool/uf2tool
         create
         -o rp2_test_modules.uf2
-        -s 0x10100000 "${CMAKE_CURRENT_BINARY_DIR}/rp2_test_modules.avm"
+        -s ${RP2_TEST_MODULES_ADDRESS} "${CMAKE_CURRENT_BINARY_DIR}/rp2_test_modules.avm"
     DEPENDS
         HostAtomVM
         "${CMAKE_CURRENT_BINARY_DIR}/rp2_test_modules.avm"
