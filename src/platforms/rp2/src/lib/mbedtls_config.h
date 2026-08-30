@@ -55,6 +55,7 @@
 // Requirements
 #define MBEDTLS_PKCS1_V15
 #define MBEDTLS_ASN1_PARSE_C
+#define MBEDTLS_BASE64_C
 #define MBEDTLS_BIGNUM_C
 #define MBEDTLS_CIPHER_C
 #define MBEDTLS_CTR_DRBG_C
@@ -65,6 +66,7 @@
 #define MBEDTLS_PKCS5_C
 #define MBEDTLS_PK_C
 #define MBEDTLS_PK_PARSE_C
+#define MBEDTLS_PEM_PARSE_C
 #define MBEDTLS_RSA_C
 #define MBEDTLS_SHA1_C
 #define MBEDTLS_SHA224_C
@@ -86,6 +88,7 @@
 #define MBEDTLS_PLATFORM_C
 #define MBEDTLS_NO_PLATFORM_ENTROPY
 #define MBEDTLS_HAVE_TIME
+#define MBEDTLS_HAVE_TIME_DATE
 #define MBEDTLS_ENTROPY_HARDWARE_ALT
 
 // Options that reduce ROM or RAM usage at the expense of performance

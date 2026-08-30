@@ -133,41 +133,84 @@ handle_info(_Msg, State) ->
 terminate(_Reason, _State) ->
     ok.
 
+%%-----------------------------------------------------------------------------
+%% @param Host the hostname or IP address to which to connect
+%% @param Port the port to which to connect
+%% @param TLSOptions options controlling the TLS connection
+%% @returns `{ok, SSLSocket}' or `{error, Reason}'
+%% @doc Establish a TLS connection to a host and port.
+%%
+%% Peer verification is enabled by default and requires a verification name and trusted CA. When
+%% `Host' is a hostname, it is used as the verification name; when connecting to an IP address,
+%% supply `{server_name_indication, Hostname}'. Supply a CA using `{cacerts, Certs}',
+%% `{cacertfile, Path}', or ESP32 `{cacerts, crt_bundle}'. Certificate validity dates are checked
+%% by default on ESP32 and RP2, so the system clock must be set to a trustworthy value before
+%% connecting. On ESP32, wait for the SNTP `synchronized' callback; obtaining an IP address does
+%% not mean that the clock is synchronized, and `ssl:connect/3' does not wait for synchronization.
+%%
+%% ESP32 builds that cannot obtain trustworthy time may disable
+%% `CONFIG_MBEDTLS_HAVE_TIME_DATE', but doing so accepts expired and not-yet-valid certificates.
+%% `{verify, verify_none}' disables all peer authentication and should not be used merely to avoid
+%% synchronizing the clock.
+%% @end
+%%-----------------------------------------------------------------------------
 -spec connect(Host :: host(), Port :: inet:port_number(), TLSOptions :: [tls_client_option()]) ->
     {ok, sslsocket()} | {error, reason()}.
 connect(Hostname, Port, TLSOptions) when
     is_list(Hostname) andalso is_integer(Port) andalso is_list(TLSOptions)
 ->
-    % Erlang OTP actually first checks some options
-    case net:getaddrinfo(Hostname) of
-        {ok, Results} ->
-            case
-                [
-                    Addr
-                 || #{addr := #{addr := Addr}, type := stream, protocol := tcp, family := inet} <-
-                        Results
-                ]
-            of
-                [TCPAddr | _] ->
-                    NewTLSOptions =
-                        case lists:keyfind(server_name_indication, 1, TLSOptions) of
-                            false -> [{server_name_indication, Hostname} | TLSOptions];
-                            _ -> TLSOptions
-                        end,
-                    connect(TCPAddr, Port, NewTLSOptions);
-                [] ->
+    NewTLSOptions =
+        case lists:keyfind(server_name_indication, 1, TLSOptions) of
+            false -> [{server_name_indication, Hostname} | TLSOptions];
+            _ -> TLSOptions
+        end,
+    case prepare_tls(NewTLSOptions) of
+        {ok, SSLContext, SSLConfig} ->
+            case net:getaddrinfo(Hostname) of
+                {ok, Results} ->
+                    case
+                        [
+                            Addr
+                         || #{
+                                addr := #{addr := Addr},
+                                type := stream,
+                                protocol := tcp,
+                                family := inet
+                            } <-
+                                Results
+                        ]
+                    of
+                        [TCPAddr | _] ->
+                            connect_addr(TCPAddr, Port, SSLContext, SSLConfig);
+                        [] ->
+                            {error, nxdomain}
+                    end;
+                {error, _} ->
                     {error, nxdomain}
             end;
-        {error, _} ->
-            {error, nxdomain}
+        {error, _} = Error ->
+            Error
     end;
 connect(Addr, Port, TLSOptions) when
     is_tuple(Addr) andalso is_integer(Port) andalso is_list(TLSOptions)
 ->
+    case prepare_tls(TLSOptions) of
+        {ok, SSLContext, SSLConfig} ->
+            connect_addr(Addr, Port, SSLContext, SSLConfig);
+        {error, _} = Error ->
+            Error
+    end.
+
+prepare_tls(TLSOptions) ->
     ReversedOptions = lists:reverse(TLSOptions),
+    VerifyOption =
+        case lists:keyfind(verify, 1, ReversedOptions) of
+            false -> {verify, verify_peer};
+            Option -> Option
+        end,
     case
         {
-            lists:keyfind(verify, 1, ReversedOptions),
+            VerifyOption,
             lists:keyfind(server_name_indication, 1, ReversedOptions)
         }
     of
@@ -176,20 +219,38 @@ connect(Addr, Port, TLSOptions) when
         {{verify, verify_peer}, {server_name_indication, disabled}} ->
             {error, {options, missing_verification_name}};
         _ ->
-            {ok, Socket} = socket:open(inet, stream, tcp),
+            prepare_tls_config(TLSOptions)
+    end.
+
+prepare_tls_config(TLSOptions) ->
+    SSLContext = ?MODULE:nif_init(),
+    SSLConfig = ?MODULE:nif_config_init(),
+    ok = ?MODULE:nif_config_defaults(SSLConfig, client, stream),
+    ok = ?MODULE:nif_conf_authmode(SSLConfig, required),
+    {active, false} = proplists:lookup(active, TLSOptions),
+    case process_options(SSLContext, SSLConfig, normalize_ca_options(TLSOptions)) of
+        ok ->
+            {ok, SSLContext, SSLConfig};
+        {error, _} = Error ->
+            Error
+    end.
+
+connect_addr(Addr, Port, SSLContext, SSLConfig) ->
+    case socket:open(inet, stream, tcp) of
+        {ok, Socket} ->
             case socket:connect(Socket, #{family => inet, addr => Addr, port => Port}) of
                 ok ->
-                    connect(Socket, TLSOptions);
+                    connect_socket(Socket, SSLContext, SSLConfig);
                 {error, _Reason} = Error ->
                     _ = socket:close(Socket),
                     Error
-            end
+            end;
+        {error, _Reason} = Error ->
+            Error
     end.
 
--spec connect(Socket :: socket:socket(), TLSOptions :: [tls_client_option()]) ->
-    {ok, sslsocket()} | {error, reason()}.
-connect(Socket, TLSOptions) ->
-    try connect_tls(Socket, TLSOptions) of
+connect_socket(Socket, SSLContext, SSLConfig) ->
+    try connect_tls(Socket, SSLContext, SSLConfig) of
         {ok, _} = Result ->
             Result;
         {error, _} = Error ->
@@ -201,21 +262,12 @@ connect(Socket, TLSOptions) ->
             erlang:raise(Class, Reason, Stacktrace)
     end.
 
-connect_tls(Socket, TLSOptions) ->
-    SSLContext = ?MODULE:nif_init(),
+connect_tls(Socket, SSLContext, SSLConfig) ->
     ok = ?MODULE:nif_set_bio(SSLContext, Socket),
-    SSLConfig = ?MODULE:nif_config_init(),
-    ok = ?MODULE:nif_config_defaults(SSLConfig, client, stream),
-    {active, false} = proplists:lookup(active, TLSOptions),
-    case process_options(SSLContext, SSLConfig, normalize_ca_options(TLSOptions)) of
-        ok ->
-            CtrDrbg = gen_server:call(?MODULE, get_ctr_drbg),
-            ok = ?MODULE:nif_conf_rng(SSLConfig, CtrDrbg),
-            ok = ?MODULE:nif_setup(SSLContext, SSLConfig),
-            handshake_loop(SSLContext, Socket);
-        {error, _} = Error ->
-            Error
-    end.
+    CtrDrbg = gen_server:call(?MODULE, get_ctr_drbg),
+    ok = ?MODULE:nif_conf_rng(SSLConfig, CtrDrbg),
+    ok = ?MODULE:nif_setup(SSLContext, SSLConfig),
+    handshake_loop(SSLContext, Socket).
 
 normalize_ca_options(TLSOptions) ->
     Reversed = lists:reverse(TLSOptions),

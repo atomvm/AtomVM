@@ -19,7 +19,8 @@
 %
 
 %% Exercise HTTPS connections with `{verify, verify_none}', `{verify, verify_peer}'
-%% (no CA), and `{verify, verify_peer}' + `{cacerts, crt_bundle}'.
+%% (no CA), and `{verify, verify_peer}' + `{cacerts, crt_bundle}', including a
+%% trusted chain with the wrong verification name.
 -module(test_ahttp_ssl).
 
 -export([start/0]).
@@ -73,7 +74,14 @@ run_cases() ->
     Cases = [
         {verify_none, [{verify, verify_none}], success},
         {verify_peer_no_ca, [{verify, verify_peer}], failure},
-        {verify_peer_crt_bundle, [{verify, verify_peer}, {cacerts, crt_bundle}], success}
+        {verify_peer_crt_bundle, [{verify, verify_peer}, {cacerts, crt_bundle}], success},
+        {verify_peer_wrong_name,
+            [
+                {verify, verify_peer},
+                {cacerts, crt_bundle},
+                {server_name_indication, "wrong.example"}
+            ],
+            failure}
     ],
     lists:foreach(fun run_case/1, Cases),
     ok.
@@ -100,8 +108,7 @@ fmt_conn(Other) ->
     Other.
 
 wait_for_clock(0) ->
-    io:format("Clock not synced; TLS dates may fail~n"),
-    ok;
+    error(clock_not_synchronized);
 wait_for_clock(N) ->
     case erlang:universaltime() of
         {{1970, _, _}, _} ->
