@@ -1127,6 +1127,19 @@ $ npx tsx run-tests.ts ../build/tests/rp2040_tests.uf2 \
 ../build/tests/test_erl_sources/rp2040_test_modules.uf2
 ```
 
+The Pico W WiFi, SNTP, and verified TLS integration test runs with
+[Wokwi CI](https://docs.wokwi.com/wokwi-ci/getting-started). Set `WOKWI_CLI_TOKEN`, install
+`wokwi-cli`, and run:
+
+```shell
+$ cmake -S src/platforms/rp2 -B src/platforms/rp2/build.wokwi -G Ninja \
+    -DPICO_BOARD=pico_w -DAVM_DISABLE_SMP=ON -DAVM_RP2_WOKWI_TEST=ON
+$ cmake --build src/platforms/rp2/build.wokwi --target rp2_wokwi_tests
+$ cd src/platforms/rp2/tests
+$ wokwi-cli --timeout 300000 --expect-text PICO_SIMTEST_OK \
+    --fail-text PICO_SIMTEST_FAIL --diagram-file sim_boards/diagram.pico_w.json .
+```
+
 ## Building for `emscripten`
 
 Two different builds are possible, depending on link options: for NodeJS and
