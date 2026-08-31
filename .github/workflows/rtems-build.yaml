@@ -32,7 +32,6 @@ env:
   RTEMS_VERSION: "6"
   RTEMS_RELEASE: "6.2"
   RTEMS_PREFIX: /home/runner/rtems/6.2
-  RTEMS_BSP: sparc/erc32
 
 jobs:
   rtems:
@@ -41,6 +40,18 @@ jobs:
     permissions:
       actions: read
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: sparc
+            bsp: sparc/erc32
+            cache_key: sparc-erc32
+            qemu: ""
+          - arch: arm
+            bsp: arm/imx7
+            cache_key: arm-imx7
+            qemu: qemu-system-arm
 
     steps:
     - name: Checkout repo
@@ -64,16 +75,18 @@ jobs:
           build-essential g++ gdb unzip pax bison flex texinfo \
           python3-dev python-is-python3 python3-setuptools \
           libncurses-dev zlib1g-dev ninja-build pkg-config \
-          cmake gperf wget xz-utils python3-pip
+          cmake gperf wget xz-utils python3-pip \
+          device-tree-compiler gdb-multiarch \
+          ${{ matrix.qemu }}
 
-    - name: Cache RTEMS 6.2 sparc/erc32 toolchain
+    - name: Cache RTEMS 6.2 ${{ matrix.bsp }} toolchain
       id: rtems-cache
       uses: actions/cache@v4
       with:
         path: ${{ env.RTEMS_PREFIX }}
-        key: rtems-${{ env.RTEMS_RELEASE }}-sparc-erc32-${{ runner.os }}
+        key: rtems-${{ env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-${{ runner.os }}
 
-    - name: Build RTEMS 6.2 tools and sparc/erc32 BSP
+    - name: Build RTEMS 6.2 tools and ${{ matrix.bsp }} BSP
       if: steps.rtems-cache.outputs.cache-hit != 'true'
       run: |
         set -euo pipefail
@@ -82,10 +95,10 @@ jobs:
         wget -q "https://ftp.rtems.org/pub/rtems/releases/6/${RTEMS_RELEASE}/sources/rtems-source-builder-${RTEMS_RELEASE}.tar.xz"
         tar xJf "rtems-source-builder-${RTEMS_RELEASE}.tar.xz"
         cd "rtems-source-builder-${RTEMS_RELEASE}/rtems"
-        ../source-builder/sb-set-builder --prefix="$RTEMS_PREFIX" "${RTEMS_VERSION}/rtems-sparc"
+        ../source-builder/sb-set-builder --prefix="$RTEMS_PREFIX" "${RTEMS_VERSION}/rtems-${{ matrix.arch }}"
         ../source-builder/sb-set-builder --prefix="$RTEMS_PREFIX" \
-          --target=sparc-rtems${RTEMS_VERSION} \
-          --with-rtems-bsp=sparc/erc32 \
+          --target=${{ matrix.arch }}-rtems${RTEMS_VERSION} \
+          --with-rtems-bsp=${{ matrix.bsp }} \
           --with-rtems-tests=no \
           "${RTEMS_VERSION}/rtems-kernel"
 
@@ -95,8 +108,7 @@ jobs:
     - name: Check RTEMS toolchain
       run: |
         set -euo pipefail
-        sparc-rtems${RTEMS_VERSION}-gcc --version
-        test -x "$RTEMS_PREFIX/bin/rtems-run"
+        ${{ matrix.arch }}-rtems${RTEMS_VERSION}-gcc --version
 
     - name: Build host AtomVM and RTEMS boot AVM
       run: |
@@ -109,18 +121,19 @@ jobs:
           build-host/src/platforms/rtems/tests/test_erl_sources/test_boot.beam \
           build-host/libs/atomvmlib-rtems.avm
 
-    - name: Cross-compile AtomVM for sparc/erc32
+    - name: Cross-compile AtomVM for ${{ matrix.bsp }}
       run: |
         set -euo pipefail
         cmake -S src/platforms/rtems -B src/platforms/rtems/build -G Ninja \
           -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
           -DRTEMS_PREFIX="$RTEMS_PREFIX" \
-          -DRTEMS_BSP="$RTEMS_BSP" \
+          -DRTEMS_BSP="${{ matrix.bsp }}" \
           -DRTEMS_VERSION="$RTEMS_VERSION" \
           -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_boot.avm"
         cmake --build src/platforms/rtems/build
 
     - name: Run boot test on SIS
+      if: matrix.arch == 'sparc'
       run: |
         set -euo pipefail
         ELF="src/platforms/rtems/build/AtomVM-erc32.exe"
@@ -140,6 +153,52 @@ jobs:
         fi
         if ! printf '%s\n' "$output" | grep -q "Return value: ok"; then
           echo "::error::RTEMS boot test did not return ok"
+          exit 1
+        fi
+        echo "Boot test output contained {atomvm_rtems_boot,rtems} and Return value: ok"
+
+    - name: Fetch and patch imx7d-sdb DTB for QEMU
+      if: matrix.arch == 'arm'
+      run: |
+        set -euo pipefail
+        mkdir -p src/platforms/rtems/build /tmp/linux-dts
+        git clone --depth 1 --filter=blob:none --sparse --branch v6.1 \
+          https://github.com/torvalds/linux.git /tmp/linux-dts
+        # linux-event-codes.h is a symlink into include/uapi.
+        git -C /tmp/linux-dts sparse-checkout set \
+          arch/arm/boot/dts include/dt-bindings include/uapi/linux
+        cpp -nostdinc -undef -P -x assembler-with-cpp \
+          -I /tmp/linux-dts/arch/arm/boot/dts \
+          -I /tmp/linux-dts/include \
+          /tmp/linux-dts/arch/arm/boot/dts/imx7d-sdb.dts \
+          | dtc -@ -I dts -O dtb -o src/platforms/rtems/build/imx7d-sdb-qemu.dtb
+        fdtput -t x src/platforms/rtems/build/imx7d-sdb-qemu.dtb /memory@80000000 reg 0x80000000 0x40000000
+        fdtput -t x src/platforms/rtems/build/imx7d-sdb-qemu.dtb /timer clock-frequency 0x7a1200
+
+    - name: Run boot test on QEMU mcimx7d-sabre
+      if: matrix.arch == 'arm'
+      run: |
+        set -euo pipefail
+        ELF="src/platforms/rtems/build/AtomVM-imx7.exe"
+        DTB="src/platforms/rtems/build/imx7d-sdb-qemu.dtb"
+        test -f "$ELF"
+        test -f "$DTB"
+        chmod +x src/platforms/rtems/tools/run-imx7-qemu.sh
+        set +e
+        output=$(src/platforms/rtems/tools/run-imx7-qemu.sh -d "$DTB" -t 90 "$ELF" 2>&1)
+        status=$?
+        set -e
+        printf '%s\n' "$output"
+        if printf '%s\n' "$output" | grep -q "Failed load module"; then
+          echo "::error::imx7 QEMU boot failed to load a BEAM module"
+          exit 1
+        fi
+        if ! printf '%s\n' "$output" | grep -Fq '{atomvm_rtems_boot,rtems}'; then
+          echo "::error::imx7 QEMU boot did not print {atomvm_rtems_boot,rtems} (status ${status})"
+          exit 1
+        fi
+        if ! printf '%s\n' "$output" | grep -q "Return value: ok"; then
+          echo "::error::imx7 QEMU boot did not return ok"
           exit 1
         fi
         echo "Boot test output contained {atomvm_rtems_boot,rtems} and Return value: ok"
