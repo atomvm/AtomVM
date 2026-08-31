@@ -8,10 +8,14 @@
 
 This directory contains the RTEMS 6.2 port of AtomVM.
 
-The first supported target is the SPARC `erc32` BSP, which runs on the SIS
-simulator shipped with the RTEMS tool suite (`rtems-run --rtems-bsps=erc32-sis`).
+Supported bring-up targets:
+
+- SPARC `erc32` on SIS (`rtems-run --rtems-bsps=erc32-sis`)
+- ARM `imx7` on QEMU (`qemu-system-arm -M mcimx7d-sabre`)
+
 Other RTEMS 6 BSPs can be selected at configure time once a matching toolchain
-and BSP are installed.
+and BSP are installed. `imx7` is the NXP i.MX 7Dual BSP; QEMU models the
+SABRE board, not GRiSP 2 (same SoC family, different pinmux and FDT).
 
 This is a bring-up port: no SMP, no JIT, no sockets, and no filesystem loading
 of `.avm` files. Applications are compiled on the host and embedded in the
@@ -77,6 +81,41 @@ rtems-run --rtems-bsps=erc32-sis \
 A successful boot of `rtems_boot_test` prints `{atomvm_rtems_boot,rtems}`
 and `Return value: ok` before the RTEMS exit fatal. SIS then traps (`ta 0x0`);
 that shutdown is expected. There must be no `Failed load module` line.
+
+## i.MX 7 / QEMU SABRE
+
+Install ARM tools and the `imx7` BSP (separate prefix or the same `RTEMS_PREFIX`):
+
+```sh
+../source-builder/sb-set-builder --prefix="$RTEMS_PREFIX" 6/rtems-arm
+../source-builder/sb-set-builder --prefix="$RTEMS_PREFIX" \
+    --target=arm-rtems6 --with-rtems-bsp=arm/imx7 --with-rtems-tests=no \
+    6/rtems-kernel
+```
+
+Cross-compile with `-DRTEMS_BSP=arm/imx7`. The ELF is `AtomVM-imx7.exe`.
+
+The imx7 BSP does not initialize clocks or pins; it expects a bootloader FDT
+pointer in ARM `r2`. QEMU `-kernel` of an ELF leaves `r2=0` and ignores `-dtb`,
+so the helper raw-loads the DTB at `0xb0000000` (above the ELF workspace) and
+sets `r2` via gdb.
+
+Build Linux `imx7d-sdb.dtb` from the v6.1 DTS (do not enable armhf apt on
+amd64 hosts). Sparse-checkout must include `include/uapi/linux` because
+`linux-event-codes.h` is a symlink there. Patch the DTB for QEMU's 1 GiB
+RAM and an 8 MHz ARM generic-timer frequency so RTEMS does not touch
+unimplemented system-counter MMIO:
+
+```sh
+fdtput -t x imx7d-sdb-qemu.dtb /memory@80000000 reg 0x80000000 0x40000000
+fdtput -t x imx7d-sdb-qemu.dtb /timer clock-frequency 0x7a1200
+src/platforms/rtems/tools/run-imx7-qemu.sh \
+    -d imx7d-sdb-qemu.dtb \
+    src/platforms/rtems/build/AtomVM-imx7.exe
+```
+
+QEMU default RAM is 128 MiB, which is smaller than this ELF; the helper uses
+`-m 1024M`. This is SoC-level UART bring-up, not GRiSP 2.
 
 ## CMake options
 
