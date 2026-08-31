@@ -1,0 +1,145 @@
+#
+#  Copyright 2026 Peter M. <petermm@gmail.com>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: RTEMS Build
+
+on:
+  push:
+    paths:
+      - '.github/workflows/rtems-build.yaml'
+      - 'CMakeLists.txt'
+      - 'CMakeModules/**'
+      - 'src/platforms/rtems/**'
+      - 'src/libAtomVM/**'
+      - 'libs/**'
+  pull_request:
+    paths:
+      - '.github/workflows/rtems-build.yaml'
+      - 'CMakeLists.txt'
+      - 'CMakeModules/**'
+      - 'src/platforms/rtems/**'
+      - 'src/libAtomVM/**'
+      - 'libs/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  RTEMS_VERSION: "6"
+  RTEMS_RELEASE: "6.2"
+  RTEMS_PREFIX: /home/runner/rtems/6.2
+  RTEMS_BSP: sparc/erc32
+
+jobs:
+  rtems:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - uses: erlef/setup-beam@v1
+      with:
+        otp-version: "28"
+        rebar3-version: "3.25.1"
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://repo.hex.pm
+          https://cdn.jsdelivr.net/hex
+
+    - name: "apt update"
+      run: sudo apt update
+
+    - name: "Install deps"
+      run: |
+        sudo apt install -y \
+          build-essential g++ gdb unzip pax bison flex texinfo \
+          python3-dev python-is-python3 python3-setuptools \
+          libncurses-dev zlib1g-dev ninja-build pkg-config \
+          cmake gperf wget xz-utils python3-pip
+
+    - name: Cache RTEMS 6.2 sparc/erc32 toolchain
+      id: rtems-cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.RTEMS_PREFIX }}
+        key: rtems-${{ env.RTEMS_RELEASE }}-sparc-erc32-${{ runner.os }}
+
+    - name: Build RTEMS 6.2 tools and sparc/erc32 BSP
+      if: steps.rtems-cache.outputs.cache-hit != 'true'
+      run: |
+        set -euo pipefail
+        mkdir -p "$HOME/rtems-src" "$RTEMS_PREFIX"
+        cd "$HOME/rtems-src"
+        wget -q "https://ftp.rtems.org/pub/rtems/releases/6/${RTEMS_RELEASE}/sources/rtems-source-builder-${RTEMS_RELEASE}.tar.xz"
+        tar xJf "rtems-source-builder-${RTEMS_RELEASE}.tar.xz"
+        cd "rtems-source-builder-${RTEMS_RELEASE}/rtems"
+        ../source-builder/sb-set-builder --prefix="$RTEMS_PREFIX" "${RTEMS_VERSION}/rtems-sparc"
+        ../source-builder/sb-set-builder --prefix="$RTEMS_PREFIX" \
+          --target=sparc-rtems${RTEMS_VERSION} \
+          --with-rtems-bsp=sparc/erc32 \
+          --with-rtems-tests=no \
+          "${RTEMS_VERSION}/rtems-kernel"
+
+    - name: Add RTEMS tools to PATH
+      run: echo "$RTEMS_PREFIX/bin" >> "$GITHUB_PATH"
+
+    - name: Check RTEMS toolchain
+      run: |
+        set -euo pipefail
+        sparc-rtems${RTEMS_VERSION}-gcc --version
+        test -x "$RTEMS_PREFIX/bin/rtems-run"
+
+    - name: Build host AtomVM and RTEMS boot AVM
+      run: |
+        set -euo pipefail
+        cmake -S . -B build-host -G Ninja
+        cmake --build build-host -t rtems_boot_test atomvmlib-rtems
+        mkdir -p src/platforms/rtems/build
+        ./build-host/tools/packbeam/packbeam create -s test_boot \
+          src/platforms/rtems/build/rtems_boot.avm \
+          build-host/src/platforms/rtems/tests/test_erl_sources/test_boot.beam \
+          build-host/libs/atomvmlib-rtems.avm
+
+    - name: Cross-compile AtomVM for sparc/erc32
+      run: |
+        set -euo pipefail
+        cmake -S src/platforms/rtems -B src/platforms/rtems/build -G Ninja \
+          -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
+          -DRTEMS_PREFIX="$RTEMS_PREFIX" \
+          -DRTEMS_BSP="$RTEMS_BSP" \
+          -DRTEMS_VERSION="$RTEMS_VERSION" \
+          -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_boot.avm"
+        cmake --build src/platforms/rtems/build
+
+    - name: Run boot test on SIS
+      run: |
+        set -euo pipefail
+        ELF="src/platforms/rtems/build/AtomVM-erc32.exe"
+        test -f "$ELF"
+        set +e
+        output=$(timeout 90 rtems-run --rtems-bsps=erc32-sis "$ELF" 2>&1)
+        status=$?
+        set -e
+        printf '%s\n' "$output"
+        if printf '%s\n' "$output" | grep -q "Failed load module"; then
+          echo "::error::RTEMS boot still failed to load a BEAM module"
+          exit 1
+        fi
+        if ! printf '%s\n' "$output" | grep -Fq '{atomvm_rtems_boot,rtems}'; then
+          echo "::error::RTEMS boot test did not print {atomvm_rtems_boot,rtems} (rtems-run status ${status})"
+          exit 1
+        fi
+        if ! printf '%s\n' "$output" | grep -q "Return value: ok"; then
+          echo "::error::RTEMS boot test did not return ok"
+          exit 1
+        fi
+        echo "Boot test output contained {atomvm_rtems_boot,rtems} and Return value: ok"
