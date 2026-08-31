@@ -665,6 +665,15 @@ TEST_CASE("test_rtc_slow", "[test_run]")
 
 // Only test wifi on simulator, not on QEMU
 #if !CONFIG_ETH_USE_OPENETH && !CONFIG_IDF_TARGET_ESP32H2 && !CONFIG_IDF_TARGET_ESP32P4
+// The TLS handshake exceeds simulator resources on low-SRAM C5/C61/S2 and hangs on C6.
+#if !CONFIG_IDF_TARGET_ESP32C5 && !CONFIG_IDF_TARGET_ESP32C6 && !CONFIG_IDF_TARGET_ESP32C61 && !CONFIG_IDF_TARGET_ESP32S2
+TEST_CASE("test_ahttp_ssl", "[test_run]")
+{
+    term ret_value = avm_test_case("test_ahttp_ssl.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+#endif
+
 // We avoid test_wifi_example on low sram boards
 #if !CONFIG_IDF_TARGET_ESP32S2 && !CONFIG_IDF_TARGET_ESP32C61
 TEST_CASE("test_wifi_example", "[test_run]")
