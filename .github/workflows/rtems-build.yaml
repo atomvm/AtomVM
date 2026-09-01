@@ -151,6 +151,12 @@ jobs:
           echo "::error::RTEMS boot test did not print {atomvm_rtems_boot,rtems} (rtems-run status ${status})"
           exit 1
         fi
+        for marker in '{uart,read_timeout,ok}' '{uart,write,ok}' '{i2c,enotsup}' '{gpio,enotsup}'; do
+          if ! printf '%s\n' "$output" | grep -Fq "$marker"; then
+            echo "::error::RTEMS boot test did not print ${marker}"
+            exit 1
+          fi
+        done
         if ! printf '%s\n' "$output" | grep -q "Return value: ok"; then
           echo "::error::RTEMS boot test did not return ok"
           exit 1
@@ -197,6 +203,12 @@ jobs:
           echo "::error::imx7 QEMU boot did not print {atomvm_rtems_boot,rtems} (status ${status})"
           exit 1
         fi
+        for marker in '{uart,read_timeout,ok}' '{uart,write,ok}' '{i2c,open,ok}' '{i2c,fdt_alias,ok}' '{gpio,imx7,ok}'; do
+          if ! printf '%s\n' "$output" | grep -Fq "$marker"; then
+            echo "::error::imx7 QEMU boot test did not print ${marker}"
+            exit 1
+          fi
+        done
         if ! printf '%s\n' "$output" | grep -q "Return value: ok"; then
           echo "::error::imx7 QEMU boot did not return ok"
           exit 1

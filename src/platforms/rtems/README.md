@@ -22,6 +22,15 @@ of `.avm` files. Applications are compiled on the host and embedded in the
 RTEMS executable. Pack `atomvmlib-rtems.avm` (estdlib + eavmlib + `avm_rtems`)
 together with the application so `init:boot/1` can start the entry module.
 
+UART implements `uart_hal` over RTEMS Termios (`/dev/console`, erc32
+`/dev/console_a` / `/dev/console_b`, imx7 `/dev/ttyS0` … `/dev/ttyS6`).
+I2C implements `i2c_hal` with Linux-style `I2C_RDWR` on imx7
+(`/dev/i2c-0`, registered from FDT alias `i2c0` on first open). SPARC erc32
+has no I2C controller; `i2c:init/1` returns `{error, enotsup}`.
+GPIO implements `gpio_hal` using the RTEMS i.MX GPIO driver on imx7. Pins can
+be addressed as `{Bank, Pin}` (`1..7`, `0..31`) or through an FDT property.
+GPIO on erc32 returns `{error, enotsup}`.
+
 ## Prerequisites
 
 Install RTEMS 6.2 tools and the BSP you want to run. The official release
@@ -116,6 +125,34 @@ src/platforms/rtems/tools/run-imx7-qemu.sh \
 
 QEMU default RAM is 128 MiB, which is smaller than this ELF; the helper uses
 `-m 1024M`. This is SoC-level UART bring-up, not GRiSP 2.
+
+Open a second UART with `{peripheral, "/dev/ttyS1"}` (imx7) or
+`"/dev/console_b"` (erc32). I2C on imx7:
+
+```erlang
+{ok, Bus} = i2c:init([{peripheral, "/dev/i2c-0"}, {fdt_alias, "i2c0"}]),
+i2c:master_transmit(Bus, 16#50, <<16#00>>, 500).
+```
+
+GPIO direct bank/pin access requires the pin mux to have been configured by
+the BSP or device tree:
+
+```erlang
+ok = gpio:set_pin_mode({1, 3}, output),
+ok = gpio:digital_write({1, 3}, high).
+```
+
+An FDT consumer property can instead identify a pin and preserve its active
+polarity:
+
+```erlang
+Pin = #{path => "/leds/status", property => "gpios", index => 0},
+ok = gpio:set_pin_mode(Pin, output),
+ok = gpio:digital_write(Pin, high).
+```
+
+GPIO pull configuration, open-drain mode, and interrupts are not yet
+supported and return `{error, enotsup}`.
 
 ## CMake options
 
