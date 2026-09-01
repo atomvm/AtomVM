@@ -21,8 +21,8 @@
 %%-----------------------------------------------------------------------------
 %% @doc RTEMS platform helpers.
 %%
-%% This module currently only exists so `avm_rtems` has a non-empty archive
-%% that can be packed into `atomvmlib-rtems`. Platform-specific NIFs live in C.
+%% Platform helpers packed into `atomvmlib-rtems`. UART, I2C, and GPIO live in
+%% their respective Erlang modules with NIFs in the RTEMS C port.
 %% @end
 %%-----------------------------------------------------------------------------
 -module(atomvm_rtems).

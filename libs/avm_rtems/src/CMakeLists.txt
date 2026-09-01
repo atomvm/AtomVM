@@ -24,6 +24,9 @@ include(BuildErlang)
 
 set(ERLANG_MODULES
     atomvm_rtems
+    uart
+    i2c
+    gpio
 )
 
 pack_archive(avm_rtems DEPENDS_ON eavmlib ERLC_FLAGS +warnings_as_errors MODULES ${ERLANG_MODULES})
