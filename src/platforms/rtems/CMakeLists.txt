@@ -50,7 +50,8 @@ if(AVM_CONFIG_REBOOT_ON_NOT_OK)
 endif()
 
 # RTEMS newlib may declare POSIX APIs that are not provided without libbsd / IMFS.
-# Force the same conservative defaults used by other embedded ports.
+# Force the same conservative defaults used by other embedded ports. Socket and
+# select are re-enabled below when LibBSD is linked for imx7.
 set(HAVE_MKFIFO "" CACHE INTERNAL "Have symbol mkfifo" FORCE)
 set(HAVE_UNLINK "" CACHE INTERNAL "Have symbol unlink" FORCE)
 set(HAVE_EXECVE "" CACHE INTERNAL "Have symbol execve" FORCE)
@@ -76,6 +77,20 @@ set(HAVE_FSTAT "" CACHE INTERNAL "Have symbol fstat" FORCE)
 set(HAVE_MKDIR "" CACHE INTERNAL "Have symbol mkdir" FORCE)
 set(HAVE_RMDIR "" CACHE INTERNAL "Have symbol rmdir" FORCE)
 set(HAVE_POSIX_SPAWN_CLOEXEC_DEFAULT "" CACHE INTERNAL "Have symbol POSIX_SPAWN_CLOEXEC_DEFAULT" FORCE)
+
+set(RTEMS_HAS_LIBBSD OFF)
+if(RTEMS_ARCH STREQUAL "arm" AND RTEMS_BSP_NAME STREQUAL "imx7")
+    set(_rtems_libbsd "${RTEMS_PREFIX}/${RTEMS_TARGET}/${RTEMS_BSP_NAME}/lib/libbsd.a")
+    if(EXISTS "${_rtems_libbsd}")
+        set(RTEMS_HAS_LIBBSD ON)
+        set(HAVE_SOCKET 1 CACHE INTERNAL "Have symbol socket" FORCE)
+        set(HAVE_SELECT 1 CACHE INTERNAL "Have symbol select" FORCE)
+        message(STATUS "Linking rtems-libbsd from ${_rtems_libbsd}")
+    else()
+        message(STATUS
+            "rtems-libbsd not found at ${_rtems_libbsd}; building arm/imx7 without socket support")
+    endif()
+endif()
 
 set(AVM_PACK "" CACHE FILEPATH "AVM pack to embed in the RTEMS executable")
 

@@ -25,11 +25,20 @@
 #include <portnifloader.h>
 #include <sys.h>
 
+#ifdef RTEMS_HAS_LIBBSD
+#include <poll.h>
+#endif
+
 #define RTEMS_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "rtems"))
 
 struct RTEMSPlatformData
 {
+#ifdef RTEMS_HAS_LIBBSD
+    struct pollfd *fds;
+    int select_events_poll_count;
+#else
     int dummy;
+#endif
 };
 
 #endif /* _RTEMS_SYS_H_ */
