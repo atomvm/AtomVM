@@ -46,10 +46,17 @@ add_custom_command(
     VERBATIM
 )
 
-add_executable(${PROJECT_EXECUTABLE}
+set(_rtems_sources
     main.c
     rtems_config.c
     ${EMBEDDED_AVM_C}
+)
+if(RTEMS_HAS_LIBBSD)
+    list(APPEND _rtems_sources rtems_bsd_config.c)
+endif()
+
+add_executable(${PROJECT_EXECUTABLE}
+    ${_rtems_sources}
 )
 
 target_compile_features(${PROJECT_EXECUTABLE} PUBLIC c_std_11)
@@ -69,6 +76,10 @@ set(
 
 add_subdirectory(lib)
 target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX})
+if(RTEMS_HAS_LIBBSD)
+    target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_HAS_LIBBSD HAVE_SOCKET=1 HAVE_SELECT=1)
+    target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE bsd)
+endif()
 
 if(RTEMS_SIZE)
     add_custom_command(

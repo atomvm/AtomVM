@@ -17,10 +17,15 @@ Other RTEMS 6 BSPs can be selected at configure time once a matching toolchain
 and BSP are installed. `imx7` is the NXP i.MX 7Dual BSP; QEMU models the
 SABRE board, not GRiSP 2 (same SoC family, different pinmux and FDT).
 
-This is a bring-up port: no SMP, no JIT, no sockets, and no filesystem loading
-of `.avm` files. Applications are compiled on the host and embedded in the
-RTEMS executable. Pack `atomvmlib-rtems.avm` (estdlib + eavmlib + `avm_rtems`)
-together with the application so `init:boot/1` can start the entry module.
+This is a bring-up port: no SMP, no JIT, and no filesystem loading of `.avm`
+files. Applications are compiled on the host and embedded in the RTEMS
+executable. Pack `atomvmlib-rtems.avm` (estdlib + eavmlib + `avm_network` +
+`avm_rtems`) together with the application so `init:boot/1` can start the
+entry module.
+
+Sockets are provided on `arm/imx7` when `rtems-libbsd` is installed. Without
+LibBSD, and on SPARC `erc32`, `atomvm_rtems:wait_dhcp/1` returns
+`{error, enotsup}`.
 
 UART implements `uart_hal` over RTEMS Termios (`/dev/console`, erc32
 `/dev/console_a` / `/dev/console_b`, imx7 `/dev/ttyS0` … `/dev/ttyS6`).
@@ -153,6 +158,37 @@ ok = gpio:digital_write(Pin, high).
 
 GPIO pull configuration, open-drain mode, and interrupts are not yet
 supported and return `{error, enotsup}`.
+
+## Networking (imx7 / LibBSD)
+
+Build LibBSD with the official RTEMS 6.2 Source Builder set. The `imx7` BSP
+set uses `6/rtems-libbsd` (FreeBSD 12 `rtems-libbsd-6.2.tar.xz`), which is
+internally consistent for i.MX7. The FreeBSD 14 6.2 tarball is not.
+
+```sh
+cd rtems-source-builder-6.2/rtems
+../source-builder/sb-set-builder --prefix="$RTEMS_PREFIX" \
+    --target=arm-rtems6 --with-rtems-bsp=arm/imx7 \
+    6/rtems-libbsd
+```
+
+CMake links `libbsd.a` when it is present at
+`$RTEMS_PREFIX/arm-rtems6/imx7/lib/libbsd.a`. The image initializes LibBSD,
+brings up `lo0`, starts dhcpcd on `ffec0`, and installs the DHCP-provided name
+servers in `/etc/resolv.conf`. QEMU user networking attaches to the onboard
+ENET with:
+
+```sh
+src/platforms/rtems/tools/run-imx7-qemu.sh \
+    -d imx7d-sdb-qemu.dtb \
+    -n user,model=imx.enet,hostfwd=tcp::8080-:8080 \
+    src/platforms/rtems/build/AtomVM-imx7.exe
+```
+
+The Linux v6.1 `imx7d-sdb` DTB already describes `fsl,imx7d-fec`, PHY, MDIO,
+interrupts, and clocks used by QEMU and the LibBSD `ffec` driver. Pack a
+network test with `rtems_net_test` / `test_net.erl` to cover DHCP, DNS, outbound
+TCP, a guest echo server on port 8080, and host-to-guest forwarding.
 
 ## CMake options
 

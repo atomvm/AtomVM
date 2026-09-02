@@ -1,6 +1,7 @@
 /*
  * This file is part of AtomVM.
  *
+ * Copyright 2023 by Fred Dushin <fred@dushin.net>
  * Copyright 2026 Peter M. <petermm@gmail.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,27 +19,24 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#ifndef _RTEMS_SYS_H_
-#define _RTEMS_SYS_H_
+#ifndef __OTP_SOCKET_PLATFORM_H__
+#define __OTP_SOCKET_PLATFORM_H__
 
-#include <interop.h>
-#include <portnifloader.h>
-#include <sys.h>
+#include <stdbool.h>
+#include <stdio.h>
 
-#ifdef RTEMS_HAS_LIBBSD
-#include <poll.h>
+#define AVM_LOGD(tag, format, ...) \
+    ;
+
+#define AVM_LOGI(tag, format, ...) \
+    fprintf(stderr, "I %s: " format " (%s:%i)\n", tag, ##__VA_ARGS__, __FILE__, __LINE__);
+
+#define AVM_LOGW(tag, format, ...) \
+    fprintf(stderr, "W %s: " format " (%s:%i)\n", tag, ##__VA_ARGS__, __FILE__, __LINE__);
+
+#define AVM_LOGE(tag, format, ...) \
+    fprintf(stderr, "E %s: " format " (%s:%i)\n", tag, ##__VA_ARGS__, __FILE__, __LINE__);
+
+bool otp_socket_platform_supports_peek(void);
+
 #endif
-
-#define RTEMS_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "rtems"))
-
-struct RTEMSPlatformData
-{
-#ifdef RTEMS_HAS_LIBBSD
-    struct pollfd *fds;
-    int select_events_poll_count;
-#else
-    int dummy;
-#endif
-};
-
-#endif /* _RTEMS_SYS_H_ */

@@ -1,6 +1,7 @@
 /*
  * This file is part of AtomVM.
  *
+ * Copyright 2023 by Fred Dushin <fred@dushin.net>
  * Copyright 2026 Peter M. <petermm@gmail.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,27 +19,21 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#ifndef _RTEMS_SYS_H_
-#define _RTEMS_SYS_H_
+#ifdef RTEMS_HAS_LIBBSD
 
-#include <interop.h>
+#include "otp_socket_platform.h"
+
+#include <nifs.h>
+#include <otp_net.h>
+#include <otp_socket.h>
 #include <portnifloader.h>
-#include <sys.h>
 
-#ifdef RTEMS_HAS_LIBBSD
-#include <poll.h>
-#endif
-
-#define RTEMS_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "rtems"))
-
-struct RTEMSPlatformData
+bool otp_socket_platform_supports_peek(void)
 {
-#ifdef RTEMS_HAS_LIBBSD
-    struct pollfd *fds;
-    int select_events_poll_count;
-#else
-    int dummy;
-#endif
-};
+    return false;
+}
 
-#endif /* _RTEMS_SYS_H_ */
+REGISTER_NIF_COLLECTION(otp_socket, otp_socket_init, NULL, otp_socket_nif_get_nif)
+REGISTER_NIF_COLLECTION(otp_net, otp_net_init, NULL, otp_net_nif_get_nif)
+
+#endif
