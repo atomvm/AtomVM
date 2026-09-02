@@ -29,10 +29,12 @@ set -euo pipefail
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0") -d dtb [-t timeout_sec] <AtomVM-imx7.exe>
+Usage: $(basename "$0") -d dtb [-t timeout_sec] [-n nic] <AtomVM-imx7.exe>
 
   -d DTB     Device tree blob (required for a console)
   -t SEC     Timeout in seconds (default 90)
+  -n NIC     Extra QEMU networking option, repeatable.
+             Example: -n user,model=imx.enet,hostfwd=tcp::8080-:8080
 EOF
     exit 2
 }
@@ -43,11 +45,13 @@ TIMEOUT=90
 RAM=1024M
 DTB_ADDR=0xb0000000
 GDB_PORT=${GDB_PORT:-1234}
+NICS=()
 
-while getopts "d:t:h" opt; do
+while getopts "d:t:n:h" opt; do
     case "$opt" in
         d) DTB=$OPTARG ;;
         t) TIMEOUT=$OPTARG ;;
+        n) NICS+=("$OPTARG") ;;
         h|*) usage ;;
     esac
 done
@@ -70,6 +74,9 @@ if ! command -v "$QEMU" >/dev/null 2>&1; then
 fi
 
 cmd=("$QEMU" -M mcimx7d-sabre -m "$RAM" -nographic -no-reboot -serial mon:stdio -kernel "$ELF")
+for nic in "${NICS[@]+"${NICS[@]}"}"; do
+    cmd+=(-nic "$nic")
+done
 
 if [ -z "$DTB" ]; then
     echo "warning: no DTB; the imx7 BSP will not have a console" >&2

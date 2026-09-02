@@ -36,7 +36,7 @@ env:
 jobs:
   rtems:
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 300
     permissions:
       actions: read
       contents: read
@@ -46,10 +46,12 @@ jobs:
         include:
           - arch: sparc
             bsp: sparc/erc32
+            bsp_name: erc32
             cache_key: sparc-erc32
             qemu: ""
           - arch: arm
             bsp: arm/imx7
+            bsp_name: imx7
             cache_key: arm-imx7
             qemu: qemu-system-arm
 
@@ -79,12 +81,12 @@ jobs:
           device-tree-compiler gdb-multiarch \
           ${{ matrix.qemu }}
 
-    - name: Cache RTEMS 6.2 ${{ matrix.bsp }} toolchain
+    - name: Restore RTEMS 6.2 ${{ matrix.bsp }} toolchain
       id: rtems-cache
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: ${{ env.RTEMS_PREFIX }}
-        key: rtems-${{ env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-${{ runner.os }}
+        key: rtems-${{ env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-libbsd-rsb-${{ runner.os }}
 
     - name: Build RTEMS 6.2 tools and ${{ matrix.bsp }} BSP
       if: steps.rtems-cache.outputs.cache-hit != 'true'
@@ -102,6 +104,35 @@ jobs:
           --with-rtems-tests=no \
           "${RTEMS_VERSION}/rtems-kernel"
 
+    - name: Build rtems-libbsd for ${{ matrix.bsp }}
+      if: matrix.arch == 'arm'
+      run: |
+        set -euo pipefail
+        libbsd="$RTEMS_PREFIX/${{ matrix.arch }}-rtems${RTEMS_VERSION}/${{ matrix.bsp_name }}/lib/libbsd.a"
+        if [ -f "$libbsd" ]; then
+          echo "Using cached rtems-libbsd at $libbsd"
+          exit 0
+        fi
+        echo "Building rtems-libbsd because $libbsd is missing"
+        mkdir -p "$HOME/rtems-src"
+        cd "$HOME/rtems-src"
+        if [ ! -d "rtems-source-builder-${RTEMS_RELEASE}/rtems" ]; then
+          wget -q "https://ftp.rtems.org/pub/rtems/releases/6/${RTEMS_RELEASE}/sources/rtems-source-builder-${RTEMS_RELEASE}.tar.xz"
+          tar xJf "rtems-source-builder-${RTEMS_RELEASE}.tar.xz"
+        fi
+        cd "rtems-source-builder-${RTEMS_RELEASE}/rtems"
+        ../source-builder/sb-set-builder --prefix="$RTEMS_PREFIX" \
+          --target=${{ matrix.arch }}-rtems${RTEMS_VERSION} \
+          --with-rtems-bsp=${{ matrix.bsp }} \
+          "${RTEMS_VERSION}/rtems-libbsd"
+
+    - name: Save RTEMS 6.2 ${{ matrix.bsp }} toolchain
+      if: steps.rtems-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ env.RTEMS_PREFIX }}
+        key: rtems-${{ env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-libbsd-rsb-${{ runner.os }}
+
     - name: Add RTEMS tools to PATH
       run: echo "$RTEMS_PREFIX/bin" >> "$GITHUB_PATH"
 
@@ -114,11 +145,15 @@ jobs:
       run: |
         set -euo pipefail
         cmake -S . -B build-host -G Ninja
-        cmake --build build-host -t rtems_boot_test atomvmlib-rtems
+        cmake --build build-host -t rtems_boot_test rtems_net_test atomvmlib-rtems
         mkdir -p src/platforms/rtems/build
         ./build-host/tools/packbeam/packbeam create -s test_boot \
           src/platforms/rtems/build/rtems_boot.avm \
           build-host/src/platforms/rtems/tests/test_erl_sources/test_boot.beam \
+          build-host/libs/atomvmlib-rtems.avm
+        ./build-host/tools/packbeam/packbeam create -s test_net \
+          src/platforms/rtems/build/rtems_net.avm \
+          build-host/src/platforms/rtems/tests/test_erl_sources/test_net.beam \
           build-host/libs/atomvmlib-rtems.avm
 
     - name: Cross-compile AtomVM for ${{ matrix.bsp }}
@@ -162,6 +197,38 @@ jobs:
           exit 1
         fi
         echo "Boot test output contained {atomvm_rtems_boot,rtems} and Return value: ok"
+
+    - name: Cross-compile AtomVM net test for ${{ matrix.bsp }}
+      run: |
+        set -euo pipefail
+        cmake -S src/platforms/rtems -B src/platforms/rtems/build-net -G Ninja \
+          -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
+          -DRTEMS_PREFIX="$RTEMS_PREFIX" \
+          -DRTEMS_BSP="${{ matrix.bsp }}" \
+          -DRTEMS_VERSION="$RTEMS_VERSION" \
+          -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_net.avm"
+        cmake --build src/platforms/rtems/build-net
+
+    - name: Run unsupported-networking test on SIS
+      if: matrix.arch == 'sparc'
+      run: |
+        set -euo pipefail
+        ELF="src/platforms/rtems/build-net/AtomVM-erc32.exe"
+        test -f "$ELF"
+        set +e
+        output=$(timeout 90 rtems-run --rtems-bsps=erc32-sis "$ELF" 2>&1)
+        status=$?
+        set -e
+        printf '%s\n' "$output"
+        if ! printf '%s\n' "$output" | grep -q "{net,enotsup}"; then
+          echo "::error::erc32 net test did not print {net,enotsup} (status ${status})"
+          exit 1
+        fi
+        if ! printf '%s\n' "$output" | grep -q "Return value: ok"; then
+          echo "::error::erc32 net test did not return ok"
+          exit 1
+        fi
+        echo "erc32 explicitly reported unsupported networking"
 
     - name: Fetch and patch imx7d-sdb DTB for QEMU
       if: matrix.arch == 'arm'
@@ -214,3 +281,57 @@ jobs:
           exit 1
         fi
         echo "Boot test output contained {atomvm_rtems_boot,rtems} and Return value: ok"
+
+    - name: Run networking tests on QEMU mcimx7d-sabre
+      if: matrix.arch == 'arm'
+      run: |
+        set -euo pipefail
+        ELF="src/platforms/rtems/build-net/AtomVM-imx7.exe"
+        DTB="src/platforms/rtems/build/imx7d-sdb-qemu.dtb"
+        test -f "$ELF"
+        test -f "$DTB"
+        chmod +x src/platforms/rtems/tools/run-imx7-qemu.sh
+        chmod +x src/platforms/rtems/tools/probe-hostfwd.py
+        python3 src/platforms/rtems/tools/probe-hostfwd.py --timeout 90 --port 8080 &
+        probe_pid=$!
+        set +e
+        output=$(src/platforms/rtems/tools/run-imx7-qemu.sh \
+          -d "$DTB" -t 120 \
+          -n "user,model=imx.enet,hostfwd=tcp::8080-:8080" \
+          "$ELF" 2>&1)
+        status=$?
+        set -e
+        printf '%s\n' "$output"
+        set +e
+        wait "$probe_pid"
+        probe_status=$?
+        set -e
+        if printf '%s\n' "$output" | grep -q "Failed load module"; then
+          echo "::error::imx7 QEMU net test failed to load a BEAM module"
+          exit 1
+        fi
+        if ! printf '%s\n' "$output" | grep -q "{dhcp,ok"; then
+          echo "::error::imx7 QEMU net test did not obtain a DHCP address (status ${status})"
+          exit 1
+        fi
+        if ! printf '%s\n' "$output" | grep -q "{dns,ok"; then
+          echo "::error::imx7 QEMU net test did not resolve a DNS name"
+          exit 1
+        fi
+        if ! printf '%s\n' "$output" | grep -q "{tcp,outbound"; then
+          echo "::error::imx7 QEMU net test did not exercise outbound TCP"
+          exit 1
+        fi
+        if ! printf '%s\n' "$output" | grep -q "{tcp,echo,ok}"; then
+          echo "::error::imx7 QEMU net test did not run the guest echo server"
+          exit 1
+        fi
+        if ! printf '%s\n' "$output" | grep -q "Return value: ok"; then
+          echo "::error::imx7 QEMU net test did not return ok"
+          exit 1
+        fi
+        if [ "$probe_status" -ne 0 ]; then
+          echo "::error::host-to-guest probe of forwarded port 8080 failed"
+          exit 1
+        fi
+        echo "Networking smoke test obtained DHCP, DNS, TCP, echo, and hostfwd"

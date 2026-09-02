@@ -67,7 +67,7 @@ pack_lib(atomvmlib-rp2 UF2 ${ATOMVM_COMMON_LIBS} avm_network avm_rp2 TARGETS arm
 pack_lib(atomvmlib-stm32 ${ATOMVM_COMMON_LIBS} avm_stm32 TARGETS armv6m armv6m+thumb2 armv6m+thumb2+float32)
 # Interpreter-only: TARGETS must be non-empty to avoid pack_lib's
 # fallback to AVM_PRECOMPILED_TARGETS, then filtered out as unknown.
-pack_lib(atomvmlib-rtems ${ATOMVM_COMMON_LIBS} avm_rtems TARGETS none)
+pack_lib(atomvmlib-rtems ${ATOMVM_COMMON_LIBS} avm_network avm_rtems TARGETS none)
 pack_lib(atomvmlib-emscripten ${ATOMVM_COMMON_LIBS} avm_network avm_emscripten TARGETS wasm32)
 
 if (Dialyzer_FOUND)

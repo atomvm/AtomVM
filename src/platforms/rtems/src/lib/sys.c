@@ -28,7 +28,12 @@
 #include <time.h>
 
 #include <defaultatoms.h>
+#include <resources.h>
 #include <utils.h>
+
+#ifdef RTEMS_HAS_LIBBSD
+#include <poll.h>
+#endif
 
 // #define ENABLE_TRACE
 #include <trace.h>
@@ -45,12 +50,21 @@ void sys_init_platform(GlobalContext *glb)
     if (IS_NULL_PTR(platform)) {
         AVM_ABORT();
     }
+#ifdef RTEMS_HAS_LIBBSD
+    platform->fds = NULL;
+    platform->select_events_poll_count = -1;
+#else
     platform->dummy = 0;
+#endif
     glb->platform_data = platform;
 }
 
 void sys_free_platform(GlobalContext *glb)
 {
+#ifdef RTEMS_HAS_LIBBSD
+    struct RTEMSPlatformData *platform = glb->platform_data;
+    free(platform->fds);
+#endif
     free(glb->platform_data);
     glb->platform_data = NULL;
 }
@@ -65,8 +79,85 @@ static rtems_interval timeout_ms_to_ticks(int timeout_ms)
     return ticks;
 }
 
+#ifdef RTEMS_HAS_LIBBSD
+static void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
+{
+    struct RTEMSPlatformData *platform = glb->platform_data;
+    struct pollfd *fds = platform->fds;
+    int select_events_poll_count = platform->select_events_poll_count;
+    int fd_index;
+
+    if (fds == NULL || select_events_poll_count < 0) {
+        struct ListHead *select_events = synclist_wrlock(&glb->select_events);
+        size_t select_events_new_count;
+        if (select_events_poll_count < 0) {
+            select_event_count_and_destroy_closed(select_events, NULL, NULL, &select_events_new_count, glb);
+        } else {
+            select_events_new_count = select_events_poll_count;
+        }
+
+        fds = realloc(fds, sizeof(struct pollfd) * (select_events_new_count == 0 ? 1 : select_events_new_count));
+        platform->fds = fds;
+
+        fd_index = 0;
+        struct ListHead *item;
+        LIST_FOR_EACH (item, select_events) {
+            struct SelectEvent *select_event = GET_LIST_ENTRY(item, struct SelectEvent, head);
+            if (select_event->read || select_event->write) {
+                fds[fd_index].fd = select_event->event;
+                fds[fd_index].events = (select_event->read ? POLLIN : 0) | (select_event->write ? POLLOUT : 0);
+                fds[fd_index].revents = 0;
+                fd_index++;
+            }
+        }
+        synclist_unlock(&glb->select_events);
+
+        select_events_poll_count = select_events_new_count;
+        platform->select_events_poll_count = select_events_new_count;
+    }
+
+    if (select_events_poll_count == 0) {
+        if (timeout_ms == SYS_POLL_EVENTS_DO_NOT_WAIT) {
+            return;
+        }
+        rtems_interval ticks;
+        if (timeout_ms == SYS_POLL_EVENTS_WAIT_FOREVER) {
+            ticks = timeout_ms_to_ticks(100);
+        } else {
+            ticks = timeout_ms_to_ticks(timeout_ms);
+        }
+        rtems_task_wake_after(ticks);
+        return;
+    }
+
+    int nb_descriptors = poll(fds, select_events_poll_count, timeout_ms);
+    if (nb_descriptors <= 0) {
+        return;
+    }
+
+    fd_index = 0;
+    for (int i = 0; i < select_events_poll_count && nb_descriptors > 0; i++, fd_index++) {
+        if (!(fds[fd_index].revents & (fds[fd_index].events | POLLHUP | POLLERR))) {
+            continue;
+        }
+        bool is_read = fds[fd_index].revents & (POLLIN | POLLHUP | POLLERR);
+        bool is_write = fds[fd_index].revents & (POLLOUT | POLLERR);
+        fds[fd_index].revents = 0;
+        nb_descriptors--;
+
+        select_event_notify(fds[fd_index].fd, is_read, is_write, glb);
+    }
+}
+#endif
+
 void sys_poll_events(GlobalContext *glb, int timeout_ms)
 {
+#ifdef RTEMS_HAS_LIBBSD
+    if (timeout_ms == SYS_POLL_EVENTS_DO_NOT_WAIT && synclist_is_empty(&glb->select_events)) {
+        return;
+    }
+    sys_poll_events_with_poll(glb, timeout_ms);
+#else
     UNUSED(glb);
 
     if (timeout_ms == SYS_POLL_EVENTS_DO_NOT_WAIT) {
@@ -80,6 +171,7 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
         ticks = timeout_ms_to_ticks(timeout_ms);
     }
     rtems_task_wake_after(ticks);
+#endif
 }
 
 void sys_listener_destroy(struct ListHead *item)
@@ -89,16 +181,30 @@ void sys_listener_destroy(struct ListHead *item)
 
 void sys_register_select_event(GlobalContext *global, ErlNifEvent event, bool is_write)
 {
+#ifdef RTEMS_HAS_LIBBSD
+    UNUSED(event);
+    UNUSED(is_write);
+    struct RTEMSPlatformData *platform = global->platform_data;
+    platform->select_events_poll_count = -1;
+#else
     UNUSED(global);
     UNUSED(event);
     UNUSED(is_write);
+#endif
 }
 
 void sys_unregister_select_event(GlobalContext *global, ErlNifEvent event, bool is_write)
 {
+#ifdef RTEMS_HAS_LIBBSD
+    UNUSED(event);
+    UNUSED(is_write);
+    struct RTEMSPlatformData *platform = global->platform_data;
+    platform->select_events_poll_count = -1;
+#else
     UNUSED(global);
     UNUSED(event);
     UNUSED(is_write);
+#endif
 }
 
 void sys_time(struct timespec *t)

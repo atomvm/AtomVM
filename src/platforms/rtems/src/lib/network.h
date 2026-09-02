@@ -18,27 +18,9 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#ifndef _RTEMS_SYS_H_
-#define _RTEMS_SYS_H_
+#ifndef _RTEMS_ATOMVM_NETWORK_H_
+#define _RTEMS_ATOMVM_NETWORK_H_
 
-#include <interop.h>
-#include <portnifloader.h>
-#include <sys.h>
+int rtems_atomvm_network_init(void);
 
-#ifdef RTEMS_HAS_LIBBSD
-#include <poll.h>
 #endif
-
-#define RTEMS_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "rtems"))
-
-struct RTEMSPlatformData
-{
-#ifdef RTEMS_HAS_LIBBSD
-    struct pollfd *fds;
-    int select_events_poll_count;
-#else
-    int dummy;
-#endif
-};
-
-#endif /* _RTEMS_SYS_H_ */

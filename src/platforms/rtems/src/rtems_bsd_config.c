@@ -18,27 +18,21 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#ifndef _RTEMS_SYS_H_
-#define _RTEMS_SYS_H_
+#include <bsp.h>
+#include <rtems/bsd/bsd.h>
+#include <machine/rtems-bsd-nexus-bus.h>
+#include <machine/rtems-bsd-sysinit.h>
 
-#include <interop.h>
-#include <portnifloader.h>
-#include <sys.h>
+/*
+ * Do not use RTEMS_BSD_CONFIG_BSP_CONFIG: the imx7 default nexus set
+ * attaches sdhci_fsl, which times out on QEMU mcimx7d-sabre. Keep the FDT
+ * nexus plus ffec/ukphy for networking.
+ */
+RTEMS_BSD_DEFINE_NEXUS_DEVICE(ofwbus, 0, 0, NULL);
+SYSINIT_DRIVER_REFERENCE(simplebus, ofwbus);
+SYSINIT_DRIVER_REFERENCE(ffec, simplebus);
+SYSINIT_DRIVER_REFERENCE(ukphy, miibus);
 
-#ifdef RTEMS_HAS_LIBBSD
-#include <poll.h>
-#endif
+#define RTEMS_BSD_CONFIG_INIT
 
-#define RTEMS_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "rtems"))
-
-struct RTEMSPlatformData
-{
-#ifdef RTEMS_HAS_LIBBSD
-    struct pollfd *fds;
-    int select_events_poll_count;
-#else
-    int dummy;
-#endif
-};
-
-#endif /* _RTEMS_SYS_H_ */
+#include <machine/rtems-bsd-config.h>

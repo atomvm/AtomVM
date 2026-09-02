@@ -33,6 +33,7 @@
 #include <module.h>
 #include <utils.h>
 
+#include "lib/network.h"
 #include "lib/rtems_sys.h"
 
 #define TAG "AtomVM"
@@ -64,6 +65,11 @@ rtems_task Init(rtems_task_argument ignored)
 
     fprintf(stdout, "%s", ATOMVM_BANNER);
     fprintf(stdout, "Starting AtomVM revision " ATOMVM_VERSION " on RTEMS\n");
+
+    if (rtems_atomvm_network_init() != 0) {
+        fprintf(stderr, TAG ": Network stack initialization failed\n");
+        exit(1);
+    }
 
     GlobalContext *glb = globalcontext_new();
     if (IS_NULL_PTR(glb)) {

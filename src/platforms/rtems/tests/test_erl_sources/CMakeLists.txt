@@ -21,3 +21,4 @@
 include(BuildErlang)
 
 pack_runnable(rtems_boot_test test_boot)
+pack_runnable(rtems_net_test test_net)
