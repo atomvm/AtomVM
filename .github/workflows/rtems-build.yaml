@@ -54,6 +54,11 @@ jobs:
             bsp_name: imx7
             cache_key: arm-imx7
             qemu: qemu-system-arm
+          - arch: arm
+            bsp: arm/realview_pbx_a9_qemu
+            bsp_name: realview_pbx_a9_qemu
+            cache_key: arm-realview-pbx-a9-qemu
+            qemu: qemu-system-arm
 
     steps:
     - name: Checkout repo
@@ -105,7 +110,7 @@ jobs:
           "${RTEMS_VERSION}/rtems-kernel"
 
     - name: Build rtems-libbsd for ${{ matrix.bsp }}
-      if: matrix.arch == 'arm'
+      if: matrix.bsp == 'arm/imx7'
       run: |
         set -euo pipefail
         libbsd="$RTEMS_PREFIX/${{ matrix.arch }}-rtems${RTEMS_VERSION}/${{ matrix.bsp_name }}/lib/libbsd.a"
@@ -168,7 +173,7 @@ jobs:
         cmake --build src/platforms/rtems/build
 
     - name: Run boot test on SIS
-      if: matrix.arch == 'sparc'
+      if: matrix.bsp == 'sparc/erc32'
       run: |
         set -euo pipefail
         ELF="src/platforms/rtems/build/AtomVM-erc32.exe"
@@ -198,6 +203,39 @@ jobs:
         fi
         echo "Boot test output contained {atomvm_rtems_boot,rtems} and Return value: ok"
 
+    - name: Run boot test on QEMU RealView PBX-A9
+      if: matrix.bsp == 'arm/realview_pbx_a9_qemu'
+      run: |
+        set -euo pipefail
+        ELF="src/platforms/rtems/build/AtomVM-realview_pbx_a9_qemu.exe"
+        test -f "$ELF"
+        set +e
+        output=$(timeout 90 qemu-system-arm \
+          -net none -nographic -no-reboot -M realview-pbx-a9 -m 256M \
+          -kernel "$ELF" 2>&1)
+        status=$?
+        set -e
+        printf '%s\n' "$output"
+        if grep -q "Failed load module" <<< "$output"; then
+          echo "::error::RealView QEMU boot failed to load a BEAM module"
+          exit 1
+        fi
+        if ! grep -Fq '{atomvm_rtems_boot,rtems}' <<< "$output"; then
+          echo "::error::RealView QEMU boot did not print {atomvm_rtems_boot,rtems} (status ${status})"
+          exit 1
+        fi
+        for marker in '{uart,read_timeout,ok}' '{uart,write,ok}' '{i2c,enotsup}' '{gpio,enotsup}'; do
+          if ! grep -Fq "$marker" <<< "$output"; then
+            echo "::error::RealView QEMU boot test did not print ${marker}"
+            exit 1
+          fi
+        done
+        if ! grep -q "Return value: ok" <<< "$output"; then
+          echo "::error::RealView QEMU boot did not return ok"
+          exit 1
+        fi
+        echo "RealView boot test completed successfully"
+
     - name: Cross-compile AtomVM net test for ${{ matrix.bsp }}
       run: |
         set -euo pipefail
@@ -210,7 +248,7 @@ jobs:
         cmake --build src/platforms/rtems/build-net
 
     - name: Run unsupported-networking test on SIS
-      if: matrix.arch == 'sparc'
+      if: matrix.bsp == 'sparc/erc32'
       run: |
         set -euo pipefail
         ELF="src/platforms/rtems/build-net/AtomVM-erc32.exe"
@@ -230,8 +268,31 @@ jobs:
         fi
         echo "erc32 explicitly reported unsupported networking"
 
+    - name: Run unsupported-networking test on QEMU RealView PBX-A9
+      if: matrix.bsp == 'arm/realview_pbx_a9_qemu'
+      run: |
+        set -euo pipefail
+        ELF="src/platforms/rtems/build-net/AtomVM-realview_pbx_a9_qemu.exe"
+        test -f "$ELF"
+        set +e
+        output=$(timeout 90 qemu-system-arm \
+          -net none -nographic -no-reboot -M realview-pbx-a9 -m 256M \
+          -kernel "$ELF" 2>&1)
+        status=$?
+        set -e
+        printf '%s\n' "$output"
+        if ! grep -Fq '{net,enotsup}' <<< "$output"; then
+          echo "::error::RealView net test did not print {net,enotsup} (status ${status})"
+          exit 1
+        fi
+        if ! grep -q "Return value: ok" <<< "$output"; then
+          echo "::error::RealView net test did not return ok"
+          exit 1
+        fi
+        echo "RealView explicitly reported unsupported networking"
+
     - name: Fetch and patch imx7d-sdb DTB for QEMU
-      if: matrix.arch == 'arm'
+      if: matrix.bsp == 'arm/imx7'
       run: |
         set -euo pipefail
         mkdir -p src/platforms/rtems/build /tmp/linux-dts
@@ -249,7 +310,7 @@ jobs:
         fdtput -t x src/platforms/rtems/build/imx7d-sdb-qemu.dtb /timer clock-frequency 0x7a1200
 
     - name: Run boot test on QEMU mcimx7d-sabre
-      if: matrix.arch == 'arm'
+      if: matrix.bsp == 'arm/imx7'
       run: |
         set -euo pipefail
         ELF="src/platforms/rtems/build/AtomVM-imx7.exe"
@@ -283,7 +344,7 @@ jobs:
         echo "Boot test output contained {atomvm_rtems_boot,rtems} and Return value: ok"
 
     - name: Run networking tests on QEMU mcimx7d-sabre
-      if: matrix.arch == 'arm'
+      if: matrix.bsp == 'arm/imx7'
       run: |
         set -euo pipefail
         ELF="src/platforms/rtems/build-net/AtomVM-imx7.exe"

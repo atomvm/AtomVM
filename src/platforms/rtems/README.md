@@ -11,6 +11,7 @@ This directory contains the RTEMS 6.2 port of AtomVM.
 Supported bring-up targets:
 
 - SPARC `erc32` on SIS (`rtems-run --rtems-bsps=erc32-sis`)
+- ARM `realview_pbx_a9_qemu` on QEMU (`qemu-system-arm -M realview-pbx-a9`)
 - ARM `imx7` on QEMU (`qemu-system-arm -M mcimx7d-sabre`)
 
 Other RTEMS 6 BSPs can be selected at configure time once a matching toolchain
@@ -24,17 +25,18 @@ executable. Pack `atomvmlib-rtems.avm` (estdlib + eavmlib + `avm_network` +
 entry module.
 
 Sockets are provided on `arm/imx7` when `rtems-libbsd` is installed. Without
-LibBSD, and on SPARC `erc32`, `atomvm_rtems:wait_dhcp/1` returns
-`{error, enotsup}`.
+LibBSD, and on SPARC `erc32` and ARM `realview_pbx_a9_qemu`,
+`atomvm_rtems:wait_dhcp/1` returns `{error, enotsup}`.
 
 UART implements `uart_hal` over RTEMS Termios (`/dev/console`, erc32
 `/dev/console_a` / `/dev/console_b`, imx7 `/dev/ttyS0` … `/dev/ttyS6`).
 I2C implements `i2c_hal` with Linux-style `I2C_RDWR` on imx7
 (`/dev/i2c-0`, registered from FDT alias `i2c0` on first open). SPARC erc32
-has no I2C controller; `i2c:init/1` returns `{error, enotsup}`.
+and ARM RealView have no supported I2C controller; `i2c:init/1` returns
+`{error, enotsup}`.
 GPIO implements `gpio_hal` using the RTEMS i.MX GPIO driver on imx7. Pins can
 be addressed as `{Bank, Pin}` (`1..7`, `0..31`) or through an FDT property.
-GPIO on erc32 returns `{error, enotsup}`.
+GPIO on erc32 and RealView returns `{error, enotsup}`.
 
 ## Prerequisites
 
@@ -95,6 +97,32 @@ rtems-run --rtems-bsps=erc32-sis \
 A successful boot of `rtems_boot_test` prints `{atomvm_rtems_boot,rtems}`
 and `Return value: ok` before the RTEMS exit fatal. SIS then traps (`ta 0x0`);
 that shutdown is expected. There must be no `Failed load module` line.
+
+## ARM RealView PBX-A9 / QEMU
+
+Install ARM tools and the `realview_pbx_a9_qemu` BSP:
+
+```sh
+../source-builder/sb-set-builder --prefix="$RTEMS_PREFIX" 6/rtems-arm
+../source-builder/sb-set-builder --prefix="$RTEMS_PREFIX" \
+    --target=arm-rtems6 \
+    --with-rtems-bsp=arm/realview_pbx_a9_qemu \
+    --with-rtems-tests=no \
+    6/rtems-kernel
+```
+
+Cross-compile as above with `-DRTEMS_BSP=arm/realview_pbx_a9_qemu`. Run the
+resulting ELF directly in QEMU; this BSP does not require a DTB or debugger
+bootstrap:
+
+```sh
+qemu-system-arm -net none -nographic -no-reboot -M realview-pbx-a9 -m 256M \
+    -kernel src/platforms/rtems/build/AtomVM-realview_pbx_a9_qemu.exe
+```
+
+`-no-reboot` makes QEMU exit when RTEMS resets the board during shutdown. The
+console UART is supported. I2C, GPIO, and networking currently return
+`{error, enotsup}` on this target.
 
 ## i.MX 7 / QEMU SABRE
 
