@@ -183,21 +183,21 @@ jobs:
         status=$?
         set -e
         printf '%s\n' "$output"
-        if printf '%s\n' "$output" | grep -q "Failed load module"; then
+        if grep -q "Failed load module" <<< "$output"; then
           echo "::error::RTEMS boot still failed to load a BEAM module"
           exit 1
         fi
-        if ! printf '%s\n' "$output" | grep -Fq '{atomvm_rtems_boot,rtems}'; then
+        if ! grep -Fq '{atomvm_rtems_boot,rtems}' <<< "$output"; then
           echo "::error::RTEMS boot test did not print {atomvm_rtems_boot,rtems} (rtems-run status ${status})"
           exit 1
         fi
         for marker in '{uart,read_timeout,ok}' '{uart,write,ok}' '{i2c,enotsup}' '{gpio,enotsup}'; do
-          if ! printf '%s\n' "$output" | grep -Fq "$marker"; then
+          if ! grep -Fq "$marker" <<< "$output"; then
             echo "::error::RTEMS boot test did not print ${marker}"
             exit 1
           fi
         done
-        if ! printf '%s\n' "$output" | grep -q "Return value: ok"; then
+        if ! grep -q "Return value: ok" <<< "$output"; then
           echo "::error::RTEMS boot test did not return ok"
           exit 1
         fi
@@ -258,11 +258,11 @@ jobs:
         status=$?
         set -e
         printf '%s\n' "$output"
-        if ! printf '%s\n' "$output" | grep -q "{net,enotsup}"; then
+        if ! grep -Fq '{net,enotsup}' <<< "$output"; then
           echo "::error::erc32 net test did not print {net,enotsup} (status ${status})"
           exit 1
         fi
-        if ! printf '%s\n' "$output" | grep -q "Return value: ok"; then
+        if ! grep -q "Return value: ok" <<< "$output"; then
           echo "::error::erc32 net test did not return ok"
           exit 1
         fi
@@ -323,21 +323,21 @@ jobs:
         status=$?
         set -e
         printf '%s\n' "$output"
-        if printf '%s\n' "$output" | grep -q "Failed load module"; then
+        if grep -q "Failed load module" <<< "$output"; then
           echo "::error::imx7 QEMU boot failed to load a BEAM module"
           exit 1
         fi
-        if ! printf '%s\n' "$output" | grep -Fq '{atomvm_rtems_boot,rtems}'; then
+        if ! grep -Fq '{atomvm_rtems_boot,rtems}' <<< "$output"; then
           echo "::error::imx7 QEMU boot did not print {atomvm_rtems_boot,rtems} (status ${status})"
           exit 1
         fi
         for marker in '{uart,read_timeout,ok}' '{uart,write,ok}' '{i2c,open,ok}' '{i2c,fdt_alias,ok}' '{gpio,imx7,ok}'; do
-          if ! printf '%s\n' "$output" | grep -Fq "$marker"; then
+          if ! grep -Fq "$marker" <<< "$output"; then
             echo "::error::imx7 QEMU boot test did not print ${marker}"
             exit 1
           fi
         done
-        if ! printf '%s\n' "$output" | grep -q "Return value: ok"; then
+        if ! grep -q "Return value: ok" <<< "$output"; then
           echo "::error::imx7 QEMU boot did not return ok"
           exit 1
         fi
@@ -355,6 +355,7 @@ jobs:
         chmod +x src/platforms/rtems/tools/probe-hostfwd.py
         python3 src/platforms/rtems/tools/probe-hostfwd.py --timeout 90 --port 8080 &
         probe_pid=$!
+        trap 'kill "$probe_pid" 2>/dev/null || true' EXIT
         set +e
         output=$(src/platforms/rtems/tools/run-imx7-qemu.sh \
           -d "$DTB" -t 120 \
@@ -363,31 +364,39 @@ jobs:
         status=$?
         set -e
         printf '%s\n' "$output"
+        if kill -0 "$probe_pid" 2>/dev/null; then
+          kill "$probe_pid" 2>/dev/null || true
+        fi
         set +e
         wait "$probe_pid"
         probe_status=$?
         set -e
-        if printf '%s\n' "$output" | grep -q "Failed load module"; then
+        trap - EXIT
+        if grep -q "Failed load module" <<< "$output"; then
           echo "::error::imx7 QEMU net test failed to load a BEAM module"
           exit 1
         fi
-        if ! printf '%s\n' "$output" | grep -q "{dhcp,ok"; then
+        if ! grep -Fq '{dhcp,ok' <<< "$output"; then
           echo "::error::imx7 QEMU net test did not obtain a DHCP address (status ${status})"
           exit 1
         fi
-        if ! printf '%s\n' "$output" | grep -q "{dns,ok"; then
+        if ! grep -Fq '{resolver,ok}' <<< "$output"; then
+          echo "::error::imx7 QEMU net test did not install resolver configuration"
+          exit 1
+        fi
+        if ! grep -Fq '{dns,ok' <<< "$output"; then
           echo "::error::imx7 QEMU net test did not resolve a DNS name"
           exit 1
         fi
-        if ! printf '%s\n' "$output" | grep -q "{tcp,outbound"; then
+        if ! grep -Fq '{tcp,outbound' <<< "$output"; then
           echo "::error::imx7 QEMU net test did not exercise outbound TCP"
           exit 1
         fi
-        if ! printf '%s\n' "$output" | grep -q "{tcp,echo,ok}"; then
+        if ! grep -Fq '{tcp,echo,ok}' <<< "$output"; then
           echo "::error::imx7 QEMU net test did not run the guest echo server"
           exit 1
         fi
-        if ! printf '%s\n' "$output" | grep -q "Return value: ok"; then
+        if ! grep -q "Return value: ok" <<< "$output"; then
           echo "::error::imx7 QEMU net test did not return ok"
           exit 1
         fi

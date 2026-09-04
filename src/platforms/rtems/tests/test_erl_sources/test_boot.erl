@@ -55,13 +55,11 @@ i2c_open_smoke() ->
             erlang:display({i2c, open, ok}),
             ok = i2c:deinit(Resource);
         {error, Reason} ->
-            erlang:error({i2c_smoke_failed, Reason});
-        Other ->
-            erlang:error({i2c_smoke_failed, Other})
+            erlang:error({i2c_smoke_failed, Reason})
     end.
 
 gpio_smoke() ->
-    case gpio:init({8, 0}) of
+    case gpio:init(#{}) of
         {error, enotsup} ->
             erlang:display({gpio, enotsup});
         {error, invalid_pin} ->

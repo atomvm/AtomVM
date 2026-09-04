@@ -28,12 +28,15 @@
 #include <rtems.h>
 #include <rtems/bsd/bsd.h>
 #include <rtems/dhcpcd.h>
+#include <stdatomic.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
 
 #ifdef RTEMS_HAS_LIBBSD
+static atomic_bool resolver_ready = ATOMIC_VAR_INIT(false);
+
 static const char dhcpcd_conf[] = "hostname atomvm\n"
                                   "duid\n"
                                   "option domain_name_servers, domain_name, domain_search, host_name\n"
@@ -92,6 +95,9 @@ static const char *dhcpcd_env_value(char *const *env, const char *name)
 
 static int write_resolv_conf(const char *servers)
 {
+    static const char resolv_conf[] = "/etc/resolv.conf";
+    static const char resolv_conf_tmp[] = "/etc/resolv.conf.tmp";
+
     while (isspace((unsigned char) *servers)) {
         servers++;
     }
@@ -99,7 +105,7 @@ static int write_resolv_conf(const char *servers)
         return -1;
     }
 
-    int fd = open("/etc/resolv.conf", O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    int fd = open(resolv_conf_tmp, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     if (fd < 0) {
         return -1;
     }
@@ -124,6 +130,12 @@ static int write_resolv_conf(const char *servers)
     if (close(fd) != 0) {
         rv = -1;
     }
+    if (rv == 0 && rename(resolv_conf_tmp, resolv_conf) != 0) {
+        rv = -1;
+    }
+    if (rv != 0) {
+        unlink(resolv_conf_tmp);
+    }
     return rv;
 }
 
@@ -132,8 +144,13 @@ static void dhcpcd_hook_handler(rtems_dhcpcd_hook *hook, char *const *env)
     (void) hook;
 
     const char *servers = dhcpcd_env_value(env, "new_domain_name_servers");
-    if (servers != NULL && write_resolv_conf(servers) != 0) {
-        fprintf(stderr, "failed to write DHCP resolver configuration\n");
+    if (servers != NULL) {
+        if (write_resolv_conf(servers) == 0) {
+            atomic_store_explicit(&resolver_ready, true, memory_order_release);
+        } else {
+            atomic_store_explicit(&resolver_ready, false, memory_order_release);
+            fprintf(stderr, "failed to write DHCP resolver configuration\n");
+        }
     }
 }
 
@@ -143,9 +160,20 @@ static rtems_dhcpcd_hook dhcpcd_hook = {
 };
 #endif
 
+bool rtems_atomvm_resolver_ready(void)
+{
+#ifdef RTEMS_HAS_LIBBSD
+    return atomic_load_explicit(&resolver_ready, memory_order_acquire);
+#else
+    return false;
+#endif
+}
+
 int rtems_atomvm_network_init(void)
 {
 #ifdef RTEMS_HAS_LIBBSD
+    atomic_store_explicit(&resolver_ready, false, memory_order_relaxed);
+
     rtems_status_code sc = rtems_bsd_initialize();
     if (sc != RTEMS_SUCCESSFUL) {
         fprintf(stderr, "rtems_bsd_initialize failed: %s\n", rtems_status_text(sc));

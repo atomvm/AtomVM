@@ -19,9 +19,9 @@
  */
 
 #include <bsp.h>
-#include <rtems/bsd/bsd.h>
 #include <machine/rtems-bsd-nexus-bus.h>
 #include <machine/rtems-bsd-sysinit.h>
+#include <rtems/bsd/bsd.h>
 
 /*
  * Do not use RTEMS_BSD_CONFIG_BSP_CONFIG: the imx7 default nexus set
