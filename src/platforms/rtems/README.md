@@ -203,8 +203,9 @@ cd rtems-source-builder-6.2/rtems
 CMake links `libbsd.a` when it is present at
 `$RTEMS_PREFIX/arm-rtems6/imx7/lib/libbsd.a`. The image initializes LibBSD,
 brings up `lo0`, starts dhcpcd on `ffec0`, and installs the DHCP-provided name
-servers in `/etc/resolv.conf`. QEMU user networking attaches to the onboard
-ENET with:
+servers atomically in `/etc/resolv.conf`. `atomvm_rtems:wait_resolver/1` waits
+until that resolver configuration is installed. QEMU user networking attaches
+to the onboard ENET with:
 
 ```sh
 src/platforms/rtems/tools/run-imx7-qemu.sh \

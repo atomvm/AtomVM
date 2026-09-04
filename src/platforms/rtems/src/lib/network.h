@@ -21,6 +21,9 @@
 #ifndef _RTEMS_ATOMVM_NETWORK_H_
 #define _RTEMS_ATOMVM_NETWORK_H_
 
+#include <stdbool.h>
+
 int rtems_atomvm_network_init(void);
+bool rtems_atomvm_resolver_ready(void);
 
 #endif

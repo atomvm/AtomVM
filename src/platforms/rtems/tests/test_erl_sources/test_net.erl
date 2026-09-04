@@ -22,6 +22,9 @@
 -export([start/0]).
 
 -define(DHCP_TIMEOUT_MS, 45000).
+-define(RESOLVER_TIMEOUT_MS, 10000).
+-define(DNS_TIMEOUT_MS, 10000).
+-define(DNS_RETRY_INTERVAL_MS, 250).
 -define(ECHO_PORT, 8080).
 -define(QEMU_DNS, {10, 0, 2, 3}).
 -define(CLOUDFLARE_DNS, {1, 1, 1, 1}).
@@ -35,9 +38,11 @@ start() ->
             ok;
         ok ->
             ok = dhcp_ok(),
-            ok = dns_ok(),
-            ok = tcp_outbound_ok(),
             ok = echo_server(),
+            ok = tcp_outbound_ok(),
+            ok = atomvm_rtems:wait_resolver(?RESOLVER_TIMEOUT_MS),
+            erlang:display({resolver, ok}),
+            ok = dns_ok(),
             ok;
         Other ->
             erlang:error({dhcp_failed, Other})
@@ -84,7 +89,7 @@ find_if([_ | Rest], Name) ->
     find_if(Rest, Name).
 
 dns_ok() ->
-    case net:getaddrinfo("example.com") of
+    case resolve_dns("example.com", ?DNS_TIMEOUT_MS) of
         {ok, [Info | _]} ->
             Addr = maps:get(addr, Info),
             IP = maps:get(addr, Addr),
@@ -93,6 +98,23 @@ dns_ok() ->
         Other ->
             erlang:error({dns_failed, Other})
     end.
+
+resolve_dns(Name, RemainingMs) ->
+    case net:getaddrinfo(Name) of
+        {error, Reason} when
+            RemainingMs > 0 andalso (Reason =:= eainoname orelse Reason =:= eaiagain)
+        ->
+            SleepMs = dns_retry_interval(RemainingMs),
+            timer:sleep(SleepMs),
+            resolve_dns(Name, RemainingMs - SleepMs);
+        Result ->
+            Result
+    end.
+
+dns_retry_interval(RemainingMs) when RemainingMs < ?DNS_RETRY_INTERVAL_MS ->
+    RemainingMs;
+dns_retry_interval(_RemainingMs) ->
+    ?DNS_RETRY_INTERVAL_MS.
 
 tcp_outbound_ok() ->
     case try_connect(?QEMU_DNS, 53) of

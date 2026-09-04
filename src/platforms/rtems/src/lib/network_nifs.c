@@ -18,6 +18,8 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#include "network.h"
+
 #include <string.h>
 
 #ifdef RTEMS_HAS_LIBBSD
@@ -115,10 +117,30 @@ static const struct Nif rtems_ifaddrs_nif = {
     .nif_ptr = nif_rtems_ifaddrs
 };
 
+static term nif_rtems_resolver_ready(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+#ifdef RTEMS_HAS_LIBBSD
+    return rtems_atomvm_resolver_ready() ? TRUE_ATOM : FALSE_ATOM;
+#else
+    return error_atom(ctx, ATOM_STR("\x7", "enotsup"));
+#endif
+}
+
+static const struct Nif rtems_resolver_ready_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_rtems_resolver_ready
+};
+
 static const struct Nif *network_nif_get_nif(const char *nifname)
 {
     if (strcmp("atomvm_rtems:ifaddrs/0", nifname) == 0) {
         return &rtems_ifaddrs_nif;
+    }
+    if (strcmp("atomvm_rtems:resolver_ready/0", nifname) == 0) {
+        return &rtems_resolver_ready_nif;
     }
     return NULL;
 }
