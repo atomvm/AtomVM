@@ -83,7 +83,7 @@ jobs:
           python3-dev python-is-python3 python3-setuptools \
           libncurses-dev zlib1g-dev ninja-build pkg-config \
           cmake gperf wget xz-utils python3-pip \
-          device-tree-compiler gdb-multiarch \
+          device-tree-compiler u-boot-tools gdb-multiarch \
           ${{ matrix.qemu }}
 
     - name: Restore RTEMS 6.2 ${{ matrix.bsp }} toolchain
@@ -104,7 +104,7 @@ jobs:
         cd "rtems-source-builder-${RTEMS_RELEASE}/rtems"
         ../source-builder/sb-set-builder --prefix="$RTEMS_PREFIX" "${RTEMS_VERSION}/rtems-${{ matrix.arch }}"
         ../source-builder/sb-set-builder --prefix="$RTEMS_PREFIX" \
-          --target=${{ matrix.arch }}-rtems${RTEMS_VERSION} \
+          --target="${{ matrix.arch }}-rtems${RTEMS_VERSION}" \
           --with-rtems-bsp=${{ matrix.bsp }} \
           --with-rtems-tests=no \
           "${RTEMS_VERSION}/rtems-kernel"
@@ -127,7 +127,7 @@ jobs:
         fi
         cd "rtems-source-builder-${RTEMS_RELEASE}/rtems"
         ../source-builder/sb-set-builder --prefix="$RTEMS_PREFIX" \
-          --target=${{ matrix.arch }}-rtems${RTEMS_VERSION} \
+          --target="${{ matrix.arch }}-rtems${RTEMS_VERSION}" \
           --with-rtems-bsp=${{ matrix.bsp }} \
           "${RTEMS_VERSION}/rtems-libbsd"
 
@@ -144,13 +144,13 @@ jobs:
     - name: Check RTEMS toolchain
       run: |
         set -euo pipefail
-        ${{ matrix.arch }}-rtems${RTEMS_VERSION}-gcc --version
+        "${{ matrix.arch }}-rtems${RTEMS_VERSION}-gcc" --version
 
     - name: Build host AtomVM and RTEMS boot AVM
       run: |
         set -euo pipefail
-        cmake -S . -B build-host -G Ninja
-        cmake --build build-host -t rtems_boot_test rtems_net_test atomvmlib-rtems
+        cmake -S . -B build-host -G Ninja -DAVM_DISABLE_JIT=ON
+        cmake --build build-host -t rtems_boot_test rtems_net_test rtems_grisp2_test atomvmlib-rtems
         mkdir -p src/platforms/rtems/build
         ./build-host/tools/packbeam/packbeam create -s test_boot \
           src/platforms/rtems/build/rtems_boot.avm \
@@ -160,6 +160,54 @@ jobs:
           src/platforms/rtems/build/rtems_net.avm \
           build-host/src/platforms/rtems/tests/test_erl_sources/test_net.beam \
           build-host/libs/atomvmlib-rtems.avm
+        ./build-host/tools/packbeam/packbeam create -s test_grisp2 \
+          src/platforms/rtems/build/rtems_grisp2.avm \
+          build-host/src/platforms/rtems/tests/test_erl_sources/test_grisp2.beam \
+          build-host/libs/atomvmlib-rtems.avm
+
+    - name: Test loading replaceable AVM files on the host
+      if: matrix.bsp == 'arm/imx7'
+      run: |
+        set -euo pipefail
+        cmake -S src/platforms/rtems/tests -B build-rtems-loader -G Ninja \
+          -DRTEMS_TEST_PACK="$PWD/src/platforms/rtems/build/rtems_grisp2.avm" \
+          -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+        cmake --build build-rtems-loader
+        ctest --test-dir build-rtems-loader --output-on-failure
+        cmake --build build-host -t test-rtems-startup
+        ./build-host/tests/rtems-startup/test-rtems-startup
+
+    - name: Cross-compile and package GRiSP 2 with the imx7 toolchain
+      if: matrix.bsp == 'arm/imx7'
+      run: |
+        set -euo pipefail
+        cmake -S src/platforms/rtems -B src/platforms/rtems/build-grisp2 -G Ninja \
+          -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
+          -DRTEMS_PREFIX="$RTEMS_PREFIX" \
+          -DRTEMS_BSP=arm/imx7 \
+          -DRTEMS_VERSION="$RTEMS_VERSION" \
+          -DRTEMS_BOARD=grisp2 \
+          -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_grisp2.avm"
+        cmake --build src/platforms/rtems/build-grisp2
+        cp src/platforms/rtems/build/rtems_grisp2.avm src/platforms/rtems/build-grisp2/app.avm
+        mkimage -l src/platforms/rtems/build-grisp2/AtomVM-grisp2.zImage
+        cmp src/platforms/rtems/boards/grisp2/imx6ul-grisp2.dtb \
+          src/platforms/rtems/build-grisp2/oftree
+
+    - name: Upload GRiSP 2 hardware smoke-test image
+      if: matrix.bsp == 'arm/imx7'
+      uses: actions/upload-artifact@v4
+      with:
+        name: atomvm-grisp2
+        if-no-files-found: error
+        path: |
+          src/platforms/rtems/build-grisp2/AtomVM-grisp2.exe
+          src/platforms/rtems/build-grisp2/AtomVM-grisp2.zImage
+          src/platforms/rtems/build-grisp2/oftree
+          src/platforms/rtems/build-grisp2/app.avm
+          src/platforms/rtems/boards/grisp2/README.md
+          src/platforms/rtems/boards/grisp2/COPYING
+          src/platforms/rtems/boards/grisp2/grisp2-dtb-source.tar.gz
 
     - name: Cross-compile AtomVM for ${{ matrix.bsp }}
       run: |

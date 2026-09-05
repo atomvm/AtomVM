@@ -37,6 +37,32 @@ option(AVM_DISABLE_JIT "Disable just in time compilation." ON)
 option(AVM_PRINT_PROCESS_CRASH_DUMPS "Print crash reports when processes die with non-standard reasons" ON)
 option(AVM_CONFIG_REBOOT_ON_NOT_OK "Reboot when application exits with non 'ok' return" OFF)
 
+set(_rtems_board_default "generic")
+if(RTEMS_ARCH STREQUAL "arm" AND RTEMS_BSP_NAME STREQUAL "imx7")
+    # The BSP is shared by the QEMU SABRE model and GRiSP 2.  Keep the
+    # existing generic/QEMU behavior as the default and require an explicit
+    # board selection for physical-board assumptions.
+    set(_rtems_board_default "qemu")
+endif()
+set(RTEMS_BOARD "${_rtems_board_default}" CACHE STRING
+    "RTEMS board integration (generic, qemu, or grisp2)")
+set_property(CACHE RTEMS_BOARD PROPERTY STRINGS generic qemu grisp2)
+
+if(NOT RTEMS_BOARD STREQUAL "generic" AND
+   NOT RTEMS_BOARD STREQUAL "qemu" AND
+   NOT RTEMS_BOARD STREQUAL "grisp2")
+    message(FATAL_ERROR
+        "Unsupported RTEMS_BOARD='${RTEMS_BOARD}' (use generic, qemu, or grisp2)")
+endif()
+
+if(RTEMS_BOARD STREQUAL "grisp2" AND
+   (NOT RTEMS_ARCH STREQUAL "arm" OR NOT RTEMS_BSP_NAME STREQUAL "imx7"))
+    message(FATAL_ERROR "RTEMS_BOARD=grisp2 requires RTEMS_BSP=arm/imx7")
+endif()
+if(RTEMS_BOARD STREQUAL "grisp2" AND NOT RTEMS_VERSION STREQUAL "6")
+    message(FATAL_ERROR "RTEMS_BOARD=grisp2 requires RTEMS_VERSION=6")
+endif()
+
 set(AVM_DISABLE_SMP ON CACHE BOOL "Disable SMP support." FORCE)
 set(AVM_DISABLE_TASK_DRIVER ON CACHE BOOL "Disable task driver support." FORCE)
 
@@ -90,6 +116,27 @@ if(RTEMS_ARCH STREQUAL "arm" AND RTEMS_BSP_NAME STREQUAL "imx7")
         message(STATUS
             "rtems-libbsd not found at ${_rtems_libbsd}; building arm/imx7 without socket support")
     endif()
+endif()
+
+if(RTEMS_BOARD STREQUAL "grisp2")
+    if(NOT RTEMS_HAS_LIBBSD)
+        message(FATAL_ERROR
+            "RTEMS_BOARD=grisp2 requires RTEMS 6 LibBSD for arm/imx7 at ${_rtems_libbsd}")
+    endif()
+    set(RTEMS_BOARD_FDT_COMPATIBLE "embeddedbrains,grisp2")
+    set(RTEMS_DTB "${CMAKE_CURRENT_SOURCE_DIR}/boards/grisp2/imx6ul-grisp2.dtb"
+        CACHE FILEPATH "Board device tree passed separately by the bootloader")
+    set(RTEMS_IMAGE_LOAD_ADDRESS "0x80200000" CACHE STRING
+        "Boot image load and entry address")
+    set(_rtems_create_zimage_default ON)
+else()
+    set(_rtems_create_zimage_default OFF)
+endif()
+option(RTEMS_CREATE_ZIMAGE
+    "Create a bootloader-ready zImage next to the RTEMS ELF"
+    ${_rtems_create_zimage_default})
+if(RTEMS_CREATE_ZIMAGE AND NOT RTEMS_BOARD STREQUAL "grisp2")
+    message(FATAL_ERROR "RTEMS_CREATE_ZIMAGE currently requires RTEMS_BOARD=grisp2")
 endif()
 
 set(AVM_PACK "" CACHE FILEPATH "AVM pack to embed in the RTEMS executable")
