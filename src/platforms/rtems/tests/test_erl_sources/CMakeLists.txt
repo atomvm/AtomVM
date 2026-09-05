@@ -22,3 +22,4 @@ include(BuildErlang)
 
 pack_runnable(rtems_boot_test test_boot DIALYZE_AGAINST avm_rtems)
 pack_runnable(rtems_net_test test_net DIALYZE_AGAINST avm_rtems)
+pack_runnable(rtems_grisp2_test test_grisp2 DIALYZE_AGAINST avm_rtems)
