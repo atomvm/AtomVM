@@ -13,14 +13,18 @@ Supported bring-up targets:
 - SPARC `erc32` on SIS (`rtems-run --rtems-bsps=erc32-sis`)
 - ARM `realview_pbx_a9_qemu` on QEMU (`qemu-system-arm -M realview-pbx-a9`)
 - ARM `imx7` on QEMU (`qemu-system-arm -M mcimx7d-sabre`)
+- GRiSP 2 (`arm/imx7` with `RTEMS_BOARD=grisp2`; hardware validation pending)
 
 Other RTEMS 6 BSPs can be selected at configure time once a matching toolchain
 and BSP are installed. `imx7` is the NXP i.MX 7Dual BSP; QEMU models the
-SABRE board, not GRiSP 2 (same SoC family, different pinmux and FDT).
+SABRE board, not GRiSP 2 (same BSP family, different pinmux, PHY, and FDT).
+The GRiSP 2 build selects the board-specific LibBSD nexus and checks that the
+bootloader supplied an FDT with the `embeddedbrains,grisp2` compatible string.
 
-This is a bring-up port: no SMP, no JIT, and no filesystem loading of `.avm`
-files. Applications are compiled on the host and embedded in the RTEMS
-executable. Pack `atomvmlib-rtems.avm` (estdlib + eavmlib + `avm_network` +
+This is a bring-up port: no SMP or JIT. Applications are compiled on the host
+and embedded in the RTEMS executable. GRiSP 2 can instead load `app.avm`
+from its SD card, using the embedded application as a fallback.
+Pack `atomvmlib-rtems.avm` (estdlib + eavmlib + `avm_network` +
 `avm_rtems`) together with the application so `init:boot/1` can start the
 entry module.
 
@@ -187,6 +191,22 @@ ok = gpio:digital_write(Pin, high).
 GPIO pull configuration, open-drain mode, and interrupts are not yet
 supported and return `{error, enotsup}`.
 
+## Host startup regression test
+
+On Linux, exercise the RTEMS boot fallback using the native VM and stubbed
+board I/O:
+
+```sh
+cmake -S . -B build-host -G Ninja -DAVM_DISABLE_JIT=ON
+cmake --build build-host -t test-rtems-startup
+./build-host/tests/rtems-startup/test-rtems-startup
+```
+
+The test caps VM allocations at 256 KiB, forces failures late in module
+loading and partway through import construction, and checks that the embedded
+app starts and all VM allocations are released. It does not require an RTEMS
+toolchain or board.
+
 ## Networking (imx7 / LibBSD)
 
 Build LibBSD with the official RTEMS 6.2 Source Builder set. The `imx7` BSP
@@ -219,13 +239,139 @@ interrupts, and clocks used by QEMU and the LibBSD `ffec` driver. Pack a
 network test with `rtems_net_test` / `test_net.erl` to cover DHCP, DNS, outbound
 TCP, a guest echo server on port 8080, and host-to-guest forwarding.
 
+## GRiSP 2 hardware
+
+GRiSP 2 uses an i.MX6ULL with RTEMS's shared `arm/imx7` BSP. Reuse the
+RTEMS 6.2 ARM compiler, `imx7` BSP, and LibBSD from the QEMU build above;
+LibBSD already includes the KSZ8091 PHY driver and i.MX nexus devices.
+There is no additional AtomVM board driver or `libgrisp` dependency.
+The GRiSP toolchain repository's RTEMS 5 prefix is not compatible with this
+port, and building that entire repository is unnecessary.
+
+A generated board DTB is bundled in
+[`boards/grisp2`](boards/grisp2/README.md), with its source revision and
+regeneration instructions. CMake validates its header and board compatible
+string and copies it to `oftree` beside the image. Override it with
+`-DRTEMS_DTB=/absolute/path/to/custom.dtb` for a different board
+revision. The bootloader passes this DTB separately; it is not embedded in
+the executable.
+
+Install `u-boot-tools` and `device-tree-compiler` (`dtc` on Homebrew) for
+image packaging and DTB validation.
+
+Build and package a hardware smoke test as follows:
+
+```sh
+cmake -S . -B build-host -G Ninja
+cmake --build build-host -t rtems_grisp2_test atomvmlib-rtems
+mkdir -p src/platforms/rtems/build
+./build-host/tools/packbeam/packbeam create -s test_grisp2 \
+    src/platforms/rtems/build/rtems_grisp2.avm \
+    build-host/src/platforms/rtems/tests/test_erl_sources/test_grisp2.beam \
+    build-host/libs/atomvmlib-rtems.avm
+
+cmake -S src/platforms/rtems -B src/platforms/rtems/build-grisp2 -G Ninja \
+    -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
+    -DRTEMS_PREFIX="$RTEMS_PREFIX" \
+    -DRTEMS_BSP=arm/imx7 \
+    -DRTEMS_BOARD=grisp2 \
+    -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_grisp2.avm"
+cmake --build src/platforms/rtems/build-grisp2
+```
+
+`RTEMS_BOARD=grisp2` also enables creation of `AtomVM-grisp2.zImage`. The
+image is converted to a flat binary, gzip-compressed, and wrapped with U-Boot
+`mkimage` at load/entry address `0x80200000`. Inspect it with:
+
+```sh
+mkimage -l src/platforms/rtems/build-grisp2/AtomVM-grisp2.zImage
+```
+
+For the first boot, copy `AtomVM-grisp2.zImage` to a FAT SD card as `zImage`
+and copy the build's `oftree` beside it. Select the SD boot entry in barebox
+if an existing eMMC application takes precedence. Do not overwrite eMMC
+until the serial smoke test succeeds.
+
+The smoke test prints `{atomvm_grisp2,rtems}`, `{grisp2,uart,ok}`,
+`{grisp2,led,ok}`, `{grisp2,gpio,high}` or `{grisp2,gpio,low}`, and
+`{grisp2,eeprom,ok}`, followed by `Return value: ok`. The first RGB LED's
+red channel lights for half a second. The EEPROM check reads eight bytes
+at I²C address `0x57` and does not write EEPROM contents.
+Use `rtems_net_test` separately to verify `ffec0` DHCP/DNS/TCP on the
+physical Ethernet link.
+
+CI cross-builds the hardware image in the existing `arm/imx7` job and uploads
+the `atomvm-grisp2` artifact. Physical boot, UART, GPIO, I²C and Ethernet
+remain manual checks; a successful cross-build does not establish that they
+work on a board.
+
+### Updating the application on GRiSP 2
+
+Install the firmware containing the SD loader once. Then applications can be
+changed by replacing `app.avm` in the root of the existing SD-card FAT
+partition and rebooting. No additional partition or firmware rebuild is
+needed for application-only changes:
+
+```text
+zImage     RTEMS + AtomVM + embedded fallback application
+oftree     Board device tree
+app.avm    Replaceable application, including its libraries
+```
+
+For example, from the repository root, build and pack `hello_world` using
+the existing host build:
+
+```sh
+cmake --build build-host -t hello_world atomvmlib-rtems
+./build-host/tools/packbeam/packbeam create -s hello_world \
+    build-host/app.avm \
+    build-host/examples/erlang/hello_world.beam \
+    build-host/libs/atomvmlib-rtems.avm
+```
+
+With the board powered off, replace the card's `app.avm` with
+`build-host/app.avm`, safely eject the card, and reboot. Keep `zImage` and
+`oftree`. A native driver or runtime change still requires a new `zImage`.
+The boot log identifies the selected file:
+
+```text
+AtomVM: Loaded /media/mmcsd-0-0/app.avm (... bytes)
+Starting: hello_world.beam...
+```
+
+The media server starts before LibBSD attaches SD devices and mounts FAT
+filesystems. The loader waits up to five seconds for the configured file,
+then reads the complete pack into RAM (maximum 32 MiB). Missing files,
+read/allocation failures, invalid pack or BEAM chunk structure, and startup
+module load failures select the embedded application. The checks do not
+validate all bytecode semantics: build the pack with the supported OTP and
+libraries. An error after an application starts is reported normally; it
+does not silently run the fallback. Remove `app.avm` to boot the embedded
+hardware smoke test.
+
+The default RTEMS path assumes the SD card is `mmcsd-0` and uses its first
+partition, `/media/mmcsd-0-0`. If device numbering or the card layout differs,
+set `-DRTEMS_APP_PATH=/media/your-volume/app.avm` when building the
+firmware. For an unpartitioned FAT volume on `mmcsd-0`, use
+`/media/mmcsd-0/app.avm`. The loader selects this path explicitly; it does
+not infer which volume barebox booted.
+
+The CI artifact includes the smoke-test pack as `app.avm`. On hardware,
+check a valid replacement, a missing file, and a truncated copy: the latter
+two must print the fallback message and run the embedded example.
+
 ## CMake options
 
 | Option | Default | Description |
 | --- | --- | --- |
 | `RTEMS_PREFIX` | (required) | RTEMS 6.2 installation prefix |
 | `RTEMS_BSP` | `sparc/erc32` | Architecture/BSP (`arch/bsp`) |
+| `RTEMS_BOARD` | `generic` (`qemu` for `arm/imx7`) | Board integration (`generic`, `qemu`, or `grisp2`) |
 | `RTEMS_VERSION` | `6` | Major toolchain version (`sparc-rtems6-gcc`) |
 | `AVM_PACK` | empty | Host-built `.avm` to embed |
+| `RTEMS_CREATE_ZIMAGE` | `ON` for `grisp2` | Create a GRiSP 2 bootloader-ready image |
+| `RTEMS_IMAGE_LOAD_ADDRESS` | `0x80200000` | GRiSP 2 image load and entry address |
+| `RTEMS_DTB` | bundled `boards/grisp2/imx6ul-grisp2.dtb` | Board DTB to validate and copy as `oftree` when packaging |
+| `RTEMS_APP_PATH` | `/media/mmcsd-0-0/app.avm` | RTEMS filesystem path for the replaceable application (GRiSP 2 only) |
 | `AVM_DISABLE_JIT` | `ON` | JIT is not supported yet |
 | `AVM_DISABLE_SMP` | `ON` | Forced off for this port |

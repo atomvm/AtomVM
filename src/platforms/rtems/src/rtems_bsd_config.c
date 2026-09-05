@@ -24,14 +24,26 @@
 #include <rtems/bsd/bsd.h>
 
 /*
- * Do not use RTEMS_BSD_CONFIG_BSP_CONFIG: the imx7 default nexus set
- * attaches sdhci_fsl, which times out on QEMU mcimx7d-sabre. Keep the FDT
- * nexus plus ffec/ukphy for networking.
+ * Physical boards use the BSP nexus devices and their configured drivers.
+ * The QEMU SABRE image uses a smaller nexus set because its emulated
+ * SDHCI device never becomes ready.  Do not use RTEMS_BSD_CONFIG_BSP_CONFIG
+ * for either image: select the appropriate set explicitly below.
  */
+#ifdef RTEMS_HAS_REGFIX
+SYSINIT_DRIVER_REFERENCE(regfix, simplebus);
+#endif
+#ifdef RTEMS_HAS_KSZ8091RNB
+SYSINIT_DRIVER_REFERENCE(ksz8091rnb, miibus);
+#endif
+
+#ifdef RTEMS_USE_BSP_NEXUS
+#include <bsp/nexus-devices.h>
+#else
 RTEMS_BSD_DEFINE_NEXUS_DEVICE(ofwbus, 0, 0, NULL);
 SYSINIT_DRIVER_REFERENCE(simplebus, ofwbus);
 SYSINIT_DRIVER_REFERENCE(ffec, simplebus);
 SYSINIT_DRIVER_REFERENCE(ukphy, miibus);
+#endif
 
 #define RTEMS_BSD_CONFIG_INIT
 

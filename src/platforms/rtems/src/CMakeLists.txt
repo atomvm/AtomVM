@@ -20,7 +20,11 @@
 
 cmake_minimum_required(VERSION 3.13)
 
-set(PROJECT_EXECUTABLE ${PROJECT_NAME}-${RTEMS_BSP_NAME}.exe)
+if(RTEMS_BOARD STREQUAL "grisp2")
+    set(PROJECT_EXECUTABLE ${PROJECT_NAME}-${RTEMS_BOARD}.exe)
+else()
+    set(PROJECT_EXECUTABLE ${PROJECT_NAME}-${RTEMS_BSP_NAME}.exe)
+endif()
 
 if(NOT AVM_PACK)
     set(_default_avm "${CMAKE_BINARY_DIR}/rtems_boot.avm")
@@ -48,6 +52,7 @@ add_custom_command(
 
 set(_rtems_sources
     main.c
+    app_loader.c
     rtems_config.c
     ${EMBEDDED_AVM_C}
 )
@@ -58,6 +63,19 @@ endif()
 add_executable(${PROJECT_EXECUTABLE}
     ${_rtems_sources}
 )
+
+if(RTEMS_BOARD STREQUAL "grisp2")
+    set(RTEMS_APP_PATH "/media/mmcsd-0-0/app.avm" CACHE STRING
+        "RTEMS filesystem path to the replaceable AVM application")
+    target_sources(${PROJECT_EXECUTABLE} PRIVATE storage.c)
+    target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE
+        RTEMS_USE_BSP_NEXUS
+        RTEMS_HAS_REGFIX
+        RTEMS_HAS_KSZ8091RNB
+        RTEMS_HAS_STORAGE
+        RTEMS_BOARD_FDT_COMPATIBLE="${RTEMS_BOARD_FDT_COMPATIBLE}"
+        RTEMS_APP_PATH="${RTEMS_APP_PATH}")
+endif()
 
 target_compile_features(${PROJECT_EXECUTABLE} PUBLIC c_std_11)
 if(CMAKE_COMPILER_IS_GNUCC)
@@ -88,6 +106,10 @@ if(RTEMS_SIZE)
         COMMAND ${RTEMS_SIZE} ${PROJECT_EXECUTABLE}
         WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
     )
+endif()
+
+if(RTEMS_CREATE_ZIMAGE)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/boot_image.cmake)
 endif()
 
 message("------------Output Locations------------")

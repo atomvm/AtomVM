@@ -117,6 +117,10 @@ target_link_libraries(test-mailbox PRIVATE libAtomVM libAtomVM${PLATFORM_LIB_SUF
 target_link_libraries(test-structs PRIVATE libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})
 target_link_libraries(test-term PRIVATE libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND Erlang_FOUND AND AVM_DISABLE_JIT AND NOT AVM_ENABLE_PRECOMPILED)
+    add_subdirectory(../src/platforms/rtems/tests/startup rtems-startup)
+endif()
+
 # Except for XCode, also compile beams
 if (NOT "${CMAKE_GENERATOR}" MATCHES "Xcode")
     add_dependencies(test-erlang erlang_test_modules)

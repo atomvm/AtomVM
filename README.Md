@@ -19,7 +19,7 @@ Supported Platforms
 * ESP32 SoC (with IDF/FreeRTOS, see [esp32](https://doc.atomvm.org/main/getting-started-guide.html#getting-started-on-the-esp32-platform))
 * STM32 MCUs (with official ST HAL/LL SDK, see [stm32](https://doc.atomvm.org/main/getting-started-guide.html#getting-started-on-the-stm32-platform))
 * Raspberry Pi Pico and Pico 2 (see [rp2](https://doc.atomvm.org/main/getting-started-guide.html#getting-started-on-the-raspberry-pi-pico-platform))
-* RTEMS 6.2 (`src/platforms/rtems`, SPARC `erc32` bring-up)
+* RTEMS 6.2 (`src/platforms/rtems`, SPARC `erc32` and GRiSP 2 bring-up)
 * Browsers and NodeJS with WebAssembly (see [emscripten](https://doc.atomvm.org/main/getting-started-guide.html#getting-started-with-atomvm-webassembly))
 
 AtomVM aims to be easily portable to new platforms with a minimum effort, so additional platforms
