@@ -1,3 +1,9 @@
+<!---
+  Copyright 2026 Peter M. <petermm@gmail.com>
+
+  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+-->
+
 # GRiSP 2 device tree
 
 `imx6ul-grisp2.dtb` is generated without board changes from
@@ -49,3 +55,7 @@ Messtechnik. The generated DTB is distributed under GPL-2.0-only; see
 `COPYING`. Original notices and binding-header license alternatives remain
 in the source archive. Keep this metadata, license, and corresponding
 source archive with redistributed DTBs.
+
+The accompanying `.license` files provide machine-readable copyright and
+licensing notices for the DTB and source archive. Canonical license texts
+are in the repository's `LICENSES` directory.
