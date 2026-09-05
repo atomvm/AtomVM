@@ -194,20 +194,37 @@ jobs:
         cmp src/platforms/rtems/boards/grisp2/imx6ul-grisp2.dtb \
           src/platforms/rtems/build-grisp2/oftree
 
-    - name: Upload GRiSP 2 hardware smoke-test image
+    - name: Prepare GRiSP 2 SD-card bundle
+      if: matrix.bsp == 'arm/imx7'
+      id: sd-card-bundle
+      run: |
+        set -euo pipefail
+        bundle=src/platforms/rtems/build-grisp2/sd-card-bundle
+        board=src/platforms/rtems/boards/grisp2
+        mkdir -p "$bundle/debug" "$bundle/dtb-source" "$bundle/loader/entries"
+        cp src/platforms/rtems/build-grisp2/AtomVM-grisp2.zImage "$bundle/zImage"
+        cp src/platforms/rtems/build-grisp2/oftree src/platforms/rtems/build-grisp2/app.avm "$bundle/"
+        cp src/platforms/rtems/build-grisp2/AtomVM-grisp2.exe "$bundle/debug/AtomVM-grisp2.elf"
+        cp "$board/INSTALL.md" "$bundle/README.md"
+        cp "$board/atomvm.conf" "$bundle/loader/entries/atomvm.conf"
+        cp "$board/imx6ul-grisp2.dtb.license" "$bundle/oftree.license"
+        cp "$board/README.md" "$board/COPYING" "$board/grisp2-dtb-source.tar.gz" \
+          "$board/grisp2-dtb-source.tar.gz.license" "$bundle/dtb-source/"
+        cp "$board/imx6ul-grisp2.dtb" "$board/imx6ul-grisp2.dtb.license" "$bundle/dtb-source/"
+        cp -R LICENSES "$bundle/"
+        printf 'Source: %s/%s/tree/%s\nBuild: %s/%s/actions/runs/%s\n' \
+          "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_SHA" \
+          "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > "$bundle/BUILD.txt"
+        echo "name=atomvm-grisp2-sd-card-${GITHUB_SHA:0:12}" >> "$GITHUB_OUTPUT"
+
+    - name: Upload GRiSP 2 SD-card bundle
       if: matrix.bsp == 'arm/imx7'
       uses: actions/upload-artifact@v4
       with:
-        name: atomvm-grisp2
+        # GitHub adds the .zip extension when downloading the artifact.
+        name: ${{ steps.sd-card-bundle.outputs.name }}
         if-no-files-found: error
-        path: |
-          src/platforms/rtems/build-grisp2/AtomVM-grisp2.exe
-          src/platforms/rtems/build-grisp2/AtomVM-grisp2.zImage
-          src/platforms/rtems/build-grisp2/oftree
-          src/platforms/rtems/build-grisp2/app.avm
-          src/platforms/rtems/boards/grisp2/README.md
-          src/platforms/rtems/boards/grisp2/COPYING
-          src/platforms/rtems/boards/grisp2/grisp2-dtb-source.tar.gz
+        path: src/platforms/rtems/build-grisp2/sd-card-bundle/
 
     - name: Cross-compile AtomVM for ${{ matrix.bsp }}
       run: |
