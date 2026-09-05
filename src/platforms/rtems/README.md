@@ -241,6 +241,12 @@ TCP, a guest echo server on port 8080, and host-to-guest forwarding.
 
 ## GRiSP 2 hardware
 
+For a prebuilt image, download the `atomvm-grisp2-sd-card-<commit>` artifact
+from the RTEMS Build workflow. GitHub downloads it as a `.zip` file. Follow
+the [SD-card installation guide](boards/grisp2/INSTALL.md), also included as
+`README.md` at the top level of the ZIP. No RTEMS toolchain is needed to
+install the prebuilt image.
+
 GRiSP 2 uses an i.MX6ULL with RTEMS's shared `arm/imx7` BSP. Reuse the
 RTEMS 6.2 ARM compiler, `imx7` BSP, and LibBSD from the QEMU build above;
 LibBSD already includes the KSZ8091 PHY driver and i.MX nexus devices.
@@ -287,10 +293,13 @@ image is converted to a flat binary, gzip-compressed, and wrapped with U-Boot
 mkimage -l src/platforms/rtems/build-grisp2/AtomVM-grisp2.zImage
 ```
 
-For the first boot, copy `AtomVM-grisp2.zImage` to a FAT SD card as `zImage`
-and copy the build's `oftree` beside it. Select the SD boot entry in barebox
-if an existing eMMC application takes precedence. Do not overwrite eMMC
-until the serial smoke test succeeds.
+For the first boot, copy `AtomVM-grisp2.zImage` to the first FAT SD-card
+partition as `zImage` and copy the build's `oftree` beside it. Copy
+`src/platforms/rtems/build/rtems_grisp2.avm` as `app.avm` to exercise the SD
+loader. Install `boards/grisp2/atomvm.conf` as `loader/entries/atomvm.conf`
+on the same partition so barebox can find the image and device tree. See
+the [installation guide](boards/grisp2/INSTALL.md) for serial console setup
+and SD boot selection.
 
 The smoke test prints `{atomvm_grisp2,rtems}`, `{grisp2,uart,ok}`,
 `{grisp2,led,ok}`, `{grisp2,gpio,high}` or `{grisp2,gpio,low}`, and
@@ -301,9 +310,12 @@ Use `rtems_net_test` separately to verify `ffec0` DHCP/DNS/TCP on the
 physical Ethernet link.
 
 CI cross-builds the hardware image in the existing `arm/imx7` job and uploads
-the `atomvm-grisp2` artifact. Physical boot, UART, GPIO, I²C and Ethernet
-remain manual checks; a successful cross-build does not establish that they
-work on a board.
+the `atomvm-grisp2-sd-card-<commit>` artifact. It contains ready-to-copy
+`zImage`, `oftree` and `app.avm` files, a boot-loader entry, installation
+instructions, source revision details, device-tree sources and licenses.
+The debug ELF is named `debug/AtomVM-grisp2.elf` in the bundle. Physical
+boot, UART, GPIO, I²C and Ethernet remain manual checks; a successful cross-build does not establish
+that they work on a board.
 
 ### Updating the application on GRiSP 2
 
@@ -313,9 +325,10 @@ partition and rebooting. No additional partition or firmware rebuild is
 needed for application-only changes:
 
 ```text
-zImage     RTEMS + AtomVM + embedded fallback application
-oftree     Board device tree
-app.avm    Replaceable application, including its libraries
+zImage                      RTEMS + AtomVM + embedded fallback application
+oftree                      Board device tree
+app.avm                     Replaceable application, including its libraries
+loader/entries/atomvm.conf   Boot image and device-tree selection
 ```
 
 For example, from the repository root, build and pack `hello_world` using
@@ -330,8 +343,9 @@ cmake --build build-host -t hello_world atomvmlib-rtems
 ```
 
 With the board powered off, replace the card's `app.avm` with
-`build-host/app.avm`, safely eject the card, and reboot. Keep `zImage` and
-`oftree`. A native driver or runtime change still requires a new `zImage`.
+`build-host/app.avm`, safely eject the card, and reboot. Keep `zImage`,
+`oftree` and the boot-loader entry. A native driver or runtime change still
+requires a new `zImage`.
 The boot log identifies the selected file:
 
 ```text
