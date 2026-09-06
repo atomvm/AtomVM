@@ -6709,7 +6709,10 @@ static int sort_keys_uniq(term *keys, int size, GlobalContext *global)
     int j = 1;
     term last_seen = keys[0];
     for (int i = 1; i < size; i++) {
-        if (keys[i] != last_seen) {
+        TermCompareResult result = term_compare(keys[i], last_seen, TermCompareExact, global);
+        if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+            return -1;
+        } else if (result != TermEquals) {
             last_seen = keys[i];
             keys[j] = last_seen;
             j++;

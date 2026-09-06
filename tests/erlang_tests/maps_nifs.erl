@@ -24,6 +24,7 @@
 
 start() ->
     ok = test_maps_from_keys(),
+    ok = test_maps_from_keys_dedup_boxed_terms(),
     0.
 
 test_maps_from_keys() ->
@@ -46,6 +47,24 @@ test_maps_from_keys() ->
     M5 = ?MODULE:get_expected(5),
 
     ok.
+
+% maps:from_keys/2 must deduplicate keys using structural equality, not
+% identity, even for boxed terms such as tuples. Each {1, 1} below is built
+% by a separate recursive call to build_pairs/1, so the five tuples are
+% guaranteed to be five separate heap allocations rather than one
+% constant-folded literal shared by the compiler.
+test_maps_from_keys_dedup_boxed_terms() ->
+    List = build_pairs(5),
+
+    M = maps:from_keys(List, true),
+    1 = map_size(M),
+
+    ok.
+
+build_pairs(0) ->
+    [];
+build_pairs(N) ->
+    [{1, 1} | build_pairs(N - 1)].
 
 fact(0) ->
     1;
