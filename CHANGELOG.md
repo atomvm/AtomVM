@@ -114,6 +114,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed Elixir `map.field` raising `undef` instead of `KeyError` or `BadMapError` when the key is
   missing or the term is not a map, and the deprecated `map.field()` form raising `undef` always,
   by adding the `elixir_erl_pass` runtime helpers that compiled Elixir code calls
+- Fixed `maps:from_keys/2` (and `sets:from_list/1`, which is built on top of it) not
+  deduplicating structurally equal but separately-allocated boxed terms, such as tuples
 
 ## [0.7.0-alpha.1] - 2026-04-06
 
