@@ -27,6 +27,8 @@
 
 -export([
     at/2,
+    first/1,
+    last/1,
     copy/1, copy/2,
     decode_hex/1,
     encode_hex/1, encode_hex/2,
@@ -47,6 +49,28 @@
 %%-----------------------------------------------------------------------------
 -spec at(Binary :: binary(), Index :: non_neg_integer()) -> byte().
 at(_Binary, _Index) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Binary binary to get the first byte from
+%% @returns value of the first byte of the binary
+%% @doc     Get the first byte of a binary.
+%% Errors with `badarg' if the binary is empty.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec first(Binary :: binary()) -> byte().
+first(_Binary) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Binary binary to get the last byte from
+%% @returns value of the last byte of the binary
+%% @doc     Get the last byte of a binary.
+%% Errors with `badarg' if the binary is empty.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec last(Binary :: binary()) -> byte().
+last(_Binary) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
