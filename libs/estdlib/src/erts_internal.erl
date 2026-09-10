@@ -30,7 +30,7 @@
 %%-----------------------------------------------------------------------------
 -module(erts_internal).
 
--export([mc_iterator/1, mc_refill/1]).
+-export([mc_iterator/1, mc_refill/1, cmp_term/2]).
 
 %%-----------------------------------------------------------------------------
 %% @param   MapOrIter   a map or a map iterator to iterate over
@@ -94,3 +94,19 @@ is_map_iter(Iter) ->
     Iter :: {term(), term(), maps:iterator()} | none.
 mc_refill([Path | Map]) ->
     maps:next([Path | Map]).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   first term to compare
+%% @param   B   second term to compare
+%% @returns `-1' if `A' is less than `B', `1' if `A' is greater than `B', or
+%%          `0' if they are exactly equal
+%% @doc     Compare two terms using the standard exact term ordering.
+%%
+%% Returns a negative, zero or positive indicator rather than a boolean.
+%% Comparison is exact, so numbers of different types are never equal (as with
+%% `=:='). This is an internal helper and is not meant to be called directly.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec cmp_term(A :: term(), B :: term()) -> -1 | 0 | 1.
+cmp_term(_A, _B) ->
+    erlang:nif_error(undefined).
