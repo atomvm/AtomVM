@@ -1837,7 +1837,7 @@ group_leader(_Leader, _Pid) ->
 %%
 %% @end
 %%-----------------------------------------------------------------------------
--spec process_flag(Flag :: trap_exit, Value :: boolean()) -> pid().
+-spec process_flag(Flag :: trap_exit, Value :: boolean()) -> boolean().
 process_flag(_Flag, _Value) ->
     erlang:nif_error(undefined).
 
