@@ -1,0 +1,130 @@
+#
+#  Copyright 2026 Davide Bettio <davide@uninstall.it>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+# Check that every natively registered function has an Erlang export, and generate
+# the files that describe what this AtomVM supports.
+
+name: Supported API
+
+on:
+  push:
+    paths:
+      - '.github/workflows/supported-api.yaml'
+      - 'CMakeLists.txt'
+      - 'CMakeModules/**'
+      - 'libs/**'
+      - 'src/**'
+      - 'tools/packbeam/**'
+      - 'tools/supported_api/**'
+  pull_request:
+    paths:
+      - '.github/workflows/supported-api.yaml'
+      - 'CMakeLists.txt'
+      - 'CMakeModules/**'
+      - 'libs/**'
+      - 'src/**'
+      - 'tools/packbeam/**'
+      - 'tools/supported_api/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  DEFAULT_OTP_VERSION: "28"
+  DEFAULT_ELIXIR_VERSION: "1.19"
+  DEFAULT_REBAR3_VERSION: "3.25.1"
+  DEFAULT_GLEAM_VERSION: "1.11.1"
+
+jobs:
+  supported-api:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: "APT update"
+      run: sudo apt update -y
+
+    - name: "Install deps"
+      run: sudo apt install -y cmake gperf ninja-build zlib1g-dev
+
+    # Elixir and Gleam are not optional here: without them their libraries are
+    # not built at all, and funcs.txt would silently lose every function they
+    # provide.
+    - uses: erlef/setup-beam@v1
+      with:
+        otp-version: ${{ env.DEFAULT_OTP_VERSION }}
+        elixir-version: ${{ env.DEFAULT_ELIXIR_VERSION }}
+        rebar3-version: ${{ env.DEFAULT_REBAR3_VERSION }}
+        gleam-version: ${{ env.DEFAULT_GLEAM_VERSION }}
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://repo.hex.pm
+          https://cdn.jsdelivr.net/hex
+
+    - name: "Test: supported API tools"
+      run: tools/supported_api/test/run-tests.sh
+
+    - name: "Build: run cmake"
+      run: |
+        mkdir build
+        cd build
+        cmake .. -G Ninja
+
+    - name: "Check that every native registration has an Erlang export"
+      working-directory: build
+      run: cmake --build . -t check-native-stubs
+
+    - name: "Generate the supported API files"
+      if: success() || failure()
+      working-directory: build
+      run: cmake --build . -t supported_api
+
+    - name: "Check the generated supported API files"
+      if: success() || failure()
+      working-directory: build/supported_api
+      run: |
+        set -eu
+        # Loose bounds: exact counts would need updating by every commit that
+        # adds a function.
+        test "$(wc -l < funcs.txt)" -ge 2000
+        test "$(wc -l < instructions.txt)" -ge 140
+        LC_ALL=C sort -c -u funcs.txt
+        for func in erlang:length/1 erlang:+/2 erlang:nif_error/1 \
+                    gpio:digital_write/2 atomvm:posix_unlink/1 \
+                    Elixir.GPIO:digital_write/2 Elixir.Esp.ADC:init/0 \
+                    Elixir.LEDC:fade_stop/2 Elixir.Enum:map/2; do
+          grep -qxF "$func" funcs.txt || { echo "missing from funcs.txt: $func"; exit 1; }
+        done
+        grep -q '^gleam_avm@' funcs.txt || { echo "no Gleam function in funcs.txt"; exit 1; }
+        # The jit library is the compiler, not part of the contract.
+        if grep -qxF 'jit:stream_module/0' funcs.txt; then
+          echo "compiler internals in funcs.txt: jit:stream_module/0"
+          exit 1
+        fi
+        for instruction in label call_ext bs_match nif_start update_record; do
+          grep -qxF "$instruction" instructions.txt ||
+            { echo "missing from instructions.txt: $instruction"; exit 1; }
+        done
+        for instruction in put_tuple put recv_mark bs_init2 allocate_heap_zero; do
+          if grep -qxF "$instruction" instructions.txt; then
+            echo "removed opcode in instructions.txt: $instruction"
+            exit 1
+          fi
+        done
+        {
+          echo "| file | lines |"
+          echo "| --- | --- |"
+          echo "| funcs.txt | $(wc -l < funcs.txt) |"
+          echo "| instructions.txt | $(wc -l < instructions.txt) |"
+          echo "| registrations.txt | $(wc -l < registrations.txt) |"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: "Upload the supported API files"
+      if: success() || failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: supported-api
+        path: build/supported_api/
