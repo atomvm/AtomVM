@@ -130,6 +130,75 @@ else()
     message("Dialyzer was not found -- skipping PLT build")
 endif()
 
+# Supported API: the functions AtomVM makes callable, and the check that keeps
+# the list complete.
+set(SUPPORTED_API_TOOLS ${CMAKE_SOURCE_DIR}/tools/supported_api)
+set(SUPPORTED_API_DIR ${CMAKE_BINARY_DIR}/supported_api)
+
+# The module list comes from the archive rather than from the beams directory,
+# which also holds the precompiled beams of every JIT target and, for some
+# libraries, beams that are not packed.
+macro(supported_api_fragment lib_name)
+    if(${lib_name} STREQUAL "exavmlib")
+        set(_sa_avm ${CMAKE_CURRENT_BINARY_DIR}/${lib_name}/lib/${lib_name}.avm)
+        set(_sa_beams ${CMAKE_CURRENT_BINARY_DIR}/${lib_name}/lib/beams)
+    elseif(${lib_name} STREQUAL "gleam_avm")
+        set(_sa_avm ${CMAKE_CURRENT_BINARY_DIR}/${lib_name}/${lib_name}.avm)
+        set(_sa_beams ${CMAKE_CURRENT_BINARY_DIR}/${lib_name}/build/prod/erlang/${lib_name}/ebin)
+    else()
+        set(_sa_avm ${CMAKE_CURRENT_BINARY_DIR}/${lib_name}/src/${lib_name}.avm)
+        set(_sa_beams ${CMAKE_CURRENT_BINARY_DIR}/${lib_name}/src/beams)
+    endif()
+    get_filename_component(_sa_dir ${_sa_avm} DIRECTORY)
+    add_custom_command(
+        OUTPUT ${_sa_dir}/${lib_name}.funcs
+        DEPENDS ${_sa_avm} PackBEAM ${SUPPORTED_API_TOOLS}/extract_beam_exports.erl
+        COMMAND
+            ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam list -f bare ${_sa_avm}
+                | sed -e 's|^|${_sa_beams}/|g' > ${_sa_dir}/${lib_name}.beams
+        COMMAND
+            escript ${SUPPORTED_API_TOOLS}/extract_beam_exports.erl
+                -o ${_sa_dir}/${lib_name}.funcs --files-from ${_sa_dir}/${lib_name}.beams
+        COMMENT "Generating exported function list of ${lib_name}"
+    )
+    set(SUPPORTED_API_${lib_name}_FUNCS ${_sa_dir}/${lib_name}.funcs)
+endmacro()
+
+# Every library that ends up in an atomvmlib archive. jit is left out of the
+# contract, its modules being the compiler itself, but it takes part in the
+# check because the gperf tables register jit:backend_module/0 and
+# jit:stream_module/0, whose Erlang home is libs/jit.
+set(SUPPORTED_API_CONTRACT_LIBS ${ATOMVM_COMMON_LIBS} etest avm_network avm_unix
+    avm_esp32 avm_rp2 avm_stm32 avm_emscripten esp32devmode)
+set(SUPPORTED_API_GATE_LIBS ${SUPPORTED_API_CONTRACT_LIBS} jit)
+
+foreach(lib_name IN LISTS SUPPORTED_API_GATE_LIBS)
+    supported_api_fragment(${lib_name})
+    set(SUPPORTED_API_GATE_FRAGMENTS ${SUPPORTED_API_GATE_FRAGMENTS} ${SUPPORTED_API_${lib_name}_FUNCS})
+endforeach()
+foreach(lib_name IN LISTS SUPPORTED_API_CONTRACT_LIBS)
+    set(SUPPORTED_API_CONTRACT_FRAGMENTS ${SUPPORTED_API_CONTRACT_FRAGMENTS} ${SUPPORTED_API_${lib_name}_FUNCS})
+endforeach()
+
+# The registrations are extracted on every run, from the source tree, so that
+# adding a platform source cannot leave a stale list behind.
+add_custom_target(check-native-stubs
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${SUPPORTED_API_DIR}
+    COMMAND
+        escript ${SUPPORTED_API_TOOLS}/extract_gperf_registrations.erl
+            -o ${SUPPORTED_API_DIR}/registrations.txt
+            src/libAtomVM/bifs.gperf src/libAtomVM/nifs.gperf
+    COMMAND
+        escript ${SUPPORTED_API_TOOLS}/check_native_stubs.erl
+            --registrations ${SUPPORTED_API_DIR}/registrations.txt
+            ${SUPPORTED_API_GATE_FRAGMENTS}
+    DEPENDS ${SUPPORTED_API_GATE_FRAGMENTS}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Checking that every natively registered function has an Erlang export"
+    VERBATIM
+)
+add_dependencies(check-native-stubs ${SUPPORTED_API_GATE_LIBS})
+
 install(
     FILES ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.avm
     DESTINATION lib/atomvm
