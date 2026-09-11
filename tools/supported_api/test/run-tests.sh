@@ -77,6 +77,16 @@ expect_output "extract_gperf_registrations.erl" expected/registrations.txt \
 expect_failure "extract_gperf_registrations.erl rejects a non-registration line" \
     "$tools/extract_gperf_registrations.erl" fixtures/unparseable.gperf
 
+# One expected file serves both input modes: the output has no file names in it.
+erlc -o "$tmp" fixtures/fixture_exports.erl
+
+expect_output "extract_beam_exports.erl" expected/fixture_exports.funcs \
+    "$tools/extract_beam_exports.erl" "$tmp/fixture_exports.beam"
+
+echo "$tmp/fixture_exports.beam" > "$tmp/beams.txt"
+expect_output "extract_beam_exports.erl --files-from" expected/fixture_exports.funcs \
+    "$tools/extract_beam_exports.erl" --files-from "$tmp/beams.txt"
+
 if [ "$failures" -ne 0 ]; then
     echo "$failures test(s) failed" >&2
     exit 1
