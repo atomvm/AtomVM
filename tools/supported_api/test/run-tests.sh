@@ -95,6 +95,20 @@ echo "$tmp" > "$tmp/directory.txt"
 expect_failure "extract_beam_exports.erl --files-from rejects a directory" \
     "$tools/extract_beam_exports.erl" --files-from "$tmp/directory.txt"
 
+escript "$tools/extract_beam_exports.erl" -o "$tmp/fixture_exports.funcs" \
+    "$tmp/fixture_exports.beam"
+
+escript "$tools/extract_gperf_registrations.erl" -o "$tmp/check.txt" fixtures/check.gperf
+expect_output "check_native_stubs.erl" expected/check_native_stubs.txt \
+    "$tools/check_native_stubs.erl" --registrations "$tmp/check.txt" \
+    "$tmp/fixture_exports.funcs"
+
+escript "$tools/extract_gperf_registrations.erl" -o "$tmp/check_missing.txt" \
+    fixtures/check_missing.gperf
+expect_failure "check_native_stubs.erl reports a registration without an export" \
+    "$tools/check_native_stubs.erl" --registrations "$tmp/check_missing.txt" \
+    "$tmp/fixture_exports.funcs"
+
 if [ "$failures" -ne 0 ]; then
     echo "$failures test(s) failed" >&2
     exit 1

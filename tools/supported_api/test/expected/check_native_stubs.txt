@@ -1,0 +1,1 @@
+check-native-stubs: 2 registrations, all exported
