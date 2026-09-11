@@ -101,6 +101,12 @@ expect_failure "check_native_stubs.erl reports a registration without an export"
     "$tools/check_native_stubs.erl" --registrations "$tmp/check_missing.txt" \
     "$tmp/fixture_exports.funcs"
 
+expect_output "extract_instructions.erl" expected/instructions.txt \
+    "$tools/extract_instructions.erl" fixtures/sample_opcodes.def
+
+expect_failure "extract_instructions.erl rejects an unknown X macro" \
+    "$tools/extract_instructions.erl" fixtures/unknown_macro_opcodes.def
+
 if [ "$failures" -ne 0 ]; then
     echo "$failures test(s) failed" >&2
     exit 1

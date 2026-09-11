@@ -208,8 +208,22 @@ add_custom_command(
     COMMENT "Generating supported_api/funcs.txt"
 )
 
+add_custom_command(
+    OUTPUT ${SUPPORTED_API_DIR}/instructions.txt
+    DEPENDS
+        ${CMAKE_SOURCE_DIR}/src/libAtomVM/opcodes.def
+        ${SUPPORTED_API_TOOLS}/extract_instructions.erl
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${SUPPORTED_API_DIR}
+    COMMAND
+        escript ${SUPPORTED_API_TOOLS}/extract_instructions.erl
+            -o ${SUPPORTED_API_DIR}/instructions.txt
+            ${CMAKE_SOURCE_DIR}/src/libAtomVM/opcodes.def
+    COMMENT "Generating supported_api/instructions.txt"
+    VERBATIM
+)
+
 add_custom_target(supported_api
-    DEPENDS ${SUPPORTED_API_DIR}/funcs.txt
+    DEPENDS ${SUPPORTED_API_DIR}/funcs.txt ${SUPPORTED_API_DIR}/instructions.txt
     COMMENT "Generating the supported API files"
 )
 add_dependencies(supported_api ${SUPPORTED_API_CONTRACT_LIBS})
