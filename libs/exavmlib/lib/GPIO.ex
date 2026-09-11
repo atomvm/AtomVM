@@ -82,6 +82,20 @@ defmodule GPIO do
           | :up_down
           | :floating
 
+  @typedoc """
+  Function that can be selected for a pin on the rp2 platform.
+
+  GPIO function select values matching the Pico SDK `gpio_function_t`.
+  """
+  @type gpio_function() ::
+          :spi
+          | :uart
+          | :i2c
+          | :pwm
+          | :sio
+          | :pio0
+          | :pio1
+
   @doc """
   Start the GPIO driver port
 
@@ -286,6 +300,21 @@ defmodule GPIO do
   """
   @spec set_pin_mode(gpio_pin(), direction()) :: :ok | :error
   def set_pin_mode(_gpio_num, _mode),
+    do: throw(:nif_error)
+
+  @doc """
+  Select the function of a gpio pin.
+
+  ## Parameters
+    - gpio_num:  number of the pin to configure
+    - function:  function to assign to the pin
+
+  Maps to `gpio_set_function()` in the Pico SDK, and is available on the rp2
+  platform only. Common functions are :sio (default GPIO), :i2c, :spi, :uart
+  and :pwm.
+  """
+  @spec set_function(gpio_pin(), gpio_function()) :: :ok
+  def set_function(_gpio_num, _function),
     do: throw(:nif_error)
 
   @doc """

@@ -44,6 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `Esp.ADC` Elixir module with the low level ADC NIFs (`init/0`, `deinit/1`,
   `acquire/4`, `release_channel/1` and `sample/3`), which were registered natively but had
   no Elixir source
+- Added `LEDC.fade_stop/2`, `LEDC.set_duty_and_update/4`, `LEDC.set_fade_step_and_start/6`,
+  `LEDC.set_fade_time_and_start/5` and `GPIO.set_function/2`, which were registered natively
+  but missing from the Elixir modules
 
 ### Changed
 - `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does:
