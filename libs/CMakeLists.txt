@@ -199,6 +199,25 @@ add_custom_target(check-native-stubs
 )
 add_dependencies(check-native-stubs ${SUPPORTED_API_GATE_LIBS})
 
+add_custom_command(
+    OUTPUT ${SUPPORTED_API_DIR}/funcs.txt
+    DEPENDS ${SUPPORTED_API_CONTRACT_FRAGMENTS}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${SUPPORTED_API_DIR}
+    COMMAND
+        cat ${SUPPORTED_API_CONTRACT_FRAGMENTS} | LC_ALL=C sort -u > ${SUPPORTED_API_DIR}/funcs.txt
+    COMMENT "Generating supported_api/funcs.txt"
+)
+
+add_custom_target(supported_api
+    DEPENDS ${SUPPORTED_API_DIR}/funcs.txt
+    COMMENT "Generating the supported API files"
+)
+add_dependencies(supported_api ${SUPPORTED_API_CONTRACT_LIBS})
+
+if (NOT Elixir_FOUND OR NOT Gleam_FOUND)
+    message(WARNING "Elixir and/or Gleam were not found -- supported_api/funcs.txt would be incomplete")
+endif()
+
 install(
     FILES ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.avm
     DESTINATION lib/atomvm
