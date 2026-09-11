@@ -41,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `onRunTrackedJs`, `onGetTrackedObjects` and `onTrackedObjectDelete` hooks, which embedders may
   override to customize what tracking means
 - Added `string:to_integer/1`
+- Added `Esp.ADC` Elixir module with the low level ADC NIFs (`init/0`, `deinit/1`,
+  `acquire/4`, `release_channel/1` and `sample/3`), which were registered natively but had
+  no Elixir source
 
 ### Changed
 - `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does:
