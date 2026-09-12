@@ -32,6 +32,7 @@ defmodule Tests do
     :ok = test_funs()
     :ok = test_enum()
     :ok = test_exception()
+    :ok = test_map_field()
     :ok = test_chars_protocol()
     :ok = test_inspect()
     :ok = test_base()
@@ -260,6 +261,67 @@ defmodule Tests do
 
     :ok
   end
+
+  defp test_map_field() do
+    map = a_map()
+    1 = map.a
+
+    # Both receivers are hidden from the type checker, which reports the
+    # deprecated spelling with parentheses and a missing key at compile time.
+    1 = as_term(map).a()
+
+    %KeyError{key: :b, term: %{a: 1}} =
+      try do
+        as_term(map).b
+      rescue
+        e -> e
+      end
+
+    :ok = test_non_map_dot()
+
+    # The answers themselves, which every version reaches the same way.
+    {:ok, %{}} = :elixir_erl_pass.no_parens_remote(:maps, :new)
+    {:error, {:badmap, nil}} = :elixir_erl_pass.no_parens_remote(nil, :a)
+    {:error, {:badmap, false}} = :elixir_erl_pass.no_parens_remote(false, :a)
+    {:error, {:badmap, true}} = :elixir_erl_pass.no_parens_remote(true, :a)
+    {:error, {:badmap, {:tuple, 1}}} = :elixir_erl_pass.no_parens_remote({:tuple, 1}, :a)
+    {:error, {:badkey, :b, %{a: 1}}} = :elixir_erl_pass.no_parens_remote(map, :b)
+
+    :ok
+  end
+
+  # Elixir 1.19 is the first version whose generated code raises what
+  # no_parens_remote/2 answers. Before it the answer is discarded and a badkey
+  # of the caller's own raised instead, whatever the term was.
+  if Version.match?(System.version(), ">= 1.19.0") do
+    defp test_non_map_dot() do
+      %BadMapError{term: {:tuple, 1}} = dot_a(a_tuple())
+      %BadMapError{term: nil} = dot_a(a_nil())
+      :ok
+    end
+  else
+    defp test_non_map_dot() do
+      %KeyError{key: :a, term: {:tuple, 1}} = dot_a(a_tuple())
+      %KeyError{key: :a, term: nil} = dot_a(a_nil())
+      :ok
+    end
+  end
+
+  defp dot_a(term) do
+    try do
+      as_term(term).a
+    rescue
+      e -> e
+    end
+  end
+
+  defp as_term(term), do: :erlang.element(1, {term})
+
+  defp a_map(), do: %{a: 1}
+
+  defp a_tuple(), do: {:tuple, 1}
+
+  defp a_nil(), do: nil
 
   def test_chars_protocol() do
     "" = String.Chars.to_string(nil)
