@@ -40,6 +40,9 @@
     posix_close/1,
     posix_read/2,
     posix_write/2,
+    posix_select_read/3,
+    posix_select_write/3,
+    posix_select_stop/1,
     posix_seek/3,
     posix_pread/3,
     posix_pwrite/3,
@@ -47,6 +50,7 @@
     posix_ftruncate/2,
     posix_mkfifo/2,
     posix_mkdir/2,
+    posix_unlink/1,
     posix_rmdir/1,
     posix_rename/2,
     posix_stat/1,
@@ -55,6 +59,9 @@
     posix_opendir/1,
     posix_closedir/1,
     posix_readdir/1,
+    posix_tcgetattr/1,
+    posix_tcsetattr/3,
+    posix_tcflush/2,
     get_creation/0,
     subprocess/4,
     posix_kill/2
@@ -65,7 +72,8 @@
     posix_open_flag/0,
     posix_whence/0,
     posix_stat_info/0,
-    posix_dir/0
+    posix_dir/0,
+    posix_termios/0
 ]).
 
 -deprecated([
@@ -121,6 +129,21 @@
 }.
 
 -opaque posix_dir() :: binary().
+
+-type posix_termios() :: #{
+    cflag => integer(),
+    iflag => integer(),
+    oflag => integer(),
+    lflag => integer(),
+    ispeed => integer(),
+    ospeed => integer(),
+    raw => boolean(),
+    data_bits => 5..8,
+    stop_bits => 1 | 2,
+    parity => none | even | odd,
+    flow_control => none | hardware | software,
+    clocal => boolean()
+}.
 
 %%-----------------------------------------------------------------------------
 %% @returns The platform name.
@@ -314,6 +337,59 @@ posix_write(_File, _Data) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   File    Descriptor to an open file
+%% @param   Pid     process to notify when `File' becomes readable
+%% @param   Ref     reference included in the notification, or `undefined'
+%% @returns `ok'
+%% @doc     Subscribe to read-readiness notifications for a file descriptor.
+%%
+%% When `File' becomes readable, the message `{select, File, Ref, ready_input}'
+%% is sent to `Pid'. This is typically used to wait for data on a non-blocking
+%% descriptor before calling `posix_read/2'. Only one process may select on a
+%% given descriptor at a time. Invalid arguments, including a `Pid' that is not
+%% alive, and a failure to set up the selection raise `badarg'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_select_read(File :: posix_fd(), Pid :: pid(), Ref :: reference() | undefined) ->
+    ok.
+posix_select_read(_File, _Pid, _Ref) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   File    Descriptor to an open file
+%% @param   Pid     process to notify when `File' becomes writable
+%% @param   Ref     reference included in the notification, or `undefined'
+%% @returns `ok'
+%% @doc     Subscribe to write-readiness notifications for a file descriptor.
+%%
+%% When `File' becomes writable, the message `{select, File, Ref, ready_output}'
+%% is sent to `Pid'. This is typically used to wait until a non-blocking
+%% descriptor can accept data before calling `posix_write/2'. Only one process
+%% may select on a given descriptor at a time. Invalid arguments, including a
+%% `Pid' that is not alive, and a failure to set up the selection raise
+%% `badarg'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_select_write(File :: posix_fd(), Pid :: pid(), Ref :: reference() | undefined) ->
+    ok.
+posix_select_write(_File, _Pid, _Ref) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   File    Descriptor being selected on
+%% @returns `ok'
+%% @doc     Stop selecting on a file descriptor.
+%%
+%% Cancels a subscription previously created with `posix_select_read/3' or
+%% `posix_select_write/3'. An invalid descriptor or a failure to stop the
+%% selection raises `badarg'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_select_stop(File :: posix_fd()) -> ok.
+posix_select_stop(_File) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   File    Descriptor to an open file
 %% @param   Offset  Offset in bytes
 %% @param   Whence  Reference point for the offset
 %% @returns a tuple with the resulting absolute offset or an error tuple
@@ -399,6 +475,17 @@ posix_mkfifo(_Path, _Mode) ->
 -spec posix_mkdir(Path :: iodata(), Mode :: non_neg_integer()) ->
     ok | {error, posix_error()}.
 posix_mkdir(_Path, _Mode) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Path    Path to the file to remove
+%% @returns `ok' or an error tuple
+%% @doc     Remove a file using `unlink(2)'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_unlink(Path :: iodata()) ->
+    ok | {error, posix_error()}.
+posix_unlink(_Path) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -494,6 +581,65 @@ posix_closedir(_Dir) ->
 -spec posix_readdir(Dir :: posix_dir()) ->
     {ok, {dirent, Inode :: integer(), Name :: binary()}} | eof | {error, posix_error()}.
 posix_readdir(_Dir) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   File    Descriptor to an open terminal
+%% @returns a tuple with the current terminal attributes or an error tuple
+%% @doc     Get the parameters of a terminal using `tcgetattr(3)'.
+%%
+%% The attributes are returned as a map with the integer flag fields `cflag',
+%% `iflag', `oflag' and `lflag', and the input and output baud rates `ispeed'
+%% and `ospeed'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_tcgetattr(File :: posix_fd()) ->
+    {ok, posix_termios()} | {error, posix_error()}.
+posix_tcgetattr(_File) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   File    Descriptor to an open terminal
+%% @param   When    when the change takes effect
+%% @param   Termios terminal attributes to set
+%% @returns `ok' or an error tuple
+%% @doc     Set the parameters of a terminal using `tcsetattr(3)'.
+%%
+%% `When' selects when the change is applied: `tcsanow' (immediately),
+%% `tcsadrain' (after pending output has been written) or `tcsaflush' (after
+%% pending output has been written and pending input is discarded).
+%%
+%% `Termios' holds the settings to change: the current settings are read first
+%% and only the keys present in the map are applied, so the map need not be
+%% complete. Besides the fields returned by `posix_tcgetattr/1' it accepts the
+%% serial line options `data_bits' (5 to 8), `stop_bits' (1 or 2), `parity'
+%% (`none', `even' or `odd') and `flow_control' (`none', `hardware' or
+%% `software'), and `clocal => true' to ignore modem control lines and enable
+%% the receiver (`false' leaves both unchanged). The special entry `raw => true'
+%% applies `cfmakeraw(3)' before the other fields are set. Unsupported values
+%% raise `badarg'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_tcsetattr(
+    File :: posix_fd(), When :: tcsanow | tcsadrain | tcsaflush, Termios :: posix_termios()
+) ->
+    ok | {error, posix_error()}.
+posix_tcsetattr(_File, _When, _Termios) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   File            Descriptor to an open terminal
+%% @param   QueueSelector   which queue(s) to discard
+%% @returns `ok' or an error tuple
+%% @doc     Discard terminal data using `tcflush(3)'.
+%%
+%% `QueueSelector' is `tciflush' (discard data received but not read),
+%% `tcoflush' (discard data written but not transmitted) or `tcioflush' (both).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_tcflush(File :: posix_fd(), QueueSelector :: tciflush | tcoflush | tcioflush) ->
+    ok | {error, posix_error()}.
+posix_tcflush(_File, _QueueSelector) ->
     erlang:nif_error(undefined).
 
 %% @hidden

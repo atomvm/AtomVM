@@ -28,6 +28,7 @@ set(ELIXIR_MODULES
     Bitwise
     Code
     Console
+    Esp.ADC
     GPIO
     I2C
     Integer

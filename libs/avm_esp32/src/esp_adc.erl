@@ -62,7 +62,7 @@
 -export([init/1, handle_call/3, handle_cast/2]).
 -export([handle_info/2, terminate/2]).
 
--type adc_rsrc() :: {'$adc', Resource :: binary(), Ref :: reference()}.
+-type adc_rsrc() :: {'$adc', Resource :: reference(), Ref :: reference()}.
 -type adc_pin() :: non_neg_integer().
 %% ADC capable pins vary by chipset. Consult your datasheet.
 -type bit_width() :: bit_9 | bit_10 | bit_11 | bit_12 | bit_13 | bit_max.

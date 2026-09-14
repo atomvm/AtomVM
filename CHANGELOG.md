@@ -41,6 +41,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `onRunTrackedJs`, `onGetTrackedObjects` and `onTrackedObjectDelete` hooks, which embedders may
   override to customize what tracking means
 - Added `string:to_integer/1`
+- Added `Esp.ADC` Elixir module with the low level ADC NIFs (`init/0`, `deinit/1`,
+  `acquire/4`, `release_channel/1` and `sample/3`), which were registered natively but had
+  no Elixir source
+- Added `LEDC.fade_stop/2`, `LEDC.set_duty_and_update/4`, `LEDC.set_fade_step_and_start/6`,
+  `LEDC.set_fade_time_and_start/5` and `GPIO.set_function/2`, which were registered natively
+  but missing from the Elixir modules
 
 ### Changed
 - `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does:
@@ -111,6 +117,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   builds, which made `erlang:crc32/2`, `erlang:crc32_combine/3` and `crypto:pbkdf2_hmac/5`
   silently truncate huge integer arguments instead of raising `badarg`
 - Fixed a bug where bigints were not normalized, yielding equality errors
+- Fixed `esp_adc:sample/2,3` answering a bare atom such as `timeout` on a read failure, where
+  every other ADC function and its own documentation answer `{error, Reason}`
 - Fixed Elixir `map.field` raising `undef` instead of `KeyError` or `BadMapError` when the key is
   missing or the term is not a map, and the deprecated `map.field()` form raising `undef` always,
   by adding the `elixir_erl_pass` runtime helpers that compiled Elixir code calls
