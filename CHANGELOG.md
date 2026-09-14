@@ -111,6 +111,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   builds, which made `erlang:crc32/2`, `erlang:crc32_combine/3` and `crypto:pbkdf2_hmac/5`
   silently truncate huge integer arguments instead of raising `badarg`
 - Fixed a bug where bigints were not normalized, yielding equality errors
+- Fixed Elixir `map.field` raising `undef` instead of `KeyError` or `BadMapError` when the key is
+  missing or the term is not a map, and the deprecated `map.field()` form raising `undef` always,
+  by adding the `elixir_erl_pass` runtime helpers that compiled Elixir code calls
 
 ## [0.7.0-alpha.1] - 2026-04-06
 

@@ -111,8 +111,20 @@ compile_multi(json.ex
     OUTPUT JSON_BEAMS
 )
 
+# elixirc prefixes every module it compiles with Elixir., so the plain Erlang
+# modules the Elixir compiler emits calls to are built here instead.
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/elixir_erl_pass.beam
+    COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams
+    COMMAND erlc -o ${CMAKE_CURRENT_BINARY_DIR}/beams
+        ${CMAKE_CURRENT_SOURCE_DIR}/elixir_erl_pass.erl
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/elixir_erl_pass.erl
+    COMMENT "Compiling elixir_erl_pass.erl"
+    VERBATIM
+)
+
 pack_archive(exavmlib ${ELIXIR_MODULES}
-    EXTRA_BEAMS ${JSON_BEAMS}
+    EXTRA_BEAMS ${JSON_BEAMS} ${CMAKE_CURRENT_BINARY_DIR}/beams/elixir_erl_pass.beam
 )
 
 include(../../../version.cmake)
@@ -133,5 +145,5 @@ install(
 install(
     DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
     DESTINATION lib/atomvm/lib/exavmlib-${EXAVMLIB_VERSION}/lib
-    FILES_MATCHING PATTERN "*.ex"
+    FILES_MATCHING PATTERN "*.ex" PATTERN "*.erl"
 )
