@@ -47,6 +47,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `LEDC.fade_stop/2`, `LEDC.set_duty_and_update/4`, `LEDC.set_fade_step_and_start/6`,
   `LEDC.set_fade_time_and_start/5` and `GPIO.set_function/2`, which were registered natively
   but missing from the Elixir modules
+- Added a `supported_api` build target that generates `funcs.txt` and `instructions.txt`,
+  describing the functions and the BEAM instructions supported by the configured build
+- Added a `check-native-stubs` build target, run in CI, that verifies every function
+  registered in `bifs.gperf` or `nifs.gperf` has a matching Erlang export
 
 ### Changed
 - `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does:

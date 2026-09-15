@@ -1,0 +1,50 @@
+/*
+ * This file is part of AtomVM.
+ *
+ * Copyright 2026 Davide Bettio <davide@uninstall.it>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+ */
+
+/**
+ * Fixture for extract_gperf_registrations.erl: a miniature keyword file using
+ * every shape bifs.gperf and nifs.gperf use, including operator functions, a
+ * conditional value, a missing space after the comma, an uppercase letter in a
+ * function name and the same function registered twice.
+ */
+
+%readonly-tables
+%define lookup-function-name nif_in_word_set
+
+%{
+#include <string.h>
+typedef struct NifNameAndNifPtr NifNameAndNifPtr;
+%}
+struct NifNameAndNifPtr
+{
+  const char *name;
+  const struct Nif *nif;
+};
+%%
+binary:at/2, &binary_at_nif
+erlang:module_loaded/1,&module_loaded_nif
+file:get_cwd/0, IF_HAVE_GETCWD_PATHMAX(&file_get_cwd_nif)
+crypto:mac_finalN/2, &crypto_mac_finalN_nif
+erlang:++/2, &concat_nif
+erlang:!/2, &send_nif
+erlang:=/=/2, {.bif.base.type = BIFFunctionType, .bif.bif2_ptr = bif_erlang_exactly_not_equal_to_2}
+erlang://2, {.gcbif.base.type = GCBIFFunctionType, .gcbif.gcbif2_ptr = bif_erlang_fdiv_2}
+erlang:-/1, {.gcbif.base.type = GCBIFFunctionType, .gcbif.gcbif1_ptr = bif_erlang_neg_1}
+binary:at/2, &binary_at_nif_alias

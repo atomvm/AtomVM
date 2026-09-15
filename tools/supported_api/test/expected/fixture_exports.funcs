@@ -1,0 +1,4 @@
+fixture_exports:+/2
+fixture_exports:module_info/0
+fixture_exports:module_info/1
+fixture_exports:plain/1
