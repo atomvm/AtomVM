@@ -1229,6 +1229,8 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     data->owner_process_id = term_to_local_process_id(pid);
     data->ref_ticks = term_to_ref_ticks(ref);
     data->managed = roaming;
+    struct ESP32PlatformData *platform = ctx->global->platform_data;
+    platform->network_driver_data = data;
 
     esp_netif_t *sta_wifi_interface = NULL;
     if ((sta_wifi_config != NULL) || (roaming)) {
@@ -1380,7 +1382,7 @@ cleanup:
     return;
 }
 
-static void stop_network(void)
+static void stop_network(GlobalContext *global)
 {
     // Stop sntp (ignore OK, or not configured error)
     esp_sntp_stop();
@@ -1413,6 +1415,10 @@ static void stop_network(void)
     if (sta_wifi_interface != NULL) {
         esp_netif_destroy_default_wifi(sta_wifi_interface);
     }
+
+    struct ESP32PlatformData *platform = global->platform_data;
+    free(platform->network_driver_data);
+    platform->network_driver_data = NULL;
 }
 
 static void get_sta_rssi(Context *ctx, term pid, term ref)
@@ -1913,7 +1919,7 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
                 break;
             case NetworkStopCmd:
                 cmd_terminate = true;
-                stop_network();
+                stop_network(ctx->global);
                 break;
             case NetworkScanCmd:
                 wifi_scan(ctx, pid, ref, config);
@@ -1995,12 +2001,10 @@ Context *network_driver_create_port(GlobalContext *global, term opts)
 
 static void network_driver_destroy(GlobalContext *global)
 {
-    UNUSED(global);
-
     // Unregister the scan handler first, since stop_network() does not handle
     // it and esp_wifi_stop() may post WIFI_EVENT_SCAN_DONE for an aborted scan.
     esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_SCAN_DONE, &scan_done_handler);
-    stop_network();
+    stop_network(global);
 }
 
 REGISTER_PORT_DRIVER(network, network_driver_init, network_driver_destroy, network_driver_create_port)

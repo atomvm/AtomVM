@@ -108,7 +108,7 @@ GlobalContext *globalcontext_new(void)
 #ifndef AVM_NO_SMP
     glb->modules_lock = smp_rwlock_create();
     if (IS_NULL_PTR(glb->modules_lock)) {
-        free(glb->modules_table);
+        valueshashtable_destroy(glb->modules_table);
         atom_table_destroy(glb->atom_table);
         free(glb);
         return NULL;
@@ -140,7 +140,7 @@ GlobalContext *globalcontext_new(void)
 #ifndef AVM_NO_SMP
         smp_rwlock_destroy(glb->modules_lock);
 #endif
-        free(glb->modules_table);
+        valueshashtable_destroy(glb->modules_table);
         atom_table_destroy(glb->atom_table);
         free(glb);
         return NULL;
@@ -155,7 +155,7 @@ GlobalContext *globalcontext_new(void)
 #ifndef AVM_NO_SMP
         smp_rwlock_destroy(glb->modules_lock);
 #endif
-        free(glb->modules_table);
+        valueshashtable_destroy(glb->modules_table);
         atom_table_destroy(glb->atom_table);
         free(glb);
         return NULL;
@@ -171,7 +171,7 @@ GlobalContext *globalcontext_new(void)
 #ifndef AVM_NO_SMP
         smp_rwlock_destroy(glb->modules_lock);
 #endif
-        free(glb->modules_table);
+        valueshashtable_destroy(glb->modules_table);
         atom_table_destroy(glb->atom_table);
         free(glb);
         return NULL;
@@ -185,7 +185,7 @@ GlobalContext *globalcontext_new(void)
 #ifndef AVM_NO_SMP
         smp_rwlock_destroy(glb->modules_lock);
 #endif
-        free(glb->modules_table);
+        valueshashtable_destroy(glb->modules_table);
         atom_table_destroy(glb->atom_table);
         free(glb);
         return NULL;
@@ -199,7 +199,7 @@ GlobalContext *globalcontext_new(void)
 #ifndef AVM_NO_SMP
         smp_rwlock_destroy(glb->modules_lock);
 #endif
-        free(glb->modules_table);
+        valueshashtable_destroy(glb->modules_table);
         atom_table_destroy(glb->atom_table);
         free(glb);
         return NULL;
@@ -215,7 +215,7 @@ GlobalContext *globalcontext_new(void)
         resource_type_destroy(glb->posix_fd_resource_type);
 #endif
         smp_rwlock_destroy(glb->modules_lock);
-        free(glb->modules_table);
+        valueshashtable_destroy(glb->modules_table);
         atom_table_destroy(glb->atom_table);
         free(glb);
         return NULL;
@@ -227,7 +227,7 @@ GlobalContext *globalcontext_new(void)
         resource_type_destroy(glb->posix_fd_resource_type);
 #endif
         smp_rwlock_destroy(glb->modules_lock);
-        free(glb->modules_table);
+        valueshashtable_destroy(glb->modules_table);
         atom_table_destroy(glb->atom_table);
         free(glb);
         return NULL;
@@ -257,10 +257,24 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
     struct ListHead *item;
     struct ListHead *tmp;
 
+    while (true) {
+        struct ListHead *processes = synclist_rdlock(&glb->processes_table);
+        struct ListHead *first = list_first(processes);
+        if (first == processes) {
+            synclist_unlock(&glb->processes_table);
+            break;
+        }
+        Context *ctx = GET_LIST_ENTRY(first, Context, processes_table_head);
+        synclist_unlock(&glb->processes_table);
+        context_destroy(ctx);
+    }
+
     int module_index = glb->loaded_modules_count;
     for (int i = 0; i < module_index; i++) {
         module_destroy(glb->modules_by_index[i]);
     }
+    free(glb->modules_by_index);
+    valueshashtable_destroy(glb->modules_table);
 
     struct ListHead *open_avm_packs = synclist_nolock(&glb->avmpack_data);
     MUTABLE_LIST_FOR_EACH (item, tmp, open_avm_packs) {
@@ -317,6 +331,8 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
     synclist_destroy(&glb->dist_connections);
     synclist_destroy(&glb->registered_processes);
     synclist_destroy(&glb->processes_table);
+
+    atom_table_destroy(glb->atom_table);
 
     free(glb);
 }
