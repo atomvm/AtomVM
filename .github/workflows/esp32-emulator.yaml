@@ -1,0 +1,142 @@
+#
+#  Copyright 2026 Peter Madsen-Mygdal <petermm@gmail.com>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: ESP32 Emulator test
+
+on:
+  push:
+    paths:
+      - ".github/workflows/esp32-emulator.yaml"
+      - "CMakeLists.txt"
+      - "CMakeModules/**"
+      - "libs/**"
+      - "src/platforms/esp32/**"
+      - "src/libAtomVM/**"
+      - "tools/packbeam/**"
+  pull_request:
+    paths:
+      - ".github/workflows/esp32-emulator.yaml"
+      - "CMakeLists.txt"
+      - "CMakeModules/**"
+      - "libs/**"
+      - "src/platforms/esp32/**"
+      - "src/libAtomVM/**"
+      - "tools/packbeam/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  esp-emulator-test:
+    runs-on: ubuntu-24.04
+    container: espressif/idf:v5.5.5
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        esp-idf-target: ["esp32c3", "esp32c6", "esp32h2", "esp32p4"]
+
+    env:
+      SOC_TARGET: ${{ matrix.esp-idf-target }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Install build dependencies
+        run: |
+          set -eu
+          apt update
+          DEBIAN_FRONTEND=noninteractive apt install -y -q \
+              curl doxygen gcc g++ zlib1g-dev libmbedtls-dev
+
+      - name: "Set ImageOS for erlef/setup-beam"
+        run: |
+          sed -n -E -e 's|VERSION_ID="(.+)\..+"|ImageOS=ubuntu\1|p' /etc/os-release >> "${GITHUB_ENV}"
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28"
+          rebar3-version: "3.25.1"
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://repo.hex.pm
+            https://cdn.jsdelivr.net/hex
+
+      - name: Build ${{ matrix.esp-idf-target }} tests and merged flash image
+        working-directory: ./src/platforms/esp32/test/
+        run: |
+          set -eu
+          export PATH="${PATH}:${HOME}/.cache/rebar3/bin"
+          . "${IDF_PATH}/export.sh"
+          idf.py -DSDKCONFIG_DEFAULTS='sdkconfig.ci.wokwi' set-target "${SOC_TARGET}"
+          idf.py build
+          idf.py merge-bin -o merged_flash.bin
+
+      - name: Prepare ESP32-P4 virtual eFuses
+        if: matrix.esp-idf-target == 'esp32p4'
+        working-directory: ./src/platforms/esp32/test/
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # esp-emu uses the 336-byte QEMU eFuse layout.  P4 blocks 0 and 1
+          # are 24 bytes each; BLK_VERSION_MINOR starts at block 1, bit 72.
+          # Version 0.1 makes IDF use factory ADC calibration defaults instead
+          # of polling the emulator's unimplemented ADC self-calibration path.
+          efuses = bytearray(336)
+          efuses[24 + 72 // 8] = 1
+          Path("esp32p4-efuse.bin").write_bytes(efuses)
+          PY
+
+      - name: Install ESP-Emulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL \
+              https://raw.githubusercontent.com/espressif/esp-emulator/60511395403787e243e45749e4f8bc2972b4d7c1/install.sh \
+              | sh -s -- --version 0.38.0
+          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+
+      - name: Run ${{ matrix.esp-idf-target }} tests with ESP-Emulator
+        shell: bash
+        working-directory: ./src/platforms/esp32/test/
+        env:
+          RUST_BACKTRACE: "1"
+          RUST_LOG: warn
+        run: |
+          set -euo pipefail
+          emulator_args=()
+          if [[ "${SOC_TARGET}" == "esp32p4" ]]; then
+              emulator_args+=(--efuse esp32p4-efuse.bin)
+          fi
+
+          timeout --signal=TERM --kill-after=5s 260s esp-emu \
+              --chip "${SOC_TARGET}" \
+              --firmware build/merged_flash.bin \
+              "${emulator_args[@]}" \
+              --wifi-ssid Wokwi-GUEST \
+              --wifi-password "" \
+              --net user \
+              --timeout 240s \
+              --exit-on "Returned from app_main()" \
+              --log-color never \
+              2>&1 | tee esp-emulator.log
+
+          if [[ "${SOC_TARGET}" == "esp32c3" || "${SOC_TARGET}" == "esp32c6" ]]; then
+              # ESP-Emulator 0.38.0 does not forward SNTP traffic, so
+              # test_wifi_example is the sole expected failure on Wi-Fi chips.
+              # Match both its failure line and the summary so no other failure
+              # is hidden.
+              grep -E 'test_wifi_example.*FAIL|FAIL.*test_wifi_example' esp-emulator.log
+              grep -E '^[0-9]+ Tests 1 Failures 0 Ignored' esp-emulator.log
+          else
+              grep -E '^[0-9]+ Tests 0 Failures 0 Ignored' esp-emulator.log
+          fi
