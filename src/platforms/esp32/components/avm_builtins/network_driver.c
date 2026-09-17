@@ -1123,7 +1123,7 @@ static wifi_config_t *get_ap_wifi_config(term ap_config, GlobalContext *global)
 
 static void time_sync_notification_cb(struct timeval *tv)
 {
-    esp_err_t err = esp_event_post(sntp_event_base, SNTP_EVENT_BASE_SYNC, tv, sizeof(tv), portMAX_DELAY);
+    esp_err_t err = esp_event_post(sntp_event_base, SNTP_EVENT_BASE_SYNC, tv, sizeof(*tv), portMAX_DELAY);
     if (err == ESP_OK) {
         ESP_LOGI(TAG, "Posting SNTP synchronization event");
     } else {

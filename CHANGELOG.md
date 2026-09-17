@@ -90,6 +90,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stop using deprecated `term_from_int32` on RP2 platform
 - Stop using deprecated `term_from_int32` on ESP32 platform
 - Fixed improper cast of ESP32 `event_data` for `WIFI_EVENT_AP_STA(DIS)CONNECTED` events
+- Fixed ESP32 SNTP synchronization events posting only a pointer-sized payload instead of the
+  full `timeval`, so `{sntp_sync, {Sec, USec}}` now includes both timestamp fields
 - `erlang:system_info(system_architecture)` now reports normalized `arch-vendor-os` strings
 - Fixed `ahttp_client` crash on non-numeric or negative `Content-Length` values
 - Fixed `ahttp_client` crash on headers with empty or all-whitespace values
