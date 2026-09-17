@@ -1,0 +1,1792 @@
+/*
+ * This file is part of AtomVM.
+ *
+ * Copyright 2026 Peter M <petermm@gmail.com>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+ */
+
+#include <zephyr/kernel.h>
+
+#if defined(CONFIG_WIFI)
+
+#include <atom.h>
+#include <context.h>
+#include <debug.h>
+#include <globalcontext.h>
+#include <interop.h>
+#include <mailbox.h>
+#include <memory.h>
+#include <port.h>
+#include <term.h>
+#include <utils.h>
+
+#include <zephyr/net/net_if.h>
+#include <zephyr/net/net_mgmt.h>
+#include <zephyr/net/wifi_mgmt.h>
+#include <zephyr/net/net_event.h>
+#include <zephyr/net/dhcpv4.h>
+#ifdef CONFIG_NET_DHCPV4_SERVER
+#include <zephyr/net/dhcpv4_server.h>
+#define ATOMVM_ZEPHYR_AP_LEASE_POLL_MS 500
+#define ATOMVM_ZEPHYR_AP_LEASE_MAX 4
+#endif
+
+#include <errno.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
+#include <zephyr/net/dns_resolve.h>
+#include <zephyr/net/net_ip.h>
+#include <zephyr/net/sntp.h>
+#include <zephyr/net/socketutils.h>
+#include <time.h>
+#endif
+
+#include "zephyros_sys.h"
+
+#define TAG "network_driver"
+#define PORT_REPLY_SIZE (TUPLE_SIZE(2) + REF_SIZE)
+#define ZEPHYR_WIFI_SCAN_MAX_RESULTS 10
+
+static const char *const sta_atom = ATOM_STR("\x3", "sta");
+static const char *const ap_atom = ATOM_STR("\x2", "ap");
+static const char *const ssid_atom = ATOM_STR("\x4", "ssid");
+static const char *const psk_atom = ATOM_STR("\x3", "psk");
+static const char *const ap_channel_atom = ATOM_STR("\xA", "ap_channel");
+static const char *const ap_started_atom = ATOM_STR("\xA", "ap_started");
+static const char *const ap_sta_connected_atom = ATOM_STR("\x10", "ap_sta_connected");
+static const char *const ap_sta_disconnected_atom = ATOM_STR("\x13", "ap_sta_disconnected");
+static const char *const ap_sta_ip_assigned_atom = ATOM_STR("\x12", "ap_sta_ip_assigned");
+static const char *const rssi_atom = ATOM_STR("\x4", "rssi");
+static const char *const scan_results_atom = ATOM_STR("\xC", "scan_results");
+static const char *const scan_canceled_atom = ATOM_STR("\xD", "scan_canceled");
+static const char *const sta_connected_atom = ATOM_STR("\xD", "sta_connected");
+static const char *const sta_disconnected_atom = ATOM_STR("\x10", "sta_disconnected");
+static const char *const sta_got_ip_atom = ATOM_STR("\xA", "sta_got_ip");
+static const char *const managed_atom = ATOM_STR("\x7", "managed");
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
+static const char *const sntp_atom = ATOM_STR("\x4", "sntp");
+static const char *const host_atom = ATOM_STR("\x4", "host");
+static const char *const sntp_sync_atom = ATOM_STR("\x9", "sntp_sync");
+#endif
+
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
+#define ATOMVM_ZEPHYR_SNTP_TIMEOUT_MS 2000
+#define ATOMVM_ZEPHYR_SNTP_SERVER_PORT 123
+#define ATOMVM_ZEPHYR_SNTP_MAX_ATTEMPTS 3
+#define ATOMVM_ZEPHYR_SNTP_RETRY_DELAY_MS 1000
+
+static void sntp_socket_service_handler(struct net_socket_service_event *event);
+static void start_sntp_sync(void);
+NET_SOCKET_SERVICE_SYNC_DEFINE_STATIC(atomvm_sntp_service, sntp_socket_service_handler, 1);
+#endif
+
+enum network_cmd
+{
+    NetworkInvalidCmd = 0,
+    NetworkStartCmd,
+    NetworkRssiCmd,
+    NetworkStopCmd,
+    NetworkScanStopCmd,
+    StaHaltCmd,
+    StaConnectCmd,
+    WifiScanCmd
+};
+
+static const AtomStringIntPair cmd_table[] = {
+    { ATOM_STR("\x5", "start"), NetworkStartCmd },
+    { rssi_atom, NetworkRssiCmd },
+    { ATOM_STR("\x4", "stop"), NetworkStopCmd },
+    { ATOM_STR("\xB", "cancel_scan"), NetworkScanStopCmd },
+    { ATOM_STR("\x8", "halt_sta"), StaHaltCmd },
+    { ATOM_STR("\x7", "connect"), StaConnectCmd },
+    { ATOM_STR("\x4", "scan"), WifiScanCmd },
+    SELECT_INT_DEFAULT(NetworkInvalidCmd)
+};
+
+struct ZephyrScanResult
+{
+    uint8_t ssid[WIFI_SSID_MAX_LEN + 1];
+    uint8_t ssid_length;
+    uint8_t channel;
+    enum wifi_security_type security;
+    int8_t rssi;
+    uint8_t mac[WIFI_MAC_ADDR_LEN];
+    uint8_t mac_length;
+};
+
+struct NetworkDriverData
+{
+    GlobalContext *global;
+    uint32_t owner_process_id;
+    uint64_t ref_ticks;
+    struct net_mgmt_event_callback wifi_cb;
+    struct net_mgmt_event_callback ipv4_cb;
+    struct net_mgmt_event_callback scan_cb;
+    struct net_if *iface;
+    struct net_if *ap_iface;
+    char *ssid;
+    char *psk;
+    char *ap_ssid;
+    char *ap_psk;
+    bool ap_enabled;
+#ifdef CONFIG_NET_DHCPV4_SERVER
+    struct k_work_delayable ap_lease_work;
+    uint32_t ap_reported_leases[ATOMVM_ZEPHYR_AP_LEASE_MAX];
+    uint8_t ap_reported_lease_count;
+#endif
+    bool connected;
+    bool got_ip;
+    bool managed;
+    bool cb_registered;
+    bool scan_cb_registered;
+    bool scanning;
+    uint16_t scan_requested_results;
+    uint16_t scan_discovered;
+    uint16_t scan_stored;
+    uint32_t scan_owner_process_id;
+    uint64_t scan_ref_ticks;
+    struct ZephyrScanResult scan_results[ZEPHYR_WIFI_SCAN_MAX_RESULTS];
+    term sta_connected_term;
+    term sta_disconnected_term;
+    term sta_got_ip_term;
+    term ap_started_term;
+    term ap_sta_connected_term;
+    term ap_sta_disconnected_term;
+    term ap_sta_ip_assigned_term;
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
+    char *sntp_host;
+    char *sntp_dns_query_host;
+    term sntp_sync_term;
+    struct k_mutex sntp_lock;
+    bool sntp_enabled;
+    bool sntp_dns_pending;
+    bool sntp_query_pending;
+    uint16_t sntp_dns_id;
+    bool sntp_dns_id_valid;
+    uint32_t sntp_generation;
+    uint8_t sntp_attempts;
+    struct sntp_ctx sntp_ctx;
+    struct net_sockaddr_storage sntp_addr;
+    net_socklen_t sntp_addrlen;
+    struct k_work_delayable sntp_timeout_work;
+    struct k_work_sync sntp_timeout_work_sync;
+    struct k_work_delayable sntp_retry_work;
+    struct k_work_sync sntp_retry_work_sync;
+#endif
+};
+
+static struct NetworkDriverData *driver_data = NULL;
+
+static term wifi_security_to_atom_term(GlobalContext *global, enum wifi_security_type security)
+{
+    switch (security) {
+        case WIFI_SECURITY_TYPE_NONE:
+            return globalcontext_make_atom(global, ATOM_STR("\x4", "open"));
+        case WIFI_SECURITY_TYPE_WEP:
+        case WIFI_SECURITY_TYPE_WEP_OPEN:
+        case WIFI_SECURITY_TYPE_WEP_SHARED:
+            return globalcontext_make_atom(global, ATOM_STR("\x3", "wep"));
+        case WIFI_SECURITY_TYPE_WPA_PSK:
+        case WIFI_SECURITY_TYPE_FT_PSK:
+            return globalcontext_make_atom(global, ATOM_STR("\x7", "wpa_psk"));
+        case WIFI_SECURITY_TYPE_PSK:
+        case WIFI_SECURITY_TYPE_PSK_SHA256:
+            return globalcontext_make_atom(global, ATOM_STR("\x8", "wpa2_psk"));
+        case WIFI_SECURITY_TYPE_SAE:
+        case WIFI_SECURITY_TYPE_SAE_H2E:
+        case WIFI_SECURITY_TYPE_SAE_AUTO:
+        case WIFI_SECURITY_TYPE_FT_SAE:
+        case WIFI_SECURITY_TYPE_SAE_EXT_KEY:
+            return globalcontext_make_atom(global, ATOM_STR("\x8", "wpa3_psk"));
+        case WIFI_SECURITY_TYPE_WPA_AUTO_PERSONAL:
+            return globalcontext_make_atom(global, ATOM_STR("\xc", "wpa_wpa2_psk"));
+        case WIFI_SECURITY_TYPE_EAP:
+        case WIFI_SECURITY_TYPE_EAP_PEAP_MSCHAPV2:
+        case WIFI_SECURITY_TYPE_EAP_PEAP_GTC:
+        case WIFI_SECURITY_TYPE_EAP_TTLS_MSCHAPV2:
+        case WIFI_SECURITY_TYPE_EAP_PEAP_TLS:
+        case WIFI_SECURITY_TYPE_FT_EAP:
+        case WIFI_SECURITY_TYPE_FT_EAP_SHA384:
+            return globalcontext_make_atom(global, ATOM_STR("\x3", "eap"));
+        case WIFI_SECURITY_TYPE_WAPI:
+            return globalcontext_make_atom(global, ATOM_STR("\x4", "wapi"));
+        case WIFI_SECURITY_TYPE_DPP:
+            return globalcontext_make_atom(global, ATOM_STR("\x3", "dpp"));
+        default:
+            return globalcontext_make_atom(global, ATOM_STR("\x7", "unknown"));
+    }
+}
+
+static void send_scan_error_from_task(struct NetworkDriverData *data, term reason)
+{
+    BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(2), heap);
+    {
+        term ref = term_from_ref_ticks(data->scan_ref_ticks, &heap);
+        term error_tuple = port_heap_create_error_tuple(&heap, reason);
+        term payload = port_heap_create_tuple2(&heap, globalcontext_make_atom(data->global, scan_results_atom), error_tuple);
+        term msg = port_heap_create_tuple2(&heap, ref, payload);
+        globalcontext_send_message_from_task(data->global, data->scan_owner_process_id, NormalMessage, msg);
+    }
+    END_WITH_STACK_HEAP(heap, data->global);
+}
+
+static void send_scan_results_from_task(struct NetworkDriverData *data)
+{
+    size_t ap_data_size = TERM_MAP_SIZE(6) + TERM_BINARY_HEAP_SIZE(WIFI_SSID_MAX_LEN) + TERM_BINARY_HEAP_SIZE(WIFI_MAC_ADDR_LEN);
+    size_t heap_size = PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(2) + BOXED_INT_SIZE + LIST_SIZE(data->scan_stored, ap_data_size);
+
+    Heap heap;
+    if (UNLIKELY(memory_init_heap(&heap, heap_size) != MEMORY_GC_OK)) {
+        send_scan_error_from_task(data, OUT_OF_MEMORY_ATOM);
+        return;
+    }
+
+    term authmode_atom_term = globalcontext_make_atom(data->global, ATOM_STR("\x8", "authmode"));
+    term bssid_atom_term = globalcontext_make_atom(data->global, ATOM_STR("\x5", "bssid"));
+    term channel_atom_term = globalcontext_make_atom(data->global, ATOM_STR("\x7", "channel"));
+    term hidden_atom_term = globalcontext_make_atom(data->global, ATOM_STR("\x6", "hidden"));
+    term rssi_atom_term = globalcontext_make_atom(data->global, rssi_atom);
+    term ssid_atom_term = globalcontext_make_atom(data->global, ssid_atom);
+
+    term networks_data_list = term_nil();
+    for (int i = data->scan_stored - 1; i >= 0; i--) {
+        struct ZephyrScanResult *result = &data->scan_results[i];
+        term ssid_term = term_from_literal_binary(result->ssid, result->ssid_length, &heap, data->global);
+        term bssid_term = term_from_literal_binary(result->mac, WIFI_MAC_ADDR_LEN, &heap, data->global);
+
+        term ap_data = term_alloc_map(6, &heap);
+        term_set_map_assoc(ap_data, 0, authmode_atom_term, wifi_security_to_atom_term(data->global, result->security));
+        term_set_map_assoc(ap_data, 1, bssid_atom_term, bssid_term);
+        term_set_map_assoc(ap_data, 2, channel_atom_term, term_from_int(result->channel));
+        term_set_map_assoc(ap_data, 3, hidden_atom_term, result->ssid_length == 0 ? TRUE_ATOM : FALSE_ATOM);
+        term_set_map_assoc(ap_data, 4, rssi_atom_term, term_from_int(result->rssi));
+        term_set_map_assoc(ap_data, 5, ssid_atom_term, ssid_term);
+
+        networks_data_list = term_list_prepend(ap_data, networks_data_list, &heap);
+    }
+
+    term scan_results = port_heap_create_tuple2(&heap, term_from_int(data->scan_discovered), networks_data_list);
+    term payload = port_heap_create_tuple2(&heap, globalcontext_make_atom(data->global, scan_results_atom), scan_results);
+    term ref = term_from_ref_ticks(data->scan_ref_ticks, &heap);
+    term msg = port_heap_create_tuple2(&heap, ref, payload);
+
+    globalcontext_send_message_from_task(data->global, data->scan_owner_process_id, NormalMessage, msg);
+    memory_destroy_heap_from_task(&heap, data->global);
+}
+
+static void wifi_scan_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event, struct net_if *iface)
+{
+    UNUSED(cb);
+
+    if (!driver_data || iface != driver_data->iface || !driver_data->scanning) {
+        return;
+    }
+
+    if (mgmt_event == NET_EVENT_WIFI_SCAN_RESULT) {
+        const struct wifi_scan_result *result = (const struct wifi_scan_result *) cb->info;
+        driver_data->scan_discovered++;
+        if (driver_data->scan_stored >= driver_data->scan_requested_results) {
+            return;
+        }
+        struct ZephyrScanResult *stored = &driver_data->scan_results[driver_data->scan_stored++];
+        memset(stored, 0, sizeof(*stored));
+        stored->ssid_length = result->ssid_length > WIFI_SSID_MAX_LEN ? WIFI_SSID_MAX_LEN : result->ssid_length;
+        memcpy(stored->ssid, result->ssid, stored->ssid_length);
+        stored->channel = result->channel;
+        stored->security = result->security;
+        stored->rssi = result->rssi;
+        stored->mac_length = result->mac_length;
+        memcpy(stored->mac, result->mac, WIFI_MAC_ADDR_LEN);
+    } else if (mgmt_event == NET_EVENT_WIFI_SCAN_DONE) {
+        if (driver_data->scan_cb_registered) {
+            net_mgmt_del_event_callback(&driver_data->scan_cb);
+            driver_data->scan_cb_registered = false;
+        }
+        driver_data->scanning = false;
+        send_scan_results_from_task(driver_data);
+    }
+}
+
+static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb,
+                                    uint64_t mgmt_event,
+                                    struct net_if *iface)
+{
+    if (!driver_data) {
+        return;
+    }
+
+    bool is_sta_event = (mgmt_event == NET_EVENT_WIFI_CONNECT_RESULT
+        || mgmt_event == NET_EVENT_WIFI_DISCONNECT_RESULT);
+    bool is_ap_event = (mgmt_event == NET_EVENT_WIFI_AP_ENABLE_RESULT
+        || mgmt_event == NET_EVENT_WIFI_AP_DISABLE_RESULT
+        || mgmt_event == NET_EVENT_WIFI_AP_STA_CONNECTED
+        || mgmt_event == NET_EVENT_WIFI_AP_STA_DISCONNECTED);
+
+    if (is_sta_event && iface != driver_data->iface) {
+        return;
+    }
+    if (is_ap_event && driver_data->ap_iface != NULL && iface != driver_data->ap_iface) {
+        return;
+    }
+
+    if (mgmt_event == NET_EVENT_WIFI_CONNECT_RESULT) {
+        const struct wifi_status *status = (const struct wifi_status *)cb->info;
+        if (status->status == 0) {
+            if (driver_data->connected || driver_data->got_ip) {
+                driver_data->connected = true;
+                return;
+            }
+            driver_data->connected = true;
+
+            // Notify AtomVM process: sta_connected
+            BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
+            {
+                term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+                term msg = port_heap_create_tuple2(&heap, ref, driver_data->sta_connected_term);
+                globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
+            }
+            END_WITH_STACK_HEAP(heap, driver_data->global);
+
+            // Check if we already have an IP address configured
+            struct net_if_ipv4 *ipv4 = driver_data->iface->config.ip.ipv4;
+            bool has_ip = false;
+            struct in_addr ip = {0};
+            struct in_addr netmask = {0};
+            struct in_addr gw = {0};
+            if (ipv4) {
+                for (int i = 0; i < NET_IF_MAX_IPV4_ADDR; i++) {
+                    if (ipv4->unicast[i].ipv4.is_used) {
+                        ip = ipv4->unicast[i].ipv4.address.in_addr;
+                        netmask = ipv4->unicast[i].netmask;
+                        gw = ipv4->gw;
+                        has_ip = true;
+                        break;
+                    }
+                }
+            }
+
+            if (has_ip && !driver_data->got_ip) {
+                driver_data->got_ip = true;
+
+                // Notify AtomVM process: {sta_got_ip, {IP, Netmask, Gateway}}
+                BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(3) + TUPLE_SIZE(4) * 3, heap);
+                {
+                    uint32_t ip_val = ntohl(ip.s_addr);
+                    term ip_elements[4] = {
+                        term_from_int((ip_val >> 24) & 0xFF),
+                        term_from_int((ip_val >> 16) & 0xFF),
+                        term_from_int((ip_val >> 8) & 0xFF),
+                        term_from_int(ip_val & 0xFF)
+                    };
+                    term ip_tuple = port_heap_create_tuple_n(&heap, 4, ip_elements);
+
+                    uint32_t mask_val = ntohl(netmask.s_addr);
+                    term mask_elements[4] = {
+                        term_from_int((mask_val >> 24) & 0xFF),
+                        term_from_int((mask_val >> 16) & 0xFF),
+                        term_from_int((mask_val >> 8) & 0xFF),
+                        term_from_int(mask_val & 0xFF)
+                    };
+                    term mask_tuple = port_heap_create_tuple_n(&heap, 4, mask_elements);
+
+                    uint32_t gw_val = ntohl(gw.s_addr);
+                    term gw_elements[4] = {
+                        term_from_int((gw_val >> 24) & 0xFF),
+                        term_from_int((gw_val >> 16) & 0xFF),
+                        term_from_int((gw_val >> 8) & 0xFF),
+                        term_from_int(gw_val & 0xFF)
+                    };
+                    term gw_tuple = port_heap_create_tuple_n(&heap, 4, gw_elements);
+
+                    term ip_info = port_heap_create_tuple3(&heap, ip_tuple, mask_tuple, gw_tuple);
+                    term reply_val = port_heap_create_tuple2(&heap, driver_data->sta_got_ip_term, ip_info);
+
+                    term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+                    term msg = port_heap_create_tuple2(&heap, ref, reply_val);
+                    globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
+                }
+                END_WITH_STACK_HEAP(heap, driver_data->global);
+
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
+                k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+                driver_data->sntp_attempts = 0;
+                k_mutex_unlock(&driver_data->sntp_lock);
+                start_sntp_sync();
+#endif
+            }
+
+            // Start DHCPv4 client on interface
+#if defined(CONFIG_NET_DHCPV4)
+            net_dhcpv4_start(driver_data->iface);
+#endif
+        } else {
+            driver_data->connected = false;
+            BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
+            {
+                term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+                term msg = port_heap_create_tuple2(&heap, ref, driver_data->sta_disconnected_term);
+                globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
+            }
+            END_WITH_STACK_HEAP(heap, driver_data->global);
+        }
+    } else if (mgmt_event == NET_EVENT_WIFI_DISCONNECT_RESULT) {
+        driver_data->connected = false;
+        driver_data->got_ip = false;
+
+        BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
+        {
+            term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+            term msg = port_heap_create_tuple2(&heap, ref, driver_data->sta_disconnected_term);
+            globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
+        }
+        END_WITH_STACK_HEAP(heap, driver_data->global);
+    } else if (mgmt_event == NET_EVENT_WIFI_AP_ENABLE_RESULT) {
+        const struct wifi_status *status = (const struct wifi_status *) cb->info;
+        if (status != NULL && status->status != WIFI_STATUS_AP_SUCCESS) {
+            return;
+        }
+        driver_data->ap_enabled = true;
+        BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
+        {
+            term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+            term msg = port_heap_create_tuple2(&heap, ref, driver_data->ap_started_term);
+            globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
+        }
+        END_WITH_STACK_HEAP(heap, driver_data->global);
+    } else if (mgmt_event == NET_EVENT_WIFI_AP_DISABLE_RESULT) {
+        driver_data->ap_enabled = false;
+    } else if (mgmt_event == NET_EVENT_WIFI_AP_STA_CONNECTED) {
+        const struct wifi_ap_sta_info *sta_info = (const struct wifi_ap_sta_info *) cb->info;
+        if (sta_info == NULL || sta_info->mac_length == 0) {
+            return;
+        }
+        size_t heap_size = PORT_REPLY_SIZE + TUPLE_SIZE(2) + term_binary_heap_size(sta_info->mac_length);
+        BEGIN_WITH_STACK_HEAP(heap_size, heap);
+        {
+            term mac = term_from_literal_binary(sta_info->mac, sta_info->mac_length, &heap, driver_data->global);
+            term payload = port_heap_create_tuple2(&heap, driver_data->ap_sta_connected_term, mac);
+            term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+            term msg = port_heap_create_tuple2(&heap, ref, payload);
+            globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
+        }
+        END_WITH_STACK_HEAP(heap, driver_data->global);
+    } else if (mgmt_event == NET_EVENT_WIFI_AP_STA_DISCONNECTED) {
+        const struct wifi_ap_sta_info *sta_info = (const struct wifi_ap_sta_info *) cb->info;
+        if (sta_info == NULL || sta_info->mac_length == 0) {
+            return;
+        }
+        size_t heap_size = PORT_REPLY_SIZE + TUPLE_SIZE(2) + term_binary_heap_size(sta_info->mac_length);
+        BEGIN_WITH_STACK_HEAP(heap_size, heap);
+        {
+            term mac = term_from_literal_binary(sta_info->mac, sta_info->mac_length, &heap, driver_data->global);
+            term payload = port_heap_create_tuple2(&heap, driver_data->ap_sta_disconnected_term, mac);
+            term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+            term msg = port_heap_create_tuple2(&heap, ref, payload);
+            globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
+        }
+        END_WITH_STACK_HEAP(heap, driver_data->global);
+    }
+}
+
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
+static bool sntp_is_current_locked(uint32_t generation)
+{
+    return driver_data->sntp_enabled && driver_data->sntp_generation == generation;
+}
+
+static void sntp_clear_dns_query_host_locked(void)
+{
+    free(driver_data->sntp_dns_query_host);
+    driver_data->sntp_dns_query_host = NULL;
+}
+
+static void schedule_sntp_retry(uint32_t generation)
+{
+    bool retry = false;
+
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    if (sntp_is_current_locked(generation)
+        && !driver_data->sntp_dns_pending
+        && !driver_data->sntp_query_pending
+        && driver_data->sntp_attempts < ATOMVM_ZEPHYR_SNTP_MAX_ATTEMPTS) {
+        retry = true;
+    }
+    k_mutex_unlock(&driver_data->sntp_lock);
+
+    if (retry) {
+        k_work_reschedule(&driver_data->sntp_retry_work, K_MSEC(ATOMVM_ZEPHYR_SNTP_RETRY_DELAY_MS));
+    }
+}
+
+static void sntp_retry_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+
+    start_sntp_sync();
+}
+
+static void disable_sntp_sync(void)
+{
+    if (!driver_data) {
+        return;
+    }
+
+    bool cancel_dns = false;
+    uint16_t dns_id = 0;
+    bool close_sntp = false;
+
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    driver_data->sntp_generation++;
+    driver_data->sntp_enabled = false;
+    if (driver_data->sntp_dns_pending && driver_data->sntp_dns_id_valid) {
+        cancel_dns = true;
+        dns_id = driver_data->sntp_dns_id;
+    }
+    close_sntp = driver_data->sntp_query_pending;
+    driver_data->sntp_dns_pending = false;
+    driver_data->sntp_dns_id = 0;
+    driver_data->sntp_dns_id_valid = false;
+    driver_data->sntp_query_pending = false;
+    driver_data->sntp_addrlen = 0;
+    k_mutex_unlock(&driver_data->sntp_lock);
+
+#if defined(CONFIG_DNS_RESOLVER)
+    if (cancel_dns) {
+        dns_cancel_addr_info(dns_id);
+    }
+#else
+    ARG_UNUSED(cancel_dns);
+    ARG_UNUSED(dns_id);
+#endif
+    if (close_sntp) {
+        sntp_close_async(&atomvm_sntp_service);
+    }
+
+    k_work_cancel_delayable_sync(&driver_data->sntp_timeout_work, &driver_data->sntp_timeout_work_sync);
+    k_work_cancel_delayable_sync(&driver_data->sntp_retry_work, &driver_data->sntp_retry_work_sync);
+
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    sntp_clear_dns_query_host_locked();
+    free(driver_data->sntp_host);
+    driver_data->sntp_host = NULL;
+    k_mutex_unlock(&driver_data->sntp_lock);
+}
+
+static void send_sntp_sync_from_task(const struct sntp_time *ts, uint32_t generation)
+{
+    struct timespec tspec;
+    tspec.tv_sec = ts->seconds;
+    tspec.tv_nsec = ((uint64_t) ts->fraction * 1000000000ULL) >> 32;
+
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    bool enabled = sntp_is_current_locked(generation);
+    k_mutex_unlock(&driver_data->sntp_lock);
+
+    if (!enabled) {
+        return;
+    }
+
+    printk("SNTP synchronization successful. Seconds: %lld\n", (long long) tspec.tv_sec);
+    sys_set_time_from_sntp(&tspec);
+
+    size_t heap_size = PORT_REPLY_SIZE + TUPLE_SIZE(2) * 2 + BOXED_INT64_SIZE * 2;
+    Heap heap;
+    if (UNLIKELY(memory_init_heap(&heap, heap_size) != MEMORY_GC_OK)) {
+        printk("SNTP synchronization notification failed: out of memory\n");
+        return;
+    }
+
+    term tv_sec = term_make_maybe_boxed_int64(tspec.tv_sec, &heap);
+    term tv_usec = term_make_maybe_boxed_int64(tspec.tv_nsec / 1000, &heap);
+    term tv_tuple = port_heap_create_tuple2(&heap, tv_sec, tv_usec);
+    term reply = port_heap_create_tuple2(&heap, driver_data->sntp_sync_term, tv_tuple);
+    term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+    term msg = port_heap_create_tuple2(&heap, ref, reply);
+
+    globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
+    memory_destroy_heap(&heap, driver_data->global);
+}
+
+static void sntp_timeout_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+
+    if (!driver_data) {
+        return;
+    }
+
+    bool close_sntp = false;
+    uint32_t generation = 0;
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    if (driver_data->sntp_query_pending) {
+        driver_data->sntp_query_pending = false;
+        generation = driver_data->sntp_generation;
+        close_sntp = true;
+    }
+    k_mutex_unlock(&driver_data->sntp_lock);
+
+    if (close_sntp) {
+        printk("SNTP query timed out.\n");
+        sntp_close_async(&atomvm_sntp_service);
+        schedule_sntp_retry(generation);
+    }
+}
+
+static int sntp_query_async(const struct net_sockaddr *addr, net_socklen_t addrlen, uint32_t generation)
+{
+    int ret;
+    bool close_sntp = false;
+
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    if (!sntp_is_current_locked(generation) || driver_data->sntp_query_pending) {
+        k_mutex_unlock(&driver_data->sntp_lock);
+        return -ECANCELED;
+    }
+
+    driver_data->sntp_query_pending = true;
+    ret = sntp_init_async(&driver_data->sntp_ctx, addr, addrlen, &atomvm_sntp_service);
+    if (ret < 0) {
+        driver_data->sntp_query_pending = false;
+        k_mutex_unlock(&driver_data->sntp_lock);
+        return ret;
+    }
+
+    ret = sntp_send_async(&driver_data->sntp_ctx);
+    if (ret < 0) {
+        driver_data->sntp_query_pending = false;
+        close_sntp = true;
+    } else {
+        k_work_reschedule(&driver_data->sntp_timeout_work, K_MSEC(ATOMVM_ZEPHYR_SNTP_TIMEOUT_MS));
+    }
+
+    k_mutex_unlock(&driver_data->sntp_lock);
+
+    if (close_sntp) {
+        sntp_close_async(&atomvm_sntp_service);
+    }
+
+    return ret;
+}
+
+static void sntp_socket_service_handler(struct net_socket_service_event *event)
+{
+    if (!driver_data) {
+        return;
+    }
+
+    uint32_t generation = 0;
+    bool current = false;
+    int fd = event->event.fd;
+
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    if (driver_data->sntp_enabled && driver_data->sntp_query_pending && driver_data->sntp_ctx.sock.fd == fd) {
+        driver_data->sntp_query_pending = false;
+        generation = driver_data->sntp_generation;
+        current = true;
+    }
+    k_mutex_unlock(&driver_data->sntp_lock);
+
+    if (!current) {
+        return;
+    }
+
+    struct sntp_time ts;
+    int ret = sntp_read_async(event, &ts);
+    sntp_close_async(&atomvm_sntp_service);
+    k_work_cancel_delayable(&driver_data->sntp_timeout_work);
+
+    if (ret == 0) {
+        send_sntp_sync_from_task(&ts, generation);
+    } else {
+        printk("SNTP response read failed: %d\n", ret);
+        schedule_sntp_retry(generation);
+    }
+}
+
+#if defined(CONFIG_DNS_RESOLVER)
+static void sntp_dns_result_handler(enum dns_resolve_status status, struct dns_addrinfo *info, void *user_data)
+{
+    if (!driver_data) {
+        return;
+    }
+
+    uint32_t generation = (uint32_t) (uintptr_t) user_data;
+
+    if (status == DNS_EAI_INPROGRESS && info) {
+        k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+        if (sntp_is_current_locked(generation) && driver_data->sntp_dns_pending && driver_data->sntp_addrlen == 0 && info->ai_addrlen <= sizeof(driver_data->sntp_addr)) {
+            memset(&driver_data->sntp_addr, 0, sizeof(driver_data->sntp_addr));
+            memcpy(&driver_data->sntp_addr, &info->ai_addr, info->ai_addrlen);
+            if (net_port_set_default(net_sad(&driver_data->sntp_addr), ATOMVM_ZEPHYR_SNTP_SERVER_PORT) == 0) {
+                driver_data->sntp_addrlen = info->ai_addrlen;
+            }
+        }
+        k_mutex_unlock(&driver_data->sntp_lock);
+        return;
+    }
+
+    struct net_sockaddr_storage addr;
+    net_socklen_t addrlen = 0;
+    bool start_query = false;
+
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    if (sntp_is_current_locked(generation) && driver_data->sntp_dns_pending) {
+        driver_data->sntp_dns_pending = false;
+        driver_data->sntp_dns_id = 0;
+        driver_data->sntp_dns_id_valid = false;
+        if (status == DNS_EAI_ALLDONE && driver_data->sntp_addrlen > 0) {
+            addr = driver_data->sntp_addr;
+            addrlen = driver_data->sntp_addrlen;
+            start_query = true;
+        }
+        driver_data->sntp_addrlen = 0;
+        sntp_clear_dns_query_host_locked();
+    }
+    k_mutex_unlock(&driver_data->sntp_lock);
+
+    if (start_query) {
+        int ret = sntp_query_async(net_sad(&addr), addrlen, generation);
+        if (ret < 0) {
+            printk("SNTP query start failed: %d\n", ret);
+            schedule_sntp_retry(generation);
+        }
+    } else if (status != DNS_EAI_INPROGRESS) {
+        schedule_sntp_retry(generation);
+    }
+}
+#endif
+
+static void start_sntp_sync(void)
+{
+    if (!driver_data) {
+        return;
+    }
+
+    uint32_t generation;
+    char *query_host;
+
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    if (!driver_data->sntp_enabled || !driver_data->sntp_host
+        || driver_data->sntp_dns_pending || driver_data->sntp_query_pending
+        || driver_data->sntp_attempts >= ATOMVM_ZEPHYR_SNTP_MAX_ATTEMPTS) {
+        k_mutex_unlock(&driver_data->sntp_lock);
+        return;
+    }
+
+    size_t host_len = strlen(driver_data->sntp_host) + 1;
+    query_host = malloc(host_len);
+    if (!query_host) {
+        k_mutex_unlock(&driver_data->sntp_lock);
+        return;
+    }
+
+    memcpy(query_host, driver_data->sntp_host, host_len);
+    sntp_clear_dns_query_host_locked();
+    driver_data->sntp_dns_query_host = query_host;
+    driver_data->sntp_dns_pending = true;
+    driver_data->sntp_dns_id = 0;
+    driver_data->sntp_dns_id_valid = false;
+    driver_data->sntp_addrlen = 0;
+    driver_data->sntp_attempts++;
+    uint8_t attempt = driver_data->sntp_attempts;
+    generation = driver_data->sntp_generation;
+    k_mutex_unlock(&driver_data->sntp_lock);
+
+    printk("SNTP query attempt %u/%u started for host: %s\n",
+        attempt, ATOMVM_ZEPHYR_SNTP_MAX_ATTEMPTS, query_host);
+
+#if defined(CONFIG_DNS_RESOLVER)
+    enum dns_query_type query_type;
+#if defined(CONFIG_NET_IPV4)
+    query_type = DNS_QUERY_TYPE_A;
+#elif defined(CONFIG_NET_IPV6)
+    query_type = DNS_QUERY_TYPE_AAAA;
+#else
+    query_type = DNS_QUERY_TYPE_ANY;
+#endif
+
+    uint16_t dns_id = 0;
+    int ret = dns_get_addr_info(
+        query_host,
+        query_type,
+        &dns_id,
+        sntp_dns_result_handler,
+        (void *) (uintptr_t) generation,
+        ATOMVM_ZEPHYR_SNTP_TIMEOUT_MS);
+
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    if (ret == 0) {
+        if (sntp_is_current_locked(generation) && driver_data->sntp_dns_pending) {
+            driver_data->sntp_dns_id = dns_id;
+            driver_data->sntp_dns_id_valid = true;
+        }
+    } else if (sntp_is_current_locked(generation) && driver_data->sntp_dns_pending) {
+        driver_data->sntp_dns_pending = false;
+        driver_data->sntp_dns_id = 0;
+        driver_data->sntp_dns_id_valid = false;
+        sntp_clear_dns_query_host_locked();
+    }
+    k_mutex_unlock(&driver_data->sntp_lock);
+
+    if (ret < 0) {
+        printk("SNTP DNS query start failed: %d\n", ret);
+        schedule_sntp_retry(generation);
+    }
+#else
+    struct net_sockaddr_storage addr;
+    memset(&addr, 0, sizeof(addr));
+    int ret = -EINVAL;
+    if (net_ipaddr_parse(query_host, strlen(query_host), net_sad(&addr))) {
+        if (IS_ENABLED(CONFIG_NET_IPV4) && addr.ss_family == NET_AF_INET) {
+            ret = net_port_set_default(net_sad(&addr), ATOMVM_ZEPHYR_SNTP_SERVER_PORT);
+            if (ret == 0) {
+                ret = sntp_query_async(net_sad(&addr), sizeof(struct net_sockaddr_in), generation);
+            }
+        } else if (IS_ENABLED(CONFIG_NET_IPV6) && addr.ss_family == NET_AF_INET6) {
+            ret = net_port_set_default(net_sad(&addr), ATOMVM_ZEPHYR_SNTP_SERVER_PORT);
+            if (ret == 0) {
+                ret = sntp_query_async(net_sad(&addr), sizeof(struct net_sockaddr_in6), generation);
+            }
+        }
+    }
+
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    if (sntp_is_current_locked(generation)) {
+        driver_data->sntp_dns_pending = false;
+        sntp_clear_dns_query_host_locked();
+    }
+    k_mutex_unlock(&driver_data->sntp_lock);
+
+    if (ret < 0) {
+        printk("SNTP address setup failed: %d\n", ret);
+        schedule_sntp_retry(generation);
+    }
+#endif
+}
+
+#endif
+
+static void ipv4_mgmt_event_handler(struct net_mgmt_event_callback *cb,
+                                    uint64_t mgmt_event,
+                                    struct net_if *iface)
+{
+    UNUSED(cb);
+
+    if (!driver_data || iface != driver_data->iface) {
+        return;
+    }
+
+    if (mgmt_event == NET_EVENT_IPV4_ADDR_ADD) {
+        struct net_if_ipv4 *ipv4 = iface->config.ip.ipv4;
+        if (!ipv4) {
+            return;
+        }
+
+        struct in_addr ip = {0};
+        struct in_addr netmask = {0};
+        struct in_addr gw = ipv4->gw;
+
+        for (int i = 0; i < NET_IF_MAX_IPV4_ADDR; i++) {
+            if (ipv4->unicast[i].ipv4.is_used) {
+                ip = ipv4->unicast[i].ipv4.address.in_addr;
+                netmask = ipv4->unicast[i].netmask;
+                break;
+            }
+        }
+
+        driver_data->got_ip = true;
+
+        // Notify AtomVM process: {sta_got_ip, {IP, Netmask, Gateway}}
+        BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(3) + TUPLE_SIZE(4) * 3, heap);
+        {
+            uint32_t ip_val = ntohl(ip.s_addr);
+            term ip_elements[4] = {
+                term_from_int((ip_val >> 24) & 0xFF),
+                term_from_int((ip_val >> 16) & 0xFF),
+                term_from_int((ip_val >> 8) & 0xFF),
+                term_from_int(ip_val & 0xFF)
+            };
+            term ip_tuple = port_heap_create_tuple_n(&heap, 4, ip_elements);
+
+            uint32_t mask_val = ntohl(netmask.s_addr);
+            term mask_elements[4] = {
+                term_from_int((mask_val >> 24) & 0xFF),
+                term_from_int((mask_val >> 16) & 0xFF),
+                term_from_int((mask_val >> 8) & 0xFF),
+                term_from_int(mask_val & 0xFF)
+            };
+            term mask_tuple = port_heap_create_tuple_n(&heap, 4, mask_elements);
+
+            uint32_t gw_val = ntohl(gw.s_addr);
+            term gw_elements[4] = {
+                term_from_int((gw_val >> 24) & 0xFF),
+                term_from_int((gw_val >> 16) & 0xFF),
+                term_from_int((gw_val >> 8) & 0xFF),
+                term_from_int(gw_val & 0xFF)
+            };
+            term gw_tuple = port_heap_create_tuple_n(&heap, 4, gw_elements);
+
+            term ip_info = port_heap_create_tuple3(&heap, ip_tuple, mask_tuple, gw_tuple);
+            term reply_val = port_heap_create_tuple2(&heap, driver_data->sta_got_ip_term, ip_info);
+
+            term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+            term msg = port_heap_create_tuple2(&heap, ref, reply_val);
+            globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
+        }
+        END_WITH_STACK_HEAP(heap, driver_data->global);
+
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
+        k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+        driver_data->sntp_attempts = 0;
+        k_mutex_unlock(&driver_data->sntp_lock);
+        start_sntp_sync();
+#endif
+    }
+}
+
+static struct net_if *find_sta_iface(void)
+{
+    struct net_if *sta_iface = net_if_get_wifi_sta();
+    return sta_iface != NULL ? sta_iface : net_if_get_first_wifi();
+}
+
+static struct net_if *find_ap_iface(struct net_if *sta_iface)
+{
+    struct net_if *ap_iface = net_if_get_wifi_sap();
+    if (ap_iface != NULL && ap_iface != sta_iface) {
+        return ap_iface;
+    }
+
+    STRUCT_SECTION_FOREACH (net_if, iface) {
+        if (!net_if_is_wifi(iface) || iface == sta_iface) {
+            continue;
+        }
+        return iface;
+    }
+
+    return sta_iface;
+}
+
+static void assign_ap_ipv4(struct net_if *iface)
+{
+    struct net_in_addr addr;
+    if (net_addr_pton(AF_INET, "192.168.4.1", &addr) != 0) {
+        return;
+    }
+    struct net_if *existing = iface;
+    if (net_if_ipv4_addr_lookup(&addr, &existing) == NULL || existing != iface) {
+        if (net_if_ipv4_addr_add(iface, &addr, NET_ADDR_MANUAL, 0) == NULL) {
+            return;
+        }
+    }
+    struct net_in_addr netmask;
+    if (net_addr_pton(AF_INET, "255.255.255.0", &netmask) == 0) {
+        net_if_ipv4_set_netmask_by_addr(iface, &addr, &netmask);
+    }
+    net_if_ipv4_set_gw(iface, &addr);
+}
+
+#ifdef CONFIG_NET_DHCPV4_SERVER
+static term ip4_tuple_from_addr(struct net_in_addr addr, Heap *heap)
+{
+    uint32_t ip_val = ntohl(addr.s_addr);
+    term ip_elements[4] = {
+        term_from_int((ip_val >> 24) & 0xFF),
+        term_from_int((ip_val >> 16) & 0xFF),
+        term_from_int((ip_val >> 8) & 0xFF),
+        term_from_int(ip_val & 0xFF)
+    };
+    return port_heap_create_tuple_n(heap, 4, ip_elements);
+}
+
+static bool ap_lease_already_reported(uint32_t addr)
+{
+    for (uint8_t i = 0; i < driver_data->ap_reported_lease_count; i++) {
+        if (driver_data->ap_reported_leases[i] == addr) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void ap_lease_remember(uint32_t addr)
+{
+    if (driver_data->ap_reported_lease_count < ATOMVM_ZEPHYR_AP_LEASE_MAX) {
+        driver_data->ap_reported_leases[driver_data->ap_reported_lease_count++] = addr;
+        return;
+    }
+    driver_data->ap_reported_leases[ATOMVM_ZEPHYR_AP_LEASE_MAX - 1] = addr;
+}
+
+static void send_ap_sta_ip_assigned(struct net_in_addr addr)
+{
+    BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(4), heap);
+    {
+        term ip_term = ip4_tuple_from_addr(addr, &heap);
+        term payload = port_heap_create_tuple2(&heap, driver_data->ap_sta_ip_assigned_term, ip_term);
+        term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+        term msg = port_heap_create_tuple2(&heap, ref, payload);
+        globalcontext_send_message_from_task(driver_data->global, driver_data->owner_process_id, NormalMessage, msg);
+    }
+    END_WITH_STACK_HEAP(heap, driver_data->global);
+}
+
+static void ap_lease_foreach_cb(struct net_if *iface, struct dhcpv4_addr_slot *lease, void *user_data)
+{
+    UNUSED(iface);
+    UNUSED(user_data);
+
+    if (lease == NULL || lease->state != DHCPV4_SERVER_ADDR_ALLOCATED) {
+        return;
+    }
+    if (ap_lease_already_reported(lease->addr.s_addr)) {
+        return;
+    }
+    ap_lease_remember(lease->addr.s_addr);
+    send_ap_sta_ip_assigned(lease->addr);
+}
+
+static void ap_lease_work_handler(struct k_work *work)
+{
+    UNUSED(work);
+
+    if (!driver_data || !driver_data->ap_enabled || driver_data->ap_iface == NULL) {
+        return;
+    }
+
+    (void) net_dhcpv4_server_foreach_lease(driver_data->ap_iface, ap_lease_foreach_cb, NULL);
+    k_work_reschedule(&driver_data->ap_lease_work, K_MSEC(ATOMVM_ZEPHYR_AP_LEASE_POLL_MS));
+}
+
+static void start_ap_dhcp_server(struct net_if *iface)
+{
+    assign_ap_ipv4(iface);
+
+    struct net_in_addr pool;
+    if (net_addr_pton(AF_INET, "192.168.4.2", &pool) != 0) {
+        return;
+    }
+    (void) net_dhcpv4_server_start(iface, &pool);
+    driver_data->ap_reported_lease_count = 0;
+    k_work_reschedule(&driver_data->ap_lease_work, K_MSEC(ATOMVM_ZEPHYR_AP_LEASE_POLL_MS));
+}
+
+static void stop_ap_dhcp_server(struct net_if *iface)
+{
+    k_work_cancel_delayable(&driver_data->ap_lease_work);
+    driver_data->ap_reported_lease_count = 0;
+    (void) net_dhcpv4_server_stop(iface);
+}
+#endif
+
+static term start_ap(Context *ctx, term ap_config)
+{
+    UNUSED(ctx);
+
+    if (UNLIKELY(!driver_data || !driver_data->ap_iface)) {
+        return BADARG_ATOM;
+    }
+
+    term ssid_term = interop_kv_get_value(ap_config, ssid_atom, ctx->global);
+    term psk_term = interop_kv_get_value(ap_config, psk_atom, ctx->global);
+    term channel_term = interop_kv_get_value(ap_config, ap_channel_atom, ctx->global);
+
+    char *ssid = NULL;
+    int ok = 0;
+    if (term_is_invalid_term(ssid_term)) {
+        ssid = strdup("atomvm-ap");
+        if (IS_NULL_PTR(ssid)) {
+            return OUT_OF_MEMORY_ATOM;
+        }
+    } else {
+        ssid = interop_term_to_string(ssid_term, &ok);
+        if (!ok || IS_NULL_PTR(ssid) || ssid[0] == '\0') {
+            free(ssid);
+            return BADARG_ATOM;
+        }
+    }
+
+    char *psk = NULL;
+    if (!term_is_invalid_term(psk_term)) {
+        psk = interop_term_to_string(psk_term, &ok);
+        if (!ok || IS_NULL_PTR(psk) || strlen(psk) < 8) {
+            free(ssid);
+            free(psk);
+            return BADARG_ATOM;
+        }
+    }
+
+    uint8_t channel = WIFI_CHANNEL_ANY;
+    if (!term_is_invalid_term(channel_term)) {
+        if (!term_is_integer(channel_term)) {
+            free(ssid);
+            free(psk);
+            return BADARG_ATOM;
+        }
+        avm_int_t channel_value = term_to_int(channel_term);
+        if (channel_value < 1 || channel_value > 14) {
+            free(ssid);
+            free(psk);
+            return BADARG_ATOM;
+        }
+        channel = (uint8_t) channel_value;
+    }
+
+    if (driver_data->ap_ssid) {
+        free(driver_data->ap_ssid);
+    }
+    driver_data->ap_ssid = ssid;
+    if (driver_data->ap_psk) {
+        free(driver_data->ap_psk);
+    }
+    driver_data->ap_psk = psk;
+
+    struct wifi_connect_req_params params = { 0 };
+    params.ssid = (const uint8_t *) driver_data->ap_ssid;
+    params.ssid_length = strlen(driver_data->ap_ssid);
+    if (driver_data->ap_psk != NULL) {
+        params.psk = (const uint8_t *) driver_data->ap_psk;
+        params.psk_length = strlen(driver_data->ap_psk);
+        params.security = WIFI_SECURITY_TYPE_PSK;
+    } else {
+        params.security = WIFI_SECURITY_TYPE_NONE;
+    }
+    params.channel = channel;
+    params.band = WIFI_FREQ_BAND_2_4_GHZ;
+    params.mfp = WIFI_MFP_OPTIONAL;
+    params.timeout = SYS_FOREVER_MS;
+
+    int err = net_mgmt(NET_REQUEST_WIFI_AP_ENABLE, driver_data->ap_iface, &params, sizeof(params));
+    if (err != 0 && err != -EALREADY) {
+        return ERROR_ATOM;
+    }
+    if (err == -EALREADY) {
+        driver_data->ap_enabled = true;
+        BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
+        {
+            term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+            term msg = port_heap_create_tuple2(&heap, ref, driver_data->ap_started_term);
+            globalcontext_send_message(driver_data->global, driver_data->owner_process_id, msg);
+        }
+        END_WITH_STACK_HEAP(heap, driver_data->global);
+    }
+
+#ifdef CONFIG_NET_DHCPV4_SERVER
+    start_ap_dhcp_server(driver_data->ap_iface);
+#else
+    assign_ap_ipv4(driver_data->ap_iface);
+#endif
+    return OK_ATOM;
+}
+
+static term start_network(Context *ctx, term pid, term ref, term config)
+{
+    if (UNLIKELY(!driver_data || !driver_data->iface)) {
+        return BADARG_ATOM;
+    }
+
+    if (term_is_invalid_term(config)) {
+        return BADARG_ATOM;
+    }
+
+    term sta_config = interop_kv_get_value(config, sta_atom, ctx->global);
+    term ap_config = interop_kv_get_value(config, ap_atom, ctx->global);
+    if (term_is_invalid_term(sta_config) && term_is_invalid_term(ap_config)) {
+        return BADARG_ATOM;
+    }
+
+    if (term_is_invalid_term(sta_config)) {
+        driver_data->owner_process_id = term_to_local_process_id(pid);
+        driver_data->ref_ticks = term_to_ref_ticks(ref);
+        if (!driver_data->cb_registered) {
+            net_mgmt_init_event_callback(&driver_data->wifi_cb, wifi_mgmt_event_handler,
+                NET_EVENT_WIFI_CONNECT_RESULT | NET_EVENT_WIFI_DISCONNECT_RESULT
+                    | NET_EVENT_WIFI_AP_ENABLE_RESULT | NET_EVENT_WIFI_AP_DISABLE_RESULT
+                    | NET_EVENT_WIFI_AP_STA_CONNECTED | NET_EVENT_WIFI_AP_STA_DISCONNECTED);
+            net_mgmt_add_event_callback(&driver_data->wifi_cb);
+            net_mgmt_init_event_callback(&driver_data->ipv4_cb, ipv4_mgmt_event_handler,
+                NET_EVENT_IPV4_ADDR_ADD);
+            net_mgmt_add_event_callback(&driver_data->ipv4_cb);
+            driver_data->cb_registered = true;
+        }
+        return start_ap(ctx, ap_config);
+    }
+
+    term ssid_term = interop_kv_get_value(sta_config, ssid_atom, ctx->global);
+    term psk_term = interop_kv_get_value(sta_config, psk_atom, ctx->global);
+
+    term managed_term = interop_kv_get_value(sta_config, managed_atom, ctx->global);
+    bool managed = (managed_term == TRUE_ATOM);
+
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
+    term sntp_config = interop_kv_get_value(config, sntp_atom, ctx->global);
+#endif
+
+    if (term_is_invalid_term(ssid_term) && !managed) {
+        return BADARG_ATOM;
+    }
+
+    int ok = 0;
+    char *ssid = NULL;
+    if (!term_is_invalid_term(ssid_term)) {
+        ssid = interop_term_to_string(ssid_term, &ok);
+        if (!ok) {
+            return BADARG_ATOM;
+        }
+    }
+
+    char *psk = NULL;
+    if (!term_is_invalid_term(psk_term)) {
+        psk = interop_term_to_string(psk_term, &ok);
+        if (!ok) {
+            free(ssid);
+            return BADARG_ATOM;
+        }
+    }
+
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
+    char *sntp_host = NULL;
+    if (!term_is_invalid_term(sntp_config)) {
+        term host_term = interop_kv_get_value(sntp_config, host_atom, ctx->global);
+        if (!term_is_invalid_term(host_term)) {
+            sntp_host = interop_term_to_string(host_term, &ok);
+            if (!ok) {
+                free(ssid);
+                free(psk);
+                return BADARG_ATOM;
+            }
+        }
+    }
+#endif
+
+    driver_data->owner_process_id = term_to_local_process_id(pid);
+    driver_data->ref_ticks = term_to_ref_ticks(ref);
+    driver_data->managed = managed;
+
+    if (driver_data->ssid) {
+        free(driver_data->ssid);
+    }
+    driver_data->ssid = ssid;
+
+    if (driver_data->psk) {
+        free(driver_data->psk);
+    }
+    driver_data->psk = psk;
+
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
+    disable_sntp_sync();
+    k_mutex_lock(&driver_data->sntp_lock, K_FOREVER);
+    driver_data->sntp_generation++;
+    driver_data->sntp_host = sntp_host;
+    driver_data->sntp_enabled = sntp_host != NULL;
+    driver_data->sntp_attempts = 0;
+    k_mutex_unlock(&driver_data->sntp_lock);
+#endif
+
+    // Register callbacks if not registered yet
+    if (!driver_data->cb_registered) {
+        net_mgmt_init_event_callback(&driver_data->wifi_cb, wifi_mgmt_event_handler,
+            NET_EVENT_WIFI_CONNECT_RESULT | NET_EVENT_WIFI_DISCONNECT_RESULT
+                | NET_EVENT_WIFI_AP_ENABLE_RESULT | NET_EVENT_WIFI_AP_DISABLE_RESULT
+                | NET_EVENT_WIFI_AP_STA_CONNECTED | NET_EVENT_WIFI_AP_STA_DISCONNECTED);
+        net_mgmt_add_event_callback(&driver_data->wifi_cb);
+
+        net_mgmt_init_event_callback(&driver_data->ipv4_cb, ipv4_mgmt_event_handler,
+                                     NET_EVENT_IPV4_ADDR_ADD);
+        net_mgmt_add_event_callback(&driver_data->ipv4_cb);
+
+        driver_data->cb_registered = true;
+    }
+
+    /* Enable AP before STA so APSTA mode is set before the station
+     * association starts. Enabling AP after CONNECT restarts the radio.
+     */
+    if (!term_is_invalid_term(ap_config) && driver_data->ap_iface != driver_data->iface) {
+        term ap_ret = start_ap(ctx, ap_config);
+        if (ap_ret != OK_ATOM) {
+            return ap_ret;
+        }
+    }
+
+    if (!managed) {
+        struct wifi_connect_req_params cnx_params = {0};
+        cnx_params.ssid = (const uint8_t *)driver_data->ssid;
+        cnx_params.ssid_length = strlen(driver_data->ssid);
+        if (driver_data->psk && (strlen(driver_data->psk) > 0)) {
+            cnx_params.psk = (const uint8_t *)driver_data->psk;
+            cnx_params.psk_length = strlen(driver_data->psk);
+            cnx_params.security = WIFI_SECURITY_TYPE_PSK;
+        } else {
+            cnx_params.security = WIFI_SECURITY_TYPE_NONE;
+        }
+        cnx_params.channel = WIFI_CHANNEL_ANY;
+        cnx_params.mfp = WIFI_MFP_OPTIONAL;
+        cnx_params.timeout = SYS_FOREVER_MS;
+
+        int err = net_mgmt(NET_REQUEST_WIFI_CONNECT, driver_data->iface, &cnx_params, sizeof(cnx_params));
+        if (err != 0 && err != -EALREADY && err != -EISCONN) {
+            return ERROR_ATOM;
+        }
+    }
+
+    return OK_ATOM;
+}
+
+static void wifi_scan(Context *ctx, term pid, term ref, term config)
+{
+    size_t error_size = PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(2);
+
+    if (UNLIKELY(!driver_data || !driver_data->iface)) {
+        port_ensure_available(ctx, error_size);
+        term payload = port_create_tuple2(ctx, globalcontext_make_atom(ctx->global, scan_results_atom), port_create_error_tuple(ctx, BADARG_ATOM));
+        port_send_reply(ctx, pid, ref, payload);
+        return;
+    }
+    if (driver_data->scanning) {
+        port_ensure_available(ctx, error_size);
+        term payload = port_create_tuple2(ctx, globalcontext_make_atom(ctx->global, scan_results_atom), port_create_error_tuple(ctx, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "busy"))));
+        port_send_reply(ctx, pid, ref, payload);
+        return;
+    }
+
+    term results_term = interop_kv_get_value_default(config, ATOM_STR("\x7", "results"), term_from_int(6), ctx->global);
+    if (!term_is_integer(results_term)) {
+        port_ensure_available(ctx, error_size);
+        term payload = port_create_tuple2(ctx, globalcontext_make_atom(ctx->global, scan_results_atom), port_create_error_tuple(ctx, BADARG_ATOM));
+        port_send_reply(ctx, pid, ref, payload);
+        return;
+    }
+    avm_int_t requested_results = term_to_int(results_term);
+    if (requested_results < 1 || requested_results > ZEPHYR_WIFI_SCAN_MAX_RESULTS) {
+        port_ensure_available(ctx, error_size);
+        term payload = port_create_tuple2(ctx, globalcontext_make_atom(ctx->global, scan_results_atom), port_create_error_tuple(ctx, BADARG_ATOM));
+        port_send_reply(ctx, pid, ref, payload);
+        return;
+    }
+
+    term passive_term = interop_kv_get_value_default(config, ATOM_STR("\x7", "passive"), FALSE_ATOM, ctx->global);
+    if (passive_term != TRUE_ATOM && passive_term != FALSE_ATOM) {
+        port_ensure_available(ctx, error_size);
+        term payload = port_create_tuple2(ctx, globalcontext_make_atom(ctx->global, scan_results_atom), port_create_error_tuple(ctx, BADARG_ATOM));
+        port_send_reply(ctx, pid, ref, payload);
+        return;
+    }
+    bool passive = passive_term == TRUE_ATOM;
+
+    term dwell_term = interop_kv_get_value_default(config, ATOM_STR("\x5", "dwell"), term_from_int(passive ? 360 : 120), ctx->global);
+    if (!term_is_integer(dwell_term)) {
+        port_ensure_available(ctx, error_size);
+        term payload = port_create_tuple2(ctx, globalcontext_make_atom(ctx->global, scan_results_atom), port_create_error_tuple(ctx, BADARG_ATOM));
+        port_send_reply(ctx, pid, ref, payload);
+        return;
+    }
+    avm_int_t dwell_ms = term_to_int(dwell_term);
+    if (dwell_ms < 1 || dwell_ms > 1500) {
+        port_ensure_available(ctx, error_size);
+        term payload = port_create_tuple2(ctx, globalcontext_make_atom(ctx->global, scan_results_atom), port_create_error_tuple(ctx, BADARG_ATOM));
+        port_send_reply(ctx, pid, ref, payload);
+        return;
+    }
+
+    term reply_term = interop_kv_get_value_default(config, ATOM_STR("\x5", "reply"), FALSE_ATOM, ctx->global);
+    bool reply_immediately = reply_term == TRUE_ATOM;
+
+    driver_data->scan_owner_process_id = term_to_local_process_id(pid);
+    driver_data->scan_ref_ticks = term_to_ref_ticks(ref);
+    driver_data->scan_requested_results = (uint16_t) requested_results;
+    driver_data->scan_discovered = 0;
+    driver_data->scan_stored = 0;
+    memset(driver_data->scan_results, 0, sizeof(driver_data->scan_results));
+
+    if (!driver_data->scan_cb_registered) {
+        net_mgmt_init_event_callback(&driver_data->scan_cb, wifi_scan_event_handler, NET_EVENT_WIFI_SCAN_RESULT | NET_EVENT_WIFI_SCAN_DONE);
+        net_mgmt_add_event_callback(&driver_data->scan_cb);
+        driver_data->scan_cb_registered = true;
+    }
+    driver_data->scanning = true;
+
+    struct wifi_scan_params params = {0};
+    params.scan_type = passive ? WIFI_SCAN_TYPE_PASSIVE : WIFI_SCAN_TYPE_ACTIVE;
+    params.dwell_time_active = (uint16_t) dwell_ms;
+    params.dwell_time_passive = (uint16_t) dwell_ms;
+    params.max_bss_cnt = (uint16_t) requested_results;
+
+    int err = net_mgmt(NET_REQUEST_WIFI_SCAN, driver_data->iface, &params, sizeof(params));
+    if (err != 0) {
+        if (driver_data->scan_cb_registered) {
+            net_mgmt_del_event_callback(&driver_data->scan_cb);
+            driver_data->scan_cb_registered = false;
+        }
+        driver_data->scanning = false;
+        port_ensure_available(ctx, error_size);
+        term reason = (err == -EBUSY) ? globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "busy")) : ERROR_ATOM;
+        term payload = port_create_tuple2(ctx, globalcontext_make_atom(ctx->global, scan_results_atom), port_create_error_tuple(ctx, reason));
+        port_send_reply(ctx, pid, ref, payload);
+        return;
+    }
+
+    if (reply_immediately) {
+        port_ensure_available(ctx, PORT_REPLY_SIZE);
+        port_send_reply(ctx, pid, ref, OK_ATOM);
+    }
+}
+
+static void cancel_scan(Context *ctx, term pid, term ref, term reply_config)
+{
+    if (driver_data && driver_data->scanning) {
+        if (driver_data->scan_cb_registered) {
+            net_mgmt_del_event_callback(&driver_data->scan_cb);
+            driver_data->scan_cb_registered = false;
+        }
+        driver_data->scanning = false;
+    }
+
+    term scan_canceled = globalcontext_make_atom(ctx->global, scan_canceled_atom);
+    size_t reply_size = PORT_REPLY_SIZE + TUPLE_SIZE(3);
+    port_ensure_available(ctx, reply_size);
+    term reply = port_create_tuple3(ctx, scan_canceled, reply_config, OK_ATOM);
+    port_send_reply(ctx, pid, ref, reply);
+}
+
+static term resolve_sta_config(term config, GlobalContext *global)
+{
+    term sta_config = interop_kv_get_value(config, sta_atom, global);
+    if (!term_is_invalid_term(sta_config)) {
+        return sta_config;
+    }
+    if (!term_is_invalid_term(interop_kv_get_value(config, ssid_atom, global))) {
+        return config;
+    }
+    return term_invalid_term();
+}
+
+static term sta_connect_ap(Context *ctx, term pid, term ref, term config)
+{
+    if (UNLIKELY(!driver_data || !driver_data->iface)) {
+        return BADARG_ATOM;
+    }
+
+    driver_data->owner_process_id = term_to_local_process_id(pid);
+    driver_data->ref_ticks = term_to_ref_ticks(ref);
+
+    char *ssid = NULL;
+    char *psk = NULL;
+    bool new_creds = false;
+
+    if (!term_is_invalid_term(config)) {
+        term resolved = resolve_sta_config(config, ctx->global);
+        if (!term_is_invalid_term(resolved)) {
+            term ssid_term = interop_kv_get_value(resolved, ssid_atom, ctx->global);
+            if (!term_is_invalid_term(ssid_term)) {
+                int ok = 0;
+                ssid = interop_term_to_string(ssid_term, &ok);
+                if (!ok) {
+                    return BADARG_ATOM;
+                }
+                term psk_term = interop_kv_get_value(resolved, psk_atom, ctx->global);
+                if (!term_is_invalid_term(psk_term)) {
+                    psk = interop_term_to_string(psk_term, &ok);
+                    if (!ok) {
+                        free(ssid);
+                        return BADARG_ATOM;
+                    }
+                }
+                new_creds = true;
+            }
+        }
+    }
+
+    if (!ssid) {
+        if (!driver_data->ssid) {
+            return BADARG_ATOM;
+        }
+        ssid = driver_data->ssid;
+        psk = driver_data->psk;
+    }
+
+    if (new_creds) {
+        if (driver_data->ssid) {
+            free(driver_data->ssid);
+        }
+        driver_data->ssid = ssid;
+        if (driver_data->psk) {
+            free(driver_data->psk);
+        }
+        driver_data->psk = psk;
+    }
+
+    struct wifi_connect_req_params cnx_params = {0};
+    cnx_params.ssid = (const uint8_t *)ssid;
+    cnx_params.ssid_length = strlen(ssid);
+    if (psk && (strlen(psk) > 0)) {
+        cnx_params.psk = (const uint8_t *)psk;
+        cnx_params.psk_length = strlen(psk);
+        cnx_params.security = WIFI_SECURITY_TYPE_PSK;
+    } else {
+        cnx_params.security = WIFI_SECURITY_TYPE_NONE;
+    }
+    cnx_params.channel = WIFI_CHANNEL_ANY;
+    cnx_params.mfp = WIFI_MFP_OPTIONAL;
+    cnx_params.timeout = SYS_FOREVER_MS;
+
+    int err = net_mgmt(NET_REQUEST_WIFI_CONNECT, driver_data->iface, &cnx_params, sizeof(cnx_params));
+    if (err != 0 && err != -EALREADY && err != -EISCONN) {
+        return ERROR_ATOM;
+    }
+
+    return OK_ATOM;
+}
+
+static term sta_disconnect_ap(Context *ctx, term pid, term ref)
+{
+    UNUSED(ctx);
+    UNUSED(pid);
+    UNUSED(ref);
+
+    if (UNLIKELY(!driver_data)) {
+        return BADARG_ATOM;
+    }
+
+    int err = net_mgmt(NET_REQUEST_WIFI_DISCONNECT, driver_data->iface, NULL, 0);
+    if (err != 0) {
+        return ERROR_ATOM;
+    }
+
+    return OK_ATOM;
+}
+
+static void send_cmd_reply(Context *ctx, term pid, term ref, term ret)
+{
+    if (ret == OK_ATOM) {
+        port_ensure_available(ctx, PORT_REPLY_SIZE);
+        port_send_reply(ctx, pid, ref, OK_ATOM);
+    } else {
+        port_ensure_available(ctx, PORT_REPLY_SIZE + TUPLE_SIZE(2));
+        port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, ret));
+    }
+}
+
+static void stop_network(void)
+{
+    if (!driver_data) {
+        return;
+    }
+
+    if (driver_data->cb_registered) {
+        net_mgmt_del_event_callback(&driver_data->wifi_cb);
+        net_mgmt_del_event_callback(&driver_data->ipv4_cb);
+        driver_data->cb_registered = false;
+    }
+
+    if (driver_data->iface) {
+#if defined(CONFIG_NET_DHCPV4)
+        net_dhcpv4_stop(driver_data->iface);
+#endif
+        net_mgmt(NET_REQUEST_WIFI_DISCONNECT, driver_data->iface, NULL, 0);
+    }
+    if (driver_data->ap_iface) {
+#ifdef CONFIG_NET_DHCPV4_SERVER
+        stop_ap_dhcp_server(driver_data->ap_iface);
+#endif
+        net_mgmt(NET_REQUEST_WIFI_AP_DISABLE, driver_data->ap_iface, NULL, 0);
+        driver_data->ap_enabled = false;
+    }
+
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
+    disable_sntp_sync();
+#endif
+
+    driver_data->connected = false;
+    driver_data->got_ip = false;
+}
+
+static void get_sta_rssi(Context *ctx, term pid, term ref)
+{
+    size_t tuple_reply_size = PORT_REPLY_SIZE + TUPLE_SIZE(2);
+
+    if (UNLIKELY(!driver_data)) {
+        port_ensure_available(ctx, tuple_reply_size);
+        port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
+        return;
+    }
+
+    struct wifi_iface_status status = {0};
+    int err = net_mgmt(NET_REQUEST_WIFI_IFACE_STATUS, driver_data->iface, &status, sizeof(status));
+    if (err != 0 || status.state < WIFI_STATE_ASSOCIATED) {
+        port_ensure_available(ctx, tuple_reply_size);
+        port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, ERROR_ATOM));
+        return;
+    }
+
+    term rssi = term_from_int11(status.rssi);
+    port_ensure_available(ctx, tuple_reply_size);
+    term reply = port_create_tuple2(ctx, globalcontext_make_atom(ctx->global, rssi_atom), rssi);
+    port_send_reply(ctx, pid, ref, reply);
+}
+
+static NativeHandlerResult consume_mailbox(Context *ctx)
+{
+    Message *message = mailbox_first(&ctx->mailbox);
+    term msg = message->message;
+
+    if (UNLIKELY(!term_is_tuple(msg) || term_get_tuple_arity(msg) != 3)) {
+        mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+        return NativeContinue;
+    }
+
+    term pid = term_get_tuple_element(msg, 0);
+    term ref = term_get_tuple_element(msg, 1);
+    term cmd = term_get_tuple_element(msg, 2);
+    term cmd_term = term_invalid_term();
+    term config = term_invalid_term();
+
+    if ((term_is_tuple(cmd) && term_get_tuple_arity(cmd) == 2) || term_is_atom(cmd)) {
+        if (term_is_atom(cmd)) {
+            cmd_term = cmd;
+        } else {
+            cmd_term = term_get_tuple_element(cmd, 0);
+            config = term_get_tuple_element(cmd, 1);
+        }
+
+        enum network_cmd command = interop_atom_term_select_int(cmd_table, cmd_term, ctx->global);
+        switch (command) {
+            case NetworkStartCmd: {
+                term ret = start_network(ctx, pid, ref, config);
+                send_cmd_reply(ctx, pid, ref, ret);
+                break;
+            }
+            case NetworkRssiCmd: {
+                get_sta_rssi(ctx, pid, ref);
+                break;
+            }
+            case NetworkStopCmd: {
+                stop_network();
+                mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+                return NativeTerminate;
+            }
+            case StaHaltCmd: {
+                term ret = sta_disconnect_ap(ctx, pid, ref);
+                send_cmd_reply(ctx, pid, ref, ret);
+                break;
+            }
+            case StaConnectCmd: {
+                term ret = sta_connect_ap(ctx, pid, ref, config);
+                send_cmd_reply(ctx, pid, ref, ret);
+                break;
+            }
+            case WifiScanCmd: {
+                wifi_scan(ctx, pid, ref, config);
+                break;
+            }
+            case NetworkScanStopCmd: {
+                cancel_scan(ctx, pid, ref, config);
+                break;
+            }
+            default: {
+                send_cmd_reply(ctx, pid, ref, BADARG_ATOM);
+            }
+        }
+    } else {
+        send_cmd_reply(ctx, pid, ref, BADARG_ATOM);
+    }
+
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+    return NativeContinue;
+}
+
+void network_driver_init(GlobalContext *global)
+{
+    if (driver_data) {
+        return;
+    }
+
+    struct NetworkDriverData *data = calloc(1, sizeof(struct NetworkDriverData));
+    if (!data) {
+        return;
+    }
+
+    data->global = global;
+    data->iface = find_sta_iface();
+    if (!data->iface) {
+        free(data);
+        return;
+    }
+    data->ap_iface = find_ap_iface(data->iface);
+    data->sta_connected_term = globalcontext_make_atom(global, sta_connected_atom);
+    data->sta_disconnected_term = globalcontext_make_atom(global, sta_disconnected_atom);
+    data->sta_got_ip_term = globalcontext_make_atom(global, sta_got_ip_atom);
+    data->ap_started_term = globalcontext_make_atom(global, ap_started_atom);
+    data->ap_sta_connected_term = globalcontext_make_atom(global, ap_sta_connected_atom);
+    data->ap_sta_disconnected_term = globalcontext_make_atom(global, ap_sta_disconnected_atom);
+    data->ap_sta_ip_assigned_term = globalcontext_make_atom(global, ap_sta_ip_assigned_atom);
+#ifdef CONFIG_NET_DHCPV4_SERVER
+    k_work_init_delayable(&data->ap_lease_work, ap_lease_work_handler);
+#endif
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
+    data->sntp_sync_term = globalcontext_make_atom(global, sntp_sync_atom);
+    k_mutex_init(&data->sntp_lock);
+    k_work_init_delayable(&data->sntp_timeout_work, sntp_timeout_handler);
+    k_work_init_delayable(&data->sntp_retry_work, sntp_retry_handler);
+#endif
+    driver_data = data;
+}
+
+void network_driver_destroy(GlobalContext *global)
+{
+    UNUSED(global);
+
+    if (driver_data) {
+        if (driver_data->cb_registered) {
+            net_mgmt_del_event_callback(&driver_data->wifi_cb);
+            net_mgmt_del_event_callback(&driver_data->ipv4_cb);
+        }
+        if (driver_data->scan_cb_registered) {
+            net_mgmt_del_event_callback(&driver_data->scan_cb);
+        }
+#ifdef CONFIG_NET_DHCPV4_SERVER
+        k_work_cancel_delayable(&driver_data->ap_lease_work);
+#endif
+#if defined(CONFIG_SNTP) && defined(CONFIG_NET_SOCKETS_SERVICE)
+        disable_sntp_sync();
+#endif
+        free(driver_data->ssid);
+        free(driver_data->psk);
+        free(driver_data->ap_ssid);
+        free(driver_data->ap_psk);
+        free(driver_data);
+        driver_data = NULL;
+    }
+}
+
+Context *network_driver_create_port(GlobalContext *global, term opts)
+{
+    UNUSED(opts);
+    if (!driver_data) {
+        return NULL;
+    }
+
+    Context *ctx = context_new(global);
+    ctx->native_handler = consume_mailbox;
+    ctx->platform_data = NULL;
+    return ctx;
+}
+
+REGISTER_PORT_DRIVER(network, network_driver_init, network_driver_destroy, network_driver_create_port)
+
+#endif /* CONFIG_WIFI */
