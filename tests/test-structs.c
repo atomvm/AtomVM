@@ -181,6 +181,7 @@ void test_valueshashtable(void)
         assert(valueshashtable_get_value(htable, 0xBBDDBBDD + i, 0xCAFEBABE) == 0xEEFFEEFFL + i);
         assert(valueshashtable_get_value(htable, 0xABDDBBDD + i, 0xCAFEBABE) == 0xCAFEBABE);
     }
+    valueshashtable_destroy(htable);
 }
 
 atom_index_t insert_atoms_into_atom_table(struct AtomTable *table)
@@ -536,10 +537,31 @@ static void test_atom_table_bulk_grow(void)
 #undef PER_BATCH
 }
 
+static void test_atom_table_owned_keys(void)
+{
+    struct AtomTable *table = atom_table_new();
+    uint8_t source[] = "copied";
+    atom_index_t copied;
+    assert(atom_table_ensure_atom(table, source, 6, AtomTableCopyAtom, &copied) == AtomTableEnsureAtomOk);
+    memset(source, 'x', 6);
+    size_t size;
+    const uint8_t *key = atom_table_get_atom_string(table, copied, &size);
+    assert(size == 6 && memcmp(key, "copied", 6) == 0);
+
+    static const uint8_t borrowed[] = "borrowed";
+    atom_index_t index;
+    assert(atom_table_ensure_atom(table, borrowed, 8, AtomTableNoOpts, &index) == AtomTableEnsureAtomOk);
+    assert(atom_table_ensure_atom(table, borrowed, 8, AtomTableCopyAtom, &index) == AtomTableEnsureAtomOk);
+    assert(atom_table_get_atom_string(table, index, &size) == borrowed);
+    // Only the first key is owned, including after an existing-atom lookup.
+    atom_table_destroy(table);
+}
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
     UNUSED(argv);
+    test_atom_table_owned_keys();
 
     test_valueshashtable();
     test_atom_table();

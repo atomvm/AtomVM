@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0-beta.0] - Unreleased
 
 ### Added
+- Added an RTEMS 6.2 platform (`src/platforms/rtems`) with a SPARC `erc32` bring-up target and `atomvmlib-rtems`
 - Added `filename:dirname/1`, `filename:basename/1,2`, `filename:extension/1`, `filename:rootname/1,2` and `filename:join/2`
 - Added `init:get_arguments/0`
 - Added `atomvm:posix_kill/2` to send a signal to a process, typically one started with `atomvm:subprocess/4`

@@ -65,6 +65,23 @@ struct ValuesHashTable *valueshashtable_new(void)
     return htable;
 }
 
+void valueshashtable_destroy(struct ValuesHashTable *hash_table)
+{
+    for (size_t i = 0; i < hash_table->capacity; i++) {
+        struct HNode *node = hash_table->buckets[i];
+        while (node) {
+            struct HNode *next = node->next;
+            free(node);
+            node = next;
+        }
+    }
+#ifndef AVM_NO_SMP
+    smp_rwlock_destroy(hash_table->lock);
+#endif
+    free(hash_table->buckets);
+    free(hash_table);
+}
+
 int valueshashtable_insert(struct ValuesHashTable *hash_table, uintptr_t key, uintptr_t value)
 {
     SMP_WRLOCK(hash_table);
