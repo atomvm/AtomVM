@@ -63,6 +63,10 @@
 #include <sodium.h>
 #endif
 
+#if defined(HAVE_LIBSODIUM) && defined(crypto_kem_mlkem768_PUBLICKEYBYTES)
+#define CRYPTO_MLKEM768_AVAILABLE 1
+#endif
+
 // mbedtls_ct_memcmp is available in 2.28.x+ and 3.1.x+ (absent in 3.0.x)
 #if (MBEDTLS_VERSION_NUMBER >= 0x021C0000 && MBEDTLS_VERSION_NUMBER < 0x03000000) \
     || MBEDTLS_VERSION_NUMBER >= 0x03010000
@@ -634,7 +638,8 @@ enum pk_type_t
     InvalidPkType = 0,
     Eddh,
     Eddsa,
-    Ecdh
+    Ecdh,
+    Mlkem768
 };
 
 // not working with latest mbedtls (yet): PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_TWISTED_EDWARDS))
@@ -643,6 +648,7 @@ static const AtomStringIntPair pk_type_table[] = {
     { ATOM_STR("\x4", "eddh"), Eddh },
     { ATOM_STR("\x5", "eddsa"), Eddsa },
     { ATOM_STR("\x4", "ecdh"), Ecdh },
+    { ATOM_STR("\x8", "mlkem768"), Mlkem768 },
     SELECT_INT_DEFAULT(InvalidPkType)
 };
 
@@ -729,6 +735,63 @@ static void do_sodium_init(void)
         abort();
     }
 }
+
+#ifdef CRYPTO_MLKEM768_AVAILABLE
+// term_from_literal_binary() cannot report a failed refc-binary allocation.
+static term make_mlkem768_binary(Context *ctx, const unsigned char *data, size_t size)
+{
+    term binary = term_create_uninitialized_binary(size, &ctx->heap, ctx->global);
+    if (UNLIKELY(term_is_invalid_term(binary))) {
+        memory_heap_trim(&ctx->heap, TERM_BOXED_REFC_BINARY_SIZE);
+        return term_invalid_term();
+    }
+    memcpy((void *) term_binary_data(binary), data, size);
+    return binary;
+}
+
+static term do_mlkem768_keypair(Context *ctx, term params)
+{
+    // Like OTP, only accept an empty list
+    if (UNLIKELY(!term_is_nil(params))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    unsigned char pk[crypto_kem_mlkem768_PUBLICKEYBYTES];
+    unsigned char sk[crypto_kem_mlkem768_SECRETKEYBYTES];
+
+    do_sodium_init();
+    if (UNLIKELY(crypto_kem_mlkem768_keypair(pk, sk) != 0)) {
+        sodium_memzero(sk, sizeof sk);
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "ML-KEM-768 keygen failed", ctx));
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx,
+                     TERM_BINARY_HEAP_SIZE(sizeof pk) + TERM_BINARY_HEAP_SIZE(sizeof sk)
+                         + TUPLE_SIZE(2))
+            != MEMORY_GC_OK)) {
+        sodium_memzero(sk, sizeof sk);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term pub_term = make_mlkem768_binary(ctx, pk, sizeof pk);
+    if (UNLIKELY(term_is_invalid_term(pub_term))) {
+        sodium_memzero(sk, sizeof sk);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term priv_term = make_mlkem768_binary(ctx, sk, sizeof sk);
+    if (UNLIKELY(term_is_invalid_term(priv_term))) {
+        sodium_memzero(sk, sizeof sk);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, pub_term);
+    term_put_tuple_element(result, 1, priv_term);
+
+    sodium_memzero(sk, sizeof sk);
+    return result;
+}
+#endif
 
 static term sodium_try_generate_key(
     Context *ctx, enum pk_type_t key_type, enum pk_param_t pk_param, bool *is_handled)
@@ -1015,6 +1078,12 @@ static term nif_crypto_generate_key(Context *ctx, int argc, term argv[])
 
     enum pk_type_t key_type = interop_atom_term_select_int(pk_type_table, argv[0], glb);
     enum pk_param_t pk_param = interop_atom_term_select_int(pk_param_table, argv[1], glb);
+
+#ifdef CRYPTO_MLKEM768_AVAILABLE
+    if (key_type == Mlkem768) {
+        return do_mlkem768_keypair(ctx, argv[1]);
+    }
+#endif
 
 #ifdef HAVE_LIBSODIUM
     bool sodium_handled;
@@ -3248,6 +3317,117 @@ term nif_crypto_strong_rand_bytes(Context *ctx, int argc, term argv[])
     return out_bin;
 }
 
+#ifdef CRYPTO_MLKEM768_AVAILABLE
+static term nif_crypto_decapsulate_key(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    GlobalContext *glb = ctx->global;
+
+    term type_term = argv[0];
+    if (UNLIKELY(!term_is_atom(type_term))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (UNLIKELY(!globalcontext_is_term_equal_to_atom_string(
+            glb, type_term, ATOM_STR("\x8", "mlkem768")))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    term sk_term = argv[1];
+    if (UNLIKELY(!term_is_binary(sk_term)
+            || term_binary_size(sk_term) != crypto_kem_mlkem768_SECRETKEYBYTES)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    term ct_term = argv[2];
+    if (UNLIKELY(!term_is_binary(ct_term)
+            || term_binary_size(ct_term) != crypto_kem_mlkem768_CIPHERTEXTBYTES)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    const unsigned char *sk = (const unsigned char *) term_binary_data(sk_term);
+    const unsigned char *ct = (const unsigned char *) term_binary_data(ct_term);
+
+    unsigned char ss[crypto_kem_mlkem768_SHAREDSECRETBYTES];
+
+    do_sodium_init();
+    if (UNLIKELY(crypto_kem_mlkem768_dec(ss, ct, sk) != 0)) {
+        sodium_memzero(ss, sizeof ss);
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "ML-KEM-768 decapsulation failed", ctx));
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BINARY_HEAP_SIZE(sizeof ss)) != MEMORY_GC_OK)) {
+        sodium_memzero(ss, sizeof ss);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term ss_term = make_mlkem768_binary(ctx, ss, sizeof ss);
+    sodium_memzero(ss, sizeof ss);
+    if (UNLIKELY(term_is_invalid_term(ss_term))) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    return ss_term;
+}
+
+static term nif_crypto_encapsulate_key(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    GlobalContext *glb = ctx->global;
+
+    term type_term = argv[0];
+    if (UNLIKELY(!term_is_atom(type_term))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (UNLIKELY(!globalcontext_is_term_equal_to_atom_string(
+            glb, type_term, ATOM_STR("\x8", "mlkem768")))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    term pk_term = argv[1];
+    if (UNLIKELY(!term_is_binary(pk_term))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (UNLIKELY(term_binary_size(pk_term) != crypto_kem_mlkem768_PUBLICKEYBYTES)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    const unsigned char *pk = (const unsigned char *) term_binary_data(pk_term);
+
+    unsigned char ct[crypto_kem_mlkem768_CIPHERTEXTBYTES];
+    unsigned char ss[crypto_kem_mlkem768_SHAREDSECRETBYTES];
+
+    do_sodium_init();
+    if (UNLIKELY(crypto_kem_mlkem768_enc(ct, ss, pk) != 0)) {
+        sodium_memzero(ss, sizeof ss);
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "ML-KEM-768 encapsulation failed", ctx));
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx,
+                     TERM_BINARY_HEAP_SIZE(sizeof ct) + TERM_BINARY_HEAP_SIZE(sizeof ss)
+                         + TUPLE_SIZE(2))
+            != MEMORY_GC_OK)) {
+        sodium_memzero(ss, sizeof ss);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term ct_term = make_mlkem768_binary(ctx, ct, sizeof ct);
+    if (UNLIKELY(term_is_invalid_term(ct_term))) {
+        sodium_memzero(ss, sizeof ss);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term ss_term = make_mlkem768_binary(ctx, ss, sizeof ss);
+    if (UNLIKELY(term_is_invalid_term(ss_term))) {
+        sodium_memzero(ss, sizeof ss);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    // {Secret, EncapSecret}: the shared secret comes first, as in OTP.
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, ss_term);
+    term_put_tuple_element(result, 1, ct_term);
+
+    sodium_memzero(ss, sizeof ss);
+    return result;
+}
+#endif
+
 static const char *get_mbedtls_version_string_full(char *buf, size_t buf_size)
 {
 #if defined(MBEDTLS_VERSION_C)
@@ -3434,6 +3614,16 @@ static const struct Nif crypto_strong_rand_bytes_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_crypto_strong_rand_bytes
 };
+#ifdef CRYPTO_MLKEM768_AVAILABLE
+static const struct Nif crypto_encapsulate_key_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_encapsulate_key
+};
+static const struct Nif crypto_decapsulate_key_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_decapsulate_key
+};
+#endif
 static const struct Nif crypto_info_lib = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_crypto_info_lib
@@ -3547,6 +3737,16 @@ const struct Nif *otp_crypto_nif_get_nif(const char *nifname)
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &crypto_strong_rand_bytes_nif;
         }
+#ifdef CRYPTO_MLKEM768_AVAILABLE
+        if (strcmp("encapsulate_key/2", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_encapsulate_key_nif;
+        }
+        if (strcmp("decapsulate_key/3", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_decapsulate_key_nif;
+        }
+#endif
         if (strcmp("info_lib/0", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &crypto_info_lib;

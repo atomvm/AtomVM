@@ -45,11 +45,16 @@
     pbkdf2_hmac/5,
     hash_equals/2,
     strong_rand_bytes/1,
+    encapsulate_key/2,
+    decapsulate_key/3,
     info_lib/0
 ]).
 
 -type hash_algorithm() :: md5 | sha | sha224 | sha256 | sha384 | sha512.
+-type kem() :: mlkem512 | mlkem768 | mlkem1024.
 -type digest() :: binary().
+
+-export_type([kem/0]).
 
 -export_type([hash_state/0]).
 -opaque hash_state() :: reference().
@@ -379,6 +384,7 @@ crypto_final(_State) ->
 %%          * `ecdh' with `x25519 | secp256k1 | secp256r1 | secp384r1 | secp521r1 |
 %%            brainpoolP256r1 | brainpoolP384r1 | brainpoolP512r1'
 %%          * `eddsa' with `ed25519'
+%%          * `mlkem768' with `[]' (requires libsodium >= 1.0.22)
 %%
 %%          Keys are returned as raw key material, not PEM, DER, or `public_key'
 %%          records.
@@ -388,10 +394,9 @@ crypto_final(_State) ->
 %%          seeded before generating keys.
 %% @end
 %%-----------------------------------------------------------------------------
--spec generate_key(
-    Type :: ecdh | eddh | eddsa,
-    Param :: ecdh_params() | eddsa_params()
-) -> {binary(), binary()}.
+-spec generate_key
+    (Type :: ecdh | eddh | eddsa, Param :: ecdh_params() | eddsa_params()) -> {binary(), binary()};
+    (Type :: kem(), Param :: []) -> {binary(), binary()}.
 generate_key(_Type, _Param) ->
     erlang:nif_error(undefined).
 
@@ -422,6 +427,61 @@ generate_key(_Type, _Param) ->
     Param :: ecdh_params()
 ) -> binary().
 compute_key(_Type, _OtherPublicKey, _MyPrivateKey, _Param) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   PublicKey the ML-KEM-768 encapsulation (public) key, 1184 bytes
+%% @param   Type key encapsulation mechanism, `mlkem768'
+%% @param   OthersPublicKey the other party's encapsulation key (1184 bytes for
+%%          `mlkem768')
+%% @returns `{Secret, EncapSecret}' where `Secret' is the 32-byte shared secret
+%%          and `EncapSecret' is its 1088-byte encapsulated form
+%% @doc     ML-KEM (FIPS 203) key encapsulation.
+%%
+%%          Generates a shared secret and the encapsulated form to send to the
+%%          owner of `OthersPublicKey', who recovers the same secret with their
+%%          private key. Used to implement post-quantum hybrid SSH key exchange
+%%          (`mlkem768x25519-sha256').
+%%
+%%          Of the mechanisms OTP names, AtomVM implements `mlkem768' only,
+%%          because that is the one libsodium provides; `mlkem512' and
+%%          `mlkem1024' raise `badarg'.
+%%
+%%          Only available on builds with libsodium >= 1.0.22.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec encapsulate_key(Type :: kem(), OthersPublicKey :: binary()) ->
+    {Secret :: binary(), EncapSecret :: binary()}.
+encapsulate_key(_Type, _OthersPublicKey) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Type key encapsulation mechanism, `mlkem768'
+%% @param   MyPrivKey our decapsulation key (2400 bytes for `mlkem768')
+%% @param   EncapSecret the encapsulated secret received from the peer
+%%          (1088 bytes for `mlkem768')
+%% @returns the 32-byte shared secret
+%% @doc     ML-KEM (FIPS 203) key decapsulation.
+%%
+%%          Recovers the secret a peer encapsulated to our public key with
+%%          {@link encapsulate_key/2}.
+%%
+%%          A ciphertext that does not belong to this key is not reported as an
+%%          error: FIPS 203 specifies implicit rejection, so decapsulation
+%%          returns a pseudorandom secret instead, and the mismatch only shows
+%%          up when the two sides disagree about what they derived.
+%%
+%%          Of the mechanisms OTP names, AtomVM implements `mlkem768' only,
+%%          because that is the one libsodium provides; `mlkem512' and
+%%          `mlkem1024' raise `badarg'.
+%%
+%%          Only available on builds with libsodium >= 1.0.22.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec decapsulate_key(
+    Type :: kem(), MyPrivKey :: binary(), EncapSecret :: binary()
+) -> Secret :: binary().
+decapsulate_key(_Type, _MyPrivKey, _EncapSecret) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
