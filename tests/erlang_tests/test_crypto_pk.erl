@@ -34,7 +34,8 @@
     test_ed25519_verify_malformed_key/0,
     test_ed25519_sign_bad_digest/0,
     test_ed25519_verify_bad_digest/0,
-    test_x25519_mutual_key_agreement/0
+    test_x25519_mutual_key_agreement/0,
+    test_encapsulate_key/0
 ]).
 
 start() ->
@@ -57,6 +58,7 @@ start() ->
     ok = libsodium_conditional_run(test_ed25519_sign_bad_digest),
     ok = libsodium_conditional_run(test_ed25519_verify_bad_digest),
     ok = libsodium_conditional_run(test_x25519_mutual_key_agreement),
+    ok = test_encapsulate_key(),
     0.
 
 otp_version() ->
@@ -425,3 +427,84 @@ test_x25519_mutual_key_agreement() ->
     32 = byte_size(ThirdShared),
 
     ok.
+
+%% ML-KEM-768 encapsulation is only present when AtomVM was built with a
+%% libsodium that provides it (>= 1.0.22), and on BEAM only from OTP 28.1;
+%% otherwise the call raises and this self-skips.
+test_encapsulate_key() ->
+    Pk = <<0:(1184 * 8)>>,
+    case mlkem768_available(Pk) of
+        false ->
+            ok;
+        true ->
+            {Ss, Ct} = crypto:encapsulate_key(mlkem768, Pk),
+            32 = byte_size(Ss),
+            1088 = byte_size(Ct),
+            %% Encapsulation is randomized: a second call yields a fresh
+            %% shared secret and ciphertext.
+            {Ss2, Ct2} = crypto:encapsulate_key(mlkem768, Pk),
+            true = (Ss =/= Ss2),
+            true = (Ct =/= Ct2),
+            %% A wrong-size key is rejected: badarg on AtomVM, an OpenSSL
+            %% error struct on OTP, so only require that it raises.
+            ok = expect_error(fun() -> crypto:encapsulate_key(mlkem768, <<0:8>>) end),
+            %% So is a key of the right size that is not a valid encoding: the
+            %% implementation's own validation has to be propagated, not just
+            %% the size check above.
+            ok = expect_error(
+                fun() -> crypto:encapsulate_key(mlkem768, binary:copy(<<255>>, 1184)) end
+            ),
+            %% So is a mechanism this build does not implement.
+            ok = expect_error(fun() -> crypto:encapsulate_key(mlkem512, Pk) end),
+            ok = test_kem_round_trip(),
+            ok
+    end.
+
+%% generate_key/encapsulate/decapsulate against each other.
+test_kem_round_trip() ->
+    {Pub, Priv} = crypto:generate_key(mlkem768, []),
+    1184 = byte_size(Pub),
+    2400 = byte_size(Priv),
+    {Ss, Ct} = crypto:encapsulate_key(mlkem768, Pub),
+    Ss = crypto:decapsulate_key(mlkem768, Priv, Ct),
+
+    %% FIPS 203 specifies implicit rejection: decapsulating someone else's
+    %% ciphertext yields a pseudorandom secret rather than an error.
+    {_OtherPub, OtherPriv} = crypto:generate_key(mlkem768, []),
+    Other = crypto:decapsulate_key(mlkem768, OtherPriv, Ct),
+    32 = byte_size(Other),
+    true = (Other =/= Ss),
+    %% Likewise for a ciphertext of the right size that is simply not one.
+    Zero = crypto:decapsulate_key(mlkem768, Priv, <<0:(1088 * 8)>>),
+    32 = byte_size(Zero),
+    true = (Zero =/= Ss),
+
+    %% Rejected arguments: badarg on AtomVM, an OpenSSL error struct or
+    %% function_clause on OTP.
+    ok = expect_error(fun() -> crypto:decapsulate_key(mlkem512, Priv, Ct) end),
+    ok = expect_error(fun() -> crypto:decapsulate_key(mlkem768, <<0:8>>, Ct) end),
+    ok = expect_error(fun() -> crypto:decapsulate_key(mlkem768, Priv, <<0:8>>) end),
+    %% A malformed private key must raise, unlike ciphertext implicit rejection.
+    <<Prefix:2336/binary, HashByte, Tail/binary>> = Priv,
+    BadPriv = <<Prefix/binary, (HashByte bxor 1), Tail/binary>>,
+    ok = expect_error(fun() -> crypto:decapsulate_key(mlkem768, BadPriv, Ct) end),
+    <<SkPrefix:1152/binary, PkByte, SkTail/binary>> = Priv,
+    BadEmbeddedPub = <<SkPrefix/binary, (PkByte bxor 1), SkTail/binary>>,
+    ok = expect_error(fun() -> crypto:decapsulate_key(mlkem768, BadEmbeddedPub, Ct) end),
+    ok = expect_error(fun() -> crypto:generate_key(mlkem768, x25519) end),
+    ok.
+
+mlkem768_available(Pk) ->
+    try crypto:encapsulate_key(mlkem768, Pk) of
+        {Ss, Ct} when byte_size(Ss) =:= 32, byte_size(Ct) =:= 1088 -> true;
+        _ -> false
+    catch
+        _:_ -> false
+    end.
+
+expect_error(F) ->
+    try F() of
+        _ -> error
+    catch
+        error:_ -> ok
+    end.
