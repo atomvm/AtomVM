@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for `process_info/1` and `process_info/2` with list argument
 - Added `erlang:term_to_binary/2`, `erlang:is_builtin/3` and `erlang:bitstring_to_list/1`
 - Added `lists:mapfoldr/3`
+- Added ML-KEM-768 (FIPS 203) key encapsulation to `crypto`, requiring libsodium >= 1.0.22
+- Added `AVM_STATIC_LIBSODIUM` CMake option to statically link libsodium
 - Added `emscripten:run_script_tracked/1` and `emscripten:get_tracked/2` to hold handles to
   JavaScript values from Erlang, tying the JavaScript value lifetime to the Erlang term lifetime.
   The emscripten module object gained `trackedObjectsMap`, `nextTrackedObjectKey()` and the
