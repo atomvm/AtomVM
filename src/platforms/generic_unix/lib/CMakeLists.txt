@@ -116,8 +116,26 @@ if (AVM_USE_LIBSODIUM)
     pkg_check_modules(LIBSODIUM REQUIRED libsodium)
 
     target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${LIBSODIUM_INCLUDE_DIRS})
-    target_link_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${LIBSODIUM_LIBRARY_DIRS})
-    target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${LIBSODIUM_LIBRARIES})
+    if (AVM_STATIC_LIBSODIUM)
+        find_library(LIBSODIUM_STATIC_LIB NAMES libsodium.a
+            PATHS ${LIBSODIUM_LIBRARY_DIRS} ${LIBSODIUM_LIBDIR}
+            NO_DEFAULT_PATH)
+        if (LIBSODIUM_STATIC_LIB STREQUAL "LIBSODIUM_STATIC_LIB-NOTFOUND")
+            message(FATAL_ERROR "AVM_STATIC_LIBSODIUM=ON but libsodium.a was not found in ${LIBSODIUM_LIBRARY_DIRS};${LIBSODIUM_LIBDIR}")
+        endif()
+        message(STATUS "Found static libsodium ${LIBSODIUM_STATIC_LIB}")
+        # Link the archive by absolute path so the shared library is not picked
+        # instead, but keep the private dependencies pkg-config reports for a
+        # static link (pthread, and whatever else a given package needs).
+        set(LIBSODIUM_STATIC_DEPS ${LIBSODIUM_STATIC_LIBRARIES})
+        list(REMOVE_ITEM LIBSODIUM_STATIC_DEPS sodium libsodium)
+        target_link_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${LIBSODIUM_STATIC_LIBRARY_DIRS})
+        target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${LIBSODIUM_STATIC_LIB} ${LIBSODIUM_STATIC_DEPS})
+        target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${LIBSODIUM_STATIC_LDFLAGS_OTHER})
+    else()
+        target_link_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${LIBSODIUM_LIBRARY_DIRS})
+        target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${LIBSODIUM_LIBRARIES})
+    endif()
     target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC HAVE_LIBSODIUM)
 endif()
 
