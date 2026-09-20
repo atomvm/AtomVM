@@ -43,9 +43,9 @@
 #ifdef CONFIG_USE_USB_SERIAL
 void init_usb_serial(void);
 #include "tinyusb.h"
+#include "tinyusb_cdc_acm.h"
+#include "tinyusb_console.h"
 #include "tinyusb_default_config.h"
-#include "tusb_cdc_acm.h"
-#include "tusb_console.h"
 #endif
 
 #include "esp32_sys.h"
@@ -155,9 +155,9 @@ void init_usb_serial()
     ESP_ERROR_CHECK(tinyusb_driver_install(&tusb_cfg));
 
     tinyusb_config_cdcacm_t acm_cfg = { 0 }; // the configuration uses default values
-    ESP_ERROR_CHECK(tusb_cdc_acm_init(&acm_cfg));
+    ESP_ERROR_CHECK(tinyusb_cdcacm_init(&acm_cfg));
 
-    esp_tusb_init_console(TINYUSB_CDC_ACM_0); // log to usb
+    ESP_ERROR_CHECK(tinyusb_console_init(TINYUSB_CDC_ACM_0)); // log to usb
 
     ESP_LOGI(TAG, "USB initialization: done.");
 }

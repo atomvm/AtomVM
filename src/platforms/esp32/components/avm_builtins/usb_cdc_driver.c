@@ -30,7 +30,7 @@
 #include <freertos/queue.h>
 
 #include <tinyusb.h>
-#include <tusb_cdc_acm.h>
+#include <tinyusb_cdc_acm.h>
 
 #include "atom.h"
 #include "bif.h"
@@ -298,12 +298,12 @@ static Context *usb_cdc_driver_create_port(GlobalContext *global, term opts)
         .callback_line_state_changed = NULL,
         .callback_line_coding_changed = NULL,
     };
-    esp_err_t err = tusb_cdc_acm_init(&acm_cfg);
+    esp_err_t err = tinyusb_cdcacm_init(&acm_cfg);
     if (err == ESP_OK) {
         cdc_data->owns_itf = true;
     } else if (err == ESP_ERR_INVALID_STATE) {
         // The interface was already initialized (e.g. by the console).
-        // tusb_cdc_acm_init ignored our acm_cfg, so register our RX
+        // tinyusb_cdcacm_init ignored our acm_cfg, so register our RX
         // callback explicitly — otherwise we'd never see incoming bytes.
         esp_err_t rerr = tinyusb_cdcacm_register_callback(itf, CDC_EVENT_RX, &usb_cdc_rx_callback);
         if (rerr != ESP_OK) {
@@ -332,7 +332,7 @@ static Context *usb_cdc_driver_create_port(GlobalContext *global, term opts)
     if (xQueueAddToSet(cdc_data->rxqueue, event_set) != pdPASS) {
         ESP_LOGE(TAG, "Failed to add USB CDC queue to event set.");
         if (cdc_data->owns_itf) {
-            tusb_cdc_acm_deinit(itf);
+            tinyusb_cdcacm_deinit(itf);
         } else {
             tinyusb_cdcacm_unregister_callback(itf, CDC_EVENT_RX);
         }
@@ -350,7 +350,7 @@ static Context *usb_cdc_driver_create_port(GlobalContext *global, term opts)
         ESP_LOGE(TAG, "Failed to create context");
         xQueueRemoveFromSet(cdc_data->rxqueue, event_set);
         if (cdc_data->owns_itf) {
-            tusb_cdc_acm_deinit(itf);
+            tinyusb_cdcacm_deinit(itf);
         } else {
             tinyusb_cdcacm_unregister_callback(itf, CDC_EVENT_RX);
         }
@@ -562,7 +562,7 @@ static void usb_cdc_driver_do_close(Context *ctx, GenMessage gen_message)
     SMP_MUTEX_UNLOCK(s_open_lock);
 
     if (cdc_data->owns_itf) {
-        tusb_cdc_acm_deinit(cdc_data->itf);
+        tinyusb_cdcacm_deinit(cdc_data->itf);
     } else {
         tinyusb_cdcacm_unregister_callback(cdc_data->itf, CDC_EVENT_RX);
     }

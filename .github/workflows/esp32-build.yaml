@@ -64,8 +64,16 @@ jobs:
           idf-version: 'v5.5.4'
           jit: false
         - esp-idf-target: "esp32s3"
+          idf-version: 'v5.2.7'
+          usb-serial: 'ON'
+          jit: false
+        - esp-idf-target: "esp32s3"
           idf-version: 'v5.5.4'
           usb-serial: 'ON'
+          jit: false
+        - esp-idf-target: "esp32s3"
+          idf-version: 'v5.2.7'
+          usb-cdc: 'ON'
           jit: false
         - esp-idf-target: "esp32s3"
           idf-version: 'v5.5.4'
@@ -126,10 +134,7 @@ jobs:
           echo 'CONFIG_USE_USB_SERIAL=y' >> sdkconfig.defaults.in
         fi
         if [[ "${USB_CDC}" == "ON" ]]; then
-          printf '%s\n' \
-            'CONFIG_TINYUSB_CDC_ENABLED=y' \
-            'CONFIG_AVM_ENABLE_USB_CDC_PORT_DRIVER=y' \
-            >> sdkconfig.defaults.in
+          echo 'CONFIG_AVM_ENABLE_USB_CDC_PORT_DRIVER=y' >> sdkconfig.defaults.in
         fi
         export IDF_TARGET=${{matrix.esp-idf-target}}
         if [ "${{ matrix.jit }}" = "true" ]; then
@@ -141,6 +146,7 @@ jobs:
         fi
 
     - name: Print size info with idf.py
+      # idf.py size has known failures on IDF v5.2.7, so we skip it for this version
       if: matrix.idf-version != 'v5.2.7'
       shell: bash
       working-directory: ./src/platforms/esp32/

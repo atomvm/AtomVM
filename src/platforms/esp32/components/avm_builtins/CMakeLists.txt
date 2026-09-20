@@ -69,8 +69,14 @@ if(CONFIG_AVM_ENABLE_DAC_NIF)
 endif()
 
 if(CONFIG_AVM_ENABLE_USB_CDC_PORT_DRIVER)
-    if(IDF_VERSION_MAJOR GREATER_EQUAL 6 OR (IDF_VERSION_MAJOR EQUAL 5 AND IDF_VERSION_MINOR GREATER_EQUAL 3))
+    if(TARGET idf::espressif__esp_tinyusb)
         target_link_libraries(${COMPONENT_LIB} PRIVATE idf::espressif__esp_tinyusb)
+    else()
+        message(FATAL_ERROR
+            "CONFIG_AVM_ENABLE_USB_CDC_PORT_DRIVER requires the espressif/esp_tinyusb "
+            "managed component. Add it with "
+            "'idf.py add-dependency \"espressif/esp_tinyusb^2.0.0\"' or by listing it "
+            "in main/idf_component.yml.")
     endif()
 endif()
 
