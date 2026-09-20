@@ -20,7 +20,7 @@
 
 -module(test_persistent_term).
 
--export([start/0, insert_worker/3]).
+-export([start/0, map_update_worker/2, insert_worker/3]).
 
 start() ->
     ok = test_get_put(),
@@ -31,6 +31,7 @@ start() ->
     end,
     ok = test_complex_keys(),
     ok = test_fun_keys(),
+    ok = test_persistent_map_exact_update(),
     ok = test_info_and_get_all(),
     ok = test_concurrent_insert(),
     0.
@@ -80,6 +81,23 @@ test_fun_keys() ->
     ok = persistent_term:put(Key, fun_value),
     fun_value = persistent_term:get(EquivalentKey),
     fun_value = persistent_term:get(Key),
+    ok.
+
+test_persistent_map_exact_update() ->
+    PersistentKey = {?MODULE, persistent_map},
+    MapKey = {compound_key, seq(1, 64)},
+    ok = persistent_term:put(PersistentKey, #{MapKey => original}),
+    {Pid, Ref} = spawn_opt(?MODULE, map_update_worker, [PersistentKey, self()], [monitor]),
+    receive
+        updated -> ok
+    end,
+    receive
+        {'DOWN', Ref, process, Pid, normal} -> ok
+    end,
+    churn(100),
+    true = erlang:garbage_collect(),
+    PersistentMap = persistent_term:get(PersistentKey),
+    original = maps:get({compound_key, seq(1, 64)}, PersistentMap),
     ok.
 
 test_info_and_get_all() ->
@@ -148,6 +166,19 @@ insert_worker(Key, Value, Parent) ->
             error:badarg -> rejected
         end,
     Parent ! {inserted, self(), Result}.
+
+churn(0) ->
+    ok;
+churn(N) ->
+    _ = seq(1, 128),
+    churn(N - 1).
+
+map_update_worker(Key, Parent) ->
+    Map = persistent_term:get(Key),
+    EqualKey = {compound_key, seq(1, 64)},
+    Updated = Map#{EqualKey := changed},
+    changed = maps:get(EqualKey, Updated),
+    Parent ! updated.
 
 assert_badarg(Fun) ->
     {'EXIT', {badarg, _}} = (catch Fun()),

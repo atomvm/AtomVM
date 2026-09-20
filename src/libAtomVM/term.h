@@ -3027,6 +3027,15 @@ static inline void term_set_map_value(term map, avm_uint_t pos, term value)
     boxed_value[term_get_map_value_offset() + pos] = value;
 }
 
+static inline void term_set_map_assoc_maybe_shared(term map, avm_uint_t pos, bool is_shared, term key, term value)
+{
+    if (is_shared) {
+        term_set_map_value(map, pos, value);
+    } else {
+        term_set_map_assoc(map, pos, key, value);
+    }
+}
+
 static inline int term_find_map_pos(term map, term key, GlobalContext *global)
 {
     term keys = term_get_map_keys(map);

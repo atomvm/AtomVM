@@ -1843,12 +1843,12 @@ static term jit_put_map_assoc(Context *ctx, JITState *jit_state, term src, size_
         if (src_pos >= src_size) {
             term new_key = kv[2 * kv_pos];
             term new_value = kv[(2 * kv_pos) + 1];
-            term_set_map_assoc(map, j, new_key, new_value);
+            term_set_map_assoc_maybe_shared(map, j, is_shared, new_key, new_value);
             kv_pos++;
         } else if (kv_pos >= num_elements) {
             term src_key = term_get_map_key(src, src_pos);
             term src_value = term_get_map_value(src, src_pos);
-            term_set_map_assoc(map, j, src_key, src_value);
+            term_set_map_assoc_maybe_shared(map, j, is_shared, src_key, src_value);
             src_pos++;
         } else {
             term src_key = term_get_map_key(src, src_pos);
@@ -1857,21 +1857,21 @@ static term jit_put_map_assoc(Context *ctx, JITState *jit_state, term src, size_
             switch (term_compare(src_key, new_key, TermCompareExact, ctx->global)) {
                 case TermLessThan: {
                     term src_value = term_get_map_value(src, src_pos);
-                    term_set_map_assoc(map, j, src_key, src_value);
+                    term_set_map_assoc_maybe_shared(map, j, is_shared, src_key, src_value);
                     src_pos++;
                     break;
                 }
 
                 case TermGreaterThan: {
                     term new_value = kv[(2 * kv_pos) + 1];
-                    term_set_map_assoc(map, j, new_key, new_value);
+                    term_set_map_assoc_maybe_shared(map, j, is_shared, new_key, new_value);
                     kv_pos++;
                     break;
                 }
 
                 case TermEquals: {
                     term new_value = kv[(2 * kv_pos) + 1];
-                    term_set_map_assoc(map, j, src_key, new_value);
+                    term_set_map_assoc_maybe_shared(map, j, is_shared, src_key, new_value);
                     src_pos++;
                     kv_pos++;
                     break;
@@ -2002,7 +2002,7 @@ static term term_copy_map(Context *ctx, term src)
     size_t src_size = term_get_map_size(src);
     term map = term_alloc_map_maybe_shared(src_size, term_get_map_keys(src), &ctx->heap);
     for (size_t j = 0; j < src_size; ++j) {
-        term_set_map_assoc(map, j, term_get_map_key(src, j), term_get_map_value(src, j));
+        term_set_map_value(map, j, term_get_map_value(src, j));
     }
     return map;
 }
