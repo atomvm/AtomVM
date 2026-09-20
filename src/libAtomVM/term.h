@@ -1058,6 +1058,24 @@ static inline bool term_is_external_fun(term t)
 }
 
 /**
+ * @brief Checks if a term is an unresolved local fun
+ *
+ * @details An unresolved local fun decoded from the external term format stores
+ * the module atom in the slot normally occupied by a Module pointer.
+ * @param t the term that will be checked.
+ * @return true if the term is an unresolved local fun, false otherwise.
+ */
+static inline bool term_is_unresolved_fun(term t)
+{
+    if (term_is_fun(t) && !term_is_external_fun(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        return term_is_atom(boxed_value[1]);
+    }
+
+    return false;
+}
+
+/**
  * @brief Checks if a term is a saved CP
  *
  * @details Returns \c true if a term is a saved continuation pointer, otherwise \c false.

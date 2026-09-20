@@ -31,6 +31,7 @@ start() ->
     end,
     ok = test_complex_keys(),
     ok = test_fun_keys(),
+    ok = test_unresolved_fun_keys(),
     ok = test_persistent_map_exact_update(),
     ok = test_info_and_get_all(),
     ok = test_concurrent_insert(),
@@ -81,6 +82,18 @@ test_fun_keys() ->
     ok = persistent_term:put(Key, fun_value),
     fun_value = persistent_term:get(EquivalentKey),
     fun_value = persistent_term:get(Key),
+    ok.
+
+test_unresolved_fun_keys() ->
+    Fun1 = make_unresolved_fun(42),
+    Fun2 = make_unresolved_fun(42),
+    Fun3 = make_unresolved_fun(43),
+    true = Fun1 =:= Fun2,
+    false = Fun1 =:= Fun3,
+    Key1 = {?MODULE, unresolved_fun, Fun1},
+    Key2 = {?MODULE, unresolved_fun, Fun2},
+    ok = persistent_term:put(Key1, unresolved_fun_value),
+    unresolved_fun_value = persistent_term:get(Key2),
     ok.
 
 test_persistent_map_exact_update() ->
@@ -166,6 +179,18 @@ insert_worker(Key, Value, Parent) ->
             error:badarg -> rejected
         end,
     Parent ! {inserted, self(), Result}.
+
+make_unresolved_fun(Capture) ->
+    MissingModule = <<"persistent_term_unresolved_fun_module">>,
+    MissingModuleLen = byte_size(MissingModule),
+    PidNode = atom_to_binary(?MODULE, utf8),
+    PidNodeLen = byte_size(PidNode),
+    Body =
+        <<119, MissingModuleLen, MissingModule/binary, 97, 0, 97, 0, 88, 119, PidNodeLen,
+            PidNode/binary, 0:32, 0:32, 0:32, 97, Capture>>,
+    Rest = <<0, 0:128, 0:32, 1:32, Body/binary>>,
+    Size = byte_size(Rest) + 4,
+    binary_to_term(<<131, 112, Size:32, Rest/binary>>).
 
 churn(0) ->
     ok;

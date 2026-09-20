@@ -176,24 +176,37 @@ static uint32_t hash_function(term t, uint32_t h, GlobalContext *global)
 
     h = h * LARGE_PRIME_FUNCTION;
 
-    Module *fun_module = (Module *) boxed_value[1];
-    term module_name_atom = module_get_name(fun_module);
     uint32_t fun_index = term_to_int32(boxed_value[2]);
     uint32_t arity;
     uint32_t old_index;
     uint32_t old_uniq;
-    module_get_fun_arity_old_index_uniq(fun_module, fun_index, &arity, &old_index, &old_uniq);
-    UNUSED(arity);
-    UNUSED(old_index);
+    uint32_t num_freeze;
+    size_t freeze_base;
+    term module_name_atom;
+    if (term_is_unresolved_fun(t)) {
+        module_name_atom = boxed_value[1];
+        arity = term_to_int32(boxed_value[3]);
+        old_index = term_to_int32(boxed_value[4]);
+        old_uniq = term_to_int32(boxed_value[5]);
+        num_freeze = term_get_size_from_boxed_header(boxed_value[0]) - 5;
+        freeze_base = 6;
+    } else {
+        Module *fun_module = (Module *) boxed_value[1];
+        module_name_atom = module_get_name(fun_module);
+        module_get_fun_arity_old_index_uniq(fun_module, fun_index, &arity, &old_index, &old_uniq);
+        num_freeze = module_get_fun_freeze(fun_module, fun_index);
+        arity -= num_freeze;
+        freeze_base = 3;
+    }
 
     h = h * LARGE_PRIME_FUNCTION + hash_term_incr(module_name_atom, h, global);
     h = hash_uint32(fun_index, h, LARGE_PRIME_FUNCTION);
+    h = hash_uint32(arity, h, LARGE_PRIME_FUNCTION);
+    h = hash_uint32(old_index, h, LARGE_PRIME_FUNCTION);
     h = hash_uint32(old_uniq, h, LARGE_PRIME_FUNCTION);
-
-    uint32_t num_freeze = module_get_fun_freeze(fun_module, fun_index);
     h = hash_uint32(num_freeze, h, LARGE_PRIME_FUNCTION);
     for (uint32_t i = 0; i < num_freeze; i++) {
-        h = h * LARGE_PRIME_FUNCTION + hash_term_incr(boxed_value[i + 3], h, global);
+        h = h * LARGE_PRIME_FUNCTION + hash_term_incr(boxed_value[i + freeze_base], h, global);
     }
 
     return h * LARGE_PRIME_FUNCTION;

@@ -1202,6 +1202,8 @@ test_safe_option() ->
     ok = expect_badarg(fun() -> binary_to_term(NewFunFreshBin, [safe]) end),
     DecodedFreshFun = binary_to_term(NewFunFreshBin),
     true = is_function(DecodedFreshFun),
+    EquivalentFreshFun = binary_to_term(NewFunFreshBin),
+    true = DecodedFreshFun =:= EquivalentFreshFun,
 
     % NEW_FUN_EXT with num_free = 0 whose embedded pid carries a fresh node
     % atom — [safe] must reject the entire fun.
