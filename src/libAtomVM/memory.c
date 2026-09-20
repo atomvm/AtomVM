@@ -60,6 +60,9 @@ static inline term *memory_rewrite_pointer(term *ptr, const term *old_start, con
 
 enum MemoryGCResult memory_init_heap(Heap *heap, size_t size)
 {
+    if (UNLIKELY(size > MEMORY_HEAP_MAX_TERMS)) {
+        return MEMORY_GC_ERROR_FAILED_ALLOCATION;
+    }
     HeapFragment *fragment = (HeapFragment *) malloc(sizeof(HeapFragment) + size * sizeof(term));
     if (IS_NULL_PTR(fragment)) {
         return MEMORY_GC_ERROR_FAILED_ALLOCATION;
@@ -454,19 +457,27 @@ term memory_copy_term_tree_to_storage(term *storage, term **heap_end, term t)
     return result;
 }
 
-unsigned long memory_estimate_usage(term t)
+static bool memory_estimate_usage_add(size_t *acc, size_t amount, size_t limit)
 {
-    unsigned long acc = 0;
+    if (UNLIKELY(amount > limit - *acc)) {
+        return false;
+    }
+    *acc += amount;
+    return true;
+}
+
+bool memory_estimate_usage_with_limit(term t, size_t limit, size_t *result)
+{
+    size_t acc = 0;
 
     struct TempStack temp_stack;
     if (UNLIKELY(temp_stack_init(&temp_stack) != TempStackOk)) {
-        // TODO: handle failed malloc
-        AVM_ABORT();
+        return false;
     }
 
     if (UNLIKELY(temp_stack_push(&temp_stack, t) != TempStackOk)) {
-        // TODO: handle failed malloc
-        AVM_ABORT();
+        temp_stack_destroy(&temp_stack);
+        return false;
     }
 
     while (!temp_stack_is_empty(&temp_stack)) {
@@ -475,10 +486,11 @@ unsigned long memory_estimate_usage(term t)
                 t = temp_stack_pop(&temp_stack);
                 break;
             case TERM_PRIMARY_LIST:
-                acc += 2;
+                if (UNLIKELY(!memory_estimate_usage_add(&acc, 2, limit))) {
+                    goto error;
+                }
                 if (UNLIKELY(temp_stack_push(&temp_stack, term_get_list_tail(t)) != TempStackOk)) {
-                    // TODO: handle failed malloc
-                    AVM_ABORT();
+                    goto error;
                 }
                 t = term_get_list_head(t);
                 break;
@@ -488,13 +500,14 @@ unsigned long memory_estimate_usage(term t)
                 switch (boxed_value_0 & TERM_BOXED_TAG_MASK) {
                     case TERM_BOXED_TUPLE: {
                         int tuple_size = term_get_size_from_boxed_header(boxed_value_0);
-                        acc += tuple_size + 1;
+                        if (UNLIKELY(!memory_estimate_usage_add(&acc, (size_t) tuple_size + 1, limit))) {
+                            goto error;
+                        }
 
                         if (tuple_size > 0) {
                             for (int i = 1; i < tuple_size; i++) {
                                 if (UNLIKELY(temp_stack_push(&temp_stack, term_get_tuple_element(t, i)) != TempStackOk)) {
-                                    // TODO: handle failed malloc
-                                    AVM_ABORT();
+                                    goto error;
                                 }
                             }
                             t = term_get_tuple_element(t, 0);
@@ -506,21 +519,24 @@ unsigned long memory_estimate_usage(term t)
 
                     case TERM_BOXED_MAP: {
                         int map_size = term_get_map_size(t);
-                        acc += term_map_size_in_terms(map_size);
+                        if (UNLIKELY(limit < 3 || (size_t) map_size > (limit - 3) / 2)) {
+                            goto error;
+                        }
+                        size_t map_memory = 3 + ((size_t) map_size * 2);
+                        if (UNLIKELY(!memory_estimate_usage_add(&acc, map_memory, limit))) {
+                            goto error;
+                        }
                         if (map_size > 0) {
                             for (int i = 1; i < map_size; i++) {
                                 if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_key(t, i)) != TempStackOk)) {
-                                    // TODO: handle failed malloc
-                                    AVM_ABORT();
+                                    goto error;
                                 }
                                 if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(t, i)) != TempStackOk)) {
-                                    // TODO: handle failed malloc
-                                    AVM_ABORT();
+                                    goto error;
                                 }
                             }
                             if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(t, 0)) != TempStackOk)) {
-                                // TODO: handle failed malloc
-                                AVM_ABORT();
+                                goto error;
                             }
                             t = term_get_map_key(t, 0);
 
@@ -531,7 +547,9 @@ unsigned long memory_estimate_usage(term t)
 
                     case TERM_BOXED_FUN: {
                         int boxed_size = term_get_size_from_boxed_header(boxed_value_0);
-                        acc += boxed_size + 1;
+                        if (UNLIKELY(!memory_estimate_usage_add(&acc, (size_t) boxed_size + 1, limit))) {
+                            goto error;
+                        }
 
                         // We skip the first two elements:
                         // First is either a module atom or a pointer to a Module
@@ -541,8 +559,7 @@ unsigned long memory_estimate_usage(term t)
                         // estimate.
                         for (int i = 2; i < boxed_size; i++) {
                             if (UNLIKELY(temp_stack_push(&temp_stack, boxed_value[i + 1]) != TempStackOk)) {
-                                // TODO: handle failed malloc
-                                AVM_ABORT();
+                                goto error;
                             }
                         }
                         t = boxed_value[2];
@@ -550,14 +567,18 @@ unsigned long memory_estimate_usage(term t)
 
                     case TERM_BOXED_SUB_BINARY: {
                         int boxed_size = term_get_size_from_boxed_header(boxed_value_0);
-                        acc += boxed_size + 1;
+                        if (UNLIKELY(!memory_estimate_usage_add(&acc, (size_t) boxed_size + 1, limit))) {
+                            goto error;
+                        }
                         t = term_get_sub_binary_ref(t);
                     } break;
 
                     default: {
                         // Default type of boxed terms
                         int boxed_size = term_get_size_from_boxed_header(boxed_value_0);
-                        acc += boxed_size + 1;
+                        if (UNLIKELY(!memory_estimate_usage_add(&acc, (size_t) boxed_size + 1, limit))) {
+                            goto error;
+                        }
                         t = temp_stack_pop(&temp_stack);
                     }
                 }
@@ -570,7 +591,21 @@ unsigned long memory_estimate_usage(term t)
 
     temp_stack_destroy(&temp_stack);
 
-    return acc;
+    *result = acc;
+    return true;
+
+error:
+    temp_stack_destroy(&temp_stack);
+    return false;
+}
+
+unsigned long memory_estimate_usage(term t)
+{
+    size_t result;
+    if (UNLIKELY(!memory_estimate_usage_with_limit(t, ULONG_MAX, &result))) {
+        AVM_ABORT();
+    }
+    return result;
 }
 
 static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, const term *mem_end, term **new_heap_pos, term *mso_list, bool move)

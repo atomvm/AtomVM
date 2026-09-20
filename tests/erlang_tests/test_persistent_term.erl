@@ -49,7 +49,10 @@ test_get_put() ->
     case erlang:system_info(machine) of
         "ATOM" ->
             false = erlang:function_exported(persistent_term, erase, 1),
-            assert_badarg(fun() -> persistent_term:put(Key, {new, value}) end);
+            assert_badarg(fun() -> persistent_term:put(Key, {new, value}) end),
+            % A rejected replacement must not attempt to copy this huge tree.
+            Shared = make_shared_tree(40),
+            assert_badarg(fun() -> persistent_term:put(Key, Shared) end);
         _ ->
             ok
     end,
@@ -64,6 +67,9 @@ test_put_new() ->
     ok = persistent_term:put_new(Key, first),
     first = persistent_term:get(Key),
     assert_badarg(fun() -> persistent_term:put_new(Key, second) end),
+    first = persistent_term:get(Key),
+    Shared = make_shared_tree(40),
+    assert_badarg(fun() -> persistent_term:put_new(Key, Shared) end),
     first = persistent_term:get(Key),
     ok.
 
@@ -191,6 +197,12 @@ make_unresolved_fun(Capture) ->
     Rest = <<0, 0:128, 0:32, 1:32, Body/binary>>,
     Size = byte_size(Rest) + 4,
     binary_to_term(<<131, 112, Size:32, Rest/binary>>).
+
+make_shared_tree(0) ->
+    leaf;
+make_shared_tree(N) ->
+    Child = make_shared_tree(N - 1),
+    {Child, Child}.
 
 churn(0) ->
     ok;

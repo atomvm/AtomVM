@@ -152,6 +152,12 @@ persistent_term_result_t persistent_term_put(
         return PersistentTermExists;
     }
 
+    if (UNLIKELY(new_entry->memory > SIZE_MAX - persistent_term->memory)) {
+        SMP_RWLOCK_UNLOCK(persistent_term->lock);
+        entry_destroy(new_entry, global);
+        return PersistentTermAllocationError;
+    }
+
     new_entry->next = persistent_term->buckets[bucket_index];
     persistent_term->buckets[bucket_index] = new_entry;
     persistent_term->count++;
@@ -277,7 +283,21 @@ static struct PersistentTermEntry *entry_new(term key, term value)
         return NULL;
     }
 
-    size_t size = memory_estimate_usage(key) + memory_estimate_usage(value);
+    const size_t accounting_overhead = sizeof(struct PersistentTermEntry) + sizeof(Heap) + sizeof(HeapFragment);
+    const size_t max_heap_terms = (SIZE_MAX - accounting_overhead) / sizeof(term);
+    size_t key_size;
+    if (UNLIKELY(!memory_estimate_usage_with_limit(key, max_heap_terms, &key_size))) {
+        free(heap);
+        free(entry);
+        return NULL;
+    }
+    size_t value_size;
+    if (UNLIKELY(!memory_estimate_usage_with_limit(value, max_heap_terms - key_size, &value_size))) {
+        free(heap);
+        free(entry);
+        return NULL;
+    }
+    size_t size = key_size + value_size;
     if (UNLIKELY(memory_init_heap(heap, size) != MEMORY_GC_OK)) {
         free(heap);
         free(entry);
@@ -287,8 +307,7 @@ static struct PersistentTermEntry *entry_new(term key, term value)
     entry->key = memory_copy_term_tree(heap, key);
     entry->value = memory_copy_term_tree(heap, value);
     entry->heap = heap;
-    entry->memory = sizeof(struct PersistentTermEntry) + sizeof(Heap) + sizeof(HeapFragment)
-        + ((size_t) (heap->heap_ptr - heap->heap_start) * sizeof(term));
+    entry->memory = accounting_overhead + ((size_t) (heap->heap_end - heap->heap_start) * sizeof(term));
     entry->next = NULL;
 
     return entry;
