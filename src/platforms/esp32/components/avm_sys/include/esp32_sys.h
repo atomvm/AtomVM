@@ -69,6 +69,9 @@ struct ESP32PlatformData
     struct SyncList sockets;
     struct ListHead ready_connections;
 
+    // network_driver
+    void *network_driver_data;
+
 #ifndef AVM_NO_SMP
     Mutex *entropy_mutex;
 #endif
@@ -89,7 +92,7 @@ struct ESP32PlatformData
 
 extern QueueSetHandle_t event_set;
 extern QueueHandle_t event_queue;
-void esp32_sys_queue_init();
+void esp32_sys_queue_init(void);
 
 void socket_init(Context *ctx, term opts);
 
