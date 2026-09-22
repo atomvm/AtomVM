@@ -22,23 +22,19 @@
 %% @doc A limited implementation of the Erlang/OTP `persistent_term' module.
 %%
 %% Values are stored globally and reads return stored values without copying.
-%% Replaced or erased values remain allocated until VM shutdown so references
-%% already returned to processes stay valid without a global GC pass. The
-%% `memory' value returned by `info/0' includes those retained old values.
+%% Terms remain allocated until VM shutdown. Erasing or replacing stored values
+%% is not supported. Both `put/2' and `put_new/2' raise `badarg' if the key
+%% already has a different value; storing the same value again returns `ok'.
 %% @end
 %%-----------------------------------------------------------------------------
 -module(persistent_term).
 
--export([erase/1, get/0, get/1, get/2, info/0, put/2, put_new/2]).
+-export([get/0, get/1, get/2, info/0, put/2, put_new/2]).
 
 -export_type([key/0, value/0]).
 
 -type key() :: term().
 -type value() :: term().
-
--spec erase(Key :: key()) -> boolean().
-erase(_Key) ->
-    erlang:nif_error(undefined).
 
 -spec get() -> [{key(), value()}].
 get() ->

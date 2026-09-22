@@ -183,7 +183,6 @@ ets:update_counter/4, &ets_update_counter_nif
 ets:delete/1, &ets_delete_nif
 ets:delete/2, &ets_delete_nif
 ets:delete_object/2, &ets_delete_object_nif
-persistent_term:erase/1, &persistent_term_erase_nif
 persistent_term:get/0, &persistent_term_get_nif
 persistent_term:get/1, &persistent_term_get_nif
 persistent_term:get/2, &persistent_term_get_nif

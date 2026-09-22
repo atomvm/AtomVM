@@ -23,6 +23,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include "smp.h"
 #include "term_typedef.h"
@@ -50,7 +51,6 @@ typedef struct PersistentTerm
     size_t count;
     size_t memory;
     struct PersistentTermEntry *buckets[PERSISTENT_TERM_NUM_BUCKETS];
-    struct PersistentTermEntry *retired_entries;
 #ifndef AVM_NO_SMP
     RWLock *lock;
 #endif
@@ -59,23 +59,18 @@ typedef struct PersistentTerm
 void persistent_term_init(PersistentTerm *persistent_term);
 void persistent_term_destroy(PersistentTerm *persistent_term, struct GlobalContext *global);
 
+// Entries are immutable and live until VM shutdown. An existing key accepts
+// only an equal value; a different value returns PersistentTermExists.
 persistent_term_result_t persistent_term_put(
     PersistentTerm *persistent_term,
     term key,
     term value,
-    bool put_new,
     struct GlobalContext *global);
 
 persistent_term_result_t persistent_term_get(
     PersistentTerm *persistent_term,
     term key,
     term *value,
-    struct GlobalContext *global);
-
-persistent_term_result_t persistent_term_erase(
-    PersistentTerm *persistent_term,
-    term key,
-    bool *removed,
     struct GlobalContext *global);
 
 persistent_term_result_t persistent_term_get_all_maybe_gc(

@@ -239,8 +239,6 @@ static term nif_ets_delete(Context *ctx, int argc, term argv[]);
 static term nif_ets_delete_object(Context *ctx, int argc, term argv[]);
 static term nif_persistent_term_get(Context *ctx, int argc, term argv[]);
 static term nif_persistent_term_put(Context *ctx, int argc, term argv[]);
-static term nif_persistent_term_put_new(Context *ctx, int argc, term argv[]);
-static term nif_persistent_term_erase(Context *ctx, int argc, term argv[]);
 static term nif_persistent_term_info(Context *ctx, int argc, term argv[]);
 static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_port_to_list(Context *ctx, int argc, term argv[]);
@@ -825,12 +823,7 @@ static const struct Nif persistent_term_put_nif = {
 
 static const struct Nif persistent_term_put_new_nif = {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_persistent_term_put_new
-};
-
-static const struct Nif persistent_term_erase_nif = {
-    .base.type = NIFFunctionType,
-    .nif_ptr = nif_persistent_term_erase
+    .nif_ptr = nif_persistent_term_put
 };
 
 static const struct Nif persistent_term_info_nif = {
@@ -4827,28 +4820,6 @@ static term nif_persistent_term_put(Context *ctx, int argc, term argv[])
         &ctx->global->persistent_term,
         argv[0],
         argv[1],
-        false,
-        ctx->global);
-
-    switch (result) {
-        case PersistentTermOk:
-            return OK_ATOM;
-        case PersistentTermAllocationError:
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        default:
-            UNREACHABLE();
-    }
-}
-
-static term nif_persistent_term_put_new(Context *ctx, int argc, term argv[])
-{
-    UNUSED(argc);
-
-    persistent_term_result_t result = persistent_term_put(
-        &ctx->global->persistent_term,
-        argv[0],
-        argv[1],
-        true,
         ctx->global);
 
     switch (result) {
@@ -4856,27 +4827,6 @@ static term nif_persistent_term_put_new(Context *ctx, int argc, term argv[])
             return OK_ATOM;
         case PersistentTermExists:
             RAISE_ERROR(BADARG_ATOM);
-        case PersistentTermAllocationError:
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        default:
-            UNREACHABLE();
-    }
-}
-
-static term nif_persistent_term_erase(Context *ctx, int argc, term argv[])
-{
-    UNUSED(argc);
-
-    bool removed;
-    persistent_term_result_t result = persistent_term_erase(
-        &ctx->global->persistent_term,
-        argv[0],
-        &removed,
-        ctx->global);
-
-    switch (result) {
-        case PersistentTermOk:
-            return removed ? TRUE_ATOM : FALSE_ATOM;
         case PersistentTermAllocationError:
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         default:

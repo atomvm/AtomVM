@@ -21,6 +21,7 @@
 #include "persistent_term.h"
 
 #include <assert.h>
+#include <stdbool.h>
 #include <stdlib.h>
 
 #include "context.h"
@@ -44,19 +45,16 @@ static persistent_term_result_t find_entry(
     PersistentTerm *persistent_term,
     uint32_t bucket_index,
     term key,
-    struct PersistentTermEntry ***out_link,
     struct PersistentTermEntry **out_entry,
     GlobalContext *global);
 static struct PersistentTermEntry *entry_new(term key, term value);
 static void entry_destroy(struct PersistentTermEntry *entry, GlobalContext *global);
-static void retire_entry(PersistentTerm *persistent_term, struct PersistentTermEntry *entry);
 static bool term_is_equal(term a, term b, GlobalContext *global, persistent_term_result_t *result);
 
 void persistent_term_init(PersistentTerm *persistent_term)
 {
     persistent_term->count = 0;
     persistent_term->memory = 0;
-    persistent_term->retired_entries = NULL;
     for (size_t i = 0; i < PERSISTENT_TERM_NUM_BUCKETS; i++) {
         persistent_term->buckets[i] = NULL;
     }
@@ -79,13 +77,6 @@ void persistent_term_destroy(PersistentTerm *persistent_term, GlobalContext *glo
         persistent_term->buckets[i] = NULL;
     }
 
-    struct PersistentTermEntry *entry = persistent_term->retired_entries;
-    while (entry != NULL) {
-        struct PersistentTermEntry *next = entry->next;
-        entry_destroy(entry, global);
-        entry = next;
-    }
-    persistent_term->retired_entries = NULL;
     persistent_term->count = 0;
     persistent_term->memory = 0;
     SMP_RWLOCK_UNLOCK(persistent_term->lock);
@@ -99,10 +90,34 @@ persistent_term_result_t persistent_term_put(
     PersistentTerm *persistent_term,
     term key,
     term value,
-    bool put_new,
     GlobalContext *global)
 {
     uint32_t bucket_index = term_hash(key, global) % PERSISTENT_TERM_NUM_BUCKETS;
+
+    SMP_RWLOCK_WRLOCK(persistent_term->lock);
+
+    struct PersistentTermEntry *entry;
+    persistent_term_result_t result = find_entry(persistent_term, bucket_index, key, &entry, global);
+    if (UNLIKELY(result != PersistentTermOk)) {
+        SMP_RWLOCK_UNLOCK(persistent_term->lock);
+        return result;
+    }
+
+    if (entry != NULL) {
+        bool equal = term_is_equal(entry->value, value, global, &result);
+        if (UNLIKELY(result != PersistentTermOk)) {
+            SMP_RWLOCK_UNLOCK(persistent_term->lock);
+            return result;
+        }
+        if (equal) {
+            SMP_RWLOCK_UNLOCK(persistent_term->lock);
+            return PersistentTermOk;
+        }
+        SMP_RWLOCK_UNLOCK(persistent_term->lock);
+        return PersistentTermExists;
+    }
+
+    SMP_RWLOCK_UNLOCK(persistent_term->lock);
 
     struct PersistentTermEntry *new_entry = entry_new(key, value);
     if (IS_NULL_PTR(new_entry)) {
@@ -111,9 +126,7 @@ persistent_term_result_t persistent_term_put(
 
     SMP_RWLOCK_WRLOCK(persistent_term->lock);
 
-    struct PersistentTermEntry **link;
-    struct PersistentTermEntry *entry;
-    persistent_term_result_t result = find_entry(persistent_term, bucket_index, key, &link, &entry, global);
+    result = find_entry(persistent_term, bucket_index, key, &entry, global);
     if (UNLIKELY(result != PersistentTermOk)) {
         SMP_RWLOCK_UNLOCK(persistent_term->lock);
         entry_destroy(new_entry, global);
@@ -134,24 +147,15 @@ persistent_term_result_t persistent_term_put(
             return PersistentTermOk;
         }
 
-        if (put_new) {
-            SMP_RWLOCK_UNLOCK(persistent_term->lock);
-            entry_destroy(new_entry, global);
-            return PersistentTermExists;
-        }
+        SMP_RWLOCK_UNLOCK(persistent_term->lock);
+        entry_destroy(new_entry, global);
+        return PersistentTermExists;
     }
 
-    if (entry == NULL) {
-        new_entry->next = persistent_term->buckets[bucket_index];
-        persistent_term->buckets[bucket_index] = new_entry;
-        persistent_term->count++;
-        persistent_term->memory += new_entry->memory;
-    } else {
-        new_entry->next = entry->next;
-        *link = new_entry;
-        persistent_term->memory += new_entry->memory;
-        retire_entry(persistent_term, entry);
-    }
+    new_entry->next = persistent_term->buckets[bucket_index];
+    persistent_term->buckets[bucket_index] = new_entry;
+    persistent_term->count++;
+    persistent_term->memory += new_entry->memory;
 
     SMP_RWLOCK_UNLOCK(persistent_term->lock);
     return PersistentTermOk;
@@ -170,7 +174,7 @@ persistent_term_result_t persistent_term_get(
     SMP_RWLOCK_RDLOCK(persistent_term->lock);
 
     struct PersistentTermEntry *entry;
-    persistent_term_result_t result = find_entry(persistent_term, bucket_index, key, NULL, &entry, global);
+    persistent_term_result_t result = find_entry(persistent_term, bucket_index, key, &entry, global);
     if (UNLIKELY(result != PersistentTermOk)) {
         SMP_RWLOCK_UNLOCK(persistent_term->lock);
         return result;
@@ -182,42 +186,6 @@ persistent_term_result_t persistent_term_get(
     }
 
     *value = entry->value;
-    SMP_RWLOCK_UNLOCK(persistent_term->lock);
-    return PersistentTermOk;
-}
-
-persistent_term_result_t persistent_term_erase(
-    PersistentTerm *persistent_term,
-    term key,
-    bool *removed,
-    GlobalContext *global)
-{
-    assert(removed != NULL);
-
-    *removed = false;
-
-    uint32_t bucket_index = term_hash(key, global) % PERSISTENT_TERM_NUM_BUCKETS;
-
-    SMP_RWLOCK_WRLOCK(persistent_term->lock);
-
-    struct PersistentTermEntry **link;
-    struct PersistentTermEntry *entry;
-    persistent_term_result_t result = find_entry(persistent_term, bucket_index, key, &link, &entry, global);
-    if (UNLIKELY(result != PersistentTermOk)) {
-        SMP_RWLOCK_UNLOCK(persistent_term->lock);
-        return result;
-    }
-
-    if (entry == NULL) {
-        SMP_RWLOCK_UNLOCK(persistent_term->lock);
-        return PersistentTermOk;
-    }
-
-    *link = entry->next;
-    persistent_term->count--;
-    retire_entry(persistent_term, entry);
-
-    *removed = true;
     SMP_RWLOCK_UNLOCK(persistent_term->lock);
     return PersistentTermOk;
 }
@@ -273,7 +241,6 @@ static persistent_term_result_t find_entry(
     PersistentTerm *persistent_term,
     uint32_t bucket_index,
     term key,
-    struct PersistentTermEntry ***out_link,
     struct PersistentTermEntry **out_entry,
     GlobalContext *global)
 {
@@ -281,28 +248,19 @@ static persistent_term_result_t find_entry(
 
     *out_entry = NULL;
 
-    struct PersistentTermEntry **link = &persistent_term->buckets[bucket_index];
-    while (*link != NULL) {
+    for (struct PersistentTermEntry *entry = persistent_term->buckets[bucket_index]; entry != NULL; entry = entry->next) {
         persistent_term_result_t result = PersistentTermOk;
-        bool equal = term_is_equal((*link)->key, key, global, &result);
+        bool equal = term_is_equal(entry->key, key, global, &result);
         if (UNLIKELY(result != PersistentTermOk)) {
             return result;
         }
 
         if (equal) {
-            if (out_link != NULL) {
-                *out_link = link;
-            }
-            *out_entry = *link;
+            *out_entry = entry;
             return PersistentTermOk;
         }
-
-        link = &(*link)->next;
     }
 
-    if (out_link != NULL) {
-        *out_link = link;
-    }
     return PersistentTermOk;
 }
 
@@ -341,12 +299,6 @@ static void entry_destroy(struct PersistentTermEntry *entry, GlobalContext *glob
     memory_destroy_heap(entry->heap, global);
     free(entry->heap);
     free(entry);
-}
-
-static void retire_entry(PersistentTerm *persistent_term, struct PersistentTermEntry *entry)
-{
-    entry->next = persistent_term->retired_entries;
-    persistent_term->retired_entries = entry;
 }
 
 static bool term_is_equal(term a, term b, GlobalContext *global, persistent_term_result_t *result)
