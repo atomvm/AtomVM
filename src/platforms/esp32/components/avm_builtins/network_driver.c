@@ -242,6 +242,9 @@ static inline term authmode_to_atom_term(GlobalContext *global, wifi_auth_mode_t
         case WIFI_AUTH_MAX:
             authmode = ERROR_ATOM;
             break;
+        default:
+            // esp_wifi_remote may expose auth modes not present in this ESP-IDF release.
+            break;
     }
     return authmode;
 }
