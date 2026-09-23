@@ -1,0 +1,9 @@
+binary:at/2	fixtures/sample.gperf:41,fixtures/sample.gperf:50
+crypto:mac_finalN/2	fixtures/sample.gperf:44
+erlang:!/2	fixtures/sample.gperf:46
+erlang:++/2	fixtures/sample.gperf:45
+erlang:-/1	fixtures/sample.gperf:49
+erlang://2	fixtures/sample.gperf:48
+erlang:=/=/2	fixtures/sample.gperf:47
+erlang:module_loaded/1	fixtures/sample.gperf:42
+file:get_cwd/0	fixtures/sample.gperf:43
