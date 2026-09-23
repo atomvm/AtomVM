@@ -22,6 +22,8 @@
 #define _EMSCRIPTEN_SYS_H_
 
 #include <pthread.h>
+#include <stdatomic.h>
+#include <stdint.h>
 #include <time.h>
 
 #include <erl_nif.h>
@@ -69,6 +71,7 @@ enum EmscriptenMessageType
     Call,
     HTMLEvent,
     UnregisterHTMLEvent,
+    TrackedAnswer,
     Signal
 };
 
@@ -108,14 +111,35 @@ struct EmscriptenMessageUnregisterHTMLEvent
     struct HTMLEventUserDataResource *rsrc;
 };
 
+struct EmscriptenMessageTrackedAnswer
+{
+    struct EmscriptenMessageBase base;
+    int32_t target_pid;
+    // an invalid term makes the trapped caller raise out_of_memory instead
+    term answer;
+    // NULL when the answer needed none
+    HeapFragment *answer_heap;
+};
+
+// Reserved key: sys_get_next_tracked_object_key returns it once every other
+// key has been handed out, and it never identifies a tracked object.
+#define TRACKED_OBJECT_KEY_EXHAUSTED UINT32_MAX
+
+struct TrackedObjectResource
+{
+    uint32_t key;
+};
+
 struct EmscriptenPlatformData
 {
     pthread_mutex_t poll_mutex;
     pthread_cond_t poll_cond;
     struct ListHead messages;
+    _Atomic uint32_t next_tracked_object_key;
     ErlNifResourceType *promise_resource_type;
     ErlNifResourceType *htmlevent_user_data_resource_type;
     ErlNifResourceType *websocket_resource_type;
+    ErlNifResourceType *tracked_object_resource_type;
 
 #ifndef AVM_NO_SMP
     Mutex *entropy_mutex;
@@ -134,6 +158,9 @@ void sys_enqueue_emscripten_cast_message(GlobalContext *glb, const char *target,
 em_promise_t sys_enqueue_emscripten_call_message(GlobalContext *glb, const char *target, const char *message);
 void sys_enqueue_emscripten_htmlevent_message(GlobalContext *glb, int32_t target_pid, term message, term user_data, HeapFragment *heap);
 void sys_enqueue_emscripten_unregister_htmlevent_message(GlobalContext *glb, struct HTMLEventUserDataResource *rsrc);
+void sys_enqueue_emscripten_tracked_answer_message(GlobalContext *glb, int32_t target_pid, term answer, HeapFragment *heap);
+uint32_t sys_get_next_tracked_object_key(GlobalContext *glb);
+void sys_remove_tracked_object(uint32_t key);
 void sys_promise_resolve_int_and_destroy(em_promise_t promise, em_promise_result_t result, int value);
 void sys_promise_resolve_str_and_destroy(em_promise_t promise, em_promise_result_t result, int value);
 

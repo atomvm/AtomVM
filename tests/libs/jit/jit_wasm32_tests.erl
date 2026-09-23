@@ -2242,6 +2242,17 @@ condition_int_cast_ne_test() ->
     >>,
     ?assertStream(wasm32, Dump, Stream).
 
+call_func_ptr_regs_test() ->
+    State0 = ?BACKEND:new(0, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 1),
+    State2 = ?BACKEND:add_label(State1, 0),
+    {State3, FuncPtr} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    ?assertEqual([FuncPtr], ?BACKEND:used_regs(State3)),
+    {State4, ResultReg} = ?BACKEND:call_func_ptr(State3, {free, FuncPtr}, [ctx]),
+    ?assertEqual([ResultReg], ?BACKEND:used_regs(State4)),
+    State5 = ?BACKEND:free_native_registers(State4, [ResultReg]),
+    ?assertEqual(ok, ?BACKEND:assert_all_native_free(State5)).
+
 call_func_ptr_primitive_test() ->
     State0 = ?BACKEND:new(0, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:jump_table(State0, 1),
@@ -2456,3 +2467,27 @@ alloc_local_overflow_reuse_test() ->
         " 00017f:	0b                        	end"
     >>,
     ?assertStream(wasm32, Dump, Stream).
+
+if_block_pool_growth_merge_test() ->
+    State0 = ?BACKEND:new(0, jit_stream_binary, jit_stream_binary:new(65536)),
+    State1 = ?BACKEND:jump_table(State0, 2),
+    State2 = ?BACKEND:add_label(State1, 1),
+    {State3, Cond} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    %% The body allocates 9 locals (growing the pool from 8 to 9) and frees them
+    %% all, so every scratch local must be free again after the merge.
+    State4 = ?BACKEND:if_block(State3, {{free, Cond}, '==', {free, Cond}}, fun(BSt0) ->
+        {BSt1, Regs} = lists:foldl(
+            fun(_, {S, Acc}) ->
+                {S1, R} = ?BACKEND:call_primitive(S, 0, [ctx]),
+                {S1, [R | Acc]}
+            end,
+            {BSt0, []},
+            lists:seq(1, 9)
+        ),
+        ?BACKEND:free_native_registers(BSt1, Regs)
+    end),
+    ?assertEqual([], ?BACKEND:used_regs(State4)),
+    Available = ?BACKEND:available_regs(State4),
+    ?assertEqual(9, length(Available)),
+    ?assert(lists:member(local11, Available)),
+    ?assertEqual(ok, ?BACKEND:assert_all_native_free(State4)).

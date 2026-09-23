@@ -31,6 +31,7 @@
     start_timer/3, start_timer/4,
     cancel_timer/1,
     send_after/3,
+    process_info/1,
     process_info/2,
     system_info/1,
     system_flag/2,
@@ -44,6 +45,18 @@
     monotonic_time/1,
     min/2,
     max/2,
+    '=='/2,
+    '/='/2,
+    '=:='/2,
+    '=/='/2,
+    '<'/2,
+    '=<'/2,
+    '>'/2,
+    '>='/2,
+    'not'/1,
+    'and'/2,
+    'or'/2,
+    'xor'/2,
     memory/1,
     nif_error/1,
     get/0,
@@ -52,6 +65,7 @@
     erase/0,
     erase/1,
     function_exported/3,
+    is_builtin/3,
     loaded/0,
     module_loaded/1,
     display/1,
@@ -60,6 +74,7 @@
     list_to_atom/1,
     list_to_existing_atom/1,
     list_to_binary/1,
+    list_to_bitstring/1,
     list_to_integer/1,
     list_to_integer/2,
     list_to_tuple/1,
@@ -67,10 +82,13 @@
     iolist_to_binary/1,
     binary_to_atom/1,
     binary_to_atom/2,
+    binary_to_existing_atom/1,
+    binary_to_existing_atom/2,
     binary_to_float/1,
     binary_to_integer/1,
     binary_to_integer/2,
     binary_to_list/1,
+    bitstring_to_list/1,
     atom_to_binary/1,
     atom_to_binary/2,
     atom_to_list/1,
@@ -85,6 +103,7 @@
     integer_to_list/1,
     integer_to_list/2,
     fun_to_list/1,
+    make_fun/3,
     pid_to_list/1,
     port_to_list/1,
     ref_to_list/1,
@@ -103,7 +122,9 @@
     unlink/1,
     make_ref/0,
     send/2,
+    '!'/2,
     monitor/2,
+    monitor/3,
     demonitor/1,
     demonitor/2,
     exit/1,
@@ -114,6 +135,7 @@
     group_leader/0,
     group_leader/2,
     process_flag/2,
+    process_flag/3,
     get_module_info/1,
     get_module_info/2,
     processes/0,
@@ -121,7 +143,9 @@
     garbage_collect/0,
     garbage_collect/1,
     binary_to_term/1,
+    binary_to_term/2,
     term_to_binary/1,
+    term_to_binary/2,
     split_binary/2,
     crc32/1,
     crc32/2,
@@ -144,13 +168,31 @@
     unique_integer/1,
     raise/3,
     abs/1,
+    '+'/2,
+    '+'/1,
+    '-'/2,
+    '-'/1,
+    '*'/2,
+    '/'/2,
+    'div'/2,
+    'rem'/2,
+    'band'/2,
+    'bor'/2,
+    'bxor'/2,
+    'bsl'/2,
+    'bsr'/2,
+    'bnot'/1,
     byte_size/1,
+    bit_size/1,
+    binary_part/3,
     element/2,
     error/1,
     error/2,
+    error/3,
     hd/1,
     is_atom/1,
     is_binary/1,
+    is_bitstring/1,
     is_boolean/1,
     is_float/1,
     is_function/1,
@@ -160,21 +202,33 @@
     is_list/1,
     is_number/1,
     is_pid/1,
+    is_port/1,
     is_reference/1,
     is_tuple/1,
     length/1,
+    '++'/2,
+    '--'/2,
     list_to_float/1,
     node/0,
     node/1,
     round/1,
+    ceil/1,
+    floor/1,
     self/0,
     setelement/3,
+    insert_element/3,
+    delete_element/2,
+    make_tuple/2,
     size/1,
     throw/1,
     tl/1,
     trunc/1,
+    float/1,
     tuple_size/1,
-    tuple_to_list/1
+    tuple_to_list/1,
+    alias/0,
+    alias/1,
+    unalias/1
 ]).
 
 -export_type([
@@ -183,7 +237,8 @@
     atomvm_heap_growth_strategy/0,
     stacktrace/0,
     stacktrace_extrainfo/0,
-    raise_stacktrace/0
+    raise_stacktrace/0,
+    term_to_binary_option/0
 ]).
 
 -type atom_encoding() :: latin1 | utf8 | unicode.
@@ -202,6 +257,12 @@
 
 -type demonitor_option() :: flush | {flush, boolean()} | info | {info, boolean()}.
 
+-type term_to_binary_option() ::
+    compressed
+    | {compressed, Level :: 0..9}
+    | deterministic
+    | {minor_version, Version :: 0..2}.
+
 -type atomvm_heap_growth_strategy() ::
     bounded_free
     | minimum
@@ -212,12 +273,14 @@
     | {max_heap_size, pos_integer()}
     | {atomvm_heap_growth, atomvm_heap_growth_strategy()}
     | link
-    | monitor.
+    | monitor
+    | {monitor, [monitor_option()]}.
 
 -type send_destination() ::
     pid()
     | port()
-    | atom().
+    | atom()
+    | reference().
 
 % Current type until we make these references
 -type resource() :: binary().
@@ -237,6 +300,8 @@
 %% Extended `stacktrace()' that can be passed to `raise/3'
 -type raise_stacktrace() ::
     [{module(), atom(), arity() | [term()]} | {function(), arity() | [term()]}] | stacktrace().
+
+-type monitor_option() :: {alias, explicit_unalias | demonitor | reply_demonitor}.
 
 %%-----------------------------------------------------------------------------
 %% @param   Time time in milliseconds after which to send the timeout message.
@@ -303,6 +368,39 @@ send_after(Time, Dest, Msg) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Pid the process pid.
+%% @returns a list of `{Key, Value}' tuples, or `undefined' if the process
+%%          is not alive.
+%% @doc     Return information about the specified process.
+%%
+%% As in Erlang/OTP, the result covers a default set of keys; AtomVM returns
+%% the supported subset of OTP's default set, in the same relative order:
+%% `registered_name' (omitted when the process is not registered, first
+%% otherwise), `message_queue_len', `links', `trap_exit', `total_heap_size',
+%% `heap_size' and `stack_size'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec process_info(Pid :: pid()) -> [{atom(), term()}] | undefined.
+process_info(Pid) when erlang:is_pid(Pid) ->
+    case
+        erlang:process_info(Pid, [
+            registered_name,
+            message_queue_len,
+            links,
+            trap_exit,
+            total_heap_size,
+            heap_size,
+            stack_size
+        ])
+    of
+        undefined -> undefined;
+        [{registered_name, []} | Info] -> Info;
+        Info -> Info
+    end;
+process_info(Pid) ->
+    erlang:error(badarg, [Pid]).
+
+%%-----------------------------------------------------------------------------
+%% @param   Pid the process pid.
 %% @param   Key key used to find process information.
 %% @returns process information for the specified pid defined by the specified key.
 %% @doc     Return process information.
@@ -320,20 +418,26 @@ send_after(Time, Dest, Msg) ->
 %%      <li><b>memory</b> the estimated total number of bytes in use by the process (integer)</li>
 %%      <li><b>links</b> the list of linked processes</li>
 %%      <li><b>monitored_by</b> the list of processes, NIF resources or ports that monitor the process</li>
+%%      <li><b>trap_exit</b> whether the process is trapping exits (boolean)</li>
 %% </ul>
-%% Specifying an unsupported term or atom raises a bad_arg error.
+%% A list of keys may also be specified, in which case the result is a list
+%% with one `{Key, Value}' tuple per requested key, in the same order and
+%% with duplicates preserved, or `undefined' if the process is not alive.
+%% Specifying an unsupported term or atom raises a badarg error.
 %%
 %% @end
 %%-----------------------------------------------------------------------------
 -spec process_info
-    (Pid :: pid(), heap_size) -> {heap_size, non_neg_integer()};
-    (Pid :: pid(), total_heap_size) -> {total_heap_size, non_neg_integer()};
-    (Pid :: pid(), registered_name) -> {registered_name, term()} | [];
-    (Pid :: pid(), stack_size) -> {stack_size, non_neg_integer()};
-    (Pid :: pid(), message_queue_len) -> {message_queue_len, non_neg_integer()};
-    (Pid :: pid(), memory) -> {memory, non_neg_integer()};
-    (Pid :: pid(), links) -> {links, [pid()]};
-    (Pid :: pid(), monitored_by) -> {monitored_by, [pid() | resource() | port()]}.
+    (Pid :: pid(), heap_size) -> {heap_size, non_neg_integer()} | undefined;
+    (Pid :: pid(), total_heap_size) -> {total_heap_size, non_neg_integer()} | undefined;
+    (Pid :: pid(), registered_name) -> {registered_name, term()} | [] | undefined;
+    (Pid :: pid(), stack_size) -> {stack_size, non_neg_integer()} | undefined;
+    (Pid :: pid(), message_queue_len) -> {message_queue_len, non_neg_integer()} | undefined;
+    (Pid :: pid(), memory) -> {memory, non_neg_integer()} | undefined;
+    (Pid :: pid(), links) -> {links, [pid()]} | undefined;
+    (Pid :: pid(), monitored_by) -> {monitored_by, [pid() | resource() | port()]} | undefined;
+    (Pid :: pid(), trap_exit) -> {trap_exit, boolean()} | undefined;
+    (Pid :: pid(), [atom()]) -> [{atom(), term()}] | undefined.
 process_info(_Pid, _Key) ->
     erlang:nif_error(undefined).
 
@@ -582,6 +686,168 @@ max(_A, _B) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   A   left-hand term
+%% @param   B   right-hand term
+%% @returns `true' if `A' and `B' are equal after coercion; `false' otherwise.
+%% @doc     Term equality operator (`A == B'). Numbers of different types are
+%%          compared by value, so `1 == 1.0' is `true'.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec '=='(A :: term(), B :: term()) -> boolean().
+'=='(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   left-hand term
+%% @param   B   right-hand term
+%% @returns `true' if `A' and `B' are not equal after coercion; `false' otherwise.
+%% @doc     Term inequality operator (`A /= B'), the negation of `=='.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec '/='(A :: term(), B :: term()) -> boolean().
+'/='(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   left-hand term
+%% @param   B   right-hand term
+%% @returns `true' if `A' and `B' are exactly equal; `false' otherwise.
+%% @doc     Term exact equality operator (`A =:= B'). Numbers of different types
+%%          are not equal, so `1 =:= 1.0' is `false'.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec '=:='(A :: term(), B :: term()) -> boolean().
+'=:='(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   left-hand term
+%% @param   B   right-hand term
+%% @returns `true' if `A' and `B' are not exactly equal; `false' otherwise.
+%% @doc     Term exact inequality operator (`A =/= B'), the negation of `=:='.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec '=/='(A :: term(), B :: term()) -> boolean().
+'=/='(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   left-hand term
+%% @param   B   right-hand term
+%% @returns `true' if `A' is less than `B'; `false' otherwise.
+%% @doc     Term less-than operator (`A < B'), using the standard term ordering.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec '<'(A :: term(), B :: term()) -> boolean().
+'<'(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   left-hand term
+%% @param   B   right-hand term
+%% @returns `true' if `A' is less than or equal to `B'; `false' otherwise.
+%% @doc     Term less-than-or-equal operator (`A =< B'), using the standard term
+%%          ordering.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec '=<'(A :: term(), B :: term()) -> boolean().
+'=<'(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   left-hand term
+%% @param   B   right-hand term
+%% @returns `true' if `A' is greater than `B'; `false' otherwise.
+%% @doc     Term greater-than operator (`A > B'), using the standard term
+%%          ordering.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec '>'(A :: term(), B :: term()) -> boolean().
+'>'(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   left-hand term
+%% @param   B   right-hand term
+%% @returns `true' if `A' is greater than or equal to `B'; `false' otherwise.
+%% @doc     Term greater-than-or-equal operator (`A >= B'), using the standard
+%%          term ordering.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec '>='(A :: term(), B :: term()) -> boolean().
+'>='(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Bool    a boolean
+%% @returns the logical negation of `Bool'
+%% @doc     Boolean `not' operator. `Bool' must be `true' or `false'.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec 'not'(Bool :: boolean()) -> boolean().
+'not'(_Bool) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   a boolean
+%% @param   B   a boolean
+%% @returns the logical conjunction of `A' and `B'
+%% @doc     Boolean `and' operator. Both arguments are always evaluated (unlike
+%%          `andalso').
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec 'and'(A :: boolean(), B :: boolean()) -> boolean().
+'and'(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   a boolean
+%% @param   B   a boolean
+%% @returns the logical disjunction of `A' and `B'
+%% @doc     Boolean `or' operator. Both arguments are always evaluated (unlike
+%%          `orelse').
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec 'or'(A :: boolean(), B :: boolean()) -> boolean().
+'or'(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   a boolean
+%% @param   B   a boolean
+%% @returns the logical exclusive disjunction of `A' and `B'
+%% @doc     Boolean `xor' operator.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec 'xor'(A :: boolean(), B :: boolean()) -> boolean().
+'xor'(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @param   Type the type of memory to request
 %% @returns the amount of memory (in bytes) used of the specified type
 %% @doc     Return the amount of memory (in bytes) used of the specified type
@@ -679,6 +945,27 @@ function_exported(_Module, _Function, _Arity) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   Module module name
+%% @param   Function function name
+%% @param   Arity function arity
+%% @returns `true' if `Module:Function/Arity' is a builtin, `false' otherwise.
+%% @doc     Determine whether a function is implemented natively (as a BIF or a
+%%          NIF) by AtomVM. As on BEAM, this reflects functions "implemented in
+%%          C" rather than in Erlang, but it is answered against AtomVM's own
+%%          registry. It therefore differs from BEAM whenever the two virtual
+%%          machines disagree on whether a given function is native: for
+%%          example `erlang:atom_to_binary/1' is native on AtomVM but
+%%          Erlang-implemented on BEAM, while `erlang:md5/1' is a BEAM BIF that
+%%          AtomVM implements in Erlang. An arity that no builtin has (including a
+%%          negative integer) returns `false'. Raises `badarg' if `Module' or
+%%          `Function' is not an atom, or `Arity' is not an integer.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_builtin(Module :: module(), Function :: atom(), Arity :: arity()) -> boolean().
+is_builtin(_Module, _Function, _Arity) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @returns list of loaded modules
 %% @doc     Returns all loaded modules.
 %% @end
@@ -749,6 +1036,19 @@ list_to_existing_atom(_String) ->
 %%-----------------------------------------------------------------------------
 -spec list_to_binary(IOList :: iolist()) -> binary().
 list_to_binary(_IOList) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   BitstringList  list of integers, binaries and bitstrings to convert
+%% @returns a bitstring composed of the elements of the list
+%% @doc     Convert a list of bytes, binaries and bitstrings into a bitstring.
+%%
+%% Unlike Erlang/OTP, AtomVM only supports byte-aligned bitstrings (binaries),
+%% so this function behaves like `list_to_binary/1'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec list_to_bitstring(BitstringList :: iolist()) -> bitstring().
+list_to_bitstring(_BitstringList) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -828,6 +1128,31 @@ binary_to_atom(_Binary, _Encoding) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   Binary  Binary to convert to an existing atom
+%% @returns the existing atom whose name is `Binary'
+%% @doc     Convert a binary to an already existing atom, defaults to utf8.
+%%
+%% Errors with `badarg' if the atom does not already exist.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec binary_to_existing_atom(Binary :: binary()) -> atom().
+binary_to_existing_atom(_Binary) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Binary   Binary to convert to an existing atom
+%% @param   Encoding encoding for conversion (any of latin1, utf8 or unicode)
+%% @returns the existing atom whose name is `Binary'
+%% @doc     Convert a binary to an already existing atom.
+%%
+%% Errors with `badarg' if the atom does not already exist.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec binary_to_existing_atom(Binary :: binary(), Encoding :: atom_encoding()) -> atom().
+binary_to_existing_atom(_Binary, _Encoding) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @param   Binary  Binary containing a text representation of a float
 %% @returns the float represented by the binary
 %% @doc     Parse the text in a given binary as a floating point number.
@@ -890,6 +1215,20 @@ binary_to_integer(_Binary, _Base) ->
 %%-----------------------------------------------------------------------------
 -spec binary_to_list(Binary :: binary()) -> [byte()].
 binary_to_list(_Binary) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Bitstring   Bitstring to convert to list
+%% @returns a list of bytes from the bitstring
+%% @doc     Convert a bitstring to a list of bytes.
+%%
+%% Unlike Erlang/OTP, AtomVM only supports byte-aligned bitstrings (binaries),
+%% so the returned list never has a trailing bitstring and this function
+%% behaves like `binary_to_list/1'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec bitstring_to_list(Bitstring :: bitstring()) -> [byte()].
+bitstring_to_list(_Bitstring) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -1088,6 +1427,20 @@ fun_to_list(_Fun) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   Module   module of the function
+%% @param   Function name of the function
+%% @param   Arity    arity of the function
+%% @returns a fun referring to `Module:Function/Arity'
+%% @doc     Create a fun referring to an exported function.
+%%
+%% Equivalent to the expression `fun Module:Function/Arity'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec make_fun(Module :: module(), Function :: atom(), Arity :: arity()) -> function().
+make_fun(_Module, _Function, _Arity) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @param   Pid     pid to convert to a string
 %% @returns a string representation of the pid
 %% @doc     Create a string representing a pid.
@@ -1222,8 +1575,10 @@ spawn_monitor(Module, Function, Args) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Function    function to create a process from
-%% @param   Options     additional options.
-%% @returns pid of the new process
+%% @param   Options     additional options, see `spawn_option()'. With `monitor'
+%%          or `{monitor, MonitorOpts}' the new process is also monitored, see
+%%          `monitor/3' for the monitor options.
+%% @returns pid of the new process, or `{Pid, MonitorRef}' when monitoring
 %% @doc     Create a new process.
 %% @end
 %%-----------------------------------------------------------------------------
@@ -1236,8 +1591,10 @@ spawn_opt(_Name, _Options) ->
 %% @param   Module      module of the function to create a process from
 %% @param   Function    name of the function to create a process from
 %% @param   Args        arguments to pass to the function to create a process from
-%% @param   Options     additional options.
-%% @returns pid of the new process
+%% @param   Options     additional options, see `spawn_option()'. With `monitor'
+%%          or `{monitor, MonitorOpts}' the new process is also monitored, see
+%%          `monitor/3' for the monitor options.
+%% @returns pid of the new process, or `{Pid, MonitorRef}' when monitoring
 %% @doc     Create a new process by calling exported Function from Module with Args.
 %% @end
 %%-----------------------------------------------------------------------------
@@ -1277,14 +1634,27 @@ make_ref() ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @param   Pid     process to send the message to
+%% @param   Target  process, registered name or alias to send the message to
 %% @param   Message message to send
 %% @returns the sent message
-%% @doc     Send a message to a given process
+%% @doc     Send a message to a given process. A message sent to a reference
+%%          that is not an active alias is silently dropped.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec send(Target :: send_destination(), Message :: Message) -> Message.
 send(_Target, _Message) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Target  process, registered name or alias to send the message to
+%% @param   Message message to send
+%% @returns the sent message
+%% @doc     Send a message to a given process. This is the function form of the
+%%          `Target ! Message' operator and is equivalent to `send/2'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec '!'(Target :: send_destination(), Message :: Message) -> Message.
+'!'(_Target, _Message) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -1304,6 +1674,32 @@ send(_Target, _Message) ->
     (Type :: process, Pid :: pid() | atom()) -> reference();
     (Type :: port, Port :: port() | atom()) -> reference().
 monitor(_Type, _PidOrPort) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Type        type of monitor to create
+%% @param   PidOrPort   pid or port of the object to monitor
+%% @param   Options     monitor options
+%% @returns a monitor reference
+%% @doc     Creates a monitor and allows passing additional options.
+%%          Currently, only the `{alias, AliasMode}' option is supported. Passing it
+%%          makes the monitor also an alias on the calling process (see `alias/0').
+%%          `AliasMode' defines the behaviour of the alias:
+%%          - explicit_unalias - the alias can be only removed with `unalias/1',
+%%          - demonitor - the alias is also removed when the monitor is removed,
+%%                        by `demonitor/1' or by the delivery of a `DOWN' message,
+%%          - reply_demonitor - additionally, the alias is deactivated and the
+%%                              monitor removed (as by `demonitor/1') when the
+%%                              first message sent via the alias is delivered.
+%%
+%%          <b>Note:</b> Unlike Erlang/OTP, the `{tag, Term}' option is not
+%%          supported and raises `unsupported'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec monitor
+    (Type :: process, Pid :: pid() | atom(), [monitor_option()]) -> reference();
+    (Type :: port, Port :: port() | atom(), [monitor_option()]) -> reference().
+monitor(_Type, _PidOrPort, _Options) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -1441,8 +1837,30 @@ group_leader(_Leader, _Pid) ->
 %%
 %% @end
 %%-----------------------------------------------------------------------------
--spec process_flag(Flag :: trap_exit, Value :: boolean()) -> pid().
+-spec process_flag(Flag :: trap_exit, Value :: boolean()) -> boolean().
 process_flag(_Flag, _Value) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Pid     process to set the flag for
+%% @param   Flag    trace flag to change
+%% @param   Value   `true' to enable the flag, `false' to disable it
+%% @returns `ok'
+%% @doc     Set a trace flag on a given process.
+%%
+%% Unlike Erlang/OTP, `process_flag/3' only controls per-process call tracing,
+%% and requires AtomVM to be built with advanced tracing support: without it
+%% the call raises `badarg'. Supported flags are `trace_calls',
+%% `trace_call_args', `trace_returns', `trace_send' and `trace_receive'; any
+%% other flag, or a value that is not a boolean, raises `badarg' as well.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec process_flag(
+    Pid :: pid(),
+    Flag :: trace_calls | trace_call_args | trace_returns | trace_send | trace_receive,
+    Value :: boolean()
+) -> ok.
+process_flag(_Pid, _Flag, _Value) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -1516,10 +1934,8 @@ garbage_collect(_Pid) ->
 %%-----------------------------------------------------------------------------
 %% @returns A term decoded from passed binary
 %% @param   Binary  binary to decode
-%% @doc Decode a term that was previously encodes with `term_to_binary/1'
+%% @doc Decode a term that was previously encoded with `term_to_binary/1'.
 %% This function should be mostly compatible with its Erlang/OTP counterpart.
-%% Unlike modern Erlang/OTP, resources are currently serialized as empty
-%% binaries and cannot be unserialized.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec binary_to_term(Binary :: binary()) -> any().
@@ -1527,16 +1943,67 @@ binary_to_term(_Binary) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @returns A term decoded from passed binary, or `{Term, Used}' with the
+%%          `used' option
+%% @param   Binary  binary to decode
+%% @param   Options decoding options
+%% @doc Decode a term that was previously encoded with `term_to_binary/1'.
+%%
+%% Supported options:
+%% <ul>
+%%   <li>`safe' - refuse to decode terms that may be unsafe, such as atoms that
+%%       do not already exist. Raises `badarg' if such a term is encountered.</li>
+%%   <li>`used' - return `{Term, Used}' where `Used' is the number of bytes
+%%       read from `Binary'.</li>
+%% </ul>
+%%
+%% This function should be mostly compatible with its Erlang/OTP counterpart.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec binary_to_term(Binary :: binary(), Options :: [safe | used]) ->
+    any() | {any(), pos_integer()}.
+binary_to_term(_Binary, _Options) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @returns A binary encoding passed term.
 %% @param   Term    term to encode
 %% @doc Encode a term to a binary that can later be decoded with `binary_to_term/1'.
 %% This function should be mostly compatible with its Erlang/OTP counterpart.
-%% Unlike modern Erlang/OTP, resources are currently serialized as empty
-%% binaries.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec term_to_binary(Term :: any()) -> binary().
 term_to_binary(_Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns A binary encoding passed term.
+%% @param   Term    term to encode
+%% @param   Options encoding options
+%% @doc Encode a term to a binary that can later be decoded with `binary_to_term/1'.
+%%
+%% The following options are accepted:
+%% <ul>
+%%   <li>`compressed' and `{compressed, Level}' (`Level' from 0 to 9): accepted
+%%       for compatibility but ignored. AtomVM's encoding is always
+%%       uncompressed; the resulting binary is still a valid external term that
+%%       `binary_to_term/1' can decode.</li>
+%%   <li>`deterministic': accepted for compatibility. AtomVM's encoding is
+%%       already deterministic, so this option has no effect.</li>
+%%   <li>`{minor_version, Version}' (`Version' from 0 to 2): accepted for
+%%       compatibility. AtomVM always encodes floats using the `NEW_FLOAT_EXT'
+%%       representation (minor version 1 and later).</li>
+%% </ul>
+%%
+%% Unlike Erlang/OTP, the `local' option is not supported: AtomVM never emits
+%% the node-local `LOCAL_EXT' encoding. Passing `local', or any other unknown
+%% option, raises a `badarg' error.
+%%
+%% This function should be mostly compatible with its Erlang/OTP counterpart.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec term_to_binary(Term :: any(), Options :: [term_to_binary_option()]) -> binary().
+term_to_binary(_Term, _Options) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -1779,6 +2246,212 @@ abs(_Number) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   A   left-hand operand
+%% @param   B   right-hand operand
+%% @returns the sum of `A' and `B'
+%% @doc     Arithmetic addition operator (`A + B').
+%%
+%% Unlike BEAM's arbitrary-precision integers, AtomVM integers hold a 256-bit
+%% magnitude plus a separate sign; an integer result whose magnitude exceeds
+%% `2^256 - 1' raises an `overflow' error.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec '+'(A :: number(), B :: number()) -> number().
+'+'(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   a number
+%% @returns `A' unchanged
+%% @doc     Unary plus operator (`+A'). Returns `A' for any number.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec '+'(A :: number()) -> number().
+'+'(_A) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   left-hand operand
+%% @param   B   right-hand operand
+%% @returns the difference of `A' and `B'
+%% @doc     Arithmetic subtraction operator (`A - B').
+%%
+%% Unlike BEAM's arbitrary-precision integers, AtomVM integers hold a 256-bit
+%% magnitude plus a separate sign; an integer result whose magnitude exceeds
+%% `2^256 - 1' raises an `overflow' error.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec '-'(A :: number(), B :: number()) -> number().
+'-'(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   a number
+%% @returns the negation of `A'
+%% @doc     Unary minus (negation) operator (`-A').
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec '-'(A :: number()) -> number().
+'-'(_A) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   left-hand operand
+%% @param   B   right-hand operand
+%% @returns the product of `A' and `B'
+%% @doc     Arithmetic multiplication operator (`A * B').
+%%
+%% Unlike BEAM's arbitrary-precision integers, AtomVM integers hold a 256-bit
+%% magnitude plus a separate sign; an integer result whose magnitude exceeds
+%% `2^256 - 1' raises an `overflow' error.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec '*'(A :: number(), B :: number()) -> number().
+'*'(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   dividend
+%% @param   B   divisor
+%% @returns the quotient of `A' and `B' as a float
+%% @doc     Floating point division operator (`A / B'). Always returns a float.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec '/'(A :: number(), B :: number()) -> float().
+'/'(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   dividend
+%% @param   B   divisor
+%% @returns the integer quotient of `A' and `B'
+%% @doc     Integer division operator (`A div B'), truncated towards zero.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec 'div'(A :: integer(), B :: integer()) -> integer().
+'div'(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   dividend
+%% @param   B   divisor
+%% @returns the remainder of `A div B'
+%% @doc     Integer remainder operator (`A rem B').
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec 'rem'(A :: integer(), B :: integer()) -> integer().
+'rem'(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   left-hand operand
+%% @param   B   right-hand operand
+%% @returns the bitwise AND of `A' and `B'
+%% @doc     Bitwise AND operator (`A band B').
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec 'band'(A :: integer(), B :: integer()) -> integer().
+'band'(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   left-hand operand
+%% @param   B   right-hand operand
+%% @returns the bitwise OR of `A' and `B'
+%% @doc     Bitwise OR operator (`A bor B').
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec 'bor'(A :: integer(), B :: integer()) -> integer().
+'bor'(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   left-hand operand
+%% @param   B   right-hand operand
+%% @returns the bitwise exclusive OR of `A' and `B'
+%% @doc     Bitwise exclusive OR operator (`A bxor B').
+%%
+%% AtomVM integers hold a 256-bit magnitude plus a separate sign and are not
+%% stored in two's complement, so a result that would need a 257th bit cannot be
+%% represented; for example `-1 bxor (2^256 - 1)' returns `0' on AtomVM, whereas
+%% BEAM returns `-(2^256)'.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec 'bxor'(A :: integer(), B :: integer()) -> integer().
+'bxor'(_A, _B) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A       the integer to shift
+%% @param   Shift   number of bit positions to shift left
+%% @returns `A' arithmetically shifted left by `Shift' bits
+%% @doc     Arithmetic bitshift left operator (`A bsl Shift').
+%%
+%% AtomVM integers hold a 256-bit magnitude plus a separate sign, so shifting
+%% bits beyond that boundary raises an `overflow' error (for example
+%% `1 bsl 257'). Mask the value first when only the low bits are wanted, e.g.
+%% `(X band 16#F) bsl 252'.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec 'bsl'(A :: integer(), Shift :: integer()) -> integer().
+'bsl'(_A, _Shift) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A       the integer to shift
+%% @param   Shift   number of bit positions to shift right
+%% @returns `A' arithmetically shifted right by `Shift' bits
+%% @doc     Arithmetic bitshift right operator (`A bsr Shift').
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec 'bsr'(A :: integer(), Shift :: integer()) -> integer().
+'bsr'(_A, _Shift) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   A   an integer
+%% @returns the bitwise complement of `A'
+%% @doc     Bitwise NOT operator (`bnot A').
+%%
+%% AtomVM integers hold a 256-bit magnitude plus a separate sign and are not
+%% stored in two's complement, so a result that would need a 257th bit cannot be
+%% represented: `bnot' of the largest 256-bit integer returns `0' on AtomVM,
+%% whereas BEAM returns `-(2^256)'.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec 'bnot'(A :: integer()) -> integer().
+'bnot'(_A) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @param   Bitstring  the bitstring to get the byte size of
 %% @returns the number of bytes needed to contain `Bitstring'
 %% @doc     Return the number of bytes needed to contain `Bitstring'.
@@ -1788,6 +2461,40 @@ abs(_Number) ->
 %%-----------------------------------------------------------------------------
 -spec byte_size(Bitstring :: bitstring()) -> non_neg_integer().
 byte_size(_Bitstring) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Bitstring  the bitstring to get the bit size of
+%% @returns the number of bits in `Bitstring'
+%% @doc     Return the number of bits in `Bitstring'.
+%%
+%% Since AtomVM only supports byte-aligned bitstrings (binaries), this is always
+%% `8 * byte_size(Bitstring)'.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec bit_size(Bitstring :: bitstring()) -> non_neg_integer().
+bit_size(_Bitstring) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Subject the binary to extract a part from
+%% @param   Start   zero-based start offset of the part
+%% @param   Length  length of the part, in bytes; may be negative to count
+%%                  backwards from `Start'
+%% @returns the sub-binary of `Subject' described by `Start' and `Length'
+%% @doc     Extract a part of a binary.
+%%
+%% Errors with `badarg' if `Start' and `Length' do not describe a valid range
+%% within `Subject'.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec binary_part(Subject :: binary(), Start :: non_neg_integer(), Length :: integer()) ->
+    binary().
+binary_part(_Subject, _Start, _Length) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -1828,6 +2535,22 @@ error(_Reason, _Args) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   Reason  the reason for the error
+%% @param   Args    the argument list, or a list of extra error information
+%% @param   Options options providing extra error information
+%% @doc     Raises an exception of class `error' with reason `Reason'.
+%%
+%% The stacktrace is automatically added. `Args' and `Options' (such as
+%% `{error_info, Map}') are accepted for compatibility with Erlang/OTP; AtomVM
+%% raises `Reason' directly without deriving extra error information from them.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec error(Reason :: term(), Args :: [term()] | none, Options :: [{error_info, map()}]) ->
+    no_return().
+error(_Reason, _Args, _Options) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @param   List    a nonempty list
 %% @returns the first element (head) of the list
 %% @doc     Return the first element of a list.
@@ -1861,6 +2584,21 @@ is_atom(_Term) ->
 %%-----------------------------------------------------------------------------
 -spec is_binary(Term :: term()) -> boolean().
 is_binary(_Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Term  the term to test
+%% @returns `true' if `Term' is a bitstring; `false', otherwise.
+%% @doc     Return `true' if `Term' is a bitstring; `false', otherwise.
+%%
+%% Since AtomVM only supports byte-aligned bitstrings (binaries), this behaves
+%% like `is_binary/1'.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_bitstring(Term :: term()) -> boolean().
+is_bitstring(_Term) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -1978,6 +2716,18 @@ is_pid(_Term) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Term  the term to test
+%% @returns `true' if `Term' is a port; `false', otherwise.
+%% @doc     Return `true' if `Term' is a port identifier; `false', otherwise.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_port(Term :: term()) -> boolean().
+is_port(_Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Term  the term to test
 %% @returns `true' if `Term' is a reference; `false', otherwise.
 %% @doc     Return `true' if `Term' is a reference; `false', otherwise.
 %%
@@ -2010,6 +2760,33 @@ is_tuple(_Term) ->
 %%-----------------------------------------------------------------------------
 -spec length(List :: list()) -> non_neg_integer().
 length(_List) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   List1   a proper list
+%% @param   List2   any term
+%% @returns `List1' with `List2' appended
+%% @doc     List concatenation operator (`List1 ++ List2').
+%%
+%% `List1' must be a proper list. `List2' may be any term; if it is not a list
+%% the result is an improper list.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec '++'(List1 :: [term()], List2 :: term()) -> term().
+'++'(_List1, _List2) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   List1   a proper list
+%% @param   List2   a proper list
+%% @returns `List1' with the elements of `List2' removed
+%% @doc     List subtraction operator (`List1 -- List2').
+%%
+%% Removes from `List1' the first occurrence of each element of `List2'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec '--'(List1 :: [term()], List2 :: [term()]) -> [term()].
+'--'(_List1, _List2) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -2059,6 +2836,38 @@ round(_Number) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   Number  the number to round up
+%% @returns the smallest integer not less than `Number'
+%% @doc     Return the ceiling of `Number' (round towards positive infinity).
+%%
+%% On AtomVM, an integer result whose magnitude exceeds `2^256 - 1' raises an
+%% `overflow' error, since AtomVM integers hold a 256-bit magnitude plus a
+%% separate sign (unlike BEAM's arbitrary-precision integers).
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec ceil(Number :: number()) -> integer().
+ceil(_Number) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Number  the number to round down
+%% @returns the largest integer not greater than `Number'
+%% @doc     Return the floor of `Number' (round towards negative infinity).
+%%
+%% On AtomVM, an integer result whose magnitude exceeds `2^256 - 1' raises an
+%% `overflow' error, since AtomVM integers hold a 256-bit magnitude plus a
+%% separate sign (unlike BEAM's arbitrary-precision integers).
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec floor(Number :: number()) -> integer().
+floor(_Number) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @returns the pid of the calling process
 %% @doc     Return the pid of the calling process.
 %%
@@ -2079,6 +2888,47 @@ self() ->
 %%-----------------------------------------------------------------------------
 -spec setelement(Index :: pos_integer(), Tuple :: tuple(), Value :: term()) -> tuple().
 setelement(_Index, _Tuple, _Value) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Index   the one-based index at which to insert `Term'
+%% @param   Tuple   the original tuple
+%% @param   Term    the value to insert
+%% @returns a new tuple with `Term' inserted at position `Index'
+%% @doc     Return a new tuple with `Term' inserted at `Index'.
+%%
+%% Elements at and after `Index' are shifted one position towards the end, so
+%% the result is one element larger than `Tuple'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec insert_element(Index :: pos_integer(), Tuple :: tuple(), Term :: term()) -> tuple().
+insert_element(_Index, _Tuple, _Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Index   the one-based index of the element to remove
+%% @param   Tuple   the original tuple
+%% @returns a new tuple with the element at position `Index' removed
+%% @doc     Return a new tuple with the element at `Index' removed.
+%%
+%% Elements after `Index' are shifted one position towards the start, so the
+%% result is one element smaller than `Tuple'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec delete_element(Index :: pos_integer(), Tuple :: tuple()) -> tuple().
+delete_element(_Index, _Tuple) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Arity           the size of the tuple to create
+%% @param   InitialValue    the value to set every element to
+%% @returns a new tuple of size `Arity' with every element set to `InitialValue'
+%% @doc     Create a new tuple of the given size with all elements initialized
+%%          to `InitialValue'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec make_tuple(Arity :: non_neg_integer(), InitialValue :: term()) -> tuple().
+make_tuple(_Arity, _InitialValue) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -2127,6 +2977,18 @@ trunc(_Number) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   Number  the number to convert to a float
+%% @returns `Number' as a float
+%% @doc     Return `Number' converted to a float.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec float(Number :: number()) -> float().
+float(_Number) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @param   Tuple  the tuple to get the size of
 %% @returns the number of elements in the tuple
 %% @doc     Return the number of elements in a tuple.
@@ -2146,4 +3008,42 @@ tuple_size(_Tuple) ->
 %%-----------------------------------------------------------------------------
 -spec tuple_to_list(Tuple :: tuple()) -> [term()].
 tuple_to_list(_Tuple) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns A reference aliasing the calling process.
+%% @doc     Creates an alias for the calling process. The alias can be used
+%%          to send messages to the process like the PID. The alias can also be
+%%          created along with a monitor - see `monitor/3'. The alias can be
+%%          removed by calling `unalias/1'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec alias() -> Alias when Alias :: reference().
+alias() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Options alias options
+%% @returns A reference aliasing the calling process.
+%% @doc     Creates an alias for the calling process, like `alias/0'.
+%%          With `explicit_unalias' (the default, so `alias([])' is `alias/0')
+%%          the alias stays active until `unalias/1'; with `reply' it is
+%%          deactivated when the first message sent via the alias is delivered.
+%%
+%%          <b>Note:</b> Unlike Erlang/OTP, the `priority' option (OTP 28) is
+%%          not supported and raises `unsupported'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec alias(Options) -> Alias when Options :: [explicit_unalias | reply], Alias :: reference().
+alias(_Options) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Alias the alias to be removed.
+%% @returns `true' if alias was removed, `false' if it was not found
+%% @doc     Removes process alias. See `alias/0' for more information.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec unalias(Alias) -> boolean() when Alias :: reference().
+unalias(_Alias) ->
     erlang:nif_error(undefined).

@@ -90,6 +90,10 @@ typedef Context *(*create_port_t)(GlobalContext *global, term opts);
 
 #include "trace.h"
 
+#if !defined(AVM_NO_SMP) || defined(AVM_TASK_DRIVER_ENABLED)
+#define SYS_SIGNAL_ENABLED
+#endif
+
 struct GenericUnixPlatformData
 {
     struct ListHead listeners;
@@ -103,7 +107,7 @@ struct GenericUnixPlatformData
 #endif
     int ATOMIC listeners_poll_count; // can be invalidated by being set to -1
     int ATOMIC select_events_poll_count; // can be invalidated by being set to -1
-#ifndef AVM_NO_SMP
+#ifdef SYS_SIGNAL_ENABLED
 #ifndef HAVE_KQUEUE
 #ifdef HAVE_EVENTFD
     int signal_fd;
@@ -198,7 +202,7 @@ static inline void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
     int listeners_poll_count = platform->listeners_poll_count;
     int select_events_poll_count = platform->select_events_poll_count;
     int poll_count;
-#ifndef AVM_NO_SMP
+#ifdef SYS_SIGNAL_ENABLED
     poll_count = 1;
 #else
     poll_count = 0;
@@ -207,7 +211,7 @@ static inline void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
     if (listeners_poll_count < 0 || select_events_poll_count < 0) {
         // Means it is dirty and should be rebuilt.
         // The array of polling fds is composed of, in this order:
-        // - the signaling fd (for SMP), which is eventfd or a pipe
+        // - the signaling fd, which is eventfd or a pipe
         // - the listeners fd
         // - the sockets fd
         struct ListHead *select_events = synclist_wrlock(&glb->select_events);
@@ -238,7 +242,7 @@ static inline void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
         fds = realloc(fds, sizeof(struct pollfd) * (poll_count + select_events_new_count + listeners_new_count));
         platform->fds = fds;
 
-#ifndef AVM_NO_SMP
+#ifdef SYS_SIGNAL_ENABLED
 #ifdef HAVE_EVENTFD
         fds[0].fd = platform->signal_fd;
 #else
@@ -296,7 +300,7 @@ static inline void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
     // After poll, process the list of fds in order, using fd_index as the index
     // on the list and nb_descriptors as the number of fds to process left
     fd_index = 0;
-#ifndef AVM_NO_SMP
+#ifdef SYS_SIGNAL_ENABLED
     if (nb_descriptors > 0) {
         if ((fds[0].revents & fds[0].events)) {
             // We've been signaled
@@ -359,7 +363,7 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms) CLANG_THREAD_SANITIZE_S
 #endif
 }
 
-#if !defined(AVM_NO_SMP) || defined(AVM_TASK_DRIVER_ENABLED)
+#ifdef SYS_SIGNAL_ENABLED
 void sys_signal(GlobalContext *glb)
 {
     struct GenericUnixPlatformData *platform = glb->platform_data;
@@ -535,7 +539,7 @@ void sys_init_platform(GlobalContext *global)
     platform->kqueue_fd = kqueue();
     platform->listeners_poll_count = 0;
     platform->select_events_poll_count = 0;
-#ifndef AVM_NO_SMP
+#ifdef SYS_SIGNAL_ENABLED
     struct timespec ts = { 0, 0 };
     struct kevent kev;
     EV_SET(&kev, SIGNAL_IDENTIFIER, EVFILT_USER, EV_ADD | EV_CLEAR, 0, 0, NULL);
@@ -553,7 +557,7 @@ void sys_init_platform(GlobalContext *global)
 #if __GNUC__ >= 14
 #pragma GCC diagnostic pop
 #endif
-#ifndef AVM_NO_SMP
+#ifdef SYS_SIGNAL_ENABLED
 #ifdef HAVE_EVENTFD
     int signal_fd = eventfd(0, EFD_NONBLOCK);
     if (UNLIKELY(signal_fd < 0)) {
@@ -612,7 +616,7 @@ void sys_free_platform(GlobalContext *global)
 #else
     free(platform->fds);
 #endif
-#ifndef AVM_NO_SMP
+#ifdef SYS_SIGNAL_ENABLED
 #ifndef HAVE_KQUEUE
 #ifdef HAVE_EVENTFD
     close(platform->signal_fd);
@@ -660,9 +664,8 @@ void event_listener_add_to_polling_set(struct EventListener *listener, GlobalCon
 #endif
 }
 
-void sys_register_listener(GlobalContext *global, struct EventListener *listener)
+void sys_register_listener_nolock(GlobalContext *global, struct EventListener *listener)
 {
-    struct ListHead *listeners = synclist_wrlock(&global->listeners);
     event_listener_add_to_polling_set(listener, global);
 #ifndef AVM_NO_SMP
 #ifndef HAVE_KQUEUE
@@ -670,7 +673,13 @@ void sys_register_listener(GlobalContext *global, struct EventListener *listener
     sys_signal(global);
 #endif
 #endif
-    list_append(listeners, &listener->listeners_list_head);
+    list_append(synclist_nolock(&global->listeners), &listener->listeners_list_head);
+}
+
+void sys_register_listener(GlobalContext *global, struct EventListener *listener)
+{
+    synclist_wrlock(&global->listeners);
+    sys_register_listener_nolock(global, listener);
     synclist_unlock(&global->listeners);
 }
 
@@ -692,10 +701,17 @@ static void listener_event_remove_from_polling_set(listener_event_t listener_fd,
 #endif
 }
 
-void sys_unregister_listener(GlobalContext *global, struct EventListener *listener)
+void sys_unregister_listener_nolock(GlobalContext *global, struct EventListener *listener)
 {
     listener_event_remove_from_polling_set(listener->fd, global);
-    synclist_remove(&global->listeners, &listener->listeners_list_head);
+    list_remove(&listener->listeners_list_head);
+}
+
+void sys_unregister_listener(GlobalContext *global, struct EventListener *listener)
+{
+    synclist_wrlock(&global->listeners);
+    sys_unregister_listener_nolock(global, listener);
+    synclist_unlock(&global->listeners);
 }
 
 void sys_register_select_event(GlobalContext *global, ErlNifEvent event, bool is_write)

@@ -234,6 +234,7 @@ compile_erlang(test_abs)
 compile_erlang(test_is_process_alive)
 compile_erlang(test_is_not_type)
 compile_erlang(test_is_bitstring_is_binary)
+compile_erlang(test_is_builtin)
 compile_erlang(test_badarith)
 compile_erlang(test_badarith2)
 compile_erlang(test_badarith3)
@@ -271,6 +272,7 @@ compile_erlang(test_heap_growth)
 compile_erlang(test_system_flag)
 compile_erlang(test_system_info)
 compile_erlang(test_binary_to_term)
+compile_erlang(test_bitstring_to_list)
 compile_erlang(test_selective_receive)
 compile_erlang(test_timeout_not_integer)
 compile_erlang(test_undef)
@@ -436,6 +438,7 @@ compile_erlang(test_list_tuple_eq)
 compile_erlang(test_ref_eq)
 compile_erlang(test_binary_eq)
 compile_erlang(test_bigint_eq)
+compile_erlang(test_bigint_normalization)
 
 compile_erlang(test_binaries_ordering)
 compile_erlang(test_lists_ordering)
@@ -568,6 +571,7 @@ compile_erlang(bs_context_byte_size)
 compile_erlang(bs_get_binary_fixed_size)
 compile_erlang(bs_get_integer_fixed_size)
 compile_erlang(bs_get_float_dynamic_size)
+compile_erlang(bs_get_float_gc)
 compile_erlang(test_is_not_equal)
 compile_assembler(test_is_not_equal_asm)
 compile_erlang(test_make_fun2)
@@ -793,6 +797,7 @@ set(erlang_test_beams
     test_is_process_alive.beam
     test_is_not_type.beam
     test_is_bitstring_is_binary.beam
+    test_is_builtin.beam
     test_badarith.beam
     test_badarith2.beam
     test_badarith3.beam
@@ -830,6 +835,7 @@ set(erlang_test_beams
     test_system_flag.beam
     test_system_info.beam
     test_binary_to_term.beam
+    test_bitstring_to_list.beam
     test_selective_receive.beam
     test_timeout_not_integer.beam
     test_undef.beam
@@ -998,6 +1004,7 @@ set(erlang_test_beams
     test_ref_eq.beam
     test_binary_eq.beam
     test_bigint_eq.beam
+    test_bigint_normalization.beam
 
     test_binaries_ordering.beam
     test_lists_ordering.beam
@@ -1135,6 +1142,7 @@ set(erlang_test_beams
     bs_get_binary_fixed_size.beam
     bs_get_integer_fixed_size.beam
     bs_get_float_dynamic_size.beam
+    bs_get_float_gc.beam
     test_is_not_equal.beam
     test_is_not_equal_asm.beam
     test_make_fun2.beam

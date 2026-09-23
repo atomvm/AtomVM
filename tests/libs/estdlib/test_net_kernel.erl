@@ -44,6 +44,7 @@ test() ->
             ok = test_link_remote_exit_local(Platform),
             ok = test_link_local_unlink_remote(Platform),
             ok = test_link_local_unlink_local(Platform),
+            ok = test_alias_send_from_beam(Platform),
             ok = test_is_alive(),
             ok = test_ping_with_avm_dist_opts(Platform),
             ok;
@@ -495,6 +496,32 @@ test_link_local_unlink_local(Platform) ->
         after 30000 -> timeout
         end,
     quit = call_apply_loop(SpawnedPid, {self(), quit}),
+    ok = stop_apply_loop(BeamMainPid, Pid, MonitorRef),
+    ok.
+
+test_alias_send_from_beam(Platform) ->
+    {BeamMainPid, Pid, MonitorRef} = start_apply_loop(Platform),
+    Alias = alias(),
+    {via_alias, Alias} = call_apply_loop(
+        BeamMainPid, {self(), apply, erlang, send, [Alias, {via_alias, Alias}]}
+    ),
+    ok =
+        receive
+            {via_alias, Alias} -> ok
+        after 30000 -> alias_message_timeout
+        end,
+    true = unalias(Alias),
+    should_be_dropped = call_apply_loop(
+        BeamMainPid, {self(), apply, erlang, send, [Alias, should_be_dropped]}
+    ),
+    %% The dropped send precedes this reply on the same connection, so `after 0` is
+    %% race-free. Match only alias messages: a stale 'EXIT' may be queued on BEAM.
+    ok =
+        receive
+            should_be_dropped -> unexpected_alias_message;
+            {via_alias, _} = Unexpected -> {unexpected_alias_message, Unexpected}
+        after 0 -> ok
+        end,
     ok = stop_apply_loop(BeamMainPid, Pid, MonitorRef),
     ok.
 

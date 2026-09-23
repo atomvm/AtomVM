@@ -50,6 +50,7 @@
     foldl/3,
     foldr/3,
     mapfoldl/3,
+    mapfoldr/3,
     all/2,
     any/2,
     flatten/1,
@@ -411,6 +412,22 @@ mapfoldl0(_Fun, {List1, Acc0}, []) ->
 mapfoldl0(Fun, {List1, Acc0}, [H | T]) ->
     {B, Acc1} = Fun(H, Acc0),
     mapfoldl0(Fun, {[B | List1], Acc1}, T).
+
+%%-----------------------------------------------------------------------------
+%% @param   Fun the function to apply
+%% @param   Acc0 the initial accumulator
+%% @param   List the list over which to fold
+%% @returns the result of mapping and folding Fun over List, from right to left
+%% @doc     Combine `map/2' and `foldr/3' in one pass.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec mapfoldr(fun((A, Acc) -> {B, Acc}), Acc, [A]) -> {[B], Acc}.
+mapfoldr(_Fun, Acc0, []) ->
+    {[], Acc0};
+mapfoldr(Fun, Acc0, [H | T]) ->
+    {Bs, Acc1} = mapfoldr(Fun, Acc0, T),
+    {B, Acc2} = Fun(H, Acc1),
+    {[B | Bs], Acc2}.
 
 %%-----------------------------------------------------------------------------
 %% @equiv   foldl(Fun, Acc0, reverse(List))

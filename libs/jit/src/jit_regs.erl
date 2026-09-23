@@ -36,6 +36,13 @@
 
 -export([
     new/0,
+    new/2,
+    available_regs/1,
+    used_regs/1,
+    set_available_regs/2,
+    set_masks/3,
+    alloc_reg/2,
+    free_reg/2,
     get_contents/2,
     get_all_contents/1,
     set_contents/3,
@@ -46,13 +53,16 @@
     invalidate_vm_loc/2,
     find_reg_with_contents/2,
     merge/2,
+    merge/3,
     stack_push/2,
     stack_pop/1,
     stack_clear/1,
     stack_contents/1,
     value_to_contents/2,
     vm_dest_to_contents/2,
-    regs_to_mask/2
+    regs_to_mask/2,
+    first_set/3,
+    mask_to_reg_list/3
 ]).
 
 -export_type([regs/0, contents/0]).
@@ -77,7 +87,9 @@
 -record(regs, {
     contents = #{} :: #{atom() => contents()},
     stack = [] :: [atom() | contents()],
-    unreachable = false :: boolean()
+    unreachable = false :: boolean(),
+    available_regs = 0 :: non_neg_integer(),
+    used_regs = 0 :: non_neg_integer()
 }).
 
 -opaque regs() :: #regs{}.
@@ -86,6 +98,52 @@
 -spec new() -> regs().
 new() ->
     #regs{}.
+
+%% @doc Create a new register tracking state with initial available/used masks.
+-spec new(non_neg_integer(), non_neg_integer()) -> regs().
+new(Available, Used) ->
+    #regs{available_regs = Available, used_regs = Used}.
+
+%% @doc Get the available-registers bitmask.
+-spec available_regs(regs()) -> non_neg_integer().
+available_regs(#regs{available_regs = A}) -> A.
+
+%% @doc Get the used-registers bitmask.
+-spec used_regs(regs()) -> non_neg_integer().
+used_regs(#regs{used_regs = U}) -> U.
+
+%% @doc Set the available-registers bitmask.
+-spec set_available_regs(regs(), non_neg_integer()) -> regs().
+set_available_regs(#regs{} = Regs, A) ->
+    Regs#regs{available_regs = A}.
+
+%% @doc Set both available and used bitmasks at once.
+-spec set_masks(regs(), non_neg_integer(), non_neg_integer()) -> regs().
+set_masks(#regs{} = Regs, A, U) ->
+    Regs#regs{available_regs = A, used_regs = U}.
+
+%% @doc Mark the scratch register(s) in `Bit' as allocated: remove them from the
+%% available pool and add them to the used set. `Bit' is usually a single
+%% register's bit (`reg_bit(Reg)') but may be the bitwise-or of several. This is
+%% the single place the allocation bit-law lives.
+-spec alloc_reg(regs(), non_neg_integer()) -> regs().
+alloc_reg(#regs{available_regs = A, used_regs = U} = Regs, Bit) ->
+    Regs#regs{available_regs = A band (bnot Bit), used_regs = U bor Bit}.
+
+%% @doc Mark the scratch register(s) in `Bit' as freed: return them to the
+%% available pool and remove them from the used set. Inverse of alloc_reg/2.
+-spec free_reg(regs(), non_neg_integer()) -> regs().
+free_reg(#regs{available_regs = A, used_regs = U} = Regs, Bit) ->
+    Regs#regs{available_regs = A bor Bit, used_regs = U band (bnot Bit)}.
+
+%% @doc Merge two regs taking the intersection of available masks and union
+%% of used masks (constrained by AllRegsMask).
+-spec merge(regs(), regs(), non_neg_integer()) -> regs().
+merge(R1, R2, AllRegsMask) ->
+    Merged0 = merge(R1, R2),
+    A1 = (R1#regs.available_regs band R2#regs.available_regs) band AllRegsMask,
+    U1 = (R1#regs.used_regs bor R2#regs.used_regs) band AllRegsMask,
+    Merged0#regs{available_regs = A1, used_regs = U1}.
 
 %% @doc Get what a CPU register currently holds.
 -spec get_contents(regs(), atom()) -> contents().
@@ -213,3 +271,27 @@ regs_to_mask([imm | T], RegBitFn) -> regs_to_mask(T, RegBitFn);
 regs_to_mask([jit_state | T], RegBitFn) -> regs_to_mask(T, RegBitFn);
 regs_to_mask([stack | T], RegBitFn) -> regs_to_mask(T, RegBitFn);
 regs_to_mask([Reg | T], RegBitFn) -> RegBitFn(Reg) bor regs_to_mask(T, RegBitFn).
+
+%% @doc Return the first register in the ordered register list whose bit (per
+%% `RegBitFn') is set in `Mask', following the list order. Crashes with
+%% `function_clause' if no register in the list matches — callers must ensure at
+%% least one register in the list has its bit set in `Mask' (matching the
+%% previous per-backend guard-clause `first_avail/1').
+-spec first_set(non_neg_integer(), [atom()], fun((atom()) -> non_neg_integer())) -> atom().
+first_set(Mask, [Reg | Rest], RegBitFn) ->
+    case Mask band RegBitFn(Reg) of
+        0 -> first_set(Mask, Rest, RegBitFn);
+        _ -> Reg
+    end.
+
+%% @doc Return the registers in the ordered register list whose bits (per
+%% `RegBitFn') are set in `Mask', preserving the list order.
+-spec mask_to_reg_list(non_neg_integer(), [atom()], fun((atom()) -> non_neg_integer())) ->
+    [atom()].
+mask_to_reg_list(_Mask, [], _RegBitFn) ->
+    [];
+mask_to_reg_list(Mask, [Reg | Rest], RegBitFn) ->
+    case Mask band RegBitFn(Reg) of
+        0 -> mask_to_reg_list(Mask, Rest, RegBitFn);
+        _ -> [Reg | mask_to_reg_list(Mask, Rest, RegBitFn)]
+    end.

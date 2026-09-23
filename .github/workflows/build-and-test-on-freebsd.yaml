@@ -157,6 +157,13 @@ jobs:
         cd build
         ./tests/test-structs
 
+    - name: "Test: test-term"
+      shell: freebsd {0}
+      run: |
+        cd $GITHUB_WORKSPACE;
+        cd build
+        ./tests/test-term
+
     - name: "Test: test_etest.avm"
       shell: freebsd {0}
       run: |

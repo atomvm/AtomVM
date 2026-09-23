@@ -28,7 +28,14 @@
 -module(filename).
 
 -export([
+    basename/1,
+    basename/2,
+    dirname/1,
+    extension/1,
     join/1,
+    join/2,
+    rootname/1,
+    rootname/2,
     split/1
 ]).
 
@@ -38,8 +45,9 @@
 %% @doc     Join a list of path components.
 %%
 %%          If a component is absolute (starts with "/"), all preceding
-%%          components are discarded.  Redundant directory separators are
-%%          removed from the result.
+%%          components are discarded.  Redundant directory separators and
+%%          "." components followed by a separator are removed from the
+%%          result.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec join(Components :: [string()]) -> string().
@@ -51,6 +59,8 @@ join([Name | Rest]) ->
     join([do_join(Name, hd(Rest)) | tl(Rest)]).
 
 %% @private
+do_join(Left, []) ->
+    normalize(Left);
 do_join(_Left, Right) when hd(Right) =:= $/ ->
     normalize(Right);
 do_join(Left, Right) ->
@@ -104,10 +114,195 @@ skip_slashes([$/ | Rest]) -> skip_slashes(Rest);
 skip_slashes(Rest) -> Rest.
 
 %% @private
-%% Collapse every run of consecutive "/" into a single "/".
-normalize([]) ->
+normalize(Name) ->
+    strip_join_trailing_slash(collapse_separators(Name)).
+
+%% @private
+%% Collapse every run of consecutive "/" into a single "/", and drop any
+%% "." component followed by a separator ("/./" -> "/"), as OTP join does.
+%% A leading "./" and a trailing "/." are kept.
+collapse_separators([]) ->
     [];
-normalize([$/, $/ | Rest]) ->
-    normalize([$/ | Rest]);
-normalize([C | Rest]) ->
-    [C | normalize(Rest)].
+collapse_separators([$/, $/ | Rest]) ->
+    collapse_separators([$/ | Rest]);
+collapse_separators([$/, $., $/ | Rest]) ->
+    collapse_separators([$/ | Rest]);
+collapse_separators([C | Rest]) ->
+    [C | collapse_separators(Rest)].
+
+%% @private
+%% Remove a single trailing "/", except for the root "/" itself.
+strip_join_trailing_slash([$/]) -> [$/];
+strip_join_trailing_slash(Name) -> strip_trailing_slash(Name).
+
+%% @private
+%% Remove a single trailing "/", if present.
+strip_trailing_slash([]) -> [];
+strip_trailing_slash([$/]) -> [];
+strip_trailing_slash([C | Rest]) -> [C | strip_trailing_slash(Rest)].
+
+%%-----------------------------------------------------------------------------
+%% @param   Name1 first path component
+%% @param   Name2 second path component
+%% @returns the path formed by joining Name1 and Name2
+%% @doc     Join two path components, equivalent to `join([Name1, Name2])'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec join(Name1 :: string(), Name2 :: string()) -> string().
+join(Name1, []) ->
+    join([Name1]);
+join(Name1, Name2) ->
+    join([Name1, Name2]).
+
+%%-----------------------------------------------------------------------------
+%% @param   Name a file name
+%% @returns the directory part of Name
+%% @doc     Return the directory part of a file name, "." if there is none.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec dirname(Name :: string()) -> string().
+dirname(Name) ->
+    %% Drop the last component (the characters after the last slash, which
+    %% may be empty for names with a trailing slash), then the separating
+    %% slash run; what remains, reversed, is the directory.
+    case drop_component(lists:reverse(Name)) of
+        no_slash ->
+            ".";
+        [] ->
+            "/";
+        DirReversed ->
+            lists:reverse(DirReversed)
+    end.
+
+%% @private
+%% Drop the reversed last component and the slash run separating it; return
+%% the reversed directory part, or no_slash if the name has no slash at all.
+drop_component([]) -> no_slash;
+drop_component([$/ | _] = Rest) -> skip_slashes(Rest);
+drop_component([_ | Rest]) -> drop_component(Rest).
+
+%%-----------------------------------------------------------------------------
+%% @param   Name a file name
+%% @returns the last component of Name
+%% @doc     Return the last component of a file name, ignoring a single
+%%          trailing slash (further ones make the last component empty).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec basename(Name :: string()) -> string().
+basename(Name) ->
+    basename(Name, []).
+
+%%-----------------------------------------------------------------------------
+%% @param   Name a file name
+%% @param   Ext an extension
+%% @returns the last component of Name, with Ext stripped if it matches
+%% @doc     Like `basename/1', but also removes the extension Ext when the
+%%          base name ends with it.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec basename(Name :: string(), Ext :: string()) -> string().
+basename(Name, Ext) ->
+    basename(Name, Ext, []).
+
+%% @private
+%% Scan Name, accumulating the current component (reversed) in Tail and
+%% resetting it at each "/"; when the remainder equals Ext, the component
+%% accumulated so far is the base name.  A single trailing "/" is ignored.
+%% This mirrors OTP basename/2; basename/1 is the Ext = "" case.
+basename(Ext, Ext, Tail) ->
+    lists:reverse(Tail);
+basename([$/], Ext, Tail) ->
+    basename([], Ext, Tail);
+basename([$/ | Rest], Ext, _Tail) ->
+    basename(Rest, Ext, []);
+basename([C | Rest], Ext, Tail) ->
+    basename(Rest, Ext, [C | Tail]);
+basename([], _Ext, Tail) ->
+    lists:reverse(Tail).
+
+%%-----------------------------------------------------------------------------
+%% @param   Name a file name
+%% @returns the extension of Name, including the dot, or "" if there is none
+%% @doc     Return the file extension of the last path component, "" if the
+%%          last component has no dot.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec extension(Name :: string()) -> string().
+extension(Name) ->
+    case extension_split(Name) of
+        {_Root, Ext} -> Ext
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @param   Name a file name
+%% @returns Name with its extension removed
+%% @doc     Remove the extension of the last path component, if any.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec rootname(Name :: string()) -> string().
+rootname(Name) ->
+    case leading_dot_only(Name) of
+        true ->
+            [];
+        false ->
+            case extension_split(Name) of
+                {Root, _Ext} -> Root
+            end
+    end.
+
+%% @private
+%% True if Name is a leading-dot dotfile with no directory and no further
+%% dot (e.g. ".bashrc"), which OTP treats as having no root name.
+leading_dot_only([$. | Rest]) ->
+    not lists:member($/, Rest) andalso not lists:member($., Rest);
+leading_dot_only(_) ->
+    false.
+
+%%-----------------------------------------------------------------------------
+%% @param   Name a file name
+%% @param   Ext an extension
+%% @returns Name with Ext removed if Name ends with Ext
+%% @doc     Remove Ext from Name when it is its extension.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec rootname(Name :: string(), Ext :: string()) -> string().
+rootname(Name, Ext) ->
+    strip_root_suffix(Name, Ext, [], Name).
+
+%% @private
+%% Remove Ext from the end of Name if present, except when the character
+%% before it is a "/" (i.e. Ext is the whole last component), matching
+%% OTP rootname/2.
+strip_root_suffix(Ext, Ext, [$/ | _], Name) -> Name;
+strip_root_suffix(Ext, Ext, Acc, _Name) -> lists:reverse(Acc);
+strip_root_suffix([], _Ext, _Acc, Name) -> Name;
+strip_root_suffix([C | Rest], Ext, Acc, Name) -> strip_root_suffix(Rest, Ext, [C | Acc], Name).
+
+%% @private
+%% Split Name into {Root, Extension}: the extension starts at the last "." of
+%% the last path component, unless that dot is the component's first character
+%% (hidden files such as ".bashrc" have no extension).
+extension_split(Name) ->
+    case extension_length(lists:reverse(Name), 0) of
+        0 ->
+            {Name, []};
+        ExtLen ->
+            NameLen = length(Name),
+            {lists:sublist(Name, NameLen - ExtLen), lists:nthtail(NameLen - ExtLen, Name)}
+    end.
+
+%% @private
+%% Scan the reversed name for the dot starting the extension; return the
+%% extension length (including the dot), or 0 if there is none.
+extension_length([], _Consumed) ->
+    0;
+extension_length([$/ | _], _Consumed) ->
+    0;
+extension_length([$., Next | _], Consumed) when Next =/= $/ ->
+    Consumed + 1;
+extension_length([$.], _Consumed) ->
+    0;
+extension_length([$., $/ | _], _Consumed) ->
+    0;
+extension_length([_ | Rest], Consumed) ->
+    extension_length(Rest, Consumed + 1).

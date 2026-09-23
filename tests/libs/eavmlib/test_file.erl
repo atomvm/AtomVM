@@ -29,6 +29,7 @@ test() ->
     HasExecve = atomvm:platform() =/= emscripten,
     ok = test_basic_file(),
     ok = test_fifo_select(HasSelect),
+    ok = test_alias_select_handle_rejected(HasSelect),
     ok = test_gc(HasSelect),
     ok = test_crash_no_leak(HasSelect),
     ok = test_select_with_gone_process(HasSelect),
@@ -122,6 +123,25 @@ test_fifo_select(_HasSelect) ->
             Message -> {unexpected, Message}
         after 200 -> ok
         end,
+    ok = atomvm:posix_close(RdFd),
+    ok = atomvm:posix_close(WrFd),
+    ok = atomvm:posix_unlink(Path).
+
+test_alias_select_handle_rejected(false) ->
+    ok;
+test_alias_select_handle_rejected(_HasSelect) ->
+    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    ok = atomvm:posix_mkfifo(Path, 8#644),
+    {ok, RdFd} = atomvm:posix_open(Path, [o_rdonly]),
+    {ok, WrFd} = atomvm:posix_open(Path, [o_wronly]),
+    Alias = alias(),
+    ok =
+        try atomvm:posix_select_write(WrFd, self(), Alias) of
+            R -> {unexpected, R}
+        catch
+            error:badarg -> ok
+        end,
+    true = unalias(Alias),
     ok = atomvm:posix_close(RdFd),
     ok = atomvm:posix_close(WrFd),
     ok = atomvm:posix_unlink(Path).

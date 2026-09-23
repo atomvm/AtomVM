@@ -249,6 +249,66 @@ defmodule LEDC do
     do: throw(:nif_error)
 
   @doc """
+  Set LEDC fade function with a limited time and start fading.
+
+  Thread-safe version that atomically configures and starts the fade, so it can
+  safely be called from different processes for different channels.
+
+  `speed` configures the LEDC channel group with specified speed mode.
+  Use the function LEDC.high_speed_mode/0 | LEDC.low_speed_mode/0
+  or integers 0|1. Caution, not all targets support high speed mode.
+  `channel` is of type ledc_channel(), (0-7).
+  `target_duty` is duty of fading.(0..(2^duty_resolution-1))).
+  `max_fade_ms` sets the maximum time of the fading (ms).
+  `fade_mode` controls whether or not to block until fading done, use the
+  convenience functions LEDC.fade_no_wait/0 | LEDC.fade_wait_done/0 or integers 0|1.
+
+  Note. Call LEDC.fade_func_install() once before calling this function.
+
+  A failing SDK call raises an error whose reason is the integer error code.
+  """
+  @spec set_fade_time_and_start(
+          speed_mode(),
+          ledc_channel(),
+          duty(),
+          non_neg_integer(),
+          fade_mode()
+        ) :: :ok
+  def set_fade_time_and_start(_speed, _channel, _target_duty, _max_fade_ms, _fade_mode),
+    do: throw(:nif_error)
+
+  @doc """
+  Set LEDC fade function with step and start fading.
+
+  Thread-safe version that atomically configures and starts the fade, so it can
+  safely be called from different processes for different channels.
+
+  `speed` configures the LEDC channel group with specified speed mode.
+  Use the function LEDC.high_speed_mode/0 | LEDC.low_speed_mode/0
+  or integers 0|1. Caution, not all targets support high speed mode.
+  `channel` is of type ledc_channel(), (0-7).
+  `target_duty` is duty of fading.(0..(2^duty_resolution-1))).
+  `scale` controls the increase or decrease step scale.
+  `cycle_num` is the number of cycles increase or decrease the duty
+  `fade_mode` controls whether or not to block until fading done, use the
+  convenience functions LEDC.fade_no_wait/0 | LEDC.fade_wait_done/0 or integers 0|1.
+
+  Note. Call LEDC.fade_func_install() once before calling this function.
+
+  A failing SDK call raises an error whose reason is the integer error code.
+  """
+  @spec set_fade_step_and_start(
+          speed_mode(),
+          ledc_channel(),
+          duty(),
+          non_neg_integer(),
+          non_neg_integer(),
+          fade_mode()
+        ) :: :ok
+  def set_fade_step_and_start(_speed, _channel, _target_duty, _scale, _cycle_num, _fade_mode),
+    do: throw(:nif_error)
+
+  @doc """
   Start LEDC fading.
 
   `speed` configures the LEDC channel group with specified speed mode.
@@ -263,6 +323,24 @@ defmodule LEDC do
   """
   @spec fade_start(speed_mode(), ledc_channel(), fade_mode()) :: :ok | {:error, ledc_error_code()}
   def fade_start(_speed, _channel, _mode),
+    do: throw(:nif_error)
+
+  @doc """
+  Stop LEDC fading.
+
+  `speed` configures the LEDC channel group with specified speed mode.
+  Use the function LEDC.high_speed_mode/0 | LEDC.low_speed_mode/0
+  or integers 0|1. Caution, not all targets support high speed mode.
+  `channel` is of type ledc_channel(), (0-7).
+
+  Note. Call LEDC.fade_func_install() once before calling this function.
+  This function is only available on platforms with SOC_LEDC_SUPPORT_FADE_STOP
+  (including esp32s2 and esp32c3, but not esp32).
+
+  A failing SDK call raises an error whose reason is the integer error code.
+  """
+  @spec fade_stop(speed_mode(), ledc_channel()) :: :ok
+  def fade_stop(_speed, _channel),
     do: throw(:nif_error)
 
   @doc """
@@ -289,6 +367,27 @@ defmodule LEDC do
   @spec set_duty(speed_mode(), ledc_channel(), duty()) ::
           :ok | {:error, ledc_error_code()}
   def set_duty(_speed, _channel, _duty),
+    do: throw(:nif_error)
+
+  @doc """
+  LEDC set duty and update immediately.
+
+  Thread-safe version that atomically sets the duty and triggers an update, so
+  it can safely be called from different processes for different channels.
+
+  `speed` configures the LEDC channel group with specified speed mode.
+  Use the function LEDC.high_speed_mode/0 | LEDC.low_speed_mode/0
+  or integers 0|1. Caution, not all targets support high speed mode.
+  `channel` is of type ledc_channel(), (0-7).
+  `duty` in the range of [0, (2**duty_resolution)].
+  `hpoint` sets the LEDC hpoint value.
+
+  Note. Call LEDC.fade_func_install() once before calling this function.
+
+  A failing SDK call raises an error whose reason is the integer error code.
+  """
+  @spec set_duty_and_update(speed_mode(), ledc_channel(), duty(), hpoint()) :: :ok
+  def set_duty_and_update(_speed, _channel, _duty, _hpoint),
     do: throw(:nif_error)
 
   @doc """

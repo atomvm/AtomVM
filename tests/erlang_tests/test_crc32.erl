@@ -110,6 +110,15 @@ test_crc32_badarg() ->
     ok = expect_badarg(fun() -> erlang:crc32_combine(0, 0, ?MODULE:id(-1)) end),
     ok = expect_badarg(fun() -> erlang:crc32_combine(?MODULE:id(16#100000000), 0, 0) end),
     ok = expect_badarg(fun() -> erlang:crc32_combine(0, ?MODULE:id(16#100000000), 0) end),
+
+    % big integers whose low 64 bits are small must not pass the uint32 check
+    ok = expect_badarg(fun() -> erlang:crc32(?MODULE:id(1 bsl 64), <<"data">>) end),
+    ok = expect_badarg(fun() -> erlang:crc32(?MODULE:id((1 bsl 64) + 7), <<"data">>) end),
+    ok = expect_badarg(fun() -> erlang:crc32(?MODULE:id(-(1 bsl 64)), <<"data">>) end),
+    ok = expect_badarg(fun() -> erlang:crc32(?MODULE:id(1 bsl 130), <<"data">>) end),
+    ok = expect_badarg(fun() -> erlang:crc32_combine(?MODULE:id(1 bsl 64), 0, 0) end),
+    ok = expect_badarg(fun() -> erlang:crc32_combine(0, ?MODULE:id((1 bsl 64) + 7), 0) end),
+    ok = expect_badarg(fun() -> erlang:crc32_combine(0, 0, ?MODULE:id(1 bsl 64)) end),
     ok.
 
 test_crc32_boundary() ->

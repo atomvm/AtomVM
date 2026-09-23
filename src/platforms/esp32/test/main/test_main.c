@@ -132,9 +132,27 @@ static void eth_stop(esp_netif_t *eth_netif)
 }
 #endif
 
-term avm_test_case(const char *test_module)
+static void prepare_event_queue(void)
 {
     esp32_sys_queue_init();
+
+    QueueSetMemberHandle_t source;
+    while ((source = xQueueSelectFromSet(event_set, 0)) != NULL) {
+        if (UNLIKELY(source != event_queue)) {
+            fprintf(stderr, "Stale member in ESP32 event queue set.\n");
+            AVM_ABORT();
+        }
+
+        void *ignored;
+        if (UNLIKELY(xQueueReceive(event_queue, &ignored, 0) != pdTRUE)) {
+            AVM_ABORT();
+        }
+    }
+}
+
+term avm_test_case(const char *test_module)
+{
+    prepare_event_queue();
 
     GlobalContext *glb = globalcontext_new();
     TEST_ASSERT(glb != NULL);
@@ -183,7 +201,7 @@ term avm_test_case(const char *test_module)
 #ifndef AVM_NO_JIT
 TEST_CASE("test_jit_compile", "[test_run]")
 {
-    esp32_sys_queue_init();
+    prepare_event_queue();
 
     GlobalContext *glb = globalcontext_new();
     TEST_ASSERT(glb != NULL);
@@ -678,6 +696,18 @@ TEST_CASE("test_wifi_example", "[test_run]")
 TEST_CASE("test_wifi_managed", "[test_run]")
 {
     term ret_value = avm_test_case("test_wifi_managed.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+
+TEST_CASE("test_wifi_teardown", "[test_run]")
+{
+    // test_wifi_teardown.beam starts WiFi and intentionally returns without
+    // calling network:stop(): the network driver destroy callback must release
+    // all WiFi resources when the GlobalContext is destroyed. Run it twice, as
+    // the second run only succeeds if the first teardown was complete.
+    term ret_value = avm_test_case("test_wifi_teardown.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+    ret_value = avm_test_case("test_wifi_teardown.beam");
     TEST_ASSERT(ret_value == OK_ATOM);
 }
 #endif

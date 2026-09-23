@@ -155,6 +155,15 @@ else()
     set(STM32_HAS_RNG FALSE)
 endif()
 
+# Flash-constrained devices that do have an RNG (e.g. stm32g474ret6, 384 KB
+# flash) can opt out of mbedTLS/crypto to save ~38 KB. STM32_HAS_RNG is the
+# sole gate for crypto (mbedTLS fetch/link + otp_crypto.c), so forcing it FALSE
+# takes the same no-crypto path already exercised by RNG-less devices (g0b1).
+if (STM32_HAS_RNG AND AVM_DISABLE_MBEDTLS)
+    set(STM32_HAS_RNG FALSE)
+    set(STM32_CRYPTO_DISABLED_BY_OPTION TRUE)
+endif()
+
 message("-----------Device Info-----------")
 message(STATUS "Device      : ${DEVICE}")
 message(STATUS "Family      : ${STM32_FAMILY}")
@@ -162,3 +171,6 @@ message(STATUS "CPU         : ${STM32_CPU}")
 message(STATUS "FPU         : ${STM32_FPU}")
 message(STATUS "Arch Flags  : ${_arch_flags_str}")
 message(STATUS "Has RNG     : ${STM32_HAS_RNG}")
+if (STM32_CRYPTO_DISABLED_BY_OPTION)
+    message(STATUS "Crypto      : disabled via AVM_DISABLE_MBEDTLS (RNG present)")
+endif()

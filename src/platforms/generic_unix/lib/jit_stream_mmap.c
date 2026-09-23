@@ -89,7 +89,13 @@ static term nif_jit_stream_mmap_new(Context *ctx, int argc, term argv[])
 
     // Write the total mmap size into the header so sys_release_native_code
     // can recover it (it reads *(size_t *)(entry_point - sizeof(size_t))).
+#if HAVE_PTHREAD_JIT_WRITE_PROTECT_NP
+    pthread_jit_write_protect_np(0);
+#endif
     *((size_t *) addr) = total;
+#if HAVE_PTHREAD_JIT_WRITE_PROTECT_NP
+    pthread_jit_write_protect_np(1);
+#endif
 
     // Return a resource object
     struct JITStreamMMap *js = enif_alloc_resource(jit_stream_mmap_resource_type, sizeof(struct JITStreamMMap));

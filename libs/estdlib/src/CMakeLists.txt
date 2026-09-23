@@ -78,6 +78,7 @@ set(ERLANG_MODULES
     string
     timer
     unicode
+    zlib
     erlang
 )
 

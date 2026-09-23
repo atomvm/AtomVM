@@ -157,7 +157,30 @@ start() ->
     ok = test_safe_option(),
     ok = test_invalid_export_fun_encoding(),
     ok = test_atom_utf8_ext_node(),
+    ok = test_encode_process_ref(),
+    ok = test_term_to_binary_options(),
     0.
+
+test_term_to_binary_options() ->
+    T = ?MODULE:id({foo, [1, 2, 3], #{a => <<"b">>}, 3.14}),
+    Plain = erlang:term_to_binary(T),
+    Plain = erlang:term_to_binary(T, []),
+    Plain = erlang:term_to_binary(T, [deterministic]),
+    Plain = erlang:term_to_binary(T, [{minor_version, 2}, deterministic]),
+    T = erlang:binary_to_term(erlang:term_to_binary(T, [{minor_version, 1}])),
+    % compressed output may use a different encoding but must round-trip
+    T = erlang:binary_to_term(erlang:term_to_binary(T, [compressed])),
+    Big = duplicate(200, T, []),
+    Big = erlang:binary_to_term(erlang:term_to_binary(Big, [compressed, deterministic])),
+    Big = erlang:binary_to_term(erlang:term_to_binary(Big, [{compressed, 6}])),
+    ok = expect_badarg(fun() -> erlang:term_to_binary(T, [bad_option]) end),
+    ok = expect_badarg(fun() -> erlang:term_to_binary(T, not_a_list) end),
+    ok = expect_badarg(fun() -> erlang:term_to_binary(T, [{minor_version, 17}]) end),
+    ok = expect_badarg(fun() -> erlang:term_to_binary(T, [{compressed, 42}]) end),
+    ok.
+
+duplicate(0, _T, Acc) -> Acc;
+duplicate(N, T, Acc) -> duplicate(N - 1, T, [T | Acc]).
 
 test_reverse(T, Interop) ->
     test_reverse(T, Interop, []).
@@ -993,6 +1016,13 @@ test_encode_resource(OTPVersion) ->
     false = AlteredResource3 =:= Resource,
     AlteredResource4 = binary_to_term(AlteredResourceBin4),
     false = AlteredResource4 =:= Resource,
+    ok.
+
+test_encode_process_ref() ->
+    ProcessRef = erlang:alias(),
+    Bin = term_to_binary(ProcessRef),
+    <<131, 90, _Len:16, 119, 13, "nonode@nohost", 0:32, _/binary>> = Bin,
+    ProcessRef = binary_to_term(?MODULE:id(Bin)),
     ok.
 
 % Verify term_to_binary(binary_to_term(Bin)) is idempotent.

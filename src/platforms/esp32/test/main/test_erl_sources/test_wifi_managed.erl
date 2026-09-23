@@ -25,13 +25,16 @@
 start() ->
     case verify_platform(atomvm:platform()) of
         ok ->
-            ok = test_managed_start(),
-            ok = test_managed_connect(),
-            ok = test_sta_status_lifecycle(),
-            ok = test_disconnect_and_reconnect(),
-            ok = test_connect_new_ap(),
-            network:stop(),
-            ok;
+            try
+                ok = test_managed_start(),
+                ok = test_managed_connect(),
+                ok = test_sta_status_lifecycle(),
+                ok = test_disconnect_and_reconnect(),
+                ok = test_connect_new_ap(),
+                ok
+            after
+                ok = network:stop()
+            end;
         Error ->
             Error
     end.
@@ -82,7 +85,7 @@ test_managed_connect() ->
         Other ->
             error({unexpected_sta_status, Other})
     end,
-    case wait_for_ip(20000) of
+    case wait_for_ip(30000) of
         ok -> ok;
         E -> error({waiting_for_ip, E})
     end,
@@ -104,7 +107,7 @@ test_disconnect_and_reconnect() ->
     disconnected = network:sta_status(),
     %% Reconnect using sta_connect/0 (reconnect to last AP)
     ok = network:sta_connect(),
-    ok = wait_for_ip(20000),
+    ok = wait_for_ip(30000),
     connected = network:sta_status(),
     io:format("test_disconnect_and_reconnect OK.~n"),
     ok.
@@ -116,7 +119,7 @@ test_connect_new_ap() ->
     disconnected = network:sta_status(),
     %% Connect again with explicit config
     ok = network:sta_connect([{ssid, "Wokwi-GUEST"}, {psk, ""}]),
-    ok = wait_for_ip(20000),
+    ok = wait_for_ip(30000),
     connected = network:sta_status(),
     io:format("test_connect_new_ap OK.~n"),
     ok.

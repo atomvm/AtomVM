@@ -75,7 +75,7 @@
 #define BSSID_SIZE 6
 
 #define TAG "network_driver"
-#define PORT_REPLY_SIZE (TUPLE_SIZE(2) + REF_SIZE)
+#define PORT_REPLY_SIZE (TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_SHORT_SIZE)
 
 static const char *const ap_atom = ATOM_STR("\x2", "ap");
 static const char *const ap_channel_atom = ATOM_STR("\xA", "ap_channel");
@@ -757,6 +757,7 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
                 // TODO: expose an erlang callback so applications can choose how to respond to this
                 // event, i.e. start a periodic scan for known networks, or initiate a connection
                 ESP_LOGI(TAG, "WIFI_EVENT_STA_START received.");
+                esp_wifi_set_ps(WIFI_PS_NONE);
                 if (!data->managed) {
                     esp_wifi_connect();
                 }
@@ -1122,7 +1123,7 @@ static wifi_config_t *get_ap_wifi_config(term ap_config, GlobalContext *global)
 
 static void time_sync_notification_cb(struct timeval *tv)
 {
-    esp_err_t err = esp_event_post(sntp_event_base, SNTP_EVENT_BASE_SYNC, tv, sizeof(tv), portMAX_DELAY);
+    esp_err_t err = esp_event_post(sntp_event_base, SNTP_EVENT_BASE_SYNC, tv, sizeof(*tv), portMAX_DELAY);
     if (err == ESP_OK) {
         ESP_LOGI(TAG, "Posting SNTP synchronization event");
     } else {
@@ -1228,6 +1229,8 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     data->owner_process_id = term_to_local_process_id(pid);
     data->ref_ticks = term_to_ref_ticks(ref);
     data->managed = roaming;
+    struct ESP32PlatformData *platform = ctx->global->platform_data;
+    platform->network_driver_data = data;
 
     esp_netif_t *sta_wifi_interface = NULL;
     if ((sta_wifi_config != NULL) || (roaming)) {
@@ -1379,7 +1382,7 @@ cleanup:
     return;
 }
 
-static void stop_network(Context *ctx)
+static void stop_network(GlobalContext *global)
 {
     // Stop sntp (ignore OK, or not configured error)
     esp_sntp_stop();
@@ -1412,6 +1415,10 @@ static void stop_network(Context *ctx)
     if (sta_wifi_interface != NULL) {
         esp_netif_destroy_default_wifi(sta_wifi_interface);
     }
+
+    struct ESP32PlatformData *platform = global->platform_data;
+    free(platform->network_driver_data);
+    platform->network_driver_data = NULL;
 }
 
 static void get_sta_rssi(Context *ctx, term pid, term ref)
@@ -1912,7 +1919,7 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
                 break;
             case NetworkStopCmd:
                 cmd_terminate = true;
-                stop_network(ctx);
+                stop_network(ctx->global);
                 break;
             case NetworkScanCmd:
                 wifi_scan(ctx, pid, ref, config);
@@ -1934,7 +1941,7 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
             default: {
                 ESP_LOGE(TAG, "Unrecognized command: %x", cmd);
                 // {Ref, {error, badarg}}
-                size_t heap_size = TUPLE_SIZE(2) + REF_SIZE + TUPLE_SIZE(2);
+                size_t heap_size = TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_SHORT_SIZE + TUPLE_SIZE(2);
                 if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
                     ESP_LOGE(TAG, "Unable to allocate heap space for error; no message sent");
                     return NativeContinue;
@@ -1944,7 +1951,7 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
         }
     } else {
         // {Ref, {error, badarg}}
-        size_t heap_size = TUPLE_SIZE(2) + REF_SIZE + TUPLE_SIZE(2);
+        size_t heap_size = TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_SHORT_SIZE + TUPLE_SIZE(2);
         if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
             ESP_LOGE(TAG, "Unable to allocate heap space for error; no message sent");
             return NativeContinue;
@@ -1992,6 +1999,14 @@ Context *network_driver_create_port(GlobalContext *global, term opts)
     return ctx;
 }
 
-REGISTER_PORT_DRIVER(network, network_driver_init, NULL, network_driver_create_port)
+static void network_driver_destroy(GlobalContext *global)
+{
+    // Unregister the scan handler first, since stop_network() does not handle
+    // it and esp_wifi_stop() may post WIFI_EVENT_SCAN_DONE for an aborted scan.
+    esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_SCAN_DONE, &scan_done_handler);
+    stop_network(global);
+}
+
+REGISTER_PORT_DRIVER(network, network_driver_init, network_driver_destroy, network_driver_create_port)
 
 #endif

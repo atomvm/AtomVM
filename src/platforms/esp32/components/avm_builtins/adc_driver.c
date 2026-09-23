@@ -344,7 +344,7 @@ static term nif_adc_init(Context *ctx, int argc, term argv[])
 #endif
 
     // {ok, {'$adc', Unit :: resource(), ref()}}
-    size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(3) + REF_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE;
+    size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(3) + TERM_BOXED_REFERENCE_SHORT_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE;
     ESP_LOGD(TAG, "Requesting memory size %u for return message", requested_size);
     if (UNLIKELY(memory_ensure_free(ctx, requested_size) != MEMORY_GC_OK)) {
         enif_release_resource(unit_rsrc);
@@ -492,7 +492,7 @@ static term nif_adc_acquire(Context *ctx, int argc, term argv[])
     chan_rsrc->calibration = calibration;
 
     // {ok, {'$adc', resource(), ref()}}
-    size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(3) + REF_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE;
+    size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(3) + TERM_BOXED_REFERENCE_SHORT_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE;
     ESP_LOGD(TAG, "Requesting memory size %u for return message", requested_size);
     if (UNLIKELY(memory_ensure_free(ctx, requested_size) != MEMORY_GC_OK)) {
         enif_release_resource(chan_rsrc);
@@ -617,7 +617,7 @@ static term nif_adc_sample(Context *ctx, int argc, term argv[])
         err = adc_oneshot_read(unit_handle, chan_rsrc->channel, &adc_reading);
         if (UNLIKELY(err != ESP_OK)) {
             ESP_LOGE(TAG, "adc_oneshot_read read failed for unit: %i channel: %i", (int) chan_rsrc->adc_unit, (int) chan_rsrc->channel);
-            return adc_err_to_atom_term(ctx->global, err);
+            return error_return_tuple(ctx, adc_err_to_atom_term(ctx->global, err));
         }
         adc_raw += adc_reading;
     }
@@ -646,7 +646,7 @@ static term nif_adc_sample(Context *ctx, int argc, term argv[])
 
     size_t request_size = TUPLE_SIZE(2) + TUPLE_SIZE(2);
     if (UNLIKELY(memory_ensure_free_opt(ctx, request_size, MEMORY_NO_SHRINK) != MEMORY_GC_OK)) {
-        return OUT_OF_MEMORY_ATOM;
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term values = create_pair(ctx, raw, voltage);
     term ret = create_pair(ctx, OK_ATOM, values);

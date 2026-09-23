@@ -1,0 +1,57 @@
+<!--
+This file is part of AtomVM.
+
+Copyright 2026 Davide Bettio <davide@uninstall.it>
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+-->
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8" />
+    <title>AtomVM tracked values example</title>
+  </head>
+  <body>
+    <h1>Tracked values example</h1>
+    <p>
+      This example demonstrates
+      <code>emscripten:run_script_tracked/1</code> and
+      <code>emscripten:get_tracked/2</code>, which let Erlang hold handles to
+      JavaScript values that cannot be serialized, such as the DOM node below.
+    </p>
+
+    <p>
+      The JavaScript value stays alive exactly as long as the Erlang handle
+      does: when the handle is garbage collected, AtomVM drops the value from
+      <code>Module.trackedObjectsMap</code>.
+    </p>
+
+    <div id="demo-box" style="padding: 1em; border: 1px solid gray">
+      A box, tracked from Erlang
+    </div>
+
+    <ul id="demo-log"></ul>
+
+    <script type="module">
+      import AtomVM from "/AtomVM.mjs";
+
+      // Arguments are loaded using fetch API.
+      // wasm_webserver serves under /build/ files in build subdirectory.
+      window.Module = await AtomVM({
+        arguments: ["/build/examples/emscripten/tracked_values.avm"],
+      });
+    </script>
+  </body>
+</html>

@@ -129,6 +129,15 @@ typedef struct Heap Heap;
 void memory_init_heap_root_fragment(Heap *heap, HeapFragment *root, size_t size);
 
 /**
+ * @brief Largest heap capacity, in terms, that can be allocated.
+ *
+ * @details Allocating a heap multiplies the capacity by `sizeof(term)` and adds
+ * the fragment header, so a capacity computed from a size that callers can
+ * influence must be kept within this bound.
+ */
+#define MEMORY_HEAP_MAX_TERMS ((SIZE_MAX - sizeof(HeapFragment)) / sizeof(term))
+
+/**
  * @brief Initialize a root heap.
  *
  * @details This function should be balanced with `memory_destroy_heap` or

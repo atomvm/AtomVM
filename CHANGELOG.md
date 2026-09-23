@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0-beta.0] - Unreleased
 
 ### Added
+- Added `filename:dirname/1`, `filename:basename/1,2`, `filename:extension/1`, `filename:rootname/1,2` and `filename:join/2`
+- Added `init:get_arguments/0`
+- Added `atomvm:posix_kill/2` to send a signal to a process, typically one started with `atomvm:subprocess/4`
 - Added Erlang distribution over serial (uart)
 - Added WASM32 JIT backend for Emscripten platform
 - Added `network:wifi_scan/0,1` to ESP32 network driver to scan available APs when in sta or sta+ap mode.
@@ -20,12 +23,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `"USB_SERIAL_JTAG"` peripheral to the ESP32 `uart` module on chips with a built-in
   USB-Serial-JTAG controller (C3/C5/C6/C61/H2/H21/H4/P4/S3)
 - Added support for the `safe` option in `erlang:binary_to_term/2`
+- Added support for process aliases: `erlang:alias/0,1`, `erlang:unalias/1`,
+  `erlang:monitor/3` with the `{alias, Mode}` option, `spawn_opt` `{monitor, MonitorOpts}` and
+  sending to an alias reference
 - Added xtensa JIT backend for esp32 platform
 - Added support for configuring pins and width for sdmmc on ESP32
 - Added support for map comprehensions
 - Added USB CDC port drivers for ESP32, RP2, and STM32 platforms
+- Added a Linux `gpio` driver for the generic_unix port (in `avm_unix`) using sysfs
+- Added `console:print_err/1` to write to standard error
+- Added support for `process_info/1` and `process_info/2` with list argument
+- Added `erlang:term_to_binary/2`, `erlang:is_builtin/3` and `erlang:bitstring_to_list/1`
+- Added `lists:mapfoldr/3`
+- Added `emscripten:run_script_tracked/1` and `emscripten:get_tracked/2` to hold handles to
+  JavaScript values from Erlang, tying the JavaScript value lifetime to the Erlang term lifetime.
+  The emscripten module object gained `trackedObjectsMap`, `nextTrackedObjectKey()` and the
+  `onRunTrackedJs`, `onGetTrackedObjects` and `onTrackedObjectDelete` hooks, which embedders may
+  override to customize what tracking means
+- Added `string:to_integer/1`
+- Added `Esp.ADC` Elixir module with the low level ADC NIFs (`init/0`, `deinit/1`,
+  `acquire/4`, `release_channel/1` and `sample/3`), which were registered natively but had
+  no Elixir source
+- Added `LEDC.fade_stop/2`, `LEDC.set_duty_and_update/4`, `LEDC.set_fade_step_and_start/6`,
+  `LEDC.set_fade_time_and_start/5` and `GPIO.set_function/2`, which were registered natively
+  but missing from the Elixir modules
+- Added a `supported_api` build target that generates `funcs.txt` and `instructions.txt`,
+  describing the functions and the BEAM instructions supported by the configured build
+- Added a `check-native-stubs` build target, run in CI, that verifies every function
+  registered in `bifs.gperf` or `nifs.gperf` has a matching Erlang export
 
 ### Changed
+- `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does:
+  calling it with a port now raises `badarg` (previous versions accepted any id-carrying
+  term, so it could be used to read port information; there is no `erlang:port_info/2`
+  in AtomVM yet to migrate such code to)
 - Updated network type db() to dbm() to reflect the actual representation of the type
 - Use ES6 modules for emscripten port, using .mjs suffix
 - `ahttp_client` now returns `{error, {parser, incomplete_response}}` when a socket closes mid-response
@@ -43,6 +74,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer lines return `{error, {parser, {line_too_long, Prefix}}}` with the first 128 bytes of
   the offending line. Callers whose upstream servers emit unusually large headers must account
   for this limit
+- Replaced the `exavmlib` `Protocol` module with a small runtime shim (only `Protocol.__concat__/2`),
+  saving ~31 KB of flash. ExAtomVM uses precompiled, unconsolidated protocols and continue to function normally at runtime.
+- Deprecated the C macro `REF_SIZE`: use `TERM_BOXED_REFERENCE_SHORT_SIZE` for references built
+  from ref ticks, `TERM_BOXED_REFERENCE_PROCESS_SIZE` for process references (aliases), or
+  `TERM_BOXED_REFERENCE_MAX_SIZE` to fit any reference. `REF_SIZE` still expands to the short
+  reference size, but now emits a compiler warning
+- On ESP32 platform, when starting wifi as a station (client), disable wifi power save so TCP servers are reachable
 
 ### Removed
 - Removed `ahttp_client` support for obsolete line folding (RFC 9112 §5.2); folded header and
@@ -50,20 +88,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `header_continuation` / `trailer_header_continuation` response events are no longer emitted
 
 ### Fixed
+- Fixed generic_unix and emscripten builds with `AVM_DISABLE_SMP=ON` and task drivers enabled
+- Route `io:put_chars(standard_error, ...)` and `io:format(standard_error, ...)` to stderr instead
+  of aliasing them to standard_io (diagnostics no longer pollute an escript's stdout)
 - Stop using deprecated `term_from_int32` on STM32 platform
 - Stop using deprecated `term_from_int32` on RP2 platform
 - Stop using deprecated `term_from_int32` on ESP32 platform
 - Fixed improper cast of ESP32 `event_data` for `WIFI_EVENT_AP_STA(DIS)CONNECTED` events
+- Fixed ESP32 SNTP synchronization events posting only a pointer-sized payload instead of the
+  full `timeval`, so `{sntp_sync, {Sec, USec}}` now includes both timestamp fields
 - `erlang:system_info(system_architecture)` now reports normalized `arch-vendor-os` strings
 - Fixed `ahttp_client` crash on non-numeric or negative `Content-Length` values
 - Fixed `ahttp_client` crash on headers with empty or all-whitespace values
 - Fixed a bug in `supervisor` handling of failing child
 - Fixed two bugs related to closing fds in `atomvm:subprocess/4`
+- Fixed `message_queue_len` (as reported by `erlang:process_info/2`): unprocessed signals,
+  such as monitor or unlink requests, were counted as queued messages
+- Fixed a process hanging forever after catching an exception raised asynchronously by a
+  trapping BIF: the trap flag was left set, so the process parked at the next scheduling
+  point and never ran again
 - Fixed `erlang:localtime/1` memory leak, use-after-free, and TZ restore bugs on newlib/picolibc
 - Fixed ESP32 I2C driver resource leaks, half-closed state, and close-during-transmission errors
 - Fixed several underallocation issues that could trigger data corruption on `binary:replace`, `zlib:compress` and bsd socket recv code.
 - Fixed a bug where `catch` would raise on regular atom results
 - Fixed ESP32 socket driver holding the global socket-list lock across blocking TCP connects, leaking the port on connect failure, losing concurrent `accept` waiters, leaking `netbuf` on receive error paths, and a recycled-`netconn` race between socket close and the event handler
+- Fixed generic_unix TCP server sockets performing an abortive close that could truncate replies awaiting ack
+- Fixed a JIT crash (`EXC_BAD_ACCESS`/SIGBUS) on Apple Silicon
+- Fixed the ESP32 event poller re-blocking after running a listener, which could delay a process
+  readied by a driver (e.g. an active-mode socket message) until the next event or timer tick
+- Fixed `term_from_resource` failing to compile from C++
+- Fixed a bug where negative or oversized segment sizes were not rejected in binary matching
+- Fixed the `network` mdns configuration to read the documented `host` key; the previously
+  required, undocumented `hostname` key is still accepted
+- Fixed `term_is_uint32` accepting big integers whose low 64 bits are within range on 32-bit
+  builds, which made `erlang:crc32/2`, `erlang:crc32_combine/3` and `crypto:pbkdf2_hmac/5`
+  silently truncate huge integer arguments instead of raising `badarg`
+- Fixed a bug where bigints were not normalized, yielding equality errors
+- Fixed `esp_adc:sample/2,3` answering a bare atom such as `timeout` on a read failure, where
+  every other ADC function and its own documentation answer `{error, Reason}`
+- Fixed Elixir `map.field` raising `undef` instead of `KeyError` or `BadMapError` when the key is
+  missing or the term is not a map, and the deprecated `map.field()` form raising `undef` always,
+  by adding the `elixir_erl_pass` runtime helpers that compiled Elixir code calls
+- Fixed `maps:from_keys/2` (and `sets:from_list/1`, which is built on top of it) not
+  deduplicating structurally equal but separately-allocated boxed terms, such as tuples
 
 ## [0.7.0-alpha.1] - 2026-04-06
 

@@ -122,6 +122,16 @@ foreach(riscv_module jit_riscv32 jit_riscv64)
     )
 endforeach()
 
+# The register-based backends include the shared native-register bookkeeping in
+# jit_backend_regs_impl.hrl, so changes to that header must force recompilation.
+foreach(regs_module jit_x86_64 jit_aarch64 jit_arm32 jit_armv6m jit_xtensa jit_riscv32 jit_riscv64)
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/${regs_module}.beam
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/jit_backend_regs_impl.hrl
+        APPEND
+    )
+endforeach()
+
 set(JIT_VERSION ${ATOMVM_BASE_VERSION})
 
 install(

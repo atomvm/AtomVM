@@ -47,6 +47,7 @@
 #include "rp2_sys.h"
 
 static NativeHandlerResult usb_cdc_driver_consume_mailbox(Context *ctx);
+static void usb_cdc_send_error_reply(Context *ctx, term pid, term ref, AtomString reason_atom_str);
 
 #define USB_CDC_BUF_SIZE 256
 #define NO_REF 0
@@ -150,7 +151,7 @@ static EventListener *usb_cdc_listener_handler(GlobalContext *glb, EventListener
     int bin_size = term_binary_heap_size(rx_size);
 
     Heap heap;
-    if (UNLIKELY(memory_init_heap(&heap, bin_size + REF_SIZE + TUPLE_SIZE(2) * 2) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_init_heap(&heap, bin_size + TERM_BOXED_REFERENCE_SHORT_SIZE + TUPLE_SIZE(2) * 2) != MEMORY_GC_OK)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         AVM_ABORT();
     }
@@ -187,13 +188,32 @@ static Context *usb_cdc_driver_create_port(GlobalContext *global, term opts)
         return NULL;
     }
 
-    Context *ctx = context_new(global);
-
     struct USBCDCData *cdc_data = malloc(sizeof(struct USBCDCData));
     if (IS_NULL_PTR(cdc_data)) {
         SMP_MUTEX_UNLOCK(s_open_lock);
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
-        AVM_ABORT();
+        return NULL;
+    }
+
+#ifndef AVM_NO_SMP
+    cdc_data->reader_lock = smp_mutex_create();
+    if (IS_NULL_PTR(cdc_data->reader_lock)) {
+        free(cdc_data);
+        SMP_MUTEX_UNLOCK(s_open_lock);
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        return NULL;
+    }
+#endif
+
+    Context *ctx = context_new(global);
+    if (IS_NULL_PTR(ctx)) {
+#ifndef AVM_NO_SMP
+        smp_mutex_destroy(cdc_data->reader_lock);
+#endif
+        free(cdc_data);
+        SMP_MUTEX_UNLOCK(s_open_lock);
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        return NULL;
     }
 
     queue_init(&cdc_data->rxqueue, sizeof(uint32_t), EVENT_QUEUE_LEN);
@@ -203,10 +223,6 @@ static Context *usb_cdc_driver_create_port(GlobalContext *global, term opts)
     cdc_data->reader_process_pid = term_invalid_term();
     cdc_data->reader_ref_ticks = 0;
     cdc_data->itf = 0;
-
-#ifndef AVM_NO_SMP
-    cdc_data->reader_lock = smp_mutex_create();
-#endif
 
     // TinyUSB should already be initialized by Pico SDK when
     // pico_enable_stdio_usb is set. For distribution use, stdio_usb
@@ -295,6 +311,10 @@ static void usb_cdc_driver_do_cancel_read(Context *ctx, GenMessage gen_message)
     bool clear_unconditionally = term_is_atom(req);
     uint64_t target_ref_ticks = 0;
     if (!clear_unconditionally) {
+        if (UNLIKELY(term_get_tuple_arity(req) < 2)) {
+            usb_cdc_send_error_reply(ctx, pid, ref, ATOM_STR("\x6", "badarg"));
+            return;
+        }
         target_ref_ticks = term_to_ref_ticks(term_get_tuple_element(req, 1));
     }
 
@@ -333,6 +353,10 @@ static void usb_cdc_driver_do_write(Context *ctx, GenMessage gen_message)
     term pid = gen_message.pid;
     term ref = gen_message.ref;
 
+    if (UNLIKELY(!term_is_tuple(msg) || term_get_tuple_arity(msg) < 2)) {
+        usb_cdc_send_error_reply(ctx, pid, ref, ATOM_STR("\x6", "badarg"));
+        return;
+    }
     term data = term_get_tuple_element(msg, 1);
     int local_pid = term_to_local_process_id(pid);
 
@@ -464,7 +488,7 @@ static void usb_cdc_driver_do_close(Context *ctx, GenMessage gen_message)
     SMP_MUTEX_UNLOCK(cdc_data->reader_lock);
 
     if (pending_reader_pid != term_invalid_term()) {
-        BEGIN_WITH_STACK_HEAP(REF_SIZE + TUPLE_SIZE(2) * 2, heap)
+        BEGIN_WITH_STACK_HEAP(TERM_BOXED_REFERENCE_SHORT_SIZE + TUPLE_SIZE(2) * 2, heap)
         term error_tuple = term_alloc_tuple(2, &heap);
         term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
         term_put_tuple_element(error_tuple, 1, globalcontext_make_atom(glb, ATOM_STR("\x6", "closed")));
@@ -508,7 +532,7 @@ static NativeHandlerResult usb_cdc_driver_consume_mailbox(Context *ctx)
         int local_pid = term_to_local_process_id(gen_message.pid);
 
         if (is_closed) {
-            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2 + REF_SIZE) != MEMORY_GC_OK)) {
+            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2 + TERM_BOXED_REFERENCE_SHORT_SIZE) != MEMORY_GC_OK)) {
                 fprintf(stderr, "usb_cdc: Failed to allocate error tuple\n");
                 globalcontext_send_message(glb, local_pid, OUT_OF_MEMORY_ATOM);
             } else {
@@ -530,6 +554,12 @@ static NativeHandlerResult usb_cdc_driver_consume_mailbox(Context *ctx)
         }
 
         term req = gen_message.req;
+        // req is unvalidated: an immediate would be misread as a boxed tuple pointer below.
+        if (UNLIKELY(!term_is_atom(req) && !(term_is_tuple(req) && term_get_tuple_arity(req) >= 1))) {
+            usb_cdc_send_error_reply(ctx, gen_message.pid, gen_message.ref, ATOM_STR("\xF", "unknown_command"));
+            mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+            continue;
+        }
         term cmd_term = term_is_atom(req) ? req : term_get_tuple_element(req, 0);
 
         enum usb_cdc_cmd cmd = interop_atom_term_select_int(cmd_table, cmd_term, ctx->global);

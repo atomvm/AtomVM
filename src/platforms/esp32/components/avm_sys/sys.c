@@ -113,8 +113,12 @@ static const char *const revision_atom = "\x8" "revision";
 QueueHandle_t event_queue = NULL;
 QueueSetHandle_t event_set = NULL;
 
-void esp32_sys_queue_init()
+void esp32_sys_queue_init(void)
 {
+    if (event_set != NULL) {
+        return;
+    }
+
     event_set = xQueueCreateSet(EVENT_QUEUE_LEN * 4);
     event_queue = xQueueCreate(EVENT_QUEUE_LEN, sizeof(void *));
     xQueueAddToSet(event_queue, event_set);
@@ -132,6 +136,9 @@ static void receive_events(GlobalContext *glb, TickType_t wait_ticks)
     void *sender = NULL;
     QueueSetMemberHandle_t event_source;
     while ((event_source = xQueueSelectFromSet(event_set, wait_ticks))) {
+        // Drain without re-blocking after the first event, then return so the
+        // scheduler loop can run any process a listener just made ready
+        wait_ticks = 0;
         // Listener used shared event_queue.
         if (event_source == event_queue) {
             if (UNLIKELY(xQueueReceive(event_queue, &sender, 0) == pdFALSE)) {
@@ -227,6 +234,7 @@ void sys_init_platform(GlobalContext *glb)
     glb->platform_data = platform;
     platform->select_thread_exit = false;
     platform->select_events_poll_count = -1;
+    platform->network_driver_data = NULL;
     esp_vfs_eventfd_config_t eventfd_config = ESP_VFS_EVENTD_CONFIG_DEFAULT();
     esp_err_t err = esp_vfs_eventfd_register(&eventfd_config);
     if (err == ESP_OK) {

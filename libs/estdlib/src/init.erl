@@ -31,6 +31,7 @@
     boot/1,
     get_argument/1,
     get_plain_arguments/0,
+    get_arguments/0,
     notify_when_started/1
 ]).
 
@@ -94,6 +95,16 @@ get_argument(_Flag) ->
 %%-----------------------------------------------------------------------------
 -spec get_plain_arguments() -> [string()].
 get_plain_arguments() ->
+    [].
+
+%%-----------------------------------------------------------------------------
+%% @return all command-line user flags with their values.
+%% @doc Returns all command-line flags, as `{Flag, Values}' tuples.
+%% AtomVM has no emulator flags, so this always returns `[]'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_arguments() -> [{atom(), [string()]}].
+get_arguments() ->
     [].
 
 %% @private

@@ -840,25 +840,32 @@ static bool jit_send(Context *ctx, JITState *jit_state)
             return false;
         }
         ctx->x[0] = return_value;
-    } else {
-        if (term_is_atom(recipient_term)) {
-            recipient_term = globalcontext_get_registered_process(ctx->global, term_to_atom_index(recipient_term));
-            if (UNLIKELY(recipient_term == UNDEFINED_ATOM)) {
-                set_error(ctx, jit_state, 0, BADARG_ATOM);
-                return false;
-            }
-        }
-
-        int local_process_id;
-        if (term_is_local_pid_or_port(recipient_term)) {
-            local_process_id = term_to_local_process_id(recipient_term);
-        } else {
+    } else if (term_is_local_pid_or_port(recipient_term)) {
+        int local_process_id = term_to_local_process_id(recipient_term);
+        globalcontext_send_message(ctx->global, local_process_id, ctx->x[1]);
+        ctx->x[0] = ctx->x[1];
+    } else if (term_is_atom(recipient_term)) {
+        recipient_term = globalcontext_get_registered_process(ctx->global, term_to_atom_index(recipient_term));
+        if (UNLIKELY(recipient_term == UNDEFINED_ATOM)) {
             set_error(ctx, jit_state, 0, BADARG_ATOM);
             return false;
         }
+        int local_process_id = term_to_local_process_id(recipient_term);
         globalcontext_send_message(ctx->global, local_process_id, ctx->x[1]);
         ctx->x[0] = ctx->x[1];
+    } else if (UNLIKELY(!term_is_reference(recipient_term))) {
+        set_error(ctx, jit_state, 0, BADARG_ATOM);
+        return false;
+    } else if (term_is_process_reference(recipient_term)) {
+        int32_t process_id = term_process_ref_to_process_id(recipient_term);
+        globalcontext_send_message_to_alias(ctx->global, process_id, recipient_term, ctx->x[1]);
+        ctx->x[0] = ctx->x[1];
+    } else {
+        // Drop the send but still return the message in x0, as OTP does for a non-active-alias
+        // reference. Outbound distributed aliases are unsupported.
+        ctx->x[0] = ctx->x[1];
     }
+
     return true;
 }
 
@@ -883,7 +890,7 @@ static term *jit_extended_register_ptr(Context *ctx, unsigned int index)
 static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
 {
     TRACE("jit_process_signal_messages\n");
-    MailboxMessage *signal_message = mailbox_process_outer_list(&ctx->mailbox);
+    MailboxMessage *signal_message = mailbox_process_outer_list(ctx);
     bool handle_error = false;
     bool reprocess_outer = false;
     while (signal_message) {
@@ -902,23 +909,21 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
                 break;
             }
             case ProcessInfoRequestSignal: {
-                struct BuiltInAtomRequestSignal *request_signal
-                    = CONTAINER_OF(signal_message, struct BuiltInAtomRequestSignal, base);
+                struct ProcessInfoRequestSignal *request_signal
+                    = CONTAINER_OF(signal_message, struct ProcessInfoRequestSignal, base);
                 context_process_process_info_request_signal(ctx, request_signal, false);
                 break;
             }
             case TrapAnswerSignal: {
                 struct TermSignal *trap_answer
                     = CONTAINER_OF(signal_message, struct TermSignal, base);
-                if (UNLIKELY(!context_process_signal_trap_answer(ctx, trap_answer))) {
-                    set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
-                    handle_error = true;
-                }
+                context_process_signal_trap_answer(ctx, trap_answer);
                 break;
             }
             case TrapExceptionSignal: {
                 struct ImmediateSignal *trap_exception
                     = CONTAINER_OF(signal_message, struct ImmediateSignal, base);
+                context_update_flags(ctx, ~Trap, NoFlags);
                 set_error(ctx, jit_state, 0, trap_exception->immediate);
                 handle_error = true;
                 break;
@@ -1010,6 +1015,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
 #endif
                 break;
             }
+            case AliasMessageSignal:
             case NormalMessage: {
                 UNREACHABLE();
             }
@@ -1019,7 +1025,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
         signal_message = next;
         if (UNLIKELY(reprocess_outer && signal_message == NULL)) {
             reprocess_outer = false;
-            signal_message = mailbox_process_outer_list(&ctx->mailbox);
+            signal_message = mailbox_process_outer_list(ctx);
         }
     }
     if (context_get_flags(ctx, Killed)) {
@@ -1440,6 +1446,16 @@ static term jit_term_alloc_bin_match_state(Context *ctx, term src, int slots)
 static term make_bigint_from_digits(
     Context *ctx, JITState *jit_state, intn_digit_t *bigint, intn_integer_sign_t sign, int count)
 {
+    count = (int) intn_count_digits(bigint, count);
+    if (intn_fits_int64(bigint, count, sign)) {
+        term t = maybe_alloc_boxed_integer_fragment(ctx, intn_to_int64(bigint, count, sign));
+        if (UNLIKELY(term_is_invalid_term(t))) {
+            set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
+            return FALSE_ATOM;
+        }
+        return t;
+    }
+
     size_t intn_data_size;
     size_t rounded_res_len;
     term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
@@ -1471,10 +1487,10 @@ static term extract_bigint(Context *ctx, JITState *jit_state, const uint8_t *byt
 }
 
 static term jit_bitstring_extract_integer(
-    Context *ctx, JITState *jit_state, term *bin_ptr, size_t offset, int n, int bs_flags)
+    Context *ctx, JITState *jit_state, term *bin_ptr, size_t offset, size_t n, int bs_flags)
 {
     TRACE("jit_bitstring_extract_integer: bin_ptr=%p offset=%d n=%d bs_flags=%d\n",
-        (void *) bin_ptr, (int) offset, n, bs_flags);
+        (void *) bin_ptr, (int) offset, (int) n, bs_flags);
     if (n <= 64) {
         union maybe_unsigned_int64 value;
         bool status = bitstring_extract_integer(
@@ -1514,26 +1530,33 @@ static term jit_bitstring_extract_integer(
     }
 }
 
-static term jit_bitstring_extract_float(Context *ctx, term *bin_ptr, size_t offset, int n, int bs_flags)
+static term jit_bitstring_extract_float(Context *ctx, JITState *jit_state, term *match_state_ptr, size_t n, int bs_flags, int live)
 {
-    TRACE("jit_bitstring_extract_float: bin_ptr=%p offset=%d n=%d bs_flags=%d\n", (void *) bin_ptr, (int) offset, n, bs_flags);
+    TRACE("jit_bitstring_extract_float: match_state_ptr=%p n=%d bs_flags=%d live=%d\n", (void *) match_state_ptr, (int) n, bs_flags, live);
+    avm_int_t offset = (avm_int_t) match_state_ptr[2];
     avm_float_t value;
     bool status;
     switch (n) {
         case 16:
-            status = bitstring_extract_f16((term) (((uintptr_t) bin_ptr) | TERM_PRIMARY_BOXED), offset, n, bs_flags, &value);
+            status = bitstring_extract_f16(match_state_ptr[1], offset, n, bs_flags, &value);
             break;
         case 32:
-            status = bitstring_extract_f32((term) (((uintptr_t) bin_ptr) | TERM_PRIMARY_BOXED), offset, n, bs_flags, &value);
+            status = bitstring_extract_f32(match_state_ptr[1], offset, n, bs_flags, &value);
             break;
         case 64:
-            status = bitstring_extract_f64((term) (((uintptr_t) bin_ptr) | TERM_PRIMARY_BOXED), offset, n, bs_flags, &value);
+            status = bitstring_extract_f64(match_state_ptr[1], offset, n, bs_flags, &value);
             break;
         default:
             status = false;
     }
     if (UNLIKELY(!status)) {
         return FALSE_ATOM;
+    }
+    match_state_ptr[2] = (term) (offset + n);
+    TRIM_LIVE_REGS(live);
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, FLOAT_SIZE, live, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
+        return term_invalid_term();
     }
     return term_from_float(value, &ctx->heap);
 }

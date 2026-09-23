@@ -139,6 +139,20 @@ em_promise_t call(const char *name, const char *message)
 }
 
 /**
+ * @brief Gets a number representing TrackedObject identity.
+ * @return a TrackedObject id, or TRACKED_OBJECT_KEY_EXHAUSTED if every key
+ * has been handed out already or the VM has not started yet.
+ */
+EMSCRIPTEN_KEEPALIVE
+uint32_t next_tracked_object_key(void)
+{
+    if (UNLIKELY(IS_NULL_PTR(global))) {
+        return TRACKED_OBJECT_KEY_EXHAUSTED;
+    }
+    return sys_get_next_tracked_object_key(global);
+}
+
+/**
  * @brief Emscripten entry point
  * @details For node builds, this function is run in the main thread. For web
  * builds, this function actually is proxied by Emscripten SDK and runs on a

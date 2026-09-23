@@ -163,6 +163,13 @@ static term nif_uart_set_baudrate(Context *ctx, int argc, term argv[])
     return create_pair(ctx, OK_ATOM, term_from_int28((int32_t) actual));
 }
 
+static const AtomStringIntPair parity_table[] = {
+    { ATOM_STR("\x4", "none"), UART_PARITY_NONE },
+    { ATOM_STR("\x4", "even"), UART_PARITY_EVEN },
+    { ATOM_STR("\x3", "odd"), UART_PARITY_ODD },
+    SELECT_INT_DEFAULT(-1)
+};
+
 static term nif_uart_set_format(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -187,19 +194,12 @@ static term nif_uart_set_format(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    term parity_term = argv[3];
-    uart_parity_t parity;
-    if (parity_term == globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "none"))) {
-        parity = UART_PARITY_NONE;
-    } else if (parity_term == globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "even"))) {
-        parity = UART_PARITY_EVEN;
-    } else if (parity_term == globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "odd"))) {
-        parity = UART_PARITY_ODD;
-    } else {
+    int parity = interop_atom_term_select_int(parity_table, argv[3], ctx->global);
+    if (UNLIKELY(parity < 0)) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    uart_set_format(rsrc_obj->uart_inst, (uint) data_bits, (uint) stop_bits, parity);
+    uart_set_format(rsrc_obj->uart_inst, (uint) data_bits, (uint) stop_bits, (uart_parity_t) parity);
 
     return OK_ATOM;
 }
@@ -277,7 +277,7 @@ static term nif_uart_read_blocking(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(argv[1], term_is_integer);
 
     avm_int_t count = term_to_int(argv[1]);
-    if (UNLIKELY(count < 0)) {
+    if (UNLIKELY(count < 0 || count > UINT16_MAX)) {
         RAISE_ERROR(BADARG_ATOM);
     }
 

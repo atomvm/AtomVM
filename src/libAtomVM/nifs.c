@@ -241,6 +241,7 @@ static term nif_erlang_port_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_function_exported(Context *ctx, int argc, term argv[]);
+static term nif_erlang_is_builtin(Context *ctx, int argc, term argv[]);
 static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[]);
 static term nif_erlang_group_leader(Context *ctx, int argc, term argv[]);
 static term nif_erlang_get_module_info(Context *ctx, int argc, term argv[]);
@@ -257,6 +258,7 @@ static term nif_atomvm_get_start_beam(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_get_creation(Context *ctx, int argc, term argv[]);
 static term nif_console_print(Context *ctx, int argc, term argv[]);
+static term nif_console_print_err(Context *ctx, int argc, term argv[]);
 static term nif_base64_encode(Context *ctx, int argc, term argv[]);
 static term nif_base64_decode(Context *ctx, int argc, term argv[]);
 static term nif_base64_encode_to_string(Context *ctx, int argc, term argv[]);
@@ -296,6 +298,8 @@ static term nif_unicode_characters_to_binary(Context *ctx, int argc, term argv[]
 static term nif_erlang_lists_subtract(Context *ctx, int argc, term argv[]);
 static term nif_erlang_crc32(Context *ctx, int argc, term argv[]);
 static term nif_erlang_crc32_combine_3(Context *ctx, int argc, term argv[]);
+static term nif_erlang_alias(Context *ctx, int argc, term argv[]);
+static term nif_erlang_unalias(Context *ctx, int argc, term argv[]);
 static term nif_zlib_compress_1(Context *ctx, int argc, term argv[]);
 
 #define DECLARE_MATH_NIF_FUN(moniker) \
@@ -688,6 +692,10 @@ static const struct Nif function_exported_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_function_exported
 };
+static const struct Nif is_builtin_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_is_builtin
+};
 
 static const struct Nif garbage_collect_nif = {
     .base.type = NIFFunctionType,
@@ -826,6 +834,10 @@ static const struct Nif atomvm_get_creation_nif = {
 static const struct Nif console_print_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_console_print
+};
+static const struct Nif console_print_err_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_console_print_err
 };
 static const struct Nif base64_encode_nif = {
     .base.type = NIFFunctionType,
@@ -987,6 +999,14 @@ static const struct Nif crc32_combine_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_crc32_combine_3
 };
+static const struct Nif erlang_alias_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_alias
+};
+static const struct Nif erlang_unalias_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_unalias
+};
 static const struct Nif zlib_compress_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_zlib_compress_1
@@ -1032,6 +1052,11 @@ DEFINE_MATH_NIF(tanh)
 #else
 #define IF_HAVE_OPEN_CLOSE(expr) NULL
 #define IF_HAVE_EXECVE(expr) NULL
+#endif
+#if HAVE_KILL
+#define IF_HAVE_KILL(expr) (expr)
+#else
+#define IF_HAVE_KILL(expr) NULL
 #endif
 #if HAVE_OPEN && HAVE_CLOSE && HAVE_LSEEK
 #define IF_HAVE_LSEEK(expr) (expr)
@@ -1325,7 +1350,7 @@ static NativeHandlerResult process_console_message(Context *ctx, term msg)
 {
     // msg is not in the port's heap
     NativeHandlerResult result = NativeContinue;
-    if (UNLIKELY(memory_ensure_free_opt(ctx, 12, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, MAX(TUPLE_SIZE(3), 2 * TUPLE_SIZE(2)), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         fprintf(stderr, "Unable to allocate sufficient memory for console driver.\n");
         AVM_ABORT();
     }
@@ -1343,7 +1368,6 @@ static NativeHandlerResult process_console_message(Context *ctx, term msg)
         term pid = term_get_tuple_element(msg, 1);
         term ref = term_get_tuple_element(msg, 2);
         term req = term_get_tuple_element(msg, 3);
-        uint64_t ref_ticks = term_to_ref_ticks(ref);
 
         if (is_tagged_tuple(req, PUT_CHARS_ATOM, 3)) {
             term chars = term_get_tuple_element(req, 2);
@@ -1353,11 +1377,9 @@ static NativeHandlerResult process_console_message(Context *ctx, term msg)
                 printf("%s", str);
                 free(str);
 
-                term refcopy = term_from_ref_ticks(ref_ticks, &ctx->heap);
-
                 term reply = term_alloc_tuple(3, &ctx->heap);
                 term_put_tuple_element(reply, 0, IO_REPLY_ATOM);
-                term_put_tuple_element(reply, 1, refcopy);
+                term_put_tuple_element(reply, 1, ref);
                 term_put_tuple_element(reply, 2, OK_ATOM);
 
                 port_send_message(ctx->global, pid, reply);
@@ -1417,6 +1439,42 @@ static NativeHandlerResult process_console_mailbox(Context *ctx)
     return result;
 }
 
+static term parse_monitor_opts(Context *ctx, term monitor_opts, bool *is_alias, context_monitor_alias_type_t *alias_type)
+{
+    *is_alias = false;
+    while (term_is_nonempty_list(monitor_opts)) {
+        term option = term_get_list_head(monitor_opts);
+        if (term_is_tuple(option) && term_get_tuple_arity(option) == 2 && term_get_tuple_element(option, 0) == ALIAS_ATOM) {
+            *is_alias = true;
+            switch (term_get_tuple_element(option, 1)) {
+                case EXPLICIT_UNALIAS_ATOM:
+                    *alias_type = ContextMonitorAliasExplicitUnalias;
+                    break;
+                case DEMONITOR_ATOM:
+                    *alias_type = ContextMonitorAliasDemonitor;
+                    break;
+                case REPLY_DEMONITOR_ATOM:
+                    *alias_type = ContextMonitorAliasReplyDemonitor;
+                    break;
+                default:
+                    RAISE_ERROR(BADARG_ATOM);
+            }
+        } else if (term_is_tuple(option) && term_get_tuple_arity(option) == 2 && term_get_tuple_element(option, 0) == TAG_ATOM) {
+            RAISE_ERROR(UNSUPPORTED_ATOM);
+        } else {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+
+        monitor_opts = term_get_list_tail(monitor_opts);
+    }
+
+    if (UNLIKELY(!term_is_nil(monitor_opts))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    return OK_ATOM;
+}
+
 // Common handling of spawn/1, spawn/3, spawn_opt/2, spawn_opt/4
 // opts_term is [] for spawn/1,3
 static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_freeze, term opts_term)
@@ -1424,7 +1482,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
     term min_heap_size_term = interop_proplist_get_value(opts_term, MIN_HEAP_SIZE_ATOM);
     term max_heap_size_term = interop_proplist_get_value(opts_term, MAX_HEAP_SIZE_ATOM);
     term link_term = interop_proplist_get_value(opts_term, LINK_ATOM);
-    term monitor_term = interop_proplist_get_value(opts_term, MONITOR_ATOM);
+    term monitor_term = interop_proplist_get_value_default(opts_term, MONITOR_ATOM, term_invalid_term());
     term heap_growth_strategy = interop_proplist_get_value_default(opts_term, ATOMVM_HEAP_GROWTH_ATOM, BOUNDED_FREE_ATOM);
     term request_term = interop_proplist_get_value_default(opts_term, REQUEST_ATOM, UNDEFINED_ATOM);
     term group_leader;
@@ -1494,59 +1552,122 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
             context_destroy(new_ctx);
             RAISE_ERROR(BADARG_ATOM);
     }
-    uint64_t ref_ticks = 0;
+    RefData ref_data;
+    bool is_spawn_monitor = false;
+    bool is_alias = false;
+    context_monitor_alias_type_t alias_type;
     term new_pid = term_from_local_process_id(new_ctx->process_id);
 
+    // Do every fallible step before publishing any side effect: destroying a never-published
+    // new_ctx would send the caller a spurious {'EXIT', Pid, normal} for a spawn that raised.
+    struct Monitor *new_link = NULL;
+    struct Monitor *self_link = NULL;
+    struct Monitor *alias_monitor = NULL;
+    struct Monitor *new_monitor = NULL;
+    struct Monitor *self_monitor = NULL;
+
     if (link_term == TRUE_ATOM) {
-        // We can call context_add_monitor directly on new process because it's not started yet
-        struct Monitor *new_link = monitor_link_new(term_from_local_process_id(ctx->process_id));
+        new_link = monitor_link_new(term_from_local_process_id(ctx->process_id));
         if (IS_NULL_PTR(new_link)) {
             context_destroy(new_ctx);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        struct Monitor *self_link = monitor_link_new(new_pid);
+        self_link = monitor_link_new(new_pid);
         if (IS_NULL_PTR(self_link)) {
-            free(new_link);
+            monitor_destroy(new_link);
             context_destroy(new_ctx);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
+    }
+    if (monitor_term == TRUE_ATOM) {
+        monitor_term = term_nil();
+    }
+    if (term_is_list(monitor_term)) {
+        is_spawn_monitor = true;
+
+        if (UNLIKELY(term_is_invalid_term(parse_monitor_opts(ctx, monitor_term, &is_alias, &alias_type)))) {
+            monitor_destroy(new_link);
+            monitor_destroy(self_link);
+            context_destroy(new_ctx);
+            return term_invalid_term();
+        }
+        if (is_alias) {
+            ref_data = (RefData){ .ref_ticks = globalcontext_get_ref_ticks(ctx->global), .process_id = ctx->process_id };
+            alias_monitor = monitor_alias_new(ref_data.ref_ticks, alias_type);
+            if (IS_NULL_PTR(alias_monitor)) {
+                monitor_destroy(new_link);
+                monitor_destroy(self_link);
+                context_destroy(new_ctx);
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+        } else {
+            ref_data = (RefData){ .ref_ticks = globalcontext_get_ref_ticks(ctx->global), .process_id = INVALID_PROCESS_ID };
+        }
+
+        new_monitor = monitor_new(term_from_local_process_id(ctx->process_id), ref_data.ref_ticks,
+            is_alias ? CONTEXT_MONITOR_MONITORED_LOCAL_ALIAS : CONTEXT_MONITOR_MONITORED_LOCAL);
+        if (IS_NULL_PTR(new_monitor)) {
+            monitor_destroy(new_link);
+            monitor_destroy(self_link);
+            monitor_destroy(alias_monitor);
+            context_destroy(new_ctx);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        self_monitor = monitor_new(new_pid, ref_data.ref_ticks, CONTEXT_MONITOR_MONITORING_LOCAL);
+        if (IS_NULL_PTR(self_monitor)) {
+            monitor_destroy(new_link);
+            monitor_destroy(self_link);
+            monitor_destroy(alias_monitor);
+            monitor_destroy(new_monitor);
+            context_destroy(new_ctx);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+
+        // Reserve before publishing (see above). GC here is safe: new_pid and ref_data are immediates.
+        int ref_size = is_alias ? TERM_BOXED_REFERENCE_PROCESS_SIZE : TERM_BOXED_REFERENCE_SHORT_SIZE;
+        int res_size = ref_size + TUPLE_SIZE(2);
+        if (UNLIKELY(memory_ensure_free_opt(ctx, res_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            monitor_destroy(new_link);
+            monitor_destroy(self_link);
+            monitor_destroy(alias_monitor);
+            monitor_destroy(self_monitor);
+            monitor_destroy(new_monitor);
+            context_destroy(new_ctx);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+    } else if (UNLIKELY(!term_is_invalid_term(monitor_term))) {
+        // {monitor, BadTerm} where BadTerm is neither a list nor 'true': raise badarg like OTP
+        // instead of spawning an unmonitored process.
+        monitor_destroy(new_link);
+        monitor_destroy(self_link);
+        context_destroy(new_ctx);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    // Nothing can fail from here on. Publish in order so the entries keep their relative position
+    // in the monitor lists. context_add_monitor on new_ctx is safe because it is not started yet.
+    if (new_link != NULL) {
         context_add_monitor(new_ctx, new_link);
         context_add_monitor(ctx, self_link);
     }
-    if (monitor_term == TRUE_ATOM) {
-        // We can call context_add_monitor directly on new process because it's not started yet
-        ref_ticks = globalcontext_get_ref_ticks(ctx->global);
-        struct Monitor *new_monitor = monitor_new(term_from_local_process_id(ctx->process_id), ref_ticks, false);
-        if (IS_NULL_PTR(new_monitor)) {
-            context_destroy(new_ctx);
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-        struct Monitor *self_monitor = monitor_new(new_pid, ref_ticks, true);
-        if (IS_NULL_PTR(self_monitor)) {
-            free(new_monitor);
-            context_destroy(new_ctx);
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
+    if (is_spawn_monitor) {
         context_add_monitor(new_ctx, new_monitor);
         context_add_monitor(ctx, self_monitor);
+        if (is_alias) {
+            context_add_monitor(ctx, alias_monitor);
+        }
     }
 
-    if (ref_ticks) {
-        int res_size = REF_SIZE + TUPLE_SIZE(2);
-        if (UNLIKELY(memory_ensure_free_opt(ctx, res_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            context_destroy(new_ctx);
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-
+    if (is_spawn_monitor) {
         scheduler_init_ready(new_ctx);
 
-        term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
+        term ref = term_from_ref_data(&ref_data, &ctx->heap);
 
-        term pid_ref_tuple = term_alloc_tuple(2, &ctx->heap);
-        term_put_tuple_element(pid_ref_tuple, 0, new_pid);
-        term_put_tuple_element(pid_ref_tuple, 1, ref);
+        term process_ref_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(process_ref_tuple, 0, new_pid);
+        term_put_tuple_element(process_ref_tuple, 1, ref);
 
-        return pid_ref_tuple;
+        return process_ref_tuple;
     } else if (UNLIKELY(valid_request)) {
         // Handling of spawn_request
         // spawn_request requires that the reply is enqueued before
@@ -1763,9 +1884,16 @@ static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
 
         globalcontext_send_message_nolock(glb, local_process_id, argv[1]);
         synclist_unlock(&glb->processes_table);
-    } else {
+    } else if (UNLIKELY(!term_is_reference(target))) {
         RAISE_ERROR(BADARG_ATOM);
+    } else if (term_is_process_reference(target)) {
+        int32_t process_id = term_process_ref_to_process_id(target);
+        globalcontext_send_message_to_alias(glb, process_id, target, argv[1]);
     }
+    // else: a non-local-process reference is silently dropped, as OTP drops a send to a
+    // non-active-alias reference.
+    // TODO: route sends to external references over distribution. Outbound distributed aliases are
+    // unsupported, so the message is currently lost.
 
     return argv[1];
 }
@@ -1842,7 +1970,7 @@ term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[])
     UNUSED(argv);
 
     // a ref is 64 bits, hence 8 bytes
-    if (UNLIKELY(memory_ensure_free_opt(ctx, REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFERENCE_SHORT_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -3212,14 +3340,27 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
     UNUSED(argc);
 
     term pid = argv[0];
-    term item_or_item_info = argv[1];
+    VALIDATE_VALUE(pid, term_is_local_pid);
 
-    if (!term_is_atom(item_or_item_info)) {
-        RAISE_ERROR(BADARG_ATOM);
+    // OTP compatibility: the second argument is validated before the target
+    // aliveness is considered, so a dead pid with an invalid argument is a
+    // badarg, not undefined.
+    size_t list_len = 0;
+    if (!term_is_list(argv[1])) {
+        if (UNLIKELY(!context_is_valid_process_info_key(argv[1]))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    } else {
+        term l = argv[1];
+        for (; term_is_nonempty_list(l); l = term_get_list_tail(l), list_len++) {
+            if (UNLIKELY(!context_is_valid_process_info_key(term_get_list_head(l)))) {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+        }
+        if (UNLIKELY(!term_is_nil(l))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
     }
-    // TODO add support for process_info/1
-    // and process_info/2 when second argument is a list
-    term item = item_or_item_info;
 
     int local_process_id = term_to_local_process_id(pid);
     Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
@@ -3227,30 +3368,114 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
         return UNDEFINED_ATOM;
     }
 
-    term ret = term_invalid_term();
-    if (ctx == target) {
-        size_t term_size;
-        // NOLINT(allocations-without-ensure-free) called with NULL heap, only computes size
-        if (UNLIKELY(!context_get_process_info(ctx, NULL, &term_size, item, NULL))) {
-            globalcontext_get_process_unlock(ctx->global, target);
-            RAISE_ERROR(BADARG_ATOM);
+    if (!term_is_list(argv[1])) {
+        term item = argv[1];
+        term ret = term_invalid_term();
+        if (ctx == target) {
+            size_t term_size;
+            // NOLINT(allocations-without-ensure-free) NULL heap call, only computes size
+            if (UNLIKELY(!context_get_process_info(ctx, NULL, &term_size, item, NULL))) {
+                globalcontext_get_process_unlock(ctx->global, target);
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            if (UNLIKELY(
+                    memory_ensure_free_opt(ctx, term_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                globalcontext_get_process_unlock(ctx->global, target);
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            if (UNLIKELY(!context_get_process_info(ctx, &ret, NULL, item, &ctx->heap))) {
+                globalcontext_get_process_unlock(ctx->global, target);
+                RAISE_ERROR(ret);
+            }
+            // return [] when unregistered (BEAM compatibility)
+            if (item == REGISTERED_NAME_ATOM && term_is_nil(term_get_tuple_element(ret, 1))) {
+                ret = term_nil();
+            }
+        } else {
+            if (UNLIKELY(!mailbox_send_process_info_request_signal(
+                    target, ctx->process_id, ProcessInfoSingle, &item, 1))) {
+                globalcontext_get_process_unlock(ctx->global, target);
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            context_update_flags(ctx, ~NoFlags, Trap);
         }
-        if (UNLIKELY(memory_ensure_free_opt(ctx, term_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        globalcontext_get_process_unlock(ctx->global, target);
+        return ret;
+    }
+
+    term item_list = argv[1];
+
+    if (list_len == 0) {
+        globalcontext_get_process_unlock(ctx->global, target);
+        return term_nil();
+    }
+
+    term *items_alloc = malloc(list_len * sizeof(term));
+    if (IS_NULL_PTR(items_alloc)) {
+        globalcontext_get_process_unlock(ctx->global, target);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term l = item_list;
+    for (size_t i = 0; i < list_len; i++) {
+        items_alloc[i] = term_get_list_head(l);
+        l = term_get_list_tail(l);
+    }
+
+    const term *items = items_alloc;
+    size_t items_len = list_len;
+
+    if (ctx != target) {
+        if (UNLIKELY(!mailbox_send_process_info_request_signal(
+                target, ctx->process_id, ProcessInfoList, items, items_len))) {
+            free(items_alloc);
             globalcontext_get_process_unlock(ctx->global, target);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        if (UNLIKELY(!context_get_process_info(ctx, &ret, NULL, item, &ctx->heap))) {
-            globalcontext_get_process_unlock(ctx->global, target);
-            RAISE_ERROR(ret);
-        }
-    } else {
-        // Currently, all items require a signal. We could nevertheless filter
-        // items that do not exist.
-        mailbox_send_built_in_atom_request_signal(target, ProcessInfoRequestSignal, ctx->process_id, item);
         context_update_flags(ctx, ~NoFlags, Trap);
+        free(items_alloc);
+        globalcontext_get_process_unlock(ctx->global, target);
+        return term_invalid_term();
     }
-    globalcontext_get_process_unlock(ctx->global, target);
 
+    size_t total_size = 0;
+    for (size_t i = 0; i < items_len; i++) {
+        size_t item_size;
+        // NOLINT(allocations-without-ensure-free) NULL heap call, only computes size
+        if (UNLIKELY(!context_get_process_info(ctx, NULL, &item_size, items[i], NULL))) {
+            free(items_alloc);
+            globalcontext_get_process_unlock(ctx->global, target);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        if (UNLIKELY(item_size > MEMORY_HEAP_MAX_TERMS - CONS_SIZE
+                || item_size + CONS_SIZE > MEMORY_HEAP_MAX_TERMS - total_size)) {
+            free(items_alloc);
+            globalcontext_get_process_unlock(ctx->global, target);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        total_size += item_size + CONS_SIZE;
+    }
+
+    if (UNLIKELY(memory_ensure_free_opt(ctx, total_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        free(items_alloc);
+        globalcontext_get_process_unlock(ctx->global, target);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    // Atoms in `items` are immediate, safe after GC
+    term ret = term_nil();
+    for (size_t i = items_len; i-- > 0;) {
+        term item_result;
+        if (UNLIKELY(!context_get_process_info(ctx, &item_result, NULL, items[i], &ctx->heap))) {
+            free(items_alloc);
+            globalcontext_get_process_unlock(ctx->global, target);
+            RAISE_ERROR(item_result);
+        }
+
+        ret = term_list_prepend(item_result, ret, &ctx->heap);
+    }
+
+    free(items_alloc);
+    globalcontext_get_process_unlock(ctx->global, target);
     return ret;
 }
 
@@ -3439,10 +3664,48 @@ static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
     }
 }
 
+// AtomVM's external term encoding is already deterministic and always uses
+// NEW_FLOAT_EXT (minor_version >= 1).  `compressed' is accepted but ignored:
+// the uncompressed encoding is a valid external term that any
+// binary_to_term can read.
+static bool is_valid_term_to_binary_option(Context *ctx, term opt)
+{
+    if (term_is_atom(opt)) {
+        return globalcontext_is_term_equal_to_atom_string(ctx->global, opt, ATOM_STR("\xD", "deterministic"))
+            || globalcontext_is_term_equal_to_atom_string(ctx->global, opt, ATOM_STR("\xA", "compressed"));
+    }
+    if (term_is_tuple(opt) && term_get_tuple_arity(opt) == 2) {
+        term name = term_get_tuple_element(opt, 0);
+        term value = term_get_tuple_element(opt, 1);
+        if (!term_is_integer(value)) {
+            return false;
+        }
+        avm_int_t int_value = term_to_int(value);
+        if (globalcontext_is_term_equal_to_atom_string(ctx->global, name, ATOM_STR("\xD", "minor_version"))) {
+            return int_value >= 0 && int_value <= 2;
+        }
+        if (globalcontext_is_term_equal_to_atom_string(ctx->global, name, ATOM_STR("\xA", "compressed"))) {
+            return int_value >= 0 && int_value <= 9;
+        }
+    }
+    return false;
+}
+
 static term nif_erlang_term_to_binary(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
     term t = argv[0];
+    if (argc == 2) {
+        term options = argv[1];
+        while (term_is_nonempty_list(options)) {
+            if (UNLIKELY(!is_valid_term_to_binary_option(ctx, term_get_list_head(options)))) {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            options = term_get_list_tail(options);
+        }
+        if (UNLIKELY(!term_is_nil(options))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
     term ret = external_term_to_binary(ctx, t);
     if (term_is_invalid_term(ret)) {
         RAISE_ERROR(BADARG_ATOM);
@@ -4661,6 +4924,36 @@ static term nif_erlang_function_exported(Context *ctx, int argc, term argv[])
     return TRUE_ATOM;
 }
 
+static term nif_erlang_is_builtin(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term module = argv[0];
+    term function = argv[1];
+    term arity_term = argv[2];
+
+    VALIDATE_VALUE(module, term_is_atom);
+    VALIDATE_VALUE(function, term_is_atom);
+    VALIDATE_VALUE(arity_term, term_is_integer);
+
+    atom_index_t module_name_ix = term_to_atom_index(module);
+    atom_index_t function_name_ix = term_to_atom_index(function);
+
+    avm_int_t arity = term_to_int(arity_term);
+
+    char mfa[MAX_MFA_NAME_LEN];
+    atom_table_write_mfa(ctx->global->atom_table, mfa, sizeof(mfa), module_name_ix, function_name_ix, arity);
+
+    // A function is a builtin iff it is implemented natively in AtomVM, i.e.
+    // registered as a BIF or a NIF. Unlike function_exported/3, a function
+    // exported by a loaded (Erlang) module is not a builtin.
+    if (bif_registry_get_handler(mfa) != NULL || nifs_get(mfa) != NULL) {
+        return TRUE_ATOM;
+    }
+
+    return FALSE_ATOM;
+}
+
 static term nif_erlang_garbage_collect(Context *ctx, int argc, term argv[])
 {
     if (argc == 0) {
@@ -4920,17 +5213,21 @@ static term nif_erlang_memory(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
-
     term object_type = argv[0];
     term target_proc = argv[1];
+    term options = argc == 3 ? argv[2] : term_nil();
     term target_pid;
     size_t target_proc_size = 0;
+    bool is_alias;
+    context_monitor_alias_type_t alias_type;
 
     if (object_type != PROCESS_ATOM && object_type != PORT_ATOM) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
+    if (UNLIKELY(term_is_invalid_term(parse_monitor_opts(ctx, options, &is_alias, &alias_type)))) {
+        return term_invalid_term();
+    }
     if (term_is_atom(target_proc)) {
         target_pid = globalcontext_get_registered_process(ctx->global, term_to_atom_index(target_proc));
         target_proc_size = TUPLE_SIZE(2);
@@ -4940,35 +5237,47 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     }
 
     Context *target;
-    int32_t local_process_id;
-    // gcc < 14 is not smart enough to find out local_process_id is not used initialized below
-#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ < 14
-    local_process_id = 0;
-#endif
+    // Some compilers cannot tell that local_process_id is always set before it is used below
+    int32_t local_process_id = INVALID_PROCESS_ID;
     if (UNLIKELY(target_pid == UNDEFINED_ATOM)) {
         target = NULL;
     } else {
         local_process_id = term_to_local_process_id(target_pid);
-        // Monitoring self is possible but no monitor is actually created
+        // Monitoring self installs nothing, like OTP: no monitor and (with {alias, _}) no alias, so
+        // sends to the returned ref are dropped and unalias/1, demonitor(Ref, [info]) return false.
         if (UNLIKELY(local_process_id == ctx->process_id)) {
-            if (UNLIKELY(memory_ensure_free_opt(ctx, REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFERENCE_SHORT_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
             uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
-            term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
-            return ref;
+            return term_from_ref_ticks(ref_ticks, &ctx->heap);
         }
 
         target = globalcontext_get_process_lock(ctx->global, local_process_id);
     }
 
+    int ref_size = is_alias ? TERM_BOXED_REFERENCE_PROCESS_SIZE : TERM_BOXED_REFERENCE_SHORT_SIZE;
+
     if (IS_NULL_PTR(target)) {
-        int res_size = REF_SIZE + TUPLE_SIZE(5) + target_proc_size;
+        int res_size = ref_size + TUPLE_SIZE(5) + target_proc_size;
+        RefData ref_data = { .ref_ticks = globalcontext_get_ref_ticks(ctx->global), .process_id = is_alias ? ctx->process_id : INVALID_PROCESS_ID };
+        // The monitor is immediately removed by the noproc DOWN, so only an explicit_unalias alias
+        // stays active (demonitor / reply_demonitor would be deactivated right away, as at a DOWN).
+        struct Monitor *alias_monitor = NULL;
+        if (is_alias && alias_type == ContextMonitorAliasExplicitUnalias) {
+            alias_monitor = monitor_alias_new(ref_data.ref_ticks, alias_type);
+            if (IS_NULL_PTR(alias_monitor)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+        }
         if (UNLIKELY(memory_ensure_free_opt(ctx, res_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            monitor_destroy(alias_monitor);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
-        term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
+        if (alias_monitor != NULL) {
+            context_add_monitor(ctx, alias_monitor);
+        }
+        term ref = term_from_ref_data(&ref_data, &ctx->heap);
         term down_message_tuple = term_alloc_tuple(5, &ctx->heap);
         term_put_tuple_element(down_message_tuple, 0, DOWN_ATOM);
         term_put_tuple_element(down_message_tuple, 1, ref);
@@ -4987,36 +5296,63 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     }
 
     if ((object_type == PROCESS_ATOM && target->native_handler != NULL) || (object_type == PORT_ATOM && target->native_handler == NULL)) {
+        globalcontext_get_process_unlock(ctx->global, target);
         RAISE_ERROR(BADARG_ATOM);
     }
-    uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
-    term monitoring_pid = term_from_local_process_id(ctx->process_id);
+
+    RefData ref_data;
+    struct Monitor *alias_monitor = NULL;
+    if (is_alias) {
+        ref_data = (RefData){ .ref_ticks = globalcontext_get_ref_ticks(ctx->global), .process_id = ctx->process_id };
+        alias_monitor = monitor_alias_new(ref_data.ref_ticks, alias_type);
+        if (IS_NULL_PTR(alias_monitor)) {
+            globalcontext_get_process_unlock(ctx->global, target);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+    } else {
+        ref_data = (RefData){ .ref_ticks = globalcontext_get_ref_ticks(ctx->global), .process_id = INVALID_PROCESS_ID };
+    }
     struct Monitor *self_monitor;
     if (term_is_atom(target_proc)) {
-        self_monitor = monitor_registeredname_monitor_new(local_process_id, target_proc, ref_ticks);
+        self_monitor = monitor_registeredname_monitor_new(local_process_id, target_proc, ref_data.ref_ticks);
     } else {
-        self_monitor = monitor_new(target_pid, ref_ticks, true);
+        self_monitor = monitor_new(target_pid, ref_data.ref_ticks, CONTEXT_MONITOR_MONITORING_LOCAL);
     }
     if (IS_NULL_PTR(self_monitor)) {
         globalcontext_get_process_unlock(ctx->global, target);
+        monitor_destroy(alias_monitor);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    struct Monitor *other_monitor = monitor_new(monitoring_pid, ref_ticks, false);
+    term monitoring_pid = term_from_local_process_id(ctx->process_id);
+    struct Monitor *other_monitor = monitor_new(monitoring_pid, ref_data.ref_ticks,
+        is_alias ? CONTEXT_MONITOR_MONITORED_LOCAL_ALIAS : CONTEXT_MONITOR_MONITORED_LOCAL);
     if (IS_NULL_PTR(other_monitor)) {
-        free(self_monitor);
+        monitor_destroy(alias_monitor);
+        monitor_destroy(self_monitor);
         globalcontext_get_process_unlock(ctx->global, target);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
+
+    // Reserve the result reference *before* publishing any monitor/alias state, so an OOM here
+    // cannot leave the target with a queued MonitorSignal while the caller gets an exception and
+    // never receives the reference. GC here is safe: the monitor structs hold only immediates.
+    if (UNLIKELY(memory_ensure_free_opt(ctx, ref_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        monitor_destroy(alias_monitor);
+        monitor_destroy(self_monitor);
+        monitor_destroy(other_monitor);
+        globalcontext_get_process_unlock(ctx->global, target);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
     mailbox_send_monitor_signal(target, MonitorSignal, other_monitor);
     globalcontext_get_process_unlock(ctx->global, target);
 
     context_add_monitor(ctx, self_monitor);
-
-    if (UNLIKELY(memory_ensure_free_opt(ctx, REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    if (is_alias) {
+        context_add_monitor(ctx, alias_monitor);
     }
 
-    return term_from_ref_ticks(ref_ticks, &ctx->heap);
+    return term_from_ref_data(&ref_data, &ctx->heap);
 }
 
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[])
@@ -5092,7 +5428,7 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[])
 
         if (UNLIKELY(!context_add_monitor(ctx, self_link))) {
             globalcontext_get_process_unlock(ctx->global, target);
-            free(other_link);
+            monitor_destroy(other_link);
             return TRUE_ATOM;
         }
 
@@ -5635,16 +5971,14 @@ static term nif_atomvm_get_creation(Context *ctx, int argc, term argv[])
     return term_make_maybe_boxed_int64(ctx->global->creation, &ctx->heap);
 }
 
-static term nif_console_print(Context *ctx, int argc, term argv[])
+static term console_print_to(FILE *stream, Context *ctx, term argv[])
 {
-    UNUSED(argc);
-
     term t = argv[0];
     if (term_is_binary(t)) {
         const char *data = term_binary_data(t);
-        unsigned long n = term_binary_size(t);
-        fprintf(stdout, "%.*s", (int) n, data);
-        fflush(stdout);
+        size_t n = term_binary_size(t);
+        fwrite(data, 1, n, stream);
+        fflush(stream);
     } else {
         size_t size;
         switch (interop_iolist_size(t, &size)) {
@@ -5654,6 +5988,10 @@ static term nif_console_print(Context *ctx, int argc, term argv[])
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             case InteropBadArg:
                 RAISE_ERROR(BADARG_ATOM);
+        }
+        if (size == 0) {
+            fflush(stream);
+            return OK_ATOM;
         }
         char *buf = malloc(size);
         if (IS_NULL_PTR(buf)) {
@@ -5669,11 +6007,23 @@ static term nif_console_print(Context *ctx, int argc, term argv[])
                 free(buf);
                 RAISE_ERROR(BADARG_ATOM);
         }
-        fprintf(stdout, "%.*s", (int) size, buf);
-        fflush(stdout);
+        fwrite(buf, 1, size, stream);
+        fflush(stream);
         free(buf);
     }
     return OK_ATOM;
+}
+
+static term nif_console_print(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    return console_print_to(stdout, ctx, argv);
+}
+
+static term nif_console_print_err(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    return console_print_to(stderr, ctx, argv);
 }
 
 // clang-format off
@@ -6709,7 +7059,10 @@ static int sort_keys_uniq(term *keys, int size, GlobalContext *global)
     int j = 1;
     term last_seen = keys[0];
     for (int i = 1; i < size; i++) {
-        if (keys[i] != last_seen) {
+        TermCompareResult result = term_compare(keys[i], last_seen, TermCompareExact, global);
+        if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+            return -1;
+        } else if (result != TermEquals) {
             last_seen = keys[i];
             keys[j] = last_seen;
             j++;
@@ -7446,6 +7799,68 @@ static term nif_erlang_crc32_combine_3(Context *ctx, int argc, term argv[])
 #endif
 
     return make_maybe_boxed_int64(ctx, crc);
+}
+
+static term nif_erlang_alias(Context *ctx, int argc, term argv[])
+{
+    // The reply option reuses the reply_demonitor machinery: with no monitor to remove, the alias
+    // is deactivated when the first message via it is delivered.
+    context_monitor_alias_type_t alias_type = ContextMonitorAliasExplicitUnalias;
+    if (argc == 1) {
+        term opts = argv[0];
+        VALIDATE_VALUE(opts, term_is_list);
+        while (term_is_nonempty_list(opts)) {
+            term option = term_get_list_head(opts);
+            if (option == EXPLICIT_UNALIAS_ATOM) {
+                alias_type = ContextMonitorAliasExplicitUnalias;
+            } else if (option == REPLY_ATOM) {
+                alias_type = ContextMonitorAliasReplyDemonitor;
+            } else if (UNLIKELY(option == PRIORITY_ATOM)) {
+                RAISE_ERROR(UNSUPPORTED_ATOM);
+            } else {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            opts = term_get_list_tail(opts);
+        }
+        if (UNLIKELY(!term_is_nil(opts))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
+
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFERENCE_PROCESS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    RefData ref_data = { .ref_ticks = globalcontext_get_ref_ticks(ctx->global), .process_id = ctx->process_id };
+    term process_ref = term_from_ref_data(&ref_data, &ctx->heap);
+    struct Monitor *monitor = monitor_alias_new(ref_data.ref_ticks, alias_type);
+    if (IS_NULL_PTR(monitor)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    context_add_monitor(ctx, monitor);
+    return process_ref;
+}
+
+static term nif_erlang_unalias(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term process_ref = argv[0];
+    VALIDATE_VALUE(process_ref, term_is_reference);
+    if (UNLIKELY(!term_is_local_reference(process_ref))) {
+        // An external reference cannot be an alias of the calling process: return false like
+        // OTP, instead of raising badarg.
+        return FALSE_ATOM;
+    }
+    uint64_t ref_ticks = term_to_ref_ticks(process_ref);
+
+    struct MonitorAlias *alias = context_find_alias(ctx, ref_ticks);
+    if (IS_NULL_PTR(alias)) {
+        return FALSE_ATOM;
+    } else {
+        context_unalias(ctx, alias);
+        return TRUE_ATOM;
+    }
 }
 
 #ifdef WITH_ZLIB

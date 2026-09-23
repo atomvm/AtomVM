@@ -257,7 +257,7 @@ put_chars(standard_io, Chars) ->
             execute_request(Leader, {put_chars, unicode, Chars})
     end;
 put_chars(standard_error, Chars) ->
-    put_chars(standard_io, Chars).
+    console:print_err(Chars).
 
 %% @private
 convert_request({requests, Requests}) ->

@@ -91,7 +91,7 @@ open(Opts) ->
                     {Pid, Fd};
                 {error, _} = CfgErr ->
                     atomvm:posix_close(Fd),
-                    CfgErr
+                    error(CfgErr)
             end;
         {error, Reason} ->
             error(Reason)

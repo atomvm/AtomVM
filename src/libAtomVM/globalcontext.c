@@ -257,10 +257,24 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
     struct ListHead *item;
     struct ListHead *tmp;
 
+    while (true) {
+        struct ListHead *processes = synclist_rdlock(&glb->processes_table);
+        struct ListHead *first = list_first(processes);
+        if (first == processes) {
+            synclist_unlock(&glb->processes_table);
+            break;
+        }
+        Context *ctx = GET_LIST_ENTRY(first, Context, processes_table_head);
+        synclist_unlock(&glb->processes_table);
+        context_destroy(ctx);
+    }
+
     int module_index = glb->loaded_modules_count;
     for (int i = 0; i < module_index; i++) {
         module_destroy(glb->modules_by_index[i]);
     }
+    free(glb->modules_by_index);
+    valueshashtable_destroy(glb->modules_table);
 
     struct ListHead *open_avm_packs = synclist_nolock(&glb->avmpack_data);
     MUTABLE_LIST_FOR_EACH (item, tmp, open_avm_packs) {
@@ -318,8 +332,6 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
     synclist_destroy(&glb->registered_processes);
     synclist_destroy(&glb->processes_table);
 
-    valueshashtable_destroy(glb->modules_table);
-    free(glb->modules_by_index);
     atom_table_destroy(glb->atom_table);
 
     free(glb);
@@ -414,6 +426,20 @@ void globalcontext_send_message(GlobalContext *glb, int32_t process_id, term t)
     Context *p = globalcontext_get_process_lock(glb, process_id);
     if (p) {
         mailbox_send(p, t);
+        globalcontext_get_process_unlock(glb, p);
+    }
+}
+
+void globalcontext_send_message_to_alias(GlobalContext *glb, int32_t process_id, term ref, term message)
+{
+    Context *p = globalcontext_get_process_lock(glb, process_id);
+    if (p) {
+        BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(2), temp_heap)
+        term tuple = term_alloc_tuple(2, &temp_heap);
+        term_put_tuple_element(tuple, 0, ref);
+        term_put_tuple_element(tuple, 1, message);
+        mailbox_send_term_signal(p, AliasMessageSignal, tuple);
+        END_WITH_STACK_HEAP(temp_heap, glb)
         globalcontext_get_process_unlock(glb, p);
     }
 }

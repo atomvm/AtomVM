@@ -988,8 +988,15 @@ maybe_start_mdns(#state{config = Config, sta_ip_info = {InterfaceAddr, _, _}} = 
         undefined ->
             State;
         MDNSConfig ->
+            % The documented config key is `host` (see mdns_hostname_config());
+            % `hostname` is accepted too for compatibility with older code.
+            Hostname =
+                case proplists:get_value(host, MDNSConfig) of
+                    undefined -> proplists:get_value(hostname, MDNSConfig);
+                    Host -> Host
+                end,
             MDNSMap0 = #{
-                hostname => proplists:get_value(hostname, MDNSConfig), interface => InterfaceAddr
+                hostname => Hostname, interface => InterfaceAddr
             },
             MDNSMap1 =
                 case proplists:get_value(ttl, MDNSConfig) of

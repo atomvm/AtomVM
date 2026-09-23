@@ -103,6 +103,7 @@ compile_erlang(test_file)
 compile_erlang(test_i2c)
 compile_erlang(test_wifi_example)
 compile_erlang(test_wifi_managed)
+compile_erlang(test_wifi_teardown)
 compile_erlang(test_list_to_atom)
 compile_erlang(test_list_to_binary)
 compile_erlang(test_md5)
@@ -130,6 +131,7 @@ set(erlang_test_beams
     test_i2c.beam
     test_wifi_example.beam
     test_wifi_managed.beam
+    test_wifi_teardown.beam
     test_list_to_atom.beam
     test_list_to_binary.beam
     test_md5.beam

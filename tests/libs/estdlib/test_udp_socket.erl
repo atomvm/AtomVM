@@ -213,6 +213,7 @@ test_nowait() ->
     ok = test_nowait(fun receive_loop_nowait_ref/2),
     ok = test_nowait(fun receive_loop_recvfrom_nowait/2),
     ok = test_nowait(fun receive_loop_recvfrom_nowait_ref/2),
+    ok = test_alias_select_handle_rejected(),
     ok.
 
 test_nowait(ReceiveFun) ->
@@ -265,6 +266,23 @@ receive_loop_nowait_ref(Socket, Packet) ->
         {error, _} = Error ->
             io:format("Error on recv: ~p~n", [Error]),
             Error
+    end.
+
+test_alias_select_handle_rejected() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            ok;
+        _ ->
+            {ok, Socket} = socket:open(inet, dgram, udp),
+            Alias = alias(),
+            ok =
+                try socket:recv(Socket, 1, Alias) of
+                    R -> {unexpected, R}
+                catch
+                    error:badarg -> ok
+                end,
+            true = unalias(Alias),
+            ok = socket:close(Socket)
     end.
 
 receive_loop_recvfrom_nowait(Socket, Packet) ->

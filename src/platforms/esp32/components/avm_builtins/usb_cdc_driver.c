@@ -169,7 +169,7 @@ EventListener *usb_cdc_interrupt_callback(GlobalContext *glb, EventListener *lis
             size_t rx_size = 0;
             esp_err_t ret = tinyusb_cdcacm_read(cdc_data->itf, buf, sizeof(buf), &rx_size);
             if (ret != ESP_OK || rx_size == 0) {
-                BEGIN_WITH_STACK_HEAP(REF_SIZE + TUPLE_SIZE(2) * 2, err_heap)
+                BEGIN_WITH_STACK_HEAP(TERM_BOXED_REFERENCE_SHORT_SIZE + TUPLE_SIZE(2) * 2, err_heap)
                 term ref = term_from_ref_ticks(reader_ref_ticks, &err_heap);
                 term error_tuple = term_alloc_tuple(2, &err_heap);
                 term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
@@ -186,7 +186,7 @@ EventListener *usb_cdc_interrupt_callback(GlobalContext *glb, EventListener *lis
 
             int local_pid = term_to_local_process_id(reader_pid);
             Heap heap;
-            if (UNLIKELY(memory_init_heap(&heap, bin_size + REF_SIZE + TUPLE_SIZE(2) * 2) != MEMORY_GC_OK)) {
+            if (UNLIKELY(memory_init_heap(&heap, bin_size + TERM_BOXED_REFERENCE_SHORT_SIZE + TUPLE_SIZE(2) * 2) != MEMORY_GC_OK)) {
                 fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
                 globalcontext_send_message(glb, local_pid, OUT_OF_MEMORY_ATOM);
                 return listener;
@@ -578,7 +578,7 @@ static void usb_cdc_driver_do_close(Context *ctx, GenMessage gen_message)
     SMP_MUTEX_UNLOCK(cdc_data->reader_lock);
 
     if (pending_reader_pid != term_invalid_term()) {
-        BEGIN_WITH_STACK_HEAP(REF_SIZE + TUPLE_SIZE(2) * 2, heap)
+        BEGIN_WITH_STACK_HEAP(TERM_BOXED_REFERENCE_SHORT_SIZE + TUPLE_SIZE(2) * 2, heap)
         term error_tuple = term_alloc_tuple(2, &heap);
         term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
         term_put_tuple_element(error_tuple, 1, globalcontext_make_atom(glb, ATOM_STR("\x6", "closed")));
@@ -623,7 +623,7 @@ static NativeHandlerResult usb_cdc_driver_consume_mailbox(Context *ctx)
         int local_pid = term_to_local_process_id(gen_message.pid);
 
         if (is_closed) {
-            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2 + REF_SIZE) != MEMORY_GC_OK)) {
+            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2 + TERM_BOXED_REFERENCE_SHORT_SIZE) != MEMORY_GC_OK)) {
                 ESP_LOGE(TAG, "Failed to allocate space for error tuple");
                 globalcontext_send_message(glb, local_pid, OUT_OF_MEMORY_ATOM);
             } else {

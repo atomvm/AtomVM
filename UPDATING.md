@@ -19,6 +19,10 @@ bitshifts: e.g. `(16#FFFF band 0xF) bsl 252`.
 - `binary_to_integer` and `list_to_integer` do not raise `overflow` error anymore, they instead
 raise `badarg` when trying to parse an integer that exceeds 256 bits. Update any relevant error
 handling code.
+- `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does: calling
+it with a port raises `badarg`. Previous versions accepted any id-carrying term, so it could be
+used to read port information; there is no `erlang:port_info/2` in AtomVM yet, so such calls
+must be removed or guarded when updating.
 - ESP32 builds with Elixir support may be configured without making changes to git-tracked files
 using `idf.py -DATOMVM_ELIXIR_SUPPORT=on set-target ${CHIP}` instead of copying
 partitions-elixir.csv to partitions.csv. This configures the build to use partitions-elixir.csv for
@@ -42,6 +46,11 @@ were using the `0x210000` offset.
   * Instantiate with `const module = await AtomVM({ arguments: [...] })`
   * The old implicit global-script pattern is no longer supported
   * `AtomVM.worker.js` is no longer emitted; only `AtomVM.mjs` and `AtomVM.wasm` are needed
+- `io:put_chars(standard_error, ...)` (and `io:format/3`, `io:fwrite/3` targeting
+  `standard_error`) now write directly to the OS standard error stream via `console:print_err/1`,
+  instead of being routed through the process group leader as an alias for `standard_io`. Code or
+  tests that captured `standard_error` output by swapping the group leader must instead redirect
+  or intercept the underlying stderr stream, or pass an explicit pid/device.
 
 ## v0.6.4 -> v0.6.5
 

@@ -104,6 +104,8 @@ start() ->
     ok = test_bs_skip_bits2_little(),
 
     ok = test_bs_variable_size_bitstring(),
+    ok = test_negative_dynamic_size(),
+    ok = test_oversized_dynamic_size(),
     ok = test_float(),
 
     0.
@@ -688,6 +690,67 @@ create_float_binary(Value, Size) ->
 check_x86_64_jt(<<>>) -> ok;
 check_x86_64_jt(<<16#e9, _Offset:32/little, Tail/binary>>) -> check_x86_64_jt(Tail);
 check_x86_64_jt(Bin) -> {unexpected, Bin}.
+
+test_negative_dynamic_size() ->
+    B = id(<<1>>),
+    nope = skip_unit64(id(-1), B),
+    nope = skip_unit64(id(-(1 bsl 58)), B),
+    nope = skip_unit64(id(-(1 bsl 58) - 1), B),
+    nope = skip_unit8(id(-1), B),
+    nope = skip_unit8(id(-(1 bsl 61)), B),
+    nope = int_unit64(id(-1), B),
+    nope = int_unit64(id(-(1 bsl 58)), B),
+    nope = float_unit64(id(-1), id(<<1, 2, 3, 4, 5, 6, 7, 8>>)),
+    nope = bin_unit8(id(-1), B),
+    nope = bin_unit8(id(-(1 bsl 61)), B),
+    % the same segments still match when the size is valid
+    <<>> = skip_unit8(id(1), B),
+    {<<1>>, <<>>} = bin_unit8(id(1), B),
+    ok.
+
+test_oversized_dynamic_size() ->
+    B = id(<<1>>),
+    nope = skip_unit64(id(1 bsl 26), B),
+    nope = skip_unit64(id(1 bsl 58), B),
+    nope = skip_unit8(id(1 bsl 26), B),
+    nope = int_unit64(id(1 bsl 26), B),
+    nope = int_unit64(id(1 bsl 58), B),
+    nope = float_unit64(id(1 bsl 26), id(<<1, 2, 3, 4, 5, 6, 7, 8>>)),
+    nope = bin_unit8(id(1 bsl 26), B),
+    nope = skip_unit64(id(1 bsl 61), B),
+    nope = int_unit64(id(1 bsl 61), B),
+    nope = bin_unit8(id(1 bsl 61), B),
+    ok.
+
+skip_unit64(N, B) ->
+    case B of
+        <<_:N/binary-unit:64, R/binary>> -> R;
+        _ -> nope
+    end.
+
+skip_unit8(N, B) ->
+    case B of
+        <<_:N/binary-unit:8, R/binary>> -> R;
+        _ -> nope
+    end.
+
+bin_unit8(N, B) ->
+    case B of
+        <<X:N/binary-unit:8, R/binary>> -> {X, R};
+        _ -> nope
+    end.
+
+int_unit64(N, B) ->
+    case B of
+        <<X:N/integer-unit:64, _/binary>> -> X;
+        _ -> nope
+    end.
+
+float_unit64(N, B) ->
+    case B of
+        <<X:N/float-unit:64, _/binary>> -> X;
+        _ -> nope
+    end.
 
 id(X) -> ?MODULE:ext_id(X).
 

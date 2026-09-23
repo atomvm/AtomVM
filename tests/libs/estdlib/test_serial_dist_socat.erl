@@ -223,7 +223,7 @@ test_multi_port_ping(OsPid1, SocatFd1, PtyA1, PtyB, OsPid2, SocatFd2, PtyA2, Pty
 start_socat() ->
     {ok, OsPid, Fd} = atomvm:subprocess(
         "/bin/sh",
-        ["sh", "-c", "socat -d -d pty,raw,echo=0 pty,raw,echo=0 2>&1"],
+        ["sh", "-c", "exec socat -d -d pty,raw,echo=0 pty,raw,echo=0 2>&1"],
         undefined,
         [stdout]
     ),
@@ -235,11 +235,13 @@ start_socat() ->
     {OsPid, Fd, PtyA, PtyB}.
 
 stop_socat(OsPid, Fd) ->
-    atomvm:posix_close(Fd),
-    {ok, _, KillFd} = atomvm:subprocess(
-        "/bin/kill", ["kill", integer_to_list(OsPid)], undefined, [stdout]
-    ),
-    atomvm:posix_close(KillFd).
+    %% SIGTERM; exec in start_socat makes OsPid socat itself. Tolerate esrch so
+    %% an already-exited socat does not mask the real test failure.
+    case atomvm:posix_kill(OsPid, 15) of
+        ok -> ok;
+        {error, esrch} -> ok
+    end,
+    atomvm:posix_close(Fd).
 
 start_peer(PtyPath, TestName) ->
     AvmBin = find_atomvm_binary(),
