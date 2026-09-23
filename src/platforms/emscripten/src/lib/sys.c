@@ -267,7 +267,7 @@ static void sys_enqueue_emscripten_message(GlobalContext *glb, struct Emscripten
     pthread_mutex_unlock(&platform->poll_mutex);
 }
 
-#ifndef AVM_NO_SMP
+#if !defined(AVM_NO_SMP) || defined(AVM_TASK_DRIVER_ENABLED)
 void sys_signal(GlobalContext *glb)
 {
     struct EmscriptenMessageBase *message = malloc(sizeof(struct EmscriptenMessageBase));

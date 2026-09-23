@@ -84,6 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `header_continuation` / `trailer_header_continuation` response events are no longer emitted
 
 ### Fixed
+- Fixed generic_unix and emscripten builds with `AVM_DISABLE_SMP=ON` and task drivers enabled
 - Route `io:put_chars(standard_error, ...)` and `io:format(standard_error, ...)` to stderr instead
   of aliasing them to standard_io (diagnostics no longer pollute an escript's stdout)
 - Stop using deprecated `term_from_int32` on STM32 platform
