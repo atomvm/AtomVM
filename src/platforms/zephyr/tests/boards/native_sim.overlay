@@ -1,0 +1,31 @@
+/*
+ * This file is part of AtomVM.
+ *
+ * Copyright 2026 Peter M <petermm@gmail.com>
+ *
+ * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+ */
+
+/ {
+    chosen {
+        atomvm,i2c = &i2c0;
+        atomvm,spi = &spi0;
+        atomvm,pwm = &pwm0;
+        atomvm,dac = &dac0;
+        zephyr,settings-partition = &storage_partition;
+    };
+
+    pwm0: pwm0 {
+        compatible = "zephyr,fake-pwm";
+        status = "okay";
+        #pwm-cells = <2>;
+        frequency = <10000000>;
+    };
+
+    dac0: dac0 {
+        compatible = "zephyr,dac-emul";
+        status = "okay";
+        nchannels = <2>;
+        #io-channel-cells = <1>;
+    };
+};

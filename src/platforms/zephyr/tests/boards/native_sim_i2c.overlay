@@ -1,0 +1,15 @@
+/*
+ * This file is part of AtomVM.
+ *
+ * Copyright 2026 Peter M <petermm@gmail.com>
+ *
+ * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+ */
+
+/* Emulator target used only by atomvm.zephyr.i2c_native_sim. */
+&i2c0 {
+    atomvm_i2c_test_target: atomvm-i2c-test-target@50 {
+        compatible = "vnd,atomvm-native-sim-i2c-target";
+        reg = <0x50>;
+    };
+};

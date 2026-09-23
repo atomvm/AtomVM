@@ -618,6 +618,7 @@ wifi_scan(Options) ->
     Platform =
         case atomvm:platform() of
             esp32 -> ok;
+            zephyr -> ok;
             Platform0 -> Platform0
         end,
     Passive = proplists:get_bool(passive, Options),
@@ -650,7 +651,7 @@ wifi_scan(Options) ->
     | {error, Reason :: term()}.
 wifi_scan() ->
     case atomvm:platform() of
-        esp32 ->
+        Platform when Platform =:= esp32; Platform =:= zephyr ->
             Config =
                 try
                     NetConfig = gen_server:call(?SERVER, get_config),
@@ -783,19 +784,34 @@ handle_cast(_Msg, State) ->
 
 %% @hidden
 handle_info({Ref, sta_connected} = _Msg, #state{ref = Ref, config = Config} = State) ->
-    maybe_sta_connected_callback(Config),
-    {noreply, State#state{sta_state = associated}};
+    self() ! {Ref, {invoke_callback, sta_connected, Config}},
+    NextState =
+        case State#state.sta_state of
+            connected -> connected;
+            degraded -> degraded;
+            _ -> associated
+        end,
+    {noreply, State#state{sta_state = NextState}};
 handle_info({Ref, sta_beacon_timeout} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_sta_beacon_timeout_callback(Config),
     {noreply, State#state{sta_state = degraded}};
 handle_info({Ref, sta_disconnected} = _Msg, #state{ref = Ref, config = Config} = State) ->
-    maybe_sta_disconnected_callback(Config),
+    self() ! {Ref, {invoke_callback, sta_disconnected, Config}},
     {noreply, State#state{sta_state = disconnected, sta_ip_info = undefined}};
 handle_info({Ref, {sta_got_ip, IpInfo}} = _Msg, #state{ref = Ref, config = Config} = State0) ->
-    maybe_sta_got_ip_callback(Config, IpInfo),
     State1 = State0#state{sta_ip_info = IpInfo, sta_state = connected},
     State2 = maybe_start_mdns(State1),
+    self() ! {Ref, {invoke_callback, sta_got_ip, Config, IpInfo}},
     {noreply, State2};
+handle_info({Ref, {invoke_callback, sta_connected, Config}}, #state{ref = Ref} = State) ->
+    maybe_sta_connected_callback(Config),
+    {noreply, State};
+handle_info({Ref, {invoke_callback, sta_disconnected, Config}}, #state{ref = Ref} = State) ->
+    maybe_sta_disconnected_callback(Config),
+    {noreply, State};
+handle_info({Ref, {invoke_callback, sta_got_ip, Config, IpInfo}}, #state{ref = Ref} = State) ->
+    maybe_sta_got_ip_callback(Config, IpInfo),
+    {noreply, State};
 handle_info({Ref, ap_started} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_ap_started_callback(Config),
     {noreply, State};
