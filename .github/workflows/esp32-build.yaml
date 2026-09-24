@@ -179,9 +179,9 @@ jobs:
       if: runner.arch != 'ARM64' && runner.os == 'Linux' && (matrix.esp-idf-target == 'esp32' || matrix.esp-idf-target == 'esp32s3')
       run: |
         set -eu
-        QEMU_VER=esp-develop-9.2.2-20250817
-        QEMU_XTENSA_DIST=qemu-xtensa-softmmu-esp_develop_9.2.2_20250817-x86_64-linux-gnu.tar.xz
-        QEMU_XTENSA_SHA256=588bfaccd0f929650655d10a580f020c6ba9c131712d8fa519280081b8d126eb
+        QEMU_VER=esp-develop-9.2.2-20260417
+        QEMU_XTENSA_DIST=qemu-xtensa-softmmu-esp_develop_9.2.2_20260417-x86_64-linux-gnu.tar.xz
+        QEMU_XTENSA_SHA256=0eecb2a34a5586c0e59110f77b9343b7b336e82fdb0e1a30e1dc1bab8a547e35
         wget --no-verbose https://github.com/espressif/qemu/releases/download/${QEMU_VER}/${QEMU_XTENSA_DIST}
         echo "${QEMU_XTENSA_SHA256} *${QEMU_XTENSA_DIST}" | sha256sum --check --strict -
         tar -xf ${QEMU_XTENSA_DIST} -C /opt && rm ${QEMU_XTENSA_DIST}
@@ -190,9 +190,9 @@ jobs:
       if: runner.arch != 'ARM64' && runner.os == 'Linux' && matrix.esp-idf-target == 'esp32c3'
       run: |
         set -eu
-        QEMU_VER=esp-develop-9.2.2-20250817
-        QEMU_RISCV32_DIST=qemu-riscv32-softmmu-esp_develop_9.2.2_20250817-x86_64-linux-gnu.tar.xz
-        QEMU_RISCV32_SHA256=373b37a68bae3ef441ead24a7bfc950fcbfc274cbdd2b628fc6915f179eb1d8e
+        QEMU_VER=esp-develop-9.2.2-20260417
+        QEMU_RISCV32_DIST=qemu-riscv32-softmmu-esp_develop_9.2.2_20260417-x86_64-linux-gnu.tar.xz
+        QEMU_RISCV32_SHA256=547f03e04701a92cbb699f7f7d015adc1f5b5ef93cbb94c0dd9b7107e2d84e77
         wget --no-verbose https://github.com/espressif/qemu/releases/download/${QEMU_VER}/${QEMU_RISCV32_DIST}
         echo "${QEMU_RISCV32_SHA256} *${QEMU_RISCV32_DIST}" | sha256sum --check --strict -
         tar -xf ${QEMU_RISCV32_DIST} -C /opt && rm ${QEMU_RISCV32_DIST}
@@ -201,9 +201,9 @@ jobs:
       if: runner.arch == 'ARM64' && runner.os == 'Linux' && (matrix.esp-idf-target == 'esp32' || matrix.esp-idf-target == 'esp32s3')
       run: |
         set -eu
-        QEMU_VER=esp-develop-9.2.2-20250817
-        QEMU_XTENSA_DIST=qemu-xtensa-softmmu-esp_develop_9.2.2_20250817-aarch64-linux-gnu.tar.xz
-        QEMU_XTENSA_SHA256=317f6e0fd1dba0886d8110709823d909593ef29438822a14f81ebe19d72ce7cd
+        QEMU_VER=esp-develop-9.2.2-20260417
+        QEMU_XTENSA_DIST=qemu-xtensa-softmmu-esp_develop_9.2.2_20260417-aarch64-linux-gnu.tar.xz
+        QEMU_XTENSA_SHA256=00de5985094c14e47d1b38464a006b8ed64fd0fa7a289c56da24f3a329f65339
         wget --no-verbose https://github.com/espressif/qemu/releases/download/${QEMU_VER}/${QEMU_XTENSA_DIST}
         echo "${QEMU_XTENSA_SHA256} *${QEMU_XTENSA_DIST}" | sha256sum --check --strict -
         tar -xf ${QEMU_XTENSA_DIST} -C /opt && rm ${QEMU_XTENSA_DIST}
@@ -212,9 +212,9 @@ jobs:
       if: runner.arch == 'ARM64' && runner.os == 'Linux' && matrix.esp-idf-target == 'esp32c3'
       run: |
         set -eu
-        QEMU_VER=esp-develop-9.2.2-20250817
-        QEMU_RISCV32_DIST=qemu-riscv32-softmmu-esp_develop_9.2.2_20250817-aarch64-linux-gnu.tar.xz
-        QEMU_RISCV32_SHA256=f907a54313058f8a9681d2f48257d518950ff98bcd5a319194b4bee7c10cf223
+        QEMU_VER=esp-develop-9.2.2-20260417
+        QEMU_RISCV32_DIST=qemu-riscv32-softmmu-esp_develop_9.2.2_20260417-aarch64-linux-gnu.tar.xz
+        QEMU_RISCV32_SHA256=a9f7b98636008edcf7a11c96f10b3a3ec83c2a890fc54c3e3ceb3ec9edace427
         wget --no-verbose https://github.com/espressif/qemu/releases/download/${QEMU_VER}/${QEMU_RISCV32_DIST}
         echo "${QEMU_RISCV32_SHA256} *${QEMU_RISCV32_DIST}" | sha256sum --check --strict -
         tar -xf ${QEMU_RISCV32_DIST} -C /opt && rm ${QEMU_RISCV32_DIST}
@@ -228,12 +228,12 @@ jobs:
       run: |
         set -e
         . $IDF_PATH/export.sh
-        pip install pytest==8.3.3 \
-            esptool==5.2.0 \
-            pytest-embedded==2.7.0 \
-            pytest-embedded-serial-esp==2.7.0 \
-            pytest-embedded-idf==2.7.0 \
-            pytest-embedded-qemu==2.7.0
+        pip install pytest==8.3.4 \
+            esptool==5.3.0 \
+            pytest-embedded==2.8.1 \
+            pytest-embedded-serial-esp==2.8.1 \
+            pytest-embedded-idf==2.8.1 \
+            pytest-embedded-qemu==2.8.1
 
     - name: Build ESP32 tests using idf.py with memory checks
       # TODO: remove the following exclusion when ESP32P4 support is added to espressif/qemu

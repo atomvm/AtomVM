@@ -132,11 +132,11 @@ jobs:
           set -e
           . $IDF_PATH/export.sh
           pip install pytest==8.3.4 \
-              esptool==5.2.0 \
-              pytest-embedded==2.7.0 \
-              pytest-embedded-idf==2.7.0 \
-              pytest-embedded-qemu==2.7.0 \
-              pytest-embedded-wokwi==2.7.0
+              esptool==5.3.0 \
+              pytest-embedded==2.8.1 \
+              pytest-embedded-idf==2.8.1 \
+              pytest-embedded-qemu==2.8.1 \
+              pytest-embedded-wokwi==2.8.1
 
       - name: Set SDKCONFIG_DEFAULTS and Build ESP32-sim tests using idf.py
         working-directory: ./src/platforms/esp32/test/
