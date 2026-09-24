@@ -47,10 +47,10 @@ jobs:
       matrix:
         esp-idf-target: ["esp32", "esp32c3"]
         idf-version:
-         - 'v5.2.7'
-         - 'v5.3.5'
+         - 'v5.2.8'
+         - 'v5.3.6'
          - 'v5.4.4'
-         - 'v5.5.4'
+         - 'v5.5.5'
         jit: [false]
 
         include:
@@ -58,32 +58,32 @@ jobs:
           idf-version: 'v5.4.4'
           jit: false
         - esp-idf-target: "esp32p4"
-          idf-version: 'v5.5.4'
+          idf-version: 'v5.5.5'
           jit: false
         - esp-idf-target: "esp32s3"
-          idf-version: 'v5.5.4'
+          idf-version: 'v5.5.5'
           jit: false
         - esp-idf-target: "esp32s3"
-          idf-version: 'v5.5.4'
+          idf-version: 'v5.5.5'
           usb-serial: 'ON'
           jit: false
         - esp-idf-target: "esp32s3"
-          idf-version: 'v5.5.4'
+          idf-version: 'v5.5.5'
           usb-cdc: 'ON'
           jit: false
         - esp-idf-target: "esp32"
           idf-version: 'v5.4.4'
           libsodium: 'ON'
           jit: false
-        # JIT builds (v5.5.4 only)
+        # JIT builds (v5.5.5 only)
         - esp-idf-target: "esp32c3"
-          idf-version: 'v5.5.4'
+          idf-version: 'v5.5.5'
           jit: true
         - esp-idf-target: "esp32"
-          idf-version: 'v5.5.4'
+          idf-version: 'v5.5.5'
           jit: true
         - esp-idf-target: "esp32s3"
-          idf-version: 'v5.5.4'
+          idf-version: 'v5.5.5'
           jit: true
 
     steps:
@@ -141,7 +141,7 @@ jobs:
         fi
 
     - name: Print size info with idf.py
-      if: matrix.idf-version != 'v5.2.7'
+      if: matrix.idf-version != 'v5.2.8'
       shell: bash
       working-directory: ./src/platforms/esp32/
       run: |
