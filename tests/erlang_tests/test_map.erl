@@ -29,6 +29,7 @@ start() ->
     ok = test_map_get_bif(),
     ok = test_literal_map(),
     ok = test_extend_map(),
+    ok = test_large_integer_value(),
     ok = test_exact_map(),
     ok = test_generate_map(),
     ok = test_compare(),
@@ -175,6 +176,11 @@ test_extend_map() ->
         _:_E ->
             ok
     end.
+
+test_large_integer_value() ->
+    Map = #{large => 16#FFFFFFFFFFFFFFFF, value => id(value)},
+    #{large := 16#FFFFFFFFFFFFFFFF, value := value} = Map,
+    ok.
 
 test_exact_map() ->
     Map = #{a => 1, b => 2},
