@@ -33,13 +33,14 @@ start() ->
     ok = test_connect_to_unreachable_recovers(),
     0.
 
+% requires local_test_servers.escript
 test_tcp_client(Active, BinaryOpt) ->
     Socket = open_port({spawn, "socket"}, []),
     Params = [
         {proto, tcp},
         {connect, true},
         {controlling_process, self()},
-        {address, "github.com"},
+        {address, "10.0.2.2"},
         {port, 80},
         {active, Active},
         {buffer, 512},
@@ -149,7 +150,7 @@ test_udp(Active, QueryID) ->
     ok = call(Socket, {init, Params}, 30000),
     {ok, {MyIPAddr, _Port}} = call(Socket, {sockname}),
     ok =
-        case call(Socket, {sendto, {1, 1, 1, 1}, 53, ?UDP_QUERY(QueryID)}) of
+        case call(Socket, {sendto, {10, 0, 2, 2}, 53, ?UDP_QUERY(QueryID)}) of
             % generic_unix socket driver
             {ok, _Len} -> ok;
             % esp32 socket driver
@@ -162,8 +163,8 @@ test_udp(Active, QueryID) ->
             true ->
                 ok =
                     receive
-                        %               {udp, Socket, {{1,1,1,1}, 53, <<QueryID:16, 1:1, _:7, _/binary>>}} -> ok;    % not supported yet
-                        {udp, _WrappedSocket, {1, 1, 1, 1}, 53, <<QueryID:16, B, _/binary>>} when
+                        %               {udp, Socket, {{10,0,2,2}, 53, <<QueryID:16, 1:1, _:7, _/binary>>}} -> ok; % not supported yet -- uncomment after bitstring is merged
+                        {udp, _WrappedSocket, {10, 0, 2, 2}, 53, <<QueryID:16, B, _/binary>>} when
                             B band 16#80 =:= 16#80
                         ->
                             ok;
@@ -183,8 +184,8 @@ test_udp(Active, QueryID) ->
             false ->
                 ok =
                     case call(Socket, {recvfrom, 512, 30000}) of
-                        %               {ok, {{1,1,1,1}, 53, <<QueryID:16, 1:1, _:7, _/binary>>}} -> ok;
-                        {ok, {{1, 1, 1, 1}, 53, <<QueryID:16, B, _/binary>>}} when
+                        %               {ok, {{10,0,2,2}, 53, <<QueryID:16, 1:1, _:7, _/binary>>}} -> ok; % not supported yet -- uncomment after bitstring is merged
+                        {ok, {{10, 0, 2, 2}, 53, <<QueryID:16, B, _/binary>>}} when
                             B band 16#80 =:= 16#80
                         ->
                             ok;
