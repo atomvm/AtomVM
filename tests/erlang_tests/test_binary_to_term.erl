@@ -159,6 +159,8 @@ start() ->
     ok = test_atom_utf8_ext_node(),
     ok = test_encode_process_ref(),
     ok = test_term_to_binary_options(),
+    ok = test_zero_length_list_ext(),
+    ok = test_deeply_nested(),
     0.
 
 test_term_to_binary_options() ->
@@ -1333,6 +1335,93 @@ test_atom_utf8_ext_node() ->
     Ref = binary_to_term(RefBin),
     true = is_reference(Ref),
     ok.
+
+test_zero_length_list_ext() ->
+    %% Reject LIST_EXT with no tail
+    ok = expect_badarg(fun() -> binary_to_term(<<131, 108, 0, 0, 0, 0>>) end),
+
+    %% A zero-length LIST_EXT with a NIL_EXT tail is the empty list
+    [] = binary_to_term(<<131, 108, 0, 0, 0, 0, 106>>),
+    {[], 7} = binary_to_term(<<131, 108, 0, 0, 0, 0, 106>>, [used]),
+
+    %% A zero-length LIST_EXT decodes to its tail term.
+    5 = binary_to_term(<<131, 108, 0, 0, 0, 0, 97, 5>>),
+    {5, 8} = binary_to_term(<<131, 108, 0, 0, 0, 0, 97, 5>>, [used]),
+    ok.
+
+%% Regression test for C-stack exhaustion: encoding and decoding used unbounded
+%% C recursion, so a deeply nested term could blow the C stack (seen on macOS's
+%% 512 KB default). Both directions are now iterative.
+%%
+%% The deep cases are built as external binaries directly (O(depth)) rather than
+%% as Erlang terms: building a deep term with cons/tuple/map ops would trigger
+%% repeated copying GCs and cost O(depth^2). deep_round_trip/1 then decodes the
+%% binary, re-encodes it and asserts the bytes are identical, exercising both the
+%% iterative decoder and encoder at a depth that would overflow a recursive one.
+test_deeply_nested() ->
+    Depth = 100000,
+
+    %% Nested list [[ ... []]]: Depth LIST_EXT(1) headers, the innermost element
+    %% NIL, then Depth NIL tails.
+    deep_round_trip(
+        <<131, (binary:copy(<<108, 0, 0, 0, 1>>, Depth))/binary, 106,
+            (binary:copy(<<106>>, Depth))/binary>>
+    ),
+
+    %% Nested 1-tuple {{ ... {}}}: Depth SMALL_TUPLE_EXT(1) headers, then {}.
+    deep_round_trip(
+        <<131, (binary:copy(<<104, 1>>, Depth))/binary, 104, 0>>
+    ),
+
+    %% Nested single-entry map #{x => ... }: Depth MAP_EXT(1)+key('x') headers,
+    %% then the innermost value 'leaf'.
+    deep_round_trip(
+        <<131, (binary:copy(<<116, 0, 0, 0, 1, 119, 1, $x>>, Depth))/binary, 119, 4, $l, $e, $a,
+            $f>>
+    ),
+
+    %% Wide proper list [256, 256, ...]: a single LIST_EXT spine, exercising the
+    %% decoder's single-block cons-cell allocation. 256 is INTEGER_EXT, so the
+    %% list is never re-encoded as STRING_EXT.
+    deep_round_trip(
+        <<131, 108, Depth:32, (binary:copy(<<98, 0, 0, 1, 0>>, Depth))/binary, 106>>
+    ),
+
+    %% A term built natively (not from a hand-crafted binary), with alternating
+    %% list/tuple/map nesting, round-tripped through the iterative encoder and
+    %% decoder. A more modest depth keeps the O(depth^2) construction cheap; the
+    %% cases above already cover encode/decode at extreme depth.
+    TermDepth = 4000,
+    DeepTerm = nest_mixed(TermDepth, leaf),
+    DeepTerm = erlang:binary_to_term(erlang:term_to_binary(DeepTerm)),
+
+    %% A fun closing over the deeply nested term routes that free variable
+    %% through the iterative encoder and decoder.
+    Fun = id(fun() -> DeepTerm end),
+    DecodedFun = binary_to_term(term_to_binary(Fun)),
+    DeepTerm = DecodedFun(),
+    ok.
+
+%% Decode B, re-encode it and assert AtomVM reproduces B byte-for-byte, and that
+%% the [used] count consumes the whole buffer.
+deep_round_trip(B) ->
+    T = erlang:binary_to_term(B),
+    B = erlang:term_to_binary(T),
+    {T2, Used} = erlang:binary_to_term(B, [used]),
+    Used = erlang:byte_size(B),
+    true = (T =:= T2),
+    ok.
+
+nest_mixed(0, Acc) ->
+    Acc;
+nest_mixed(N, Acc) ->
+    Wrapped =
+        case N rem 3 of
+            0 -> [Acc];
+            1 -> {Acc};
+            _ -> #{m => Acc}
+        end,
+    nest_mixed(N - 1, Wrapped).
 
 make_binterm_fun(Id) ->
     fun() ->
