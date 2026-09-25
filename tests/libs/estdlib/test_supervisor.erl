@@ -41,6 +41,7 @@ test() ->
     ok = try_again_restart_shutdown(),
     ok = try_again_one_for_all(),
     ok = test_failed_child_cleanup_releases_names(),
+    ok = test_forged_restart_message(),
     ok.
 
 test_basic_supervisor() ->
@@ -568,6 +569,28 @@ test_one_for_all() ->
     % Ensure correct number of children
     [{specs, 2}, {active, 2}, {supervisors, 0}, {workers, 2}] = supervisor:count_children(SupPid),
 
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    ok.
+
+%% A message must never carry an executable child specification: start MFAs
+%% are read from the supervisor's own state, so a forged internal message
+%% cannot make a supervisor call an arbitrary function.
+test_forged_restart_message() ->
+    {ok, SupPid} = supervisor:start_link(?MODULE, {test_no_child, self()}),
+    undefined = whereis(forged_child),
+    %% #child{} as a raw tuple: pid, id, start, restart, shutdown, type, modules
+    Forged =
+        {child, {restarting, self()}, forged_id,
+            {?MODULE, child_start, [{register_then_idle, forged_child}]}, permanent, brutal_kill,
+            worker, [?MODULE]},
+    SupPid ! {restart_many_children, [Forged]},
+    SupPid ! {'$atomvm_restart_many_children', [Forged]},
+    SupPid ! '$atomvm_restart_many_children',
+    SupPid ! '$atomvm_try_again_restart',
+    %% Round-trip a call so the messages above have been handled.
+    [] = supervisor:which_children(SupPid),
+    undefined = whereis(forged_child),
     unlink(SupPid),
     exit(SupPid, shutdown),
     ok.
