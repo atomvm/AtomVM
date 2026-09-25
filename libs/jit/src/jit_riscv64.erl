@@ -77,6 +77,8 @@
     shift_right_arith/3
 ]).
 
+-export([dwarf_x_reg_offset/0]).
+
 -ifdef(JIT_DWARF).
 -export([
     dwarf_opcode/2,
@@ -210,16 +212,16 @@
     | {{free, riscv64_register()}, '==', {free, riscv64_register()}}.
 
 % Context offsets (64-bit architecture)
-% ctx->e is 0x28
-% ctx->x is 0x30
+% ctx->e is 0x50
+% ctx->x is 0x58
 -define(CTX_REG, a0).
 -define(NATIVE_INTERFACE_REG, a2).
--define(Y_REGS, {?CTX_REG, 16#28}).
--define(X_REG(N), {?CTX_REG, 16#30 + (N * 8)}).
--define(CP, {?CTX_REG, 16#B8}).
--define(FP_REGS, {?CTX_REG, 16#C0}).
--define(BS, {?CTX_REG, 16#C8}).
--define(BS_OFFSET, {?CTX_REG, 16#D0}).
+-define(Y_REGS, {?CTX_REG, 16#50}).
+-define(X_REG(N), {?CTX_REG, 16#58 + (N * 8)}).
+-define(CP, {?CTX_REG, 16#E0}).
+-define(FP_REGS, {?CTX_REG, 16#E8}).
+-define(BS, {?CTX_REG, 16#F0}).
+-define(BS_OFFSET, {?CTX_REG, 16#F8}).
 % JITSTATE is in a1 register (no prolog needed)
 -define(JITSTATE_REG, a1).
 % Return address register
@@ -335,6 +337,12 @@ handle_avm_int64_t(State, Value, ArgsT, ArgsRegs, ParamRegs, AvailGP, StackOffse
     set_registers_args0(
         State, [Value | ArgsT], ArgsRegs, ParamRegs, AvailGP, StackOffset
     ).
+
+%% @doc Byte offset of the `x' register array within the Context struct.
+%% Derived from ?X_REG so it tracks the codegen offset.
+-spec dwarf_x_reg_offset() -> non_neg_integer().
+dwarf_x_reg_offset() ->
+    element(2, ?X_REG(0)).
 
 -ifdef(JIT_DWARF).
 -spec dwarf_ctx_register() -> non_neg_integer().

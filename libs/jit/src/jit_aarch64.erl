@@ -77,6 +77,8 @@
     xor_/3
 ]).
 
+-export([dwarf_x_reg_offset/0]).
+
 -ifdef(JIT_DWARF).
 -export([
     dwarf_opcode/2,
@@ -184,16 +186,16 @@
     | {maybe_free_aarch64_register(), '&', non_neg_integer(), '!=', integer()}
     | {{free, aarch64_register()}, '==', {free, aarch64_register()}}.
 
-% ctx->e is 0x28
-% ctx->x is 0x30
+% ctx->e is 0x50
+% ctx->x is 0x58
 -define(WORD_SIZE, 8).
 -define(CTX_REG, r0).
 -define(JITSTATE_REG, r1).
 -define(NATIVE_INTERFACE_REG, r2).
--define(Y_REGS, {?CTX_REG, 16#28}).
--define(X_REG(N), {?CTX_REG, 16#30 + (N * ?WORD_SIZE)}).
--define(CP, {?CTX_REG, 16#B8}).
--define(FP_REGS, {?CTX_REG, 16#C0}).
+-define(Y_REGS, {?CTX_REG, 16#50}).
+-define(X_REG(N), {?CTX_REG, 16#58 + (N * ?WORD_SIZE)}).
+-define(CP, {?CTX_REG, 16#E0}).
+-define(FP_REGS, {?CTX_REG, 16#E8}).
 -define(FP_REG_OFFSET(State, F),
     (F *
         case (State)#state.variant band ?JIT_VARIANT_FLOAT32 of
@@ -201,8 +203,8 @@
             _ -> 4
         end)
 ).
--define(BS, {?CTX_REG, 16#C8}).
--define(BS_OFFSET, {?CTX_REG, 16#D0}).
+-define(BS, {?CTX_REG, 16#F0}).
+-define(BS_OFFSET, {?CTX_REG, 16#F8}).
 -define(JITSTATE_MODULE, {?JITSTATE_REG, 0}).
 -define(JITSTATE_CONTINUATION, {?JITSTATE_REG, 16#8}).
 -define(JITSTATE_REDUCTIONCOUNT, {?JITSTATE_REG, 16#10}).
@@ -2932,6 +2934,12 @@ add_label(
     };
 add_label(#state{labels = Labels} = State, Label, Offset) ->
     State#state{labels = Labels#{Label => Offset}}.
+
+%% @doc Byte offset of the `x' register array within the Context struct.
+%% Derived from ?X_REG so it tracks the codegen offset.
+-spec dwarf_x_reg_offset() -> non_neg_integer().
+dwarf_x_reg_offset() ->
+    element(2, ?X_REG(0)).
 
 -ifdef(JIT_DWARF).
 %%-----------------------------------------------------------------------------
