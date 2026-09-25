@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   describing the functions and the BEAM instructions supported by the configured build
 - Added a `check-native-stubs` build target, run in CI, that verifies every function
   registered in `bifs.gperf` or `nifs.gperf` has a matching Erlang export
+- Added `gen:start/5,6`, used by Elixir's `GenServer`
 
 ### Changed
 - `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does:
@@ -131,6 +132,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   by adding the `elixir_erl_pass` runtime helpers that compiled Elixir code calls
 - Fixed `maps:from_keys/2` (and `sets:from_list/1`, which is built on top of it) not
   deduplicating structurally equal but separately-allocated boxed terms, such as tuples
+- Fixed `gen_server` returning an error instead of `ignore` when `init/1` returns `ignore`
+- Fixed a failed named `gen_server` start leaving a stray `EXIT` or `DOWN` in the caller's mailbox
+- Fixed `proc_lib:start/5` killing a linked caller when a start passing `{spawn_opt, [link]}`
+  timed out, and `proc_lib:start_link/5,start_monitor/5` hanging when the child died before
+  acknowledging
+- Fixed `proc_lib:start*/5` accepting the `{monitor, _}` spawn option, which is not allowed
+- Fixed a failed `proc_lib:start_monitor/3,4,5` consuming the `DOWN` message of the monitor it
+  returns, which callers waiting on that monitor never received
 
 ## [0.7.0-alpha.1] - 2026-04-06
 

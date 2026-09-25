@@ -140,7 +140,7 @@ start(Module, Function, Args, Timeout) ->
 %%-----------------------------------------------------------------------------
 -spec start(module(), atom(), [any()], timeout(), [start_spawn_option()]) -> any().
 start(Module, Function, Args, Timeout, SpawnOpts) ->
-    start0(Module, Function, Args, Timeout, SpawnOpts, false, false).
+    start0(Module, Function, Args, Timeout, SpawnOpts, false).
 
 %% @equiv start_link(Module, Function, Args, infinity)
 -spec start_link(module(), atom(), [any()]) -> any().
@@ -164,7 +164,7 @@ start_link(Module, Function, Args, Timeout) ->
 %%-----------------------------------------------------------------------------
 -spec start_link(module(), atom(), [any()], timeout(), [start_spawn_option()]) -> any().
 start_link(Module, Function, Args, Timeout, SpawnOpts) ->
-    start0(Module, Function, Args, Timeout, [link | SpawnOpts], true, false).
+    start0(Module, Function, Args, Timeout, [link | SpawnOpts], false).
 
 %% @equiv start_monitor(Module, Function, Args, infinity)
 -spec start_monitor(module(), atom(), [any()]) -> any().
@@ -182,17 +182,20 @@ start_monitor(Module, Function, Args, Timeout) ->
 %% @param   Args arguments to pass to the function
 %% @param   Timeout timeout for the initialization to be done
 %% @param   SpawnOpts options passed to spawn_link. `monitor' is not allowed.
-%% @doc     Start a new process synchronously and atomically link it.
+%% @doc     Start a new process synchronously and atomically monitor it.
 %%          Wait for the process to call `init_ack/1,2' or `init_fail/2,3'.
+%%
+%%          If the start fails, the process is terminated and the `DOWN'
+%%          message for the returned monitor is still delivered to the caller.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec start_monitor(module(), atom(), [any()], timeout(), [start_spawn_option()]) -> any().
 start_monitor(Module, Function, Args, Timeout, SpawnOpts) ->
-    start0(Module, Function, Args, Timeout, SpawnOpts, true, true).
+    start0(Module, Function, Args, Timeout, SpawnOpts, true).
 
 %% @private
-start0(Module, Function, Args, Timeout, SpawnOpts, Link, Monitor) ->
-    case lists:member(monitor, SpawnOpts) of
+start0(Module, Function, Args, Timeout, SpawnOpts, Monitor) ->
+    case lists:member(monitor, SpawnOpts) orelse lists:keymember(monitor, 1, SpawnOpts) of
         true -> error(badarg);
         false -> ok
     end,
@@ -210,48 +213,31 @@ start0(Module, Function, Args, Timeout, SpawnOpts, Link, Monitor) ->
         %% Nack from init_fail: wait for the child to die before returning,
         %% so its registered name is freed and linked children have got their
         %% EXIT signal.
+        %% Like OTP, a failed start_monitor still delivers the DOWN for the
+        %% returned monitor to the caller.
         {nack, Pid, Result} when Monitor ->
-            receive
-                {'DOWN', MonitorRef, process, Pid, _} -> ok
-            end,
-            flush_exit(Pid, Link),
+            flush_exit(Pid),
+            self() ! await_down(Pid, MonitorRef),
             {Result, MonitorRef};
         {nack, Pid, Result} ->
-            receive
-                {'DOWN', MonitorRef, process, Pid, _} -> ok
-            end,
-            flush_exit(Pid, Link),
+            flush_exit(Pid),
+            _ = await_down(Pid, MonitorRef),
             Result;
-        {'DOWN', MonitorRef, process, Pid, Reason} when Link ->
-            receive
-                {'EXIT', Pid, _} -> ok
-            after 0 -> ok
-            end,
-            receive
-                {'DOWN', MonitorRef, process, Pid, _} -> ok
-            end,
-            {error, Reason};
-        {'DOWN', MonitorRef, process, Pid, Reason} when Monitor ->
+        {'DOWN', MonitorRef, process, Pid, Reason} = Down when Monitor ->
+            flush_exit(Pid),
+            self() ! Down,
             {{error, Reason}, MonitorRef};
         {'DOWN', MonitorRef, process, Pid, Reason} ->
+            flush_exit(Pid),
             {error, Reason}
     after Timeout ->
-        if
-            Link ->
-                unlink(Pid),
-                exit(Pid, kill),
-                receive
-                    {'EXIT', Pid, _} -> ok
-                after 0 -> ok
-                end;
-            true ->
-                exit(Pid, kill)
-        end,
-        receive
-            {'DOWN', MonitorRef, process, Pid, _} -> ok
-        end,
+        unlink(Pid),
+        exit(Pid, kill),
+        flush_exit_message(Pid),
+        Down = await_down(Pid, MonitorRef),
         case Monitor of
             true ->
+                self() ! Down,
                 {{error, timeout}, MonitorRef};
             false ->
                 {error, timeout}
@@ -259,12 +245,20 @@ start0(Module, Function, Args, Timeout, SpawnOpts, Link, Monitor) ->
     end.
 
 %% @private
-flush_exit(_Pid, false) ->
-    ok;
-flush_exit(Pid, true) ->
+%% unlink as spawn_opt may have linked.
+flush_exit(Pid) ->
+    unlink(Pid),
+    flush_exit_message(Pid).
+
+flush_exit_message(Pid) ->
     receive
         {'EXIT', Pid, _} -> ok
     after 0 -> ok
+    end.
+
+await_down(Pid, MonitorRef) ->
+    receive
+        {'DOWN', MonitorRef, process, Pid, _} = Down -> Down
     end.
 
 %% @private
