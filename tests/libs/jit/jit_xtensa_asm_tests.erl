@@ -202,6 +202,20 @@ blt_test_() ->
         )
     ].
 
+bltu_test_() ->
+    [
+        ?_assertAsmEqual(
+            <<16#003347:24/little>>, "bltu a3, a4, . + 4", jit_xtensa_asm:bltu(a3, a4, 0)
+        )
+    ].
+
+bgeu_test_() ->
+    [
+        ?_assertAsmEqual(
+            <<16#00b347:24/little>>, "bgeu a3, a4, . + 4", jit_xtensa_asm:bgeu(a3, a4, 0)
+        )
+    ].
+
 beqi_test_() ->
     [
         ?_assertAsmEqual(

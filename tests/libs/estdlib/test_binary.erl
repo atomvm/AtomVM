@@ -64,4 +64,11 @@ test_hex() ->
     ?ASSERT_MATCH(RawBinary, binary:decode_hex(<<"48656C6C6F2C2041746F6D564D21">>)),
     ?ASSERT_EXCEPTION(binary:decode_hex(<<"48656C6C6F2C2041746F6D564D2">>), error, badarg),
     ?ASSERT_EXCEPTION(binary:decode_hex(<<"ABCDEFGH">>), error, badarg),
+    % bitstrings that are not a whole number of bytes are rejected rather than
+    % silently truncated
+    ?ASSERT_EXCEPTION(binary:decode_hex(<<1:4>>), error, badarg),
+    ?ASSERT_EXCEPTION(binary:decode_hex(<<"AB", 1:1>>), error, badarg),
+    ?ASSERT_EXCEPTION(binary:encode_hex(<<1:4>>), error, badarg),
+    ?ASSERT_EXCEPTION(binary:encode_hex(<<1:4>>, lowercase), error, badarg),
+    ?ASSERT_EXCEPTION(binary:encode_hex(<<"AB", 1:1>>), error, badarg),
     ok.

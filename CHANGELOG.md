@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   describing the functions and the BEAM instructions supported by the configured build
 - Added a `check-native-stubs` build target, run in CI, that verifies every function
   registered in `bifs.gperf` or `nifs.gperf` has a matching Erlang export
+- Added support for non-byte-aligned bitstrings
 
 ### Changed
 - `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does:
@@ -131,6 +132,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   by adding the `elixir_erl_pass` runtime helpers that compiled Elixir code calls
 - Fixed `maps:from_keys/2` (and `sets:from_list/1`, which is built on top of it) not
   deduplicating structurally equal but separately-allocated boxed terms, such as tuples
+- Fixed `erlang:list_to_binary/1`, `erlang:iolist_to_binary/1`, `erlang:iolist_size/1` and the
+  `unicode:characters_to_*` functions accepting an integer improper tail, such as `[1 | 2]`
 
 ## [0.7.0-alpha.1] - 2026-04-06
 

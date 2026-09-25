@@ -27,6 +27,7 @@
 start() ->
     ok = test_list_to_binary(),
     ok = test_iolist_to_binary(),
+    ok = test_improper_tail(),
     0.
 test_list_to_binary() ->
     <<"Hello world">> = erlang:list_to_binary(?ID([<<"Hello ">>, [<<"wor">>, [$l, $d]]])),
@@ -56,6 +57,26 @@ test_iolist_to_binary() ->
     ),
     ok = raises_badarg(fun() -> iolist_to_binary(?ID([12450, 12488, 12512])) end),
     ok = raises_badarg(fun() -> iolist_size(?ID([12450, 12488, 12512])) end),
+    ok.
+
+% Bytes are only accepted as list elements: an improper tail may be a binary,
+% but never an integer.
+test_improper_tail() ->
+    <<1, 2>> = erlang:list_to_binary(?ID([1 | <<2>>])),
+    <<1, 2, 3>> = erlang:list_to_binary(?ID([1, 2 | <<3>>])),
+    <<1, 2>> = erlang:list_to_binary(?ID([[1 | <<2>>]])),
+    <<1, 2>> = erlang:iolist_to_binary(?ID([1 | <<2>>])),
+    2 = erlang:iolist_size(?ID([1 | <<2>>])),
+    3 = erlang:iolist_size(?ID([[1 | <<2>>], <<3>>])),
+
+    ok = raises_badarg(fun() -> erlang:list_to_binary(?ID([1 | 2])) end),
+    ok = raises_badarg(fun() -> erlang:list_to_binary(?ID([1, 2 | 3])) end),
+    ok = raises_badarg(fun() -> erlang:list_to_binary(?ID([[1 | 2]])) end),
+    ok = raises_badarg(fun() -> erlang:list_to_binary(?ID([<<1>> | 2])) end),
+    ok = raises_badarg(fun() -> erlang:list_to_binary(?ID([1 | some_atom])) end),
+    ok = raises_badarg(fun() -> erlang:iolist_to_binary(?ID([1 | 2])) end),
+    ok = raises_badarg(fun() -> erlang:iolist_size(?ID([1 | 2])) end),
+    ok = raises_badarg(fun() -> erlang:iolist_size(?ID([[1 | 2], <<3>>])) end),
     ok.
 
 concat_space(A, B) ->

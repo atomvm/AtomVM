@@ -687,3 +687,34 @@ fuse_tuple_armv6m_test() ->
         binary:match(CompiledCode, <<16#7e, 16#68>>)
     ),
     ok.
+
+%% Every backend must be able to emit an unsigned comparison. This is the
+%% condition bs_create_bin uses to detect that a bit size accumulation wrapped,
+%% and a backend that cannot encode it fails at code generation time, not at
+%% compile time: jit_tests has no bs_create_bin coverage, so nothing else here
+%% would catch it.
+if_block_unsigned_less_than_test_() ->
+    Backends = [
+        jit_aarch64,
+        jit_x86_64,
+        jit_riscv32,
+        jit_riscv64,
+        jit_arm32,
+        jit_armv6m,
+        jit_xtensa,
+        jit_wasm32
+    ],
+    [
+        {atom_to_list(Backend), fun() ->
+            State0 = Backend:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+            {State1, RegA} = Backend:move_to_native_register(State0, {x_reg, 0}),
+            {State2, RegB} = Backend:move_to_native_register(State1, {x_reg, 1}),
+            %% Emitting is the assertion: a backend that cannot encode this
+            %% condition raises function_clause here rather than returning.
+            State3 = Backend:if_block(State2, {'(unsigned)', RegA, '<', RegB}, fun(BSt0) ->
+                Backend:move_to_vm_register(BSt0, 0, {x_reg, 2})
+            end),
+            ?assert(is_tuple(State3))
+        end}
+     || Backend <- Backends
+    ].

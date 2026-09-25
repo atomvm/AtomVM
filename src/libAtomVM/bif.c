@@ -122,10 +122,10 @@ term bif_erlang_byte_size_1(Context *ctx, uint32_t fail_label, int live, term ar
     if (term_is_match_state(arg1)) {
         avm_int_t offset = term_get_match_state_offset(arg1);
         term src_bin = term_get_match_state_binary(arg1);
-        len = term_binary_size(src_bin) - offset / 8;
+        len = (term_bit_size(src_bin) - offset + 7) / 8;
     } else {
-        VALIDATE_VALUE_BIF(fail_label, arg1, term_is_binary);
-        len = term_binary_size(arg1);
+        VALIDATE_VALUE_BIF(fail_label, arg1, term_is_bitstring);
+        len = (term_bit_size(arg1) + 7) / 8;
     }
 
     return term_from_int(len);
@@ -140,10 +140,10 @@ term bif_erlang_bit_size_1(Context *ctx, uint32_t fail_label, int live, term arg
     if (term_is_match_state(arg1)) {
         avm_int_t offset = term_get_match_state_offset(arg1);
         term src_bin = term_get_match_state_binary(arg1);
-        len = term_binary_size(src_bin) * 8 - offset;
+        len = term_bit_size(src_bin) - offset;
     } else {
-        VALIDATE_VALUE_BIF(fail_label, arg1, term_is_binary);
-        len = term_binary_size(arg1) * 8;
+        VALIDATE_VALUE_BIF(fail_label, arg1, term_is_bitstring);
+        len = term_bit_size(arg1);
     }
 
     return term_from_int(len);
@@ -187,6 +187,14 @@ term bif_erlang_is_binary_1(Context *ctx, uint32_t fail_label, term arg1)
     UNUSED(fail_label);
 
     return term_is_binary(arg1) ? TRUE_ATOM : FALSE_ATOM;
+}
+
+term bif_erlang_is_bitstring_1(Context *ctx, uint32_t fail_label, term arg1)
+{
+    UNUSED(ctx);
+    UNUSED(fail_label);
+
+    return term_is_bitstring(arg1) ? TRUE_ATOM : FALSE_ATOM;
 }
 
 term bif_erlang_is_boolean_1(Context *ctx, uint32_t fail_label, term arg1)
@@ -2100,9 +2108,12 @@ term bif_erlang_max_2(Context *ctx, uint32_t fail_label, term arg1, term arg2)
 
 term bif_erlang_size_1(Context *ctx, uint32_t fail_label, int live, term arg1)
 {
-    if (term_is_binary(arg1)) {
-        // For bitstrings, number of bytes is rounded down
-        return bif_erlang_byte_size_1(ctx, fail_label, live, arg1);
+    UNUSED(live);
+
+    if (term_is_bitstring(arg1)) {
+        // For bitstrings, number of bytes is rounded down,
+        // unlike byte_size/1 which rounds up
+        return term_from_int(term_binary_size(arg1));
     } else if (term_is_tuple(arg1)) {
         return bif_erlang_tuple_size_1(ctx, fail_label, arg1);
     }

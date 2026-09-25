@@ -229,7 +229,7 @@ struct ModuleNativeInterface
     bool (*bitstring_insert_utf32)(term bin, size_t offset, uint32_t c, enum BitstringFlags flags);
     bool (*bitstring_insert_integer)(term bin, size_t offset, term value, size_t n, enum BitstringFlags flags);
     void (*bitstring_copy_module_str)(Context *ctx, JITState *jit_state, term bin, size_t offset, int str_id, size_t len);
-    int (*bitstring_copy_binary)(Context *ctx, JITState *jit_state, term t, size_t offset, term src, term size);
+    int (*bitstring_copy_binary)(term t, size_t offset, term src, term size);
     Context *(*apply)(Context *ctx, JITState *jit_state, int offset, term module, term function, unsigned int arity);
     void *(*malloc)(Context *ctx, JITState *jit_state, size_t sz);
     void (*free)(void *ptr);
@@ -249,6 +249,12 @@ struct ModuleNativeInterface
     Context *(*raise_error_mfa)(
         Context *ctx, JITState *jit_state, int offset, int function_atom_index, int arity);
     void (*try_case)(Context *ctx);
+    size_t (*bitstring_get_tail_heap_size)(term *bs_bin_ptr, size_t bs_offset);
+    term (*bitstring_create_tail)(Context *ctx, term bs_bin, size_t bs_offset);
+    term (*bs_create_bin_wrap)(Context *ctx, term byte_binary, size_t total_bits);
+    size_t (*bitstring_slice_heap_size)(term *bs_bin_ptr, size_t offset, size_t len_bits);
+    term (*bitstring_slice)(Context *ctx, term bs_bin, size_t offset, size_t len_bits);
+    bool (*bitstring_is_multiple_of)(size_t bits, size_t unit);
 };
 
 extern const ModuleNativeInterface module_native_interface;
