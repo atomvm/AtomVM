@@ -42,6 +42,8 @@ test() ->
     ok = try_again_one_for_all(),
     ok = test_failed_child_cleanup_releases_names(),
     ok = test_forged_restart_message(),
+    ok = test_restart_survives_messages_one_for_all(),
+    ok = test_retry_survives_messages_one_for_one(),
     ok.
 
 test_basic_supervisor() ->
@@ -288,6 +290,49 @@ arbitrator(Deny) ->
             ok
     end.
 
+%% Grants the first Auto start requests, then hands each request to Parent,
+%% which answers it with {answer, Allow}.
+gate(Parent, Auto) ->
+    receive
+        {can_start, From} when Auto > 0 ->
+            From ! {do_start, true},
+            gate(Parent, Auto - 1);
+        {can_start, From} ->
+            Parent ! {gate, self()},
+            receive
+                {answer, Allow} -> From ! {do_start, Allow}
+            end,
+            gate(Parent, 0);
+        stop ->
+            ok
+    end.
+
+%% Wait until the supervisor is blocked asking Gate for permission, queue a
+%% call to the supervisor, then let the start proceed with Allow.
+hold_gate_with_pending_call(SupPid, Gate, Allow) ->
+    receive
+        {gate, Gate} -> ok
+    after 2000 -> error({timeout, gate})
+    end,
+    Tag = make_ref(),
+    SupPid ! {'$gen_call', {self(), Tag}, which_children},
+    Gate ! {answer, Allow},
+    receive
+        {Tag, Children} when is_list(Children) -> ok
+    after 2000 -> error({timeout, which_children})
+    end.
+
+wait_for_new_registered(Name, OldPid, 0) ->
+    error({timeout, Name, OldPid});
+wait_for_new_registered(Name, OldPid, N) ->
+    case whereis(Name) of
+        Pid when is_pid(Pid) andalso Pid =/= OldPid ->
+            Pid;
+        _ ->
+            timer:sleep(50),
+            wait_for_new_registered(Name, OldPid, N - 1)
+    end.
+
 test_ping_pong(SupPid) ->
     Pid1 = get_and_test_server(),
     gen_server:cast(Pid1, {crash, test}),
@@ -434,6 +479,22 @@ init({test_failed_child_cleanup, RegisterName}) ->
         }
     ],
     {ok, {#{strategy => one_for_one, intensity => 1, period => 5}, ChildSpecs}};
+init({test_restart_stall, Strategy, Gate, Parent, Ref, Name}) ->
+    ChildSpecs = [
+        #{
+            id => gated,
+            start => {?MODULE, child_start, [{get_permission, Gate, Parent, Ref}]},
+            restart => permanent,
+            shutdown => brutal_kill
+        },
+        #{
+            id => idle,
+            start => {?MODULE, child_start, [{register_then_idle, Name}]},
+            restart => permanent,
+            shutdown => brutal_kill
+        }
+    ],
+    {ok, {#{strategy => Strategy, intensity => 10, period => 10}, ChildSpecs}};
 init({test_retry_one_for_all, Arbitrator, Parent, Ref}) ->
     ChildSpec = [
         #{
@@ -593,6 +654,55 @@ test_forged_restart_message() ->
     undefined = whereis(forged_child),
     unlink(SupPid),
     exit(SupPid, shutdown),
+    ok.
+
+%% A message reaching the supervisor while it restarts children one by one
+%% must not cancel the restart of the remaining children.
+test_restart_survives_messages_one_for_all() ->
+    Self = self(),
+    Gate = spawn(fun() -> gate(Self, 1) end),
+    Ref = make_ref(),
+    Name = test_restart_survives_messages,
+    {ok, SupPid} = supervisor:start_link(
+        ?MODULE, {test_restart_stall, one_for_all, Gate, Self, Ref, Name}
+    ),
+    Gated1 = wait_child_pid(Ref, gated),
+    Idle1 = wait_for_new_registered(Name, undefined, 20),
+    exit(Idle1, kill),
+    %% gated restarts first; a call arrives while it is starting
+    ok = hold_gate_with_pending_call(SupPid, Gate, true),
+    Gated2 = wait_child_pid(Ref, gated),
+    true = Gated2 =/= Gated1,
+    _Idle2 = wait_for_new_registered(Name, Idle1, 20),
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    Gate ! stop,
+    ok.
+
+%% A message reaching the supervisor while a child fails to restart must not
+%% cancel the retry.
+test_retry_survives_messages_one_for_one() ->
+    Self = self(),
+    Gate = spawn(fun() -> gate(Self, 1) end),
+    Ref = make_ref(),
+    Name = test_retry_survives_messages,
+    {ok, SupPid} = supervisor:start_link(
+        ?MODULE, {test_restart_stall, one_for_one, Gate, Self, Ref, Name}
+    ),
+    Gated1 = wait_child_pid(Ref, gated),
+    exit(Gated1, kill),
+    %% the restart is denied while a call is pending
+    ok = hold_gate_with_pending_call(SupPid, Gate, false),
+    %% the retry must still come
+    receive
+        {gate, Gate} -> Gate ! {answer, true}
+    after 2000 -> error({timeout, retry})
+    end,
+    Gated2 = wait_child_pid(Ref, gated),
+    true = Gated2 =/= Gated1,
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    Gate ! stop,
     ok.
 
 test_failed_child_cleanup_releases_names() ->
