@@ -117,6 +117,10 @@ struct LWIPEvent
         struct
         {
             struct SocketResource *rsrc_obj;
+        } tcp_error;
+        struct
+        {
+            struct SocketResource *rsrc_obj;
             struct pbuf *buf;
             uint32_t addr;
             uint16_t port;
@@ -161,7 +165,7 @@ struct LWIPEvent
  * If lwIP callbacks are not called from ISR, calling handler with the event is
  * sufficient.
  */
-void otp_socket_lwip_enqueue(struct LWIPEvent *event);
+bool otp_socket_lwip_enqueue(struct LWIPEvent *event);
 
 #endif
 

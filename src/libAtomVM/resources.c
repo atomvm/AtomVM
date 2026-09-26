@@ -154,6 +154,39 @@ static int enif_select_common(ErlNifEnv *env, ErlNifEvent event, enum ErlNifSele
         }
         select_event = NULL;
     }
+    if (mode & ERL_NIF_SELECT_CANCEL) {
+        int result = 0;
+        if (select_event) {
+            if (mode & ERL_NIF_SELECT_READ) {
+                if (select_event->read) {
+                    result |= ERL_NIF_SELECT_READ_CANCELLED;
+                }
+                select_event->read = false;
+                enif_select_event_message_dispose(select_event->read_message, global, false);
+                select_event->read_message = NULL;
+                select_event->read_local_pid = INVALID_PROCESS_ID;
+                select_event->read_ref_ticks = 0;
+            }
+            if (mode & ERL_NIF_SELECT_WRITE) {
+                if (select_event->write) {
+                    result |= ERL_NIF_SELECT_WRITE_CANCELLED;
+                }
+                select_event->write = false;
+                enif_select_event_message_dispose(select_event->write_message, global, false);
+                select_event->write_message = NULL;
+                select_event->write_local_pid = INVALID_PROCESS_ID;
+                select_event->write_ref_ticks = 0;
+            }
+        }
+        synclist_unlock(&global->select_events);
+        if (result & ERL_NIF_SELECT_READ_CANCELLED) {
+            sys_unregister_select_event(global, event, false);
+        }
+        if (result & ERL_NIF_SELECT_WRITE_CANCELLED) {
+            sys_unregister_select_event(global, event, true);
+        }
+        return result;
+    }
     if (mode & ERL_NIF_SELECT_STOP) {
         if (select_event == NULL) {
             synclist_unlock(&global->select_events);
@@ -177,9 +210,9 @@ static int enif_select_common(ErlNifEnv *env, ErlNifEvent event, enum ErlNifSele
         // We cannot call stop now because scheduler loop unlocks after building
         // the select set but before calling select (or equivalent)
         // So instead we flag the event.
-        select_event->close = 1;
-        select_event->read = 0;
-        select_event->write = 0;
+        select_event->close = true;
+        select_event->read = false;
+        select_event->write = false;
         synclist_unlock(&global->select_events);
         // Platform loop should check close flag after unregister is called
         if (was_read) {
@@ -220,16 +253,16 @@ static int enif_select_common(ErlNifEnv *env, ErlNifEvent event, enum ErlNifSele
         select_event->read_message = message;
         select_event->read_ref_ticks = message ? 0 : ref_ticks;
         select_event->read_local_pid = *pid;
-        select_event->read = 1;
+        select_event->read = true;
     }
     if (mode & ERL_NIF_SELECT_WRITE) {
         enif_select_event_message_dispose(select_event->write_message, global, false);
         select_event->write_message = message;
         select_event->write_ref_ticks = message ? 0 : ref_ticks;
         select_event->write_local_pid = *pid;
-        select_event->write = 1;
+        select_event->write = true;
     }
-    select_event->close = 0;
+    select_event->close = false;
     synclist_unlock(&global->select_events);
     if (mode & ERL_NIF_SELECT_READ) {
         sys_register_select_event(global, event, false);
@@ -244,6 +277,12 @@ int enif_select(ErlNifEnv *env, ErlNifEvent event, enum ErlNifSelectFlags mode, 
 {
     if (!(mode & (ERL_NIF_SELECT_STOP | ERL_NIF_SELECT_READ | ERL_NIF_SELECT_WRITE))) {
         return ERL_NIF_SELECT_BADARG;
+    }
+    if (mode & ERL_NIF_SELECT_CANCEL) {
+        if ((mode & ERL_NIF_SELECT_STOP) || !(mode & (ERL_NIF_SELECT_READ | ERL_NIF_SELECT_WRITE))) {
+            return ERL_NIF_SELECT_BADARG;
+        }
+        return enif_select_common(env, event, mode, obj, pid, ref, NULL);
     }
     if (UNLIKELY(mode & (ERL_NIF_SELECT_READ | ERL_NIF_SELECT_WRITE) && !term_is_local_reference(ref) && ref != UNDEFINED_ATOM)) {
         return ERL_NIF_SELECT_BADARG;
