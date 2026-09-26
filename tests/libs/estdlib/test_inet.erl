@@ -20,7 +20,19 @@
 
 -module(test_inet).
 
--export([test/0]).
+-export([test/0, is_inet_driver_available/0]).
+
+-spec is_inet_driver_available() -> boolean().
+is_inet_driver_available() ->
+    try gen_udp:open(0, [{inet_backend, inet}]) of
+        {ok, S} ->
+            catch gen_udp:close(S),
+            true;
+        _ ->
+            false
+    catch
+        _:_ -> false
+    end.
 
 test() ->
     ok = test_getaddr(),

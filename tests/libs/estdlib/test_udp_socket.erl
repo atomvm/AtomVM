@@ -32,14 +32,18 @@ test() ->
     % Workaround for image limitation on CI
     % https://github.com/actions/runner-images/issues/10924
     Platform = erlang:system_info(machine),
-    System = execute_command(Platform, "uname -s"),
     TestMulticast =
-        case System of
-            "Darwin\n" ->
-                Version = execute_command(Platform, "uname -r"),
-                Version < "24";
-            _ ->
-                true
+        case Platform =:= "ATOM" andalso atomvm:platform() =:= wasi of
+            true ->
+                %% wasi:sockets@0.2.x has no multicast API
+                false;
+            false ->
+                case execute_command(Platform, "uname -s") of
+                    "Darwin\n" ->
+                        execute_command(Platform, "uname -r") < "24";
+                    _ ->
+                        true
+                end
         end,
     if
         TestMulticast ->
@@ -289,6 +293,8 @@ test_alias_select_handle_rejected() ->
             ok;
         _ ->
             {ok, Socket} = socket:open(inet, dgram, udp),
+            % wasi:sockets rejects recv on an unbound socket with einval
+            ok = socket:bind(Socket, #{family => inet, addr => loopback, port => 0}),
             Alias = alias(),
             ok =
                 try socket:recv(Socket, 1, Alias) of

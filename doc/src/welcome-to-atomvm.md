@@ -55,7 +55,7 @@ AtomVM is licensed under the terms of the [Apache2](https://www.apache.org/licen
 
 ## Source Code
 
-The [AtomVM Github Repository](https://github.com/atomvm/AtomVM) contains the AtomVM source code, including the AtomVM virtual machine and core libraries.  The AtomVM [Build Instructions](./build-instructions.md) contains instructions for building AtomVM for Generic UNIX, ESP32, and STM32 platforms.
+The [AtomVM Github Repository](https://github.com/atomvm/AtomVM) contains the AtomVM source code, including the AtomVM virtual machine and core libraries.  The AtomVM [Build Instructions](./build-instructions.md) contains instructions for building AtomVM for Generic UNIX, ESP32, STM32, RP2, Emscripten, and WASI platforms.
 
 ## Contributing
 

@@ -51,6 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   describing the functions and the BEAM instructions supported by the configured build
 - Added a `check-native-stubs` build target, run in CI, that verifies every function
   registered in `bifs.gperf` or `nifs.gperf` has a matching Erlang export
+- Added WASI platform, for `wasm32-wasip1` (with or without threads) and `wasm32-wasip2` (with
+  networking)
 
 ### Changed
 - `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does:
@@ -81,6 +83,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `TERM_BOXED_REFERENCE_MAX_SIZE` to fit any reference. `REF_SIZE` still expands to the short
   reference size, but now emits a compiler warning
 - On ESP32 platform, when starting wifi as a station (client), disable wifi power save so TCP servers are reachable
+- `socket:setopt/3` accepts `{socket, reuseaddr}` and `{socket, linger}` as no-ops on platforms
+  that do not implement them
 
 ### Removed
 - Removed `ahttp_client` support for obsolete line folding (RFC 9112 §5.2); folded header and
@@ -132,6 +136,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `maps:from_keys/2` (and `sets:from_list/1`, which is built on top of it) not
   deduplicating structurally equal but separately-allocated boxed terms, such as tuples
 - `socket:send/2` now waits for write-readiness and retries partial stream sends under transient backpressure (lwIP `ERR_MEM` / BSD `EAGAIN`|`EWOULDBLOCK`), so higher-level TCP send paths no longer leak `{ok, Rest}` or `{error, eagain}` on normal backpressure; closed peers now return `{error, closed}` instead of being reported as a partial send
+- Fixed `socket:recv/3` and `socket:recvfrom/3` failing on spurious select wakeups
+- Fixed `gen_tcp` and `gen_udp` sockets leaking pending select entries
+- Fixed `socket:sendto/3` failing with `eagain` when the send buffer is full
+- Fixed socket functions returning `{error, ebadf}` instead of `{error, closed}` on a socket
+  closed by another process
+- Fixed `gen_tcp` and `gen_udp` calls such as `close/1` failing when the socket process already
+  exited, instead of returning `ok` or `{error, closed}` as OTP does
 
 ## [0.7.0-alpha.1] - 2026-04-06
 
