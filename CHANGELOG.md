@@ -81,6 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `TERM_BOXED_REFERENCE_MAX_SIZE` to fit any reference. `REF_SIZE` still expands to the short
   reference size, but now emits a compiler warning
 - On ESP32 platform, when starting wifi as a station (client), disable wifi power save so TCP servers are reachable
+- Improved SMP scheduler performance; resources stopped with `ERL_NIF_SELECT_STOP_SCHEDULED` are
+  now released asynchronously by the polling scheduler, as the `enif_select` specification allows
 
 ### Removed
 - Removed `ahttp_client` support for obsolete line folding (RFC 9112 §5.2); folded header and

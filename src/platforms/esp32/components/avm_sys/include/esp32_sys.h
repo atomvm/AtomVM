@@ -25,6 +25,7 @@
 #include "freertos/FreeRTOS.h"
 #include <esp_partition.h>
 #include <freertos/queue.h>
+#include <freertos/semphr.h>
 
 #if ESP_IDF_VERSION_MAJOR >= 5
 #include <spi_flash_mmap.h>
@@ -92,6 +93,7 @@ struct ESP32PlatformData
 
 extern QueueSetHandle_t event_set;
 extern QueueHandle_t event_queue;
+extern SemaphoreHandle_t signal_semaphore;
 void esp32_sys_queue_init(void);
 
 void socket_init(Context *ctx, term opts);
