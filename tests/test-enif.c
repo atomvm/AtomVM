@@ -20,6 +20,8 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #include "context.h"
 #include "defaultatoms.h"
@@ -28,8 +30,10 @@
 #include "erl_nif_priv.h"
 #include "external_term.h"
 #include "globalcontext.h"
+#include "mailbox.h"
 #include "memory.h"
 #include "scheduler.h"
+#include "sys.h"
 #include "utils.h"
 
 static uint32_t cb_read_resource = 0;
@@ -704,6 +708,84 @@ void test_resource_release_in_down_handler_two_monitors(void)
     globalcontext_destroy(glb);
 }
 
+void test_select_cancel(void)
+{
+    dtor_call_count = 0;
+    GlobalContext *global = globalcontext_new();
+    Context *reader = context_new(global);
+    Context *writer = context_new(global);
+    ErlNifEnv *env = erl_nif_env_from_context(reader);
+    ErlNifResourceTypeInit init = { .members = 1, .dtor = resource_dtor };
+    ErlNifResourceType *type = enif_init_resource_type(env, "select_cancel", &init, ERL_NIF_RT_CREATE, NULL);
+    assert(type != NULL);
+    void *resource = enif_alloc_resource(type, sizeof(uint32_t));
+    *((uint32_t *) resource) = 42;
+    int sockets[2];
+    assert(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0);
+    ErlNifEvent event = sockets[0];
+
+    assert(enif_select(env, event, ERL_NIF_SELECT_CANCEL, resource, NULL, UNDEFINED_ATOM) == ERL_NIF_SELECT_BADARG);
+    assert(enif_select(env, event, ERL_NIF_SELECT_READ | ERL_NIF_SELECT_CANCEL, resource, NULL, UNDEFINED_ATOM) == 0);
+    assert(memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFERENCE_RESOURCE_SIZE) == MEMORY_GC_OK);
+    term resource_message = term_from_resource(resource, &env->heap);
+    assert(enif_select_read(env, event, resource, &reader->process_id, resource_message, NULL) == 0);
+    assert(enif_select_write(env, event, resource, &writer->process_id, term_from_int(29), NULL) == 0);
+    assert(enif_select(env, event, ERL_NIF_SELECT_READ | ERL_NIF_SELECT_CANCEL, resource, NULL, UNDEFINED_ATOM) == ERL_NIF_SELECT_READ_CANCELLED);
+    assert(enif_select(env, event, ERL_NIF_SELECT_READ | ERL_NIF_SELECT_CANCEL, resource, NULL, UNDEFINED_ATOM) == 0);
+    assert(write(sockets[1], "x", 1) == 1);
+    sys_poll_events(global, 0);
+
+    term notification;
+    assert(mailbox_process_outer_list_native(&reader->mailbox) == NULL);
+    assert(!mailbox_peek(reader, &notification));
+    assert(mailbox_process_outer_list_native(&writer->mailbox) == NULL);
+    assert(mailbox_peek(writer, &notification));
+    assert(notification == term_from_int(29));
+    mailbox_remove_message(&writer->mailbox, &writer->heap);
+
+    // Reuse the retained event; cancelling write must leave a reference-based
+    // read selection intact, including its owner and reference.
+    assert(memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFERENCE_SHORT_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE) == MEMORY_GC_OK);
+    term ref = term_from_ref_ticks(123, &env->heap);
+    resource_message = term_from_resource(resource, &env->heap);
+    assert(enif_select_write(env, event, resource, &writer->process_id, resource_message, NULL) == 0);
+    assert(enif_select(env, event, ERL_NIF_SELECT_READ, resource, &reader->process_id, ref) == 0);
+    assert(enif_select(env, event, ERL_NIF_SELECT_WRITE | ERL_NIF_SELECT_CANCEL, resource, NULL, term_from_int(99)) == ERL_NIF_SELECT_WRITE_CANCELLED);
+    sys_poll_events(global, 0);
+    assert(mailbox_process_outer_list_native(&writer->mailbox) == NULL);
+    assert(!mailbox_peek(writer, &notification));
+    assert(mailbox_process_outer_list_native(&reader->mailbox) == NULL);
+    assert(mailbox_peek(reader, &notification));
+    assert(term_is_tuple(notification) && term_get_tuple_arity(notification) == 4);
+    assert(term_get_tuple_element(notification, 0) == SELECT_ATOM);
+    assert(term_to_ref_ticks(term_get_tuple_element(notification, 2)) == 123);
+    assert(term_get_tuple_element(notification, 3) == READY_INPUT_ATOM);
+    mailbox_remove_message(&reader->mailbox, &reader->heap);
+
+    assert(enif_select_read(env, event, resource, &reader->process_id, term_from_int(37), NULL) == 0);
+    assert(enif_select_write(env, event, resource, &writer->process_id, term_from_int(41), NULL) == 0);
+    enum ErlNifSelectFlags cancel_both = ERL_NIF_SELECT_READ | ERL_NIF_SELECT_WRITE | ERL_NIF_SELECT_CANCEL;
+    assert(enif_select(env, event, cancel_both, resource, NULL, UNDEFINED_ATOM) == (ERL_NIF_SELECT_READ_CANCELLED | ERL_NIF_SELECT_WRITE_CANCELLED));
+    assert(enif_select(env, event, cancel_both, resource, NULL, UNDEFINED_ATOM) == 0);
+    sys_poll_events(global, 0);
+    assert(mailbox_process_outer_list_native(&reader->mailbox) == NULL);
+    assert(!mailbox_peek(reader, &notification));
+    assert(mailbox_process_outer_list_native(&writer->mailbox) == NULL);
+    assert(!mailbox_peek(writer, &notification));
+
+    assert(enif_select(env, event, ERL_NIF_SELECT_STOP, resource, NULL, UNDEFINED_ATOM) == ERL_NIF_SELECT_STOP_CALLED);
+    enif_release_resource(resource);
+    close(sockets[0]);
+    close(sockets[1]);
+    context_destroy(reader);
+    context_destroy(writer);
+#ifdef AVM_TASK_DRIVER_ENABLED
+    globalcontext_process_task_driver_queues(global);
+#endif
+    assert(dtor_call_count == 1);
+    globalcontext_destroy(global);
+}
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
@@ -719,6 +801,7 @@ int main(int argc, char **argv)
     test_resource_binaries();
     test_resource_release_in_down_handler();
     test_resource_release_in_down_handler_two_monitors();
+    test_select_cancel();
 
     return EXIT_SUCCESS;
 }

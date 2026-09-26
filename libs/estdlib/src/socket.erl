@@ -587,8 +587,6 @@ recvfrom0_nowait(Socket, Length, Ref) ->
 %%-----------------------------------------------------------------------------
 -spec send(Socket :: socket(), Data :: iodata()) ->
     ok | {ok, Rest :: binary()} | {error, Reason :: term()}.
-send(_Socket, <<>>) ->
-    ok;
 send(Socket, Data) when is_binary(Data) ->
     send_all_binary(Socket, Data);
 send(Socket, Data) ->
@@ -739,8 +737,6 @@ nif_send(_Socket, _Data) ->
 nif_sendto(_Socket, _Data, _Dest) ->
     erlang:nif_error(undefined).
 
-send_all_binary(_Socket, <<>>) ->
-    ok;
 send_all_binary(Socket, Data) ->
     case ?MODULE:nif_send(Socket, Data) of
         ok ->
