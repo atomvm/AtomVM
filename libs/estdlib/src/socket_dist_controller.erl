@@ -125,6 +125,8 @@ handshake_complete(Controller, _Node, DHandle) ->
     socket :: socket:socket(),
     dhandle :: reference() | undefined,
     select_handle :: reference() | undefined,
+    write_select_handle :: reference() | undefined,
+    pending_output = [] :: [{binary(), non_neg_integer()}],
     buffer :: binary(),
     received :: non_neg_integer(),
     sent :: non_neg_integer()
@@ -141,12 +143,12 @@ handle_call(socket, _From, #state{socket = Socket} = State) ->
 handle_call(getstat, _From, #state{received = Received, sent = Sent} = State) ->
     {reply, {ok, Received, Sent, 0}, State}.
 
-handle_cast(tick, #state{socket = Socket, sent = Sent} = State) ->
-    case socket:send(Socket, <<0:32>>) of
-        ok ->
-            {noreply, State#state{sent = Sent + 1}};
-        {error, Reason} ->
-            {stop, {send_error, Reason}, State}
+handle_cast(tick, State) ->
+    case queue_output(State, <<0:32>>) of
+        {ok, State1} ->
+            {noreply, State1};
+        {stop, Reason, State1} ->
+            {stop, Reason, State1}
     end;
 handle_cast({handshake_complete, DHandle}, State0) ->
     ok = erlang:dist_ctrl_get_data_notification(DHandle),
@@ -162,6 +164,27 @@ handle_info(dist_data, State0) ->
         {ok, State1} -> {noreply, State1};
         {stop, Reason, State1} -> {stop, Reason, State1}
     end;
+handle_info(
+    {'$socket', Socket, select, WriteSelectHandle},
+    #state{socket = Socket, write_select_handle = WriteSelectHandle} = State0
+) ->
+    State1 = State0#state{write_select_handle = undefined},
+    case flush_output(State1) of
+        {ok, #state{pending_output = []} = State2} ->
+            case send_data_loop(State2) of
+                {ok, State3} -> {noreply, State3};
+                {stop, Reason, State3} -> {stop, Reason, State3}
+            end;
+        {ok, State2} ->
+            {noreply, State2};
+        {stop, Reason, State2} ->
+            {stop, Reason, State2}
+    end;
+handle_info(
+    {'$socket', Socket, abort, {WriteSelectHandle, closed}},
+    #state{socket = Socket, write_select_handle = WriteSelectHandle} = State
+) ->
+    {stop, {send_error, closed}, State};
 handle_info(
     {'$socket', Socket, select, SelectHandle},
     #state{socket = Socket, select_handle = SelectHandle} = State0
@@ -211,7 +234,9 @@ process_recv_buffer(DHandle, <<Size:32, Rest/binary>>, Received) when byte_size(
 process_recv_buffer(_DHandle, Other, Received) ->
     {Other, Received}.
 
-send_data_loop(#state{dhandle = DHandle, socket = Socket, sent = Sent} = State) ->
+send_data_loop(#state{pending_output = [_ | _]} = State) ->
+    {ok, State};
+send_data_loop(#state{dhandle = DHandle} = State) ->
     case erlang:dist_ctrl_get_data(DHandle) of
         none ->
             ok = erlang:dist_ctrl_get_data_notification(DHandle),
@@ -219,10 +244,42 @@ send_data_loop(#state{dhandle = DHandle, socket = Socket, sent = Sent} = State) 
         Data ->
             DataBin = ?PRE_PROCESS(Data),
             DataSize = byte_size(DataBin),
-            case socket:send(Socket, <<DataSize:32, DataBin/binary>>) of
-                ok ->
-                    send_data_loop(State#state{sent = Sent + 1});
-                {error, Reason} ->
-                    {stop, {send_error, Reason}, State}
+            case queue_output(State, <<DataSize:32, DataBin/binary>>) of
+                {ok, #state{pending_output = []} = State1} ->
+                    send_data_loop(State1);
+                {ok, State1} ->
+                    {ok, State1};
+                {stop, _Reason, _State1} = Stop ->
+                    Stop
             end
+    end.
+
+queue_output(#state{pending_output = PendingOutput} = State, Data) ->
+    flush_output(State#state{pending_output = PendingOutput ++ [{Data, 1}]}).
+
+flush_output(#state{write_select_handle = Ref} = State) when is_reference(Ref) ->
+    {ok, State};
+flush_output(#state{pending_output = []} = State) ->
+    {ok, State};
+flush_output(
+    #state{socket = Socket, pending_output = [{Data, Increment} | Tail], sent = Sent} = State
+) ->
+    case socket:nif_send(Socket, Data) of
+        ok ->
+            flush_output(State#state{pending_output = Tail, sent = Sent + Increment});
+        {ok, Rest} ->
+            wait_for_write(State#state{pending_output = [{Rest, Increment} | Tail]});
+        {error, eagain} ->
+            wait_for_write(State);
+        {error, Reason} ->
+            {stop, {send_error, Reason}, State}
+    end.
+
+wait_for_write(#state{socket = Socket} = State) ->
+    Ref = erlang:make_ref(),
+    case socket:nif_select_write(Socket, Ref) of
+        ok ->
+            {ok, State#state{write_select_handle = Ref}};
+        {error, Reason} ->
+            {stop, {send_error, Reason}, State}
     end.
