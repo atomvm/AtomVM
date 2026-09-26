@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "atomvm_version": "@ATOMVM_HEX_VERSION@",
+  "supported_erlang": @ATOMVM_HEX_SUPPORTED_ERLANG@,
+  "tested_elixir": @ATOMVM_HEX_TESTED_ELIXIR@
+}
