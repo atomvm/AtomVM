@@ -143,6 +143,16 @@ void resource_type_destroy(struct ResourceType *resource_type);
 bool select_event_notify(ErlNifEvent event, bool is_read, bool is_write, GlobalContext *global);
 
 /**
+ * @brief Cancel one direction of a select event.
+ * @param env current environment
+ * @param event event to update
+ * @param obj resource associated with the event
+ * @param is_write cancel write when true, read when false
+ * @return true if the direction was active
+ */
+bool select_event_cancel_direction(ErlNifEnv *env, ErlNifEvent event, void *obj, bool is_write);
+
+/**
  * @brief Count events available for reading and/or writing and destroy the
  * events marked for close.
  * @details Convenience function that can be called by `sys_poll_events` and

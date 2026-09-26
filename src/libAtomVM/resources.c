@@ -354,6 +354,41 @@ bool select_event_notify(ErlNifEvent event, bool is_read, bool is_write, GlobalC
     return result;
 }
 
+bool select_event_cancel_direction(ErlNifEnv *env, ErlNifEvent event, void *obj, bool is_write)
+{
+    GlobalContext *global = env->global;
+    struct RefcBinary *resource = refc_binary_from_data(obj);
+    bool was_active = false;
+    struct ListHead *item;
+    struct ListHead *select_events = synclist_wrlock(&global->select_events);
+    LIST_FOR_EACH (item, select_events) {
+        struct SelectEvent *select_event = GET_LIST_ENTRY(item, struct SelectEvent, head);
+        if (select_event->event == event && select_event->resource == resource) {
+            if (is_write) {
+                was_active = select_event->write;
+                select_event->write = false;
+                enif_select_event_message_dispose(select_event->write_message, global, false);
+                select_event->write_message = NULL;
+                select_event->write_local_pid = INVALID_PROCESS_ID;
+                select_event->write_ref_ticks = 0;
+            } else {
+                was_active = select_event->read;
+                select_event->read = false;
+                enif_select_event_message_dispose(select_event->read_message, global, false);
+                select_event->read_message = NULL;
+                select_event->read_local_pid = INVALID_PROCESS_ID;
+                select_event->read_ref_ticks = 0;
+            }
+            break;
+        }
+    }
+    synclist_unlock(&global->select_events);
+    if (was_active) {
+        sys_unregister_select_event(global, event, is_write);
+    }
+    return was_active;
+}
+
 static inline void select_event_destroy(struct SelectEvent *select_event, GlobalContext *global)
 {
     if (select_event->resource->resource_type->stop) {
