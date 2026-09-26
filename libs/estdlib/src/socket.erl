@@ -46,6 +46,7 @@
 %% internal nifs
 -export([
     nif_select_read/2,
+    nif_select_write/2,
     nif_accept/1,
     nif_recv/2,
     nif_recvfrom/2,
@@ -267,21 +268,18 @@ accept0(Socket, Timeout) ->
         ok ->
             receive
                 {'$socket', Socket, select, Ref} ->
-                    case ?MODULE:nif_accept(Socket) of
-                        {error, _} = E ->
-                            ?MODULE:nif_select_stop(Socket),
-                            E;
-                        {ok, _Socket} = Reply ->
-                            Reply
-                    end;
+                    ?MODULE:nif_select_stop(Socket),
+                    ?MODULE:nif_accept(Socket);
                 {'$socket', Socket, abort, {Ref, closed}} ->
                     % socket was closed by another process
                     % TODO: we need to handle:
                     % (a) SELECT_STOP being scheduled
                     % (b) flush of messages as we can have both in the
                     % queue
+                    ?MODULE:nif_select_stop(Socket),
                     {error, closed}
             after Timeout ->
+                ?MODULE:nif_select_stop(Socket),
                 {error, timeout}
             end;
         {error, _Reason} = Error ->
@@ -375,28 +373,50 @@ recv0_noselect(Socket, Length) ->
     end.
 
 recv0(Socket, Length, Timeout) ->
+    Deadline =
+        case Timeout of
+            infinity -> infinity;
+            _ -> erlang:system_time(millisecond) + Timeout
+        end,
+    recv0_loop(Socket, Length, Deadline).
+
+recv0_loop(Socket, Length, Deadline) ->
     Ref = erlang:make_ref(),
     case ?MODULE:nif_select_read(Socket, Ref) of
         ok ->
+            Remaining = recv0_remaining(Deadline),
             receive
                 {'$socket', Socket, select, Ref} ->
+                    ?MODULE:nif_select_stop(Socket),
                     case ?MODULE:nif_recv(Socket, Length) of
-                        {error, _} = E ->
-                            ?MODULE:nif_select_stop(Socket),
-                            E;
-                        {ok, Data} ->
-                            {ok, Data}
+                        {error, Reason} when Reason =:= timeout orelse Reason =:= eagain ->
+                            %% Handle spurious select wakeup: some platforms
+                            %% (wasi-libc) require that we tear down and
+                            %% re-arm the select.
+                            case recv0_remaining(Deadline) of
+                                Done when Done =< 0, Deadline =/= infinity ->
+                                    {error, timeout};
+                                _ ->
+                                    recv0_loop(Socket, Length, Deadline)
+                            end;
+                        Result ->
+                            Result
                     end;
                 {'$socket', Socket, abort, {Ref, closed}} ->
                     % socket was closed by another process
                     % TODO: see above in accept/2
+                    ?MODULE:nif_select_stop(Socket),
                     {error, closed}
-            after Timeout ->
+            after Remaining ->
+                ?MODULE:nif_select_stop(Socket),
                 {error, timeout}
             end;
         {error, _Reason} = Error ->
             Error
     end.
+
+recv0_remaining(infinity) -> infinity;
+recv0_remaining(Deadline) -> max(0, Deadline - erlang:system_time(millisecond)).
 
 recv0_nowait(Socket, Length, Ref) ->
     case ?MODULE:nif_recv(Socket, Length) of
@@ -431,9 +451,20 @@ recv0_r(Socket, Length, Timeout, EndQuery, Acc) ->
         ok ->
             receive
                 {'$socket', Socket, select, Ref} ->
+                    ?MODULE:nif_select_stop(Socket),
                     case ?MODULE:nif_recv(Socket, Length) of
+                        {error, Reason} when Reason =:= timeout orelse Reason =:= eagain ->
+                            %% Handle spurious select wakeup
+                            case recv0_r_remaining(Timeout, EndQuery) of
+                                Done when Done =< 0, Timeout =/= infinity ->
+                                    case Acc of
+                                        [] -> {error, timeout};
+                                        _ -> {error, {timeout, list_to_binary(lists:reverse(Acc))}}
+                                    end;
+                                NewTimeout ->
+                                    recv0_r(Socket, Length, NewTimeout, EndQuery, Acc)
+                            end;
                         {error, _} = E ->
-                            ?MODULE:nif_select_stop(Socket),
                             E;
                         {ok, Data} ->
                             NewAcc = [Data | Acc],
@@ -442,19 +473,17 @@ recv0_r(Socket, Length, Timeout, EndQuery, Acc) ->
                                 0 ->
                                     {ok, list_to_binary(lists:reverse(NewAcc))};
                                 _ ->
-                                    NewTimeout =
-                                        case Timeout of
-                                            infinity -> infinity;
-                                            _ -> EndQuery - erlang:system_time(millisecond)
-                                        end,
+                                    NewTimeout = recv0_r_remaining(Timeout, EndQuery),
                                     recv0_r(Socket, Remaining, NewTimeout, EndQuery, NewAcc)
                             end
                     end;
                 {'$socket', Socket, abort, {Ref, closed}} ->
                     % socket was closed by another process
                     % TODO: see above in accept/2
+                    ?MODULE:nif_select_stop(Socket),
                     {error, closed}
             after Timeout ->
+                ?MODULE:nif_select_stop(Socket),
                 case Acc of
                     [] -> {error, timeout};
                     _ -> {error, {timeout, list_to_binary(lists:reverse(Acc))}}
@@ -463,6 +492,9 @@ recv0_r(Socket, Length, Timeout, EndQuery, Acc) ->
         {error, _Reason} = Error ->
             Error
     end.
+
+recv0_r_remaining(infinity, _EndQuery) -> infinity;
+recv0_r_remaining(_Timeout, EndQuery) -> max(0, EndQuery - erlang:system_time(millisecond)).
 
 %%-----------------------------------------------------------------------------
 %% @equiv socket:recvfrom(Socket, 0)
@@ -530,23 +562,40 @@ recvfrom0_noselect(Socket, Length) ->
     end.
 
 recvfrom0(Socket, Length, Timeout) ->
+    Deadline =
+        case Timeout of
+            infinity -> infinity;
+            _ -> erlang:system_time(millisecond) + Timeout
+        end,
+    recvfrom0_loop(Socket, Length, Deadline).
+
+recvfrom0_loop(Socket, Length, Deadline) ->
     Ref = erlang:make_ref(),
     case ?MODULE:nif_select_read(Socket, Ref) of
         ok ->
+            Remaining = recv0_remaining(Deadline),
             receive
                 {'$socket', Socket, select, Ref} ->
+                    ?MODULE:nif_select_stop(Socket),
                     case ?MODULE:nif_recvfrom(Socket, Length) of
-                        {error, _} = E ->
-                            ?MODULE:nif_select_stop(Socket),
-                            E;
-                        {ok, {_Address, _Data}} = Reply ->
-                            Reply
+                        {error, Reason} when Reason =:= timeout orelse Reason =:= eagain ->
+                            %% Handle spurious select wakeup
+                            case recv0_remaining(Deadline) of
+                                Done when Done =< 0, Deadline =/= infinity ->
+                                    {error, timeout};
+                                _ ->
+                                    recvfrom0_loop(Socket, Length, Deadline)
+                            end;
+                        Result ->
+                            Result
                     end;
                 {'$socket', Socket, abort, {Ref, closed}} ->
                     % socket was closed by another process
                     % TODO: see above in accept/2
+                    ?MODULE:nif_select_stop(Socket),
                     {error, closed}
-            after Timeout ->
+            after Remaining ->
+                ?MODULE:nif_select_stop(Socket),
                 {error, timeout}
             end;
         {error, _Reason} = Error ->
@@ -571,13 +620,17 @@ recvfrom0_nowait(Socket, Length, Ref) ->
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
 %% @param   Data the data to send
-%% @returns `{ok, Rest}' if successful; `{error, Reason}', otherwise.
+%% @returns `ok' if all data was accepted; `{ok, Rest}' if only part of the data
+%%          was accepted; `{error, Reason}', otherwise.
 %% @doc     Send data on the specified socket.
 %%
-%%          Note that this function will block until data is sent
-%%          on the socket.  The data may not have been received by the
-%%          intended recipient, and the data may not even have been sent
-%%          over the network.
+%%          For stream sockets, partial sends and transient backpressure are
+%%          retried internally until all data has been accepted or an error
+%%          occurs.
+%%
+%%          If the underlying non-blocking send returns `eagain' (kernel
+%%          send buffer full), this function waits via select until the
+%%          socket is writable again, then retries.
 %%
 %% Example:
 %%
@@ -587,9 +640,9 @@ recvfrom0_nowait(Socket, Length, Ref) ->
 -spec send(Socket :: socket(), Data :: iodata()) ->
     ok | {ok, Rest :: binary()} | {error, Reason :: term()}.
 send(Socket, Data) when is_binary(Data) ->
-    ?MODULE:nif_send(Socket, Data);
+    send_all_binary(Socket, Data);
 send(Socket, Data) ->
-    ?MODULE:nif_send(Socket, erlang:iolist_to_binary(Data)).
+    send_all_binary(Socket, erlang:iolist_to_binary(Data)).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
@@ -603,6 +656,10 @@ send(Socket, Data) ->
 %%          intended recipient, and the data may not even have been sent
 %%          over the network.
 %%
+%%          As with {@link send/2}, the call waits via select for the
+%%          socket to become writable when the underlying NIF reports
+%%          `eagain'.
+%%
 %% Example:
 %%
 %%          `ok = socket:sendto(ConnectedSocket, Data, Dest)'
@@ -611,9 +668,22 @@ send(Socket, Data) ->
 -spec sendto(Socket :: socket(), Data :: iodata(), Dest :: sockaddr()) ->
     ok | {ok, Rest :: binary()} | {error, Reason :: term()}.
 sendto(Socket, Data, Dest) when is_binary(Data) ->
-    ?MODULE:nif_sendto(Socket, Data, Dest);
+    sendto0(Socket, Data, Dest);
 sendto(Socket, Data, Dest) ->
-    ?MODULE:nif_sendto(Socket, erlang:iolist_to_binary(Data), Dest).
+    sendto0(Socket, erlang:iolist_to_binary(Data), Dest).
+
+sendto0(Socket, Data, Dest) ->
+    case ?MODULE:nif_sendto(Socket, Data, Dest) of
+        {error, eagain} ->
+            case wait_write(Socket) of
+                ok ->
+                    sendto0(Socket, Data, Dest);
+                {error, _Reason} = Error ->
+                    Error
+            end;
+        Result ->
+            Result
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
@@ -652,6 +722,9 @@ getopt(_Socket, _SocketOption) ->
 %%              <tr><td>`{otp, recvbuf}'</td><td>`non_neg_integer()'</td></tr>
 %%              <tr><td>`{ip, add_membership}'</td><td>`ip_mreq()'</td></tr>
 %%          </table>
+%%
+%%          Some platforms (wasi) do not implement linger or reuseaddr. The
+%%          options are silently accepted for compatibility.
 %%
 %% Example:
 %%
@@ -709,6 +782,10 @@ nif_select_read(_Socket, _Ref) ->
     erlang:nif_error(undefined).
 
 %% @private
+nif_select_write(_Socket, _Ref) ->
+    erlang:nif_error(undefined).
+
+%% @private
 nif_accept(_Socket) ->
     erlang:nif_error(undefined).
 
@@ -731,3 +808,34 @@ nif_send(_Socket, _Data) ->
 %% @private
 nif_sendto(_Socket, _Data, _Dest) ->
     erlang:nif_error(undefined).
+
+send_all_binary(Socket, Data) ->
+    case ?MODULE:nif_send(Socket, Data) of
+        ok ->
+            ok;
+        {ok, Rest} ->
+            send_all_binary(Socket, Rest);
+        {error, eagain} ->
+            case wait_write(Socket) of
+                ok ->
+                    send_all_binary(Socket, Data);
+                {error, _Reason} = Error ->
+                    Error
+            end;
+        {error, _Reason} = Error ->
+            Error
+    end.
+
+wait_write(Socket) ->
+    Ref = erlang:make_ref(),
+    case ?MODULE:nif_select_write(Socket, Ref) of
+        ok ->
+            receive
+                {'$socket', Socket, select, Ref} ->
+                    ok;
+                {'$socket', Socket, abort, {Ref, closed}} ->
+                    {error, closed}
+            end;
+        {error, _Reason} = Error ->
+            Error
+    end.

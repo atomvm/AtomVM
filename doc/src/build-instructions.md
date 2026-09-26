@@ -20,7 +20,7 @@ The native C parts of AtomVM compile to machine code on MacOS, Linux, and FreeBS
 
 The Erlang and Elixir parts are compiled to BEAM byte-code using the Erlang (`erlc`) and Elixir compilers.  For information about specific versions of required software, see the [Release Notes](./release-notes.md).
 
-This guide provides information about how to build AtomVM for the various supported platforms (Generic UNIX, ESP32, and STM32).
+This guide provides information about how to build AtomVM for the various supported platforms (Generic UNIX, ESP32, STM32, RP2, Emscripten WASM, and WASI).
 
 ```{attention}
 In order to build AtomVM AVM files for ESP32 and STM32 platforms, you will also need to build
@@ -92,6 +92,7 @@ It is possible to use a local copy of `uf2tool` source code by setting `UF2TOOL_
 * [STM32](#building-for-stm32)
 * [RP2](#building-for-rp2) (including Pico boards)
 * [WASM](#building-for-emscripten) (NodeJS or web)
+* [WASI](#building-for-wasi) (WebAssembly System Interface, wasmtime/wasmer)
 
 ## Building for Generic UNIX
 
@@ -1218,3 +1219,103 @@ $ cd src/platforms/emscripten/tests/
 $ npm install cypress
 $ npx cypress open
 ```
+
+## Building for WASI
+
+WASI (WebAssembly System Interface) allows AtomVM to run as a pure WebAssembly module without JavaScript dependencies.  Unlike the Emscripten build, WASI targets standalone runtimes such as wasmtime, WasmEdge, and wasmer.
+
+### WASI Prerequisites
+
+* [WASI SDK](https://github.com/WebAssembly/wasi-sdk/releases) at version 33 or
+  newer recommended
+* A WASI runtime, such as [wasmtime](https://wasmtime.dev) (recommended)
+* `cmake` 3.13 or later
+* Erlang/OTP
+
+### WASI Target Modes
+
+The build supports three target triples, picked automatically from `AVM_DISABLE_SMP`. SMP and networking sit on different targets and are currently mutually exclusive:
+
+| Target triple             | SMP | Networking                         | Selection                                              |
+| ------------------------- | --- | ---------------------------------- | ------------------------------------------------------ |
+| `wasm32-wasip1-threads`   | yes | no                                 | default (`-DAVM_DISABLE_SMP=OFF`)                      |
+| `wasm32-wasip2`           | no  | yes (`wasi:sockets@0.2.x`)         | `-DAVM_DISABLE_SMP=ON`                                 |
+| `wasm32-wasip1`           | no  | no                                 | `-DAVM_DISABLE_SMP=ON -DWASI_TARGET=wasm32-wasip1`     |
+
+`erlang:system_info(system_architecture)` reports the active triple (e.g. `wasm32-wasip2`).
+
+### WASI Build Instructions
+
+Default (SMP, no networking):
+
+```shell
+$ cd src/platforms/wasi/
+$ mkdir build
+$ cd build
+$ cmake -G Ninja \
+        -DCMAKE_TOOLCHAIN_FILE=../wasi-sdk.cmake \
+        -DAVM_DISABLE_JIT=ON \
+        ..
+$ ninja
+```
+
+For networking (single-threaded `wasm32-wasip2`):
+
+```shell
+$ cmake -G Ninja \
+        -DCMAKE_TOOLCHAIN_FILE=../wasi-sdk.cmake \
+        -DAVM_DISABLE_JIT=ON \
+        -DAVM_DISABLE_SMP=ON \
+        ..
+```
+
+The WASI SDK location is detected automatically from the `WASI_SDK_PATH` environment variable, `/opt/local/libexec/wasi-sdk` (MacPorts), or `/opt/wasi-sdk`.
+
+### Running AtomVM on WASI
+
+WASI uses capability-based security.  Grant directory access with `--dir` when running:
+
+```shell
+$ wasmtime run --dir=. build/src/AtomVM.wasm myapp.avm
+```
+
+For SMP (`wasm32-wasip1-threads`) wasmtime needs the threads proposal:
+
+```shell
+$ wasmtime run -W threads -W shared-memory --dir=. build/src/AtomVM.wasm myapp.avm
+```
+
+For networking (`wasm32-wasip2`) grant socket and DNS capabilities:
+
+```shell
+$ wasmtime run -S inherit-network -S allow-ip-name-lookup --dir=. \
+    build/src/AtomVM.wasm myapp.avm
+```
+
+You can load multiple AVM or BEAM files by listing them as additional arguments:
+
+```shell
+$ wasmtime run --dir=. build/src/AtomVM.wasm myapp.avm libs/atomvmlib.avm
+```
+
+### Running tests with WASI
+
+Build the test modules first using the Generic UNIX build (see above).  Then run:
+
+```shell
+$ cd build
+$ wasmtime run --dir=. ../src/platforms/wasi/build/src/AtomVM.wasm \
+    tests/libs/alisp/test_alisp.avm
+$ wasmtime run --dir=. ../src/platforms/wasi/build/src/AtomVM.wasm \
+    tests/libs/estdlib/test_estdlib.avm
+$ wasmtime run --dir=. ../src/platforms/wasi/build/src/AtomVM.wasm \
+    tests/libs/etest/test_etest.avm
+```
+
+### WASI Platform Limitations
+
+* JIT compilation is not supported; the WebAssembly sandbox prohibits executable memory.
+* Networking requires the `wasm32-wasip2` target; the WASI Preview 1 targets (`wasm32-wasip1` and `wasm32-wasip1-threads`) have no sockets.
+* SMP requires the `wasm32-wasip1-threads` target; `wasm32-wasip2` does not provide threads.
+* Process creation (fork/exec) is not supported on any WASI target.
+* Directory access requires explicit capability grants via `--dir`.

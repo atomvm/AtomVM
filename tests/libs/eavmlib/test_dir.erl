@@ -33,6 +33,11 @@ all_dir_entries(Dir, Acc) ->
     case atomvm:posix_readdir(Dir) of
         eof ->
             [eof | Acc];
-        {ok, {dirent, Inode, Name} = Dirent} when is_integer(Inode) and is_binary(Name) ->
+        {ok, {dirent, Inode, Name} = Dirent} when
+            (is_integer(Inode) orelse Inode =:= undefined) andalso is_binary(Name)
+        ->
+            %% Inode may be `undefined' on platforms whose readdir does not
+            %% populate `d_ino' (e.g. wasi-libc on wasip1 / wasip2 leaves it
+            %% at the sentinel value, which posix_readdir maps to undefined).
             all_dir_entries(Dir, [Dirent | Acc])
     end.

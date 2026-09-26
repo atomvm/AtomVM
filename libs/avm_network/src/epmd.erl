@@ -157,7 +157,7 @@ process_req(
 ) ->
     case socket:recv(Socket, 1, nowait) of
         {select, {select_info, recv, Ref}} ->
-            socket:send(Socket, <<?ALIVE2_X_RESP, 0, Creation:32>>),
+            ok = socket:send(Socket, <<?ALIVE2_X_RESP, 0, Creation:32>>),
             State#state{
                 recv_selects = [{Ref, client} | RecvSelects],
                 clients = [

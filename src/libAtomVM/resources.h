@@ -92,9 +92,12 @@ struct SelectEvent
     bool read;
     bool write;
     bool close;
-    int32_t local_pid;
-    uint64_t ref_ticks;
-    Message *message;
+    int32_t read_local_pid;
+    int32_t write_local_pid;
+    uint64_t read_ref_ticks;
+    uint64_t write_ref_ticks;
+    Message *read_message;
+    Message *write_message;
 };
 
 /**
@@ -138,6 +141,16 @@ void resource_type_destroy(struct ResourceType *resource_type);
  * @return true if the event was found
  */
 bool select_event_notify(ErlNifEvent event, bool is_read, bool is_write, GlobalContext *global);
+
+/**
+ * @brief Cancel one direction of a select event.
+ * @param env current environment
+ * @param event event to update
+ * @param obj resource associated with the event
+ * @param is_write cancel write when true, read when false
+ * @return true if the direction was active
+ */
+bool select_event_cancel_direction(ErlNifEnv *env, ErlNifEvent event, void *obj, bool is_write);
 
 /**
  * @brief Count events available for reading and/or writing and destroy the

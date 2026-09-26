@@ -31,13 +31,86 @@ test() ->
     ok = test_recv_nowait(),
     ok = test_accept_nowait(),
     ok = test_setopt_getopt(),
+    ok = test_send_empty(),
     case erlang:system_info(machine) of
         "ATOM" ->
+            ok = test_independent_read_write_selects(),
             ok = test_abandon_select();
         "BEAM" ->
             ok
     end,
     ok.
+
+test_independent_read_write_selects() ->
+    etest:flush_msg_queue(),
+    {ok, ListenSocket} = socket:open(inet, stream, tcp),
+    ok = socket:setopt(ListenSocket, {socket, reuseaddr}, true),
+    ok = socket:bind(ListenSocket, #{family => inet, addr => loopback, port => 0}),
+    ok = socket:listen(ListenSocket),
+    {ok, #{port := Port}} = socket:sockname(ListenSocket),
+    {ok, ClientSocket} = socket:open(inet, stream, tcp),
+    ok = socket:connect(ClientSocket, #{family => inet, addr => loopback, port => Port}),
+    {ok, ServerSocket} = socket:accept(ListenSocket),
+
+    Parent = self(),
+    {Reader, ReaderMonitor} = spawn_opt(
+        fun() ->
+            Ref = erlang:make_ref(),
+            ok = socket:nif_select_read(ClientSocket, Ref),
+            Parent ! {self(), registered},
+            receive
+                {'$socket', ClientSocket, select, Ref} -> Parent ! {self(), ready};
+                {'$socket', ClientSocket, abort, {Ref, Reason}} -> exit({aborted, Reason})
+            after 5000 ->
+                exit(timeout)
+            end
+        end,
+        [monitor]
+    ),
+    ok = wait_registered(Reader),
+    {Writer, WriterMonitor} = spawn_opt(
+        fun() ->
+            Ref = erlang:make_ref(),
+            ok = socket:nif_select_write(ClientSocket, Ref),
+            Parent ! {self(), registered},
+            receive
+                {'$socket', ClientSocket, select, Ref} -> ok;
+                {'$socket', ClientSocket, abort, {Ref, Reason}} -> exit({aborted, Reason})
+            after 5000 ->
+                exit(timeout)
+            end
+        end,
+        [monitor]
+    ),
+    ok = wait_registered(Writer),
+    normal = wait_down(Writer, WriterMonitor),
+
+    ok = socket:send(ServerSocket, <<42>>),
+    ok =
+        receive
+            {Reader, ready} -> ok
+        after 5000 ->
+            error({timeout, reader_ready})
+        end,
+    normal = wait_down(Reader, ReaderMonitor),
+
+    ok = socket:close(ClientSocket),
+    ok = socket:close(ServerSocket),
+    ok = socket:close(ListenSocket).
+
+wait_registered(Pid) ->
+    receive
+        {Pid, registered} -> ok
+    after 5000 ->
+        error({timeout, registered, Pid})
+    end.
+
+wait_down(Pid, Monitor) ->
+    receive
+        {'DOWN', Monitor, process, Pid, Reason} -> Reason
+    after 5000 ->
+        error({timeout, down, Pid})
+    end.
 
 -define(PACKET_SIZE, 7).
 
@@ -528,6 +601,23 @@ test_setopt_getopt() ->
     {error, closed} = socket:getopt(Socket, {socket, type}),
     {error, closed} = socket:setopt(Socket, {socket, reuseaddr}, true),
     ok.
+
+test_send_empty() ->
+    etest:flush_msg_queue(),
+
+    {ListenSocket, Port} = start_echo_server(0),
+
+    {ok, Client} = socket:open(inet, stream, tcp),
+    ok = socket:connect(Client, #{family => inet, addr => loopback, port => Port}),
+
+    ok = socket:send(Client, <<>>),
+    ok = socket:send(Client, []),
+
+    ok = socket:send(Client, <<"echo:01">>),
+    {ok, <<"echo:01">>} = socket:recv(Client, ?PACKET_SIZE),
+
+    ok = socket:close(Client),
+    ok = close_listen_socket(ListenSocket).
 
 %%
 %% abandon_select test
