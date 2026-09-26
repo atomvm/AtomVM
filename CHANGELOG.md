@@ -89,6 +89,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Fixed generic_unix and emscripten builds with `AVM_DISABLE_SMP=ON` and task drivers enabled
+- Fixed `supervisor` starting a child from a specification carried in a message, letting any
+  process make a supervisor call an arbitrary function
+- Fixed `supervisor` leaving children unrestarted when a message reached it during a
+  `one_for_all` restart or before a failed restart was retried
 - Route `io:put_chars(standard_error, ...)` and `io:format(standard_error, ...)` to stderr instead
   of aliasing them to standard_io (diagnostics no longer pollute an escript's stdout)
 - Stop using deprecated `term_from_int32` on STM32 platform
