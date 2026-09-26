@@ -77,6 +77,8 @@
     rem_/3
 ]).
 
+-export([dwarf_x_reg_offset/0]).
+
 -ifdef(JIT_DWARF).
 -export([
     dwarf_opcode/2,
@@ -203,16 +205,16 @@
     | {{free, riscv32_register()}, '==', {free, riscv32_register()}}.
 
 % Context offsets (32-bit architecture)
-% ctx->e is 0x14
-% ctx->x is 0x18
+% ctx->e is 0x28
+% ctx->x is 0x2C
 -define(CTX_REG, a0).
 -define(NATIVE_INTERFACE_REG, a2).
--define(Y_REGS, {?CTX_REG, 16#14}).
--define(X_REG(N), {?CTX_REG, 16#18 + (N * 4)}).
--define(CP, {?CTX_REG, 16#5C}).
--define(FP_REGS, {?CTX_REG, 16#60}).
--define(BS, {?CTX_REG, 16#64}).
--define(BS_OFFSET, {?CTX_REG, 16#68}).
+-define(Y_REGS, {?CTX_REG, 16#28}).
+-define(X_REG(N), {?CTX_REG, 16#2C + (N * 4)}).
+-define(CP, {?CTX_REG, 16#70}).
+-define(FP_REGS, {?CTX_REG, 16#74}).
+-define(BS, {?CTX_REG, 16#78}).
+-define(BS_OFFSET, {?CTX_REG, 16#7C}).
 -define(JITSTATE_REG, a1).
 -define(RA_REG, ra).
 -define(JITSTATE_MODULE_OFFSET, 0).
@@ -326,6 +328,12 @@ handle_avm_int64_t(State, Value, ArgsT, ArgsRegs, ParamRegs, AvailGP, StackOffse
     set_registers_args0(
         State, [LowPart, HighPart | ArgsT], [imm | ArgsRegs], ParamRegs, AvailGP, StackOffset
     ).
+
+%% @doc Byte offset of the `x' register array within the Context struct.
+%% Derived from ?X_REG so it tracks the codegen offset.
+-spec dwarf_x_reg_offset() -> non_neg_integer().
+dwarf_x_reg_offset() ->
+    element(2, ?X_REG(0)).
 
 -ifdef(JIT_DWARF).
 -spec dwarf_ctx_register() -> non_neg_integer().

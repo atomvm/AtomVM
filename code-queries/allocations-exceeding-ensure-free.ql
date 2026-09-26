@@ -951,6 +951,20 @@ predicate consumesContextBudget(FunctionCall efCall, FunctionCall consumer) {
 }
 
 /**
+ * Holds if `f` tears down a context (e.g. `context_destroy`): it frees the
+ * context rather than re-establishing a usable heap budget on it. Such a
+ * function may reach a memory_ensure_free variant incidentally while draining
+ * signals during teardown, but that does not make a preceding reservation
+ * redundant -- there is no surviving budget for a caller to use. Excluded from
+ * the superseding-reset notion to avoid flagging a deliberate
+ * `ensure_free(ctx, N); ...; context_destroy(ctx);` (e.g. a test that forces a
+ * GC then destroys the context).
+ */
+predicate isContextTeardown(Function f) {
+    f.hasName("context_destroy")
+}
+
+/**
  * Holds if `efCall` is a redundant reserving ensure_free: no allocating call
  * uses its budget, and `supersedingCall` is a subsequent call that resets
  * the heap budget (either a direct ensure_free or a function like
@@ -959,6 +973,11 @@ predicate consumesContextBudget(FunctionCall efCall, FunctionCall consumer) {
 pragma[nomagic]
 predicate isRedundantEnsureFree(FunctionCall efCall, FunctionCall supersedingCall) {
     isReservingEnsureFreeCall(efCall) and
+    // Test code calls ensure_free for its GC side effects (forcing a minor or
+    // full collection, swapping in a fragment) with no intent to allocate:
+    // an unused budget there is deliberate, not a smell. The overflow rule
+    // still applies to tests.
+    not efCall.getFile().getRelativePath().matches("tests/%") and
     // No allocating call uses this ensure_free's budget
     not exists(FunctionCall a | allocToBudget(a, efCall)) and
     // ...and no pointer-bumping consumer (memory_copy_term_tree) uses it either
@@ -986,8 +1005,10 @@ predicate isRedundantEnsureFree(FunctionCall efCall, FunctionCall supersedingCal
             // A function that internally calls ensure_free on the caller's
             // context (e.g., enif_make_resource), passed that same context as an
             // argument. Uses the ensure_free-only notion: own-heap setup does not
-            // reset this context's budget.
+            // reset this context's budget. Context teardown (context_destroy) is
+            // excluded: it frees the context rather than re-establishing a budget.
             not isEnsureFreeCall(supersedingCall) and
+            not isContextTeardown(supersedingCall.getTarget()) and
             transitivelyCallsEnsureFreeOnly(supersedingCall.getTarget()) and
             supersedingCall.getAnArgument().(VariableAccess).getTarget() = ctxVar
         ) and

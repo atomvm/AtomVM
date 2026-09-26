@@ -92,8 +92,8 @@ if_block_eq0_cbnz_thumb2_test() ->
     end),
     Stream = ?BACKEND:stream(State3),
     Dump = <<
-        "   0:	6987      	ldr	r7, [r0, #24]\n"
-        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+        "   0:	6ac7      	ldr	r7, [r0, #44]	@ 0x2c\n"
+        "   2:	6b06      	ldr	r6, [r0, #48]	@ 0x30\n"
         "   4:	b907      	cbnz	r7, 0x8\n"
         "   6:	3602      	adds	r6, #2"
     >>,
@@ -110,8 +110,8 @@ if_block_ne0_cbz_thumb2_test() ->
     end),
     Stream = ?BACKEND:stream(State3),
     Dump = <<
-        "   0:	6987      	ldr	r7, [r0, #24]\n"
-        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+        "   0:	6ac7      	ldr	r7, [r0, #44]	@ 0x2c\n"
+        "   2:	6b06      	ldr	r6, [r0, #48]	@ 0x30\n"
         "   4:	b107      	cbz	r7, 0x8\n"
         "   6:	3602      	adds	r6, #2"
     >>,

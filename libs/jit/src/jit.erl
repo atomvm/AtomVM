@@ -1003,6 +1003,9 @@ first_pass(<<?OP_SET_TUPLE_ELEMENT, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt2, Tuple, Rest2} = decode_compact_term(Rest1, MMod, MSt1, State0),
     {Position, Rest3} = decode_literal(Rest2),
     ?TRACE("OP_SET_TUPLE_ELEMENT ~p, ~p, ~p\n", [NewElement, Tuple, Position]),
+    %% No write barrier needed: the compiler emits set_tuple_element only
+    %% right after the tuple's creation, with no possible GC in between, so
+    %% the tuple cannot be in the old generation.
     {MSt3, Reg} = MMod:move_to_native_register(MSt2, Tuple),
     {MSt4, Reg} = MMod:and_(MSt3, {free, Reg}, ?TERM_PRIMARY_CLEAR_MASK),
     MSt5 = MMod:move_to_array_element(MSt4, NewElement, Reg, Position + 1),
@@ -1901,10 +1904,11 @@ first_pass(<<?OP_PUT_MAP_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
                     ctx, jit_state, offset, ?OUT_OF_MEMORY_ATOM
                 ])
             end),
-            ASt5 = term_set_map_assoc(
-                NewMapPtrReg, {free, PosReg}, {free, Key}, {free, Value}, MMod, ASt4
+            ASt5 = term_set_map_value(
+                NewMapPtrReg, {free, PosReg}, {free, Value}, MMod, ASt4
             ),
-            {ASt5, ARest2}
+            ASt6 = MMod:free_native_registers(ASt5, [Key]),
+            {ASt6, ARest2}
         end,
         {MSt10, Rest5},
         lists:seq(1, NumElements)
@@ -5057,16 +5061,12 @@ term_binary_size(Src, MMod, MSt0) ->
     MSt3 = MMod:move_array_element(MSt2, SrcReg, 1, SrcReg),
     {MSt3, SrcReg}.
 
-term_set_map_assoc(MapPtrReg, {free, PosReg}, {free, Key}, {free, Value}, MMod, MSt0) ->
-    {MSt1, MapKeysReg} = MMod:get_array_element(MSt0, MapPtrReg, 1),
-    MSt2 = term_put_tuple_element({free, MapKeysReg}, PosReg, {free, Key}, MMod, MSt1),
-    MSt3 = MMod:move_to_array_element(MSt2, Value, MapPtrReg, PosReg, 2),
-    MMod:free_native_registers(MSt3, [PosReg, Value]).
-
-term_put_tuple_element({free, TupleReg}, PosReg, {free, Value}, MMod, MSt0) ->
-    {MSt1, TupleReg} = MMod:and_(MSt0, {free, TupleReg}, ?TERM_PRIMARY_CLEAR_MASK),
-    MSt2 = MMod:move_to_array_element(MSt1, Value, TupleReg, PosReg, 1),
-    MMod:free_native_registers(MSt2, [TupleReg, Value]).
+%% The keys tuple is shared with the source map: only the value may be
+%% updated. Writing the key operand (equal but not necessarily identical)
+%% would mutate the source map's keys tuple in place.
+term_set_map_value(MapPtrReg, {free, PosReg}, {free, Value}, MMod, MSt0) ->
+    MSt1 = MMod:move_to_array_element(MSt0, Value, MapPtrReg, PosReg, 2),
+    MMod:free_native_registers(MSt1, [PosReg, Value]).
 
 %% @doc Get the stream module
 %% @return The stream module for jit on this platform

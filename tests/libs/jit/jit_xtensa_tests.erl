@@ -160,7 +160,7 @@ move_to_native_register_xreg_test() ->
     Stream = ?BACKEND:stream(State1),
     ?assert(is_atom(Reg)),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24"
+        "   0:	0b22f2        	l32i	a15, a2, 44"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -181,7 +181,7 @@ move_to_native_register_yreg_test() ->
     Stream = ?BACKEND:stream(State1),
     ?assert(byte_size(Stream) > 0),
     Dump = <<
-        "   0:	0522e2        	l32i	a14, a2, 20\n"
+        "   0:	0a22e2        	l32i	a14, a2, 40\n"
         "   3:	032ef2        	l32i	a15, a14, 12"
     >>,
     ?assertStream(xtensa, Dump, Stream).
@@ -192,7 +192,7 @@ move_to_vm_register_test() ->
     Stream = ?BACKEND:stream(State1),
     Dump = <<
         "   0:	2aa0f2        	movi	a15, 42\n"
-        "   3:	0662f2        	s32i	a15, a2, 24"
+        "   3:	0b62f2        	s32i	a15, a2, 44"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -202,7 +202,7 @@ move_to_vm_register_yreg_test() ->
     Stream = ?BACKEND:stream(State1),
     Dump = <<
         "   0:	2aa0e2        	movi	a14, 42\n"
-        "   3:	0522f2        	l32i	a15, a2, 20\n"
+        "   3:	0a22f2        	l32i	a15, a2, 40\n"
         "   6:	026fe2        	s32i	a14, a15, 8"
     >>,
     ?assertStream(xtensa, Dump, Stream).
@@ -213,7 +213,7 @@ and_test() ->
     {State2, RegA} = ?BACKEND:and_(State1, {free, RegA}, 16#3F),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	3fa0e2        	movi	a14, 63\n"
         "   6:	10ffe0        	and	a15, a15, a14"
     >>,
@@ -225,7 +225,7 @@ or_test() ->
     {State2, RegA} = ?BACKEND:or_(State1, {free, RegA}, 16#0F),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	0fa0e2        	movi	a14, 15\n"
         "   6:	20ffe0        	or	a15, a15, a14"
     >>,
@@ -237,7 +237,7 @@ add_test() ->
     {State2, RegA} = ?BACKEND:add(State1, {free, RegA}, 4),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	04cff2        	addi	a15, a15, 4"
     >>,
     ?assertStream(xtensa, Dump, Stream).
@@ -248,7 +248,7 @@ sub_test() ->
     {State2, RegA} = ?BACKEND:sub(State1, {free, RegA}, 4),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	fccff2        	addi	a15, a15, -4"
     >>,
     ?assertStream(xtensa, Dump, Stream).
@@ -306,7 +306,7 @@ shift_right_test() ->
     {State2, RegA} = ?BACKEND:shift_right(State1, {free, RegA}, 2),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	41f2f0        	srli	a15, a15, 2"
     >>,
     ?assertStream(xtensa, Dump, Stream).
@@ -317,7 +317,7 @@ shift_left_test() ->
     {State2, RegA} = ?BACKEND:shift_left(State1, {free, RegA}, 2),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	11ffe0        	slli	a15, a15, 2"
     >>,
     ?assertStream(xtensa, Dump, Stream).
@@ -333,9 +333,9 @@ register_allocation_test() ->
     ?assertNotEqual(Reg1, Reg3),
     Stream = ?BACKEND:stream(State3),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0722e2        	l32i	a14, a2, 28\n"
-        "   6:	0822d2        	l32i	a13, a2, 32"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c22e2        	l32i	a14, a2, 48\n"
+        "   6:	0d22d2        	l32i	a13, a2, 52"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -404,9 +404,9 @@ move_to_cp_test() ->
     State1 = ?BACKEND:move_to_cp(State0, {y_reg, 0}),
     Stream = ?BACKEND:stream(State1),
     Dump = <<
-        "   0:	0522e2        	l32i	a14, a2, 20\n"
+        "   0:	0a22e2        	l32i	a14, a2, 40\n"
         "   3:	002ef2        	l32i	a15, a14, 0\n"
-        "   6:	1762f2        	s32i	a15, a2, 92"
+        "   6:	1c62f2        	s32i	a15, a2, 112"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -670,10 +670,10 @@ return_if_not_equal_to_ctx_test() ->
     State2 = ?BACKEND:return_if_not_equal_to_ctx(State1, {free, Reg}),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	041f27        	beq	a15, a2, 0xb\n"
         "   6:	0f2d      	mov.n	a2, a15\n"
-        "   8:	000090        	retw"
+        "   8:	000090        	excw"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -755,13 +755,13 @@ cond_jump_to_label_test() ->
         "   1:	ff          	.byte	0xff\n"
         "   2:	ff          	.byte	0xff\n"
         "   3:	ff          	.byte	0xff\n"
-        "   4:	00c136        	entry	a1, 96\n"
+        "   4:	00c136        	excw\n"
         "   7:	fffe51        	l32r	a5, 0x0 (0xffffffff)\n"
         "   a:	032382        	l32i	a8, a3, 12\n"
         "   d:	808850        	add	a8, a8, a5\n"
         "  10:	0008a0        	jx	a8\n"
         "  13:	ff          	.byte	0xff\n"
-        "  14:	0622f2        	l32i	a15, a2, 24\n"
+        "  14:	0b22f2        	l32i	a15, a2, 44\n"
         "  17:	002f96        	bltz	a15, 0x1d\n"
         "  1a:	0005c6        	j	0x35\n"
         "  1d:	000506        	j	0x35\n"
@@ -785,7 +785,7 @@ jump_to_continuation_test() ->
     State2 = ?BACKEND:jump_to_continuation(State1, {free, Reg}),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	0323e2        	l32i	a14, a3, 12\n"
         "   6:	80eef0        	add	a14, a14, a15\n"
         "   9:	03cee2        	addi	a14, a14, 3\n"
@@ -807,7 +807,7 @@ if_block_test() ->
     ),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	002f16        	beqz	a15, 0x9\n"
         "   6:	000086        	j	0xc\n"
         "   9:	0041f0        	break	1, 15"
@@ -829,7 +829,7 @@ if_else_block_test() ->
     ),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	002f16        	beqz	a15, 0x9\n"
         "   6:	000146        	j	0xf\n"
         "   9:	0041f0        	break	1, 15\n"
@@ -860,8 +860,8 @@ if_block_and_test() ->
     ),
     Stream = ?BACKEND:stream(State3),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0722e2        	l32i	a14, a2, 28\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c22e2        	l32i	a14, a2, 48\n"
         "   6:	002f16        	beqz	a15, 0xc\n"
         "   9:	000206        	j	0x15\n"
         "   c:	002e16        	beqz	a14, 0x12\n"
@@ -881,7 +881,7 @@ if_block_cond_lt_0_bare_test() ->
     State2 = ?BACKEND:if_block(State1, {Reg, '<', 0}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	002f96        	bltz	a15, 0x9\n"
         "   6:	000086        	j	0xc\n"
         "   9:	0041f0        	break	1, 15"
@@ -895,7 +895,7 @@ if_block_cond_lt_b4const_test() ->
     State2 = ?BACKEND:if_block(State1, {Reg, '<', 1}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	021fa6        	blti	a15, 1, 0x9\n"
         "   6:	000086        	j	0xc\n"
         "   9:	0041f0        	break	1, 15"
@@ -909,7 +909,7 @@ if_block_cond_lt_uint8_test() ->
     State2 = ?BACKEND:if_block(State1, {Reg, '<', 100}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	64a0e2        	movi	a14, 100\n"
         "   6:	022fe7        	blt	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
@@ -924,7 +924,7 @@ if_block_cond_lt_large_test() ->
     State2 = ?BACKEND:if_block(State1, {Reg, '<', 1000}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	e8a3e2        	movi	a14, 0x3e8\n"
         "   6:	022fe7        	blt	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
@@ -939,7 +939,7 @@ if_block_cond_uint8_lt_reg_test() ->
     State2 = ?BACKEND:if_block(State1, {42, '<', Reg}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	2aa0e2        	movi	a14, 42\n"
         "   6:	022ef7        	blt	a14, a15, 0xc\n"
         "   9:	000086        	j	0xf\n"
@@ -954,7 +954,7 @@ if_block_cond_large_lt_reg_test() ->
     State2 = ?BACKEND:if_block(State1, {1000, '<', Reg}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	e8a3e2        	movi	a14, 0x3e8\n"
         "   6:	022ef7        	blt	a14, a15, 0xc\n"
         "   9:	000086        	j	0xf\n"
@@ -970,8 +970,8 @@ if_block_cond_reg_lt_reg_test() ->
     State3 = ?BACKEND:if_block(State2, {Reg1, '<', Reg2}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State3),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0722e2        	l32i	a14, a2, 28\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c22e2        	l32i	a14, a2, 48\n"
         "   6:	022fe7        	blt	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
         "   c:	0041f0        	break	1, 15"
@@ -989,7 +989,7 @@ if_block_cond_free_eq_0_test() ->
     State2 = ?BACKEND:if_block(State1, {{free, Reg}, '==', 0}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	002f16        	beqz	a15, 0x9\n"
         "   6:	000086        	j	0xc\n"
         "   9:	0041f0        	break	1, 15"
@@ -1004,8 +1004,8 @@ if_block_cond_eq_reg_test() ->
     State3 = ?BACKEND:if_block(State2, {Reg1, '==', Reg2}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State3),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0722e2        	l32i	a14, a2, 28\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c22e2        	l32i	a14, a2, 48\n"
         "   6:	021fe7        	beq	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
         "   c:	0041f0        	break	1, 15"
@@ -1022,8 +1022,8 @@ if_block_cond_free_eq_reg_test() ->
     ),
     Stream = ?BACKEND:stream(State3),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0722e2        	l32i	a14, a2, 28\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c22e2        	l32i	a14, a2, 48\n"
         "   6:	021fe7        	beq	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
         "   c:	0041f0        	break	1, 15"
@@ -1039,7 +1039,7 @@ if_block_cond_int_eq_zero_test() ->
     ),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	002f16        	beqz	a15, 0x9\n"
         "   6:	000086        	j	0xc\n"
         "   9:	0041f0        	break	1, 15"
@@ -1055,7 +1055,7 @@ if_block_cond_int_eq_val_test() ->
     ),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	2aa0e2        	movi	a14, 42\n"
         "   6:	021fe7        	beq	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
@@ -1070,7 +1070,7 @@ if_block_cond_eq_b4const_test() ->
     State2 = ?BACKEND:if_block(State1, {Reg, '==', 1}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	021f26        	beqi	a15, 1, 0x9\n"
         "   6:	000086        	j	0xc\n"
         "   9:	0041f0        	break	1, 15"
@@ -1084,7 +1084,7 @@ if_block_cond_eq_uint8_test() ->
     State2 = ?BACKEND:if_block(State1, {Reg, '==', 42}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	2aa0e2        	movi	a14, 42\n"
         "   6:	021fe7        	beq	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
@@ -1104,8 +1104,8 @@ if_block_cond_free_eq_free_test() ->
     ),
     Stream = ?BACKEND:stream(State3),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0722e2        	l32i	a14, a2, 28\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c22e2        	l32i	a14, a2, 48\n"
         "   6:	021fe7        	beq	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
         "   c:	0041f0        	break	1, 15"
@@ -1119,7 +1119,7 @@ if_block_cond_eq_large_test() ->
     State2 = ?BACKEND:if_block(State1, {Reg, '==', 1000}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	e8a3e2        	movi	a14, 0x3e8\n"
         "   6:	021fe7        	beq	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
@@ -1138,7 +1138,7 @@ if_block_cond_ne_zero_test() ->
     State2 = ?BACKEND:if_block(State1, {Reg, '!=', 0}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	002f56        	bnez	a15, 0x9\n"
         "   6:	000086        	j	0xc\n"
         "   9:	0041f0        	break	1, 15"
@@ -1152,7 +1152,7 @@ if_block_cond_free_ne_zero_test() ->
     State2 = ?BACKEND:if_block(State1, {{free, Reg}, '!=', 0}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	002f56        	bnez	a15, 0x9\n"
         "   6:	000086        	j	0xc\n"
         "   9:	0041f0        	break	1, 15"
@@ -1166,7 +1166,7 @@ if_block_cond_ne_b4const_test() ->
     State2 = ?BACKEND:if_block(State1, {Reg, '!=', 1}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	021f66        	bnei	a15, 1, 0x9\n"
         "   6:	000086        	j	0xc\n"
         "   9:	0041f0        	break	1, 15"
@@ -1180,7 +1180,7 @@ if_block_cond_ne_uint8_test() ->
     State2 = ?BACKEND:if_block(State1, {Reg, '!=', 42}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	2aa0e2        	movi	a14, 42\n"
         "   6:	029fe7        	bne	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
@@ -1196,8 +1196,8 @@ if_block_cond_ne_reg_test() ->
     State3 = ?BACKEND:if_block(State2, {Reg1, '!=', Reg2}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State3),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0722e2        	l32i	a14, a2, 28\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c22e2        	l32i	a14, a2, 48\n"
         "   6:	029fe7        	bne	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
         "   c:	0041f0        	break	1, 15"
@@ -1213,7 +1213,7 @@ if_block_cond_int_ne_val_test() ->
     ),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	2aa0e2        	movi	a14, 42\n"
         "   6:	029fe7        	bne	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
@@ -1228,7 +1228,7 @@ if_block_cond_ne_large_test() ->
     State2 = ?BACKEND:if_block(State1, {Reg, '!=', 1000}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	e8a3e2        	movi	a14, 0x3e8\n"
         "   6:	029fe7        	bne	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
@@ -1249,7 +1249,7 @@ if_block_cond_bool_eq_false_test() ->
     ),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	002f16        	beqz	a15, 0x9\n"
         "   6:	000086        	j	0xc\n"
         "   9:	0041f0        	break	1, 15"
@@ -1265,7 +1265,7 @@ if_block_cond_bool_ne_false_test() ->
     ),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	002f56        	bnez	a15, 0x9\n"
         "   6:	000086        	j	0xc\n"
         "   9:	0041f0        	break	1, 15"
@@ -1285,7 +1285,7 @@ if_block_cond_and_ne_zero_test() ->
     ),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	0fa0e2        	movi	a14, 15\n"
         "   6:	10efe0        	and	a14, a15, a14\n"
         "   9:	002e56        	bnez	a14, 0xf\n"
@@ -1303,7 +1303,7 @@ if_block_cond_and_nibble_ne_f_test() ->
     ),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	ffafe2        	movi	a14, -1\n"
         "   6:	30eef0        	xor	a14, a14, a15\n"
         "   9:	01ee40        	slli	a14, a14, 28\n"
@@ -1322,7 +1322,7 @@ if_block_cond_free_and_nibble_ne_f_test() ->
     ),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	60f0f0        	neg	a15, a15\n"
         "   6:	ffcff2        	addi	a15, a15, -1\n"
         "   9:	01ff40        	slli	a15, a15, 28\n"
@@ -1342,8 +1342,8 @@ if_block_cond_and_ne_reg_test() ->
     ),
     Stream = ?BACKEND:stream(State3),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0722e2        	l32i	a14, a2, 28\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c22e2        	l32i	a14, a2, 48\n"
         "   6:	0fdd      	mov.n	a13, a15\n"
         "   8:	ffa0c2        	movi	a12, 255\n"
         "   b:	10ddc0        	and	a13, a13, a12\n"
@@ -1362,7 +1362,7 @@ if_block_cond_and_ne_imm_test() ->
     ),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	0fed      	mov.n	a14, a15\n"
         "   5:	ffa0d2        	movi	a13, 255\n"
         "   8:	10eed0        	and	a14, a14, a13\n"
@@ -1383,8 +1383,8 @@ if_block_cond_free_and_ne_reg_test() ->
     ),
     Stream = ?BACKEND:stream(State3),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0722e2        	l32i	a14, a2, 28\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c22e2        	l32i	a14, a2, 48\n"
         "   6:	ffa0d2        	movi	a13, 255\n"
         "   9:	10ffd0        	and	a15, a15, a13\n"
         "   c:	029fe7        	bne	a15, a14, 0x12\n"
@@ -1402,7 +1402,7 @@ if_block_cond_free_and_ne_imm_test() ->
     ),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	ffa0e2        	movi	a14, 255\n"
         "   6:	10ffe0        	and	a15, a15, a14\n"
         "   9:	2aa0e2        	movi	a14, 42\n"
@@ -1521,16 +1521,16 @@ call_primitive_no_avail_test() ->
     {State11, _} = ?BACKEND:call_primitive(State10, 0, [ctx, jit_state]),
     Stream = ?BACKEND:stream(State11),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0722e2        	l32i	a14, a2, 28\n"
-        "   6:	0822d2        	l32i	a13, a2, 32\n"
-        "   9:	0922c2        	l32i	a12, a2, 36\n"
-        "   c:	0a22b2        	l32i	a11, a2, 40\n"
-        "   f:	0b22a2        	l32i	a10, a2, 44\n"
-        "  12:	0c2292        	l32i	a9, a2, 48\n"
-        "  15:	0d2272        	l32i	a7, a2, 52\n"
-        "  18:	0e2262        	l32i	a6, a2, 56\n"
-        "  1b:	0f2252        	l32i	a5, a2, 60\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c22e2        	l32i	a14, a2, 48\n"
+        "   6:	0d22d2        	l32i	a13, a2, 52\n"
+        "   9:	0e22c2        	l32i	a12, a2, 56\n"
+        "   c:	0f22b2        	l32i	a11, a2, 60\n"
+        "   f:	1022a2        	l32i	a10, a2, 64\n"
+        "  12:	112292        	l32i	a9, a2, 68\n"
+        "  15:	122272        	l32i	a7, a2, 72\n"
+        "  18:	132262        	l32i	a6, a2, 76\n"
+        "  1b:	142252        	l32i	a5, a2, 80\n"
         "  1e:	0c61f2        	s32i	a15, a1, 48\n"
         "  21:	0d61e2        	s32i	a14, a1, 52\n"
         "  24:	0e61d2        	s32i	a13, a1, 56\n"
@@ -1541,7 +1541,7 @@ call_primitive_no_avail_test() ->
         "  33:	0024f2        	l32i	a15, a4, 0\n"
         "  36:	02ad      	mov.n	a10, a2\n"
         "  38:	03bd      	mov.n	a11, a3\n"
-        "  3a:	000fe0        	callx8	a15\n"
+        "  3a:	000fe0        	excw\n"
         "  3d:	0a8d      	mov.n	a8, a10\n"
         "  3f:	0c21f2        	l32i	a15, a1, 48\n"
         "  42:	0d21e2        	l32i	a14, a1, 52\n"
@@ -1632,7 +1632,7 @@ if_block_cond_free_lt_b4const_test() ->
     State2 = ?BACKEND:if_block(State1, {{free, Reg}, '<', 1}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	021fa6        	blti	a15, 1, 0x9\n"
         "   6:	000086        	j	0xc\n"
         "   9:	0041f0        	break	1, 15"
@@ -1645,7 +1645,7 @@ if_block_cond_free_lt_uint8_test() ->
     State2 = ?BACKEND:if_block(State1, {{free, Reg}, '<', 42}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	2aa0e2        	movi	a14, 42\n"
         "   6:	022fe7        	blt	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
@@ -1659,7 +1659,7 @@ if_block_cond_free_lt_large_test() ->
     State2 = ?BACKEND:if_block(State1, {{free, Reg}, '<', 1000}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	e8a3e2        	movi	a14, 0x3e8\n"
         "   6:	022fe7        	blt	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
@@ -1673,7 +1673,7 @@ if_block_cond_free_uint8_lt_test() ->
     State2 = ?BACKEND:if_block(State1, {42, '<', {free, Reg}}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	2aa0e2        	movi	a14, 42\n"
         "   6:	022ef7        	blt	a14, a15, 0xc\n"
         "   9:	000086        	j	0xf\n"
@@ -1689,7 +1689,7 @@ if_block_cond_free_large_lt_test() ->
     ),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	e8a3e2        	movi	a14, 0x3e8\n"
         "   6:	022ef7        	blt	a14, a15, 0xc\n"
         "   9:	000086        	j	0xf\n"
@@ -1706,8 +1706,8 @@ if_block_cond_free_reg_lt_reg_test() ->
     ),
     Stream = ?BACKEND:stream(State3),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0722e2        	l32i	a14, a2, 28\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c22e2        	l32i	a14, a2, 48\n"
         "   6:	022fe7        	blt	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
         "   c:	0041f0        	break	1, 15"
@@ -1724,7 +1724,7 @@ if_block_cond_free_ne_b4const_test() ->
     State2 = ?BACKEND:if_block(State1, {{free, Reg}, '!=', 1}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	021f66        	bnei	a15, 1, 0x9\n"
         "   6:	000086        	j	0xc\n"
         "   9:	0041f0        	break	1, 15"
@@ -1737,7 +1737,7 @@ if_block_cond_free_ne_uint8_test() ->
     State2 = ?BACKEND:if_block(State1, {{free, Reg}, '!=', 42}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	2aa0e2        	movi	a14, 42\n"
         "   6:	029fe7        	bne	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
@@ -1754,8 +1754,8 @@ if_block_cond_free_ne_reg_test() ->
     ),
     Stream = ?BACKEND:stream(State3),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0722e2        	l32i	a14, a2, 28\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c22e2        	l32i	a14, a2, 48\n"
         "   6:	029fe7        	bne	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
         "   c:	0041f0        	break	1, 15"
@@ -1770,7 +1770,7 @@ if_block_cond_free_ne_large_test() ->
     ),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	e8a3e2        	movi	a14, 0x3e8\n"
         "   6:	029fe7        	bne	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
@@ -1788,7 +1788,7 @@ if_block_cond_free_eq_b4const_test() ->
     State2 = ?BACKEND:if_block(State1, {{free, Reg}, '==', 1}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	021f26        	beqi	a15, 1, 0x9\n"
         "   6:	000086        	j	0xc\n"
         "   9:	0041f0        	break	1, 15"
@@ -1801,7 +1801,7 @@ if_block_cond_free_eq_uint8_test() ->
     State2 = ?BACKEND:if_block(State1, {{free, Reg}, '==', 42}, fun(S) -> ?BACKEND:debugger(S) end),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	2aa0e2        	movi	a14, 42\n"
         "   6:	021fe7        	beq	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
@@ -1817,7 +1817,7 @@ if_block_cond_free_eq_large_test() ->
     ),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	e8a3e2        	movi	a14, 0x3e8\n"
         "   6:	021fe7        	beq	a15, a14, 0xc\n"
         "   9:	000086        	j	0xf\n"
@@ -1837,7 +1837,7 @@ if_block_cond_free_bool_eq_false_test() ->
     ),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	002f16        	beqz	a15, 0x9\n"
         "   6:	000086        	j	0xc\n"
         "   9:	0041f0        	break	1, 15"
@@ -1852,7 +1852,7 @@ if_block_cond_free_bool_ne_false_test() ->
     ),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	002f56        	bnez	a15, 0x9\n"
         "   6:	000086        	j	0xc\n"
         "   9:	0041f0        	break	1, 15"
@@ -1871,7 +1871,7 @@ if_block_cond_free_and_ne_zero_test() ->
     ),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	0fa0e2        	movi	a14, 15\n"
         "   6:	10efe0        	and	a14, a15, a14\n"
         "   9:	002e56        	bnez	a14, 0xf\n"
@@ -1890,7 +1890,7 @@ shift_right_free_large_test() ->
     {State2, RegA} = ?BACKEND:shift_right(State1, {free, RegA}, 16),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	10a0e2        	movi	a14, 16\n"
         "   6:	400e00        	ssr	a14\n"
         "   9:	91f0f0        	srl	a15, a15"
@@ -1908,7 +1908,7 @@ shift_right_new_reg_small_test() ->
     ?assertNotEqual(RegA, ResultReg),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	41e3f0        	srli	a14, a15, 3"
     >>,
     ?assertStream(xtensa, Dump, Stream).
@@ -1924,7 +1924,7 @@ shift_right_new_reg_large_test() ->
     ?assertNotEqual(RegA, ResultReg),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	10a0e2        	movi	a14, 16\n"
         "   6:	400e00        	ssr	a14\n"
         "   9:	91e0f0        	srl	a14, a15"
@@ -1941,7 +1941,7 @@ shift_right_arith_free_test() ->
     {State2, RegA} = ?BACKEND:shift_right_arith(State1, {free, RegA}, 3),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	21f3f0        	srai	a15, a15, 3"
     >>,
     ?assertStream(xtensa, Dump, Stream).
@@ -1957,7 +1957,7 @@ shift_right_arith_new_reg_test() ->
     ?assertNotEqual(RegA, ResultReg),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	21e3f0        	srai	a14, a15, 3"
     >>,
     ?assertStream(xtensa, Dump, Stream).
@@ -1973,9 +1973,9 @@ div_reg_test() ->
     {State3, RegA} = ?BACKEND:div_reg(State2, RegA, RegB),
     Stream = ?BACKEND:stream(State3),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0722e2        	l32i	a14, a2, 28\n"
-        "   6:	d2ffe0        	quos	a15, a15, a14"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c22e2        	l32i	a14, a2, 48\n"
+        "   6:	d2ffe0        	excw"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -1990,9 +1990,9 @@ rem_reg_test() ->
     {State3, RegA} = ?BACKEND:rem_reg(State2, RegA, RegB),
     Stream = ?BACKEND:stream(State3),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0722e2        	l32i	a14, a2, 28\n"
-        "   6:	f2ffe0        	rems	a15, a15, a14"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c22e2        	l32i	a14, a2, 48\n"
+        "   6:	f2ffe0        	excw"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -2006,8 +2006,8 @@ move_to_vm_register_native_to_xreg_extra_test() ->
     State2 = ?BACKEND:move_to_vm_register(State1, Reg, {x_reg, extra}),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	1662f2        	s32i	a15, a2, 88"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	1b62f2        	s32i	a15, a2, 108"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -2021,7 +2021,7 @@ move_to_vm_register_native_to_ptr_test() ->
     State2 = ?BACKEND:move_to_vm_register(State1, Reg, {ptr, a5}),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	0065f2        	s32i	a15, a5, 0"
     >>,
     ?assertStream(xtensa, Dump, Stream).
@@ -2036,8 +2036,8 @@ move_to_vm_register_native_to_yreg_test() ->
     State2 = ?BACKEND:move_to_vm_register(State1, Reg, {y_reg, 3}),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0522e2        	l32i	a14, a2, 20\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0a22e2        	l32i	a14, a2, 40\n"
         "   6:	036ef2        	s32i	a15, a14, 12"
     >>,
     ?assertStream(xtensa, Dump, Stream).
@@ -2052,7 +2052,7 @@ move_to_vm_register_large_int_test() ->
     Stream = ?BACKEND:stream(State1),
     Dump = <<
         "   0:	00a1f2        	movi	a15, 0x100\n"
-        "   3:	0662f2        	s32i	a15, a2, 24"
+        "   3:	0b62f2        	s32i	a15, a2, 44"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -2065,8 +2065,8 @@ move_to_vm_register_xreg_extra_src_test() ->
     State1 = ?BACKEND:move_to_vm_register(State0, {x_reg, extra}, {x_reg, 0}),
     Stream = ?BACKEND:stream(State1),
     Dump = <<
-        "   0:	1622f2        	l32i	a15, a2, 88\n"
-        "   3:	0662f2        	s32i	a15, a2, 24"
+        "   0:	1b22f2        	l32i	a15, a2, 108\n"
+        "   3:	0b62f2        	s32i	a15, a2, 44"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -2079,8 +2079,8 @@ move_to_vm_register_xreg_src_test() ->
     State1 = ?BACKEND:move_to_vm_register(State0, {x_reg, 0}, {x_reg, 1}),
     Stream = ?BACKEND:stream(State1),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0762f2        	s32i	a15, a2, 28"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c62f2        	s32i	a15, a2, 48"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -2094,7 +2094,7 @@ move_to_vm_register_ptr_src_test() ->
     Stream = ?BACKEND:stream(State1),
     Dump = <<
         "   0:	0025f2        	l32i	a15, a5, 0\n"
-        "   3:	0662f2        	s32i	a15, a2, 24"
+        "   3:	0b62f2        	s32i	a15, a2, 44"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -2107,9 +2107,9 @@ move_to_vm_register_yreg_src_test() ->
     State1 = ?BACKEND:move_to_vm_register(State0, {y_reg, 0}, {x_reg, 1}),
     Stream = ?BACKEND:stream(State1),
     Dump = <<
-        "   0:	0522e2        	l32i	a14, a2, 20\n"
+        "   0:	0a22e2        	l32i	a14, a2, 40\n"
         "   3:	002ef2        	l32i	a15, a14, 0\n"
-        "   6:	0762f2        	s32i	a15, a2, 28"
+        "   6:	0c62f2        	s32i	a15, a2, 48"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -2237,17 +2237,17 @@ call_primitive_int64_at_a14_test() ->
         "   5:	02ad      	mov.n	a10, a2\n"
         "   7:	03bd      	mov.n	a11, a3\n"
         "   9:	03a0c2        	movi	a12, 3\n"
-        "   c:	0622d2        	l32i	a13, a2, 24\n"
+        "   c:	0b22d2        	l32i	a13, a2, 44\n"
         "   f:	000146        	j	0x18\n"
         "  12:	f0ff00        	subx8	a15, a15, a0\n"
         "  15:	de          	.byte	0xde\n"
         "  16:	9abc      	beqz.n	a10, 0x53\n"
         "  18:	ffffe1        	l32r	a14, 0x14 (0x9abcdef0)\n"
         "  1b:	000146        	j	0x24\n"
-        "  1e:	78ff00        	lsi	f0, a15, 0x1e0\n"
+        "  1e:	78ff00        	excw\n"
         "  21:	123456        	bnez	a4, 0x148\n"
         "  24:	fffff1        	l32r	a15, 0x20 (0x12345678)\n"
-        "  27:	0009e0        	callx8	a9\n"
+        "  27:	0009e0        	excw\n"
         "  2a:	0a7d      	mov.n	a7, a10"
     >>,
     ?assertStream(xtensa, Dump, Stream).
@@ -2267,10 +2267,10 @@ move_array_element_x_reg_invalidates_vm_loc_cache_test() ->
     {S4, _} = ?BACKEND:move_to_native_register(S3, {x_reg, 5}),
     Stream = ?BACKEND:stream(S4),
     Dump = <<
-        "   0:	0b22f2        	l32i	a15, a2, 44\n"
-        "   3:	0622e2        	l32i	a14, a2, 24\n"
+        "   0:	1022f2        	l32i	a15, a2, 64\n"
+        "   3:	0b22e2        	l32i	a14, a2, 44\n"
         "   6:	002ed2        	l32i	a13, a14, 0\n"
-        "   9:	0b62d2        	s32i	a13, a2, 44"
+        "   9:	1062d2        	s32i	a13, a2, 64"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -2282,7 +2282,7 @@ fixed_dst_x_reg_load_preserves_cache_test() ->
     State1 = ?BACKEND:move_to_native_register(State0, {x_reg, 2}, a13),
     {State2, a13} = ?BACKEND:move_to_native_register(State1, {x_reg, 2}),
     Stream = ?BACKEND:stream(State2),
-    Dump = <<"   0:	0822d2        	l32i	a13, a2, 32">>,
+    Dump = <<"   0:	0d22d2        	l32i	a13, a2, 52">>,
     ?assertStream(xtensa, Dump, Stream).
 
 %% Verify move_to_native_register/3 for {y_reg, Y} sets the cache so that a
@@ -2294,7 +2294,7 @@ fixed_dst_y_reg_load_preserves_cache_test() ->
     {State2, a13} = ?BACKEND:move_to_native_register(State1, {y_reg, 2}),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0522f2        	l32i	a15, a2, 20\n"
+        "   0:	0a22f2        	l32i	a15, a2, 40\n"
         "   3:	022fd2        	l32i	a13, a15, 8"
     >>,
     ?assertStream(xtensa, Dump, Stream).
@@ -2315,15 +2315,15 @@ call_primitive_last_if_block_preserves_cache_test() ->
     Stream = ?BACKEND:stream(State4),
     Dump = <<
         "   0:	01a0f2        	movi	a15, 1\n"
-        "   3:	0622e2        	l32i	a14, a2, 24\n"
+        "   3:	0b22e2        	l32i	a14, a2, 44\n"
         "   6:	002f16        	beqz	a15, 0xc\n"
         "   9:	000386        	j	0x1b\n"
         "   c:	0024f2        	l32i	a15, a4, 0\n"
         "   f:	02ad      	mov.n	a10, a2\n"
         "  11:	03bd      	mov.n	a11, a3\n"
-        "  13:	000fe0        	callx8	a15\n"
+        "  13:	000fe0        	excw\n"
         "  16:	0a2d      	mov.n	a2, a10\n"
-        "  18:	000090        	retw"
+        "  18:	000090        	excw"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -2343,7 +2343,7 @@ jump_to_label_if_block_preserves_cache_test() ->
     Stream = ?BACKEND:stream(State4),
     Dump = <<
         "   0:	01a0f2        	movi	a15, 1\n"
-        "   3:	0622e2        	l32i	a14, a2, 24\n"
+        "   3:	0b22e2        	l32i	a14, a2, 44\n"
         "   6:	002f16        	beqz	a15, 0xc\n"
         "   9:	0005c6        	j	0x24\n"
         "   c:	ff          	.byte	0xff\n"
@@ -2388,12 +2388,12 @@ ldr_y_reg_invalidates_hidden_temp_cache_test() ->
     {State6, a13} = ?BACKEND:move_to_native_register(State5, {x_reg, 2}),
     Stream = ?BACKEND:stream(State6),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0722e2        	l32i	a14, a2, 28\n"
-        "   6:	0822d2        	l32i	a13, a2, 32\n"
-        "   9:	0522d2        	l32i	a13, a2, 20\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c22e2        	l32i	a14, a2, 48\n"
+        "   6:	0d22d2        	l32i	a13, a2, 52\n"
+        "   9:	0a22d2        	l32i	a13, a2, 40\n"
         "   c:	002de2        	l32i	a14, a13, 0\n"
-        "   f:	0822d2        	l32i	a13, a2, 32"
+        "   f:	0d22d2        	l32i	a13, a2, 52"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -2409,7 +2409,7 @@ decrement_reductions_invalidates_cache_test() ->
     {State3, a14} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
     Stream = ?BACKEND:stream(State3),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
         "   3:	0223e2        	l32i	a14, a3, 8\n"
         "   6:	ffcee2        	addi	a14, a14, -1\n"
         "   9:	0263e2        	s32i	a14, a3, 8\n"
@@ -2425,11 +2425,11 @@ decrement_reductions_invalidates_cache_test() ->
         "  27:	0224f2        	l32i	a15, a4, 8\n"
         "  2a:	02ad      	mov.n	a10, a2\n"
         "  2c:	03bd      	mov.n	a11, a3\n"
-        "  2e:	000fe0        	callx8	a15\n"
+        "  2e:	000fe0        	excw\n"
         "  31:	0a2d      	mov.n	a2, a10\n"
-        "  33:	000090        	retw\n"
-        "  36:	00c136        	entry	a1, 96\n"
-        "  39:	0622e2        	l32i	a14, a2, 24"
+        "  33:	000090        	excw\n"
+        "  36:	00c136        	excw\n"
+        "  39:	0b22e2        	l32i	a14, a2, 44"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -2442,8 +2442,8 @@ cached_move_to_vm_x_reg_reuse_test() ->
     {State2, a15} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0722f2        	l32i	a15, a2, 28\n"
-        "   3:	0662f2        	s32i	a15, a2, 24"
+        "   0:	0c22f2        	l32i	a15, a2, 48\n"
+        "   3:	0b62f2        	s32i	a15, a2, 44"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -2456,9 +2456,9 @@ cached_move_to_vm_y_reg_reuse_test() ->
     {State2, a15} = ?BACKEND:move_to_native_register(State1, {y_reg, 0}),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	0522e2        	l32i	a14, a2, 20\n"
+        "   0:	0a22e2        	l32i	a14, a2, 40\n"
         "   3:	002ef2        	l32i	a15, a14, 0\n"
-        "   6:	0662f2        	s32i	a15, a2, 24"
+        "   6:	0b62f2        	s32i	a15, a2, 44"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -2474,7 +2474,7 @@ cached_move_to_vm_y_reg_reuse_test() ->
 %% Each test caches {x_reg, 1} in a14, frees it (so it stays cached but becomes
 %% available), then runs the op on a15: a14 is picked as the hidden Temp and
 %% clobbered with the immediate. Re-requesting {x_reg, 1} must emit a fresh
-%% l32i a14, a2, 28 rather than reuse the now-clobbered a14.
+%% l32i a14, a2, 48 rather than reuse the now-clobbered a14.
 
 add_invalidates_hidden_temp_cache_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -2488,12 +2488,12 @@ add_invalidates_hidden_temp_cache_test() ->
     {State6, a14} = ?BACKEND:move_to_native_register(State5, {x_reg, 1}),
     Stream = ?BACKEND:stream(State6),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0722e2        	l32i	a14, a2, 28\n"
-        "   6:	0822d2        	l32i	a13, a2, 32\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c22e2        	l32i	a14, a2, 48\n"
+        "   6:	0d22d2        	l32i	a13, a2, 52\n"
         "   9:	e8a3e2        	movi	a14, 0x3e8\n"
         "   c:	80ffe0        	add	a15, a15, a14\n"
-        "   f:	0722e2        	l32i	a14, a2, 28"
+        "   f:	0c22e2        	l32i	a14, a2, 48"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -2509,12 +2509,12 @@ sub_invalidates_hidden_temp_cache_test() ->
     {State6, a14} = ?BACKEND:move_to_native_register(State5, {x_reg, 1}),
     Stream = ?BACKEND:stream(State6),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0722e2        	l32i	a14, a2, 28\n"
-        "   6:	0822d2        	l32i	a13, a2, 32\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c22e2        	l32i	a14, a2, 48\n"
+        "   6:	0d22d2        	l32i	a13, a2, 52\n"
         "   9:	e8a3e2        	movi	a14, 0x3e8\n"
         "   c:	c0ffe0        	sub	a15, a15, a14\n"
-        "   f:	0722e2        	l32i	a14, a2, 28"
+        "   f:	0c22e2        	l32i	a14, a2, 48"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -2530,12 +2530,12 @@ or_invalidates_hidden_temp_cache_test() ->
     {State6, a14} = ?BACKEND:move_to_native_register(State5, {x_reg, 1}),
     Stream = ?BACKEND:stream(State6),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0722e2        	l32i	a14, a2, 28\n"
-        "   6:	0822d2        	l32i	a13, a2, 32\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c22e2        	l32i	a14, a2, 48\n"
+        "   6:	0d22d2        	l32i	a13, a2, 52\n"
         "   9:	e8a3e2        	movi	a14, 0x3e8\n"
         "   c:	20ffe0        	or	a15, a15, a14\n"
-        "   f:	0722e2        	l32i	a14, a2, 28"
+        "   f:	0c22e2        	l32i	a14, a2, 48"
     >>,
     ?assertStream(xtensa, Dump, Stream).
 
@@ -2551,11 +2551,11 @@ xor_invalidates_hidden_temp_cache_test() ->
     {State6, a14} = ?BACKEND:move_to_native_register(State5, {x_reg, 1}),
     Stream = ?BACKEND:stream(State6),
     Dump = <<
-        "   0:	0622f2        	l32i	a15, a2, 24\n"
-        "   3:	0722e2        	l32i	a14, a2, 28\n"
-        "   6:	0822d2        	l32i	a13, a2, 32\n"
+        "   0:	0b22f2        	l32i	a15, a2, 44\n"
+        "   3:	0c22e2        	l32i	a14, a2, 48\n"
+        "   6:	0d22d2        	l32i	a13, a2, 52\n"
         "   9:	e8a3e2        	movi	a14, 0x3e8\n"
         "   c:	30ffe0        	xor	a15, a15, a14\n"
-        "   f:	0722e2        	l32i	a14, a2, 28"
+        "   f:	0c22e2        	l32i	a14, a2, 48"
     >>,
     ?assertStream(xtensa, Dump, Stream).

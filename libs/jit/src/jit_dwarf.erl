@@ -963,11 +963,7 @@ generate_named_var_loc_section(
             WordSize = Backend:word_size(),
             WSBits = WordSize * 8,
             CtxRegNum = Backend:dwarf_ctx_register(),
-            XArrayOffset =
-                case WordSize of
-                    8 -> 16#30;
-                    4 -> 16#18
-                end,
+            XArrayOffset = Backend:dwarf_x_reg_offset(),
             {_LowPC, HighPC} = calculate_address_range(State),
             SortedVars = lists:sort(fun({A, _}, {B, _}) -> A =< B end, Variables),
             SortedFuncs = lists:sort([{Off, FN, Ar} || {Off, FN, Ar} <- Functions, Off >= 0]),
@@ -1141,11 +1137,7 @@ generate_debug_loc_section(#dwarf{reg_locations = RegLocs, backend = Backend}) -
     WordSize = Backend:word_size(),
     WSBits = WordSize * 8,
     CtxRegNum = Backend:dwarf_ctx_register(),
-    XArrayOffset =
-        case WordSize of
-            8 -> 16#30;
-            4 -> 16#18
-        end,
+    XArrayOffset = Backend:dwarf_x_reg_offset(),
 
     % Sort snapshots by offset (they're stored in reverse)
     Sorted = lists:sort(fun({A, _}, {B, _}) -> A =< B end, RegLocs),
@@ -1405,14 +1397,7 @@ generate_type_dies(#dwarf{backend = Backend}, BaseOffset) ->
 
     % Abbrev 8: Context structure type
     % Only include the x array member for now (most important for debugging)
-    XOffset =
-        case Backend of
-            jit_x86_64 -> 16#30;
-            jit_aarch64 -> 16#30;
-            jit_riscv64 -> 16#30;
-            % riscv32 and armv6m
-            _ -> 16#18
-        end,
+    XOffset = Backend:dwarf_x_reg_offset(),
     XMemberDIE = <<
         9,
         "x",

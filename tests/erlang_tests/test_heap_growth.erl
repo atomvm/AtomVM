@@ -43,7 +43,7 @@ test_grow_beyond_min_heap_size() ->
             % do something with Var to avoid compiler optimizations
             true = 200 =:= length(Var)
         end,
-        [monitor, {min_heap_size, 100}]
+        [monitor, {min_heap_size, 100}, {fullsweep_after, 0}]
     ),
     ok =
         receive
@@ -70,7 +70,7 @@ test_bounded_free_strategy(UseDefault) ->
             true = X3 < X2,
             true = X3 - X1 - erts_debug:flat_size(Var1) < 32
         end,
-        [monitor | Opt]
+        [monitor, {fullsweep_after, 0} | Opt]
     ),
     ok =
         receive
@@ -107,7 +107,7 @@ test_minimum_strategy() ->
             end,
             20 = erts_debug:flat_size(Var1)
         end,
-        [monitor, {atomvm_heap_growth, minimum}]
+        [monitor, {atomvm_heap_growth, minimum}, {fullsweep_after, 0}]
     ),
     % Get heap size from the outside to have no influence on the heap
     Pid1 ! {step, 1},
@@ -172,7 +172,7 @@ test_fibonacci_strategy() ->
             NewHeap = allocate_until_heap_size_changes(MaxHeap),
             true = NewHeap < MaxHeap
         end,
-        [monitor, link, {atomvm_heap_growth, fibonacci}]
+        [monitor, link, {atomvm_heap_growth, fibonacci}, {fullsweep_after, 0}]
     ),
     % Test large increments no longer follow fibonacci
     {Pid2, Ref2} = spawn_opt(
@@ -182,7 +182,7 @@ test_fibonacci_strategy() ->
             NewHeap = allocate_until_heap_size_changes(MaxHeap),
             true = NewHeap < MaxHeap
         end,
-        [monitor, link, {atomvm_heap_growth, fibonacci}]
+        [monitor, link, {atomvm_heap_growth, fibonacci}, {fullsweep_after, 0}]
     ),
     ok =
         receive
@@ -278,7 +278,7 @@ test_messages_get_gcd() ->
         fun() ->
             loop([])
         end,
-        [monitor, {atomvm_heap_growth, minimum}]
+        [monitor, {atomvm_heap_growth, minimum}, {fullsweep_after, 0}]
     ),
     FinalHeapSize = loop_send(Pid1, 20),
     Pid1 ! quit,

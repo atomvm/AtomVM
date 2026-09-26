@@ -129,12 +129,12 @@
 -define(NUM_SCRATCH_LOCALS, 8).
 
 %% Context struct offsets (32-bit architecture, same as armv6m/riscv32)
--define(CTX_E_OFFSET, 16#14).
--define(CTX_X_OFFSET, 16#18).
--define(CTX_CP_OFFSET, 16#5C).
--define(CTX_FR_OFFSET, 16#60).
--define(CTX_BS_OFFSET, 16#64).
--define(CTX_BS_OFFSET_OFFSET, 16#68).
+-define(CTX_E_OFFSET, 16#28).
+-define(CTX_X_OFFSET, 16#2C).
+-define(CTX_CP_OFFSET, 16#70).
+-define(CTX_FR_OFFSET, 16#74).
+-define(CTX_BS_OFFSET, 16#78).
+-define(CTX_BS_OFFSET_OFFSET, 16#7C).
 
 %% JITState struct offsets
 -define(JITSTATE_MODULE_OFFSET, 16#0).

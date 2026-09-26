@@ -156,6 +156,15 @@ if (AVM_USB_CDC_PORT_DRIVER_ENABLED)
     include(cmake/stm32_tinyusb.cmake)
 endif()
 
+# Minimal opcodes reduce VM size by excluding the opcodes for optional compiler
+# flags (bit-syntax optimizations the AtomVM toolchain does not emit). The
+# bare-metal STM32 firmware shares a fixed flash budget on every device, so this
+# is enabled for all STM32 targets (unless AVM_MINIMAL_OPCODES is set explicitly).
+if (NOT DEFINED AVM_MINIMAL_OPCODES)
+    message(STATUS "Enabling minimal opcodes for ${DEVICE} to reduce binary size")
+    set(AVM_MINIMAL_OPCODES ON)
+endif()
+
 # Include additional compilation flags (must come after dev_config sets CMAKE_FLASH_SIZE)
 include(cmake/compile-flags.cmake)
 
