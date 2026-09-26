@@ -193,6 +193,7 @@
     | {'(int)', maybe_free_local(), '!=', wasm_local() | integer()}
     | {'(bool)', maybe_free_local(), '==', false}
     | {'(bool)', maybe_free_local(), '!=', false}
+    | {'(unsigned)', maybe_free_local(), '<', wasm_local()}
     | {maybe_free_local(), '&', non_neg_integer(), '!=', integer()}
     | {{free, wasm_local()}, '==', {free, wasm_local()}}.
 
@@ -1602,6 +1603,15 @@ emit_condition(State0, {Local, '<', Val}) when is_integer(Val) ->
         (emit_unwrapped_to_stack(L))/binary,
         (jit_wasm32_asm:i32_const(to_i32(Val)))/binary,
         (jit_wasm32_asm:i32_lt_s())/binary
+    >>,
+    State1 = maybe_free(State0, Local),
+    emit(State1, Code);
+emit_condition(State0, {'(unsigned)', Local, '<', OtherLocal}) when is_atom(OtherLocal) ->
+    L = unwrap_free(Local),
+    Code = <<
+        (emit_unwrapped_to_stack(L))/binary,
+        (jit_wasm32_asm:local_get(OtherLocal))/binary,
+        (jit_wasm32_asm:i32_lt_u())/binary
     >>,
     State1 = maybe_free(State0, Local),
     emit(State1, Code);

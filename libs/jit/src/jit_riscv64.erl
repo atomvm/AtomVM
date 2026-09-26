@@ -206,6 +206,7 @@
     | {'(int)', maybe_free_riscv64_register(), '!=', riscv64_register() | integer()}
     | {'(bool)', maybe_free_riscv64_register(), '==', false}
     | {'(bool)', maybe_free_riscv64_register(), '!=', false}
+    | {'(unsigned)', maybe_free_riscv64_register(), '<', riscv64_register()}
     | {maybe_free_riscv64_register(), '&', non_neg_integer(), '!=', integer()}
     | {{free, riscv64_register()}, '==', {free, riscv64_register()}}.
 

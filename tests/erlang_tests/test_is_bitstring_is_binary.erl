@@ -31,8 +31,8 @@ id(X) -> X.
 
 test_is_bitstring() ->
     true = is_bitstring(id(<<"hello">>)),
-    % bitstrings are currently unsupported
-    %   true = is_bitstring(id(<<1:1>>)),
+    true = is_bitstring(id(<<1:1>>)),
+    true = is_bitstring(id(<<"hello", 3:7>>)),
     true = is_bitstring(id(<<>>)),
     false = is_bitstring(id(binary)),
     false = is_bitstring(id("hello")),
@@ -41,8 +41,8 @@ test_is_bitstring() ->
 
 test_is_binary() ->
     true = is_binary(id(<<"hello">>)),
-    % bitstrings are currently unsupported
-    %   false = is_binary(id(<<1:1>>)),
+    false = is_binary(id(<<1:1>>)),
+    false = is_binary(id(<<"hello", 3:7>>)),
     true = is_binary(id(<<>>)),
     false = is_binary(id(binary)),
     false = is_binary(id("hello")),

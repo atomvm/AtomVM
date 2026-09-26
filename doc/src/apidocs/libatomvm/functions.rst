@@ -242,7 +242,6 @@ Functions
 .. doxygenfunction:: term_binary_heap_size
 .. doxygenfunction:: term_binary_size_is_heap_binary
 .. doxygenfunction:: term_boxed_size
-.. doxygenfunction:: term_bs_insert_binary
 .. doxygenfunction:: term_compare
 .. doxygenfunction:: term_create_empty_binary
 .. doxygenfunction:: term_create_uninitialized_binary
