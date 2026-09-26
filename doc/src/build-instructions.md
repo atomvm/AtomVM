@@ -477,6 +477,23 @@ Use `idf.py menuconfig` in `src/platforms/esp32`
 
 See [MBEDTLS_ECP_FIXED_POINT_OPTIM](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/kconfig-reference.html#config-mbedtls-ecp-fixed-point-optim)
 
+AtomVM ESP32 builds also enable mbedTLS certificate validity-date checks. This requires the system
+clock to be set to a trustworthy value before using `ssl:connect/3` with
+`{verify, verify_peer}`.
+
+For deployments that cannot obtain trustworthy time, disable this check in a custom build with
+`idf.py menuconfig` in `src/platforms/esp32`:
+`Component config ---> mbedTLS ---> Enable mbedtls certificate expiry check`
+
+See [CONFIG_MBEDTLS_HAVE_TIME_DATE](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/kconfig-reference.html#config-mbedtls-have-time-date)
+
+```{warning}
+Disabling `CONFIG_MBEDTLS_HAVE_TIME_DATE` leaves trust-chain and hostname verification enabled with
+`verify_peer`, but expired and not-yet-valid certificates will be accepted. This is a build-time
+setting and cannot be changed in a prebuilt AtomVM release image. Do not use `verify_none` merely
+to avoid synchronizing the clock, as it disables all peer authentication.
+```
+
 ### Flash Layout
 
 The AtomVM Flash memory is partitioned to include areas for the above binary artifacts created from the build, as well areas for runtime information used by the ESP32 and compiled Erlang/Elixir code.
@@ -1108,6 +1125,19 @@ We are assuming tests were built as part of regular build of AtomVM. Run them wi
 ```shell
 $ npx tsx run-tests.ts ../build/tests/rp2040_tests.uf2 \
 ../build/tests/test_erl_sources/rp2040_test_modules.uf2
+```
+
+The Pico W WiFi, SNTP, and verified TLS integration test runs with
+[Wokwi CI](https://docs.wokwi.com/wokwi-ci/getting-started). Set `WOKWI_CLI_TOKEN`, install
+`wokwi-cli`, and run:
+
+```shell
+$ cmake -S src/platforms/rp2 -B src/platforms/rp2/build.wokwi -G Ninja \
+    -DPICO_BOARD=pico_w -DAVM_DISABLE_SMP=ON -DAVM_RP2_WOKWI_TEST=ON
+$ cmake --build src/platforms/rp2/build.wokwi --target rp2_wokwi_tests
+$ cd src/platforms/rp2/tests
+$ wokwi-cli --timeout 300000 --expect-text PICO_SIMTEST_OK \
+    --fail-text PICO_SIMTEST_FAIL --diagram-file sim_boards/diagram.pico_w.json .
 ```
 
 ## Building for `emscripten`
