@@ -51,6 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   describing the functions and the BEAM instructions supported by the configured build
 - Added a `check-native-stubs` build target, run in CI, that verifies every function
   registered in `bifs.gperf` or `nifs.gperf` has a matching Erlang export
+- Added a `hex_package` build target that builds the `atomvm` Hex package, published on
+  hex.pm by CI when a release is tagged, so that build tools can check a project against
+  the AtomVM release it targets
 
 ### Changed
 - `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does:

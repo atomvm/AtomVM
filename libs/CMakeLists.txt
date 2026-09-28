@@ -236,6 +236,73 @@ if (NOT Elixir_FOUND OR NOT Gleam_FOUND)
     message(WARNING "Elixir and/or Gleam were not found -- supported_api/funcs.txt would be incomplete")
 endif()
 
+# Published by the Supported API workflow on a tag, and by hand with:
+#
+#     cmake -B build -DATOMVM_HEX_VERSION=0.7.0
+#     cmake --build build -t hex_package
+#     cd build/hex/atomvm && rebar3 hex publish package --yes
+set(ATOMVM_HEX_SRC ${CMAKE_SOURCE_DIR}/tools/release/hex/atomvm)
+set(ATOMVM_HEX_DIR ${CMAKE_BINARY_DIR}/hex/atomvm)
+
+# Not the ATOMVM_VERSION of GetVersion.cmake: its +git.<sha> suffix is not a
+# Hex version.
+include(${CMAKE_SOURCE_DIR}/version.cmake)
+if (NOT ATOMVM_HEX_VERSION)
+    set(ATOMVM_HEX_VERSION ${ATOMVM_BASE_VERSION})
+endif()
+if (NOT ATOMVM_HEX_VERSION)
+    message(FATAL_ERROR "ATOMVM_HEX_VERSION is empty and version.cmake gave nothing")
+endif()
+
+set(ATOMVM_HEX_TESTED_ELIXIR 1.17 1.18 1.19)
+
+set(ATOMVM_HEX_OPCODESSWITCH ${CMAKE_SOURCE_DIR}/src/libAtomVM/opcodesswitch.h)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${ATOMVM_HEX_OPCODESSWITCH})
+foreach(bound MINIMUM MAXIMUM)
+    file(STRINGS ${ATOMVM_HEX_OPCODESSWITCH} _otp_line
+        REGEX "^#define[ \t]+${bound}_OTP_COMPILER_VERSION[ \t]+[0-9]+")
+    if (NOT _otp_line)
+        message(FATAL_ERROR
+            "no ${bound}_OTP_COMPILER_VERSION in ${ATOMVM_HEX_OPCODESSWITCH}")
+    endif()
+    list(GET _otp_line 0 _otp_line)
+    string(REGEX REPLACE "^#define[ \t]+${bound}_OTP_COMPILER_VERSION[ \t]+([0-9]+).*$" "\\1"
+        _${bound}_OTP "${_otp_line}")
+endforeach()
+if (_MINIMUM_OTP GREATER _MAXIMUM_OTP)
+    message(FATAL_ERROR "MINIMUM_OTP_COMPILER_VERSION is above MAXIMUM")
+endif()
+
+set(ATOMVM_HEX_SUPPORTED_ERLANG "")
+foreach(otp RANGE ${_MINIMUM_OTP} ${_MAXIMUM_OTP})
+    string(APPEND ATOMVM_HEX_SUPPORTED_ERLANG "${otp}, ")
+endforeach()
+string(REGEX REPLACE ", $" "" ATOMVM_HEX_SUPPORTED_ERLANG "${ATOMVM_HEX_SUPPORTED_ERLANG}")
+set(ATOMVM_HEX_SUPPORTED_ERLANG "[${ATOMVM_HEX_SUPPORTED_ERLANG}]")
+
+list(JOIN ATOMVM_HEX_TESTED_ELIXIR "\", \"" ATOMVM_HEX_TESTED_ELIXIR)
+set(ATOMVM_HEX_TESTED_ELIXIR "[\"${ATOMVM_HEX_TESTED_ELIXIR}\"]")
+
+configure_file(${ATOMVM_HEX_SRC}/src/atomvm.app.src.in ${ATOMVM_HEX_DIR}/src/atomvm.app.src @ONLY)
+configure_file(${ATOMVM_HEX_SRC}/priv/manifest.json.in ${ATOMVM_HEX_DIR}/priv/manifest.json @ONLY)
+configure_file(${ATOMVM_HEX_SRC}/README.md.in ${ATOMVM_HEX_DIR}/README.md @ONLY)
+configure_file(${ATOMVM_HEX_SRC}/rebar.config ${ATOMVM_HEX_DIR}/rebar.config COPYONLY)
+
+configure_file(${CMAKE_SOURCE_DIR}/LICENSES/Apache-2.0.txt
+    ${ATOMVM_HEX_DIR}/LICENSE COPYONLY)
+configure_file(${CMAKE_SOURCE_DIR}/LICENSES/LGPL-2.1-or-later.txt
+    ${ATOMVM_HEX_DIR}/LICENSE.LGPL-2.1-or-later COPYONLY)
+
+add_custom_target(hex_package
+    COMMAND ${CMAKE_COMMAND} -E copy
+        ${SUPPORTED_API_DIR}/funcs.txt ${SUPPORTED_API_DIR}/instructions.txt
+        ${ATOMVM_HEX_DIR}/priv/
+    DEPENDS ${SUPPORTED_API_DIR}/funcs.txt ${SUPPORTED_API_DIR}/instructions.txt
+    COMMENT "Staging the atomvm Hex package in ${ATOMVM_HEX_DIR}"
+)
+add_dependencies(hex_package supported_api)
+
+
 install(
     FILES ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.avm
     DESTINATION lib/atomvm

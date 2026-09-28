@@ -1,0 +1,76 @@
+<!--
+ Copyright 2026 Davide Bettio <davide@uninstall.it>
+
+ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+-->
+
+# atomvm
+
+The supported API of one AtomVM release, as data. The package version is the
+AtomVM version, so a project that depends on it declares which AtomVM it
+targets, and the build tools check the project against that release instead of
+against lists of their own.
+
+It contains no modules. Everything is in `priv/`:
+
+| File | Content |
+|---|---|
+| `funcs.txt` | every `Module:Function/Arity` callable on this release, one per line |
+| `instructions.txt` | every BEAM instruction this release implements |
+| `manifest.json` | the release version, and the Erlang and Elixir versions it works with |
+
+`funcs.txt` is the union across every platform and library of the release:
+esp32, rp2, stm32, generic_unix and emscripten functions are all listed, so a
+project that builds for more than one board is checked once.
+
+## Using it
+
+With Elixir, in `mix.exs`:
+
+```elixir
+defp deps do
+  [
+    {:exatomvm, github: "atomvm/exatomvm", runtime: false},
+    {:atomvm, "~> @ATOMVM_HEX_VERSION@", runtime: false}
+  ]
+end
+```
+
+With Erlang, in `rebar.config`:
+
+```erlang
+{deps, [atomvm]}.
+```
+
+`runtime: false` keeps the package out of the application list; the build tools
+leave it out of the packed `.avm` as well.
+
+## For library authors
+
+A library that works with a given AtomVM can say so as ordinary dependency
+metadata:
+
+```elixir
+{:atomvm, "~> 0.7", optional: true, runtime: false}
+```
+
+Consumers are not forced to take the dependency, but those who pin `atomvm`
+themselves get the requirement checked by the resolver, before any AtomVM task
+runs.
+
+## Reading it from your own tool
+
+```erlang
+Dir = code:priv_dir(atomvm),
+{ok, Version} = application:get_key(atomvm, vsn),
+{ok, Funcs} = file:read_file(filename:join(Dir, "funcs.txt")).
+```
+
+The `manifest.json` schema grows by adding keys; read the ones you know and
+ignore the rest.
+
+## Prereleases
+
+A prerelease is published like any other version, but Hex does not resolve one
+from a plain requirement: `{:atomvm, "~> 0.7"}` never selects `0.7.0-beta.0`.
+Name it in full to target one.
