@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.0-beta.0] - Unreleased
+## [0.7.0-beta.0] - 2026-09-28
 
 ### Added
 - Added `filename:dirname/1`, `filename:basename/1,2`, `filename:extension/1`, `filename:rootname/1,2` and `filename:join/2`
@@ -51,6 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   describing the functions and the BEAM instructions supported by the configured build
 - Added a `check-native-stubs` build target, run in CI, that verifies every function
   registered in `bifs.gperf` or `nifs.gperf` has a matching Erlang export
+- Added a `hex_package` build target that builds the `atomvm` Hex package, published on
+  hex.pm by CI when a release is tagged, so that build tools can check a project against
+  the AtomVM release it targets
 
 ### Changed
 - `erlang:process_info/2` now accepts only pids of local processes, as Erlang/OTP does:
@@ -89,6 +92,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Fixed generic_unix and emscripten builds with `AVM_DISABLE_SMP=ON` and task drivers enabled
+- Fixed `supervisor` starting a child from a specification carried in a message, letting any
+  process make a supervisor call an arbitrary function
+- Fixed `supervisor` leaving children unrestarted when a message reached it during a
+  `one_for_all` restart or before a failed restart was retried
 - Route `io:put_chars(standard_error, ...)` and `io:format(standard_error, ...)` to stderr instead
   of aliasing them to standard_io (diagnostics no longer pollute an escript's stdout)
 - Stop using deprecated `term_from_int32` on STM32 platform

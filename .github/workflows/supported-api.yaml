@@ -17,7 +17,9 @@ on:
       - 'libs/**'
       - 'src/**'
       - 'tools/packbeam/**'
+      - 'tools/release/hex/**'
       - 'tools/supported_api/**'
+      - 'version.cmake'
   pull_request:
     paths:
       - '.github/workflows/supported-api.yaml'
@@ -26,7 +28,9 @@ on:
       - 'libs/**'
       - 'src/**'
       - 'tools/packbeam/**'
+      - 'tools/release/hex/**'
       - 'tools/supported_api/**'
+      - 'version.cmake'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
@@ -128,3 +132,28 @@ jobs:
       with:
         name: supported-api
         path: build/supported_api/
+
+    - name: "Build the atomvm Hex package"
+      if: success() || failure()
+      working-directory: build
+      run: |
+        cmake --build . -t hex_package
+        cd hex/atomvm
+        rebar3 hex build
+
+    - name: "Publish the atomvm Hex package on hex.pm"
+      if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'atomvm/AtomVM'
+      working-directory: build
+      env:
+        HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+        TAG: ${{ github.ref_name }}
+      run: |
+        set -eu
+        if [ -z "${HEX_API_KEY:-}" ]; then
+          echo "The HEX_API_KEY secret is not set: ${TAG} is not published on hex.pm."
+          exit 0
+        fi
+        cmake -DATOMVM_HEX_VERSION="${TAG#v}" ..
+        cmake --build . -t hex_package
+        cd hex/atomvm
+        rebar3 hex publish package --yes

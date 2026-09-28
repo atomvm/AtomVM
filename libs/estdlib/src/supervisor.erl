@@ -138,7 +138,9 @@
     period = ?DEFAULT_PERIOD :: pos_integer(),
     restart_count = 0 :: non_neg_integer(),
     restarts = [] :: [integer()],
-    children = [] :: [#child{}]
+    children = [] :: [#child{}],
+    restart_queue = [] :: [any()],
+    retry_queue = [] :: [any()]
 }).
 
 %% Used to trim stale restarts when the 'intensity' value is large.
@@ -382,7 +384,7 @@ handle_cast(_Msg, State) ->
 handle_info({'EXIT', Pid, Reason}, State) ->
     % TODO: log crash report
     handle_child_exit(Pid, Reason, State);
-handle_info({ensure_killed, Pid}, State) ->
+handle_info({'$atomvm_ensure_killed', Pid}, State) ->
     case lists:keyfind(Pid, #child.pid, State#state.children) of
         false ->
             {noreply, State};
@@ -390,27 +392,35 @@ handle_info({ensure_killed, Pid}, State) ->
             exit(Pid, kill),
             {noreply, State}
     end;
-handle_info({restart_many_children, []}, State) ->
+handle_info('$atomvm_restart_many_children', #state{restart_queue = []} = State) ->
     {noreply, State};
-handle_info(
-    {restart_many_children, [#child{pid = {restarting, _Pid0} = Pid} = Child | Children]}, State
-) ->
-    case try_start(Child) of
-        {ok, NewPid, _Result} ->
-            NewChild = Child#child{pid = NewPid},
-            NewChildren = lists:keyreplace(
-                Pid, #child.pid, State#state.children, NewChild
-            ),
-            {noreply, State#state{children = NewChildren},
-                {timeout, 0, {restart_many_children, Children}}};
-        {error, Reason} ->
-            handle_child_exit(Pid, {restart, Reason}, State)
-    end;
-handle_info({try_again_restart, Id}, State) ->
+handle_info('$atomvm_restart_many_children', #state{restart_queue = [Id | Ids]} = State0) ->
+    State = State0#state{restart_queue = Ids},
     case lists:keyfind(Id, #child.id, State#state.children) of
-        false ->
-            {noreply, State};
-        Child ->
+        #child{pid = {restarting, _Pid0} = Pid} = Child ->
+            case try_start(Child) of
+                {ok, NewPid, _Result} ->
+                    NewChild = Child#child{pid = NewPid},
+                    NewChildren = lists:keyreplace(
+                        Id, #child.id, State#state.children, NewChild
+                    ),
+                    self() ! '$atomvm_restart_many_children',
+                    {noreply, State#state{children = NewChildren}};
+                {error, Reason} ->
+                    handle_child_exit(
+                        Pid, {restart, Reason}, State#state{restart_queue = []}
+                    )
+            end;
+        _NotRestarting ->
+            self() ! '$atomvm_restart_many_children',
+            {noreply, State}
+    end;
+handle_info('$atomvm_try_again_restart', #state{retry_queue = []} = State) ->
+    {noreply, State};
+handle_info('$atomvm_try_again_restart', #state{retry_queue = [Id | Ids]} = State0) ->
+    State = State0#state{retry_queue = Ids},
+    case lists:keyfind(Id, #child.id, State#state.children) of
+        #child{pid = {restarting, _}} = Child ->
             case add_restart(State) of
                 {ok, State1} ->
                     case try_start(Child) of
@@ -421,16 +431,17 @@ handle_info({try_again_restart, Id}, State) ->
                             {noreply, State1#state{children = UpdatedChildren}};
                         {error, {_, _}} ->
                             % TODO: log crash report
-                            {noreply, State1, {timeout, 0, {try_again_restart, Id}}}
+                            self() ! '$atomvm_try_again_restart',
+                            {noreply, State1#state{retry_queue = Ids ++ [Id]}}
                     end;
                 {shutdown, State1} ->
                     RemainingChildren = lists:keydelete(Id, #child.id, State1#state.children),
                     % TODO: log supervisor shutdown
                     {stop, shutdown, State1#state{children = RemainingChildren}}
-            end
+            end;
+        _NotRestarting ->
+            {noreply, State}
     end;
-handle_info({restart_many_children, [#child{pid = undefined} = _Child | Children]}, State) ->
-    {noreply, State, {timeout, 0, {restart_many_children, Children}}};
 handle_info(_Msg, State) ->
     %TODO: log unexpected message to debug
     {noreply, State}.
@@ -493,7 +504,10 @@ handle_restart_strategy(
             Children = lists:keyreplace(
                 Id, #child.id, State#state.children, NewChild
             ),
-            {noreply, State#state{children = Children}, {timeout, 0, {try_again_restart, Id}}}
+            self() ! '$atomvm_try_again_restart',
+            {noreply, State#state{
+                children = Children, retry_queue = State#state.retry_queue ++ [Id]
+            }}
     end;
 handle_restart_strategy(
     #child{pid = Pid} = Child, #state{restart_strategy = one_for_all} = State
@@ -510,8 +524,13 @@ handle_restart_strategy(
     ok = terminate_one_for_all(Children),
     {ok, NewChildren} = get_restart_children(Children),
     %% NewChildren is startup order (first at head) and needs to be reversed to keep Children in correct order in #state{}
-    {noreply, State#state{children = lists:reverse(NewChildren)},
-        {timeout, 0, {restart_many_children, NewChildren}}}.
+    self() ! '$atomvm_restart_many_children',
+    {noreply, State#state{
+        children = lists:reverse(NewChildren), restart_queue = restart_ids(NewChildren)
+    }}.
+
+restart_ids(Children) ->
+    [Id || #child{id = Id} <- Children].
 
 should_restart(_Reason, permanent) ->
     true;
@@ -540,7 +559,7 @@ loop_wait_termination(RemainingChildren0) ->
         {'EXIT', Pid, _Reason} ->
             RemainingChildren1 = lists:delete(Pid, RemainingChildren0),
             loop_wait_termination(RemainingChildren1);
-        {ensure_killed, Pid} ->
+        {'$atomvm_ensure_killed', Pid} ->
             case lists:member(Pid, RemainingChildren0) of
                 true ->
                     exit(Pid, kill),
@@ -678,4 +697,4 @@ do_terminate(#child{pid = Pid, shutdown = infinity}) ->
     exit(Pid, shutdown);
 do_terminate(#child{pid = Pid, shutdown = Timeout}) when is_integer(Timeout) ->
     exit(Pid, shutdown),
-    erlang:send_after(Timeout, self(), {ensure_killed, Pid}).
+    erlang:send_after(Timeout, self(), {'$atomvm_ensure_killed', Pid}).

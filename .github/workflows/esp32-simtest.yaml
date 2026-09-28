@@ -80,24 +80,24 @@ jobs:
             "esp32c6",
             "esp32h2"
           ]
-        idf-version: ${{ ((contains(github.event.head_commit.message, 'full_sim_test')||contains(github.event.pull_request.title, 'full_sim_test')) &&  fromJSON('["v5.2.7", "v5.3.5", "v5.4.4", "v5.5.4"]')) || fromJSON('["v5.5.4"]') }}
+        idf-version: ${{ ((contains(github.event.head_commit.message, 'full_sim_test')||contains(github.event.pull_request.title, 'full_sim_test')) &&  fromJSON('["v5.2.8", "v5.3.6", "v5.4.4", "v5.5.5"]')) || fromJSON('["v5.5.5"]') }}
         exclude:
           - esp-idf-target: "esp32p4"
-            idf-version: "v5.2.7"
+            idf-version: "v5.2.8"
           - esp-idf-target: "esp32h2"
-            idf-version: "v5.2.7"
+            idf-version: "v5.2.8"
           - esp-idf-target: "esp32c5"
-            idf-version: "v5.2.7"
+            idf-version: "v5.2.8"
           - esp-idf-target: "esp32c5"
-            idf-version: "v5.3.5"
+            idf-version: "v5.3.6"
           - esp-idf-target: "esp32c5"
             idf-version: "v5.4.4"
         # CI now uses chip revision 3 that is currently only available since 5.5.2
         include:
           - esp-idf-target: "esp32p4"
-            idf-version: "v5.5.4"
+            idf-version: "v5.5.5"
           - esp-idf-target: "esp32c61"
-            idf-version: "v5.5.4"
+            idf-version: "v5.5.5"
 
     steps:
       - name: Checkout repo
@@ -131,12 +131,12 @@ jobs:
         run: |
           set -e
           . $IDF_PATH/export.sh
-          pip install pytest==8.3.4 \
-              esptool==5.2.0 \
-              pytest-embedded==2.7.0 \
-              pytest-embedded-idf==2.7.0 \
-              pytest-embedded-qemu==2.7.0 \
-              pytest-embedded-wokwi==2.7.0
+          pip install pytest==9.1.1 \
+              esptool==5.4.0 \
+              pytest-embedded==2.9.3 \
+              pytest-embedded-idf==2.9.3 \
+              pytest-embedded-qemu==2.9.3 \
+              pytest-embedded-wokwi==2.9.3
 
       - name: Set SDKCONFIG_DEFAULTS and Build ESP32-sim tests using idf.py
         working-directory: ./src/platforms/esp32/test/
