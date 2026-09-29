@@ -32,10 +32,12 @@
 #include <mbedtls/platform_time.h>
 #include <sys_mbedtls.h>
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 /* Minimum bytes the entropy pool collects from a hardware source before
  * it's considered seeded. mbedTLS defines this as MBEDTLS_ENTROPY_MIN_HARDWARE
  * in the private library/entropy_poll.h header; use the same value. */
 #define STM32_ENTROPY_MIN_HARDWARE 32
+#endif
 #endif
 
 // #define ENABLE_TRACE
@@ -223,11 +225,21 @@ void sys_init_platform(GlobalContext *glb)
         AVM_LOGE(TAG, "Out of memory!");
         AVM_ABORT();
     }
+#ifdef ATOMVM_HAS_MBEDTLS
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    psa_status_t status = psa_crypto_init();
+    if (status != PSA_SUCCESS) {
+        AVM_ABORT();
+    }
+#endif
+#endif
     glb->platform_data = platform;
     list_init(&platform->locked_pins);
 #ifdef ATOMVM_HAS_MBEDTLS
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     platform->entropy_is_initialized = false;
     platform->random_is_initialized = false;
+#endif
     if (stm32_rng_hw_init(platform) != 0) {
         AVM_LOGE(TAG, "Failed to initialize RNG peripheral");
         AVM_ABORT();
@@ -239,12 +251,14 @@ void sys_free_platform(GlobalContext *glb)
 {
     struct STM32PlatformData *platform = glb->platform_data;
 #ifdef ATOMVM_HAS_MBEDTLS
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     if (platform->random_is_initialized) {
         mbedtls_ctr_drbg_free(&platform->random_ctx);
     }
     if (platform->entropy_is_initialized) {
         mbedtls_entropy_free(&platform->entropy_ctx);
     }
+#endif
     // HAL_RNG_Init succeeded in stm32_rng_hw_init or we aborted
     HAL_RNG_DeInit(&platform->rng);
 #endif
@@ -475,6 +489,7 @@ static int stm32_rng_hw_init(struct STM32PlatformData *platform)
     return 0;
 }
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 int mbedtls_hardware_poll(void *data, unsigned char *output, size_t len, size_t *olen)
 {
     GlobalContext *global = data;
@@ -500,12 +515,14 @@ int mbedtls_hardware_poll(void *data, unsigned char *output, size_t len, size_t 
     *olen = written;
     return 0;
 }
+#endif
 
 mbedtls_ms_time_t mbedtls_ms_time(void)
 {
     return (mbedtls_ms_time_t) HAL_GetTick();
 }
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 int sys_mbedtls_entropy_func(void *entropy, unsigned char *buf, size_t size)
 {
     return mbedtls_entropy_func(entropy, buf, size);
@@ -561,4 +578,5 @@ void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
     UNUSED(global);
 }
 
+#endif
 #endif /* ATOMVM_HAS_MBEDTLS */

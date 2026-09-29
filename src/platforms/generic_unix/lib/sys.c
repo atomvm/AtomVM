@@ -32,13 +32,10 @@
 #include "utils.h"
 
 #if ATOMVM_HAS_MBEDTLS
+#include <mbedtls/version.h>
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
-
-#if defined(MBEDTLS_VERSION_NUMBER) && (MBEDTLS_VERSION_NUMBER >= 0x03000000)
-#include <mbedtls/build_info.h>
-#else
-#include <mbedtls/config.h>
 #endif
 
 #include "otp_ssl.h"
@@ -118,6 +115,7 @@ struct GenericUnixPlatformData
 #endif
 
 #ifdef ATOMVM_HAS_MBEDTLS
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 #ifndef AVM_NO_SMP
     Mutex *entropy_mutex;
 #endif
@@ -129,6 +127,7 @@ struct GenericUnixPlatformData
 #endif
     mbedtls_ctr_drbg_context random_ctx;
     bool random_is_initialized;
+#endif
 #endif
 };
 
@@ -583,6 +582,12 @@ void sys_init_platform(GlobalContext *global)
     otp_net_init(global);
     otp_socket_init(global);
 #if ATOMVM_HAS_MBEDTLS
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    psa_status_t status = psa_crypto_init();
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        AVM_ABORT();
+    }
+#else
 #ifndef AVM_NO_SMP
     platform->entropy_mutex = smp_mutex_create();
     if (IS_NULL_PTR(platform->entropy_mutex)) {
@@ -595,6 +600,7 @@ void sys_init_platform(GlobalContext *global)
 #endif
     platform->entropy_is_initialized = false;
     platform->random_is_initialized = false;
+#endif
     otp_ssl_init(global);
 #endif
 #ifndef AVM_NO_JIT
@@ -628,11 +634,14 @@ void sys_free_platform(GlobalContext *global)
 #endif
 
 #if !defined(AVM_NO_SMP) && ATOMVM_HAS_MBEDTLS
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     smp_mutex_destroy(platform->entropy_mutex);
     smp_mutex_destroy(platform->random_mutex);
 #endif
+#endif
 
 #if ATOMVM_HAS_MBEDTLS
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     if (platform->random_is_initialized) {
         mbedtls_ctr_drbg_free(&platform->random_ctx);
     }
@@ -640,6 +649,7 @@ void sys_free_platform(GlobalContext *global)
     if (platform->entropy_is_initialized) {
         mbedtls_entropy_free(&platform->entropy_ctx);
     }
+#endif
 #endif
 
     free(platform);
@@ -761,6 +771,7 @@ bool event_listener_is_event(EventListener *listener, listener_event_t event)
 }
 
 #ifdef ATOMVM_HAS_MBEDTLS
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 int sys_mbedtls_entropy_func(void *entropy, unsigned char *buf, size_t size)
 {
 #ifndef MBEDTLS_THREADING_C
@@ -827,6 +838,7 @@ void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
     struct GenericUnixPlatformData *platform = global->platform_data;
     SMP_MUTEX_UNLOCK(platform->random_mutex);
 }
+#endif
 
 #endif
 
