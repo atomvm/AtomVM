@@ -86,7 +86,8 @@ typedef enum
  * @see external_term_validate_buf() for the standard tag-included variant.
  */
 external_term_read_result_t external_term_validate_buf_raw(const void *buf, size_t buf_size,
-    external_term_read_opts_t opts, size_t *required_heap, size_t *bytes_read, GlobalContext *glb);
+    external_term_read_opts_t opts, size_t *required_heap, size_t *required_stack, size_t *bytes_read,
+    GlobalContext *glb);
 
 /**
  * @brief Deserialize a raw external term buffer (tag byte excluded) into a term.
@@ -103,7 +104,7 @@ external_term_read_result_t external_term_validate_buf_raw(const void *buf, size
  * @see external_term_deserialize_buf() for the standard tag-included variant.
  */
 external_term_read_result_t external_term_deserialize_buf_raw(const void *buf, size_t buf_size,
-    external_term_read_opts_t opts, Heap *heap, term *out_term, GlobalContext *glb);
+    external_term_read_opts_t opts, size_t required_stack, Heap *heap, term *out_term, GlobalContext *glb);
 
 /**
  * @brief Validate an external term buffer and compute required heap size.
@@ -122,6 +123,8 @@ external_term_read_result_t external_term_deserialize_buf_raw(const void *buf, s
  * @param buf_size size of \p buf in bytes
  * @param opts options for the read operation; pass \c ExternalTermReadNoOpts
  * @param[out] required_heap number of heap words needed to deserialize the term
+ * @param[out] required_stack work-stack capacity needed by \c external_term_deserialize_buf();
+ *             pass this value back to that function
  * @param[out] bytes_read total number of bytes consumed from \p buf
  * @param glb the global context
  * @return \c ExternalTermReadOk on success, \c ExternalTermReadInvalid if the
@@ -131,8 +134,8 @@ external_term_read_result_t external_term_deserialize_buf_raw(const void *buf, s
  * @see external_term_validate_buf_raw() for the tag-excluded variant
  */
 static inline external_term_read_result_t external_term_validate_buf(const void *buf,
-    size_t buf_size, external_term_read_opts_t opts, size_t *required_heap, size_t *bytes_read,
-    GlobalContext *glb)
+    size_t buf_size, external_term_read_opts_t opts, size_t *required_heap, size_t *required_stack,
+    size_t *bytes_read, GlobalContext *glb)
 {
     if (UNLIKELY(buf_size < 1)) {
         return ExternalTermReadInvalid;
@@ -145,7 +148,7 @@ static inline external_term_read_result_t external_term_validate_buf(const void 
 
     size_t raw_bytes_read;
     external_term_read_result_t res = external_term_validate_buf_raw(
-        external_term_buf + 1, buf_size - 1, opts, required_heap, &raw_bytes_read, glb);
+        external_term_buf + 1, buf_size - 1, opts, required_heap, required_stack, &raw_bytes_read, glb);
     if (LIKELY(res == ExternalTermReadOk)) {
         *bytes_read = raw_bytes_read + 1;
     }
@@ -167,6 +170,7 @@ static inline external_term_read_result_t external_term_validate_buf(const void 
  * @param buf buffer holding the external term, including the leading \c EXTERNAL_TERM_TAG byte
  * @param buf_size size of \p buf in bytes
  * @param opts options for the read operation; pass \c ExternalTermReadNoOpts
+ * @param required_stack work-stack capacity reported by \c external_term_validate_buf()
  * @param[in,out] heap heap from which term storage is allocated
  * @param[out] out_term the deserialized term (undefined on error)
  * @param glb the global context
@@ -176,10 +180,11 @@ static inline external_term_read_result_t external_term_validate_buf(const void 
  * @see external_term_deserialize_buf_raw() for the tag-excluded variant
  */
 static inline external_term_read_result_t external_term_deserialize_buf(const void *buf,
-    size_t buf_size, external_term_read_opts_t opts, Heap *heap, term *out_term, GlobalContext *glb)
+    size_t buf_size, external_term_read_opts_t opts, size_t required_stack, Heap *heap, term *out_term,
+    GlobalContext *glb)
 {
     const uint8_t *raw_buf = ((const uint8_t *) buf) + 1;
-    return external_term_deserialize_buf_raw(raw_buf, buf_size - 1, opts, heap, out_term, glb);
+    return external_term_deserialize_buf_raw(raw_buf, buf_size - 1, opts, required_stack, heap, out_term, glb);
 }
 
 /**

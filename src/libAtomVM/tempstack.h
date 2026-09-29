@@ -90,6 +90,28 @@ static inline bool temp_stack_is_empty(const struct TempStack *temp_stack)
     return temp_stack->stack_pos == temp_stack->min_stack + MIN_STACK_SIZE;
 }
 
+NO_DISCARD static inline TempStackResult temp_stack_init_with_capacity(struct TempStack *temp_stack, size_t capacity)
+{
+    temp_stack->stack_start = temp_stack->min_stack;
+    temp_stack->stack_end = temp_stack->min_stack + MIN_STACK_SIZE;
+    temp_stack->stack_pos = temp_stack->stack_end;
+
+    // The in-struct min_stack already holds MIN_STACK_SIZE items
+    if (capacity <= MIN_STACK_SIZE) {
+        return TempStackOk;
+    }
+    size_t buffer_size = capacity - MIN_STACK_SIZE;
+    term *buffer = (term *) malloc(buffer_size * sizeof(term));
+    if (IS_NULL_PTR(buffer)) {
+        return TempStackFailedAlloc;
+    }
+    temp_stack->stack_start = buffer;
+    temp_stack->stack_end = buffer + buffer_size;
+    // Keep the empty sentinel at the top of min_stack.
+    temp_stack->stack_pos = temp_stack->min_stack + MIN_STACK_SIZE;
+    return TempStackOk;
+}
+
 NO_DISCARD static inline TempStackResult temp_stack_push(struct TempStack *temp_stack, term value)
 {
     if (temp_stack->stack_pos == temp_stack->stack_start) {
