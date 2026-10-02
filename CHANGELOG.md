@@ -129,6 +129,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `unicode:characters_to_list/1,2` and `unicode:characters_to_binary/1,2,3` returning an
   error tuple with an uninitialized value in place of the rest for a top-level argument that is
   not chardata, such as `unicode:characters_to_list(foo)`; they now raise `badarg`
+- Fixed `socket:connect/2` (and so `gen_tcp:connect` and `ssl:connect`) blocking the scheduler
+  with BSD sockets (ESP32, generic_unix) while the peer did not answer: the connect is now
+  non-blocking, and only the calling process waits
+- Added `enif_select_write`, which was declared but not implemented
 
 ## [0.7.0-beta.0] - 2026-09-28
 
