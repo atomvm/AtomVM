@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed the ESP32 UART driver blocking the scheduler, until the task watchdog reset the chip,
   when a read had already taken the bytes of a pending data event, or when `uart:read/2` counted
   bytes that the other scheduler then took
+- Fixed `socket:connect/2` (and so `gen_tcp:connect` and `ssl:connect`) blocking the scheduler
+  with BSD sockets (ESP32, generic_unix) while the peer did not answer: the connect is now
+  non-blocking, and only the calling process waits
+- Added `enif_select_write`, which was declared but not implemented
 
 ## [0.7.0-beta.0] - 2026-09-28
 
