@@ -113,6 +113,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `no_ssa_opt` or `beam_debug_info` compiler options, which use `bs_test_tail2`
 - Fixed Release builds with `AVM_WARNINGS_ARE_ERRORS=ON` failing on an unused variable in
   `module.h`
+- Fixed `socket:connect/2` (and so `gen_tcp:connect` and `ssl:connect`) blocking the scheduler
+  with BSD sockets (ESP32, generic_unix) while the peer did not answer: the connect is now
+  non-blocking, and only the calling process waits
+- Added `enif_select_write`, which was declared but not implemented
 
 ## [0.7.0-beta.0] - 2026-09-28
 
