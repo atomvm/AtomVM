@@ -159,6 +159,9 @@ start() ->
     ok = test_atom_utf8_ext_node(),
     ok = test_encode_process_ref(),
     ok = test_term_to_binary_options(),
+    ok = test_map_ext_small_key_order(),
+    ok = test_map_ext_large_key_order(),
+    ok = test_map_ext_duplicate_keys(),
     0.
 
 test_term_to_binary_options() ->
@@ -1390,3 +1393,42 @@ sleep(Ms) ->
 
 id(X) ->
     X.
+
+test_map_ext_small_key_order() ->
+    Empty = ?MODULE:id(#{}),
+    Atoms = decode_map([{identifier, <<"i">>}, {client_cert, <<"c">>}, {client_key, <<"k">>}]),
+    true = Atoms =:= Empty#{client_cert => <<"c">>, client_key => <<"k">>, identifier => <<"i">>},
+    Small = decode_map([{3, 30}, {1, 10}, {2, 20}]),
+    true = Small =:= Empty#{1 => 10, 2 => 20, 3 => 30},
+    true = Small#{2 := x} =:= Empty#{1 => 10, 2 => x, 3 => 30},
+    true = Small#{2 => x} =:= Empty#{1 => 10, 2 => x, 3 => 30},
+    ok.
+
+test_map_ext_large_key_order() ->
+    Large = decode_map(descending(40)),
+    Expected = from_pairs(descending(40), ?MODULE:id(#{})),
+    true = Large =:= Expected,
+    true = Large#{7 := x} =:= Expected#{7 := x},
+    true = Large#{7 => x} =:= Expected#{7 := x},
+    true = binary_to_term(term_to_binary(Large#{7 => x})) =:= Expected#{7 := x},
+    ok.
+
+test_map_ext_duplicate_keys() ->
+    ok = expect_badarg(fun() -> decode_map([{1, 1}, {1, 2}]) end),
+    ok = expect_badarg(fun() -> decode_map([{1, 1}, {2, 2}, {1, 3}]) end),
+    ok = expect_badarg(fun() -> decode_map([{9, 0} | descending(40)]) end),
+    ok.
+
+decode_map(Pairs) ->
+    Entries = [[encode(K), encode(V)] || {K, V} <- Pairs],
+    binary_to_term(list_to_binary([131, 116, <<(length(Pairs)):32>> | Entries])).
+
+encode(Term) ->
+    <<131, Ext/binary>> = term_to_binary(Term),
+    Ext.
+
+descending(0) -> [];
+descending(K) -> [{K, K} | descending(K - 1)].
+
+from_pairs([], Map) -> Map;
+from_pairs([{K, V} | Pairs], Map) -> from_pairs(Pairs, Map#{K => V}).
