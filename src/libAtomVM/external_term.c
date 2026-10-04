@@ -659,6 +659,30 @@ static term insert_latin1_atom_ext(
     return globalcontext_insert_atom_maybe_copy(glb, utf8_buf, required_buf_size, true);
 }
 
+static bool sort_decoded_map(term map, GlobalContext *glb)
+{
+    int size = term_get_map_size(map);
+    for (int i = 1; i < size; i++) {
+        term key = term_get_map_key(map, i);
+        term value = term_get_map_value(map, i);
+        int j = i - 1;
+        while (j >= 0) {
+            TermCompareResult result = term_compare(term_get_map_key(map, j), key, TermCompareExact, glb);
+            if (UNLIKELY(result == TermCompareMemoryAllocFail || result == TermEquals)) {
+                return false;
+            }
+            if (result != TermGreaterThan) {
+                break;
+            }
+            term_set_map_assoc(map, j + 1, term_get_map_key(map, j), term_get_map_value(map, j));
+            j--;
+        }
+        term_set_map_assoc(map, j + 1, key, value);
+    }
+
+    return true;
+}
+
 static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm_size, bool copy, Heap *heap, GlobalContext *glb, external_term_read_opts_t opts)
 {
     // The safe flag is enforced in calculate_heap_usage (which must run first);
@@ -908,6 +932,9 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
                 buf_pos += value_size;
 
                 term_set_map_assoc(map, i, key, value);
+            }
+            if (UNLIKELY(!sort_decoded_map(map, glb))) {
+                return term_invalid_term();
             }
             *eterm_size = buf_pos;
             return map;
