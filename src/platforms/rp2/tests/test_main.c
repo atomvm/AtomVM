@@ -19,6 +19,7 @@
  */
 
 #include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 
 #include "unity.h"
@@ -89,9 +90,9 @@ static void unity_run_all_tests()
     }
 }
 
-#define MAIN_AVM ((void *) 0x10100000)
+#define MAIN_AVM ((void *) AVM_RP2_TEST_MODULES_ADDRESS)
 
-static term avm_test_case(const char *test_module)
+static term avm_test_case(const char *test_module, bool destroy_global_context)
 {
     GlobalContext *glb = globalcontext_new();
     TEST_ASSERT_NOT_NULL(glb);
@@ -123,12 +124,23 @@ static term avm_test_case(const char *test_module)
     context_execute_loop(ctx, mod, "start", 0);
     term ret_value = ctx->x[0];
 
-    nif_collection_destroy_all(glb);
-
-    globalcontext_destroy(glb);
+    if (destroy_global_context) {
+        nif_collection_destroy_all(glb);
+        globalcontext_destroy(glb);
+    }
 
     return ret_value;
 }
+
+#ifdef AVM_RP2_WOKWI_TEST
+static void test_picow_wifi_ssl_test(void)
+{
+    // The RP2 network port remains live after network:stop/0, so CYW43 teardown would hang.
+    // Main invokes this test last, and Wokwi terminates after the final Unity result is printed.
+    term ret_value = avm_test_case("test_picow_wifi_ssl.beam", false);
+    TEST_ASSERT_EQUAL_INT(OK_ATOM, ret_value);
+}
+#endif
 
 TEST_CASE(test_atomvm_platform0)
 {
@@ -152,19 +164,27 @@ TEST_CASE(atomvm_smp_0)
 
 TEST_CASE(test_clocks)
 {
-    term ret_value = avm_test_case("test_clocks.beam");
+    term ret_value = avm_test_case("test_clocks.beam", true);
     TEST_ASSERT_EQUAL_INT(OK_ATOM, ret_value);
 }
 
 TEST_CASE(test_crypto)
 {
-    term ret_value = avm_test_case("test_crypto.beam");
+    term ret_value = avm_test_case("test_crypto.beam", true);
     TEST_ASSERT_EQUAL_INT(OK_ATOM, ret_value);
 }
 
+#ifdef AVM_RP2_SSL_TEST
+TEST_CASE(test_ssl_pem)
+{
+    term ret_value = avm_test_case("test_ssl_pem.beam", true);
+    TEST_ASSERT_EQUAL_INT(OK_ATOM, ret_value);
+}
+#endif
+
 TEST_CASE(test_smp)
 {
-    term ret_value = avm_test_case("test_smp.beam");
+    term ret_value = avm_test_case("test_smp.beam", true);
     TEST_ASSERT_EQUAL_INT(OK_ATOM, ret_value);
 }
 
@@ -192,5 +212,12 @@ int main()
     stdio_init_all();
     UNITY_BEGIN();
     unity_run_all_tests();
-    return UNITY_END();
+#ifdef AVM_RP2_WOKWI_TEST
+    UnityDefaultTestRun(test_picow_wifi_ssl_test, "test_picow_wifi_ssl", __LINE__);
+#endif
+    int result = UNITY_END();
+#ifdef AVM_RP2_WOKWI_TEST
+    printf("PICO_SIMTEST_%s\n", result == 0 ? "OK" : "FAIL");
+#endif
+    return result;
 }

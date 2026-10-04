@@ -41,6 +41,7 @@
 -export([
     nif_close_notify/1,
     nif_conf_authmode/2,
+    nif_conf_ca_chain/2,
     nif_conf_rng/2,
     nif_config_defaults/3,
     nif_config_init/0,
@@ -69,7 +70,9 @@
     host/0,
     hostname/0,
     socket_option/0,
-    tls_client_option/0
+    tls_client_option/0,
+    cacert/0,
+    cacerts/0
 ]).
 
 -type host() :: hostname() | ip_address().
@@ -78,8 +81,13 @@
 
 -type socket_option() :: gen_tcp:connect_option() | gen_tcp:listen_option().
 -type tls_client_option() :: client_option() | socket_option().
+-type cacert() :: binary().
+-type cacerts() :: [cacert()] | crt_bundle.
 -type client_option() ::
-    {server_name_indication, sni()} | {verify, verify_none}.
+    {server_name_indication, sni()}
+    | {verify, verify_none | verify_peer}
+    | {cacerts, cacerts()}
+    | {cacertfile, iodata()}.
 
 -type sni() :: hostname() | disabled.
 -type reason() :: any().
@@ -125,58 +133,154 @@ handle_info(_Msg, State) ->
 terminate(_Reason, _State) ->
     ok.
 
+%%-----------------------------------------------------------------------------
+%% @param Host the hostname or IP address to which to connect
+%% @param Port the port to which to connect
+%% @param TLSOptions options controlling the TLS connection
+%% @returns `{ok, SSLSocket}' or `{error, Reason}'
+%% @doc Establish a TLS connection to a host and port.
+%%
+%% Peer verification is enabled by default and requires a verification name and trusted CA. When
+%% `Host' is a hostname, it is used as the verification name; when connecting to an IP address,
+%% supply `{server_name_indication, Hostname}'. Supply a CA using `{cacerts, Certs}',
+%% `{cacertfile, Path}', or ESP32 `{cacerts, crt_bundle}'. Certificate validity dates are checked
+%% by default on ESP32 and RP2, so the system clock must be set to a trustworthy value before
+%% connecting. On ESP32, wait for the SNTP `synchronized' callback; obtaining an IP address does
+%% not mean that the clock is synchronized, and `ssl:connect/3' does not wait for synchronization.
+%%
+%% ESP32 builds that cannot obtain trustworthy time may disable
+%% `CONFIG_MBEDTLS_HAVE_TIME_DATE', but doing so accepts expired and not-yet-valid certificates.
+%% `{verify, verify_none}' disables all peer authentication and should not be used merely to avoid
+%% synchronizing the clock.
+%% @end
+%%-----------------------------------------------------------------------------
 -spec connect(Host :: host(), Port :: inet:port_number(), TLSOptions :: [tls_client_option()]) ->
     {ok, sslsocket()} | {error, reason()}.
 connect(Hostname, Port, TLSOptions) when
     is_list(Hostname) andalso is_integer(Port) andalso is_list(TLSOptions)
 ->
-    % Erlang OTP actually first checks some options
-    case net:getaddrinfo(Hostname) of
-        {ok, Results} ->
-            case
-                [
-                    Addr
-                 || #{addr := #{addr := Addr}, type := stream, protocol := tcp, family := inet} <-
-                        Results
-                ]
-            of
-                [TCPAddr | _] ->
-                    NewTLSOptions =
-                        case lists:keyfind(server_name_indication, 1, TLSOptions) of
-                            false -> [{server_name_indication, Hostname} | TLSOptions];
-                            _ -> TLSOptions
-                        end,
-                    connect(TCPAddr, Port, NewTLSOptions);
-                [] ->
+    NewTLSOptions =
+        case lists:keyfind(server_name_indication, 1, TLSOptions) of
+            false -> [{server_name_indication, Hostname} | TLSOptions];
+            _ -> TLSOptions
+        end,
+    case prepare_tls(NewTLSOptions) of
+        {ok, SSLContext, SSLConfig} ->
+            case net:getaddrinfo(Hostname) of
+                {ok, Results} ->
+                    case
+                        [
+                            Addr
+                         || #{
+                                addr := #{addr := Addr},
+                                type := stream,
+                                protocol := tcp,
+                                family := inet
+                            } <-
+                                Results
+                        ]
+                    of
+                        [TCPAddr | _] ->
+                            connect_addr(TCPAddr, Port, SSLContext, SSLConfig);
+                        [] ->
+                            {error, nxdomain}
+                    end;
+                {error, _} ->
                     {error, nxdomain}
             end;
-        {error, _} ->
-            {error, nxdomain}
+        {error, _} = Error ->
+            Error
     end;
 connect(Addr, Port, TLSOptions) when
     is_tuple(Addr) andalso is_integer(Port) andalso is_list(TLSOptions)
 ->
-    {ok, Socket} = socket:open(inet, stream, tcp),
-    case socket:connect(Socket, #{family => inet, addr => Addr, port => Port}) of
-        ok ->
-            connect(Socket, TLSOptions);
-        {error, _Reason} ->
-            {error, _Reason}
+    case prepare_tls(TLSOptions) of
+        {ok, SSLContext, SSLConfig} ->
+            connect_addr(Addr, Port, SSLContext, SSLConfig);
+        {error, _} = Error ->
+            Error
     end.
 
--spec connect(Socket :: socket:socket(), TLSOptions :: [tls_client_option()]) ->
-    {ok, sslsocket()} | {error, reason()}.
-connect(Socket, TLSOptions) ->
+prepare_tls(TLSOptions) ->
+    ReversedOptions = lists:reverse(TLSOptions),
+    VerifyOption =
+        case lists:keyfind(verify, 1, ReversedOptions) of
+            false -> {verify, verify_peer};
+            Option -> Option
+        end,
+    case
+        {
+            VerifyOption,
+            lists:keyfind(server_name_indication, 1, ReversedOptions)
+        }
+    of
+        {{verify, verify_peer}, false} ->
+            {error, {options, missing_verification_name}};
+        {{verify, verify_peer}, {server_name_indication, disabled}} ->
+            {error, {options, missing_verification_name}};
+        _ ->
+            prepare_tls_config(TLSOptions)
+    end.
+
+prepare_tls_config(TLSOptions) ->
     SSLContext = ?MODULE:nif_init(),
-    ok = ?MODULE:nif_set_bio(SSLContext, Socket),
     SSLConfig = ?MODULE:nif_config_init(),
     ok = ?MODULE:nif_config_defaults(SSLConfig, client, stream),
+    ok = ?MODULE:nif_conf_authmode(SSLConfig, required),
     {active, false} = proplists:lookup(active, TLSOptions),
-    process_options(SSLContext, SSLConfig, TLSOptions),
+    case process_options(SSLContext, SSLConfig, normalize_ca_options(TLSOptions)) of
+        ok ->
+            {ok, SSLContext, SSLConfig};
+        {error, _} = Error ->
+            Error
+    end.
+
+connect_addr(Addr, Port, SSLContext, SSLConfig) ->
+    case socket:open(inet, stream, tcp) of
+        {ok, Socket} ->
+            case socket:connect(Socket, #{family => inet, addr => Addr, port => Port}) of
+                ok ->
+                    connect_socket(Socket, SSLContext, SSLConfig);
+                {error, _Reason} = Error ->
+                    _ = socket:close(Socket),
+                    Error
+            end;
+        {error, _Reason} = Error ->
+            Error
+    end.
+
+connect_socket(Socket, SSLContext, SSLConfig) ->
+    try connect_tls(Socket, SSLContext, SSLConfig) of
+        {ok, _} = Result ->
+            Result;
+        {error, _} = Error ->
+            _ = socket:close(Socket),
+            Error
+    catch
+        Class:Reason:Stacktrace ->
+            _ = socket:close(Socket),
+            erlang:raise(Class, Reason, Stacktrace)
+    end.
+
+connect_tls(Socket, SSLContext, SSLConfig) ->
+    ok = ?MODULE:nif_set_bio(SSLContext, Socket),
     CtrDrbg = gen_server:call(?MODULE, get_ctr_drbg),
     ok = ?MODULE:nif_conf_rng(SSLConfig, CtrDrbg),
     ok = ?MODULE:nif_setup(SSLContext, SSLConfig),
     handshake_loop(SSLContext, Socket).
+
+normalize_ca_options(TLSOptions) ->
+    Reversed = lists:reverse(TLSOptions),
+    WithoutCAOptions = proplists:delete(cacertfile, proplists:delete(cacerts, TLSOptions)),
+    case lists:keyfind(cacerts, 1, Reversed) of
+        false ->
+            case lists:keyfind(cacertfile, 1, Reversed) of
+                false -> WithoutCAOptions;
+                CACertFile -> [CACertFile | WithoutCAOptions]
+            end;
+        CACerts ->
+            [CACerts | WithoutCAOptions]
+    end.
 
 handshake_loop(SSLContext, Socket) ->
     case ?MODULE:nif_handshake_step(SSLContext) of
@@ -192,24 +296,21 @@ handshake_loop(SSLContext, Socket) ->
                         {'$socket', Socket, select, Ref} ->
                             handshake_loop(SSLContext, Socket);
                         {'$socket', Socket, abort, {Ref, closed}} ->
-                            ok = socket:close(Socket),
                             {error, closed}
                     end;
                 {error, _Reason} = Error ->
-                    socket:close(Socket),
                     Error
             end;
         want_write ->
             % We're currrently missing non-blocking writes
             handshake_loop(SSLContext, Socket);
         {error, _Reason} = Error ->
-            socket:close(Socket),
             Error
     end.
 
 -spec process_options(
     SSLContext :: sslcontext(), SSLConfig :: sslconfig(), TLSOptions :: [tls_client_option()]
-) -> ok.
+) -> ok | {error, reason()}.
 process_options(_SSLContext, _SSLConfig, []) ->
     ok;
 process_options(SSLContext, SSLConfig, [{server_name_indication, disabled} | Tail]) ->
@@ -220,12 +321,57 @@ process_options(SSLContext, SSLConfig, [{server_name_indication, Hostname} | Tai
 process_options(SSLContext, SSLConfig, [{verify, verify_none} | Tail]) ->
     ok = ?MODULE:nif_conf_authmode(SSLConfig, none),
     process_options(SSLContext, SSLConfig, Tail);
+process_options(SSLContext, SSLConfig, [{verify, verify_peer} | Tail]) ->
+    ok = ?MODULE:nif_conf_authmode(SSLConfig, required),
+    process_options(SSLContext, SSLConfig, Tail);
+process_options(SSLContext, SSLConfig, [{cacerts, crt_bundle} | Tail]) ->
+    process_ca_option(SSLContext, SSLConfig, crt_bundle, Tail);
+process_options(SSLContext, SSLConfig, [{cacerts, Certs} | Tail]) when is_list(Certs) ->
+    process_ca_option(SSLContext, SSLConfig, Certs, Tail);
+process_options(SSLContext, SSLConfig, [{cacertfile, Path} | Tail]) ->
+    case read_cacertfile(Path) of
+        {ok, PemOrDer} ->
+            process_ca_option(SSLContext, SSLConfig, [PemOrDer], Tail);
+        {error, _} = Error ->
+            Error
+    end;
 process_options(SSLContext, SSLConfig, [{binary, true} | Tail]) ->
     process_options(SSLContext, SSLConfig, Tail);
 process_options(SSLContext, SSLConfig, [binary | Tail]) ->
     process_options(SSLContext, SSLConfig, Tail);
 process_options(SSLContext, SSLConfig, [{active, false} | Tail]) ->
     process_options(SSLContext, SSLConfig, Tail).
+
+process_ca_option(SSLContext, SSLConfig, Certs, Tail) ->
+    try ?MODULE:nif_conf_ca_chain(SSLConfig, Certs) of
+        ok ->
+            process_options(SSLContext, SSLConfig, Tail)
+    catch
+        error:badarg ->
+            {error, invalid_cacert}
+    end.
+
+read_cacertfile(Path) ->
+    case atomvm:posix_open(Path, [o_rdonly]) of
+        {ok, Fd} ->
+            try
+                read_all(Fd, [])
+            after
+                _ = atomvm:posix_close(Fd)
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+read_all(Fd, Acc) ->
+    case atomvm:posix_read(Fd, 4096) of
+        {ok, Chunk} ->
+            read_all(Fd, [Chunk | Acc]);
+        eof ->
+            {ok, iolist_to_binary(lists:reverse(Acc))};
+        {error, _} = Error ->
+            Error
+    end.
 
 -spec close(sslsocket()) -> ok.
 close({SSLContext, Socket}) ->
@@ -368,6 +514,11 @@ nif_conf_authmode(_Config, _AuthMode) ->
 %% @private
 -spec nif_conf_rng(Config :: sslconfig(), CtrDrbg :: ctrdrbg()) -> ok.
 nif_conf_rng(_Config, _CtrDrbg) ->
+    erlang:nif_error(undefined).
+
+%% @private
+-spec nif_conf_ca_chain(Config :: sslconfig(), cacerts()) -> ok.
+nif_conf_ca_chain(_Config, _Certs) ->
     erlang:nif_error(undefined).
 
 %% @private

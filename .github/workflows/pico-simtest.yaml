@@ -1,0 +1,109 @@
+#
+# Copyright 2026 Peter M <petermm@gmail.com>
+#
+# SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: Pico W Sim test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/pico-simtest.yaml"
+      - "CMakeLists.txt"
+      - "CMakeModules/**"
+      - "libs/**"
+      - "src/libAtomVM/**"
+      - "src/platforms/esp32/test/main/test_erl_sources/test_crypto.erl"
+      - "src/platforms/rp2/**"
+      - "tools/packbeam/**"
+      - "tools/uf2tool/**"
+  pull_request:
+    paths:
+      - ".github/workflows/pico-simtest.yaml"
+      - "CMakeLists.txt"
+      - "CMakeModules/**"
+      - "libs/**"
+      - "src/libAtomVM/**"
+      - "src/platforms/esp32/test/main/test_erl_sources/test_crypto.erl"
+      - "src/platforms/rp2/**"
+      - "tools/packbeam/**"
+      - "tools/uf2tool/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  cli_token:
+    name: WOKWI_CLI_TOKEN presence
+    runs-on: ubuntu-24.04
+    outputs:
+      enabled: ${{ steps.token.outputs.enabled }}
+    steps:
+      - name: Check Wokwi token
+        id: token
+        env:
+          WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
+        run: |
+          if [ -n "${WOKWI_CLI_TOKEN}" ]; then
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "WOKWI_CLI_TOKEN is unavailable; skipping Pico W simulation."
+          fi
+
+  pico_simtest:
+    name: Pico W WiFi and TLS
+    needs: cli_token
+    if: needs.cli_token.outputs.enabled == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+              cmake doxygen gperf ninja-build gcc-arm-none-eabi \
+              libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28"
+          rebar3-version: "3.25.1"
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://repo.hex.pm
+            https://cdn.jsdelivr.net/hex
+
+      - name: Install the Wokwi CLI
+        run: curl -L https://wokwi.com/ci/install.sh | sh
+
+      - name: Build Pico W simulation firmware
+        run: |
+          cmake \
+              -S src/platforms/rp2 \
+              -B src/platforms/rp2/build.wokwi \
+              -G Ninja \
+              -DPICO_BOARD=pico_w \
+              -DAVM_DISABLE_SMP=ON \
+              -DAVM_RP2_WOKWI_TEST=ON
+          cmake --build src/platforms/rp2/build.wokwi --target rp2_wokwi_tests
+
+      - name: Run Pico W simulation
+        working-directory: src/platforms/rp2/tests
+        env:
+          WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
+        run: |
+          wokwi-cli \
+              --timeout 420000 \
+              --expect-text PICO_SIMTEST_OK \
+              --fail-text PICO_SIMTEST_FAIL \
+              --diagram-file sim_boards/diagram.pico_w.json \
+              .
