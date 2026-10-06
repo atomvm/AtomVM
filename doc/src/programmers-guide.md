@@ -1967,6 +1967,8 @@ The second parameter is a properties list, containing the following elements:
 | `stop_bits` | `1 \| 2` | no | 1 | UART stop bits |
 | `flow_control` | `hardware \| software \| none` | no | `none` | Flow control |
 | `parity` | `even \| odd \| none` | no | `none` | UART parity check |
+| `rts` | `integer()` | no | -1 (`UART_PIN_NO_CHANGE`) | RTS GPIO Pin (DE in `rs485_half_duplex` mode) |
+| `mode` | `uart \| rs485_half_duplex` | no | `uart` | `rs485_half_duplex` drives `rts` as the RS485 transceiver's DE |
 
 
 These are the usual RX and TX pins for the various UARTs on the ESP32 (as always check your board specs):
@@ -1981,6 +1983,15 @@ For example,
 
 ```erlang
 UART = uart:open("UART0", [{rx, 3}, {tx, 1}, {speed, 9600}])
+```
+
+In `rs485_half_duplex` mode the UART raises `rts` while a frame goes out and lowers it right
+after the last stop bit, so it can drive the DE (and /RE) pin of a half-duplex RS485
+transceiver; what the receiver picks up while sending is dropped. For example, for a Modbus RTU
+bus with DE on GPIO 33:
+
+```erlang
+UART = uart:open("UART1", [{rx, 3}, {tx, 1}, {rts, 33}, {speed, 9600}, {mode, rs485_half_duplex}])
 ```
 
 #### USB-Serial-JTAG
