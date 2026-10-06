@@ -6,15 +6,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.7.0-beta.1] - Unreleased
 
+### Added
+- Added `enif_select_write`, which was declared but not implemented
+
+### Changed
+- With BSD sockets (generic_unix, ESP32), `socket:connect/2` returns the reason a connect failed,
+  as OTP does (`{error, econnrefused}`, `{error, etimedout}`, `{error, ehostunreach}`...), instead
+  of `{error, closed}`. On ESP32, Wi-Fi down gives `{error, ehostunreach}`, and a refused port gives
+  `{error, econnreset}` because lwIP reports a RST during the handshake as a reset. It may also
+  return `{error, econnreset}` when the peer accepts and immediately resets, where it previously
+  returned `ok` and the error surfaced on the first `recv` or `send`; this is the OTP behaviour
+- `posix_errno_to_term` maps `econnrefused`, `econnreset`, `econnaborted`, `etimedout`,
+  `ehostunreach`, `enetunreach`, `enetdown`, `eaddrnotavail`, `ealready` and `eisconn` to atoms
+  instead of returning the raw integer
+
 ### Fixed
 - Fixed maps decoded by `binary_to_term/1,2` and received over distribution keeping the
   encoder's key order, which broke `==` and made `=>` updates on an existing key produce
   duplicate keys
 - Fixed `binary_to_term/1,2` accepting maps with duplicate keys instead of raising `badarg`
 - Fixed `socket:connect/2` (and so `gen_tcp:connect` and `ssl:connect`) blocking the scheduler
-with BSD sockets (ESP32, generic_unix) while the peer did not answer: the connect is now
-non-blocking, and only the calling process waits
-- Added `enif_select_write`, which was declared but not implemented
+  with BSD sockets (ESP32, generic_unix) while the peer did not answer: the connect is now
+  non-blocking, and only the calling process waits
 
 ## [0.7.0-beta.0] - 2026-09-28
 

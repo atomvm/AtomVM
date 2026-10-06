@@ -20,6 +20,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "context.h"
 #include "defaultatoms.h"
@@ -29,6 +30,7 @@
 #include "external_term.h"
 #include "globalcontext.h"
 #include "memory.h"
+#include "resources.h"
 #include "scheduler.h"
 #include "utils.h"
 
@@ -41,6 +43,8 @@ static int32_t down_pid_two = 0;
 static ErlNifMonitor down_mon_two = { NULL, 0 };
 
 static int32_t lockable_pid = 0;
+
+static uint32_t stop_call_count = 0;
 
 // Helpers for resource ref_count sub-fields (packed layout).
 // Only valid for resources, not plain refc binaries.
@@ -63,6 +67,16 @@ static void resource_dtor(ErlNifEnv *env, void *resource)
 
     cb_read_resource = *((uint32_t *) resource);
     dtor_call_count++;
+}
+
+static void resource_stop(ErlNifEnv *env, void *resource, ErlNifEvent event, int is_direct_call)
+{
+    UNUSED(env);
+    UNUSED(event);
+    UNUSED(is_direct_call);
+
+    cb_read_resource = *((uint32_t *) resource);
+    stop_call_count++;
 }
 
 static void resource_down(ErlNifEnv *env, void *resource, ErlNifPid *pid, ErlNifMonitor *mon)
@@ -704,6 +718,84 @@ void test_resource_release_in_down_handler_two_monitors(void)
     globalcontext_destroy(glb);
 }
 
+void test_resource_select_write(void)
+{
+    GlobalContext *glb = globalcontext_new();
+    Context *ctx = context_new(glb);
+    ErlNifEnv *env = erl_nif_env_from_context(ctx);
+
+    ErlNifResourceTypeInit init;
+    init.members = 2;
+    init.dtor = resource_dtor;
+    init.stop = resource_stop;
+    ErlNifResourceFlags flags;
+    cb_read_resource = 0;
+    dtor_call_count = 0;
+    stop_call_count = 0;
+
+    ErlNifResourceType *resource_type = enif_init_resource_type(env, "test_select_write", &init, ERL_NIF_RT_CREATE, &flags);
+    assert(resource_type != NULL);
+
+    void *ptr = enif_alloc_resource(resource_type, sizeof(uint32_t));
+    uint32_t *resource = (uint32_t *) ptr;
+    *resource = 42;
+
+    // The write end of a pipe is writable at once.
+    int pipefds[2];
+    assert(pipe(pipefds) == 0);
+    ErlNifEvent event = (ErlNifEvent) pipefds[1];
+    ErlNifPid pid = ctx->process_id;
+
+    assert(enif_select_write(env, event, ptr, &pid, term_from_int(1), env) == ERL_NIF_SELECT_BADARG);
+
+    int r = enif_select_write(env, event, ptr, &pid, term_from_int(1), NULL);
+    assert(r == 0);
+    assert(resource_ref_count(ptr) == 2);
+
+    // Selected for write only: read readiness does not notify.
+    assert(!select_event_notify(event, true, false, glb));
+    assert(!mailbox_has_next(&ctx->mailbox));
+
+    // Write readiness delivers the message, once.
+    assert(select_event_notify(event, false, true, glb));
+    assert(!select_event_notify(event, false, true, glb));
+    assert(mailbox_process_outer_list(ctx) == NULL);
+    term msg;
+    assert(mailbox_peek(ctx, &msg));
+    assert(msg == term_from_int(1));
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+    assert(!mailbox_has_next(&ctx->mailbox));
+
+    // Not selected any more: stop is called at once.
+    r = enif_select(env, event, ERL_NIF_SELECT_STOP, ptr, NULL, term_nil());
+    assert(r == ERL_NIF_SELECT_STOP_CALLED);
+    assert(stop_call_count == 1);
+    assert(resource_ref_count(ptr) == 1);
+
+    // Still selected: stop is scheduled, and called by the platform loop.
+    r = enif_select_write(env, event, ptr, &pid, term_from_int(2), NULL);
+    assert(r == 0);
+    r = enif_select(env, event, ERL_NIF_SELECT_STOP, ptr, NULL, term_nil());
+    assert(r == ERL_NIF_SELECT_STOP_SCHEDULED);
+    assert(!select_event_notify(event, false, true, glb));
+    struct ListHead *select_events = synclist_wrlock(&glb->select_events);
+    select_event_count_and_destroy_closed(select_events, NULL, NULL, NULL, glb);
+    synclist_unlock(&glb->select_events);
+    assert(stop_call_count == 2);
+    assert(resource_ref_count(ptr) == 1);
+    assert(!mailbox_has_next(&ctx->mailbox));
+
+    enif_release_resource(ptr);
+    assert(dtor_call_count == 1);
+    assert(cb_read_resource == 42);
+
+    close(pipefds[0]);
+    close(pipefds[1]);
+
+    scheduler_terminate(ctx);
+    globalcontext_destroy(glb);
+}
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
@@ -719,6 +811,7 @@ int main(int argc, char **argv)
     test_resource_binaries();
     test_resource_release_in_down_handler();
     test_resource_release_in_down_handler_two_monitors();
+    test_resource_select_write();
 
     return EXIT_SUCCESS;
 }

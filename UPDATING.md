@@ -51,6 +51,14 @@ were using the `0x210000` offset.
   instead of being routed through the process group leader as an alias for `standard_io`. Code or
   tests that captured `standard_error` output by swapping the group leader must instead redirect
   or intercept the underlying stderr stream, or pass an explicit pid/device.
+- With BSD sockets (generic_unix, ESP32), `socket:connect/2` (and so `gen_tcp:connect` with
+  `{inet_backend, socket}` and `ssl:connect`) no longer returns `{error, closed}` when the connect
+  fails: it returns the reason as OTP does, such as `{error, econnrefused}`, `{error, etimedout}`,
+  `{error, ehostunreach}` or `{error, enetunreach}`. On ESP32, a connect with Wi-Fi down returns
+  `{error, ehostunreach}`, and a refused port returns `{error, econnreset}` (lwIP reports the RST
+  received during the handshake as a reset). Code matching `{error, closed}` after a connect must
+  be updated. `{error, closed}` is still returned when the socket is closed by another process
+  while the connect is in progress.
 
 ## v0.6.4 -> v0.6.5
 

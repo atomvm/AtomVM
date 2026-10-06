@@ -31,6 +31,8 @@ test() ->
     ok = test_recv_nowait(),
     ok = test_accept_nowait(),
     ok = test_setopt_getopt(),
+    ok = test_connect_refused(),
+    ok = test_connect_in_progress(),
     case erlang:system_info(machine) of
         "ATOM" ->
             ok = test_abandon_select();
@@ -475,7 +477,8 @@ test_accept_nowait(NoWaitRef) ->
 
     {ok, Socket} = socket:open(inet, stream, tcp),
     ok = socket:setopt(Socket, {socket, reuseaddr}, true),
-    ok = socket:setopt(Socket, {socket, linger}, #{onoff => true, linger => 0}),
+    % No {linger, 0} here: the accepted socket would inherit it and close with
+    % a RST, which the connect below may then return as {error, econnreset}.
 
     ok = socket:bind(Socket, #{
         family => inet, addr => loopback, port => 0
@@ -528,6 +531,120 @@ test_setopt_getopt() ->
     {error, closed} = socket:getopt(Socket, {socket, type}),
     {error, closed} = socket:setopt(Socket, {socket, reuseaddr}, true),
     ok.
+
+%%
+%% connect tests
+%%
+
+test_connect_refused() ->
+    {ok, ListenSocket} = socket:open(inet, stream, tcp),
+    ok = socket:bind(ListenSocket, #{family => inet, addr => loopback, port => 0}),
+    {ok, #{port := Port}} = socket:sockname(ListenSocket),
+    ok = socket:close(ListenSocket),
+    {ok, Socket} = socket:open(inet, stream, tcp),
+    {error, econnrefused} = socket:connect(Socket, #{
+        family => inet, addr => loopback, port => Port
+    }),
+    ok = socket:close(Socket),
+    ok.
+
+% A listener whose accept queue is full silently drops further SYNs, so a
+% connect to it stays in progress until an accept frees a slot: a peer that
+% never answers, without depending on the network.
+test_connect_in_progress() ->
+    etest:flush_msg_queue(),
+
+    {ok, ListenSocket} = socket:open(inet, stream, tcp),
+    ok = socket:setopt(ListenSocket, {socket, reuseaddr}, true),
+    ok = socket:bind(ListenSocket, #{family => inet, addr => loopback, port => 0}),
+    ok = socket:listen(ListenSocket, 1),
+    {ok, #{port := Port}} = socket:sockname(ListenSocket),
+    Address = #{family => inet, addr => loopback, port => Port},
+
+    Fillers = fill_accept_queue(Address, [], 32),
+
+    % Closing the socket from another process ends the connect with closed
+    {Closed, ClosedMonitor} = spawn_connect(Address),
+    ClosedSocket = connecting_socket(Closed),
+    in_progress = connect_result(Closed, 500),
+    true = is_process_alive(Closed),
+    ok = socket:close(ClosedSocket),
+    {error, closed} = connect_result(Closed, 5000),
+    ok = stop_connect(Closed, ClosedMonitor),
+
+    % Killing the connecting process abandons the connect
+    {Killed, KilledMonitor} = spawn_connect(Address),
+    _ = connecting_socket(Killed),
+    in_progress = connect_result(Killed, 500),
+    true = exit(Killed, kill),
+    ok = wait_down(Killed, KilledMonitor, killed),
+
+    % An accept frees a slot, and the next SYN retransmission gets through
+    {Last, LastMonitor} = spawn_connect(Address),
+    _ = connecting_socket(Last),
+    in_progress = connect_result(Last, 500),
+    {ok, Accepted} = socket:accept(ListenSocket, 5000),
+    ok = connect_result(Last, 15000),
+    ok = stop_connect(Last, LastMonitor),
+
+    lists:foreach(fun({Pid, Monitor}) -> ok = stop_connect(Pid, Monitor) end, Fillers),
+    ok = socket:close(Accepted),
+    ok = socket:close(ListenSocket),
+    ok.
+
+% Connect until one attempt stays in progress: a full listener completes
+% backlog + 1 handshakes on Linux and a few more on the BSDs.
+fill_accept_queue(_Address, _Fillers, 0) ->
+    error(accept_queue_never_full);
+fill_accept_queue(Address, Fillers, Tries) ->
+    {Pid, Monitor} = spawn_connect(Address),
+    _ = connecting_socket(Pid),
+    case connect_result(Pid, 500) of
+        ok ->
+            fill_accept_queue(Address, [{Pid, Monitor} | Fillers], Tries - 1);
+        in_progress ->
+            % Killed, so that it does not compete for the slot freed later
+            true = exit(Pid, kill),
+            ok = wait_down(Pid, Monitor, killed),
+            Fillers
+    end.
+
+spawn_connect(Address) ->
+    Parent = self(),
+    spawn_opt(
+        fun() ->
+            {ok, Socket} = socket:open(inet, stream, tcp),
+            Parent ! {self(), socket, Socket},
+            Result = socket:connect(Socket, Address),
+            Parent ! {self(), connect, Result},
+            receive
+                stop -> socket:close(Socket)
+            end
+        end,
+        [monitor]
+    ).
+
+connecting_socket(Pid) ->
+    receive
+        {Pid, socket, Socket} -> Socket
+    after 5000 -> error({timeout, waiting_for_socket})
+    end.
+
+connect_result(Pid, Timeout) ->
+    receive
+        {Pid, connect, Result} -> Result
+    after Timeout -> in_progress
+    end.
+
+stop_connect(Pid, Monitor) ->
+    Pid ! stop,
+    wait_down(Pid, Monitor, normal).
+
+wait_down(Pid, Monitor, Reason) ->
+    receive
+        {'DOWN', Monitor, process, Pid, Reason} -> ok
+    after 5000 -> error({timeout, waiting_for_down, Pid})
+    end.
 
 %%
 %% abandon_select test
