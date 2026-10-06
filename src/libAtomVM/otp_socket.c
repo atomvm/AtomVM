@@ -2797,9 +2797,9 @@ static term nif_socket_connect(Context *ctx, int argc, term argv[])
             return UNDEFINED_ATOM;
 
         } else {
+            int err = errno;
             SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
-            AVM_LOGE(TAG, "Unable to connect: res=%i errno=%i", res, errno);
-            return make_error_tuple(CLOSED_ATOM, ctx);
+            return make_error_tuple(posix_errno_to_term(err, global), ctx);
         }
     } else if (res == 0) {
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
@@ -2841,28 +2841,6 @@ static term nif_socket_connect(Context *ctx, int argc, term argv[])
 }
 
 #if OTP_SOCKET_BSD
-// What a connect fails with, as the atoms OTP uses: posix_errno_to_term only
-// knows the file errors.
-static term connect_errno_to_term(int err, GlobalContext *global)
-{
-    switch (err) {
-        case ECONNREFUSED:
-            return globalcontext_make_atom(global, ATOM_STR("\xC", "econnrefused"));
-        case ECONNRESET:
-            return globalcontext_make_atom(global, ATOM_STR("\xA", "econnreset"));
-        case ECONNABORTED:
-            return globalcontext_make_atom(global, ATOM_STR("\xC", "econnaborted"));
-        case ETIMEDOUT:
-            return globalcontext_make_atom(global, ATOM_STR("\x9", "etimedout"));
-        case EHOSTUNREACH:
-            return globalcontext_make_atom(global, ATOM_STR("\xC", "ehostunreach"));
-        case ENETUNREACH:
-            return globalcontext_make_atom(global, ATOM_STR("\xB", "enetunreach"));
-        default:
-            return posix_errno_to_term(err, global);
-    }
-}
-
 // The outcome of a connect that was in progress, once the socket is writable.
 static term nif_socket_connect_result(Context *ctx, int argc, term argv[])
 {
@@ -2889,7 +2867,7 @@ static term nif_socket_connect_result(Context *ctx, int argc, term argv[])
         return make_errno_tuple(ctx);
     }
     if (err != 0) {
-        return make_error_tuple(connect_errno_to_term(err, ctx->global), ctx);
+        return make_error_tuple(posix_errno_to_term(err, ctx->global), ctx);
     }
     return OK_ATOM;
 }
