@@ -186,10 +186,12 @@
 -type ap_config() :: {ap, [ap_config_property()]}.
 
 -type sntp_host_config() :: {host, string() | binary()}.
+-type sntp_timezone_config() :: {timezone, string() | binary()}.
 -type sntp_synchronized_config() ::
     {synchronized, fun(({non_neg_integer(), non_neg_integer()}) -> term())}.
 -type sntp_config_property() ::
     sntp_host_config()
+    | sntp_timezone_config()
     | sntp_synchronized_config().
 -type sntp_config() :: {sntp, [sntp_config_property()]}.
 
