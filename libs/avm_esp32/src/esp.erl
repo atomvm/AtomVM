@@ -43,6 +43,11 @@
     sleep_enable_timer_wakeup/1,
     mount/4,
     umount/1,
+    sdcard_open/2,
+    sdcard_read/2,
+    sdcard_write/3,
+    sdcard_info/1,
+    sdcard_close/1,
     nvs_fetch_binary/2,
     nvs_get_binary/1, nvs_get_binary/2, nvs_get_binary/3,
     nvs_set_binary/2, nvs_set_binary/3,
@@ -148,6 +153,8 @@
     | {cd, non_neg_integer()}.
 -type mount_options() :: [sdmmc_mount_option() | sdspi_mount_option()] | #{atom() => term()}.
 
+-opaque sdcard() :: reference().
+
 -export_type(
     [
         esp_reset_reason/0,
@@ -160,6 +167,7 @@
         esp_partition_props/0,
         mounted_fs/0,
         mount_options/0,
+        sdcard/0,
         task_wdt_config/0,
         task_wdt_user_handle/0
     ]
@@ -374,6 +382,86 @@ mount(_Source, _Target, _FS, _Opts) ->
 %%-----------------------------------------------------------------------------
 -spec umount(mounted_fs()) -> ok | {error, term()}.
 umount(_Target) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Source the device to open, either `"sdmmc"' or `"sdspi"'
+%% @param   Opts options for the device
+%% @returns either a tuple having `ok' and the SD card resource, or an error tuple
+%% @doc     Open an SD card for raw block (sector) access, without mounting any
+%%          filesystem on it. The returned resource is used with
+%%          {@link sdcard_read/2}, {@link sdcard_write/3}, {@link sdcard_info/1}
+%%          and {@link sdcard_close/1}. The card is automatically closed when the
+%%          resource is garbage collected, but {@link sdcard_close/1} should be
+%%          preferred.
+%%
+%%          The same options as {@link mount/4} are accepted.
+%%
+%%          A given physical card should not be used through `sdcard_open/2' and
+%%          {@link mount/4} at the same time.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sdcard_open(
+    Source :: unicode:chardata(),
+    Opts :: mount_options()
+) -> {ok, sdcard()} | {error, term()}.
+sdcard_open(_Source, _Opts) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   SDCard the SD card resource returned by {@link sdcard_open/2}
+%% @param   Sector the sector (block) number to read
+%% @returns a tuple with `ok' and the sector data as a binary, or an error tuple
+%% @doc     Read a single sector from the SD card. The size of the returned
+%%          binary is the sector size reported by {@link sdcard_info/1} (usually
+%%          512 bytes).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sdcard_read(SDCard :: sdcard(), Sector :: non_neg_integer()) ->
+    {ok, binary()} | {error, term()}.
+sdcard_read(_SDCard, _Sector) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   SDCard the SD card resource returned by {@link sdcard_open/2}
+%% @param   Sector the sector (block) number to write
+%% @param   Data the sector data, its size must be exactly the sector size
+%% @returns `ok' or an error tuple
+%% @doc     Write a single sector to the SD card. `Data' must be a binary whose
+%%          size is exactly the sector size reported by {@link sdcard_info/1}.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sdcard_write(SDCard :: sdcard(), Sector :: non_neg_integer(), Data :: binary()) ->
+    ok | {error, term()}.
+sdcard_write(_SDCard, _Sector, _Data) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   SDCard the SD card resource returned by {@link sdcard_open/2}
+%% @returns a tuple with `ok' and a map describing the card, or an error tuple
+%% @doc     Return information about the SD card. The map contains the
+%%          `sector_size' (in bytes) and `sector_count' (the number of sectors)
+%%          keys.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sdcard_info(SDCard :: sdcard()) ->
+    {ok, #{sector_size := pos_integer(), sector_count := non_neg_integer()}}
+    | {error, term()}.
+sdcard_info(_SDCard) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   SDCard the SD card resource returned by {@link sdcard_open/2}
+%% @returns `ok' or an error tuple
+%% @doc     Close a previously opened SD card and release the underlying
+%%          peripheral. The resource must not be used after it has been closed.
+%%
+%%          A card opened with `"sdspi"' must be closed before the SPI bus is
+%%          closed with `spi:close/1'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sdcard_close(SDCard :: sdcard()) -> ok | {error, term()}.
+sdcard_close(_SDCard) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

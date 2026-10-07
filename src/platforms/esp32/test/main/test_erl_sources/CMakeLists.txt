@@ -110,6 +110,7 @@ compile_erlang(test_md5)
 compile_erlang(test_crypto)
 compile_erlang(test_monotonic_time)
 compile_erlang(test_mount)
+compile_erlang(test_sdcard)
 compile_erlang(test_net)
 compile_erlang(test_rtc_slow)
 compile_erlang(test_select)
@@ -138,6 +139,7 @@ set(erlang_test_beams
     test_crypto.beam
     test_monotonic_time.beam
     test_mount.beam
+    test_sdcard.beam
     test_net.beam
     test_rtc_slow.beam
     test_select.beam
