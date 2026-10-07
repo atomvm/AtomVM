@@ -309,6 +309,16 @@ term memory_copy_term_tree_to_storage(term *storage, term **heap_end, term t);
 unsigned long memory_estimate_usage(term t);
 
 /**
+ * @brief Calculates term memory usage up to a limit
+ *
+ * @param t root term on which used memory calculation will be performed.
+ * @param limit largest accepted result in term units.
+ * @param result estimated memory usage when successful.
+ * @returns true on success, false if the limit is exceeded or temporary memory cannot be allocated.
+ */
+bool memory_estimate_usage_with_limit(term t, size_t limit, size_t *result);
+
+/**
  * @brief append a fragment to a heap. The MSO list is merged. The fragment will then be owned by the heap.
  *
  * @param heap the heap to append the fragment to

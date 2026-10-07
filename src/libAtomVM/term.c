@@ -885,13 +885,15 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                             other = other_module_atom;
                         } else if (!term_is_external_fun(t) && !term_is_external_fun(other)) {
                             const term *boxed_value = term_to_const_term_ptr(t);
-                            Module *fun_module = (Module *) boxed_value[1];
-                            term module_name_atom = module_get_name(fun_module);
+                            bool unresolved = term_is_unresolved_fun(t);
+                            Module *fun_module = unresolved ? NULL : (Module *) boxed_value[1];
+                            term module_name_atom = unresolved ? boxed_value[1] : module_get_name(fun_module);
                             atom_index_t module_atom_index = term_to_atom_index(module_name_atom);
 
                             const term *other_boxed_value = term_to_const_term_ptr(other);
-                            Module *other_fun_module = (Module *) other_boxed_value[1];
-                            term other_module_name_atom = module_get_name(other_fun_module);
+                            bool other_unresolved = term_is_unresolved_fun(other);
+                            Module *other_fun_module = other_unresolved ? NULL : (Module *) other_boxed_value[1];
+                            term other_module_name_atom = other_unresolved ? other_boxed_value[1] : module_get_name(other_fun_module);
                             atom_index_t other_module_atom_index = term_to_atom_index(other_module_name_atom);
 
                             int module_cmp_result = atom_table_cmp_using_atom_index(
@@ -911,17 +913,50 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                             }
 
                             uint32_t arity, old_index, old_uniq;
-                            module_get_fun_arity_old_index_uniq(fun_module, fun_index, &arity, &old_index, &old_uniq);
+                            uint32_t num_freeze;
+                            uint32_t freeze_base;
+                            if (unresolved) {
+                                arity = term_to_int32(boxed_value[3]);
+                                old_index = term_to_int32(boxed_value[4]);
+                                old_uniq = term_to_int32(boxed_value[5]);
+                                num_freeze = term_get_size_from_boxed_header(boxed_value[0]) - 5;
+                                freeze_base = 6;
+                            } else {
+                                module_get_fun_arity_old_index_uniq(fun_module, fun_index, &arity, &old_index, &old_uniq);
+                                num_freeze = module_get_fun_freeze(fun_module, fun_index);
+                                arity -= num_freeze;
+                                freeze_base = 3;
+                            }
                             uint32_t other_arity, other_old_index, other_old_uniq;
-                            module_get_fun_arity_old_index_uniq(other_fun_module, other_fun_index, &other_arity, &other_old_index, &other_old_uniq);
+                            uint32_t other_num_freeze;
+                            uint32_t other_freeze_base;
+                            if (other_unresolved) {
+                                other_arity = term_to_int32(other_boxed_value[3]);
+                                other_old_index = term_to_int32(other_boxed_value[4]);
+                                other_old_uniq = term_to_int32(other_boxed_value[5]);
+                                other_num_freeze = term_get_size_from_boxed_header(other_boxed_value[0]) - 5;
+                                other_freeze_base = 6;
+                            } else {
+                                module_get_fun_arity_old_index_uniq(other_fun_module, other_fun_index, &other_arity, &other_old_index, &other_old_uniq);
+                                other_num_freeze = module_get_fun_freeze(other_fun_module, other_fun_index);
+                                other_arity -= other_num_freeze;
+                                other_freeze_base = 3;
+                            }
+
+                            if (arity != other_arity) {
+                                result = (arity > other_arity) ? TermGreaterThan : TermLessThan;
+                                goto unequal;
+                            }
+
+                            if (old_index != other_old_index) {
+                                result = (old_index > other_old_index) ? TermGreaterThan : TermLessThan;
+                                goto unequal;
+                            }
 
                             if (old_uniq != other_old_uniq) {
                                 result = (old_uniq > other_old_uniq) ? TermGreaterThan : TermLessThan;
                                 goto unequal;
                             }
-
-                            uint32_t num_freeze = module_get_fun_freeze(fun_module, fun_index);
-                            uint32_t other_num_freeze = module_get_fun_freeze(other_fun_module, other_fun_index);
 
                             if (num_freeze != other_num_freeze) {
                                 result = (num_freeze > other_num_freeze) ? TermGreaterThan : TermLessThan;
@@ -929,16 +964,15 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                             } else if (num_freeze == 0) {
                                 CMP_POP_AND_CONTINUE();
                             } else {
-                                uint32_t freeze_base = 3;
                                 for (uint32_t i = num_freeze - 1; i >= 1; i--) {
                                     if (temp_stack_push(&temp_stack, boxed_value[i + freeze_base]) != TempStackOk
-                                        || temp_stack_push(&temp_stack, other_boxed_value[i + freeze_base]) != TempStackOk) {
+                                        || temp_stack_push(&temp_stack, other_boxed_value[i + other_freeze_base]) != TempStackOk) {
                                         return TermCompareMemoryAllocFail;
                                     }
                                 }
 
                                 t = boxed_value[freeze_base];
-                                other = other_boxed_value[freeze_base];
+                                other = other_boxed_value[other_freeze_base];
                             }
 
                         } else {

@@ -4967,12 +4967,12 @@ schedule_in:
                     if (src_pos >= src_size) {
                         term new_key = kv[kv_pos].key;
                         term new_value = kv[kv_pos].value;
-                        term_set_map_assoc(map, j, new_key, new_value);
+                        term_set_map_assoc_maybe_shared(map, j, is_shared, new_key, new_value);
                         kv_pos++;
                     } else if (kv_pos >= num_elements) {
                         term src_key = term_get_map_key(src, src_pos);
                         term src_value = term_get_map_value(src, src_pos);
-                        term_set_map_assoc(map, j, src_key, src_value);
+                        term_set_map_assoc_maybe_shared(map, j, is_shared, src_key, src_value);
                         src_pos++;
                     } else {
                         term src_key = term_get_map_key(src, src_pos);
@@ -4981,21 +4981,21 @@ schedule_in:
                         switch (term_compare(src_key, new_key, TermCompareExact, ctx->global)) {
                             case TermLessThan: {
                                 term src_value = term_get_map_value(src, src_pos);
-                                term_set_map_assoc(map, j, src_key, src_value);
+                                term_set_map_assoc_maybe_shared(map, j, is_shared, src_key, src_value);
                                 src_pos++;
                                 break;
                             }
 
                             case TermGreaterThan: {
                                 term new_value = kv[kv_pos].value;
-                                term_set_map_assoc(map, j, new_key, new_value);
+                                term_set_map_assoc_maybe_shared(map, j, is_shared, new_key, new_value);
                                 kv_pos++;
                                 break;
                             }
 
                             case TermEquals: {
                                 term new_value = kv[kv_pos].value;
-                                term_set_map_assoc(map, j, src_key, new_value);
+                                term_set_map_assoc_maybe_shared(map, j, is_shared, src_key, new_value);
                                 src_pos++;
                                 kv_pos++;
                                 break;
@@ -5062,7 +5062,7 @@ schedule_in:
                 //
                 term map = term_alloc_map_maybe_shared(src_size, term_get_map_keys(src), &ctx->heap);
                 for (size_t j = 0; j < src_size; ++j) {
-                    term_set_map_assoc(map, j, term_get_map_key(src, j), term_get_map_value(src, j));
+                    term_set_map_value(map, j, term_get_map_value(src, j));
                 }
                 //
                 // Copy the new terms into the new map, in situ only
@@ -5075,7 +5075,7 @@ schedule_in:
                     if (UNLIKELY(pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    term_set_map_assoc(map, pos, key, value);
+                    term_set_map_value(map, pos, value);
                 }
                 WRITE_REGISTER_GC_SAFE(dreg, map);
                 break;

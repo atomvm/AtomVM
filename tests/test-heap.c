@@ -108,6 +108,12 @@ void test_gc_ref_count(void)
     assert(list_is_empty(refc_binaries));
 }
 
+void test_memory_init_heap_overflow(void)
+{
+    Heap heap;
+    assert(memory_init_heap(&heap, SIZE_MAX) == MEMORY_GC_ERROR_FAILED_ALLOCATION);
+}
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
@@ -115,6 +121,7 @@ int main(int argc, char **argv)
 
     test_memory_ensure_free();
     test_gc_ref_count();
+    test_memory_init_heap_overflow();
 
     return EXIT_SUCCESS;
 }
