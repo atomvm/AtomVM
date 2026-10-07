@@ -53,6 +53,7 @@ struct HNode
     const uint8_t *key;
     uint32_t index : 20;
     uint32_t bytes_len : 10;
+    uint32_t owns_key : 1;
 };
 
 struct HNodeGroup
@@ -107,6 +108,13 @@ struct AtomTable *atom_table_new(void)
 
 void atom_table_destroy(struct AtomTable *table)
 {
+    for (size_t i = 0; i < table->capacity; i++) {
+        for (struct HNode *node = table->buckets[i]; node; node = node->next) {
+            if (node->owns_key) {
+                free((void *) node->key);
+            }
+        }
+    }
     struct HNodeGroup *node_group = table->first_node_group;
     while (node_group) {
         struct HNodeGroup *next_group = node_group->next;
@@ -288,6 +296,7 @@ static inline void init_node(struct HNode *node, const uint8_t *atom_data, size_
     node->key = atom_data;
     node->bytes_len = atom_len;
     node->index = index;
+    node->owns_key = false;
 }
 
 static inline void insert_node_into_bucket(
@@ -403,6 +412,7 @@ enum AtomTableEnsureAtomResult atom_table_ensure_atom(struct AtomTable *table, c
     }
 
     *result = insert_node(table, node_group, bucket_index, atom_data, atom_len);
+    node_group->nodes[*result - node_group->first_index].owns_key = (opts & AtomTableCopyAtom) != 0;
 
     SMP_UNLOCK(table);
     return AtomTableEnsureAtomOk;

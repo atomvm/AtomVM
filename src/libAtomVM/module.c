@@ -924,6 +924,8 @@ static enum ModuleLoadResult module_build_imported_functions_table(Module *this_
         return MODULE_ERROR_FAILED_ALLOCATION;
     }
 
+    // calloc leaves unfinished entries NULL if a later allocation fails.
+    this_module->imported_funcs_count = functions_count;
     for (int i = 0; i < functions_count; i++) {
         int local_module_atom_index = READ_32_UNALIGNED(table_data + i * 12 + 12);
         int local_function_atom_index = READ_32_UNALIGNED(table_data + i * 12 + 4 + 12);
@@ -938,7 +940,8 @@ static enum ModuleLoadResult module_build_imported_functions_table(Module *this_
         if (bif) {
             this_module->imported_funcs[i] = bif;
         } else {
-            this_module->imported_funcs[i] = &nifs_get(mfa)->base;
+            const struct Nif *nif = nifs_get(mfa);
+            this_module->imported_funcs[i] = nif ? &nif->base : NULL;
         }
 
         if (!this_module->imported_funcs[i]) {
@@ -1315,6 +1318,16 @@ COLD_FUNC void module_destroy(Module *module)
 #endif
 
     free(module->labels);
+    for (size_t i = 0; i < module->imported_funcs_count; i++) {
+        const struct ExportedFunction *func = module->imported_funcs[i];
+        if (func && (func->type == UnresolvedFunctionCall || func->type == ModuleFunction
+#ifndef AVM_NO_JIT
+                || func->type == ModuleNativeFunction
+#endif
+                )) {
+            free((void *) func);
+        }
+    }
     free(module->imported_funcs);
     free(module->literals_table);
     free(module->local_atoms_to_global_table);

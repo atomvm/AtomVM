@@ -131,6 +131,7 @@ struct Module
     size_t line_refs_offsets_count;
 
     const struct ExportedFunction **imported_funcs;
+    size_t imported_funcs_count;
 
     const uint8_t **labels;
 
