@@ -38,6 +38,7 @@
     | {event_queue_len, Qlen :: pos_integer()}
     | {flow_control, none | hardware | software}
     | {parity, none | even | odd}
+    | {mode, uart | rs485_half_duplex}
     | {peripheral, peripheral()}
     | []
 ].
