@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   encoder's key order, which broke `==` and made `=>` updates on an existing key produce
   duplicate keys
 - Fixed `binary_to_term/1,2` accepting maps with duplicate keys instead of raising `badarg`
+- Fixed a heap overflow in the generic_unix poll loop when a select event was armed while
+  another scheduler rebuilt the poll set, which aborted with `realloc(): invalid next size`
 
 ## [0.7.0-beta.0] - 2026-09-28
 
