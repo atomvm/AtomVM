@@ -424,6 +424,8 @@ In order to enable both STA and AP mode, simply provide valid configuration for 
 On the ESP32 and ESP32-P4, `network:start/1` can also bring up the chip's Ethernet MAC (EMAC) with
 an RMII PHY (LAN8720, IP101, JL1101 and similar), with an `eth` entry in the configuration. It can
 be used alone or next to `sta` and/or `ap`; WiFi is only initialized when `sta` or `ap` is given.
+With both a cable and STA up, the default route goes through Ethernet, unless `route_priority` is
+set below the STA's 100.
 
 Ethernet is opt-in: it needs ESP-IDF 5.4 or newer and a build with `CONFIG_AVM_ENABLE_ETHERNET=y`
 (`idf.py menuconfig`, or a line in `sdkconfig.defaults`). WiFi must stay enabled in the sdkconfig,
@@ -438,6 +440,7 @@ makes `network:start/1` return `{error, eth_not_supported}`.
 | `power` | `non_neg_integer()` | none | GPIO driven high before the PHY is probed (PHY power or oscillator enable), and released on stop |
 | `reset` | `non_neg_integer()` | none | PHY reset GPIO, pulsed by ESP-IDF during PHY init |
 | `phy_addr` | `0..31` | first PHY found | PHY address on the SMI bus |
+| `route_priority` | `0..255` | 128 | Default route priority; the interface with the highest one that is up carries the traffic (STA: 100, AP: 10) |
 | `dhcp_hostname` | `string() \| binary()` | none | DHCP hostname |
 | `started` | `fun(() -> term())` | none | The interface is up, link state unknown |
 | `connected` | `fun(() -> term())` | none | Link up |

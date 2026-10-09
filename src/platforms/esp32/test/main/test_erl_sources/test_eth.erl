@@ -38,7 +38,8 @@ test_badarg() ->
         [{mdc, -5}],
         [{power, not_a_pin}],
         [{rmii_clock, {out, 5}}],
-        [{rmii_clock, {sideways, 0}}]
+        [{rmii_clock, {sideways, 0}}],
+        [{route_priority, 256}]
     ]).
 
 expect_badarg(EthConfig) ->
