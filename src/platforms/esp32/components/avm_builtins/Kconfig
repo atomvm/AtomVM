@@ -99,6 +99,15 @@ config AVM_ENABLE_NETWORK_PORT_DRIVER
 	depends on ESP_WIFI_ENABLED || ESP_HOST_WIFI_ENABLED || ESP32_WIFI_ENABLED || ESP_WIFI_REMOTE_ENABLED
     default y
 
+config AVM_ENABLE_ETHERNET
+    bool "Enable Ethernet in the network port driver"
+    depends on AVM_ENABLE_NETWORK_PORT_DRIVER && (ETH_USE_ESP32_EMAC || ETH_USE_OPENETH)
+    default n
+    help
+        Let network:start/1 bring up Ethernet with an {eth, [...]} entry: the
+        ESP32 or ESP32-P4 EMAC with an RMII PHY, or the OpenCores MAC
+        emulated by QEMU (ETH_USE_OPENETH). Needs ESP-IDF 5.4 or newer.
+
 config AVM_ENABLE_SOCKET_PORT_DRIVER
     bool "Enable socket port driver"
 	depends on ESP_WIFI_ENABLED || ESP_HOST_WIFI_ENABLED || ESP32_WIFI_ENABLED || ETH_ENABLED || ESP_WIFI_REMOTE_ENABLED

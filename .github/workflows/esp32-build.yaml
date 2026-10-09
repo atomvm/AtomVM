@@ -75,6 +75,10 @@ jobs:
           idf-version: 'v5.4.4'
           libsodium: 'ON'
           jit: false
+        - esp-idf-target: "esp32"
+          idf-version: 'v5.4.4'
+          ethernet: 'ON'
+          jit: false
         # JIT builds (v5.5.5 only)
         - esp-idf-target: "esp32c3"
           idf-version: 'v5.5.5'
@@ -120,6 +124,7 @@ jobs:
       env:
         USB_SERIAL: ${{ matrix.usb-serial || 'OFF' }}
         USB_CDC: ${{ matrix.usb-cdc || 'OFF' }}
+        ETHERNET: ${{ matrix.ethernet || 'OFF' }}
       run: |
         . $IDF_PATH/export.sh
         if [[ "${USB_SERIAL}" == "ON" ]]; then
@@ -130,6 +135,9 @@ jobs:
             'CONFIG_TINYUSB_CDC_ENABLED=y' \
             'CONFIG_AVM_ENABLE_USB_CDC_PORT_DRIVER=y' \
             >> sdkconfig.defaults.in
+        fi
+        if [[ "${ETHERNET}" == "ON" ]]; then
+          echo 'CONFIG_AVM_ENABLE_ETHERNET=y' >> sdkconfig.defaults.in
         fi
         export IDF_TARGET=${{matrix.esp-idf-target}}
         if [ "${{ matrix.jit }}" = "true" ]; then

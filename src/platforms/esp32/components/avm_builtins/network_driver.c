@@ -50,6 +50,18 @@
 #include <esp_sntp.h>
 #include <esp_wifi.h>
 #include <lwip/inet.h>
+#ifdef CONFIG_AVM_ENABLE_ETHERNET
+#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 4, 0)
+#error "CONFIG_AVM_ENABLE_ETHERNET needs ESP-IDF 5.4 or newer"
+#endif
+#include <driver/gpio.h>
+#include <esp_eth.h>
+#if CONFIG_IDF_TARGET_ESP32 && CONFIG_SPIRAM
+#include <esp_private/esp_gpio_reserve.h>
+#include <esp_psram.h>
+#endif
+#define HAVE_ETH 1
+#endif
 #pragma GCC diagnostic pop
 
 #include <stdint.h>
@@ -99,6 +111,23 @@ static const char *const sta_beacon_timeout_atom = ATOM_STR("\x12", "sta_beacon_
 static const char *const sta_disconnected_atom = ATOM_STR("\x10", "sta_disconnected");
 static const char *const sta_got_ip_atom = ATOM_STR("\xA", "sta_got_ip");
 static const char *const network_down_atom = ATOM_STR("\x0C", "network_down");
+static const char *const eth_atom = ATOM_STR("\x3", "eth");
+#ifndef HAVE_ETH
+static const char *const eth_not_supported_atom = ATOM_STR("\x11", "eth_not_supported");
+#else
+static const char *const eth_connected_atom = ATOM_STR("\xD", "eth_connected");
+static const char *const eth_disconnected_atom = ATOM_STR("\x10", "eth_disconnected");
+static const char *const eth_got_ip_atom = ATOM_STR("\xA", "eth_got_ip");
+static const char *const eth_started_atom = ATOM_STR("\xB", "eth_started");
+static const char *const mdc_atom = ATOM_STR("\x3", "mdc");
+static const char *const mdio_atom = ATOM_STR("\x4", "mdio");
+static const char *const phy_addr_atom = ATOM_STR("\x8", "phy_addr");
+static const char *const power_atom = ATOM_STR("\x5", "power");
+static const char *const reset_atom = ATOM_STR("\x5", "reset");
+static const char *const rmii_clock_atom = ATOM_STR("\xA", "rmii_clock");
+static const char *const in_atom = ATOM_STR("\x2", "in");
+static const char *const out_atom = ATOM_STR("\x3", "out");
+#endif
 
 ESP_EVENT_DECLARE_BASE(sntp_event_base);
 ESP_EVENT_DEFINE_BASE(sntp_event_base);
@@ -138,6 +167,12 @@ struct ClientData
     uint32_t owner_process_id;
     uint64_t ref_ticks;
     bool managed;
+#ifdef HAVE_ETH
+    esp_eth_handle_t eth_handle;
+    esp_eth_netif_glue_handle_t eth_glue;
+    esp_netif_t *eth_netif;
+    int eth_power;
+#endif
 };
 
 struct ScanData
@@ -430,7 +465,7 @@ static void send_term(Heap *heap, struct ClientData *data, term t)
     port_send_message_from_task(data->global, term_from_local_process_id(data->owner_process_id), msg);
 }
 
-static void send_got_ip(struct ClientData *data, esp_netif_ip_info_t *info)
+static void send_got_ip(struct ClientData *data, esp_netif_ip_info_t *info, AtomString got_ip_atom)
 {
     TRACE("Sending got_ip back to AtomVM\n");
 
@@ -442,7 +477,7 @@ static void send_got_ip(struct ClientData *data, esp_netif_ip_info_t *info)
         term gw = tuple_from_addr(&heap, ntohl(info->gw.addr));
 
         term ip_info = port_heap_create_tuple3(&heap, ip, netmask, gw);
-        term reply = port_heap_create_tuple2(&heap, make_atom(data->global, sta_got_ip_atom), ip_info);
+        term reply = port_heap_create_tuple2(&heap, make_atom(data->global, got_ip_atom), ip_info);
         send_term(&heap, data, reply);
     }
     END_WITH_STACK_HEAP(heap, data->global);
@@ -483,6 +518,20 @@ static void send_sta_disconnected(struct ClientData *data)
     }
     END_WITH_STACK_HEAP(heap, data->global);
 }
+
+#ifdef HAVE_ETH
+static void send_eth_event(struct ClientData *data, AtomString event_atom)
+{
+    TRACE("Sending eth event back to AtomVM\n");
+
+    // {Ref, eth_started | eth_connected | eth_disconnected}
+    BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
+    {
+        send_term(&heap, data, make_atom(data->global, event_atom));
+    }
+    END_WITH_STACK_HEAP(heap, data->global);
+}
+#endif
 
 static void send_ap_started(struct ClientData *data)
 {
@@ -836,9 +885,19 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
                 // we restart sntp here for faster time sync (especially evident on coldboots)
                 // the sntp_restart is no-op if sntp isn't configured
                 esp_sntp_restart();
-                send_got_ip(data, (esp_netif_ip_info_t *) &event->ip_info.ip);
+                send_got_ip(data, (esp_netif_ip_info_t *) &event->ip_info.ip, sta_got_ip_atom);
                 break;
             }
+
+#ifdef HAVE_ETH
+            case IP_EVENT_ETH_GOT_IP: {
+                ip_event_got_ip_t *event = (ip_event_got_ip_t *) event_data;
+                ESP_LOGI(TAG, "IP_EVENT_ETH_GOT_IP: %s", inet_ntoa(event->ip_info.ip));
+                esp_sntp_restart();
+                send_got_ip(data, (esp_netif_ip_info_t *) &event->ip_info.ip, eth_got_ip_atom);
+                break;
+            }
+#endif
 
             case IP_EVENT_AP_STAIPASSIGNED: {
                 ip_event_ap_staipassigned_t *event = (ip_event_ap_staipassigned_t *) event_data;
@@ -851,6 +910,34 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
                 ESP_LOGI(TAG, "Unhandled ip event: %" PRIi32 ".", event_id);
                 break;
         }
+#ifdef HAVE_ETH
+    } else if (event_base == ETH_EVENT) {
+
+        switch (event_id) {
+
+            case ETHERNET_EVENT_START: {
+                ESP_LOGI(TAG, "ETHERNET_EVENT_START received.");
+                send_eth_event(data, eth_started_atom);
+                break;
+            }
+
+            case ETHERNET_EVENT_CONNECTED: {
+                ESP_LOGI(TAG, "ETHERNET_EVENT_CONNECTED received.");
+                send_eth_event(data, eth_connected_atom);
+                break;
+            }
+
+            case ETHERNET_EVENT_DISCONNECTED: {
+                ESP_LOGI(TAG, "ETHERNET_EVENT_DISCONNECTED received.");
+                send_eth_event(data, eth_disconnected_atom);
+                break;
+            }
+
+            default:
+                ESP_LOGD(TAG, "Unhandled eth event: %" PRIi32 ".", event_id);
+                break;
+        }
+#endif
     } else if (event_base == sntp_event_base) {
 
         switch (event_id) {
@@ -1182,6 +1269,229 @@ static void set_dhcp_hostname(esp_netif_t *interface, const char *interface_name
     }
 }
 
+#ifdef HAVE_ETH
+// Reads the integer at key into *value, leaving it untouched when the key is absent. Returns false
+// when the value is not an integer.
+static bool eth_config_int(term eth_config, AtomString key, int *value, GlobalContext *global)
+{
+    term t = interop_kv_get_value(eth_config, key, global);
+    if (term_is_invalid_term(t)) {
+        return true;
+    }
+    if (!term_is_integer(t)) {
+        return false;
+    }
+    *value = term_to_int(t);
+    return true;
+}
+
+static bool eth_valid_output_gpio(int gpio)
+{
+    return gpio == -1 || GPIO_IS_VALID_OUTPUT_GPIO(gpio);
+}
+
+static void stop_eth(struct ClientData *data);
+
+// Starts the Ethernet MAC with a generic (IEEE 802.3) RMII PHY, e.g. LAN8720 or JL1101:
+//
+//   {eth, [{mdc, 23}, {mdio, 18}, {rmii_clock, {out, 17}}, {power, 0}, {reset, 5},
+//          {phy_addr, 0}, {dhcp_hostname, "name"}]}
+//
+// mdc, mdio and rmii_clock default to ETH_ESP32_EMAC_DEFAULT_CONFIG() (on the ESP32: 23, 18 and
+// the sdkconfig clock choice). power, if set, is driven high before the PHY is probed; reset is
+// the PHY's reset pin, pulsed by ESP-IDF during PHY init. phy_addr defaults to the first PHY
+// found. Under CONFIG_ETH_USE_OPENETH (QEMU), the OpenCores MAC with a DP83848 at address 1 is
+// used instead and the pin options are only validated. On failure, undoes its own work, replies
+// to the caller and returns false.
+static bool start_eth(Context *ctx, term pid, term ref, struct ClientData *data, term eth_config)
+{
+    GlobalContext *global = ctx->global;
+    esp_err_t err = ESP_OK;
+    esp_eth_mac_t *mac = NULL;
+    esp_eth_phy_t *phy = NULL;
+
+#if CONFIG_ETH_USE_OPENETH
+    int mdc = -1;
+    int mdio = -1;
+#else
+    eth_esp32_emac_config_t emac_config = ETH_ESP32_EMAC_DEFAULT_CONFIG();
+    int mdc = emac_config.smi_gpio.mdc_num;
+    int mdio = emac_config.smi_gpio.mdio_num;
+#endif
+    int power = -1;
+    int reset = -1;
+    int phy_addr = ESP_ETH_PHY_ADDR_AUTO;
+    if (!eth_config_int(eth_config, mdc_atom, &mdc, global) || !eth_valid_output_gpio(mdc)
+        || !eth_config_int(eth_config, mdio_atom, &mdio, global) || !eth_valid_output_gpio(mdio)
+        || !eth_config_int(eth_config, power_atom, &power, global) || !eth_valid_output_gpio(power)
+        || !eth_config_int(eth_config, reset_atom, &reset, global) || !eth_valid_output_gpio(reset)
+        || !eth_config_int(eth_config, phy_addr_atom, &phy_addr, global)
+        || phy_addr < ESP_ETH_PHY_ADDR_AUTO || phy_addr > 31) {
+        goto badarg;
+    }
+
+    term clock = interop_kv_get_value(eth_config, rmii_clock_atom, global);
+    bool clock_set = !term_is_invalid_term(clock);
+    bool clock_out = false;
+    int clock_gpio = -1;
+    if (clock_set) {
+        if (!term_is_tuple(clock) || term_get_tuple_arity(clock) != 2 || !term_is_integer(term_get_tuple_element(clock, 1))) {
+            goto badarg;
+        }
+        term direction = term_get_tuple_element(clock, 0);
+        clock_out = direction == make_atom(global, out_atom);
+        if (!clock_out && direction != make_atom(global, in_atom)) {
+            goto badarg;
+        }
+        clock_gpio = term_to_int(term_get_tuple_element(clock, 1));
+#if CONFIG_IDF_TARGET_ESP32
+        // The ESP32 takes the clock in on GPIO0 only, and puts it out on GPIO0, 16 or 17.
+        bool valid_clock = clock_out ? (clock_gpio == 0 || clock_gpio == 16 || clock_gpio == 17) : clock_gpio == 0;
+#else
+        bool valid_clock = GPIO_IS_VALID_GPIO(clock_gpio);
+#endif
+        if (!valid_clock) {
+            goto badarg;
+        }
+    }
+
+    if (power != -1) {
+        data->eth_power = power;
+        if ((err = gpio_reset_pin(power)) != ESP_OK
+            || (err = gpio_set_direction(power, GPIO_MODE_OUTPUT)) != ESP_OK
+            || (err = gpio_set_level(power, 1)) != ESP_OK) {
+            goto error;
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    eth_mac_config_t mac_config = ETH_MAC_DEFAULT_CONFIG();
+    eth_phy_config_t phy_config = ETH_PHY_DEFAULT_CONFIG();
+    phy_config.phy_addr = phy_addr;
+    phy_config.reset_gpio_num = reset;
+    // esp_eth_start waits this long for auto-negotiation, which without a cable always times out
+    // (4 s by default). On timeout negotiation carries on in the PHY, and the link timer picks up
+    // speed and duplex when the link comes up.
+    phy_config.autonego_timeout_ms = 100;
+#if CONFIG_ETH_USE_OPENETH
+    phy_config.phy_addr = 1;
+    mac = esp_eth_mac_new_openeth(&mac_config);
+    phy = esp_eth_phy_new_dp83848(&phy_config);
+#else
+    emac_config.smi_gpio.mdc_num = mdc;
+    emac_config.smi_gpio.mdio_num = mdio;
+    if (clock_set) {
+        emac_config.clock_config.rmii.clock_mode = clock_out ? EMAC_CLK_OUT : EMAC_CLK_EXT_IN;
+        emac_config.clock_config.rmii.clock_gpio = clock_gpio;
+    }
+#if CONFIG_IDF_TARGET_ESP32 && CONFIG_SPIRAM
+    // GPIO16 and GPIO17 are the PSRAM's on WROVER modules: a 50 MHz clock there takes it down.
+    // Without a PSRAM chip, its failed init still holds them reserved: release the clock pin.
+    if (clock_set && clock_out && clock_gpio != 0) {
+        if (esp_psram_is_initialized()) {
+            ESP_LOGE(TAG, "RMII clock out on GPIO%d would clash with the PSRAM", clock_gpio);
+            err = ESP_ERR_NOT_SUPPORTED;
+            goto error;
+        }
+        esp_gpio_revoke(BIT64(clock_gpio));
+    }
+#endif
+    mac = esp_eth_mac_new_esp32(&emac_config, &mac_config);
+    phy = esp_eth_phy_new_generic(&phy_config);
+#endif
+    if (IS_NULL_PTR(mac) || IS_NULL_PTR(phy)) {
+        err = ESP_ERR_NO_MEM;
+        goto error;
+    }
+
+    esp_eth_config_t config = ETH_DEFAULT_CONFIG(mac, phy);
+    if ((err = esp_eth_driver_install(&config, &data->eth_handle)) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to install the Ethernet driver (no PHY?), reason: %s", esp_err_to_name(err));
+        goto error;
+    }
+
+    esp_netif_inherent_config_t netif_base = ESP_NETIF_INHERENT_DEFAULT_ETH();
+    esp_netif_config_t netif_config = { .base = &netif_base, .driver = NULL, .stack = ESP_NETIF_NETSTACK_DEFAULT_ETH };
+    data->eth_netif = esp_netif_new(&netif_config);
+    data->eth_glue = esp_eth_new_netif_glue(data->eth_handle);
+    if (IS_NULL_PTR(data->eth_netif) || IS_NULL_PTR(data->eth_glue)) {
+        err = ESP_ERR_NO_MEM;
+        goto error;
+    }
+    if ((err = esp_netif_attach(data->eth_netif, data->eth_glue)) != ESP_OK
+        || (err = esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, &event_handler, data)) != ESP_OK
+        || (err = esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &event_handler, data)) != ESP_OK) {
+        goto error;
+    }
+    set_dhcp_hostname(data->eth_netif, "ETH", interop_kv_get_value(eth_config, dhcp_hostname_atom, global));
+    if ((err = esp_eth_start(data->eth_handle)) != ESP_OK) {
+        goto error;
+    }
+    ESP_LOGI(TAG, "ETH started");
+    return true;
+
+badarg:
+    ESP_LOGE(TAG, "Invalid Ethernet configuration");
+    port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
+    return false;
+
+error:
+    ESP_LOGE(TAG, "Failed to start Ethernet, reason: %s", esp_err_to_name(err));
+    if (data->eth_handle == NULL) {
+        // Not handed to the driver yet: stop_eth would not find them.
+        if (mac != NULL) {
+            mac->del(mac);
+        }
+        if (phy != NULL) {
+            phy->del(phy);
+        }
+    }
+    stop_eth(data);
+    port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, term_from_int(err)));
+    return false;
+}
+
+// Undoes start_eth, from whatever point it reached. NULL-safe.
+static void stop_eth(struct ClientData *data)
+{
+    esp_event_handler_unregister(ETH_EVENT, ESP_EVENT_ANY_ID, &event_handler);
+    esp_event_handler_unregister(IP_EVENT, IP_EVENT_ETH_GOT_IP, &event_handler);
+    if (data == NULL) {
+        return;
+    }
+    if (data->eth_handle != NULL) {
+        esp_eth_stop(data->eth_handle);
+    }
+    if (data->eth_glue != NULL) {
+        esp_eth_del_netif_glue(data->eth_glue);
+        data->eth_glue = NULL;
+    }
+    if (data->eth_netif != NULL) {
+        esp_netif_destroy(data->eth_netif);
+        data->eth_netif = NULL;
+    }
+    if (data->eth_handle != NULL) {
+        esp_eth_mac_t *mac = NULL;
+        esp_eth_phy_t *phy = NULL;
+        esp_eth_get_mac_instance(data->eth_handle, &mac);
+        esp_eth_get_phy_instance(data->eth_handle, &phy);
+        esp_err_t err = esp_eth_driver_uninstall(data->eth_handle);
+        if (err == ESP_OK) {
+            mac->del(mac);
+            phy->del(phy);
+            data->eth_handle = NULL;
+        } else {
+            // The MAC and PHY stay allocated, and the EMAC stays taken until reboot.
+            ESP_LOGE(TAG, "Failed to uninstall the Ethernet driver, reason: %s", esp_err_to_name(err));
+        }
+    }
+    if (data->eth_power != -1) {
+        gpio_reset_pin(data->eth_power);
+        data->eth_power = -1;
+    }
+}
+#endif
+
 // Starts the WiFi interfaces in sta_wifi_config and ap_wifi_config. On failure, replies to the
 // caller and returns false.
 static bool start_wifi(Context *ctx, term pid, term ref, struct ClientData *data,
@@ -1237,12 +1547,6 @@ static bool start_wifi(Context *ctx, term pid, term ref, struct ClientData *data
     }
     if ((err = esp_event_handler_register(IP_EVENT, IP_EVENT_AP_STAIPASSIGNED, &event_handler, data)) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to register staipassigned event handler");
-        term error = port_create_error_tuple(ctx, term_from_int(err));
-        port_send_reply(ctx, pid, ref, error);
-        return false;
-    }
-    if ((err = esp_event_handler_register(sntp_event_base, SNTP_EVENT_BASE_SYNC, &event_handler, data)) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to register sntp event handler");
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
         return false;
@@ -1328,8 +1632,18 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     //
     term sta_config = interop_kv_get_value_default(config, sta_atom, term_invalid_term(), ctx->global);
     term ap_config = interop_kv_get_value_default(config, ap_atom, term_invalid_term(), ctx->global);
-    if (UNLIKELY(term_is_invalid_term(sta_config) && term_is_invalid_term(ap_config))) {
-        ESP_LOGE(TAG, "Expected STA or AP configuration but got neither");
+    term eth_config = interop_kv_get_value_default(config, eth_atom, term_invalid_term(), ctx->global);
+#ifndef HAVE_ETH
+    if (UNLIKELY(!term_is_invalid_term(eth_config))) {
+        ESP_LOGE(TAG, "Ethernet is not available (no EMAC, or CONFIG_AVM_ENABLE_ETHERNET off)");
+        term error = port_create_error_tuple(ctx, make_atom(ctx->global, eth_not_supported_atom));
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    }
+#endif
+    bool want_wifi = !term_is_invalid_term(sta_config) || !term_is_invalid_term(ap_config);
+    if (UNLIKELY(!want_wifi && term_is_invalid_term(eth_config))) {
+        ESP_LOGE(TAG, "Expected STA, AP or ETH configuration but got none");
         term error = port_create_error_tuple(ctx, BADARG_ATOM);
         port_send_reply(ctx, pid, ref, error);
         return;
@@ -1343,7 +1657,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
 
     wifi_config_t *sta_wifi_config = get_sta_wifi_config(sta_config, ctx->global);
     wifi_config_t *ap_wifi_config = get_ap_wifi_config(ap_config, ctx->global);
-    if ((!roaming) && IS_NULL_PTR(sta_wifi_config) && IS_NULL_PTR(ap_wifi_config)) {
+    if (want_wifi && (!roaming) && IS_NULL_PTR(sta_wifi_config) && IS_NULL_PTR(ap_wifi_config)) {
         ESP_LOGE(TAG, "Unable to get STA or AP configuration");
         term error = port_create_error_tuple(ctx, BADARG_ATOM);
         port_send_reply(ctx, pid, ref, error);
@@ -1362,14 +1676,34 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     data->owner_process_id = term_to_local_process_id(pid);
     data->ref_ticks = term_to_ref_ticks(ref);
     data->managed = roaming;
+#ifdef HAVE_ETH
+    data->eth_handle = NULL;
+    data->eth_glue = NULL;
+    data->eth_netif = NULL;
+    data->eth_power = -1;
+#endif
     struct ESP32PlatformData *platform = ctx->global->platform_data;
     platform->network_driver_data = data;
 
     esp_netif_t *sta_wifi_interface = NULL;
     esp_netif_t *ap_wifi_interface = NULL;
-    if (!start_wifi(ctx, pid, ref, data, sta_wifi_config, ap_wifi_config, roaming, &sta_wifi_interface, &ap_wifi_interface)) {
+    if (want_wifi && !start_wifi(ctx, pid, ref, data, sta_wifi_config, ap_wifi_config, roaming, &sta_wifi_interface, &ap_wifi_interface)) {
         goto cleanup;
     }
+
+    esp_err_t err;
+    if ((err = esp_event_handler_register(sntp_event_base, SNTP_EVENT_BASE_SYNC, &event_handler, data)) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register sntp event handler");
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+        goto cleanup;
+    }
+
+#ifdef HAVE_ETH
+    if (!term_is_invalid_term(eth_config) && !start_eth(ctx, pid, ref, data, eth_config)) {
+        goto cleanup;
+    }
+#endif
 
     //
     // Set up simple NTP, if configured
@@ -1400,6 +1734,8 @@ cleanup:
 
 static void stop_network(GlobalContext *global)
 {
+    struct ESP32PlatformData *platform = global->platform_data;
+
     // Stop sntp (ignore OK, or not configured error)
     esp_sntp_stop();
 
@@ -1408,6 +1744,9 @@ static void stop_network(GlobalContext *global)
     esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler);
     esp_event_handler_unregister(IP_EVENT, IP_EVENT_AP_STAIPASSIGNED, &event_handler);
     esp_event_handler_unregister(sntp_event_base, SNTP_EVENT_BASE_SYNC, &event_handler);
+#ifdef HAVE_ETH
+    stop_eth(platform->network_driver_data);
+#endif
 
     esp_netif_t *sta_wifi_interface = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     esp_netif_t *ap_wifi_interface = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
@@ -1432,7 +1771,6 @@ static void stop_network(GlobalContext *global)
         esp_netif_destroy_default_wifi(sta_wifi_interface);
     }
 
-    struct ESP32PlatformData *platform = global->platform_data;
     free(platform->network_driver_data);
     platform->network_driver_data = NULL;
 }
