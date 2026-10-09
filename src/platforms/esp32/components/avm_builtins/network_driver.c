@@ -1182,6 +1182,136 @@ static void set_dhcp_hostname(esp_netif_t *interface, const char *interface_name
     }
 }
 
+// Starts the WiFi interfaces in sta_wifi_config and ap_wifi_config. On failure, replies to the
+// caller and returns false.
+static bool start_wifi(Context *ctx, term pid, term ref, struct ClientData *data,
+    wifi_config_t *sta_wifi_config, wifi_config_t *ap_wifi_config, bool roaming,
+    esp_netif_t **sta_wifi_interface, esp_netif_t **ap_wifi_interface)
+{
+    if ((sta_wifi_config != NULL) || (roaming)) {
+        *sta_wifi_interface = esp_netif_create_default_wifi_sta();
+        if (IS_NULL_PTR(*sta_wifi_interface)) {
+            ESP_LOGE(TAG, "Failed to create network STA interface");
+            term error = port_create_error_tuple(ctx, ERROR_ATOM);
+            port_send_reply(ctx, pid, ref, error);
+            return false;
+        }
+    }
+    if (ap_wifi_config != NULL) {
+        *ap_wifi_interface = esp_netif_create_default_wifi_ap();
+        if (IS_NULL_PTR(*ap_wifi_interface)) {
+            ESP_LOGE(TAG, "Failed to create network AP interface");
+            term error = port_create_error_tuple(ctx, ERROR_ATOM);
+            port_send_reply(ctx, pid, ref, error);
+            return false;
+        }
+    }
+
+    esp_err_t err;
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    if (UNLIKELY_NOT_ESP_OK(err = esp_wifi_init(&cfg))) {
+        ESP_LOGE(TAG, "Failed to initialize ESP WiFi, reason: %s", esp_err_to_name(err));
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+        return false;
+    }
+    if (UNLIKELY((err = esp_wifi_set_storage(WIFI_STORAGE_FLASH)) != ESP_OK)) {
+        ESP_LOGE(TAG, "Failed to set ESP WiFi storage, reason: %s", esp_err_to_name(err));
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+        return false;
+    }
+
+    if ((err = esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, data)) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register wifi event handler, reason: %s", esp_err_to_name(err));
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+        return false;
+    }
+
+    if ((err = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, data)) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register got_ip event handler");
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+        return false;
+    }
+    if ((err = esp_event_handler_register(IP_EVENT, IP_EVENT_AP_STAIPASSIGNED, &event_handler, data)) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register staipassigned event handler");
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+        return false;
+    }
+    if ((err = esp_event_handler_register(sntp_event_base, SNTP_EVENT_BASE_SYNC, &event_handler, data)) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register sntp event handler");
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+        return false;
+    }
+
+    //
+    // Set the wifi mode
+    //
+    wifi_mode_t wifi_mode = WIFI_MODE_NULL;
+    if ((!IS_NULL_PTR(sta_wifi_config) || (roaming)) && !IS_NULL_PTR(ap_wifi_config)) {
+        wifi_mode = WIFI_MODE_APSTA;
+    } else if (!IS_NULL_PTR(ap_wifi_config)) {
+        wifi_mode = WIFI_MODE_AP;
+    } else {
+        wifi_mode = WIFI_MODE_STA;
+    }
+
+    if ((err = esp_wifi_set_mode(wifi_mode)) != ESP_OK) {
+        ESP_LOGE(TAG, "Error setting wifi mode %d", err);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+        return false;
+    } else {
+        ESP_LOGI(TAG, "WIFI mode set to %d", wifi_mode);
+    }
+
+    //
+    // Set up STA mode, if configured
+    //
+    if (!IS_NULL_PTR(sta_wifi_config)) {
+        if ((err = esp_wifi_set_config(WIFI_IF_STA, sta_wifi_config)) != ESP_OK) {
+            ESP_LOGE(TAG, "Error setting STA mode config %d", err);
+            term error = port_create_error_tuple(ctx, term_from_int(err));
+            port_send_reply(ctx, pid, ref, error);
+            return false;
+        } else {
+            ESP_LOGI(TAG, "STA mode configured");
+        }
+    }
+
+    //
+    // Set up AP mode, if configured
+    //
+    if (!IS_NULL_PTR(ap_wifi_config)) {
+        if ((err = esp_wifi_set_config(WIFI_IF_AP, ap_wifi_config)) != ESP_OK) {
+            ESP_LOGE(TAG, "Error setting AP mode config %d", err);
+            term error = port_create_error_tuple(ctx, term_from_int(err));
+            port_send_reply(ctx, pid, ref, error);
+            return false;
+        } else {
+            ESP_LOGI(TAG, "AP mode configured");
+        }
+    }
+
+    //
+    // Start the configured interface(s)
+    //
+    if ((err = esp_wifi_start()) != ESP_OK) {
+        ESP_LOGE(TAG, "Error in esp_wifi_start %d", err);
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+        return false;
+    } else {
+        ESP_LOGI(TAG, "WIFI started");
+    }
+
+    return true;
+}
+
 static void start_network(Context *ctx, term pid, term ref, term config)
 {
     TRACE("start_network\n");
@@ -1236,126 +1366,9 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     platform->network_driver_data = data;
 
     esp_netif_t *sta_wifi_interface = NULL;
-    if ((sta_wifi_config != NULL) || (roaming)) {
-        sta_wifi_interface = esp_netif_create_default_wifi_sta();
-        if (IS_NULL_PTR(sta_wifi_interface)) {
-            ESP_LOGE(TAG, "Failed to create network STA interface");
-            term error = port_create_error_tuple(ctx, ERROR_ATOM);
-            port_send_reply(ctx, pid, ref, error);
-            goto cleanup;
-        }
-    }
     esp_netif_t *ap_wifi_interface = NULL;
-    if (ap_wifi_config != NULL) {
-        ap_wifi_interface = esp_netif_create_default_wifi_ap();
-        if (IS_NULL_PTR(ap_wifi_interface)) {
-            ESP_LOGE(TAG, "Failed to create network AP interface");
-            term error = port_create_error_tuple(ctx, ERROR_ATOM);
-            port_send_reply(ctx, pid, ref, error);
-            goto cleanup;
-        }
-    }
-
-    esp_err_t err;
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    if (UNLIKELY_NOT_ESP_OK(err = esp_wifi_init(&cfg))) {
-        ESP_LOGE(TAG, "Failed to initialize ESP WiFi, reason: %s", esp_err_to_name(err));
-        term error = port_create_error_tuple(ctx, term_from_int(err));
-        port_send_reply(ctx, pid, ref, error);
+    if (!start_wifi(ctx, pid, ref, data, sta_wifi_config, ap_wifi_config, roaming, &sta_wifi_interface, &ap_wifi_interface)) {
         goto cleanup;
-    }
-    if (UNLIKELY((err = esp_wifi_set_storage(WIFI_STORAGE_FLASH)) != ESP_OK)) {
-        ESP_LOGE(TAG, "Failed to set ESP WiFi storage, reason: %s", esp_err_to_name(err));
-        term error = port_create_error_tuple(ctx, term_from_int(err));
-        port_send_reply(ctx, pid, ref, error);
-        goto cleanup;
-    }
-
-    if ((err = esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, data)) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to register wifi event handler, reason: %s", esp_err_to_name(err));
-        term error = port_create_error_tuple(ctx, term_from_int(err));
-        port_send_reply(ctx, pid, ref, error);
-        goto cleanup;
-    }
-
-    if ((err = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, data)) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to register got_ip event handler");
-        term error = port_create_error_tuple(ctx, term_from_int(err));
-        port_send_reply(ctx, pid, ref, error);
-        goto cleanup;
-    }
-    if ((err = esp_event_handler_register(IP_EVENT, IP_EVENT_AP_STAIPASSIGNED, &event_handler, data)) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to register staipassigned event handler");
-        term error = port_create_error_tuple(ctx, term_from_int(err));
-        port_send_reply(ctx, pid, ref, error);
-        goto cleanup;
-    }
-    if ((err = esp_event_handler_register(sntp_event_base, SNTP_EVENT_BASE_SYNC, &event_handler, data)) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to register sntp event handler");
-        term error = port_create_error_tuple(ctx, term_from_int(err));
-        port_send_reply(ctx, pid, ref, error);
-        goto cleanup;
-    }
-
-    //
-    // Set the wifi mode
-    //
-    wifi_mode_t wifi_mode = WIFI_MODE_NULL;
-    if ((!IS_NULL_PTR(sta_wifi_config) || (roaming)) && !IS_NULL_PTR(ap_wifi_config)) {
-        wifi_mode = WIFI_MODE_APSTA;
-    } else if (!IS_NULL_PTR(ap_wifi_config)) {
-        wifi_mode = WIFI_MODE_AP;
-    } else {
-        wifi_mode = WIFI_MODE_STA;
-    }
-
-    if ((err = esp_wifi_set_mode(wifi_mode)) != ESP_OK) {
-        ESP_LOGE(TAG, "Error setting wifi mode %d", err);
-        term error = port_create_error_tuple(ctx, term_from_int(err));
-        port_send_reply(ctx, pid, ref, error);
-        goto cleanup;
-    } else {
-        ESP_LOGI(TAG, "WIFI mode set to %d", wifi_mode);
-    }
-
-    //
-    // Set up STA mode, if configured
-    //
-    if (!IS_NULL_PTR(sta_wifi_config)) {
-        if ((err = esp_wifi_set_config(WIFI_IF_STA, sta_wifi_config)) != ESP_OK) {
-            ESP_LOGE(TAG, "Error setting STA mode config %d", err);
-            term error = port_create_error_tuple(ctx, term_from_int(err));
-            port_send_reply(ctx, pid, ref, error);
-            goto cleanup;
-        } else {
-            ESP_LOGI(TAG, "STA mode configured");
-        }
-    }
-
-    //
-    // Set up AP mode, if configured
-    //
-    if (!IS_NULL_PTR(ap_wifi_config)) {
-        if ((err = esp_wifi_set_config(WIFI_IF_AP, ap_wifi_config)) != ESP_OK) {
-            ESP_LOGE(TAG, "Error setting AP mode config %d", err);
-            term error = port_create_error_tuple(ctx, term_from_int(err));
-            port_send_reply(ctx, pid, ref, error);
-            goto cleanup;
-        } else {
-            ESP_LOGI(TAG, "AP mode configured");
-        }
-    }
-
-    //
-    // Start the configured interface(s)
-    //
-    if ((err = esp_wifi_start()) != ESP_OK) {
-        ESP_LOGE(TAG, "Error in esp_wifi_start %d", err);
-        term error = port_create_error_tuple(ctx, term_from_int(err));
-        port_send_reply(ctx, pid, ref, error);
-        goto cleanup;
-    } else {
-        ESP_LOGI(TAG, "WIFI started");
     }
 
     //
