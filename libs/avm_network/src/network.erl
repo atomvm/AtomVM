@@ -210,6 +210,7 @@
     | {power, non_neg_integer()}
     | {reset, non_neg_integer()}
     | {phy_addr, 0..31}
+    | {route_priority, 0..255}
     | dhcp_hostname_config()
     | {started, fun(() -> term())}
     | {connected, fun(() -> term())}
