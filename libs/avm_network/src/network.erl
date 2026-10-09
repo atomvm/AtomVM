@@ -213,6 +213,7 @@
     | {power, non_neg_integer()}
     | {reset, non_neg_integer()}
     | {phy_addr, 0..31}
+    | {route_priority, 0..255}
     | dhcp_hostname_config()
     | {started, fun(() -> term())}
     | {connected, fun(() -> term())}
@@ -221,7 +222,8 @@
 %% `eth_config_property()' Ethernet MAC with a generic RMII PHY (LAN8720, JL1101, IP101...).
 %% `mdc' and `mdio' default to the chip's (23 and 18 on the ESP32); `power', if set, is driven
 %% high before the PHY is probed; `reset' is the PHY's reset pin; `phy_addr' defaults to the first
-%% PHY found. `started' runs once the interface is up, link state unknown.
+%% PHY found. `route_priority' (default 128) decides the default route against the STA's 100:
+%% higher wins. `started' runs once the interface is up, link state unknown.
 -type eth_config() :: {eth, [eth_config_property()]}.
 
 -type network_config() :: [

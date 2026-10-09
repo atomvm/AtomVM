@@ -125,6 +125,7 @@ static const char *const phy_addr_atom = ATOM_STR("\x8", "phy_addr");
 static const char *const power_atom = ATOM_STR("\x5", "power");
 static const char *const reset_atom = ATOM_STR("\x5", "reset");
 static const char *const rmii_clock_atom = ATOM_STR("\xA", "rmii_clock");
+static const char *const route_priority_atom = ATOM_STR("\xE", "route_priority");
 static const char *const in_atom = ATOM_STR("\x2", "in");
 static const char *const out_atom = ATOM_STR("\x3", "out");
 #endif
@@ -1295,7 +1296,7 @@ static void stop_eth(struct ClientData *data);
 // Starts the Ethernet MAC with a generic (IEEE 802.3) RMII PHY, e.g. LAN8720 or JL1101:
 //
 //   {eth, [{mdc, 23}, {mdio, 18}, {rmii_clock, {out, 17}}, {power, 0}, {reset, 5},
-//          {phy_addr, 0}, {dhcp_hostname, "name"}]}
+//          {phy_addr, 0}, {route_priority, 128}, {dhcp_hostname, "name"}]}
 //
 // mdc, mdio and rmii_clock default to ETH_ESP32_EMAC_DEFAULT_CONFIG() (on the ESP32: 23, 18 and
 // the sdkconfig clock choice). power, if set, is driven high before the PHY is probed; reset is
@@ -1321,12 +1322,17 @@ static bool start_eth(Context *ctx, term pid, term ref, struct ClientData *data,
     int power = -1;
     int reset = -1;
     int phy_addr = ESP_ETH_PHY_ADDR_AUTO;
+    // Over the STA's 100 (esp_netif's default for ETH is 50): a cable, when there is one, carries
+    // the traffic.
+    int route_priority = 128;
     if (!eth_config_int(eth_config, mdc_atom, &mdc, global) || !eth_valid_output_gpio(mdc)
         || !eth_config_int(eth_config, mdio_atom, &mdio, global) || !eth_valid_output_gpio(mdio)
         || !eth_config_int(eth_config, power_atom, &power, global) || !eth_valid_output_gpio(power)
         || !eth_config_int(eth_config, reset_atom, &reset, global) || !eth_valid_output_gpio(reset)
         || !eth_config_int(eth_config, phy_addr_atom, &phy_addr, global)
-        || phy_addr < ESP_ETH_PHY_ADDR_AUTO || phy_addr > 31) {
+        || phy_addr < ESP_ETH_PHY_ADDR_AUTO || phy_addr > 31
+        || !eth_config_int(eth_config, route_priority_atom, &route_priority, global)
+        || route_priority < 0 || route_priority > 255) {
         goto badarg;
     }
 
@@ -1411,6 +1417,7 @@ static bool start_eth(Context *ctx, term pid, term ref, struct ClientData *data,
     }
 
     esp_netif_inherent_config_t netif_base = ESP_NETIF_INHERENT_DEFAULT_ETH();
+    netif_base.route_prio = route_priority;
     esp_netif_config_t netif_config = { .base = &netif_base, .driver = NULL, .stack = ESP_NETIF_NETSTACK_DEFAULT_ETH };
     data->eth_netif = esp_netif_new(&netif_config);
     data->eth_glue = esp_eth_new_netif_glue(data->eth_handle);
