@@ -419,6 +419,74 @@ The `network` module can be started in both STA and AP mode.  In this case, the 
 
 In order to enable both STA and AP mode, simply provide valid configuration for both modes in the configuration structure supplied to the [`network:start/1`](./apidocs/erlang/eavmlib/network.md#start1) function.
 
+## Ethernet (ESP32)
+
+On the ESP32 and ESP32-P4, `network:start/1` can also bring up the chip's Ethernet MAC (EMAC) with
+an RMII PHY (LAN8720, IP101, JL1101 and similar), with an `eth` entry in the configuration. It can
+be used alone or next to `sta` and/or `ap`; WiFi is only initialized when `sta` or `ap` is given.
+
+Ethernet is opt-in: it needs ESP-IDF 5.4 or newer and a build with `CONFIG_AVM_ENABLE_ETHERNET=y`
+(`idf.py menuconfig`, or a line in `sdkconfig.defaults`). WiFi must stay enabled in the sdkconfig,
+since the `network` driver depends on it. On other chips, or with the option off, an `eth` entry
+makes `network:start/1` return `{error, eth_not_supported}`.
+
+| Key | Value Type | Default | Description |
+|-----|------------|---------|-------------|
+| `mdc` | `non_neg_integer()` | 23 on the ESP32 | SMI clock GPIO |
+| `mdio` | `non_neg_integer()` | 18 on the ESP32 | SMI data GPIO |
+| `rmii_clock` | `{in \| out, non_neg_integer()}` | the sdkconfig choice (`CONFIG_ETH_RMII_CLK_*`) | Who drives the 50 MHz RMII clock: `{in, Gpio}` when the PHY or an oscillator feeds the chip, `{out, Gpio}` when the chip feeds the PHY. On the ESP32 the clock comes in on GPIO0 only and goes out on GPIO0, 16 or 17 |
+| `power` | `non_neg_integer()` | none | GPIO driven high before the PHY is probed (PHY power or oscillator enable), and released on stop |
+| `reset` | `non_neg_integer()` | none | PHY reset GPIO, pulsed by ESP-IDF during PHY init |
+| `phy_addr` | `0..31` | first PHY found | PHY address on the SMI bus |
+| `dhcp_hostname` | `string() \| binary()` | none | DHCP hostname |
+| `started` | `fun(() -> term())` | none | The interface is up, link state unknown |
+| `connected` | `fun(() -> term())` | none | Link up |
+| `disconnected` | `fun(() -> term())` | none | Link down |
+| `got_ip` | `fun((ip_info()) -> term())` | none | DHCP lease obtained |
+
+Invalid pins or a `phy_addr` out of range make `network:start/1` return `{error, badarg}`.
+`network:start/1` blocks until the PHY answers on the SMI bus; it does not wait for a cable. A
+clock out on GPIO16 or GPIO17 is refused while PSRAM is in use, because WROVER modules use those
+pins for it. [`network:eth_status/0`](./apidocs/erlang/eavmlib/network.md#eth_status0) returns
+`inactive`, `started`, `connected` or `disconnected`. When an `mdns` entry is given, the responder
+binds to the Ethernet address when there is one.
+
+For example, for a Dingtian DT-R002 (PHY at address 0, clock out on GPIO17, PHY power on GPIO0):
+
+```erlang
+Config = [
+    {eth, [
+        {mdc, 23},
+        {mdio, 18},
+        {rmii_clock, {out, 17}},
+        {power, 0},
+        {phy_addr, 0},
+        {got_ip, fun(IpInfo) -> io:format("Ethernet got IP: ~p~n", [IpInfo]) end}
+    ]}
+],
+{ok, _Pid} = network:start(Config).
+```
+
+### Ethernet Convenience Functions
+
+The `network` module supports the [`network:wait_for_eth/1,2`](./apidocs/erlang/eavmlib/network.md#wait_for_eth1) convenience functions for applications that do not need robust connection management.  These functions are synchronous and will wait until the link is up and the interface got an address.  Supply the properties list specified in the `{eth, [...]}` component of the above configuration, in addition to an optional timeout (in milliseconds).
+
+For example:
+
+```erlang
+Config = [
+    {rmii_clock, {out, 17}},
+    {power, 0},
+    {phy_addr, 0}
+],
+case network:wait_for_eth(Config, 15000) of
+    {ok, {Address, _Netmask, _Gateway}} ->
+        io:format("Acquired IP address: ~p~n", [Address]);
+    {error, Reason} ->
+        io:format("Network initialization failed: ~p~n", [Reason])
+end
+```
+
 ## SNTP Support
 
 You may configure the networking layer to automatically synchronize time on the ESP32 with an NTP server accessible on the network.

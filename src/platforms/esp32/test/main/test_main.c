@@ -675,6 +675,28 @@ TEST_CASE("test_ssl", "[test_run]")
 }
 #endif
 
+#if CONFIG_AVM_ENABLE_ETHERNET && CONFIG_ETH_USE_OPENETH
+TEST_CASE("test_eth", "[test_run]")
+{
+    // Unlike the cases above, network:start/1 brings Ethernet up itself.
+    term ret_value = avm_test_case("test_eth.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+
+TEST_CASE("test_eth_teardown", "[test_run]")
+{
+    // test_eth_teardown.beam starts Ethernet and intentionally returns without
+    // calling network:stop(): the network driver destroy callback must release
+    // the driver, netif and handlers when the GlobalContext is destroyed. Run
+    // it twice, as the second run only succeeds if the first teardown was
+    // complete.
+    term ret_value = avm_test_case("test_eth_teardown.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+    ret_value = avm_test_case("test_eth_teardown.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+#endif
+
 TEST_CASE("test_rtc_slow", "[test_run]")
 {
     term ret_value = avm_test_case("test_rtc_slow.beam");

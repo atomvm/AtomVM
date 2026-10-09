@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.7.0-beta.1] - Unreleased
 
+### Added
+- Added Ethernet to the `network` module on ESP32 and ESP32-P4 (ESP-IDF 5.4 or newer, opt-in
+  with `CONFIG_AVM_ENABLE_ETHERNET=y`): `{eth, [...]}` in `network:start/1` brings up the EMAC
+  with an RMII PHY, alone or next to STA/AP, plus `network:wait_for_eth/0,1,2` and
+  `network:eth_status/0`
+
 ### Fixed
 - Fixed maps decoded by `binary_to_term/1,2` and received over distribution keeping the
   encoder's key order, which broke `==` and made `=>` updates on an existing key produce
