@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `gen:start/5,6`, used by Elixir's `GenServer`
 - Added ML-KEM-768 (FIPS 203) key encapsulation to `crypto`, requiring libsodium >= 1.0.22
 - Added `AVM_STATIC_LIBSODIUM` CMake option to statically link libsodium
+- Added Ethernet to the `network` module on ESP32 and ESP32-P4 (ESP-IDF 5.4 or newer, opt-in
+  with `CONFIG_AVM_ENABLE_ETHERNET=y`): `{eth, [...]}` in `network:start/1` brings up the EMAC
+  with an RMII PHY, alone or next to STA/AP, plus `network:wait_for_eth/0,1,2` and
+  `network:eth_status/0`
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
