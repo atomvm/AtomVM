@@ -63,6 +63,11 @@ jobs:
         - esp-idf-target: "esp32s3"
           idf-version: 'v5.5.5'
           jit: false
+        # Exercise optional TLS 1.3 without changing the baseline test config.
+        - esp-idf-target: "esp32s3"
+          idf-version: 'v5.5.5'
+          jit: false
+          tls13: true
         - esp-idf-target: "esp32s3"
           idf-version: 'v5.5.5'
           usb-serial: 'ON'
@@ -93,6 +98,10 @@ jobs:
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
+
+    - name: Enable TLS 1.3 variant
+      if: matrix.tls13 == true
+      run: echo "SDKCONFIG_DEFAULTS=sdkconfig.defaults;${GITHUB_WORKSPACE}/src/platforms/esp32/sdkconfig.tls13" >> "$GITHUB_ENV"
 
     - name: "Git config safe.directory for codeql"
       run: git config --global --add safe.directory /__w/AtomVM/AtomVM
@@ -283,7 +292,7 @@ jobs:
       if: failure() && matrix.esp-idf-target != 'esp32p4'
       uses: actions/upload-artifact@v4
       with:
-        name: atomvm-esp32-test-${{ matrix.esp-idf-target }}-${{ matrix.idf-version }}${{ matrix.jit && '-jit' || '' }}-memcheck.elf
+        name: atomvm-esp32-test-${{ matrix.esp-idf-target }}-${{ matrix.idf-version }}${{ matrix.jit && '-jit' || '' }}${{ matrix.tls13 && '-tls13' || '' }}-memcheck.elf
         path: ./src/platforms/esp32/test/build/atomvm-esp32-test.elf
         if-no-files-found: error
 
@@ -320,6 +329,6 @@ jobs:
       if: failure() && matrix.esp-idf-target != 'esp32p4'
       uses: actions/upload-artifact@v4
       with:
-        name: atomvm-esp32-test-${{ matrix.esp-idf-target }}-${{ matrix.idf-version }}${{ matrix.jit && '-jit' || '' }}.elf
+        name: atomvm-esp32-test-${{ matrix.esp-idf-target }}-${{ matrix.idf-version }}${{ matrix.jit && '-jit' || '' }}${{ matrix.tls13 && '-tls13' || '' }}.elf
         path: ./src/platforms/esp32/test/build/atomvm-esp32-test.elf
         if-no-files-found: error

@@ -70,7 +70,20 @@ set(ERLANG_MODULES
     ping_pong_server
 )
 
-pack_archive(test_estdlib_lib DEPENDS_ON eavmlib MODULES ${ERLANG_MODULES})
+# The Erlang TLS regression must know whether TLS 1.3 was compiled in. The
+# library version alone cannot distinguish a TLS-1.2-only build.
+set(test_ssl_erlc_flags "")
+if (MbedTLS_FOUND)
+    include(CheckSymbolExists)
+    set(CMAKE_REQUIRED_LIBRARIES MbedTLS::mbedtls)
+    check_symbol_exists(MBEDTLS_SSL_PROTO_TLS1_3 "mbedtls/ssl.h" TEST_SSL_TLS13)
+    unset(CMAKE_REQUIRED_LIBRARIES)
+    if (TEST_SSL_TLS13)
+        set(test_ssl_erlc_flags -DTEST_SSL_TLS13)
+    endif()
+endif()
+
+pack_archive(test_estdlib_lib DEPENDS_ON eavmlib MODULES ${ERLANG_MODULES} ERLC_FLAGS ${test_ssl_erlc_flags})
 pack_test(test_estdlib estdlib eavmlib avm_network avm_unix etest)
 
 # Build .beam files for the BEAM peer used in BEAM<->AtomVM serial

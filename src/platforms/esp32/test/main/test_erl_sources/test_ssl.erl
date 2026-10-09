@@ -23,6 +23,12 @@
 
 start() ->
     % start SSL
+    ok = ssl:start(),
+    try
+        ok = test_negotiated_tls_version()
+    after
+        ok = ssl:stop()
+    end,
     Entropy = ssl:nif_entropy_init(),
     CtrDrbg = ssl:nif_ctr_drbg_init(),
     ok = ssl:nif_ctr_drbg_seed(CtrDrbg, Entropy, <<"AtomVM">>),
@@ -58,6 +64,65 @@ start() ->
     ok = close_notify_loop(SSLContext, Socket),
     ok = socket:close(Socket),
     ok.
+
+test_negotiated_tls_version() ->
+    % Bound DNS, handshake and response reads: AtomVM's SSL API has no timeout.
+    {Pid, Ref} = spawn_monitor(fun check_negotiated_tls_version/0),
+    receive
+        {'DOWN', Ref, process, Pid, normal} -> ok;
+        {'DOWN', Ref, process, Pid, Reason} -> erlang:error({tls_test_failed, Reason})
+    after 30000 ->
+        exit(Pid, kill),
+        erlang:error(tls_test_timeout)
+    end.
+
+check_negotiated_tls_version() ->
+    Expected = expected_tls_version(),
+    {ok, SSLSocket} = ssl:connect("check-tls.akamai.io", 443, [
+        {verify, verify_none}, {active, false}, {binary, true}
+    ]),
+    try
+        % HTTP/1.0 avoids chunked transfer encoding and closes after the response.
+        ok = ssl:send(SSLSocket, [
+            <<"GET /v1/tlsinfo.json HTTP/1.0\r\nHost: check-tls.akamai.io\r\n">>,
+            <<"Connection: close\r\n\r\n">>
+        ]),
+        Response = recv_response(SSLSocket, []),
+        [Headers, Body] = binary:split(Response, <<"\r\n\r\n">>),
+        [Status | HeaderLines] = binary:split(Headers, <<"\r\n">>, [global]),
+        [_, <<"200">>, _] = binary:split(Status, <<" ">>, [global]),
+        [Length] = [Value || <<"Content-Length: ", Value/binary>> <- HeaderLines],
+        BodySize = binary_to_integer(Length),
+        BodySize = byte_size(Body),
+        #{<<"tls_version">> := Negotiated} = json:decode(Body),
+        io:format("TLS negotiated ~s; expected ~s~n", [Negotiated, Expected]),
+        Expected = Negotiated,
+        ok
+    after
+        ok = ssl:close(SSLSocket)
+    end.
+
+recv_response(SSLSocket, Acc) ->
+    case ssl:recv(SSLSocket, 0) of
+        {ok, Data} -> recv_response(SSLSocket, [Data | Acc]);
+        {error, closed} -> iolist_to_binary(lists:reverse(Acc));
+        % AtomVM exposes MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY as an integer.
+        {error, -16#7880} -> iolist_to_binary(lists:reverse(Acc));
+        {error, Reason} -> erlang:error({tls_recv_failed, Reason})
+    end.
+
+% The flag reflects the build configuration, not the observed negotiation.
+-ifdef(TEST_SSL_TLS13).
+expected_tls_version() ->
+    {<<"mbedtls">>, Version, _} = lists:keyfind(<<"mbedtls">>, 1, crypto:info_lib()),
+    if
+        Version >= 16#03060100 -> <<"tls1.3">>;
+        true -> <<"tls1.2">>
+    end.
+-else.
+expected_tls_version() ->
+    <<"tls1.2">>.
+-endif.
 
 handshake_loop(SSLContext, Socket) ->
     case ssl:nif_handshake_step(SSLContext) of

@@ -167,6 +167,19 @@ $ cd build
 $ ./src/AtomVM /path/to/myapp.avm ./libs/atomvmlib.avm
 ```
 
+#### Enabling TLS 1.3 on Generic UNIX
+
+TLS protocol support depends on the Mbed TLS library used to build and run AtomVM.
+For TLS 1.3 with `{verify, verify_none}`, use Mbed TLS 3.6.1 or later, built with
+`MBEDTLS_SSL_PROTO_TLS1_3` enabled and its required dependencies. If your system's
+Mbed TLS package does not enable TLS 1.3, rebuild or install a suitably configured
+library before building AtomVM. There is no separate AtomVM CMake option to enable
+TLS 1.3.
+
+With older Mbed TLS versions, AtomVM limits connections using disabled or optional
+certificate verification to TLS 1.2. See [TLS connections](./network-programming-guide.md#tls-connections)
+for API limitations and security considerations.
+
 #### Special Note for MacOS users
 
 You may build an Apple Xcode project, for developing, testing, and debugging in the Xcode IDE, by specifying the Xcode generator.  For example, from the top level AtomVM directory:
@@ -309,6 +322,38 @@ combined (for example: `idf.py bootloader-flash app-flash`). For more informatio
 partitions and the flash partitions layout see [Flash Layout](#flash-layout) below.
 
 To build a single binary image file see [Building a Release Image](#building-a-release-image), below.
+
+#### Enabling TLS 1.3 on ESP32
+
+TLS 1.3 is opt-in; the normal AtomVM ESP32 build defaults are unchanged. Use an
+ESP-IDF version whose bundled Mbed TLS is 3.6.1 or later for TLS 1.3 with
+`{verify, verify_none}`.
+
+For a fresh configuration, run the following from `src/platforms/esp32` in the
+ESP-IDF build environment, replacing `${CHIP}` with your target:
+
+```shell
+$ idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.tls13" set-target ${CHIP}
+$ idf.py build
+```
+
+The supplied `sdkconfig.tls13` overlay enables `CONFIG_MBEDTLS_SSL_PROTO_TLS1_3=y`
+and sets `CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144`. AtomVM also uses this stack size
+for scheduler threads. TLS 1.3 overflowed the default stack in CI memory-check
+builds; 6144 bytes was verified with ESP-IDF v5.5.5 on ESP32-S3. This is a tested
+configuration, not a guarantee that this size is sufficient for every target or
+application.
+
+```{note}
+Defaults files do not override values already saved in `sdkconfig`. For an existing
+configuration, use `idf.py menuconfig` to enable TLS 1.3 under `Component config --->
+mbedTLS` and increase the main task stack size under `Component config ---> ESP
+System Settings`, then rebuild. Preserve any other application-specific settings.
+```
+
+Enabling TLS 1.3 permits negotiation with compatible servers; it does not require
+every connection to use TLS 1.3. See [TLS connections](./network-programming-guide.md#tls-connections)
+for API limitations and security considerations.
 
 #### NVS Partition Provisioning
 

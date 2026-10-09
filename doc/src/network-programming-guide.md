@@ -543,3 +543,30 @@ network:stop().
 If `network:stop/0` is called while a WiFi scan is in progress, the scan caller or callback may
 receive either the final scan result or `{error, scan_canceled}`.
 ```
+
+## TLS connections
+
+AtomVM provides a minimal subset of the OTP [`ssl`](./apidocs/erlang/estdlib/ssl.md)
+API for TLS client connections. On WiFi devices, establish network connectivity
+before opening a TLS connection. Start the SSL service with `ssl:start/0`, then use
+`ssl:connect/3`, `ssl:send/2`, `ssl:recv/2`, and `ssl:close/1`. Connections currently
+require `{active, false}`, and the supported certificate verification option is
+`{verify, verify_none}`.
+
+```{warning}
+`verify_none` disables server certificate verification. The connection is encrypted,
+but the server's identity is not authenticated, leaving it vulnerable to
+man-in-the-middle attacks. Enabling TLS 1.3 does not fix this limitation.
+```
+
+The TLS version is negotiated automatically according to the linked Mbed TLS
+library's version and build configuration, and the server's capabilities. AtomVM
+does not currently implement OTP's `{versions, [...]}` option to select or require
+a specific protocol version.
+
+TLS 1.3 with `verify_none` requires Mbed TLS 3.6.1 or later and TLS 1.3 support
+enabled in that library. Older Mbed TLS builds remain limited to TLS 1.2 for this
+verification mode. See the build instructions for
+[Generic UNIX](./build-instructions.md#enabling-tls-13-on-generic-unix) and
+[ESP32](./build-instructions.md#enabling-tls-13-on-esp32), including the ESP32 stack
+size settings.
