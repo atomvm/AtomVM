@@ -457,10 +457,12 @@ static term nif_ssl_conf_authmode(Context *ctx, int argc, term argv[])
 
     // MBEDTLS_SSL_VERIFY_NONE and MBEDTLS_SSL_VERIFY_OPTIONAL do not work with TLS 1.3
     // https://github.com/Mbed-TLS/mbedtls/issues/7075
+    // Fixed in 3.6.1 https://github.com/Mbed-TLS/mbedtls/releases/tag/mbedtls-3.6.1
+    // "Fixed by adding support for optional/none with TLS 1.3 as well."
     if (authmode != MBEDTLS_SSL_VERIFY_REQUIRED) {
-#if MBEDTLS_VERSION_NUMBER >= 0x03020000
+#if MBEDTLS_VERSION_NUMBER >= 0x03020000 && MBEDTLS_VERSION_NUMBER < 0x03060100
         mbedtls_ssl_conf_max_tls_version(&rsrc_obj->config, MBEDTLS_SSL_VERSION_TLS1_2);
-#else
+#elif MBEDTLS_VERSION_NUMBER < 0x03020000
         mbedtls_ssl_conf_max_version(&rsrc_obj->config, MBEDTLS_SSL_MAJOR_VERSION_3, MBEDTLS_SSL_MINOR_VERSION_3);
 #endif
     }
