@@ -524,6 +524,16 @@ static inline void globalcontext_process_message_queue(GlobalContext *glb)
     if (current) {
         while (!ATOMIC_COMPARE_EXCHANGE_WEAK_PTR(&glb->message_queue, &current, NULL)) {
         };
+        // Tasks push onto the head of the queue: reverse it, so that the messages
+        // a task sent are enqueued in the order it sent them.
+        struct MessageQueueItem *reversed = NULL;
+        while (current) {
+            struct MessageQueueItem *next = current->next;
+            current->next = reversed;
+            reversed = current;
+            current = next;
+        }
+        current = reversed;
         (void) synclist_rdlock(&glb->processes_table);
         while (current) {
             Context *context = globalcontext_get_process_nolock(glb, current->process_id);
