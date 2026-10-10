@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   encoder's key order, which broke `==` and made `=>` updates on an existing key produce
   duplicate keys
 - Fixed `binary_to_term/1,2` accepting maps with duplicate keys instead of raising `badarg`
+- Fixed messages that drivers send from a task (for example ESP32 network events) arriving in
+  reverse order when they went through the global queue, which is always the case without SMP
 
 ## [0.7.0-beta.0] - 2026-09-28
 
