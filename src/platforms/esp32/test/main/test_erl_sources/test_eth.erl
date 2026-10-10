@@ -31,13 +31,15 @@ start() ->
     ok.
 
 %% The driver refuses invalid pins and addresses before touching the hardware;
-%% network then stops with the reason, after the port cleaned up.
+%% network then stops with the reason, after the port cleaned up. Only values
+%% invalid on every chip: which RMII clock pins are valid depends on the chip.
 test_badarg() ->
     lists:foreach(fun expect_badarg/1, [
         [{phy_addr, 32}],
         [{mdc, -5}],
+        [{mdc, 99}],
         [{power, not_a_pin}],
-        [{rmii_clock, {out, 5}}],
+        [{rmii_clock, {out, 99}}],
         [{rmii_clock, {sideways, 0}}],
         [{route_priority, 256}]
     ]).
