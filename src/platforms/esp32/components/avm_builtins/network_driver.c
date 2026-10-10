@@ -50,10 +50,9 @@
 #include <esp_sntp.h>
 #include <esp_wifi.h>
 #include <lwip/inet.h>
-#ifdef CONFIG_AVM_ENABLE_ETHERNET
-#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 4, 0)
-#error "CONFIG_AVM_ENABLE_ETHERNET needs ESP-IDF 5.4 or newer"
-#endif
+// Ethernet needs ESP-IDF 5.4 or newer: on older versions the option is
+// ignored and {eth, ...} gets eth_not_supported.
+#if defined(CONFIG_AVM_ENABLE_ETHERNET) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
 #include <driver/gpio.h>
 #include <esp_eth.h>
 #if CONFIG_IDF_TARGET_ESP32 && CONFIG_SPIRAM
@@ -1286,9 +1285,11 @@ static bool eth_config_int(term eth_config, AtomString key, int *value, GlobalCo
     return true;
 }
 
+// GPIO_IS_VALID_GPIO and GPIO_IS_VALID_OUTPUT_GPIO shift 1ULL by the pin number, which is undefined
+// from 64 up (on Xtensa GPIO99 tests as GPIO35): the number is bounded first.
 static bool eth_valid_output_gpio(int gpio)
 {
-    return gpio == -1 || GPIO_IS_VALID_OUTPUT_GPIO(gpio);
+    return gpio == -1 || (gpio >= 0 && gpio < GPIO_PIN_COUNT && GPIO_IS_VALID_OUTPUT_GPIO(gpio));
 }
 
 static void stop_eth(struct ClientData *data);
@@ -1354,7 +1355,7 @@ static bool start_eth(Context *ctx, term pid, term ref, struct ClientData *data,
         // The ESP32 takes the clock in on GPIO0 only, and puts it out on GPIO0, 16 or 17.
         bool valid_clock = clock_out ? (clock_gpio == 0 || clock_gpio == 16 || clock_gpio == 17) : clock_gpio == 0;
 #else
-        bool valid_clock = GPIO_IS_VALID_GPIO(clock_gpio);
+        bool valid_clock = clock_gpio >= 0 && clock_gpio < GPIO_PIN_COUNT && GPIO_IS_VALID_GPIO(clock_gpio);
 #endif
         if (!valid_clock) {
             goto badarg;
@@ -1642,7 +1643,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     term eth_config = interop_kv_get_value_default(config, eth_atom, term_invalid_term(), ctx->global);
 #ifndef HAVE_ETH
     if (UNLIKELY(!term_is_invalid_term(eth_config))) {
-        ESP_LOGE(TAG, "Ethernet is not available (no EMAC, or CONFIG_AVM_ENABLE_ETHERNET off)");
+        ESP_LOGE(TAG, "Ethernet is not available (no EMAC, CONFIG_AVM_ENABLE_ETHERNET off, or ESP-IDF older than 5.4)");
         term error = port_create_error_tuple(ctx, make_atom(ctx->global, eth_not_supported_atom));
         port_send_reply(ctx, pid, ref, error);
         return;

@@ -429,7 +429,8 @@ set below the STA's 100.
 
 Ethernet is opt-in: it needs ESP-IDF 5.4 or newer and a build with `CONFIG_AVM_ENABLE_ETHERNET=y`
 (`idf.py menuconfig`, or a line in `sdkconfig.defaults`). WiFi must stay enabled in the sdkconfig,
-since the `network` driver depends on it. On other chips, or with the option off, an `eth` entry
+since the `network` driver depends on it. On other chips, with an older ESP-IDF, or with the option
+off, an `eth` entry
 makes `network:start/1` return `{error, eth_not_supported}`.
 
 | Key | Value Type | Default | Description |

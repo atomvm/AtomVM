@@ -106,7 +106,8 @@ config AVM_ENABLE_ETHERNET
     help
         Let network:start/1 bring up Ethernet with an {eth, [...]} entry: the
         ESP32 or ESP32-P4 EMAC with an RMII PHY, or the OpenCores MAC
-        emulated by QEMU (ETH_USE_OPENETH). Needs ESP-IDF 5.4 or newer.
+        emulated by QEMU (ETH_USE_OPENETH). Needs ESP-IDF 5.4 or newer:
+        with an older one the option has no effect.
 
 config AVM_ENABLE_SOCKET_PORT_DRIVER
     bool "Enable socket port driver"

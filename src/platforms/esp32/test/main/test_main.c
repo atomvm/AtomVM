@@ -42,6 +42,7 @@
 
 #include <esp_eth.h>
 #include <esp_event.h>
+#include <esp_idf_version.h>
 #include <esp_log.h>
 #include <esp_netif.h>
 #include <esp_vfs.h>
@@ -675,7 +676,10 @@ TEST_CASE("test_ssl", "[test_run]")
 }
 #endif
 
-#if CONFIG_AVM_ENABLE_ETHERNET && CONFIG_ETH_USE_OPENETH
+// Not in JIT-only builds (AVM_NO_EMU): the esp32boot archive there carries
+// avm_network as bytecode only, so the network module cannot be loaded.
+#if CONFIG_AVM_ENABLE_ETHERNET && CONFIG_ETH_USE_OPENETH \
+    && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0) && !defined(AVM_NO_EMU)
 TEST_CASE("test_eth", "[test_run]")
 {
     // Unlike the cases above, network:start/1 brings Ethernet up itself.
