@@ -25,10 +25,12 @@
 -export([
     wait_for_sta/0, wait_for_sta/1, wait_for_sta/2,
     wait_for_ap/0, wait_for_ap/1, wait_for_ap/2,
+    wait_for_eth/0, wait_for_eth/1, wait_for_eth/2,
     sta_rssi/0,
     sta_disconnect/0,
     sta_connect/0, sta_connect/1,
     sta_status/0,
+    eth_status/0,
     wifi_scan/0, wifi_scan/1
 ]).
 -export([start/1, start_link/1, stop/0]).
@@ -200,7 +202,33 @@
     | mdns_ttl_config().
 -type mdns_config() :: {mdns, [mdns_config_property()]}.
 
--type network_config() :: [sta_config() | ap_config() | sntp_config() | mdns_config()].
+-type eth_rmii_clock_config() :: {rmii_clock, {in | out, non_neg_integer()}}.
+%% `eth_rmii_clock_config()' `{out, Gpio}' when the chip feeds the PHY's 50 MHz RMII clock,
+%% `{in, Gpio}' when the PHY or an oscillator feeds the chip. Which pins are valid depends on the
+%% chip; the default is the sdkconfig choice.
+-type eth_config_property() ::
+    {mdc, non_neg_integer()}
+    | {mdio, non_neg_integer()}
+    | eth_rmii_clock_config()
+    | {power, non_neg_integer()}
+    | {reset, non_neg_integer()}
+    | {phy_addr, 0..31}
+    | {route_priority, 0..255}
+    | dhcp_hostname_config()
+    | {started, fun(() -> term())}
+    | {connected, fun(() -> term())}
+    | {disconnected, fun(() -> term())}
+    | {got_ip, fun((ip_info()) -> term())}.
+%% `eth_config_property()' Ethernet MAC with a generic RMII PHY (LAN8720, JL1101, IP101...).
+%% `mdc' and `mdio' default to the chip's (23 and 18 on the ESP32); `power', if set, is driven
+%% high before the PHY is probed; `reset' is the PHY's reset pin; `phy_addr' defaults to the first
+%% PHY found. `route_priority' (default 128) decides the default route against the STA's 100:
+%% higher wins. `started' runs once the interface is up, link state unknown.
+-type eth_config() :: {eth, [eth_config_property()]}.
+
+-type network_config() :: [
+    sta_config() | ap_config() | eth_config() | sntp_config() | mdns_config()
+].
 
 -type dbm() :: integer().
 %% `dbm()' decibel-milliwatts (or dBm) will typically be a negative number, but in the presence of
@@ -208,6 +236,7 @@
 %% milliwatt. A 10 dBm decrease in level is equivalent to a ten-fold decrease in signal power.
 -type sta_status() ::
     associated | connected | connecting | degraded | disconnected | disconnecting | inactive.
+-type eth_status() :: inactive | started | connected | disconnected.
 
 -type scan_option() ::
     {results, 1..64}
@@ -260,8 +289,10 @@
     port :: port(),
     ref :: reference(),
     sta_ip_info :: ip_info() | undefined,
+    eth_ip_info :: ip_info() | undefined,
     mdns :: pid() | undefined,
     sta_state :: sta_status(),
+    eth_state :: eth_status(),
     scan_receiver ::
         {callback, pid() | fun((scan_results() | {error, term()}) -> term())}
         | {reply, gen_server:from()}
@@ -314,6 +345,56 @@ wait_for_sta(StaConfig, Timeout) ->
     ],
     Config = [{sta, NewStaConfig}],
     case start(Config) of
+        {ok, _Pid} ->
+            wait_for_ip(Timeout);
+        Error ->
+            Error
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @doc     Equivalent to wait_for_eth(15000).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec wait_for_eth() -> {ok, ip_info()} | {error, Reason :: term()}.
+wait_for_eth() ->
+    wait_for_eth(15000).
+
+%%-----------------------------------------------------------------------------
+%% @param   TimeoutOrEthConfig The Ethernet configuration or timeout in ms.
+%% @doc     Equivalent to wait_for_eth([], Timeout) or wait_for_eth(EthConfig, 15000).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec wait_for_eth(TimeoutOrEthConfig :: non_neg_integer() | [eth_config_property()]) ->
+    {ok, ip_info()} | {error, Reason :: term()}.
+wait_for_eth(Timeout) when is_integer(Timeout) ->
+    wait_for_eth([], Timeout);
+wait_for_eth(EthConfig) when is_list(EthConfig) ->
+    wait_for_eth(EthConfig, 15000).
+
+%%-----------------------------------------------------------------------------
+%% @param   EthConfig The Ethernet configuration
+%% @param   Timeout amount of time in milliseconds to wait for an address
+%% @returns {ok, IpInfo}, if the interface got an address, or {error, Reason} if
+%%          a failure occurred (e.g., due to malformed network configuration).
+%% @doc     Start the Ethernet interface and wait for it to get an address
+%%
+%%          This function will start the Ethernet interface, and will wait for
+%%          the link to come up and DHCP to assign an address. This is a
+%%          convenience function, for applications that do not need to be
+%%          notified of connectivity changes in the network.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec wait_for_eth(EthConfig :: [eth_config_property()], Timeout :: non_neg_integer()) ->
+    {ok, ip_info()} | {error, Reason :: term()}.
+wait_for_eth(EthConfig, Timeout) ->
+    Self = self(),
+    NewEthConfig = [
+        {connected, fun() -> Self ! connected end},
+        {got_ip, fun(IpInfo) -> Self ! {ok, IpInfo} end},
+        {disconnected, fun() -> Self ! disconnected end}
+        | EthConfig
+    ],
+    case start([{eth, NewEthConfig}]) of
         {ok, _Pid} ->
             wait_for_ip(Timeout);
         Error ->
@@ -521,6 +602,20 @@ sta_status() ->
     gen_server:call(?SERVER, sta_status).
 
 %%-----------------------------------------------------------------------------
+%% @returns ConnectionState :: eth_status().
+%%
+%% @doc Get the state of the Ethernet interface.
+%%
+%% Results will be one of: `inactive' (no `eth' entry in the configuration),
+%% `started' (the interface is up, link state unknown), `connected' (link up)
+%% or `disconnected' (link down, or the interface is not up yet).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec eth_status() -> Status :: eth_status().
+eth_status() ->
+    gen_server:call(?SERVER, eth_status).
+
+%%-----------------------------------------------------------------------------
 %% @param   Options is a `scan_options()' list
 %% @returns `ok', `{ok, Result}' tuple, or `{error, Reason}' if a failure occurred.
 %%
@@ -704,7 +799,15 @@ init(Config) ->
                         disconnected
                 end
         end,
-    {ok, #state{config = Config, port = Port, ref = Ref, sta_state = Status},
+    EthStatus =
+        case proplists:is_defined(eth, Config) of
+            false -> inactive;
+            true -> disconnected
+        end,
+    {ok,
+        #state{
+            config = Config, port = Port, ref = Ref, sta_state = Status, eth_state = EthStatus
+        },
         {continue, start_port}}.
 
 %% @hidden
@@ -736,6 +839,8 @@ handle_call({connect, Config}, _From, #state{config = OldConfig, ref = Ref} = St
     end;
 handle_call(sta_status, _From, State) ->
     {reply, State#state.sta_state, State};
+handle_call(eth_status, _From, State) ->
+    {reply, State#state.eth_state, State};
 handle_call(
     {scan, ScanOpts}, From, #state{ref = Ref, scan_receiver = undefined, config = Config} = State
 ) ->
@@ -796,6 +901,26 @@ handle_info({Ref, {sta_got_ip, IpInfo}} = _Msg, #state{ref = Ref, config = Confi
     State1 = State0#state{sta_ip_info = IpInfo, sta_state = connected},
     State2 = maybe_start_mdns(State1),
     {noreply, State2};
+handle_info({Ref, eth_started} = _Msg, #state{ref = Ref, config = Config} = State) ->
+    maybe_callback0(started, proplists:get_value(eth, Config)),
+    {noreply, State#state{eth_state = started}};
+handle_info({Ref, eth_connected} = _Msg, #state{ref = Ref, config = Config} = State) ->
+    maybe_callback0(connected, proplists:get_value(eth, Config)),
+    {noreply, State#state{eth_state = connected}};
+handle_info({Ref, eth_disconnected} = _Msg, #state{ref = Ref, config = Config} = State0) ->
+    maybe_callback0(disconnected, proplists:get_value(eth, Config)),
+    State1 = State0#state{eth_state = disconnected, eth_ip_info = undefined},
+    % The responder may be bound to the address just lost: move it to the STA's, if any.
+    State2 =
+        case State1#state.mdns of
+            undefined -> State1;
+            _ -> maybe_start_mdns(State1)
+        end,
+    {noreply, State2};
+handle_info({Ref, {eth_got_ip, IpInfo}} = _Msg, #state{ref = Ref, config = Config} = State0) ->
+    maybe_callback1({got_ip, IpInfo}, proplists:get_value(eth, Config)),
+    State1 = State0#state{eth_ip_info = IpInfo},
+    {noreply, maybe_start_mdns(State1)};
 handle_info({Ref, ap_started} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_ap_started_callback(Config),
     {noreply, State};
@@ -983,11 +1108,13 @@ maybe_sntp_sync_callback(Config, TimeVal) ->
 maybe_start_mdns(#state{mdns = MDNSResponder} = State) when is_pid(MDNSResponder) ->
     mdns:stop(MDNSResponder),
     maybe_start_mdns(State#state{mdns = undefined});
-maybe_start_mdns(#state{config = Config, sta_ip_info = {InterfaceAddr, _, _}} = State) ->
-    case proplists:get_value(mdns, Config) of
-        undefined ->
+maybe_start_mdns(#state{config = Config} = State) ->
+    case {proplists:get_value(mdns, Config), mdns_interface(State)} of
+        {undefined, _} ->
             State;
-        MDNSConfig ->
+        {_, undefined} ->
+            State;
+        {MDNSConfig, InterfaceAddr} ->
             % The documented config key is `host` (see mdns_hostname_config());
             % `hostname` is accepted too for compatibility with older code.
             Hostname =
@@ -1010,6 +1137,12 @@ maybe_start_mdns(#state{config = Config, sta_ip_info = {InterfaceAddr, _, _}} = 
                     State
             end
     end.
+
+%% @private
+%% Ethernet, when it has an address, is the preferred route.
+mdns_interface(#state{eth_ip_info = {Addr, _, _}}) -> Addr;
+mdns_interface(#state{sta_ip_info = {Addr, _, _}}) -> Addr;
+mdns_interface(_State) -> undefined.
 
 %% @private
 maybe_callback0(_Key, undefined) ->
