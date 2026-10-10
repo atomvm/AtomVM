@@ -60,9 +60,9 @@ static void otp_socket_nif_destroy(GlobalContext *global)
     sys_unregister_listener_from_event(global, &OTPSocketGlobalData.queue);
 }
 
-void otp_socket_lwip_enqueue(struct LWIPEvent *event)
+bool otp_socket_lwip_enqueue(struct LWIPEvent *event)
 {
-    sys_try_post_listener_event_from_isr(OTPSocketGlobalData.global, &OTPSocketGlobalData.queue, event);
+    return sys_try_post_listener_event_from_isr(OTPSocketGlobalData.global, &OTPSocketGlobalData.queue, event);
 }
 
 REGISTER_NIF_COLLECTION(otp_socket, otp_socket_nif_init, otp_socket_nif_destroy, otp_socket_nif_get_nif)

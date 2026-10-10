@@ -23,6 +23,7 @@
 -export([test/0]).
 
 test() ->
+    ok = test_empty_send(),
     ok = test_echo(),
     ok = test_buf_size(),
     ok = test_timeout(),
@@ -49,6 +50,20 @@ test() ->
     ok.
 
 -define(PACKET_SIZE, 7).
+
+test_empty_send() ->
+    {ok, Receiver} = socket:open(inet, dgram, udp),
+    ok = socket:bind(Receiver, #{family => inet, addr => loopback, port => 0}),
+    {ok, #{port := Port}} = socket:sockname(Receiver),
+    {ok, Sender} = socket:open(inet, dgram, udp),
+    ok = socket:connect(Sender, #{family => inet, addr => loopback, port => Port}),
+
+    ok = socket:send(Sender, <<>>),
+    {ok, {_Source, <<>>}} = socket:recvfrom(Receiver, 0, 5000),
+
+    ok = socket:close(Sender),
+    {error, _} = socket:send(Sender, <<>>),
+    ok = socket:close(Receiver).
 
 start_echo_server(Port) ->
     {ok, Socket} = socket:open(inet, dgram, udp),
