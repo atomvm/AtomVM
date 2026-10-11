@@ -116,6 +116,17 @@ if(HAVE_SOC_CPU_CORES_NUM)
     target_compile_definitions(${COMPONENT_LIB} INTERFACE HAVE_SOC_CPU_CORES_NUM)
 endif()
 
+# mbedTLS 4.x keeps its PSA headers under tf-psa-crypto/include, which the
+# component's own include list does not carry (it arrives on the mbedtls
+# target). Without them the try-compile cannot see mbedtls/build_info.h, so
+# HAVE_PSA_CRYPTO stayed empty on IDF v6 and every PSA-backed crypto NIF
+# (crypto:hash_init/1 and friends) was compiled out.
+idf_component_get_property(mbedtls_dir mbedtls COMPONENT_DIR)
+set(CMAKE_REQUIRED_INCLUDES
+    "${mbedtls_dir}/mbedtls/tf-psa-crypto/include"
+    "${mbedtls_dir}/mbedtls/tf-psa-crypto/drivers/builtin/include"
+    "${mbedtls_dir}/mbedtls/include"
+    "${mbedtls_dir}/port/include")
 check_c_source_compiles("
     #include <mbedtls/build_info.h>
     #ifndef MBEDTLS_PSA_CRYPTO_C
@@ -124,6 +135,7 @@ check_c_source_compiles("
     #include <psa/crypto.h>
     int main() { psa_crypto_init(); return 0; }
 " HAVE_PSA_CRYPTO)
+unset(CMAKE_REQUIRED_INCLUDES)
 if(HAVE_PSA_CRYPTO)
     target_compile_definitions(${COMPONENT_LIB} PUBLIC HAVE_PSA_CRYPTO)
     target_compile_definitions(libAtomVM PUBLIC HAVE_PSA_CRYPTO)
