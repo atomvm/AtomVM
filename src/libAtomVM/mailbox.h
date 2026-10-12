@@ -243,6 +243,17 @@ size_t mailbox_size(Mailbox *mbox);
 MailboxMessage *mailbox_process_outer_list_native(Mailbox *mbox);
 
 /**
+ * @brief Put signals detached from the outer list back.
+ *
+ * @details Signals are stored back behind any message enqueued since they were detached, so
+ * they are processed again in received order. To be called from the process only.
+ * @param mbox the mailbox to work with
+ * @param signals the signal messages in received order, as returned by
+ * mailbox_process_outer_list_native.
+ */
+void mailbox_requeue_outer_signals(Mailbox *mbox, MailboxMessage *signals);
+
+/**
  * @brief Process the outer list of messages, delivering alias messages in send order.
  *
  * @details AliasMessageSignals are validated in ctx's own monitor list and, when the alias is

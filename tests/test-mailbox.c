@@ -177,6 +177,76 @@ void test_mailbox_next(void)
     globalcontext_destroy(glb);
 }
 
+static void assert_ref_signal(MailboxMessage *signal, uint64_t ref_ticks)
+{
+    assert(signal != NULL);
+    assert(signal->type == DemonitorSignal);
+    assert(CONTAINER_OF(signal, struct RefSignal, base)->ref_ticks == ref_ticks);
+}
+
+void test_mailbox_crashdump_keeps_signals(void)
+{
+    GlobalContext *glb = globalcontext_new();
+    Context *ctx = context_new(glb);
+    term t;
+
+    // Signals still pending when a crash report is printed are processed by context_destroy
+    // afterwards, so the dump must leave them in the outer list, in received order.
+    mailbox_send_ref_signal(ctx, DemonitorSignal, 1);
+    mailbox_send_ref_signal(ctx, DemonitorSignal, 2);
+    mailbox_send(ctx, term_from_int(42));
+    mailbox_send_ref_signal(ctx, DemonitorSignal, 3);
+
+    mailbox_crashdump(ctx);
+
+    // A signal sent after the dump comes after the ones sent before it.
+    mailbox_send_ref_signal(ctx, DemonitorSignal, 4);
+
+    MailboxMessage *signal = mailbox_process_outer_list_native(&ctx->mailbox);
+    for (uint64_t ref_ticks = 1; ref_ticks <= 4; ref_ticks++) {
+        assert_ref_signal(signal, ref_ticks);
+        MailboxMessage *next = signal->next;
+        mailbox_message_dispose(signal, &ctx->heap);
+        signal = next;
+    }
+    assert(signal == NULL);
+
+    assert(mailbox_peek(ctx, &t));
+    assert(42 == term_to_int(t));
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+    assert(mailbox_len(&ctx->mailbox) == 0);
+
+    context_destroy(ctx);
+    globalcontext_destroy(glb);
+}
+
+void test_mailbox_requeue_outer_signals_after_send(void)
+{
+    GlobalContext *glb = globalcontext_new();
+    Context *ctx = context_new(glb);
+
+    // A signal enqueued between the detach and the requeue makes the first compare and exchange
+    // fail: it has to be kept, after the signals that were detached before it.
+    mailbox_send_ref_signal(ctx, DemonitorSignal, 1);
+    mailbox_send_ref_signal(ctx, DemonitorSignal, 2);
+    MailboxMessage *signals = mailbox_process_outer_list_native(&ctx->mailbox);
+    mailbox_send_ref_signal(ctx, DemonitorSignal, 3);
+    mailbox_requeue_outer_signals(&ctx->mailbox, signals);
+
+    MailboxMessage *signal = mailbox_process_outer_list_native(&ctx->mailbox);
+    for (uint64_t ref_ticks = 1; ref_ticks <= 3; ref_ticks++) {
+        assert_ref_signal(signal, ref_ticks);
+        MailboxMessage *next = signal->next;
+        mailbox_message_dispose(signal, &ctx->heap);
+        signal = next;
+    }
+    assert(signal == NULL);
+    assert(mailbox_len(&ctx->mailbox) == 0);
+
+    context_destroy(ctx);
+    globalcontext_destroy(glb);
+}
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
@@ -184,6 +254,8 @@ int main(int argc, char **argv)
 
     test_mailbox_send();
     test_mailbox_next();
+    test_mailbox_crashdump_keeps_signals();
+    test_mailbox_requeue_outer_signals_after_send();
 
     return EXIT_SUCCESS;
 }

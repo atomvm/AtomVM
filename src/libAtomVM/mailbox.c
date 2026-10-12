@@ -642,10 +642,63 @@ Message *mailbox_first(Mailbox *mbox)
     return result;
 }
 
+void mailbox_requeue_outer_signals(Mailbox *mbox, MailboxMessage *signals)
+{
+    if (signals == NULL) {
+        return;
+    }
+    MailboxMessage *oldest = signals;
+    MailboxMessage *newest = NULL;
+    while (signals) {
+        MailboxMessage *next = signals->next;
+        signals->next = newest;
+        newest = signals;
+        signals = next;
+    }
+    oldest->next = NULL;
+
+#if !defined(AVM_NO_SMP) || defined(AVM_TASK_DRIVER_ENABLED)
+    // Other threads may have enqueued messages since the list was detached: they are more recent
+    // and have to stay before our signals. Only the owner detaches the outer list, so whatever is
+    // there can be detached and chained in front of our signals before trying again.
+    MailboxMessage *expected = NULL;
+    while (!ATOMIC_COMPARE_EXCHANGE_WEAK_PTR(&mbox->outer_first, &expected, newest)) {
+        if (expected != NULL) {
+            MailboxMessage *newer = detach_outer_list(mbox);
+            if (newer) {
+                MailboxMessage *last = newer;
+                while (last->next) {
+                    last = last->next;
+                }
+                last->next = newest;
+                newest = newer;
+            }
+            expected = NULL;
+        }
+    }
+#else
+    // An interrupt handler can still enqueue messages on this build: they are more recent too, so
+    // chain them in front of our signals like above.
+    MailboxMessage *newer = mbox->outer_first;
+    if (newer) {
+        MailboxMessage *last = newer;
+        while (last->next) {
+            last = last->next;
+        }
+        last->next = newest;
+        newest = newer;
+    }
+    mbox->outer_first = newest;
+#endif
+}
+
 void mailbox_crashdump(Context *ctx)
 {
-    // Signal messages are now in reverse order but the process crashed anyway
-    ctx->mailbox.outer_first = mailbox_process_outer_list_native(&ctx->mailbox);
+    // Move normal messages to the inner list so they can be displayed. Signals are kept in the
+    // outer list, in order: the context is about to be destroyed, and context_destroy still has to
+    // process them (e.g. a DemonitorSignal sent by a process that terminates concurrently).
+    MailboxMessage *signals = mailbox_process_outer_list_native(&ctx->mailbox);
+    mailbox_requeue_outer_signals(&ctx->mailbox, signals);
     MailboxMessage *msg = ctx->mailbox.inner_first;
     while (msg) {
         Message *data_message = CONTAINER_OF(msg, Message, base);
