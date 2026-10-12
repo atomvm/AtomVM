@@ -25,7 +25,7 @@
 
 -export([start/0, start_timer/3, cancel_timer/1, get_timer_refs/0, send_after/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
--export([run_timer/5, send_after_timer/3]).
+-export([run_timer/6]).
 
 -record(state, {
     timers = [] :: [{reference(), pid()}]
@@ -57,10 +57,11 @@ maybe_start() ->
     TimerRef :: reference().
 start_timer(Time, Dest, Msg) ->
     maybe_start(),
-    gen_server:call(?SERVER_NAME, {Time, Dest, Msg}).
+    gen_server:call(?SERVER_NAME, {start_timer, Time, Dest, Msg}).
 
 %%-----------------------------------------------------------------------------
-%% @param   TimerRef a timer reference returned from {@link start_timer/3}.
+%% @param   TimerRef a timer reference returned from {@link start_timer/3} or
+%%          {@link send_after/3}.
 %% @returns the time in milliseconds left until the timer would have expired,
 %%          or `false' if the timer was not found.
 %% @doc     Cancel a timer.
@@ -81,14 +82,16 @@ get_timer_refs() ->
 %% @param   Dest Pid or server name to which to send the message.
 %% @param   Msg Message to send to Dest after Time ms.
 %% @returns a reference that can be used to cancel the timer, if desired.
-%% @doc     Send Msg to Dest after Time ms.
+%% @doc     Send Msg to Dest after Time ms.  Unlike {@link start_timer/3}, the
+%%          bare Msg is delivered (not wrapped in a `{timeout, Ref, Msg}'
+%%          tuple).  The returned reference is registered with the timer
+%%          manager and can be cancelled with {@link cancel_timer/1}.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec send_after(non_neg_integer(), pid() | atom(), term()) -> reference().
 send_after(Time, Dest, Msg) ->
-    TimerRef = erlang:make_ref(),
-    spawn(?MODULE, send_after_timer, [Time, Dest, Msg]),
-    TimerRef.
+    maybe_start(),
+    gen_server:call(?SERVER_NAME, {send_after, Time, Dest, Msg}).
 
 %%
 %% ?GEN_SERVER callbacks
@@ -111,8 +114,11 @@ handle_call({cancel, TimerRef}, From, #state{timers = Timers} = State) ->
             NewTimers = lists:keyreplace(Pid, 2, Timers, {{canceled, From}, Pid}),
             {noreply, State#state{timers = NewTimers}}
     end;
-handle_call({Time, Dest, Msg}, _From, #state{timers = Timers} = State) ->
-    {TimerRef, Pid} = do_start_timer(Time, Dest, Msg),
+handle_call({start_timer, Time, Dest, Msg}, _From, #state{timers = Timers} = State) ->
+    {TimerRef, Pid} = do_start_timer(Time, Dest, Msg, wrapped),
+    {reply, TimerRef, State#state{timers = [{TimerRef, Pid} | Timers]}};
+handle_call({send_after, Time, Dest, Msg}, _From, #state{timers = Timers} = State) ->
+    {TimerRef, Pid} = do_start_timer(Time, Dest, Msg, bare),
     {reply, TimerRef, State#state{timers = [{TimerRef, Pid} | Timers]}}.
 
 %% @hidden
@@ -153,13 +159,13 @@ terminate(_Reason, _State) ->
 %% internal functions
 
 %% @private
-do_start_timer(Time, Dest, Msg) ->
+do_start_timer(Time, Dest, Msg, Mode) ->
     TimerRef = erlang:make_ref(),
-    Pid = spawn(?MODULE, run_timer, [self(), Time, TimerRef, Dest, Msg]),
+    Pid = spawn(?MODULE, run_timer, [self(), Time, TimerRef, Dest, Msg, Mode]),
     {TimerRef, Pid}.
 
 %% @private
-run_timer(MgrPid, Time, TimerRef, Dest, Msg) ->
+run_timer(MgrPid, Time, TimerRef, Dest, Msg, Mode) ->
     Start = erlang:system_time(millisecond),
     receive
         {cancel, From} ->
@@ -167,13 +173,8 @@ run_timer(MgrPid, Time, TimerRef, Dest, Msg) ->
             gen_server:reply(From, Time - (erlang:system_time(millisecond) - Start))
     after Time ->
         MgrPid ! {fired, self()},
-        Dest ! {timeout, TimerRef, Msg}
-    end.
-
-%% @private
-send_after_timer(Time, Dest, Msg) ->
-    TimerRef = start_timer(Time, self(), Msg),
-    receive
-        {timeout, TimerRef, Msg} ->
-            Dest ! Msg
+        case Mode of
+            wrapped -> Dest ! {timeout, TimerRef, Msg};
+            bare -> Dest ! Msg
+        end
     end.
