@@ -24,6 +24,7 @@
 #include "context.h"
 #include "globalcontext.h"
 #include "mailbox.h"
+#include "smp.h"
 
 void test_mailbox_send(void)
 {
@@ -177,6 +178,44 @@ void test_mailbox_next(void)
     globalcontext_destroy(glb);
 }
 
+#ifdef AVM_TASK_DRIVER_ENABLED
+static void send_from_task(GlobalContext *glb, Context *ctx, int first, int last)
+{
+    // Held, the lock keeps tasks from enqueuing directly: the messages go
+    // through the global queue, as they always do without SMP.
+    SMP_SPINLOCK_LOCK(&glb->processes_spinlock);
+    for (int i = first; i <= last; i++) {
+        globalcontext_send_message_from_task(glb, ctx->process_id, NormalMessage, term_from_int(i));
+    }
+    SMP_SPINLOCK_UNLOCK(&glb->processes_spinlock);
+    // Queued, not delivered: otherwise the test would check nothing.
+    assert(glb->message_queue != NULL);
+    globalcontext_process_task_driver_queues(glb);
+}
+
+void test_send_message_from_task_order(void)
+{
+    GlobalContext *glb = globalcontext_new();
+    Context *ctx = context_new(glb);
+    term t;
+
+    // Two batches, so that a later drain cannot overtake an earlier one.
+    send_from_task(glb, ctx, 1, 3);
+    send_from_task(glb, ctx, 4, 6);
+
+    assert(mailbox_process_outer_list_native(&ctx->mailbox) == NULL);
+    for (int i = 1; i <= 6; i++) {
+        assert(mailbox_peek(ctx, &t));
+        assert(i == term_to_int(t));
+        mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+    }
+    assert(mailbox_len(&ctx->mailbox) == 0);
+
+    context_destroy(ctx);
+    globalcontext_destroy(glb);
+}
+#endif
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
@@ -184,6 +223,9 @@ int main(int argc, char **argv)
 
     test_mailbox_send();
     test_mailbox_next();
+#ifdef AVM_TASK_DRIVER_ENABLED
+    test_send_message_from_task_order();
+#endif
 
     return EXIT_SUCCESS;
 }

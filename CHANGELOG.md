@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `binary_to_term/1,2` accepting maps with duplicate keys instead of raising `badarg`
 - Fixed `erlang:send_after/3` and `timer:send_after/2,3` returning a timer that could not
   be canceled with `erlang:cancel_timer/1`
+- Fixed messages that drivers send from a task (for example ESP32 network events) arriving in
+  reverse order when they went through the global queue, which is always the case without SMP
 
 ## [0.7.0-beta.0] - 2026-09-28
 
