@@ -10,7 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `socket:send/2` now waits for write-readiness and retries partial stream sends under
   transient backpressure (lwIP `ERR_MEM` / BSD `EAGAIN`|`EWOULDBLOCK`), so higher-level TCP
   send paths no longer leak `{ok, Rest}` or `{error, eagain}` on normal backpressure;
-  closed peers now return `{error, closed}` instead of being reported as a partial send
+  closed peers now return `{error, closed}` instead of being reported as a partial send.
+  Read-side EOF/error cleanup preserves a concurrent blocked writer, allowing TCP
+  half-close followed by draining the remaining data. `socket:sendto/3` is unchanged
 - Fixed maps decoded by `binary_to_term/1,2` and received over distribution keeping the
   encoder's key order, which broke `==` and made `=>` updates on an existing key produce
   duplicate keys

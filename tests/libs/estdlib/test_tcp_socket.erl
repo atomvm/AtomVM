@@ -46,7 +46,8 @@ test_independent_read_write_selects() ->
         fun(Order) ->
             ok = test_blocked_read_write(Order, close),
             ok = test_blocked_read_write(Order, kill_writer),
-            ok = test_blocked_read_write(Order, drain)
+            ok = test_blocked_read_write(Order, drain),
+            ok = test_blocked_read_write(Order, read_eof)
         end,
         [reader_first, writer_first]
     ),
@@ -69,13 +70,11 @@ test_blocked_read_write(Order, Action) ->
     Parent = self(),
     StartReader = fun() ->
         start_registered(fun() ->
-            {select, {select_info, recv, Ref}} = socket:recv(ServerSocket, 1, nowait),
+            {select, {select_info, recv, _Ref}} = socket:recv(ServerSocket, 1, nowait),
             Parent ! {self(), registered, 0},
-            Result =
-                case wait_socket_select(ServerSocket, Ref) of
-                    ok -> socket:recv(ServerSocket, 1, 5000);
-                    Error -> Error
-                end,
+            %% Wait through the public receive path so EOF exercises its
+            %% selection cleanup while the independent writer is still waiting.
+            Result = socket:recv(ServerSocket, 1, 5000),
             Parent ! {self(), result, Result}
         end)
     end,
@@ -85,11 +84,14 @@ test_blocked_read_write(Order, Action) ->
             Parent ! {self(), registered, Buffered + byte_size(Rest)},
             %% Establish ownership before acknowledging registration, then
             %% exercise the public blocking send and its own retry selection.
-            Result = socket:send(ServerSocket, <<Rest/binary, 73, 19>>),
+            %% Hosts can grow their send buffers after EAGAIN. Reuse bounded
+            %% 32 KiB chunks until the public send really waits, rather than
+            %% assuming a particular payload size must block on every platform.
+            Result = send_until_blocked(ServerSocket, Parent, <<Rest/binary, 0:262144>>, 256),
             Parent ! {self(), result, Result}
         end)
     end,
-    {{Reader, ReaderMonitor, 0}, {Writer, WriterMonitor, Total}} =
+    {{Reader, ReaderMonitor, 0}, {Writer, WriterMonitor, Buffered}} =
         case Order of
             reader_first ->
                 R = StartReader(),
@@ -100,6 +102,11 @@ test_blocked_read_write(Order, Action) ->
                 R = StartReader(),
                 {R, W}
         end,
+    %% Observe the public send still pending while the peer is not draining;
+    %% raw EAGAIN alone does not prove the wrapper actually had to wait.
+    Total = wait_public_send_blocked(Writer, WriterMonitor, Buffered),
+    Writer ! finish,
+    ok = assert_writer_blocked(Writer, WriterMonitor),
     case Action of
         close ->
             ok = socket:close(ServerSocket),
@@ -114,17 +121,50 @@ test_blocked_read_write(Order, Action) ->
             ok = socket:close(ServerSocket);
         drain ->
             %% Check every byte, including the unsent suffix from a partial send.
-            ok = drain_zero_bytes(ClientSocket, Total),
-            {ok, <<73, 19>>} = socket:recv(ClientSocket, 2, 5000),
+            ok = drain_writer_data(ClientSocket, Total),
             ok = wait_result(Writer),
             normal = wait_down(Writer, WriterMonitor),
             ok = socket:send(ClientSocket, <<42>>),
             {ok, <<42>>} = wait_result(Reader),
+            ok = socket:close(ServerSocket);
+        read_eof ->
+            %% EOF must cancel only read selection, not the blocked writer.
+            ok = socket:shutdown(ClientSocket, write),
+            {error, closed} = wait_result(Reader),
+            ok = assert_writer_blocked(Writer, WriterMonitor),
+            ok = drain_writer_data(ClientSocket, Total),
+            ok = wait_result(Writer),
+            normal = wait_down(Writer, WriterMonitor),
             ok = socket:close(ServerSocket)
     end,
     normal = wait_down(Reader, ReaderMonitor),
     ok = socket:close(ClientSocket),
     ok = socket:close(ListenSocket).
+
+send_until_blocked(_Socket, _Parent, _Data, 0) ->
+    error(public_send_did_not_block);
+send_until_blocked(Socket, Parent, Data, Attempts) ->
+    %% Rest from the raw send is already included in registered's byte count.
+    Parent ! {self(), sending, 32768},
+    case socket:send(Socket, Data) of
+        ok ->
+            receive
+                finish -> socket:send(Socket, <<91, 7, 73, 19>>)
+            after 0 ->
+                send_until_blocked(Socket, Parent, <<0:262144>>, Attempts - 1)
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+wait_public_send_blocked(Pid, Monitor, Total) ->
+    receive
+        {Pid, sending, Size} -> wait_public_send_blocked(Pid, Monitor, Total + Size);
+        {Pid, result, Result} -> error({writer_did_not_block, Result});
+        {'DOWN', Monitor, process, Pid, Reason} -> error({writer_exited, Reason})
+    after 250 ->
+        Total
+    end.
 
 %% Bound the amount of data queued even on hosts with large TCP buffers.
 fill_send_buffer(_Socket, _Packet, _Buffered, 0) ->
@@ -155,20 +195,25 @@ start_registered(Fun) ->
     Value = wait_registered(Pid),
     {Pid, Monitor, Value}.
 
-wait_socket_select(Socket, Ref) ->
-    receive
-        {'$socket', Socket, select, Ref} -> ok;
-        {'$socket', Socket, abort, {Ref, closed}} -> {error, closed}
-    after 5000 ->
-        error({timeout, socket_select})
-    end.
-
 wait_result(Pid) ->
     receive
         {Pid, result, Result} -> Result
     after 5000 ->
         error({timeout, result, Pid})
     end.
+
+assert_writer_blocked(Pid, Monitor) ->
+    receive
+        {Pid, result, Result} -> error({writer_did_not_block, Result});
+        {'DOWN', Monitor, process, Pid, Reason} -> error({writer_exited, Reason})
+    after 250 ->
+        ok
+    end.
+
+drain_writer_data(Socket, Total) ->
+    ok = drain_zero_bytes(Socket, Total),
+    {ok, <<91, 7, 73, 19>>} = socket:recv(Socket, 4, 5000),
+    ok.
 
 drain_zero_bytes(_Socket, 0) ->
     ok;
