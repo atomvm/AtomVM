@@ -2944,7 +2944,22 @@ static term nif_socket_send_internal(Context *ctx, int argc, term argv[], bool i
     const uint8_t *buf = (const uint8_t *) term_binary_data(data);
     size_t len = term_binary_size(data);
 
+    // IPv4 UDP payloads must fit after the 20-byte IP and 8-byte UDP headers.
+    // In particular, do not truncate len to lwIP's 16-bit pbuf length.
+#if OTP_SOCKET_BSD
+    bool is_datagram = rsrc_obj->type == SOCK_DGRAM;
+#elif OTP_SOCKET_LWIP
+    bool is_datagram = rsrc_obj->socket_state & SocketStateUDP;
+#endif
+    if (is_datagram && len > 65507) {
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        return make_error_tuple(posix_errno_to_term(EMSGSIZE, global), ctx);
+    }
+
     ssize_t sent_data = do_socket_send(rsrc_obj, buf, len, dest);
+#if OTP_SOCKET_BSD
+    int send_errno = errno;
+#endif
     SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
 
     // {ok, RestData} | {error, Reason}
@@ -2977,6 +2992,11 @@ static term nif_socket_send_internal(Context *ctx, int argc, term argv[], bool i
         return make_error_tuple(CLOSED_ATOM, ctx);
     } else {
         TRACE("Unable to send data: res=%zi.\n", sent_data);
+#if OTP_SOCKET_BSD
+        if (is_sendto && sent_data == SocketOtherError) {
+            return make_error_tuple(posix_errno_to_term(send_errno, global), ctx);
+        }
+#endif
         return make_error_tuple(CLOSED_ATOM, ctx);
     }
 }

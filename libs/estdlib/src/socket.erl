@@ -596,13 +596,17 @@ send(Socket, Data) ->
 %% @param   Socket the socket
 %% @param   Data the data to send
 %% @param   Dest the destination to which to send the data
-%% @returns `{ok, Rest}' if successful; `{error, Reason}', otherwise.
+%% @returns `ok' if all data was accepted; `{ok, Rest}' for a partial send;
+%%          `{error, Reason}', otherwise.
 %% @doc     Send data on the specified socket to the specified destination.
 %%
-%%          Note that this function will block until data is sent
-%%          on the socket.  The data may not have been received by the
-%%          intended recipient, and the data may not even have been sent
-%%          over the network.
+%%          Transient backpressure is retried internally after waiting for
+%%          write readiness. Datagram boundaries are preserved: a partial
+%%          send is returned to the caller, not sent as another datagram.
+%%          Empty data sends an empty datagram.
+%%
+%%          Acceptance does not guarantee that the data has been transmitted
+%%          over the network or received by the intended recipient.
 %%
 %% Example:
 %%
@@ -612,9 +616,9 @@ send(Socket, Data) ->
 -spec sendto(Socket :: socket(), Data :: iodata(), Dest :: sockaddr()) ->
     ok | {ok, Rest :: binary()} | {error, Reason :: term()}.
 sendto(Socket, Data, Dest) when is_binary(Data) ->
-    ?MODULE:nif_sendto(Socket, Data, Dest);
+    sendto_binary(Socket, Data, Dest);
 sendto(Socket, Data, Dest) ->
-    ?MODULE:nif_sendto(Socket, erlang:iolist_to_binary(Data), Dest).
+    sendto_binary(Socket, erlang:iolist_to_binary(Data), Dest).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
@@ -757,6 +761,23 @@ send_all_binary(Socket, Data) ->
             end;
         {error, _Reason} = Error ->
             Error
+    end.
+
+sendto_binary(Socket, Data, Dest) ->
+    case ?MODULE:nif_sendto(Socket, Data, Dest) of
+        {error, eagain} ->
+            case wait_write(Socket) of
+                ok ->
+                    %% Raw lwIP UDP readiness is advisory and immediate, even
+                    %% after ERR_MEM. Yield with a timer rather than busy-loop.
+                    receive
+                    after 10 -> sendto_binary(Socket, Data, Dest)
+                    end;
+                {error, _Reason} = Error ->
+                    Error
+            end;
+        Result ->
+            Result
     end.
 
 wait_write(Socket) ->
