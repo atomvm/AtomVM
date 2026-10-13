@@ -40,7 +40,7 @@
     smp_atomic_compare_exchange_weak_int((void *) object, (void *) expected, (uint64_t) desired, sizeof(desired))
 
 #ifndef AVM_NO_SMP
-static critical_section_t atomic_cas_section;
+extern critical_section_t atomic_cas_section;
 #endif
 
 /**

@@ -27,7 +27,8 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
 
-#include <pico/cond.h>
+#include <pico/mutex.h>
+#include <pico/sem.h>
 #include <pico/util/queue.h>
 
 #include <mbedtls/ctr_drbg.h>
@@ -57,13 +58,19 @@ struct EventListener
  * @param global            the global context
  * @param listener_queue    the listener's queue (EventListener->queue)
  * @param event             the event to enqueue (copied)
- * @returns true if successful, false if either queue is full
+ * @returns true if the listener payload was accepted, false if its queue is full
  * @details This function should be called from ISR callbacks to postpone
  * processing in task context (from sys_poll_events). If the system is overloaded
  * with events, it prints a message to stderr and returns false.
  * @end
  */
 bool sys_try_post_listener_event_from_isr(GlobalContext *global, listener_event_t listener_queue, const void *event);
+
+#ifdef LIB_PICO_CYW43_ARCH
+void otp_socket_lwip_poll(void);
+bool otp_socket_lwip_has_events(void);
+void otp_socket_lwip_signal(void);
+#endif
 
 /**
  * @brief Unregister a listener using its queue.
@@ -77,8 +84,7 @@ void sys_unregister_listener_from_event(GlobalContext *global, listener_event_t 
 struct RP2PlatformData
 {
 #ifndef AVM_NO_SMP
-    mutex_t event_poll_mutex;
-    cond_t event_poll_cond;
+    semaphore_t event_poll_sem;
 #endif
     queue_t event_queue;
 

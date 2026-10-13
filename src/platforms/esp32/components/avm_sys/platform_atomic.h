@@ -28,4 +28,7 @@
 #define ATOMIC_COMPARE_EXCHANGE_WEAK_PTR(object, expected, desired) \
     atomic_compare_exchange_weak(object, expected, desired)
 
+#define ATOMIC_COMPARE_EXCHANGE_WEAK_INT(object, expected, desired) \
+    atomic_compare_exchange_weak(object, expected, desired)
+
 #endif

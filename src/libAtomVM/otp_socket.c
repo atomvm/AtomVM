@@ -131,6 +131,9 @@ struct TCPAcceptedItem
 {
     struct ListHead list_head;
     struct tcp_pcb *newpcb;
+    struct SocketResource *listener;
+    bool pending;
+    bool eof;
 };
 
 struct TCPReceivedItem
@@ -193,6 +196,12 @@ struct SocketResource
     int linger_sec;
     size_t pos;
     struct ListHead received_list;
+    struct TCPAcceptedItem *accept_slots;
+    size_t accept_slot_count;
+    struct SocketResource *pending_next;
+    unsigned pending_work;
+    size_t deferred_releases;
+    err_t connect_error;
     size_t buf_size;
 #ifndef AVM_NO_SMP
     RWLock *socket_lock;
@@ -258,6 +267,106 @@ static const AtomStringIntPair otp_socket_setopt_level_table[] = {
 
 static ErlNifResourceType *socket_resource_type;
 
+#if OTP_SOCKET_LWIP
+enum SocketPendingWork
+{
+    SocketPendingRead = 1,
+    SocketPendingWrite = 2,
+    SocketPendingError = 4,
+    SocketPendingConnect = 8,
+    SocketPendingRelease = 16,
+    SocketPendingEOF = 32
+};
+
+static struct SocketResource *pending_sockets;
+
+// Called only in the lwIP synchronization domain. Never resurrect a resource
+// whose final release has already started its destructor.
+static bool socket_try_keep_resource(struct SocketResource *rsrc_obj)
+{
+    struct RefcBinary *refc = refc_binary_from_data(rsrc_obj);
+    size_t count = refc->ref_count;
+    while ((count & REFC_COUNT_MASK) != 0 && !(count & REFC_DYING_FLAG)) {
+        if (refc_binary_cas_refcount(refc, &count, count + 1)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void socket_queue_pending(struct SocketResource *rsrc_obj, unsigned work)
+{
+    if (rsrc_obj->pending_work == 0) {
+        if (!socket_try_keep_resource(rsrc_obj)) {
+            return;
+        }
+        rsrc_obj->pending_next = pending_sockets;
+        pending_sockets = rsrc_obj;
+    }
+    rsrc_obj->pending_work |= work;
+    otp_socket_lwip_signal();
+}
+
+static void socket_lwip_init(struct SocketResource *rsrc_obj)
+{
+    rsrc_obj->tcp_pcb = NULL;
+    rsrc_obj->socket_state = SocketStateClosed;
+    rsrc_obj->accept_slots = NULL;
+    rsrc_obj->accept_slot_count = 0;
+    rsrc_obj->pending_next = NULL;
+    rsrc_obj->pending_work = 0;
+    rsrc_obj->deferred_releases = 0;
+    rsrc_obj->trapped_process_id = INVALID_PROCESS_ID;
+    rsrc_obj->pos = 0;
+    list_init(&rsrc_obj->received_list);
+}
+
+static void socket_detach_tcp_callbacks(struct SocketResource *rsrc_obj)
+{
+    tcp_arg(rsrc_obj->tcp_pcb, NULL);
+    if (rsrc_obj->socket_state & SocketStateListening) {
+        tcp_accept(rsrc_obj->tcp_pcb, NULL);
+    } else {
+        tcp_err(rsrc_obj->tcp_pcb, NULL);
+        tcp_recv(rsrc_obj->tcp_pcb, NULL);
+        tcp_sent(rsrc_obj->tcp_pcb, NULL);
+        tcp_poll(rsrc_obj->tcp_pcb, NULL, 0);
+    }
+}
+
+static void socket_clear_received(struct SocketResource *rsrc_obj)
+{
+    if (rsrc_obj->accept_slots) {
+        for (size_t i = 0; i < rsrc_obj->accept_slot_count; i++) {
+            struct tcp_pcb *pcb = rsrc_obj->accept_slots[i].newpcb;
+            if (pcb) {
+                tcp_arg(pcb, NULL);
+                tcp_err(pcb, NULL);
+                tcp_recv(pcb, NULL);
+                tcp_abort(pcb);
+            }
+        }
+        free(rsrc_obj->accept_slots);
+        rsrc_obj->accept_slots = NULL;
+        rsrc_obj->accept_slot_count = 0;
+    } else {
+        struct ListHead *item;
+        struct ListHead *tmp;
+        MUTABLE_LIST_FOR_EACH (item, tmp, &rsrc_obj->received_list) {
+            // Both TCP and UDP receive items begin with list_head and buf.
+            struct TCPReceivedItem *received = GET_LIST_ENTRY(item, struct TCPReceivedItem, list_head);
+            if (received->buf) {
+                pbuf_free(received->buf);
+            }
+            list_remove(item);
+            free(received);
+        }
+    }
+    list_init(&rsrc_obj->received_list);
+    rsrc_obj->pos = 0;
+}
+#endif
+
 #define SOCKET_MAKE_SELECT_NOTIFICATION_SIZE (TUPLE_SIZE(4) + TERM_BOXED_REFERENCE_SHORT_SIZE + TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_SHORT_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE)
 #define SOCKET_MAKE_ABORT_NOTIFICATION_SIZE (SOCKET_MAKE_SELECT_NOTIFICATION_SIZE + TUPLE_SIZE(2))
 static term socket_make_select_notification(struct SocketResource *rsrc_obj, Heap *heap, enum ErlNifSelectFlags direction);
@@ -301,25 +410,19 @@ static void socket_dtor(ErlNifEnv *caller_env, void *obj)
     if (rsrc_obj->socket_state & SocketStateUDP) {
         udp_remove(rsrc_obj->udp_pcb);
         rsrc_obj->udp_pcb = NULL;
-    } else if (rsrc_obj->socket_state & SocketStateTCP) {
+    } else if ((rsrc_obj->socket_state & SocketStateTCP) && rsrc_obj->tcp_pcb) {
         // Try to nicely close the connection here
         // NOTE: we can't handle linger if the socket is gone.
-        tcp_arg(rsrc_obj->tcp_pcb, NULL);
-        tcp_err(rsrc_obj->tcp_pcb, NULL);
-        tcp_recv(rsrc_obj->tcp_pcb, NULL);
-        tcp_sent(rsrc_obj->tcp_pcb, NULL);
-        tcp_poll(rsrc_obj->tcp_pcb, NULL, 0);
-        if (rsrc_obj->socket_state & SocketStateTCPListening) {
-            tcp_accept(rsrc_obj->tcp_pcb, NULL);
-        }
+        socket_detach_tcp_callbacks(rsrc_obj);
         if (UNLIKELY(tcp_close(rsrc_obj->tcp_pcb) != ERR_OK)) {
             // The resource will be gone, there is not much we can do here.
-            if (!(rsrc_obj->socket_state & SocketStateTCPListening)) {
+            if (!(rsrc_obj->socket_state & SocketStateListening)) {
                 tcp_abort(rsrc_obj->tcp_pcb);
             }
         }
         rsrc_obj->tcp_pcb = NULL;
     }
+    socket_clear_received(rsrc_obj);
     LWIP_END();
 #endif
 #ifndef AVM_NO_SMP
@@ -389,7 +492,7 @@ static void socket_down(ErlNifEnv *caller_env, void *obj, ErlNifPid *pid, ErlNif
         rsrc_obj->write_select.process_id = INVALID_PROCESS_ID;
         rsrc_obj->write_select.ref_ticks = 0;
         rsrc_obj->socket_state &= ~SocketStateSelectingWrite;
-        if (rsrc_obj->tcp_pcb) {
+        if ((rsrc_obj->socket_state & SocketStateConnected) && rsrc_obj->tcp_pcb) {
             tcp_sent(rsrc_obj->tcp_pcb, NULL);
             tcp_poll(rsrc_obj->tcp_pcb, NULL, 0);
         }
@@ -399,10 +502,9 @@ static void socket_down(ErlNifEnv *caller_env, void *obj, ErlNifPid *pid, ErlNif
 
     SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
 
-    if (is_read || is_write) {
-        // Balance the ordinary resource reference taken with the monitor.
-        refc_binary_decrement_refcount(refc_binary_from_data(rsrc_obj), caller_env->global);
-    }
+    // Every fired monitor owns a reference, even if cancellation or reselection
+    // replaced its selection state before this callback acquired socket_lock.
+    refc_binary_decrement_refcount(refc_binary_from_data(rsrc_obj), caller_env->global);
 }
 
 static const ErlNifResourceTypeInit SocketResourceTypeInit = {
@@ -635,6 +737,9 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
+#if OTP_SOCKET_LWIP
+    socket_lwip_init(rsrc_obj);
+#endif
 #ifndef AVM_NO_SMP
     rsrc_obj->socket_lock = smp_rwlock_create();
     if (IS_NULL_PTR(rsrc_obj->socket_lock)) {
@@ -788,13 +893,6 @@ static int send_closed_notification(Context *ctx, term socket_term, int32_t sele
     return 0;
 }
 
-#if OTP_SOCKET_LWIP
-static void finalize_close_hander(struct LWIPEvent *event)
-{
-    enif_release_resource(event->finalize_close.rsrc_obj); // release after enif_keep_resource in nif_socket_close
-}
-#endif
-
 static term nif_socket_close(Context *ctx, int argc, term argv[])
 {
     TRACE("nif_socket_close\n");
@@ -856,6 +954,10 @@ static term nif_socket_close(Context *ctx, int argc, term argv[])
             }
 
             // Now, ref_count >= 1 only.
+        } else {
+            // Directional cancellation retains an inactive event for reuse.
+            // Closing must release it even after its owners were demonitor-ed.
+            enif_select(erl_nif_env_from_context(ctx), rsrc_obj->fd, ERL_NIF_SELECT_STOP, rsrc_obj, NULL, term_nil());
         }
 
         // Eventually close the socket
@@ -890,37 +992,27 @@ static term nif_socket_close(Context *ctx, int argc, term argv[])
     if (rsrc_obj->socket_state == SocketStateClosed) {
         TRACE("Double close on pcb\n");
     } else {
-        if (rsrc_obj->socket_state & SocketStateTCP) {
-            LWIP_BEGIN();
-            tcp_arg(rsrc_obj->tcp_pcb, NULL);
-            tcp_err(rsrc_obj->tcp_pcb, NULL);
-            tcp_recv(rsrc_obj->tcp_pcb, NULL);
-            tcp_sent(rsrc_obj->tcp_pcb, NULL);
-            tcp_poll(rsrc_obj->tcp_pcb, NULL, 0);
-            if (rsrc_obj->socket_state & SocketStateTCPListening) {
-                tcp_accept(rsrc_obj->tcp_pcb, NULL);
-            }
+        LWIP_BEGIN();
+        if ((rsrc_obj->socket_state & SocketStateTCP) && rsrc_obj->tcp_pcb) {
+            socket_detach_tcp_callbacks(rsrc_obj);
             err_t err = tcp_close(rsrc_obj->tcp_pcb);
-            LWIP_END();
             if (UNLIKELY(err != ERR_OK)) {
-                AVM_LOGW(TAG, "tcp_close failed with err=%d: %s:%i.\n", err, __FILE__, __LINE__);
-                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                // No owner remains to retry a graceful close. Abort rather
+                // than leave a detached PCB alive or raise with socket_lock held.
+                tcp_abort(rsrc_obj->tcp_pcb);
             }
             rsrc_obj->tcp_pcb = NULL;
         } else if (rsrc_obj->socket_state & SocketStateUDP) {
-            LWIP_BEGIN();
-            udp_recv(rsrc_obj->udp_pcb, udp_recv_cb, NULL);
+            udp_recv(rsrc_obj->udp_pcb, NULL, NULL);
             udp_remove(rsrc_obj->udp_pcb);
-            LWIP_END();
             rsrc_obj->udp_pcb = NULL;
         }
+        socket_clear_received(rsrc_obj);
         rsrc_obj->socket_state = SocketStateClosed;
-        // The resource should not go away until all callbacks are processed.
-        enif_keep_resource(rsrc_obj);
-        struct LWIPEvent event;
-        event.handler = finalize_close_hander;
-        event.finalize_close.rsrc_obj = rsrc_obj;
-        otp_socket_lwip_enqueue(&event);
+        if (rsrc_obj->trapped_process_id != INVALID_PROCESS_ID) {
+            socket_queue_pending(rsrc_obj, SocketPendingError);
+        }
+        LWIP_END();
     }
 
 #endif
@@ -935,14 +1027,13 @@ static term nif_socket_close(Context *ctx, int argc, term argv[])
 //
 
 #if OTP_SOCKET_LWIP
-static struct SocketResource *make_accepted_socket_resource(struct tcp_pcb *newpcb)
+static struct SocketResource *make_accepted_socket_resource(void)
 {
     struct SocketResource *conn_rsrc_obj = enif_alloc_resource(socket_resource_type, sizeof(struct SocketResource));
     if (IS_NULL_PTR(conn_rsrc_obj)) {
         return NULL;
     }
-    conn_rsrc_obj->socket_state = SocketStateTCPConnected;
-    conn_rsrc_obj->tcp_pcb = newpcb;
+    socket_lwip_init(conn_rsrc_obj);
     socket_select_state_init(&conn_rsrc_obj->read_select);
     socket_select_state_init(&conn_rsrc_obj->write_select);
     conn_rsrc_obj->trapped_process_id = INVALID_PROCESS_ID;
@@ -959,27 +1050,29 @@ static struct SocketResource *make_accepted_socket_resource(struct tcp_pcb *newp
 #endif
     list_init(&conn_rsrc_obj->received_list);
 
-    tcp_arg(newpcb, conn_rsrc_obj);
-    tcp_err(newpcb, tcp_err_cb);
-    tcp_recv(newpcb, tcp_recv_cb);
     return conn_rsrc_obj;
 }
 
-static void tcp_accept_handler(struct LWIPEvent *event)
+static void tcp_pending_accept_err_cb(void *arg, err_t err)
 {
-    struct SocketResource *rsrc_obj = event->tcp_accept.rsrc_obj;
-    struct TCPAcceptedItem *new_item = malloc(sizeof(struct TCPAcceptedItem));
-    list_append(&rsrc_obj->received_list, &new_item->list_head);
-    new_item->newpcb = event->tcp_accept.newpcb;
+    UNUSED(err);
+    struct TCPAcceptedItem *slot = arg;
+    slot->newpcb = NULL;
+    socket_queue_pending(slot->listener, SocketPendingRead);
+}
 
-    // Send notification if we are selecting.
-    if (rsrc_obj->socket_state & SocketStateSelectingRead) {
-        // Clear flag to avoid sending a message again.
-        rsrc_obj->socket_state &= ~SocketStateSelectingRead;
-        if (rsrc_obj->read_select.process_id != INVALID_PROCESS_ID) {
-            select_event_send_notification_from_handler(rsrc_obj, rsrc_obj->read_select.process_id, ERL_NIF_SELECT_READ);
-        } // otherwise, selecting process died but we can just wait for monitor to handle it
+static err_t tcp_pending_accept_recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
+{
+    UNUSED(tpcb);
+    UNUSED(err);
+    if (p) {
+        // lwIP retains refused data and retries through the current callback
+        // after task-context accept transfers this PCB to a socket resource.
+        return ERR_MEM;
     }
+    // A standalone FIN is not retried, so preserve EOF across acceptance.
+    ((struct TCPAcceptedItem *) arg)->eof = true;
+    return ERR_OK;
 }
 
 static err_t tcp_accept_cb(void *arg, struct tcp_pcb *newpcb, err_t err)
@@ -987,77 +1080,77 @@ static err_t tcp_accept_cb(void *arg, struct tcp_pcb *newpcb, err_t err)
     UNUSED(err);
 
     struct SocketResource *rsrc_obj = (struct SocketResource *) arg;
-    if (rsrc_obj->read_select.process_id != INVALID_PROCESS_ID) {
-        if (newpcb != NULL) {
-            // Because data can come in, we need to immediately set the receive callback
-            // However, we cannot allocate the resource because we can't call malloc from ISR.
-            tcp_arg(newpcb, NULL);
-            tcp_recv(newpcb, tcp_recv_cb);
-
-            // Delay accepting
-            tcp_backlog_delayed(newpcb);
-
-            // Enqueue an event to further process accept
-            struct LWIPEvent event;
-            event.handler = tcp_accept_handler;
-            event.tcp_accept.rsrc_obj = rsrc_obj;
-            event.tcp_accept.newpcb = newpcb;
-            otp_socket_lwip_enqueue(&event);
-        } else {
-            if (err == ERR_MEM) {
-                AVM_LOGW(TAG, "Insufficient memory to accept connections, client will have to resend SYN.");
-            }
-        }
+    if (!newpcb) {
         return ERR_OK;
-    } else {
-        // Selecting process died
-        if (newpcb != NULL) {
-            if (rsrc_obj->socket_state & SocketStateTCPListening) {
-                (void) tcp_close(newpcb);
-            } else {
-                tcp_abort(newpcb);
-            }
-        }
-        return ERR_ABRT;
     }
+    for (size_t i = 0; i < rsrc_obj->accept_slot_count; i++) {
+        struct TCPAcceptedItem *slot = &rsrc_obj->accept_slots[i];
+        if (!slot->pending) {
+            slot->pending = true;
+            slot->newpcb = newpcb;
+            slot->eof = false;
+            tcp_arg(newpcb, slot);
+            tcp_err(newpcb, tcp_pending_accept_err_cb);
+            tcp_recv(newpcb, tcp_pending_accept_recv_cb);
+            tcp_backlog_delayed(newpcb);
+            list_append(&rsrc_obj->received_list, &slot->list_head);
+            socket_queue_pending(rsrc_obj, SocketPendingRead);
+            return ERR_OK;
+        }
+    }
+    tcp_abort(newpcb);
+    return ERR_ABRT;
 }
 
 static void tcp_recv_handler(struct LWIPEvent *event)
 {
-    struct tcp_pcb *tpcb = event->tcp_recv.tpcb;
-    // The resource should have been set by now as make_resource was queued first
-    struct SocketResource *rsrc_obj = tpcb->callback_arg;
-    if (IS_NULL_PTR(rsrc_obj)) {
-        TRACE("Unexpected null resource in tcp_recv_handler -- buf = %p\n", (void *) event->tcp_recv.buf);
-    } else {
-        struct TCPReceivedItem *new_item = malloc(sizeof(struct TCPReceivedItem));
+    struct SocketResource *rsrc_obj = event->tcp_recv.rsrc_obj;
+    struct TCPReceivedItem *new_item = malloc(sizeof(struct TCPReceivedItem));
+    SMP_RWLOCK_WRLOCK(rsrc_obj->socket_lock);
+    LWIP_BEGIN();
+    if (rsrc_obj->tcp_pcb && new_item) {
         list_append(&rsrc_obj->received_list, &new_item->list_head);
         new_item->buf = event->tcp_recv.buf;
         new_item->err = event->tcp_recv.err;
-
-        // Send notification if we are selecting.
-        if (rsrc_obj->socket_state & SocketStateSelectingRead) {
-            // Clear flag to avoid sending a message again.
-            rsrc_obj->socket_state &= ~SocketStateSelectingRead;
-            if (rsrc_obj->read_select.process_id != INVALID_PROCESS_ID) {
-                select_event_send_notification_from_handler(rsrc_obj, rsrc_obj->read_select.process_id, ERL_NIF_SELECT_READ);
-            } // otherwise, selecting process died but we can just wait for monitor to handle it
+        socket_queue_pending(rsrc_obj, SocketPendingRead);
+    } else {
+        free(new_item);
+        if (event->tcp_recv.buf) {
+            pbuf_free(event->tcp_recv.buf);
+        }
+        if (rsrc_obj->tcp_pcb) {
+            // Losing accepted stream bytes cannot be reported as success.
+            tcp_abort(rsrc_obj->tcp_pcb);
         }
     }
+    LWIP_END();
+    SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+    enif_release_resource(rsrc_obj);
 }
 
 static err_t tcp_recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
 {
-    UNUSED(arg);
-
-    // Enqueue an event to further process recv
-    // The resource may or may not have been created, so we store tpcb instead.
+    UNUSED(tpcb);
+    struct SocketResource *rsrc_obj = arg;
+    if (!p) {
+        // EOF is critical and must not be lost when the payload queue is full.
+        socket_queue_pending(rsrc_obj, SocketPendingEOF);
+        return ERR_OK;
+    }
+    if (!socket_try_keep_resource(rsrc_obj)) {
+        return ERR_MEM;
+    }
     struct LWIPEvent event;
     event.handler = tcp_recv_handler;
-    event.tcp_recv.tpcb = tpcb;
+    event.tcp_recv.rsrc_obj = rsrc_obj;
     event.tcp_recv.buf = p;
     event.tcp_recv.err = err;
-    otp_socket_lwip_enqueue(&event);
+    if (!otp_socket_lwip_enqueue(&event)) {
+        // Only task context may drop a potentially final resource reference.
+        rsrc_obj->deferred_releases++;
+        socket_queue_pending(rsrc_obj, SocketPendingRelease);
+        return ERR_MEM;
+    }
     return ERR_OK;
 }
 
@@ -1068,42 +1161,14 @@ static bool lwip_tcp_can_send(const struct SocketResource *rsrc_obj)
     return tcp_sndbuf(rsrc_obj->tcp_pcb) > 0 && tcp_sndqueuelen(rsrc_obj->tcp_pcb) < TCP_SND_QUEUELEN;
 }
 
-static void tcp_sent_handler(struct LWIPEvent *event)
-{
-    struct SocketResource *rsrc_obj = event->tcp_sent.rsrc_obj;
-    int32_t process_id = INVALID_PROCESS_ID;
-
-    SMP_RWLOCK_WRLOCK(rsrc_obj->socket_lock);
-    LWIP_BEGIN();
-    if ((rsrc_obj->socket_state & SocketStateSelectingWrite) && rsrc_obj->tcp_pcb && lwip_tcp_can_send(rsrc_obj)) {
-        rsrc_obj->socket_state &= ~SocketStateSelectingWrite;
-        tcp_sent(rsrc_obj->tcp_pcb, NULL);
-        tcp_poll(rsrc_obj->tcp_pcb, NULL, 0);
-        process_id = rsrc_obj->write_select.process_id;
-    }
-    LWIP_END();
-    SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
-
-    if (process_id != INVALID_PROCESS_ID) {
-        select_event_send_notification_from_handler(rsrc_obj, process_id, ERL_NIF_SELECT_WRITE);
-    }
-    enif_release_resource(rsrc_obj);
-}
-
 static err_t tcp_sent_cb(void *arg, struct tcp_pcb *tpcb, u16_t len)
 {
     UNUSED(tpcb);
     UNUSED(len);
 
     struct SocketResource *rsrc_obj = (struct SocketResource *) arg;
-    if (LIKELY(rsrc_obj) && (rsrc_obj->socket_state & SocketStateSelectingWrite)) {
-        enif_keep_resource(rsrc_obj);
-        struct LWIPEvent event;
-        event.handler = tcp_sent_handler;
-        event.tcp_sent.rsrc_obj = rsrc_obj;
-        if (UNLIKELY(!otp_socket_lwip_enqueue(&event))) {
-            enif_release_resource(rsrc_obj);
-        }
+    if (LIKELY(rsrc_obj)) {
+        socket_queue_pending(rsrc_obj, SocketPendingWrite);
     }
     return ERR_OK;
 }
@@ -1113,14 +1178,8 @@ static err_t tcp_poll_cb(void *arg, struct tcp_pcb *tpcb)
     UNUSED(tpcb);
 
     struct SocketResource *rsrc_obj = (struct SocketResource *) arg;
-    if (LIKELY(rsrc_obj) && (rsrc_obj->socket_state & SocketStateSelectingWrite)) {
-        enif_keep_resource(rsrc_obj);
-        struct LWIPEvent event;
-        event.handler = tcp_sent_handler;
-        event.tcp_sent.rsrc_obj = rsrc_obj;
-        if (UNLIKELY(!otp_socket_lwip_enqueue(&event))) {
-            enif_release_resource(rsrc_obj);
-        }
+    if (LIKELY(rsrc_obj)) {
+        socket_queue_pending(rsrc_obj, SocketPendingWrite);
     }
     return ERR_OK;
 }
@@ -1129,19 +1188,21 @@ static void udp_recv_handler(struct LWIPEvent *event)
 {
     struct SocketResource *rsrc_obj = event->udp_recv.rsrc_obj;
     struct UDPReceivedItem *new_item = malloc(sizeof(struct UDPReceivedItem));
-    list_append(&rsrc_obj->received_list, &new_item->list_head);
-    new_item->buf = event->udp_recv.buf;
-    new_item->addr = event->udp_recv.addr;
-    new_item->port = event->udp_recv.port;
-
-    // Send notification if we are selecting.
-    if (rsrc_obj->socket_state & SocketStateSelectingRead) {
-        // Clear flag to avoid sending a message again.
-        rsrc_obj->socket_state &= ~SocketStateSelectingRead;
-        if (rsrc_obj->read_select.process_id != INVALID_PROCESS_ID) {
-            select_event_send_notification_from_handler(rsrc_obj, rsrc_obj->read_select.process_id, ERL_NIF_SELECT_READ);
-        } // otherwise, selecting process died
+    SMP_RWLOCK_WRLOCK(rsrc_obj->socket_lock);
+    LWIP_BEGIN();
+    if (rsrc_obj->udp_pcb && new_item) {
+        list_append(&rsrc_obj->received_list, &new_item->list_head);
+        new_item->buf = event->udp_recv.buf;
+        new_item->addr = event->udp_recv.addr;
+        new_item->port = event->udp_recv.port;
+        socket_queue_pending(rsrc_obj, SocketPendingRead);
+    } else {
+        free(new_item);
+        pbuf_free(event->udp_recv.buf);
     }
+    LWIP_END();
+    SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+    enif_release_resource(rsrc_obj);
 }
 
 static void udp_recv_cb(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *addr, u16_t port)
@@ -1151,7 +1212,7 @@ static void udp_recv_cb(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip
     UNUSED(pcb);
 
     struct SocketResource *rsrc_obj = (struct SocketResource *) arg;
-    if (LIKELY(rsrc_obj)) {
+    if (LIKELY(rsrc_obj) && socket_try_keep_resource(rsrc_obj)) {
         struct LWIPEvent event;
         event.handler = udp_recv_handler;
         event.udp_recv.rsrc_obj = rsrc_obj;
@@ -1161,8 +1222,13 @@ static void udp_recv_cb(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip
         // it can be invalid even if p is not freed)
         event.udp_recv.addr = ntohl(ip_addr_get_ip4_u32(addr));
         event.udp_recv.port = port;
-        otp_socket_lwip_enqueue(&event);
-    } // Otherwise socket was closed.
+        if (otp_socket_lwip_enqueue(&event)) {
+            return;
+        }
+        rsrc_obj->deferred_releases++;
+        socket_queue_pending(rsrc_obj, SocketPendingRelease);
+    }
+    pbuf_free(p);
 }
 
 // LwIP tcpip_try_callback uses queue.
@@ -1177,8 +1243,7 @@ int tcpip_try_callback(tcpip_callback_fn function, void *ctx)
     event.handler = tcpip_try_callback_handler;
     event.tcpip_try_callback.function = function;
     event.tcpip_try_callback.ctx = ctx;
-    otp_socket_lwip_enqueue(&event);
-    return ERR_OK;
+    return otp_socket_lwip_enqueue(&event) ? ERR_OK : ERR_MEM;
 }
 
 #endif
@@ -1259,11 +1324,20 @@ static term nif_socket_select(Context *ctx, int argc, term argv[], enum ErlNifSe
 
 #elif OTP_SOCKET_LWIP
     LWIP_BEGIN();
+    if (!rsrc_obj->tcp_pcb) {
+        LWIP_END();
+        socket_select_state_demonitor(env, rsrc_obj, select_state);
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        return make_error_tuple(CLOSED_ATOM, ctx);
+    }
     if (is_write) {
-        if (rsrc_obj->socket_state & SocketStateTCPConnected) {
+        if (rsrc_obj->socket_state & SocketStateConnected) {
             rsrc_obj->socket_state |= SocketStateSelectingWrite;
             tcp_sent(rsrc_obj->tcp_pcb, tcp_sent_cb);
             tcp_poll(rsrc_obj->tcp_pcb, tcp_poll_cb, TCP_WRITE_POLL_INTERVAL);
+            if (lwip_tcp_can_send(rsrc_obj)) {
+                socket_queue_pending(rsrc_obj, SocketPendingWrite);
+            }
         } else if (rsrc_obj->socket_state & SocketStateUDP) {
             select_event_send_notification_from_nif(rsrc_obj, ctx, ERL_NIF_SELECT_WRITE);
         } else {
@@ -1335,7 +1409,7 @@ static term nif_socket_select_write(Context *ctx, int argc, term argv[])
     return nif_socket_select(ctx, argc, argv, ERL_NIF_SELECT_WRITE);
 }
 
-static term nif_socket_select_stop(Context *ctx, int argc, term argv[])
+static term nif_socket_select_stop_internal(Context *ctx, int argc, term argv[], bool read_only)
 {
     TRACE("nif_socket_stop\n");
     UNUSED(argc);
@@ -1350,9 +1424,14 @@ static term nif_socket_select_stop(Context *ctx, int argc, term argv[])
     SMP_RWLOCK_WRLOCK(rsrc_obj->socket_lock);
     ErlNifEnv *env = erl_nif_env_from_context(ctx);
     socket_select_state_demonitor(env, rsrc_obj, &rsrc_obj->read_select);
-    socket_select_state_demonitor(env, rsrc_obj, &rsrc_obj->write_select);
+    if (!read_only) {
+        socket_select_state_demonitor(env, rsrc_obj, &rsrc_obj->write_select);
+    }
 #if OTP_SOCKET_BSD
-    if (rsrc_obj->fd != CLOSED_FD && UNLIKELY(enif_select(env, rsrc_obj->fd, ERL_NIF_SELECT_STOP, rsrc_obj, NULL, term_nil()) < 0)) {
+    enum ErlNifSelectFlags flags = read_only && rsrc_obj->write_select.process_id != INVALID_PROCESS_ID
+        ? ERL_NIF_SELECT_READ | ERL_NIF_SELECT_CANCEL
+        : ERL_NIF_SELECT_STOP;
+    if (rsrc_obj->fd != CLOSED_FD && UNLIKELY(enif_select(env, rsrc_obj->fd, flags, rsrc_obj, NULL, term_nil()) < 0)) {
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
         RAISE_ERROR(BADARG_ATOM);
     }
@@ -1361,9 +1440,9 @@ static term nif_socket_select_stop(Context *ctx, int argc, term argv[])
     if (rsrc_obj->socket_state & SocketStateSelectingRead) {
         rsrc_obj->socket_state &= ~SocketStateSelectingRead;
     }
-    if (rsrc_obj->socket_state & SocketStateSelectingWrite) {
+    if (!read_only && (rsrc_obj->socket_state & SocketStateSelectingWrite)) {
         rsrc_obj->socket_state &= ~SocketStateSelectingWrite;
-        if (rsrc_obj->tcp_pcb) {
+        if ((rsrc_obj->socket_state & SocketStateConnected) && rsrc_obj->tcp_pcb) {
             tcp_sent(rsrc_obj->tcp_pcb, NULL);
             tcp_poll(rsrc_obj->tcp_pcb, NULL, 0);
         }
@@ -1373,6 +1452,16 @@ static term nif_socket_select_stop(Context *ctx, int argc, term argv[])
     SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
 
     return OK_ATOM;
+}
+
+static term nif_socket_select_stop(Context *ctx, int argc, term argv[])
+{
+    return nif_socket_select_stop_internal(ctx, argc, argv, false);
+}
+
+static term nif_socket_select_read_stop(Context *ctx, int argc, term argv[])
+{
+    return nif_socket_select_stop_internal(ctx, argc, argv, true);
 }
 
 //
@@ -1482,7 +1571,7 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    SMP_RWLOCK_RDLOCK(rsrc_obj->socket_lock);
+    SMP_RWLOCK_WRLOCK(rsrc_obj->socket_lock);
 
 #if OTP_SOCKET_BSD
     if (rsrc_obj->fd == 0) {
@@ -1514,6 +1603,11 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
                 }
 #elif OTP_SOCKET_LWIP
                 LWIP_BEGIN();
+                if (!rsrc_obj->tcp_pcb) {
+                    LWIP_END();
+                    SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                    return make_error_tuple(CLOSED_ATOM, ctx);
+                }
                 if (option_value) {
                     if (rsrc_obj->socket_state & SocketStateTCP) {
                         ip_set_option(rsrc_obj->tcp_pcb, SOF_REUSEADDR);
@@ -1717,6 +1811,11 @@ static term nif_socket_sockname(Context *ctx, int argc, term argv[])
     uint32_t ip4_u32;
     uint16_t port_u16;
     LWIP_BEGIN();
+    if (!rsrc_obj->tcp_pcb) {
+        LWIP_END();
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        return make_error_tuple(CLOSED_ATOM, ctx);
+    }
     if (rsrc_obj->socket_state & SocketStateTCP) {
         ip4_u32 = ntohl(ip_addr_get_ip4_u32(&rsrc_obj->tcp_pcb->local_ip));
         port_u16 = rsrc_obj->tcp_pcb->local_port;
@@ -1800,8 +1899,15 @@ static term nif_socket_peername(Context *ctx, int argc, term argv[])
     uint16_t port_u16 = ntohs(addr.sin_port);
 #elif OTP_SOCKET_LWIP
     // TODO: support peername for "connected" UDP sockets
+    LWIP_BEGIN();
+    if (!rsrc_obj->tcp_pcb) {
+        LWIP_END();
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        return make_error_tuple(CLOSED_ATOM, ctx);
+    }
     uint32_t ip4_u32 = ntohl(ip_addr_get_ip4_u32(&rsrc_obj->tcp_pcb->remote_ip));
     uint16_t port_u16 = rsrc_obj->tcp_pcb->remote_port;
+    LWIP_END();
     SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
 #endif
 
@@ -1916,11 +2022,18 @@ static term nif_socket_bind(Context *ctx, int argc, term argv[])
     }
 #elif OTP_SOCKET_LWIP
     err_t res;
+    LWIP_BEGIN();
+    if (!rsrc_obj->tcp_pcb) {
+        LWIP_END();
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        return make_error_tuple(CLOSED_ATOM, ctx);
+    }
     if (rsrc_obj->socket_state & SocketStateTCP) {
         res = tcp_bind(rsrc_obj->tcp_pcb, &ip_addr, port_u16);
     } else {
         res = udp_bind(rsrc_obj->udp_pcb, &ip_addr, port_u16);
     }
+    LWIP_END();
     SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
     if (UNLIKELY(res != ERR_OK)) {
         AVM_LOGE(TAG, "Unable to bind socket: res=%i.", res);
@@ -1950,7 +2063,7 @@ static term nif_socket_listen(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    SMP_RWLOCK_RDLOCK(rsrc_obj->socket_lock);
+    SMP_RWLOCK_WRLOCK(rsrc_obj->socket_lock);
 #if OTP_SOCKET_BSD
     if (rsrc_obj->fd == 0) {
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
@@ -1983,22 +2096,43 @@ static term nif_socket_listen(Context *ctx, int argc, term argv[])
     if (backlog > 255) {
         // POSIX says: "Implementations may impose a limit on backlog and silently reduce the specified value"
         backlog_u8 = 255;
-    }
-    if (backlog < 0) {
+    } else if (backlog < 0) {
         // POSIX says: "If listen() is called with a backlog argument value that is less than 0, the function behaves as if it had been called with a backlog argument value of 0."
         backlog_u8 = 0;
     } else {
         backlog_u8 = backlog;
     }
+    size_t slot_count = backlog_u8 ? backlog_u8 : 1;
+    struct TCPAcceptedItem *slots = calloc(slot_count, sizeof(struct TCPAcceptedItem));
+    if (!slots) {
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    LWIP_BEGIN();
+    if (!rsrc_obj->tcp_pcb || (rsrc_obj->socket_state & (SocketStateConnected | SocketStateListening))) {
+        LWIP_END();
+        free(slots);
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        return make_error_tuple(CLOSED_ATOM, ctx);
+    }
     err_t err;
     struct tcp_pcb *new_pcb = tcp_listen_with_backlog_and_err(rsrc_obj->tcp_pcb, backlog_u8, &err);
     if (new_pcb == NULL) {
+        LWIP_END();
+        free(slots);
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
         return make_lwip_err_tuple(err, ctx);
     }
+    for (size_t i = 0; i < slot_count; i++) {
+        slots[i].listener = rsrc_obj;
+    }
+    rsrc_obj->accept_slots = slots;
+    rsrc_obj->accept_slot_count = slot_count;
     // Define accept callback
     tcp_accept(new_pcb, tcp_accept_cb);
     rsrc_obj->tcp_pcb = new_pcb;
     rsrc_obj->socket_state = SocketStateTCPListening;
+    LWIP_END();
     SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
     return OK_ATOM;
 #endif
@@ -2041,14 +2175,14 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    SMP_RWLOCK_RDLOCK(rsrc_obj->socket_lock);
+    SMP_RWLOCK_WRLOCK(rsrc_obj->socket_lock);
 #if OTP_SOCKET_BSD
     if (rsrc_obj->fd == 0) {
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
         return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
     }
 #elif OTP_SOCKET_LWIP
-    if (rsrc_obj->socket_state & SocketStateClosed) {
+    if (rsrc_obj->socket_state == SocketStateClosed) {
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
         return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
     }
@@ -2128,43 +2262,58 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
         return result;
     }
 #elif OTP_SOCKET_LWIP
-    term result;
-    LWIP_BEGIN();
-    if (!list_is_empty(&rsrc_obj->received_list)) {
-        struct TCPAcceptedItem *first_item = CONTAINER_OF(list_first(&rsrc_obj->received_list), struct TCPAcceptedItem, list_head);
-        struct SocketResource *new_resource = make_accepted_socket_resource(first_item->newpcb);
-        if (IS_NULL_PTR(new_resource)) {
-            AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
-            LWIP_END();
-            SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-        size_t requested_size = TERM_BOXED_REFERENCE_RESOURCE_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_SHORT_SIZE;
-        if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
-            LWIP_END();
-            SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+    struct SocketResource *new_resource = make_accepted_socket_resource();
+    struct TCPReceivedItem *eof = malloc(sizeof(struct TCPReceivedItem));
+    if (!new_resource || !eof) {
+        if (new_resource) {
             enif_release_resource(new_resource);
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-
-        tcp_backlog_accepted(first_item->newpcb);
+        free(eof);
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    size_t requested_size = TERM_BOXED_REFERENCE_RESOURCE_SIZE + 2 * TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_SHORT_SIZE;
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        enif_release_resource(new_resource);
+        free(eof);
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    LWIP_BEGIN();
+    while (!list_is_empty(&rsrc_obj->received_list)) {
+        struct TCPAcceptedItem *first_item = CONTAINER_OF(list_first(&rsrc_obj->received_list), struct TCPAcceptedItem, list_head);
         list_remove(&first_item->list_head);
-        free(first_item);
-
+        first_item->pending = false;
+        if (!first_item->newpcb) {
+            continue; // A reset child does not close its listener.
+        }
+        new_resource->tcp_pcb = first_item->newpcb;
+        new_resource->socket_state = SocketStateTCPConnected;
+        tcp_backlog_accepted(first_item->newpcb);
+        tcp_arg(first_item->newpcb, new_resource);
+        tcp_err(first_item->newpcb, tcp_err_cb);
+        tcp_recv(first_item->newpcb, tcp_recv_cb);
+        first_item->newpcb = NULL;
+        if (first_item->eof) {
+            eof->buf = NULL;
+            eof->err = ERR_OK;
+            list_append(&new_resource->received_list, &eof->list_head);
+        } else {
+            free(eof);
+        }
+        LWIP_END();
         term socket_term = make_accepted_socket_term(ctx, new_resource);
-        result = term_alloc_tuple(2, &ctx->heap);
+        term result = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(result, 0, OK_ATOM);
         term_put_tuple_element(result, 1, socket_term);
-    } else {
-        // return EAGAIN
-        LWIP_END();
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
-        return make_error_tuple(posix_errno_to_term(EAGAIN, global), ctx);
+        return result;
     }
     LWIP_END();
+    enif_release_resource(new_resource);
+    free(eof);
     SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
-    return result;
+    return make_error_tuple(posix_errno_to_term(EAGAIN, global), ctx);
 #endif
 }
 
@@ -2187,6 +2336,7 @@ static size_t copy_pbuf_data(struct pbuf *src, size_t offset, size_t count, uint
         copied += chunk_count;
         dst += chunk_count;
         src = src->next;
+        offset = 0;
     }
     return copied;
 }
@@ -2241,6 +2391,10 @@ static ssize_t do_socket_recv(struct SocketResource *rsrc_obj, uint8_t *buf, siz
     err_t err = ERR_OK;
     // Use lwIP lock
     LWIP_BEGIN();
+    if (!rsrc_obj->tcp_pcb) {
+        LWIP_END();
+        return SocketClosed;
+    }
     if (rsrc_obj->socket_state & SocketStateTCP) {
         size_t pos = rsrc_obj->pos;
         struct ListHead *item;
@@ -2261,6 +2415,7 @@ static ssize_t do_socket_recv(struct SocketResource *rsrc_obj, uint8_t *buf, siz
                     // all data was copied.
                     list_remove(item);
                     pbuf_free(received_item->buf);
+                    free(received_item);
                     pos = 0;
                 } else {
                     pos = pos + copied;
@@ -2278,6 +2433,10 @@ static ssize_t do_socket_recv(struct SocketResource *rsrc_obj, uint8_t *buf, siz
             port_u16 = rsrc_obj->tcp_pcb->remote_port;
         }
     } else {
+        if (list_is_empty(&rsrc_obj->received_list)) {
+            LWIP_END();
+            return SocketWouldBlock;
+        }
         struct UDPReceivedItem *first_item = CONTAINER_OF(list_first(&rsrc_obj->received_list), struct UDPReceivedItem, list_head);
         size_t copied = copy_pbuf_data(first_item->buf, 0, remaining, ptr);
         remaining -= copied;
@@ -2317,7 +2476,9 @@ static ssize_t do_socket_recv(struct SocketResource *rsrc_obj, uint8_t *buf, siz
 
 ssize_t socket_recv(struct SocketResource *rsrc_obj, uint8_t *buf, size_t len, int flags, term *from, Heap *heap)
 {
+    SMP_RWLOCK_WRLOCK(rsrc_obj->socket_lock);
     ssize_t result = do_socket_recv(rsrc_obj, buf, len, flags, from, heap);
+    SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
     return result;
 }
 
@@ -2366,7 +2527,7 @@ static term nif_socket_recv_with_peek(Context *ctx, term resource_term, struct S
         // receive data on the socket
         //
         term map = term_invalid_term();
-        res = socket_recv(rsrc_obj, buffer, buffer_size, flags, is_recvfrom ? &map : NULL, &ctx->heap);
+        res = do_socket_recv(rsrc_obj, buffer, buffer_size, flags, is_recvfrom ? &map : NULL, &ctx->heap);
 
         if (UNLIKELY(res < 0)) {
             AVM_LOGI(TAG, "Unable to receive data on fd %i.  errno=%i", rsrc_obj->fd, errno);
@@ -2413,7 +2574,7 @@ static term nif_socket_recv_without_peek(Context *ctx, term resource_term, struc
             }
         }
 
-        ssize_t res = socket_recv(rsrc_obj, buffer, buffer_size, 0, is_recvfrom ? &roots[1] : NULL, &ctx->heap);
+        ssize_t res = do_socket_recv(rsrc_obj, buffer, buffer_size, 0, is_recvfrom ? &roots[1] : NULL, &ctx->heap);
 
         if (res < 0) {
             int err = errno;
@@ -2480,8 +2641,13 @@ static term nif_socket_recv_lwip(Context *ctx, term resource_term, struct Socket
     err_t err = ERR_OK;
     // Use lwIP lock
     LWIP_BEGIN();
+    if (!rsrc_obj->tcp_pcb) {
+        LWIP_END();
+        return make_error_tuple(CLOSED_ATOM, ctx);
+    }
     if (rsrc_obj->socket_state & SocketStateTCP) {
         // TCP: we return up to len bytes or all available (if len == 0)
+        size_t pos = rsrc_obj->pos;
         struct ListHead *item;
         LIST_FOR_EACH (item, &rsrc_obj->received_list) {
             struct TCPReceivedItem *received_item = GET_LIST_ENTRY(item, struct TCPReceivedItem, list_head);
@@ -2490,7 +2656,8 @@ static term nif_socket_recv_lwip(Context *ctx, term resource_term, struct Socket
                 err = received_item->err;
                 break;
             } else {
-                buffer_size += received_item->buf->tot_len;
+                buffer_size += received_item->buf->tot_len - pos;
+                pos = 0;
                 if (len > 0 && buffer_size >= len) {
                     buffer_size = len;
                     break;
@@ -2535,8 +2702,10 @@ static term nif_socket_recv_lwip(Context *ctx, term resource_term, struct Socket
 
     term map = term_invalid_term();
 
-    ssize_t result = socket_recv(rsrc_obj, ptr, remaining, 0, is_recvfrom ? &map : NULL, &ctx->heap);
-    UNUSED(result);
+    ssize_t result = do_socket_recv(rsrc_obj, ptr, remaining, 0, is_recvfrom ? &map : NULL, &ctx->heap);
+    if (result < 0 || (size_t) result != buffer_size) {
+        return make_error_tuple(result == SocketWouldBlock ? posix_errno_to_term(EAGAIN, global) : CLOSED_ATOM, ctx);
+    }
 
     term payload;
 
@@ -2566,14 +2735,14 @@ static term nif_socket_recv_internal(Context *ctx, term argv[], bool is_recvfrom
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    SMP_RWLOCK_RDLOCK(rsrc_obj->socket_lock);
+    SMP_RWLOCK_WRLOCK(rsrc_obj->socket_lock);
 #if OTP_SOCKET_BSD
     if (rsrc_obj->fd == 0) {
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
         return make_error_tuple(posix_errno_to_term(EBADF, ctx->global), ctx);
     }
 #elif OTP_SOCKET_LWIP
-    if (rsrc_obj->socket_state & SocketStateClosed) {
+    if (rsrc_obj->socket_state == SocketStateClosed) {
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
         return make_error_tuple(posix_errno_to_term(EBADF, ctx->global), ctx);
     }
@@ -2675,8 +2844,16 @@ static ssize_t do_socket_send(struct SocketResource *rsrc_obj, const uint8_t *bu
     }
 
     LWIP_BEGIN();
+    if (!rsrc_obj->tcp_pcb) {
+        LWIP_END();
+        return SocketClosed;
+    }
     if (rsrc_obj->socket_state & SocketStateUDP) {
         struct pbuf *p = pbuf_alloc(PBUF_TRANSPORT, len, PBUF_RAM);
+        if (!p) {
+            LWIP_END();
+            return SocketWouldBlock;
+        }
         uint8_t *bytes = (uint8_t *) p->payload;
         memcpy(bytes, buf, len);
         if (!term_is_invalid_term(dest)) {
@@ -2697,22 +2874,18 @@ static ssize_t do_socket_send(struct SocketResource *rsrc_obj, const uint8_t *bu
             flags |= TCP_WRITE_FLAG_MORE;
         }
         err = tcp_write(rsrc_obj->tcp_pcb, buf, buflen, flags);
-        if (err == ERR_MEM) {
-            sent_data = 0;
-        } else {
-            if (err == ERR_OK) {
-                err = tcp_output(rsrc_obj->tcp_pcb);
-                if (err == ERR_OK) {
-                    sent_data = buflen;
-                }
-            }
+        if (err == ERR_OK) {
+            // tcp_write accepted these bytes even if output cannot transmit
+            // them yet. Retrying the original payload would duplicate data.
+            sent_data = buflen;
+            (void) tcp_output(rsrc_obj->tcp_pcb);
         }
     }
     LWIP_END();
     if (err == ERR_CLSD) {
         return SocketClosed;
     }
-    if (sent_data == 0 && err == ERR_MEM) {
+    if (err == ERR_MEM) {
         return SocketWouldBlock;
     }
     if (err != ERR_OK) {
@@ -2856,32 +3029,13 @@ static err_t tcp_connected_cb(void *arg, struct tcp_pcb *tpcb, err_t err)
     UNUSED(tpcb);
 
     struct SocketResource *rsrc_obj = (struct SocketResource *) arg;
-    struct RefcBinary *rsrc_refc = refc_binary_from_data(rsrc_obj);
-    GlobalContext *global = rsrc_refc->resource_type->global;
-    int32_t target_pid = rsrc_obj->trapped_process_id;
-    rsrc_obj->trapped_process_id = INVALID_PROCESS_ID;
-    rsrc_obj->socket_state = SocketStateTCPConnected;
-    if (target_pid != INVALID_PROCESS_ID) {
-        if (err == ERR_OK) {
-            struct LWIPEvent event;
-            event.handler = trap_answer_ok;
-            event.trap_answer_ok.global = global;
-            event.trap_answer_ok.target_pid = target_pid;
-            otp_socket_lwip_enqueue(&event);
-        } else {
-            struct LWIPEvent event;
-            event.handler = trap_answer_closed;
-            event.trap_answer_closed.global = global;
-            event.trap_answer_closed.target_pid = target_pid;
-            otp_socket_lwip_enqueue(&event);
-        }
-    } // else: sender died
+    rsrc_obj->connect_error = err;
+    socket_queue_pending(rsrc_obj, SocketPendingConnect);
     return ERR_OK;
 }
 
-static void tcp_error_handler(struct LWIPEvent *event)
+static void tcp_error_handler(struct SocketResource *rsrc_obj)
 {
-    struct SocketResource *rsrc_obj = event->tcp_error.rsrc_obj;
     int32_t trapped_process_id;
     int32_t read_process_id = INVALID_PROCESS_ID;
     int32_t write_process_id = INVALID_PROCESS_ID;
@@ -2899,8 +3053,10 @@ static void tcp_error_handler(struct LWIPEvent *event)
         write_process_id = rsrc_obj->write_select.process_id;
         write_ref_ticks = rsrc_obj->write_select.ref_ticks;
     }
-    rsrc_obj->tcp_pcb = NULL;
+    LWIP_BEGIN();
+    socket_clear_received(rsrc_obj);
     rsrc_obj->socket_state = SocketStateClosed;
+    LWIP_END();
     ErlNifEnv env;
     erl_nif_env_partial_init_from_globalcontext(&env, refc_binary_from_data(rsrc_obj)->resource_type->global);
     socket_select_state_demonitor(&env, rsrc_obj, &rsrc_obj->read_select);
@@ -2921,7 +3077,6 @@ static void tcp_error_handler(struct LWIPEvent *event)
     if (write_process_id != INVALID_PROCESS_ID) {
         select_event_send_closed_notification_from_handler(rsrc_obj, write_process_id, write_ref_ticks);
     }
-    enif_release_resource(rsrc_obj);
 }
 
 static void tcp_err_cb(void *arg, err_t err)
@@ -2929,11 +3084,101 @@ static void tcp_err_cb(void *arg, err_t err)
     UNUSED(err);
 
     struct SocketResource *rsrc_obj = (struct SocketResource *) arg;
-    enif_keep_resource(rsrc_obj);
-    struct LWIPEvent event;
-    event.handler = tcp_error_handler;
-    event.tcp_error.rsrc_obj = rsrc_obj;
-    if (UNLIKELY(!otp_socket_lwip_enqueue(&event))) {
+    // lwIP may already have freed the PCB. Invalidate it synchronously, but
+    // defer VM notifications and monitor cleanup without taking socket_lock.
+    rsrc_obj->tcp_pcb = NULL;
+    socket_queue_pending(rsrc_obj, SocketPendingError);
+}
+
+bool otp_socket_lwip_has_pending(void)
+{
+    LWIP_BEGIN();
+    bool pending = pending_sockets != NULL;
+    LWIP_END();
+    return pending;
+}
+
+void otp_socket_lwip_process_pending(void)
+{
+    for (;;) {
+        LWIP_BEGIN();
+        struct SocketResource *rsrc_obj = pending_sockets;
+        if (!rsrc_obj) {
+            LWIP_END();
+            return;
+        }
+        pending_sockets = rsrc_obj->pending_next;
+        unsigned work = rsrc_obj->pending_work;
+        size_t releases = rsrc_obj->deferred_releases;
+        rsrc_obj->pending_work = 0;
+        rsrc_obj->deferred_releases = 0;
+        LWIP_END();
+
+        if (work & SocketPendingError) {
+            tcp_error_handler(rsrc_obj);
+        } else {
+            SMP_RWLOCK_WRLOCK(rsrc_obj->socket_lock);
+            LWIP_BEGIN();
+            if ((work & SocketPendingConnect) && rsrc_obj->tcp_pcb) {
+                int32_t pid = rsrc_obj->trapped_process_id;
+                rsrc_obj->trapped_process_id = INVALID_PROCESS_ID;
+                rsrc_obj->socket_state = SocketStateTCPConnected;
+                struct LWIPEvent event;
+                GlobalContext *global = refc_binary_from_data(rsrc_obj)->resource_type->global;
+                LWIP_END();
+                if (pid != INVALID_PROCESS_ID) {
+                    if (rsrc_obj->connect_error == ERR_OK) {
+                        event.trap_answer_ok.global = global;
+                        event.trap_answer_ok.target_pid = pid;
+                        trap_answer_ok(&event);
+                    } else {
+                        event.trap_answer_closed.global = global;
+                        event.trap_answer_closed.target_pid = pid;
+                        trap_answer_closed(&event);
+                    }
+                }
+                LWIP_BEGIN();
+            }
+            if ((work & SocketPendingEOF) && rsrc_obj->tcp_pcb) {
+                struct TCPReceivedItem *eof = malloc(sizeof(struct TCPReceivedItem));
+                if (eof) {
+                    eof->buf = NULL;
+                    eof->err = ERR_OK;
+                    list_append(&rsrc_obj->received_list, &eof->list_head);
+                    work |= SocketPendingRead;
+                } else {
+                    tcp_abort(rsrc_obj->tcp_pcb);
+                }
+            }
+            if ((work & SocketPendingRead) && rsrc_obj->tcp_pcb
+                && (rsrc_obj->socket_state & SocketStateSelectingRead)
+                && !list_is_empty(&rsrc_obj->received_list)) {
+                rsrc_obj->socket_state &= ~SocketStateSelectingRead;
+                int32_t pid = rsrc_obj->read_select.process_id;
+                LWIP_END();
+                if (pid != INVALID_PROCESS_ID) {
+                    select_event_send_notification_from_handler(rsrc_obj, pid, ERL_NIF_SELECT_READ);
+                }
+                LWIP_BEGIN();
+            }
+            if ((work & SocketPendingWrite) && rsrc_obj->tcp_pcb
+                && (rsrc_obj->socket_state & SocketStateSelectingWrite) && lwip_tcp_can_send(rsrc_obj)) {
+                rsrc_obj->socket_state &= ~SocketStateSelectingWrite;
+                tcp_sent(rsrc_obj->tcp_pcb, NULL);
+                tcp_poll(rsrc_obj->tcp_pcb, NULL, 0);
+                int32_t pid = rsrc_obj->write_select.process_id;
+                LWIP_END();
+                if (pid != INVALID_PROCESS_ID) {
+                    select_event_send_notification_from_handler(rsrc_obj, pid, ERL_NIF_SELECT_WRITE);
+                }
+                LWIP_BEGIN();
+            }
+            LWIP_END();
+            SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        }
+        while (releases-- > 0) {
+            enif_release_resource(rsrc_obj);
+        }
         enif_release_resource(rsrc_obj);
     }
 }
@@ -2954,7 +3199,7 @@ static term nif_socket_connect(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    SMP_RWLOCK_RDLOCK(rsrc_obj->socket_lock);
+    SMP_RWLOCK_WRLOCK(rsrc_obj->socket_lock);
     term sockaddr = argv[1];
     term port = interop_kv_get_value_default(sockaddr, port_atom, term_from_int(0), global);
     term addr = interop_kv_get_value(sockaddr, addr_atom, global);
@@ -3031,14 +3276,22 @@ static term nif_socket_connect(Context *ctx, int argc, term argv[])
     ip_addr_set_ip4_u32(&ip_addr, htonl(inet_addr4_to_uint32(addr)));
     err_t err;
     LWIP_BEGIN();
+    if (!rsrc_obj->tcp_pcb) {
+        LWIP_END();
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        return make_error_tuple(CLOSED_ATOM, ctx);
+    }
     if (rsrc_obj->socket_state & SocketStateUDP) {
         err = udp_connect(rsrc_obj->udp_pcb, &ip_addr, port_number);
     } else {
+        rsrc_obj->trapped_process_id = ctx->process_id;
         err = tcp_connect(rsrc_obj->tcp_pcb, &ip_addr, port_number, tcp_connected_cb);
     }
     LWIP_END();
 
     if (UNLIKELY(err != ERR_OK)) {
+        rsrc_obj->trapped_process_id = INVALID_PROCESS_ID;
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
         if (err == ERR_USE || err == ERR_RTE) {
             return make_error_tuple(CLOSED_ATOM, ctx);
         }
@@ -3048,7 +3301,6 @@ static term nif_socket_connect(Context *ctx, int argc, term argv[])
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
         return OK_ATOM;
     } else {
-        rsrc_obj->trapped_process_id = ctx->process_id;
         // Trap caller waiting for completion
         context_update_flags(ctx, ~NoFlags, Trap);
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
@@ -3076,7 +3328,7 @@ static term nif_socket_shutdown(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    SMP_RWLOCK_RDLOCK(rsrc_obj->socket_lock);
+    SMP_RWLOCK_WRLOCK(rsrc_obj->socket_lock);
     int how;
     int val = interop_atom_term_select_int(otp_socket_shutdown_direction_table, argv[1], global);
     switch (val) {
@@ -3117,12 +3369,18 @@ static term nif_socket_shutdown(Context *ctx, int argc, term argv[])
         return make_errno_tuple(ctx);
     }
 #elif OTP_SOCKET_LWIP
+    if (how == SHUT_RDWR && (rsrc_obj->socket_state & SocketStateTCP)) {
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        return nif_socket_close(ctx, 1, argv);
+    }
     LWIP_BEGIN();
+    if (!rsrc_obj->tcp_pcb) {
+        LWIP_END();
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        return make_error_tuple(CLOSED_ATOM, ctx);
+    }
     if (rsrc_obj->socket_state & SocketStateTCP) {
         err_t res = tcp_shutdown(rsrc_obj->tcp_pcb, how != SHUT_WR, how != SHUT_RD);
-        if (how == SHUT_RDWR && res == ERR_OK) {
-            rsrc_obj->tcp_pcb = NULL;
-        }
         if (res != ERR_OK) {
             AVM_LOGE(TAG, "Unable to shut down socket: res=%i", res);
             result = make_lwip_err_tuple(res, ctx);
@@ -3149,6 +3407,10 @@ static const struct Nif socket_close_nif = {
 static const struct Nif socket_select_stop_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_socket_select_stop
+};
+static const struct Nif socket_select_read_stop_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_socket_select_read_stop
 };
 static const struct Nif socket_getopt_nif = {
     .base.type = NIFFunctionType,
@@ -3227,6 +3489,10 @@ const struct Nif *otp_socket_nif_get_nif(const char *nifname)
         if (strcmp("nif_select_stop/1", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &socket_select_stop_nif;
+        }
+        if (strcmp("nif_select_read_stop/1", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &socket_select_read_stop_nif;
         }
         if (strcmp("getopt/2", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
