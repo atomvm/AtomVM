@@ -919,7 +919,7 @@ handle_info({Ref, eth_disconnected} = _Msg, #state{ref = Ref, config = Config} =
     {noreply, State2};
 handle_info({Ref, {eth_got_ip, IpInfo}} = _Msg, #state{ref = Ref, config = Config} = State0) ->
     maybe_callback1({got_ip, IpInfo}, proplists:get_value(eth, Config)),
-    State1 = State0#state{eth_ip_info = IpInfo},
+    State1 = State0#state{eth_ip_info = IpInfo, eth_state = connected},
     {noreply, maybe_start_mdns(State1)};
 handle_info({Ref, ap_started} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_ap_started_callback(Config),
