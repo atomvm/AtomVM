@@ -50,6 +50,7 @@
     nif_accept/1,
     nif_recv/2,
     nif_recvfrom/2,
+    nif_select_read_stop/1,
     nif_select_stop/1,
     nif_send/2,
     nif_sendto/3
@@ -270,7 +271,7 @@ accept0(Socket, Timeout) ->
                 {'$socket', Socket, select, Ref} ->
                     case ?MODULE:nif_accept(Socket) of
                         {error, _} = E ->
-                            ?MODULE:nif_select_stop(Socket),
+                            ?MODULE:nif_select_read_stop(Socket),
                             E;
                         {ok, _Socket} = Reply ->
                             Reply
@@ -383,7 +384,7 @@ recv0(Socket, Length, Timeout) ->
                 {'$socket', Socket, select, Ref} ->
                     case ?MODULE:nif_recv(Socket, Length) of
                         {error, _} = E ->
-                            ?MODULE:nif_select_stop(Socket),
+                            ?MODULE:nif_select_read_stop(Socket),
                             E;
                         {ok, Data} ->
                             {ok, Data}
@@ -434,7 +435,7 @@ recv0_r(Socket, Length, Timeout, EndQuery, Acc) ->
                 {'$socket', Socket, select, Ref} ->
                     case ?MODULE:nif_recv(Socket, Length) of
                         {error, _} = E ->
-                            ?MODULE:nif_select_stop(Socket),
+                            ?MODULE:nif_select_read_stop(Socket),
                             E;
                         {ok, Data} ->
                             NewAcc = [Data | Acc],
@@ -538,7 +539,7 @@ recvfrom0(Socket, Length, Timeout) ->
                 {'$socket', Socket, select, Ref} ->
                     case ?MODULE:nif_recvfrom(Socket, Length) of
                         {error, _} = E ->
-                            ?MODULE:nif_select_stop(Socket),
+                            ?MODULE:nif_select_read_stop(Socket),
                             E;
                         {ok, {_Address, _Data}} = Reply ->
                             Reply
@@ -572,8 +573,7 @@ recvfrom0_nowait(Socket, Length, Ref) ->
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
 %% @param   Data the data to send
-%% @returns `ok' if all data was accepted; `{ok, Rest}' if only part of the data
-%%          was accepted; `{error, Reason}', otherwise.
+%% @returns `ok' if all data was accepted; `{error, Reason}', otherwise.
 %% @doc     Send data on the specified socket.
 %%
 %%          For stream sockets, partial sends and transient backpressure are
@@ -586,7 +586,7 @@ recvfrom0_nowait(Socket, Length, Ref) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec send(Socket :: socket(), Data :: iodata()) ->
-    ok | {ok, Rest :: binary()} | {error, Reason :: term()}.
+    ok | {error, Reason :: term()}.
 send(Socket, Data) when is_binary(Data) ->
     send_all_binary(Socket, Data);
 send(Socket, Data) ->
@@ -723,6 +723,11 @@ nif_recv(_Socket, _Length) ->
 
 %% @private
 nif_recvfrom(_Socket, _Length) ->
+    erlang:nif_error(undefined).
+
+%% @private
+%% Cancel only read selection and its monitor, preserving any pending writer.
+nif_select_read_stop(_Socket) ->
     erlang:nif_error(undefined).
 
 %% @private
