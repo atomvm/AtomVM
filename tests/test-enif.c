@@ -726,7 +726,8 @@ void test_select_cancel(void)
 
     assert(enif_select(env, event, ERL_NIF_SELECT_CANCEL, resource, NULL, UNDEFINED_ATOM) == ERL_NIF_SELECT_BADARG);
     assert(enif_select(env, event, ERL_NIF_SELECT_READ | ERL_NIF_SELECT_CANCEL, resource, NULL, UNDEFINED_ATOM) == 0);
-    assert(memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFERENCE_RESOURCE_SIZE) == MEMORY_GC_OK);
+    enum MemoryGCResult gc_result = memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFERENCE_RESOURCE_SIZE);
+    assert(gc_result == MEMORY_GC_OK);
     term resource_message = term_from_resource(resource, &env->heap);
     assert(enif_select_read(env, event, resource, &reader->process_id, resource_message, NULL) == 0);
     assert(enif_select_write(env, event, resource, &writer->process_id, term_from_int(29), NULL) == 0);
@@ -745,7 +746,8 @@ void test_select_cancel(void)
 
     // Reuse the retained event; cancelling write must leave a reference-based
     // read selection intact, including its owner and reference.
-    assert(memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFERENCE_SHORT_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE) == MEMORY_GC_OK);
+    gc_result = memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFERENCE_SHORT_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE);
+    assert(gc_result == MEMORY_GC_OK);
     term ref = term_from_ref_ticks(123, &env->heap);
     resource_message = term_from_resource(resource, &env->heap);
     assert(enif_select_write(env, event, resource, &writer->process_id, resource_message, NULL) == 0);
@@ -773,6 +775,19 @@ void test_select_cancel(void)
     assert(mailbox_process_outer_list_native(&writer->mailbox) == NULL);
     assert(!mailbox_peek(writer, &notification));
 
+    // An inactive registration for another resource must not shadow readiness
+    // after the OS reuses its descriptor for a new socket.
+    void *replacement = enif_alloc_resource(type, sizeof(uint32_t));
+    *((uint32_t *) replacement) = 42;
+    assert(enif_select_read(env, event, replacement, &reader->process_id, term_from_int(53), NULL) == 0);
+    sys_poll_events(global, 0);
+    assert(mailbox_process_outer_list_native(&reader->mailbox) == NULL);
+    assert(mailbox_peek(reader, &notification));
+    assert(notification == term_from_int(53));
+    mailbox_remove_message(&reader->mailbox, &reader->heap);
+    assert(enif_select(env, event, ERL_NIF_SELECT_STOP, replacement, NULL, UNDEFINED_ATOM) == ERL_NIF_SELECT_STOP_CALLED);
+    enif_release_resource(replacement);
+
     assert(enif_select(env, event, ERL_NIF_SELECT_STOP, resource, NULL, UNDEFINED_ATOM) == ERL_NIF_SELECT_STOP_CALLED);
     enif_release_resource(resource);
     close(sockets[0]);
@@ -782,7 +797,7 @@ void test_select_cancel(void)
 #ifdef AVM_TASK_DRIVER_ENABLED
     globalcontext_process_task_driver_queues(global);
 #endif
-    assert(dtor_call_count == 1);
+    assert(dtor_call_count == 2);
     globalcontext_destroy(global);
 }
 
