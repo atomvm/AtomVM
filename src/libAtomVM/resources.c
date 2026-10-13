@@ -374,7 +374,8 @@ bool select_event_notify(ErlNifEvent event, bool is_read, bool is_write, GlobalC
     struct ListHead *select_events = synclist_wrlock(&global->select_events);
     LIST_FOR_EACH (item, select_events) {
         select_event = GET_LIST_ENTRY(item, struct SelectEvent, head);
-        if (select_event->event == event) {
+        if (select_event->event == event && !select_event->close
+            && ((is_read && select_event->read) || (is_write && select_event->write))) {
             break;
         }
         select_event = NULL;
