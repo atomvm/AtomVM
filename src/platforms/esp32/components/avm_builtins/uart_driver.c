@@ -111,11 +111,11 @@ static const AtomStringIntPair flow_control_table[] = {
     SELECT_INT_DEFAULT(-1)
 };
 
-// With rs485_half_duplex the UART drives RTS as the transceiver's DE: high
-// while a frame goes out, low again right after its last stop bit, and what
-// the receiver picks up meanwhile is dropped. Toggling a GPIO from Erlang
-// instead is only as precise as the scheduler tick (10 ms at 100 Hz), which
-// is longer than a slave takes to start answering.
+// With rs485_half_duplex ESP-IDF drives RTS as the transceiver's DE: high
+// while a frame goes out, low again from its transmit-done interrupt, and
+// what the receiver picks up meanwhile is dropped. Toggling a GPIO from
+// Erlang instead is only as precise as the scheduler tick (10 ms at 100 Hz),
+// which is longer than a slave takes to start answering.
 static const AtomStringIntPair mode_table[] = {
     { ATOM_STR("\x4", "uart"), UART_MODE_UART },
     { ATOM_STR("\x11", "rs485_half_duplex"), UART_MODE_RS485_HALF_DUPLEX },
@@ -437,9 +437,9 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
         return NULL;
     }
 
-    term mode_term = interop_kv_get_value_default(opts, ATOM_STR("\x4", "mode"), UNDEFINED_ATOM, global);
+    term mode_term = interop_kv_get_value_default(opts, ATOM_STR("\x4", "mode"), term_invalid_term(), global);
     int mode = UART_MODE_UART;
-    if (mode_term != UNDEFINED_ATOM) {
+    if (!term_is_invalid_term(mode_term)) {
         mode = interop_atom_term_select_int(mode_table, mode_term, global);
         if (mode < 0) {
             ESP_LOGE(TAG, "invalid mode!");
