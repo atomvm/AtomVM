@@ -140,8 +140,11 @@ handle_call({supervisor, Pid}, _From, #state{} = State0) ->
     {reply, Result, State0};
 handle_call(socket, _From, #state{socket = Socket} = State) ->
     {reply, Socket, State};
-handle_call(getstat, _From, #state{received = Received, sent = Sent} = State) ->
-    {reply, {ok, Received, Sent, 0}, State}.
+handle_call(
+    getstat, _From, #state{received = Received, sent = Sent, pending_output = Output} = State
+) ->
+    Pending = lists:foldl(fun({Data, _}, Acc) -> Acc + byte_size(Data) end, 0, Output),
+    {reply, {ok, Received, Sent, Pending}, State}.
 
 handle_cast(tick, State) ->
     case queue_output(State, <<0:32>>) of

@@ -55,6 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   transient backpressure, without splitting partial results into additional packets.
   Empty datagrams are transmitted, oversized IPv4 UDP payloads return `{error, emsgsize}`,
   and BSD send errors are preserved rather than reported as a closed socket
+- Distribution tick timeouts now depend on incoming traffic, so blocked or outgoing-only
+  socket traffic cannot hide a silent peer. Pending output no longer accumulates ticks
 - Fixed maps decoded by `binary_to_term/1,2` and received over distribution keeping the
   encoder's key order, which broke `==` and made `=>` updates on an existing key produce
   duplicate keys
