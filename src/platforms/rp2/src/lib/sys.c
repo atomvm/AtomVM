@@ -77,13 +77,18 @@
 struct PortDriverDefListItem *port_driver_list;
 struct NifCollectionDefListItem *nif_collection_list;
 
+#if defined(HAVE_PLATFORM_ATOMIC_H) && !defined(AVM_NO_SMP)
+// All translation units must use the same initialized CAS lock, including
+// resource references retained by lwIP callbacks.
+critical_section_t atomic_cas_section;
+#endif
+
 void sys_init_platform(GlobalContext *glb)
 {
     struct RP2PlatformData *platform = malloc(sizeof(struct RP2PlatformData));
     glb->platform_data = platform;
 #ifndef AVM_NO_SMP
-    mutex_init(&platform->event_poll_mutex);
-    cond_init(&platform->event_poll_cond);
+    sem_init(&platform->event_poll_sem, 0, 1);
 #endif
     queue_init(&platform->event_queue, sizeof(queue_t *), EVENT_QUEUE_LEN);
 
@@ -152,37 +157,9 @@ bool sys_try_post_listener_event_from_isr(GlobalContext *glb, listener_event_t l
         return false;
     }
 
-#ifndef AVM_NO_SMP
-    uint32_t owner;
-    bool acquired_mutex = mutex_try_enter(&platform->event_poll_mutex, &owner);
-    // We're from an ISR, so we cannot wait for the interrupted code (running
-    // on the same core as we do) to release the mutex.
-    if (!acquired_mutex) {
-        // If this core is not the owner, wait for the other core to release
-        // the mutex.
-        // TODO: implement queue_try_remove_wait_timeout_ms in Pico SDK to
-        // simplify this logic
-        uint32_t caller = (uint32_t) lock_get_caller_owner_id(); // same cast exists in mutex_try_enter
-        if (caller != owner) {
-            mutex_enter_blocking(&platform->event_poll_mutex);
-            acquired_mutex = true;
-        }
-    }
-#endif
-    if (UNLIKELY(!queue_try_add(&platform->event_queue, &listener_queue))) {
-#ifndef AVM_NO_SMP
-        if (acquired_mutex) {
-            mutex_exit(&platform->event_poll_mutex);
-        }
-#endif
-        fprintf(stderr, "Lost event from ISR as global event queue is full. System is overloaded or EVENT_QUEUE_LEN is too low\n");
-        return false;
-    }
-#ifndef AVM_NO_SMP
-    if (acquired_mutex) {
-        mutex_exit(&platform->event_poll_mutex);
-    }
-#endif
+    // The global queue is only a hint: the payload is already owned by the
+    // listener, and sys_poll_events also scans every registered queue.
+    queue_try_add(&platform->event_queue, &listener_queue);
 
 #ifndef AVM_NO_SMP
     sys_signal(glb);
@@ -190,6 +167,24 @@ bool sys_try_post_listener_event_from_isr(GlobalContext *glb, listener_event_t l
 
     return true;
 }
+
+#ifndef AVM_NO_SMP
+static bool sys_has_listener_events(GlobalContext *glb)
+{
+    bool has_events = false;
+    struct ListHead *listeners = synclist_rdlock(&glb->listeners);
+    struct ListHead *item;
+    LIST_FOR_EACH (item, listeners) {
+        EventListener *listener = GET_LIST_ENTRY(item, EventListener, listeners_list_head);
+        if (!queue_is_empty(listener->queue)) {
+            has_events = true;
+            break;
+        }
+    }
+    synclist_unlock(&glb->listeners);
+    return has_events;
+}
+#endif
 
 void sys_poll_events(GlobalContext *glb, int timeout_ms)
 {
@@ -203,15 +198,18 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
 #endif
 #ifndef AVM_NO_SMP
     if (timeout_ms != 0) {
-        mutex_enter_blocking(&platform->event_poll_mutex);
-        if (queue_is_empty(&platform->event_queue)) {
+        bool has_events = !queue_is_empty(&platform->event_queue) || sys_has_listener_events(glb);
+#ifdef LIB_PICO_CYW43_ARCH
+        has_events = has_events || otp_socket_lwip_has_events();
+#endif
+        if (!has_events) {
+            // Producers publish work before releasing this durable wake latch.
             if (timeout_ms > 0) {
-                cond_wait_timeout_ms(&platform->event_poll_cond, &platform->event_poll_mutex, timeout_ms);
+                sem_acquire_timeout_ms(&platform->event_poll_sem, timeout_ms);
             } else {
-                cond_wait(&platform->event_poll_cond, &platform->event_poll_mutex);
+                sem_acquire_blocking(&platform->event_poll_sem);
             }
         }
-        mutex_exit(&platform->event_poll_mutex);
     }
 #else
     UNUSED(timeout_ms);
@@ -224,13 +222,29 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
         }
         synclist_unlock(&glb->listeners);
     }
+    // A full global hint queue must not strand an accepted listener payload.
+    // Save the next node because handlers may remove or replace themselves.
+    struct ListHead *listeners = synclist_wrlock(&glb->listeners);
+    struct ListHead *item = listeners->next;
+    while (item != listeners) {
+        struct ListHead *next = item->next;
+        EventListener *listener = GET_LIST_ENTRY(item, EventListener, listeners_list_head);
+        if (!queue_is_empty(listener->queue)) {
+            process_listener_handler(glb, listener->queue, listeners, NULL, NULL);
+        }
+        item = next;
+    }
+    synclist_unlock(&glb->listeners);
+#ifdef LIB_PICO_CYW43_ARCH
+    otp_socket_lwip_poll();
+#endif
 }
 
 #ifndef AVM_NO_SMP
 void sys_signal(GlobalContext *glb)
 {
     struct RP2PlatformData *platform = glb->platform_data;
-    cond_signal(&platform->event_poll_cond);
+    sem_release(&platform->event_poll_sem);
 }
 #endif
 

@@ -78,10 +78,16 @@ struct RefcBinary
 
 static inline size_t refc_binary_sub_refcount(struct RefcBinary *refc, size_t delta)
 {
-#if defined(AVM_NO_SMP)
-    return (refc->ref_count -= delta);
-#elif defined(HAVE_ATOMIC)
+#if defined(HAVE_ATOMIC)
     return atomic_fetch_sub(&refc->ref_count, delta) - delta;
+#elif defined(AVM_NO_SMP) && defined(HAVE_PLATFORM_ATOMIC_H)
+    // Platform callbacks can interrupt a single scheduler, too.
+    size_t count = refc->ref_count;
+    while (!ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&refc->ref_count, &count, count - delta)) {
+    }
+    return count - delta;
+#elif defined(AVM_NO_SMP)
+    return (refc->ref_count -= delta);
 #else // HAVE_PLATFORM_ATOMIC_H guaranteed by #error above
     return smp_atomic_fetch_sub_size(&refc->ref_count, delta) - delta;
 #endif
@@ -89,10 +95,14 @@ static inline size_t refc_binary_sub_refcount(struct RefcBinary *refc, size_t de
 
 static inline void refc_binary_add_refcount(struct RefcBinary *refc, size_t delta)
 {
-#if defined(AVM_NO_SMP)
-    refc->ref_count += delta;
-#elif defined(HAVE_ATOMIC)
+#if defined(HAVE_ATOMIC)
     atomic_fetch_add(&refc->ref_count, delta);
+#elif defined(AVM_NO_SMP) && defined(HAVE_PLATFORM_ATOMIC_H)
+    size_t count = refc->ref_count;
+    while (!ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&refc->ref_count, &count, count + delta)) {
+    }
+#elif defined(AVM_NO_SMP)
+    refc->ref_count += delta;
 #else // HAVE_PLATFORM_ATOMIC_H guaranteed by #error above
     smp_atomic_fetch_add_size(&refc->ref_count, delta);
 #endif
@@ -100,10 +110,14 @@ static inline void refc_binary_add_refcount(struct RefcBinary *refc, size_t delt
 
 static inline void refc_binary_or_refcount(struct RefcBinary *refc, size_t mask)
 {
-#if defined(AVM_NO_SMP)
-    refc->ref_count |= mask;
-#elif defined(HAVE_ATOMIC)
+#if defined(HAVE_ATOMIC)
     atomic_fetch_or(&refc->ref_count, mask);
+#elif defined(AVM_NO_SMP) && defined(HAVE_PLATFORM_ATOMIC_H)
+    size_t count = refc->ref_count;
+    while (!ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&refc->ref_count, &count, count | mask)) {
+    }
+#elif defined(AVM_NO_SMP)
+    refc->ref_count |= mask;
 #else // HAVE_PLATFORM_ATOMIC_H guaranteed by #error above
     smp_atomic_fetch_or_size(&refc->ref_count, mask);
 #endif
@@ -111,15 +125,17 @@ static inline void refc_binary_or_refcount(struct RefcBinary *refc, size_t mask)
 
 static inline bool refc_binary_cas_refcount(struct RefcBinary *refc, size_t *expected, size_t desired)
 {
-#if defined(AVM_NO_SMP)
+#if defined(HAVE_ATOMIC)
+    return atomic_compare_exchange_strong(&refc->ref_count, expected, desired);
+#elif defined(AVM_NO_SMP) && defined(HAVE_PLATFORM_ATOMIC_H)
+    return ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&refc->ref_count, expected, desired);
+#elif defined(AVM_NO_SMP)
     if (refc->ref_count == *expected) {
         refc->ref_count = desired;
         return true;
     }
     *expected = refc->ref_count;
     return false;
-#elif defined(HAVE_ATOMIC)
-    return atomic_compare_exchange_strong(&refc->ref_count, expected, desired);
 #else // HAVE_PLATFORM_ATOMIC_H guaranteed by #error above
     return ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&refc->ref_count, expected, desired);
 #endif

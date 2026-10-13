@@ -32,37 +32,50 @@ struct OTPSocketNIFGlobalData
 
 static struct OTPSocketNIFGlobalData OTPSocketGlobalData;
 
-static EventListener *otp_socket_event_handler(GlobalContext *glb, EventListener *listener)
+void otp_socket_lwip_poll(void)
 {
-    UNUSED(glb);
-
     struct LWIPEvent event;
-    while (queue_try_remove(listener->queue, &event)) {
+    while (queue_try_remove(&OTPSocketGlobalData.queue, &event)) {
         event.handler(&event);
     }
-    return listener;
+    otp_socket_lwip_process_pending();
+}
+
+bool otp_socket_lwip_has_events(void)
+{
+    return !queue_is_empty(&OTPSocketGlobalData.queue) || otp_socket_lwip_has_pending();
+}
+
+void otp_socket_lwip_signal(void)
+{
+#ifndef AVM_NO_SMP
+    sys_signal(OTPSocketGlobalData.global);
+#endif
 }
 
 static void otp_socket_nif_init(GlobalContext *global)
 {
     OTPSocketGlobalData.global = global;
     queue_init(&OTPSocketGlobalData.queue, sizeof(struct LWIPEvent), EVENT_QUEUE_LEN);
-
-    EventListener *network_listener = malloc(sizeof(EventListener));
-
-    network_listener->handler = otp_socket_event_handler;
-    network_listener->queue = &OTPSocketGlobalData.queue;
-    sys_register_listener(global, network_listener);
 }
 
 static void otp_socket_nif_destroy(GlobalContext *global)
 {
-    sys_unregister_listener_from_event(global, &OTPSocketGlobalData.queue);
+    UNUSED(global);
+    do {
+        otp_socket_lwip_poll();
+    } while (otp_socket_lwip_has_events());
+    // Producers are still active until sys_free_platform deinitializes CYW43.
+    // Keep the queue alive through that boundary, as with listener queues.
 }
 
 bool otp_socket_lwip_enqueue(struct LWIPEvent *event)
 {
-    return sys_try_post_listener_event_from_isr(OTPSocketGlobalData.global, &OTPSocketGlobalData.queue, event);
+    if (!queue_try_add(&OTPSocketGlobalData.queue, event)) {
+        return false;
+    }
+    otp_socket_lwip_signal();
+    return true;
 }
 
 REGISTER_NIF_COLLECTION(otp_socket, otp_socket_nif_init, otp_socket_nif_destroy, otp_socket_nif_get_nif)
