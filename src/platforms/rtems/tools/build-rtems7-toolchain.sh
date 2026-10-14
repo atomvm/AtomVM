@@ -26,6 +26,7 @@ DEFAULT_BSP="riscv/esp32c3db"
 BUILD_DIR="${HOME}/.cache/rtems7-build"
 PREFIX="${DEFAULT_PREFIX}"
 BSP="${DEFAULT_BSP}"
+RTEMS_SRC_DIR="${RTEMS_SRC_DIR:-}"
 CLEAN=0
 
 usage() {
@@ -38,6 +39,7 @@ Options:
   --prefix <path>     Target installation directory (default: ${DEFAULT_PREFIX})
   --bsp <arch/bsp>    RTEMS BSP to build (default: ${DEFAULT_BSP})
   --build-dir <path>  Temporary build directory (default: ${BUILD_DIR})
+  --rtems-src <path>  Path to local RTEMS source tree (or env RTEMS_SRC_DIR)
   --clean             Wipe the build directory before building
   -h, --help          Show this help message
 
@@ -59,6 +61,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --build-dir)
             BUILD_DIR="$2"
+            shift 2
+            ;;
+        --rtems-src)
+            RTEMS_SRC_DIR="$2"
             shift 2
             ;;
         --clean)
@@ -127,19 +133,30 @@ export PATH="${PREFIX}/bin:${PATH}"
 echo "==> Toolchain installed successfully:"
 "${PREFIX}/bin/riscv-rtems7-gcc" --version | head -n 1
 
-# Step 3: Clone or update RTEMS kernel
-cd "${BUILD_DIR}"
-if [ ! -d "rtems/.git" ]; then
-    echo "==> Cloning RTEMS kernel (main)..."
-    git clone --depth 1 "${RTEMS_REPO}" -b main rtems
+# Step 3: RTEMS kernel source (local checkout or clone)
+if [ -n "${RTEMS_SRC_DIR}" ]; then
+    if [ ! -d "${RTEMS_SRC_DIR}" ]; then
+        echo "Error: Specified RTEMS source directory does not exist: ${RTEMS_SRC_DIR}" >&2
+        exit 1
+    fi
+    RTEMS_SRC_DIR="$(cd "${RTEMS_SRC_DIR}" && pwd)"
+    echo "==> Using local RTEMS kernel source: ${RTEMS_SRC_DIR}"
+    RTEMS_BUILD_DIR="${RTEMS_SRC_DIR}"
 else
-    echo "==> Updating RTEMS kernel..."
-    git -C rtems pull --ff-only || true
+    cd "${BUILD_DIR}"
+    if [ ! -d "rtems/.git" ]; then
+        echo "==> Cloning RTEMS kernel (main)..."
+        git clone --depth 1 "${RTEMS_REPO}" -b main rtems
+    else
+        echo "==> Updating RTEMS kernel..."
+        git -C rtems pull --ff-only || true
+    fi
+    RTEMS_BUILD_DIR="${BUILD_DIR}/rtems"
 fi
 
 # Step 4: Configure and build BSP via waf
 echo "==> Configuring and building RTEMS BSP: ${BSP}..."
-cd "${BUILD_DIR}/rtems"
+cd "${RTEMS_BUILD_DIR}"
 ./waf configure --prefix="${PREFIX}" --rtems-bsps="${BSP}"
 ./waf
 ./waf install

@@ -475,6 +475,25 @@ cd rtems-src
 ./waf install
 ```
 
+#### Option D: Developing with a Local or Patched RTEMS Tree
+
+If you are developing or testing custom patches against RTEMS `main` or `bsps/riscv/esp32`:
+
+- **Via Docker (`--rtems-src`)**:
+  Pass your local RTEMS checkout to `docker-build-esp32c3.sh`:
+  ```sh
+  ./src/platforms/rtems/tools/docker-build-esp32c3.sh --rtems-src /path/to/my/rtems --simulate
+  ```
+  Docker reuses the cached RSB toolchain and re-compiles only the ~30-second BSP layer using your local RTEMS tree.
+
+- **Via Docker (`patches/` directory)**:
+  Drop any `*.patch` or `*.diff` files into `src/platforms/rtems/docker/patches/`. They will be automatically applied with `git apply` before configuring and compiling the BSP.
+
+- **Via Native Script (`--rtems-src`)**:
+  ```sh
+  ./src/platforms/rtems/tools/build-rtems7-toolchain.sh --rtems-src /path/to/my/rtems
+  ```
+
 ### 2. Cross-Compile AtomVM
 
 Cross-compile AtomVM targeting the ESP32-C3:

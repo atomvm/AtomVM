@@ -28,6 +28,7 @@ DOCKERFILE="${REPO_ROOT}/src/platforms/rtems/docker/Dockerfile.rtems7-esp32c3"
 
 DO_SIMULATE=0
 FORCE_REBUILD=0
+RTEMS_SRC_DIR="${RTEMS_SRC_DIR:-}"
 
 usage() {
     cat <<EOF
@@ -36,9 +37,10 @@ Usage: $(basename "$0") [options]
 Builds AtomVM for RTEMS 7 ESP32-C3 inside an isolated Docker container.
 
 Options:
-  --simulate    Run the boot test in esp-emulator after compiling
-  --rebuild     Rebuild the Docker container image
-  -h, --help    Show this message
+  --simulate          Run the boot test in esp-emulator after compiling
+  --rebuild           Rebuild the Docker container image
+  --rtems-src <path>  Use local RTEMS source tree (or env RTEMS_SRC_DIR)
+  -h, --help          Show this message
 
 EOF
     exit 0
@@ -54,6 +56,10 @@ while [[ $# -gt 0 ]]; do
             FORCE_REBUILD=1
             shift
             ;;
+        --rtems-src)
+            RTEMS_SRC_DIR="$2"
+            shift 2
+            ;;
         -h|--help)
             usage
             ;;
@@ -67,9 +73,21 @@ done
 command -v docker >/dev/null 2>&1 || { echo "Error: docker is required" >&2; exit 1; }
 
 # Step 1: Check or build Docker image
+BUILD_ARGS=()
+if [ -n "${RTEMS_SRC_DIR}" ]; then
+    if [ ! -d "${RTEMS_SRC_DIR}" ]; then
+        echo "Error: Specified RTEMS source directory does not exist: ${RTEMS_SRC_DIR}" >&2
+        exit 1
+    fi
+    RTEMS_SRC_DIR="$(cd "${RTEMS_SRC_DIR}" && pwd)"
+    echo "==> Using local RTEMS source tree: ${RTEMS_SRC_DIR}"
+    BUILD_ARGS+=(--build-context "rtems-src=${RTEMS_SRC_DIR}")
+    FORCE_REBUILD=1
+fi
+
 if [ "${FORCE_REBUILD}" -eq 1 ] || ! docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
     echo "==> Building Docker image '${IMAGE_NAME}' from ${DOCKERFILE}..."
-    docker build -t "${IMAGE_NAME}" -f "${DOCKERFILE}" "${REPO_ROOT}/src/platforms/rtems/docker"
+    docker build "${BUILD_ARGS[@]}" -t "${IMAGE_NAME}" -f "${DOCKERFILE}" "${REPO_ROOT}/src/platforms/rtems/docker"
 fi
 
 # Step 2: Build inside Docker container

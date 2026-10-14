@@ -60,18 +60,44 @@ RUN git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b ${R
     && ../source-builder/sb-set-builder --prefix="${RTEMS_PREFIX}" 7/rtems-riscv \
     && rm -rf /tmp/rsb
 
+# Context for optional local RTEMS source tree (defaults to empty scratch stage)
+# Override via: docker build --build-context rtems-src=/path/to/local/rtems ...
+FROM scratch AS rtems-src
+
 # Stage 3: RTEMS Kernel & ESP32-C3 BSP ~30 sec build.
 # Layered on top of the cached RSB toolchain; if RTEMS BSP options change, only this fast step rebuilds.
 FROM rsb-toolchain AS bsp-builder
 ARG RTEMS_REF=main
+ARG RTEMS_GIT_URL=https://github.com/RTEMS/rtems.git
 
 WORKDIR /tmp/rtems
 ENV PATH="${RTEMS_PREFIX}/bin:${PATH}"
-RUN git clone --depth 1 https://github.com/RTEMS/rtems.git -b ${RTEMS_REF} . \
+
+# Copy patches directory from build context
+COPY patches/ /tmp/patches/
+
+# Copy optional local RTEMS source from build context (empty if not specified)
+COPY --from=rtems-src . /tmp/rtems-local/
+
+RUN if [ -f /tmp/rtems-local/waf ]; then \
+        echo "==> Using local RTEMS source tree..." && \
+        cp -a /tmp/rtems-local/. /tmp/rtems/ ; \
+    else \
+        echo "==> Cloning upstream RTEMS (${RTEMS_GIT_URL} @ ${RTEMS_REF})..." && \
+        git clone --depth 1 "${RTEMS_GIT_URL}" -b "${RTEMS_REF}" . ; \
+    fi \
+    && if [ -d /tmp/patches ]; then \
+        for patch in /tmp/patches/*.patch /tmp/patches/*.diff; do \
+            if [ -f "$patch" ]; then \
+                echo "==> Applying patch: $(basename "$patch")..." && \
+                git apply "$patch" || patch -p1 < "$patch"; \
+            fi; \
+        done; \
+    fi \
     && ./waf configure --prefix="${RTEMS_PREFIX}" --rtems-bsps=riscv/esp32c3db \
     && ./waf \
     && ./waf install \
-    && rm -rf /tmp/rtems
+    && rm -rf /tmp/rtems /tmp/rtems-local /tmp/patches
 
 # Strip debug symbols from host binaries to minimize final layer size
 RUN find ${RTEMS_PREFIX}/bin ${RTEMS_PREFIX}/libexec -type f -executable -exec strip {} + 2>/dev/null || true
