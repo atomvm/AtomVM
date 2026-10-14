@@ -28,6 +28,7 @@ set(ERLANG_MODULES
     i2c
     gpio
     spi
+    grisp
 )
 
 pack_archive(avm_rtems DEPENDS_ON eavmlib ERLC_FLAGS +warnings_as_errors MODULES ${ERLANG_MODULES})

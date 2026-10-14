@@ -30,6 +30,26 @@ start() ->
     gpio_smoke(),
     i2c_eeprom_smoke(),
     spi_smoke(),
+    grisp_smoke(),
+    ok.
+
+grisp_smoke() ->
+    grisp2 = grisp:platform(),
+    ok = grisp:led(1, red),
+    ok = grisp:led(1, off),
+    ok = grisp:led(2, blue),
+    ok = grisp:led_off(2),
+    J1 = grisp:jumper(1),
+    true = (J1 =:= high orelse J1 =:= low),
+    [_, _, _, _, _] = grisp:jumpers(),
+    [{peripheral, "/dev/spi-0"}, {fdt_alias, "spi0"}] = grisp:spi_bus_config(),
+    [{peripheral, "/dev/console"}, {speed, 115200}] = grisp:uart_config(console),
+    [{peripheral, "/dev/ttyS3"}, {speed, 115200}] = grisp:uart_config(pmod),
+    16#57 = grisp:i2c_address(eeprom),
+    16#5F = grisp:i2c_address(eui),
+    16#36 = grisp:i2c_address(crypto),
+    16#18 = grisp:i2c_address(onewire),
+    erlang:display({grisp2, grisp_module, ok}),
     ok.
 
 uart_smoke() ->

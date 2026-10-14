@@ -364,11 +364,54 @@ and SD boot selection.
 
 The smoke test prints `{atomvm_grisp2,rtems}`, `{grisp2,uart,ok}`,
 `{grisp2,led,ok}`, `{grisp2,gpio,high}` or `{grisp2,gpio,low}`,
-`{grisp2,gpio_int,ok}`, `{grisp2,eeprom,ok}`, and `{grisp2,spi,ok}`, followed by `Return value: ok`. The first RGB LED's
+`{grisp2,gpio_int,ok}`, `{grisp2,eeprom,ok}`, `{grisp2,spi,ok}`, and `{grisp2,grisp_module,ok}`, followed by `Return value: ok`. The first RGB LED's
 red channel lights for half a second. The EEPROM check reads eight bytes
 at I²C address `0x57` and does not write EEPROM contents.
 Use `rtems_net_test` separately to verify `ffec0` DHCP/DNS/TCP on the
 physical Ethernet link.
+
+### GRiSP 2 Board API (`grisp` module)
+
+The `grisp` module (packed into `atomvmlib-rtems.avm`) provides high-level APIs and pre-configured peripheral mappings for the GRiSP 2 hardware:
+
+```erlang
+%% RGB LEDs (LED 1 and LED 2)
+ok = grisp:led(1, red),
+ok = grisp:led(2, {0, 255, 128}),
+ok = grisp:led_off(1).
+
+%% Jumper Keys (1..5)
+State = grisp:jumper(1),               % 'high' or 'low'
+[J1, J2, J3, J4, J5] = grisp:jumpers(). % Read all 5 jumpers
+
+%% Board Identity & EEPROM
+{ok, Info} = grisp:eeprom(),           % Decodes serial, batch, PCB version, CRC16
+{ok, Serial} = grisp:serial_number(),
+{ok, {PcbVar, PcbRev}} = grisp:hw_rev(),
+{ok, MacBin} = grisp:mac_address(),    % 48-bit factory EUI MAC
+{ok, MacStr} = grisp:mac_address_string().
+
+%% Pmod SPI Connector (X1402)
+SPI = grisp:spi_open(sensor, [{cs, cs1}, {clock_speed_hz, 1000000}, {mode, 0}]),
+{ok, Val} = spi:read_at(SPI, sensor, 16#0F, 8),
+ok = grisp:spi_close(SPI).
+
+%% I2C Buses
+InternalI2C = grisp:i2c_open(internal), % /dev/i2c-0 (EEPROM 0x57, EUI 0x5F, ATECC608A 0x36, 1-Wire 0x18)
+PmodI2C = grisp:i2c_open(pmod),         % /dev/i2c-1 (X1403 Pmod connector)
+ok = grisp:i2c_close(InternalI2C).
+
+%% UART Ports
+ConsoleUART = grisp:uart_open(console), % /dev/console at 115200 baud
+PmodUART = grisp:uart_open(pmod, 9600), % /dev/ttyS3 (X1405 Pmod connector)
+ok = uart:write(PmodUART, <<"Hello Pmod\n">>),
+ok = grisp:uart_close(PmodUART).
+
+%% Pmod GPIO Connector (X1404)
+Pin1 = grisp:pmod_gpio_pin(1),          % FDT pin map for Pmod GPIO pin 1
+ok = gpio:set_pin_mode(Pin1, output),
+ok = gpio:digital_write(Pin1, high).
+```
 
 CI cross-builds the hardware image in the existing `arm/imx7` job and uploads
 the `atomvm-grisp2-sd-card-<commit>` artifact. It contains ready-to-copy
