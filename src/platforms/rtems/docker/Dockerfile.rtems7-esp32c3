@@ -18,7 +18,8 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-FROM ubuntu:24.04 AS toolchain-builder
+# Stage 1: Base build dependencies
+FROM ubuntu:24.04 AS build-base
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV RTEMS_PREFIX=/opt/rtems/7
@@ -48,26 +49,36 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Build RTEMS 7 RISC-V tools via RSB
+# Stage 2: Heavy RSB Toolchain (GCC, Binutils, GDB, Newlib) ~15-20 min build.
+# Cached independently so it never rebuilds when BSP or application code changes.
+FROM build-base AS rsb-toolchain
+ARG RSB_REF=main
+
 WORKDIR /tmp/rsb
-RUN git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b main . \
+RUN git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b ${RSB_REF} . \
     && cd rtems \
     && ../source-builder/sb-set-builder --prefix="${RTEMS_PREFIX}" 7/rtems-riscv \
     && rm -rf /tmp/rsb
 
-# Build RTEMS 7 kernel with riscv/esp32c3db BSP via waf
+# Stage 3: RTEMS Kernel & ESP32-C3 BSP ~30 sec build.
+# Layered on top of the cached RSB toolchain; if RTEMS BSP options change, only this fast step rebuilds.
+FROM rsb-toolchain AS bsp-builder
+ARG RTEMS_REF=main
+
 WORKDIR /tmp/rtems
 ENV PATH="${RTEMS_PREFIX}/bin:${PATH}"
-RUN git clone --depth 1 https://github.com/RTEMS/rtems.git -b main . \
+RUN git clone --depth 1 https://github.com/RTEMS/rtems.git -b ${RTEMS_REF} . \
     && ./waf configure --prefix="${RTEMS_PREFIX}" --rtems-bsps=riscv/esp32c3db \
     && ./waf \
     && ./waf install \
     && rm -rf /tmp/rtems
 
-# Strip tools to reduce layer size
+# Strip debug symbols from host binaries to minimize final layer size
 RUN find ${RTEMS_PREFIX}/bin ${RTEMS_PREFIX}/libexec -type f -executable -exec strip {} + 2>/dev/null || true
 
-# Final developer & runner stage
+# Stage 4: Final developer runtime & simulation environment.
+# AtomVM source is bind-mounted into /workspace at runtime (-v $PWD:/workspace),
+# ensuring that changes to AtomVM source code NEVER trigger a Docker image rebuild.
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -91,8 +102,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     erlang-parsetools \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy prebuilt RTEMS 7 RISC-V toolchain
-COPY --from=toolchain-builder /opt/rtems/7 /opt/rtems/7
+# Copy prebuilt RTEMS 7 RISC-V toolchain and installed esp32c3db BSP
+COPY --from=bsp-builder /opt/rtems/7 /opt/rtems/7
 
 # Install esp-emulator for direct headless simulation
 RUN curl -fsSL https://raw.githubusercontent.com/espressif/esp-emulator/main/install.sh | sh \
