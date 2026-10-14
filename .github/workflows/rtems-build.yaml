@@ -116,6 +116,8 @@ jobs:
           git clone --depth 1 https://gitlab.rtems.org/rtems/tools/rtems-source-builder.git -b main rsb-7
           cd rsb-7/rtems
           sed -i '/sis/d' config/7/rtems-riscv.bset
+          sed -i '/with_rtems_gdb/d' config/tools/rtems-default-tools.bset
+          sed -i -e '/0001-RTEMS-Add-riscv-multilibs/d' -e '/uCjG1KIhPuCR3H5G/d' config/tools/rtems-gcc-15.2-newlib-head.cfg
           ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" "7/rtems-${{ matrix.arch }}"
           git clone --depth 1 https://github.com/thesamprice/rtems.git -b esp32c3-rtems-esphome rtems-7
           cd rtems-7

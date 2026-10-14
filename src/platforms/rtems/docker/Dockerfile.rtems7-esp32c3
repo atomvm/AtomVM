@@ -57,6 +57,8 @@ ARG RSB_REF=main
 WORKDIR /tmp/rsb
 RUN git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b ${RSB_REF} . \
     && sed -i '/sis/d' rtems/config/7/rtems-riscv.bset \
+    && sed -i '/with_rtems_gdb/d' rtems/config/tools/rtems-default-tools.bset \
+    && sed -i -e '/0001-RTEMS-Add-riscv-multilibs/d' -e '/uCjG1KIhPuCR3H5G/d' rtems/config/tools/rtems-gcc-15.2-newlib-head.cfg \
     && cd rtems \
     && ../source-builder/sb-set-builder --prefix="${RTEMS_PREFIX}" 7/rtems-riscv \
     && rm -rf /tmp/rsb

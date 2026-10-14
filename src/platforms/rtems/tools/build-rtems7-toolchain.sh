@@ -126,8 +126,10 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     fi
 fi
 
-# Strip obsolete sis simulator from the build set if present (fails on arm64 and unneeded for esp32c3)
+# Strip obsolete sis simulator, gdb, and broken gitlab multilibs patch from RSB configs
 sed -i.bak '/sis/d' config/7/rtems-riscv.bset && rm -f config/7/rtems-riscv.bset.bak
+sed -i.bak '/with_rtems_gdb/d' config/tools/rtems-default-tools.bset && rm -f config/tools/rtems-default-tools.bset.bak
+sed -i.bak -e '/0001-RTEMS-Add-riscv-multilibs/d' -e '/uCjG1KIhPuCR3H5G/d' config/tools/rtems-gcc-15.2-newlib-head.cfg && rm -f config/tools/rtems-gcc-15.2-newlib-head.cfg.bak
 
 ../source-builder/sb-set-builder --prefix="${PREFIX}" ${RSB_PYTHON_ARGS} 7/rtems-riscv
 
