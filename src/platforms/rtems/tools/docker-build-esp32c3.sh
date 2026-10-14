@@ -117,6 +117,17 @@ fi
 RUN_CMD+=(--rm -v "${REPO_ROOT}:/workspace" -w /workspace "${IMAGE_NAME}" bash -c '
     set -euo pipefail
 
+    if ! command -v rebar3 >/dev/null 2>&1; then
+        echo "==> Ensuring rebar3 and Erlang dependencies are available..."
+        apt-get update -qq && apt-get install -y -qq erlang-nox zlib1g-dev >/dev/null 2>&1 || true
+        curl -fsSL https://github.com/erlang/rebar3/releases/download/3.24.0/rebar3 -o /usr/local/bin/rebar3
+        chmod +x /usr/local/bin/rebar3
+    fi
+
+    if [ -f build-host/CMakeCache.txt ] && grep -q "REBAR3-NOTFOUND" build-host/CMakeCache.txt; then
+        rm -rf build-host/CMakeCache.txt build-host/CMakeFiles
+    fi
+
     TEST_MOD="'"${TEST_MODULE}"'"
     echo "==> Building host AVM pack (${TEST_MOD})..."
     cmake -S . -B build-host -G Ninja -DAVM_DISABLE_JIT=ON
