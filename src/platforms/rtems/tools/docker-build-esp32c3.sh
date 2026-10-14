@@ -145,9 +145,15 @@ echo "    src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin"
 # Step 3: Run simulation if requested
 if [ "${DO_SIMULATE}" -eq 1 ]; then
     echo "==> Running simulation with esp-emulator..."
+    EMU_WIFI_ARGS=()
+    if [ "${TEST_WIFI}" -eq 1 ]; then
+        EMU_WIFI_ARGS+=(--wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user)
+    fi
+
     if command -v esp-emu >/dev/null 2>&1; then
         esp-emu --chip esp32c3 \
             --firmware "${REPO_ROOT}/src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin" \
+            "${EMU_WIFI_ARGS[@]}" \
             --timeout 30s --exit-on "Return value: ok"
     else
         SIM_CMD=(docker run)
@@ -157,6 +163,7 @@ if [ "${DO_SIMULATE}" -eq 1 ]; then
         SIM_CMD+=(--rm -v "${REPO_ROOT}:/workspace" "${IMAGE_NAME}" \
             esp-emu --chip esp32c3 \
             --firmware /workspace/src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin \
+            "${EMU_WIFI_ARGS[@]}" \
             --timeout 30s --exit-on "Return value: ok")
         "${SIM_CMD[@]}"
     fi

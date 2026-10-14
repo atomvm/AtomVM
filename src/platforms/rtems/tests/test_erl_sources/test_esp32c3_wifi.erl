@@ -34,15 +34,29 @@ wifi_smoke() ->
     case atomvm_rtems:wifi_start("AtomVM-TestAP", "secretpassword") of
         ok ->
             erlang:display({wifi_start, ok}),
-            Status1 = atomvm_rtems:wifi_status(),
-            erlang:display({started_wifi_status, Status1}),
-            ok;
+            wait_for_wifi(10);
         {error, enotsup} ->
             erlang:display({wifi_start, enotsup}),
             ok;
         Error ->
             erlang:display({wifi_start_result, Error}),
             ok
+    end.
+
+wait_for_wifi(0) ->
+    erlang:display({wifi_status_after_wait, atomvm_rtems:wifi_status()});
+wait_for_wifi(Attempts) ->
+    case atomvm_rtems:wifi_status() of
+        got_ip ->
+            erlang:display({wifi_status, got_ip}),
+            erlang:display({wifi_ip_info, atomvm_rtems:wifi_ip_info()});
+        associated ->
+            erlang:display({wifi_status, associated}),
+            timer:sleep(500),
+            wait_for_wifi(Attempts - 1);
+        _Other ->
+            timer:sleep(500),
+            wait_for_wifi(Attempts - 1)
     end.
 
 socket_smoke() ->
