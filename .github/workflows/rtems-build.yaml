@@ -48,17 +48,30 @@ jobs:
             bsp: sparc/erc32
             bsp_name: erc32
             cache_key: sparc-erc32
+            rtems_version: "6"
+            prefix: /home/runner/rtems/6.2
             qemu: ""
           - arch: arm
             bsp: arm/imx7
             bsp_name: imx7
             cache_key: arm-imx7
+            rtems_version: "6"
+            prefix: /home/runner/rtems/6.2
             qemu: qemu-system-arm
           - arch: arm
             bsp: arm/realview_pbx_a9_qemu
             bsp_name: realview_pbx_a9_qemu
             cache_key: arm-realview-pbx-a9-qemu
+            rtems_version: "6"
+            prefix: /home/runner/rtems/6.2
             qemu: qemu-system-arm
+          - arch: riscv
+            bsp: riscv/esp32c3db
+            bsp_name: esp32c3db
+            cache_key: riscv-esp32c3db
+            rtems_version: "7"
+            prefix: /home/runner/rtems/7
+            qemu: ""
 
     steps:
     - name: Checkout repo
@@ -86,34 +99,45 @@ jobs:
           device-tree-compiler u-boot-tools gdb-multiarch \
           ${{ matrix.qemu }}
 
-    - name: Restore RTEMS 6.2 ${{ matrix.bsp }} toolchain
+    - name: Restore RTEMS ${{ matrix.rtems_version }} ${{ matrix.bsp }} toolchain
       id: rtems-cache
       uses: actions/cache/restore@v4
       with:
-        path: ${{ env.RTEMS_PREFIX }}
-        key: rtems-${{ env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-libbsd-rsb-${{ runner.os }}
+        path: ${{ matrix.prefix }}
+        key: rtems-${{ matrix.rtems_version == '7' && '7' || env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-libbsd-rsb-${{ runner.os }}
 
-    - name: Build RTEMS 6.2 tools and ${{ matrix.bsp }} BSP
+    - name: Build RTEMS ${{ matrix.rtems_version }} tools and ${{ matrix.bsp }} BSP
       if: steps.rtems-cache.outputs.cache-hit != 'true'
       run: |
         set -euo pipefail
-        mkdir -p "$HOME/rtems-src" "$RTEMS_PREFIX"
+        mkdir -p "$HOME/rtems-src" "${{ matrix.prefix }}"
         cd "$HOME/rtems-src"
-        wget -q "https://ftp.rtems.org/pub/rtems/releases/6/${RTEMS_RELEASE}/sources/rtems-source-builder-${RTEMS_RELEASE}.tar.xz"
-        tar xJf "rtems-source-builder-${RTEMS_RELEASE}.tar.xz"
-        cd "rtems-source-builder-${RTEMS_RELEASE}/rtems"
-        ../source-builder/sb-set-builder --prefix="$RTEMS_PREFIX" "${RTEMS_VERSION}/rtems-${{ matrix.arch }}"
-        ../source-builder/sb-set-builder --prefix="$RTEMS_PREFIX" \
-          --target="${{ matrix.arch }}-rtems${RTEMS_VERSION}" \
-          --with-rtems-bsp=${{ matrix.bsp }} \
-          --with-rtems-tests=no \
-          "${RTEMS_VERSION}/rtems-kernel"
+        if [ "${{ matrix.rtems_version }}" = "7" ]; then
+          git clone --depth 1 https://gitlab.rtems.org/rtems/tools/rtems-source-builder.git -b main rsb-7
+          cd rsb-7/rtems
+          ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" "7/rtems-${{ matrix.arch }}"
+          git clone --depth 1 https://gitlab.rtems.org/rtems/rtems.git -b main rtems-7
+          cd rtems-7
+          ./waf configure --prefix="${{ matrix.prefix }}" --rtems-bsps=${{ matrix.bsp }}
+          ./waf
+          ./waf install
+        else
+          wget -q "https://ftp.rtems.org/pub/rtems/releases/6/${RTEMS_RELEASE}/sources/rtems-source-builder-${RTEMS_RELEASE}.tar.xz"
+          tar xJf "rtems-source-builder-${RTEMS_RELEASE}.tar.xz"
+          cd "rtems-source-builder-${RTEMS_RELEASE}/rtems"
+          ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" "${{ matrix.rtems_version }}/rtems-${{ matrix.arch }}"
+          ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" \
+            --target="${{ matrix.arch }}-rtems${{ matrix.rtems_version }}" \
+            --with-rtems-bsp=${{ matrix.bsp }} \
+            --with-rtems-tests=no \
+            "${{ matrix.rtems_version }}/rtems-kernel"
+        fi
 
     - name: Build rtems-libbsd for ${{ matrix.bsp }}
       if: matrix.bsp == 'arm/imx7'
       run: |
         set -euo pipefail
-        libbsd="$RTEMS_PREFIX/${{ matrix.arch }}-rtems${RTEMS_VERSION}/${{ matrix.bsp_name }}/lib/libbsd.a"
+        libbsd="${{ matrix.prefix }}/${{ matrix.arch }}-rtems${{ matrix.rtems_version }}/${{ matrix.bsp_name }}/lib/libbsd.a"
         if [ -f "$libbsd" ]; then
           echo "Using cached rtems-libbsd at $libbsd"
           exit 0
@@ -126,25 +150,25 @@ jobs:
           tar xJf "rtems-source-builder-${RTEMS_RELEASE}.tar.xz"
         fi
         cd "rtems-source-builder-${RTEMS_RELEASE}/rtems"
-        ../source-builder/sb-set-builder --prefix="$RTEMS_PREFIX" \
-          --target="${{ matrix.arch }}-rtems${RTEMS_VERSION}" \
+        ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" \
+          --target="${{ matrix.arch }}-rtems${{ matrix.rtems_version }}" \
           --with-rtems-bsp=${{ matrix.bsp }} \
-          "${RTEMS_VERSION}/rtems-libbsd"
+          "${{ matrix.rtems_version }}/rtems-libbsd"
 
-    - name: Save RTEMS 6.2 ${{ matrix.bsp }} toolchain
+    - name: Save RTEMS ${{ matrix.rtems_version }} ${{ matrix.bsp }} toolchain
       if: steps.rtems-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
-        path: ${{ env.RTEMS_PREFIX }}
-        key: rtems-${{ env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-libbsd-rsb-${{ runner.os }}
+        path: ${{ matrix.prefix }}
+        key: rtems-${{ matrix.rtems_version == '7' && '7' || env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-libbsd-rsb-${{ runner.os }}
 
     - name: Add RTEMS tools to PATH
-      run: echo "$RTEMS_PREFIX/bin" >> "$GITHUB_PATH"
+      run: echo "${{ matrix.prefix }}/bin" >> "$GITHUB_PATH"
 
     - name: Check RTEMS toolchain
       run: |
         set -euo pipefail
-        "${{ matrix.arch }}-rtems${RTEMS_VERSION}-gcc" --version
+        "${{ matrix.arch }}-rtems${{ matrix.rtems_version }}-gcc" --version
 
     - name: Build host AtomVM and RTEMS boot AVM
       run: |
@@ -183,9 +207,9 @@ jobs:
         set -euo pipefail
         cmake -S src/platforms/rtems -B src/platforms/rtems/build-grisp2 -G Ninja \
           -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
-          -DRTEMS_PREFIX="$RTEMS_PREFIX" \
+          -DRTEMS_PREFIX="${{ matrix.prefix }}" \
           -DRTEMS_BSP=arm/imx7 \
-          -DRTEMS_VERSION="$RTEMS_VERSION" \
+          -DRTEMS_VERSION="${{ matrix.rtems_version }}" \
           -DRTEMS_BOARD=grisp2 \
           -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_grisp2.avm"
         cmake --build src/platforms/rtems/build-grisp2
@@ -229,11 +253,16 @@ jobs:
     - name: Cross-compile AtomVM for ${{ matrix.bsp }}
       run: |
         set -euo pipefail
+        board_arg=""
+        if [ "${{ matrix.bsp }}" = "riscv/esp32c3db" ]; then
+          board_arg="-DRTEMS_BOARD=esp32c3"
+        fi
         cmake -S src/platforms/rtems -B src/platforms/rtems/build -G Ninja \
           -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
-          -DRTEMS_PREFIX="$RTEMS_PREFIX" \
+          -DRTEMS_PREFIX="${{ matrix.prefix }}" \
           -DRTEMS_BSP="${{ matrix.bsp }}" \
-          -DRTEMS_VERSION="$RTEMS_VERSION" \
+          -DRTEMS_VERSION="${{ matrix.rtems_version }}" \
+          $board_arg \
           -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_boot.avm"
         cmake --build src/platforms/rtems/build
 
@@ -301,14 +330,48 @@ jobs:
         fi
         echo "RealView boot test completed successfully"
 
+    - name: Run boot test on esp-emulator
+      if: matrix.bsp == 'riscv/esp32c3db'
+      run: |
+        set -euo pipefail
+        BIN="src/platforms/rtems/build/AtomVM-esp32c3db.bin"
+        test -f "$BIN"
+        curl -fsSL https://raw.githubusercontent.com/espressif/esp-emulator/main/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+        set +e
+        output=$(esp-emu --chip esp32c3 --firmware "$BIN" --timeout 30s --exit-on "Return value: ok" 2>&1)
+        status=$?
+        set -e
+        printf '%s\n' "$output"
+        if grep -q "Failed load module" <<< "$output"; then
+          echo "::error::ESP32-C3 boot failed to load a BEAM module"
+          exit 1
+        fi
+        if ! grep -Fq '{atomvm_rtems_boot,rtems}' <<< "$output"; then
+          echo "::error::ESP32-C3 boot test did not print {atomvm_rtems_boot,rtems} (status ${status})"
+          exit 1
+        fi
+        for marker in '{uart,read_timeout,ok}' '{uart,write,ok}' '{i2c,enotsup}' '{gpio,enotsup}' '{spi,enotsup}'; do
+          if ! grep -Fq "$marker" <<< "$output"; then
+            echo "::error::ESP32-C3 boot test did not print ${marker}"
+            exit 1
+          fi
+        done
+        if ! grep -q "Return value: ok" <<< "$output"; then
+          echo "::error::ESP32-C3 boot test did not return ok"
+          exit 1
+        fi
+        echo "ESP32-C3 boot test completed successfully"
+
     - name: Cross-compile AtomVM net test for ${{ matrix.bsp }}
+      if: matrix.bsp != 'riscv/esp32c3db'
       run: |
         set -euo pipefail
         cmake -S src/platforms/rtems -B src/platforms/rtems/build-net -G Ninja \
           -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
-          -DRTEMS_PREFIX="$RTEMS_PREFIX" \
+          -DRTEMS_PREFIX="${{ matrix.prefix }}" \
           -DRTEMS_BSP="${{ matrix.bsp }}" \
-          -DRTEMS_VERSION="$RTEMS_VERSION" \
+          -DRTEMS_VERSION="${{ matrix.rtems_version }}" \
           -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_net.avm"
         cmake --build src/platforms/rtems/build-net
 

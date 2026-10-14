@@ -6,7 +6,7 @@
 
 # AtomVM on RTEMS
 
-This directory contains the RTEMS 6.2 port of AtomVM.
+This directory contains the RTEMS port of AtomVM, supporting RTEMS 6.2 as well as RTEMS 7.0 (`main`).
 
 Supported bring-up targets:
 
@@ -14,6 +14,7 @@ Supported bring-up targets:
 - ARM `realview_pbx_a9_qemu` on QEMU (`qemu-system-arm -M realview-pbx-a9`)
 - ARM `imx7` on QEMU (`qemu-system-arm -M mcimx7d-sabre`)
 - GRiSP 2 (`arm/imx7` with `RTEMS_BOARD=grisp2`; hardware validation pending)
+- RISC-V `esp32c3db` on ESP32-C3 (`esp-emu --chip esp32c3` or QEMU `qemu-system-riscv32 -M esp32c3`)
 
 Other RTEMS 6 BSPs can be selected at configure time once a matching toolchain
 and BSP are installed. `imx7` is the NXP i.MX 7Dual BSP; QEMU models the
@@ -422,14 +423,99 @@ The CI artifact includes the smoke-test pack as `app.avm`. On hardware,
 check a valid replacement, a missing file, and a truncated copy: the latter
 two must print the fallback message and run the embedded example.
 
+## RTEMS 7 and ESP32-C3 (RISC-V)
+
+RTEMS `main` (upcoming 7.0 release) introduces first-class support for Espressif's RISC-V microcontrollers under `bsps/riscv/esp32`, starting with the `esp32c3db` direct-boot BSP.
+
+Key characteristics of AtomVM on ESP32-C3:
+- **Architecture**: RISC-V RV32IMC (`-march=rv32imc -mabi=ilp32`), target triple `riscv-rtems7`.
+- **Direct-Boot**: Bootrom begins execution directly from flash using the 8-byte direct boot header at offset `0x0`. The flat binary (`.bin`) is produced automatically by CMake via `${RTEMS_OBJCOPY} -O binary`.
+- **Zero-SRAM Flash Execution**: Code (`.text`) is mapped to `0x42000000` and read-only data (`.rodata`) to `0x3c000000`. The embedded AVM pack (`embedded_avm.c`) resides in `.rodata` and executes directly from SPI flash, leaving the internal 320 KiB SRAM dedicated to AtomVM process heaps and runtime stacks.
+- **Console & Peripherals**: Termios console is active over UART0 or USB-serial-JTAG (`/dev/console`). Dedicated RTEMS I2C, SPI, and GPIO drivers for ESP32-C3 return `{error, enotsup}` until upstream drivers mature.
+
+### 1. Build RTEMS 7 Tools and BSP
+
+Clone and build the RTEMS Source Builder (RSB) for RISC-V:
+
+```sh
+export RTEMS_PREFIX=$HOME/development/rtems/7
+git clone https://gitlab.rtems.org/rtems/tools/rtems-source-builder.git rsb
+cd rsb/rtems
+../source-builder/sb-set-builder --prefix="$RTEMS_PREFIX" 7/rtems-riscv
+export PATH="$RTEMS_PREFIX/bin:$PATH"
+```
+
+Configure and build the RTEMS `esp32c3db` BSP using RTEMS's `waf` build system:
+
+```sh
+git clone https://gitlab.rtems.org/rtems/rtems.git rtems-src
+cd rtems-src
+./waf configure --prefix="$RTEMS_PREFIX" --rtems-bsps=riscv/esp32c3db
+./waf
+./waf install
+```
+
+### 2. Cross-Compile AtomVM
+
+Cross-compile AtomVM targeting the ESP32-C3:
+
+```sh
+cmake -S src/platforms/rtems -B src/platforms/rtems/build-esp32c3 -G Ninja \
+    -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
+    -DRTEMS_PREFIX="$RTEMS_PREFIX" \
+    -DRTEMS_BSP=riscv/esp32c3db \
+    -DRTEMS_BOARD=esp32c3 \
+    -DRTEMS_VERSION=7 \
+    -DAVM_PACK="$PWD/build-host/libs/atomvmlib-rtems.avm"
+cmake --build src/platforms/rtems/build-esp32c3
+```
+
+This generates `AtomVM-esp32c3db.exe` and the flash-ready direct-boot image `AtomVM-esp32c3db.bin`.
+
+### 3. Flashing to Physical Board
+
+Flash the binary using `esptool.py` (or `ninja -C src/platforms/rtems/build-esp32c3 flash`):
+
+```sh
+esptool.py --port /dev/ttyACM0 --baud 921600 write_flash 0x0 AtomVM-esp32c3db.bin
+```
+
+### 4. Fast Emulation with esp-emulator (Recommended)
+
+You can emulate the ESP32-C3 build locally or in CI without physical hardware using Espressif's high-performance Rust-based [`esp-emulator`](https://github.com/espressif/esp-emulator) (`esp-emu`):
+
+```sh
+# Install esp-emulator
+curl -fsSL https://raw.githubusercontent.com/espressif/esp-emulator/main/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+
+# Run emulation with automatic exit on completion
+esp-emu --chip esp32c3 --firmware src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin \
+    --timeout 30s --exit-on "Return value: ok"
+```
+
+If `esp-emu` is detected in `PATH` during CMake configure, you can also run:
+```sh
+cmake --build src/platforms/rtems/build-esp32c3 -t simulate
+```
+
+Alternatively, run in QEMU:
+
+```sh
+dd if=/dev/zero of=flash.bin bs=1M count=4
+dd if=AtomVM-esp32c3db.bin of=flash.bin conv=notrunc
+qemu-system-riscv32 -nographic -machine esp32c3 \
+    -drive file=flash.bin,if=mtd,format=raw -serial mon:stdio
+```
+
 ## CMake options
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `RTEMS_PREFIX` | (required) | RTEMS 6.2 installation prefix |
-| `RTEMS_BSP` | `sparc/erc32` | Architecture/BSP (`arch/bsp`) |
-| `RTEMS_BOARD` | `generic` (`qemu` for `arm/imx7`) | Board integration (`generic`, `qemu`, or `grisp2`) |
-| `RTEMS_VERSION` | `6` | Major toolchain version (`sparc-rtems6-gcc`) |
+| `RTEMS_PREFIX` | (required) | RTEMS installation prefix (e.g. 6.2 or 7) |
+| `RTEMS_BSP` | `sparc/erc32` | Architecture/BSP (`arch/bsp`, e.g. `riscv/esp32c3db`) |
+| `RTEMS_BOARD` | `generic` (`qemu` for `arm/imx7`, `esp32c3` for `riscv/esp32`) | Board integration (`generic`, `qemu`, `grisp2`, or `esp32c3`) |
+| `RTEMS_VERSION` | `6` (or `7` for `riscv/esp32`) | Major toolchain version (`sparc-rtems6-gcc`, `riscv-rtems7-gcc`) |
 | `AVM_PACK` | empty | Host-built `.avm` to embed |
 | `RTEMS_CREATE_ZIMAGE` | `ON` for `grisp2` | Create a GRiSP 2 bootloader-ready image |
 | `RTEMS_IMAGE_LOAD_ADDRESS` | `0x80200000` | GRiSP 2 image load and entry address |

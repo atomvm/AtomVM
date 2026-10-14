@@ -75,6 +75,8 @@ if(RTEMS_BOARD STREQUAL "grisp2")
         RTEMS_HAS_STORAGE
         RTEMS_BOARD_FDT_COMPATIBLE="${RTEMS_BOARD_FDT_COMPATIBLE}"
         RTEMS_APP_PATH="${RTEMS_APP_PATH}")
+elseif(RTEMS_BOARD STREQUAL "esp32c3")
+    target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BOARD_ESP32C3)
 endif()
 
 target_compile_features(${PROJECT_EXECUTABLE} PUBLIC c_std_11)
@@ -110,6 +112,10 @@ endif()
 
 if(RTEMS_CREATE_ZIMAGE)
     include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/boot_image.cmake)
+endif()
+
+if(RTEMS_BOARD STREQUAL "esp32c3")
+    include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/esp32_image.cmake)
 endif()
 
 message("------------Output Locations------------")

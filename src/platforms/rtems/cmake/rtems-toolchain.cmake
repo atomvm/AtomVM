@@ -18,14 +18,14 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-# Cross-compiling toolchain for RTEMS 6.x applications.
+# Cross-compiling toolchain for RTEMS 6.x and 7.x applications.
 #
 # Required:
 #   RTEMS_PREFIX  Installation prefix (or env RTEMS_PREFIX)
 #
 # Optional:
 #   RTEMS_BSP     Architecture/BSP, default sparc/erc32
-#   RTEMS_VERSION Major tools version, default 6
+#   RTEMS_VERSION Major tools version, default 6 (or 7 for RISC-V esp32)
 
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
@@ -51,14 +51,6 @@ if(NOT RTEMS_BSP)
     endif()
 endif()
 
-if(NOT RTEMS_VERSION)
-    if(DEFINED ENV{RTEMS_VERSION})
-        set(RTEMS_VERSION "$ENV{RTEMS_VERSION}")
-    else()
-        set(RTEMS_VERSION "6")
-    endif()
-endif()
-
 string(REPLACE "/" ";" _rtems_bsp_parts "${RTEMS_BSP}")
 list(LENGTH _rtems_bsp_parts _rtems_bsp_parts_len)
 if(NOT _rtems_bsp_parts_len EQUAL 2)
@@ -66,6 +58,16 @@ if(NOT _rtems_bsp_parts_len EQUAL 2)
 endif()
 list(GET _rtems_bsp_parts 0 RTEMS_ARCH)
 list(GET _rtems_bsp_parts 1 RTEMS_BSP_NAME)
+
+if(NOT RTEMS_VERSION)
+    if(DEFINED ENV{RTEMS_VERSION})
+        set(RTEMS_VERSION "$ENV{RTEMS_VERSION}")
+    elseif(RTEMS_BSP MATCHES "^riscv/esp32" OR EXISTS "${RTEMS_PREFIX}/bin/riscv-rtems7-gcc")
+        set(RTEMS_VERSION "7")
+    else()
+        set(RTEMS_VERSION "6")
+    endif()
+endif()
 
 set(RTEMS_TARGET "${RTEMS_ARCH}-rtems${RTEMS_VERSION}")
 set(CMAKE_SYSTEM_PROCESSOR "${RTEMS_ARCH}")
@@ -154,9 +156,14 @@ if(NOT RTEMS_BSP_CFLAGS OR NOT RTEMS_BSP_LDFLAGS)
             "Could not find pkg-config flags for ${_rtems_pkg_name} and BSP libdir ${_rtems_bsp_libdir} is missing. "
             "Is RTEMS ${RTEMS_VERSION} installed at ${RTEMS_PREFIX} with BSP ${RTEMS_BSP}?")
     endif()
-    # RTEMS 6 no longer installs bsp_specs; -B plus -qrtems is enough.
-    set(RTEMS_BSP_CFLAGS "-B${_rtems_bsp_libdir}/ -qrtems")
-    set(RTEMS_BSP_LDFLAGS "-B${_rtems_bsp_libdir}/ -qrtems")
+    # RTEMS 6/7 no longer installs bsp_specs; -B plus -qrtems is enough.
+    if(RTEMS_ARCH STREQUAL "riscv" AND RTEMS_BSP_NAME MATCHES "esp32")
+        set(RTEMS_BSP_CFLAGS "-B${_rtems_bsp_libdir}/ -qrtems -march=rv32imc -mabi=ilp32")
+        set(RTEMS_BSP_LDFLAGS "-B${_rtems_bsp_libdir}/ -qrtems -march=rv32imc -mabi=ilp32")
+    else()
+        set(RTEMS_BSP_CFLAGS "-B${_rtems_bsp_libdir}/ -qrtems")
+        set(RTEMS_BSP_LDFLAGS "-B${_rtems_bsp_libdir}/ -qrtems")
+    endif()
     message(STATUS "Using RTEMS BSP fallback flags from ${_rtems_bsp_libdir}")
 else()
     message(STATUS "Using RTEMS pkg-config module ${_rtems_pkg_name}")
