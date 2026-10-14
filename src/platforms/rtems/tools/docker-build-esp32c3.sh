@@ -30,6 +30,7 @@ DO_SIMULATE=0
 FORCE_REBUILD=0
 RTEMS_SRC_DIR="${RTEMS_SRC_DIR:-}"
 DOCKER_PLATFORM="${DOCKER_PLATFORM:-}"
+TEST_MODULE="test_boot"
 
 usage() {
     cat <<EOF
@@ -39,6 +40,7 @@ Builds AtomVM for RTEMS 7 ESP32-C3 inside an isolated Docker container.
 
 Options:
   --simulate          Run the boot test in esp-emulator after compiling
+  --test-wifi         Embed and run the Wi-Fi test (test_esp32c3_wifi)
   --rebuild           Rebuild the Docker container image
   --rtems-src <path>  Use local RTEMS source tree (or env RTEMS_SRC_DIR)
   --platform <arch>   Target Docker platform (e.g., linux/arm64, linux/amd64)
@@ -52,6 +54,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --simulate|--test)
             DO_SIMULATE=1
+            shift
+            ;;
+        --test-wifi)
+            TEST_MODULE="test_esp32c3_wifi"
             shift
             ;;
         --rebuild)
@@ -111,13 +117,14 @@ fi
 RUN_CMD+=(--rm -v "${REPO_ROOT}:/workspace" -w /workspace "${IMAGE_NAME}" bash -c '
     set -euo pipefail
 
-    echo "==> Building host AVM pack..."
+    TEST_MOD="'"${TEST_MODULE}"'"
+    echo "==> Building host AVM pack (${TEST_MOD})..."
     cmake -S . -B build-host -G Ninja -DAVM_DISABLE_JIT=ON
-    cmake --build build-host -t rtems_boot_test atomvmlib-rtems
+    cmake --build build-host -t rtems_boot_test rtems_esp32c3_wifi_test atomvmlib-rtems
     mkdir -p src/platforms/rtems/build-esp32c3
-    ./build-host/tools/packbeam/packbeam create -s test_boot \
+    ./build-host/tools/packbeam/packbeam create -s "${TEST_MOD}" \
         src/platforms/rtems/build-esp32c3/rtems_boot.avm \
-        build-host/src/platforms/rtems/tests/test_erl_sources/test_boot.beam \
+        "build-host/src/platforms/rtems/tests/test_erl_sources/${TEST_MOD}.beam" \
         build-host/libs/atomvmlib-rtems.avm
 
     echo "==> Cross-compiling AtomVM for riscv/esp32c3db..."
