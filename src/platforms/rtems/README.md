@@ -435,20 +435,40 @@ Key characteristics of AtomVM on ESP32-C3:
 
 ### 1. Build RTEMS 7 Tools and BSP
 
-Clone and build the RTEMS Source Builder (RSB) for RISC-V:
+You can build the toolchain and BSP using Docker, the automated build script, or manually via RSB.
+
+#### Option A: Single-Command Docker Build & Emulation (Recommended)
+
+If you have Docker (or OrbStack/Podman) installed, build the entire firmware and run the boot test in `esp-emulator` with a single command:
+
+```sh
+./src/platforms/rtems/tools/docker-build-esp32c3.sh --simulate
+```
+
+This uses the dedicated [`Dockerfile.rtems7-esp32c3`](docker/Dockerfile.rtems7-esp32c3) to compile the RTEMS 7 RISC-V tools, build the `riscv/esp32c3db` BSP, cross-compile AtomVM, and run `esp-emu`.
+
+#### Option B: Automated Local Build Script
+
+To build the native RTEMS 7 toolchain and BSP on your local Linux or macOS machine without Docker:
+
+```sh
+./src/platforms/rtems/tools/build-rtems7-toolchain.sh --prefix "$HOME/development/rtems/7"
+```
+
+This script clones RSB and RTEMS `main`, builds `7/rtems-riscv`, and configures and installs the `riscv/esp32c3db` BSP into the requested prefix.
+
+#### Option C: Manual RSB & Waf Build
+
+Alternatively, execute the build steps manually:
 
 ```sh
 export RTEMS_PREFIX=$HOME/development/rtems/7
-git clone https://gitlab.rtems.org/rtems/tools/rtems-source-builder.git rsb
+git clone https://github.com/RTEMS/rtems-source-builder.git rsb
 cd rsb/rtems
 ../source-builder/sb-set-builder --prefix="$RTEMS_PREFIX" 7/rtems-riscv
 export PATH="$RTEMS_PREFIX/bin:$PATH"
-```
 
-Configure and build the RTEMS `esp32c3db` BSP using RTEMS's `waf` build system:
-
-```sh
-git clone https://gitlab.rtems.org/rtems/rtems.git rtems-src
+git clone https://github.com/RTEMS/rtems.git rtems-src
 cd rtems-src
 ./waf configure --prefix="$RTEMS_PREFIX" --rtems-bsps=riscv/esp32c3db
 ./waf
