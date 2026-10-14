@@ -28,6 +28,11 @@
 #include <net/if.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#elif defined(RTEMS_HAS_LWIP)
+#include <lwip/netif.h>
+#include <lwip/ip4_addr.h>
+#include <lwip/inet.h>
+#include <stdio.h>
 #endif
 
 #include <context.h>
@@ -117,6 +122,42 @@ static term nif_rtems_ifaddrs(Context *ctx, int argc, term argv[])
         list = term_list_prepend(entry, list, &ctx->heap);
     }
     freeifaddrs(addrs);
+    return create_pair(ctx, OK_ATOM, list);
+#elif defined(RTEMS_HAS_LWIP)
+    size_t count = 0;
+    for (struct netif *netif = netif_list; netif != NULL; netif = netif->next) {
+        count++;
+    }
+
+    size_t needed = TUPLE_SIZE(2)
+        + LIST_SIZE(count, TUPLE_SIZE(3) + TUPLE_SIZE(4) + 8 * CONS_SIZE);
+    if (UNLIKELY(memory_ensure_free(ctx, needed) != MEMORY_GC_OK)) {
+        return OUT_OF_MEMORY_ATOM;
+    }
+
+    term list = term_nil();
+    for (struct netif *netif = netif_list; netif != NULL; netif = netif->next) {
+        char name_buf[8];
+        if (netif->name[0] == 'w' && netif->name[1] == 'l') {
+            snprintf(name_buf, sizeof(name_buf), "wlan%u", netif->num);
+        } else {
+            snprintf(name_buf, sizeof(name_buf), "%c%c%u", netif->name[0], netif->name[1], netif->num);
+        }
+        uint32_t ip = lwip_ntohl(ip4_addr_get_u32(netif_ip4_addr(netif)));
+        term addr = term_alloc_tuple(4, &ctx->heap);
+        term_put_tuple_element(addr, 0, term_from_int((ip >> 24) & 0xFF));
+        term_put_tuple_element(addr, 1, term_from_int((ip >> 16) & 0xFF));
+        term_put_tuple_element(addr, 2, term_from_int((ip >> 8) & 0xFF));
+        term_put_tuple_element(addr, 3, term_from_int(ip & 0xFF));
+
+        term name = term_from_string((const uint8_t *) name_buf, (uint16_t) strlen(name_buf), &ctx->heap);
+        term flags = term_from_int(netif->flags);
+        term entry = term_alloc_tuple(3, &ctx->heap);
+        term_put_tuple_element(entry, 0, name);
+        term_put_tuple_element(entry, 1, addr);
+        term_put_tuple_element(entry, 2, flags);
+        list = term_list_prepend(entry, list, &ctx->heap);
+    }
     return create_pair(ctx, OK_ATOM, list);
 #else
     return error_atom(ctx, ATOM_STR("\x7", "enotsup"));

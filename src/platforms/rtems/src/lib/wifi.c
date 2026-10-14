@@ -315,6 +315,7 @@ bool rtems_wifi_check_sd_config_and_start(void)
 #include <rtems-esp/netif.h>
 #include <lwip/netif.h>
 #include <lwip/dhcp.h>
+#include <lwip/dns.h>
 #include <lwip/ip4_addr.h>
 #include <netstart.h>
 #include <stdatomic.h>
@@ -376,6 +377,12 @@ static rtems_task dhcp_poll_task(rtems_task_argument arg)
             uint32_t ip = lwip_ntohl(ip4_addr_get_u32(netif_ip4_addr(netif)));
             uint32_t netmask = lwip_ntohl(ip4_addr_get_u32(netif_ip4_netmask(netif)));
             uint32_t gw = lwip_ntohl(ip4_addr_get_u32(netif_ip4_gw(netif)));
+
+            if (d != NULL && ip4_addr_get_u32(&d->offered_gw_addr) != 0) {
+                ip_addr_t dns_addr;
+                ip_addr_copy_from_ip4(dns_addr, d->offered_gw_addr);
+                dns_setserver(0, &dns_addr);
+            }
 
             rtems_wifi_notify_dhcp_event("wlan0", "BOUND", ip, netmask, gw);
             printf("rtems-wifi: DHCP bound! IP=%u.%u.%u.%u, GW=%u.%u.%u.%u\n",

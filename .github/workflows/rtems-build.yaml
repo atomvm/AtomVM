@@ -437,7 +437,7 @@ jobs:
           echo "::error::ESP32-C3 Wi-Fi test did not print {atomvm_esp32c3_wifi,rtems} (status ${status})"
           exit 1
         fi
-        for marker in '{wifi_start,ok}' '{wifi_status,got_ip}' '{socket_open,ok}' '{socket_close,ok}' '{http_connected,ok}' '{http_closed,ok}' '{wifi_test_complete,ok}'; do
+        for marker in '{wifi_start,ok}' '{wifi_status,got_ip}' '{ifaddrs_match,ok}' '{socket_open,ok}' '{socket_close,ok}' '{udp_echo,ok}' '{tcp_echo,ok}' '{gen_tcp_passive,ok}' '{socket_select,ok}' '{dns_numeric_match,ok}' '{dns_inet_getaddr,ok}' '{wifi_test_complete,ok}'; do
           if ! grep -Fq "$marker" <<< "$output"; then
             echo "::error::ESP32-C3 Wi-Fi test did not print ${marker}"
             exit 1
@@ -447,7 +447,7 @@ jobs:
           echo "::error::ESP32-C3 Wi-Fi test did not return ok"
           exit 1
         fi
-        echo "ESP32-C3 Wi-Fi and ahttp_client test completed successfully"
+        echo "ESP32-C3 Wi-Fi network test suite completed successfully"
 
     - name: Cross-compile AtomVM net test for ${{ matrix.bsp }}
       if: matrix.bsp != 'riscv/esp32c3db'
