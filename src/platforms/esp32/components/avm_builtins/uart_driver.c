@@ -217,6 +217,22 @@ EventListener *uart_interrupt_callback(GlobalContext *glb, EventListener *listen
                     size_t count = event.size;
                     uint8_t *usj_buf = NULL;
 #if SOC_USB_SERIAL_JTAG_SUPPORTED
+                    if (!uart_data->use_usj)
+#endif
+                    {
+                        // A read that found data took the bytes of events still queued: an event
+                        // may announce more than the buffer holds, even nothing. Reading what it
+                        // announced would block the scheduler until that many bytes arrive.
+                        size_t buffered = 0;
+                        uart_get_buffered_data_len(uart_data->uart_num, &buffered);
+                        if (buffered < count) {
+                            count = buffered;
+                        }
+                        if (count == 0) {
+                            break;
+                        }
+                    }
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
                     if (uart_data->use_usj) {
                         count = usj_rx_available(uart_data);
                         if (count == 0) {
@@ -255,7 +271,7 @@ EventListener *uart_interrupt_callback(GlobalContext *glb, EventListener *listen
                     if (!uart_data->use_usj)
 #endif
                     {
-                        uart_read_bytes(uart_data->uart_num, bin_buf, count, portMAX_DELAY);
+                        uart_read_bytes(uart_data->uart_num, bin_buf, count, 0);
                     }
 
                     term ok_tuple = term_alloc_tuple(2, &heap);

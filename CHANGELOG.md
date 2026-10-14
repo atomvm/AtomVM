@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reverse order when they went through the global queue, which is always the case without SMP
 - Fixed a heap overflow in the generic_unix poll loop when a select event was armed while
   another scheduler rebuilt the poll set, which aborted with `realloc(): invalid next size`
+- Fixed the ESP32 UART driver blocking the scheduler, until the task watchdog reset the chip,
+  when a read had already taken the bytes of a pending data event
 
 ## [0.7.0-beta.0] - 2026-09-28
 
