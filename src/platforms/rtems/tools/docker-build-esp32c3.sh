@@ -29,6 +29,7 @@ DOCKERFILE="${REPO_ROOT}/src/platforms/rtems/docker/Dockerfile.rtems7-esp32c3"
 DO_SIMULATE=0
 FORCE_REBUILD=0
 RTEMS_SRC_DIR="${RTEMS_SRC_DIR:-}"
+DOCKER_PLATFORM="${DOCKER_PLATFORM:-}"
 
 usage() {
     cat <<EOF
@@ -40,6 +41,7 @@ Options:
   --simulate          Run the boot test in esp-emulator after compiling
   --rebuild           Rebuild the Docker container image
   --rtems-src <path>  Use local RTEMS source tree (or env RTEMS_SRC_DIR)
+  --platform <arch>   Target Docker platform (e.g., linux/arm64, linux/amd64)
   -h, --help          Show this message
 
 EOF
@@ -60,6 +62,10 @@ while [[ $# -gt 0 ]]; do
             RTEMS_SRC_DIR="$2"
             shift 2
             ;;
+        --platform)
+            DOCKER_PLATFORM="$2"
+            shift 2
+            ;;
         -h|--help)
             usage
             ;;
@@ -74,6 +80,11 @@ command -v docker >/dev/null 2>&1 || { echo "Error: docker is required" >&2; exi
 
 # Step 1: Check or build Docker image
 BUILD_ARGS=()
+PLATFORM_ARGS=()
+if [ -n "${DOCKER_PLATFORM}" ]; then
+    PLATFORM_ARGS=(--platform "${DOCKER_PLATFORM}")
+fi
+
 if [ -n "${RTEMS_SRC_DIR}" ]; then
     if [ ! -d "${RTEMS_SRC_DIR}" ]; then
         echo "Error: Specified RTEMS source directory does not exist: ${RTEMS_SRC_DIR}" >&2
@@ -87,16 +98,12 @@ fi
 
 if [ "${FORCE_REBUILD}" -eq 1 ] || ! docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
     echo "==> Building Docker image '${IMAGE_NAME}' from ${DOCKERFILE}..."
-    if [ "${#BUILD_ARGS[@]}" -gt 0 ]; then
-        docker build "${BUILD_ARGS[@]}" -t "${IMAGE_NAME}" -f "${DOCKERFILE}" "${REPO_ROOT}/src/platforms/rtems/docker"
-    else
-        docker build -t "${IMAGE_NAME}" -f "${DOCKERFILE}" "${REPO_ROOT}/src/platforms/rtems/docker"
-    fi
+    docker build "${PLATFORM_ARGS[@]}" "${BUILD_ARGS[@]}" -t "${IMAGE_NAME}" -f "${DOCKERFILE}" "${REPO_ROOT}/src/platforms/rtems/docker"
 fi
 
 # Step 2: Build inside Docker container
 echo "==> Compiling AtomVM for ESP32-C3 under RTEMS 7 inside Docker..."
-docker run --rm -v "${REPO_ROOT}:/workspace" -w /workspace "${IMAGE_NAME}" bash -c '
+docker run "${PLATFORM_ARGS[@]}" --rm -v "${REPO_ROOT}:/workspace" -w /workspace "${IMAGE_NAME}" bash -c '
     set -euo pipefail
 
     echo "==> Building host AVM pack..."
@@ -130,7 +137,7 @@ if [ "${DO_SIMULATE}" -eq 1 ]; then
             --firmware "${REPO_ROOT}/src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin" \
             --timeout 30s --exit-on "Return value: ok"
     else
-        docker run --rm -v "${REPO_ROOT}:/workspace" "${IMAGE_NAME}" \
+        docker run "${PLATFORM_ARGS[@]}" --rm -v "${REPO_ROOT}:/workspace" "${IMAGE_NAME}" \
             esp-emu --chip esp32c3 \
             --firmware /workspace/src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin \
             --timeout 30s --exit-on "Return value: ok"

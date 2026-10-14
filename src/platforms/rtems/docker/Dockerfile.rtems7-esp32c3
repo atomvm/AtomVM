@@ -56,6 +56,7 @@ ARG RSB_REF=main
 
 WORKDIR /tmp/rsb
 RUN git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b ${RSB_REF} . \
+    && sed -i '/sis/d' rtems/config/7/rtems-riscv.bset \
     && cd rtems \
     && ../source-builder/sb-set-builder --prefix="${RTEMS_PREFIX}" 7/rtems-riscv \
     && rm -rf /tmp/rsb

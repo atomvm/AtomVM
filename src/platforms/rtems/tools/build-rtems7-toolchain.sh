@@ -126,6 +126,9 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     fi
 fi
 
+# Strip obsolete sis simulator from the build set if present (fails on arm64 and unneeded for esp32c3)
+sed -i.bak '/sis/d' config/7/rtems-riscv.bset && rm -f config/7/rtems-riscv.bset.bak
+
 ../source-builder/sb-set-builder --prefix="${PREFIX}" ${RSB_PYTHON_ARGS} 7/rtems-riscv
 
 export PATH="${PREFIX}/bin:${PATH}"
