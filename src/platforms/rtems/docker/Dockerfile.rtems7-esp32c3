@@ -104,7 +104,15 @@ RUN if [ -f /tmp/rtems-local/waf ]; then \
 # Strip debug symbols from host binaries to minimize final layer size
 RUN find ${RTEMS_PREFIX}/bin ${RTEMS_PREFIX}/libexec -type f -executable -exec strip {} + 2>/dev/null || true
 
-# Stage 4: Final developer runtime & simulation environment.
+# Stage 4: Wi-Fi & lwIP Stack (rtems-lwip + rtems-esp-wifi) ~1-2 min build.
+# Cached on top of bsp-builder; rebuilds only if Wi-Fi stack components change.
+FROM bsp-builder AS wifi-builder
+
+COPY build-esp32c3-wifi-stack.sh /tmp/build-esp32c3-wifi-stack.sh
+RUN /tmp/build-esp32c3-wifi-stack.sh --prefix="${RTEMS_PREFIX}" \
+    && rm -rf /tmp/build-esp32c3-wifi-stack.sh /root/.cache/rtems7-wifi-build
+
+# Stage 5: Final developer runtime & simulation environment.
 # AtomVM source is bind-mounted into /workspace at runtime (-v $PWD:/workspace),
 # ensuring that changes to AtomVM source code NEVER trigger a Docker image rebuild.
 FROM ubuntu:24.04
@@ -130,8 +138,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     erlang-parsetools \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy prebuilt RTEMS 7 RISC-V toolchain and installed esp32c3db BSP
-COPY --from=bsp-builder /opt/rtems/7 /opt/rtems/7
+# Copy prebuilt RTEMS 7 RISC-V toolchain, esp32c3db BSP, lwIP, and Wi-Fi stack
+COPY --from=wifi-builder /opt/rtems/7 /opt/rtems/7
 
 # Install esp-emulator for direct headless simulation
 RUN curl -fsSL https://raw.githubusercontent.com/espressif/esp-emulator/main/install.sh | sh \

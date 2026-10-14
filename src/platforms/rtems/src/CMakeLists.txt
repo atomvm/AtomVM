@@ -102,6 +102,40 @@ if(RTEMS_HAS_LIBBSD)
     target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE bsd)
 endif()
 
+if(RTEMS_HAS_LWIP)
+    target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_HAS_LWIP HAVE_SOCKET=1 HAVE_SELECT=1)
+    target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE lwip)
+endif()
+
+if(RTEMS_BOARD STREQUAL "esp32c3" AND RTEMS_HAS_ESP_WIFI)
+    target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_HAS_WIFI RTEMS_WIFI_BACKEND_ESP32)
+    set(_esp32c3_lib_dir "${RTEMS_PREFIX}/${RTEMS_TARGET}/${RTEMS_BSP_NAME}/lib")
+    target_link_options(${PROJECT_EXECUTABLE} PRIVATE
+        -Wl,-u,esp32c3_netif_add
+        -Wl,-u,esp_supplicant_init
+        -Wl,-u,g_wifi_default_wpa_crypto_funcs
+        -Wl,-T,${_esp32c3_lib_dir}/esp32c3.rom.ld
+        -Wl,-T,${_esp32c3_lib_dir}/esp32c3.rom.api.ld
+        -Wl,-T,${_esp32c3_lib_dir}/esp32c3.rom.version.ld
+        -Wl,-T,${_esp32c3_lib_dir}/esp32c3.rom.eco3.ld
+    )
+    target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
+        rtems_esp_wifi
+        -Wl,--start-group
+        wpa
+        mbedtls
+        net80211
+        pp
+        core
+        phy
+        mesh
+        espnow
+        smartconfig
+        wapi
+        -Wl,--end-group
+    )
+endif()
+
 if(RTEMS_SIZE)
     add_custom_command(
         TARGET ${PROJECT_EXECUTABLE}

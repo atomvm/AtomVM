@@ -125,6 +125,27 @@ if(RTEMS_ARCH STREQUAL "arm" AND RTEMS_BSP_NAME STREQUAL "imx7")
     endif()
 endif()
 
+set(RTEMS_HAS_LWIP OFF)
+set(RTEMS_HAS_ESP_WIFI OFF)
+if(RTEMS_ARCH STREQUAL "riscv" AND RTEMS_BSP_NAME MATCHES "esp32")
+    set(_rtems_lwip "${RTEMS_PREFIX}/${RTEMS_TARGET}/${RTEMS_BSP_NAME}/lib/liblwip.a")
+    if(EXISTS "${_rtems_lwip}")
+        set(RTEMS_HAS_LWIP ON)
+        set(HAVE_SOCKET 1 CACHE INTERNAL "Have symbol socket" FORCE)
+        set(HAVE_SELECT 1 CACHE INTERNAL "Have symbol select" FORCE)
+        message(STATUS "Linking rtems-lwip from ${_rtems_lwip}")
+    else()
+        message(STATUS
+            "rtems-lwip not found at ${_rtems_lwip}; building riscv/esp32 without socket support")
+    endif()
+
+    set(_rtems_esp_wifi "${RTEMS_PREFIX}/${RTEMS_TARGET}/${RTEMS_BSP_NAME}/lib/librtems_esp_wifi.a")
+    if(EXISTS "${_rtems_esp_wifi}")
+        set(RTEMS_HAS_ESP_WIFI ON)
+        message(STATUS "Enabling ESP32-C3 Wi-Fi stack from ${_rtems_esp_wifi}")
+    endif()
+endif()
+
 if(RTEMS_BOARD STREQUAL "grisp2")
     if(NOT RTEMS_HAS_LIBBSD)
         message(FATAL_ERROR

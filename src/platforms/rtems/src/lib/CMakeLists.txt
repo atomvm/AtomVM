@@ -59,7 +59,7 @@ target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${CMAKE_CURREN
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC libAtomVM)
 # Constructor-registered NIF collections and port drivers are otherwise dropped from the static archive.
 set(_rtems_force_nifs uart_nif i2c_nif gpio_nif spi_nif rtems_network_nif networkregister_port_driver)
-if(RTEMS_HAS_LIBBSD)
+if(RTEMS_HAS_LIBBSD OR RTEMS_HAS_LWIP)
     list(APPEND _rtems_force_nifs otp_socket_nif otp_net_nif)
 endif()
 set(_rtems_force_link)
@@ -79,11 +79,20 @@ if(RTEMS_ARCH STREQUAL "arm" AND RTEMS_BSP_NAME STREQUAL "imx7")
             RTEMS_HAS_WIFI
         )
     endif()
+elseif(RTEMS_BOARD STREQUAL "esp32c3")
+    target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
+        RTEMS_BOARD_ESP32C3
+    )
+    if(RTEMS_HAS_ESP_WIFI)
+        target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
+            RTEMS_HAS_WIFI
+            RTEMS_WIFI_BACKEND_ESP32
+        )
+    endif()
 endif()
 
-if(RTEMS_HAS_LIBBSD)
+if(RTEMS_HAS_LIBBSD OR RTEMS_HAS_LWIP)
     target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC
-        RTEMS_HAS_LIBBSD
         HAVE_SOCKET=1
         HAVE_SELECT=1
         HAVE_GETHOSTNAME
@@ -95,5 +104,11 @@ if(RTEMS_HAS_LIBBSD)
         ../../../../libAtomVM/otp_net.c
         ../../../../libAtomVM/otp_socket.c
     )
-    target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC bsd)
+    if(RTEMS_HAS_LIBBSD)
+        target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC RTEMS_HAS_LIBBSD)
+        target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC bsd)
+    elseif(RTEMS_HAS_LWIP)
+        target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC RTEMS_HAS_LWIP)
+        target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC lwip)
+    endif()
 endif()

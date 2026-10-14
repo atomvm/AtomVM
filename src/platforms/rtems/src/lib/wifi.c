@@ -308,7 +308,198 @@ bool rtems_wifi_check_sd_config_and_start(void)
     return false;
 }
 
-#else /* !defined(RTEMS_HAS_LIBBSD) || !defined(RTEMS_HAS_WIFI) */
+#elif defined(RTEMS_WIFI_BACKEND_ESP32)
+
+#include <esp_wifi.h>
+#include <esp_event.h>
+#include <esp_private/wifi_os_adapter.h>
+#include <rtems-esp/netif.h>
+#include <lwip/netif.h>
+#include <lwip/dhcp.h>
+#include <lwip/ip4_addr.h>
+#include <stdatomic.h>
+#include <string.h>
+#include <stdio.h>
+#include <rtems.h>
+
+static atomic_bool wifi_enabled = ATOMIC_VAR_INIT(false);
+static atomic_int wifi_state = ATOMIC_VAR_INIT(RTEMS_WIFI_DISCONNECTED);
+static rtems_wifi_event_cb event_cb = NULL;
+static void *event_cb_arg = NULL;
+static struct rtems_wifi_ip_info current_ip_info = {0};
+static bool wifi_initialized = false;
+static rtems_id dhcp_poll_task_id = RTEMS_ID_NONE;
+
+static void set_state(rtems_wifi_state_t new_state)
+{
+    atomic_store_explicit(&wifi_state, new_state, memory_order_release);
+    if (event_cb != NULL) {
+        event_cb(new_state, &current_ip_info, event_cb_arg);
+    }
+}
+
+static rtems_task dhcp_poll_task(rtems_task_argument arg)
+{
+    (void) arg;
+    while (atomic_load_explicit(&wifi_enabled, memory_order_acquire)) {
+        struct netif *netif = netif_default;
+        if (netif != NULL && dhcp_supplied_address(netif)) {
+            uint32_t ip = ip4_addr_get_u32(netif_ip4_addr(netif));
+            uint32_t netmask = ip4_addr_get_u32(netif_ip4_netmask(netif));
+            uint32_t gw = ip4_addr_get_u32(netif_ip4_gw(netif));
+
+            rtems_wifi_notify_dhcp_event("wlan0", "BOUND", ip, netmask, gw);
+            break;
+        }
+        rtems_task_wake_after(RTEMS_MILLISECONDS_TO_TICKS(500));
+    }
+    dhcp_poll_task_id = RTEMS_ID_NONE;
+    rtems_task_exit();
+}
+
+static void on_wifi_event(void *arg, const char *base, int32_t id, void *data)
+{
+    (void) arg;
+    (void) data;
+    if (base != NULL && strcmp(base, WIFI_EVENT) == 0) {
+        if (id == WIFI_EVENT_STA_START) {
+            set_state(RTEMS_WIFI_ASSOCIATING);
+        } else if (id == WIFI_EVENT_STA_CONNECTED) {
+            set_state(RTEMS_WIFI_ASSOCIATED);
+            if (dhcp_poll_task_id == RTEMS_ID_NONE && netif_default != NULL) {
+                dhcp_start(netif_default);
+                rtems_status_code sc = rtems_task_create(
+                    rtems_build_name('W', 'D', 'H', 'C'),
+                    120,
+                    4096,
+                    RTEMS_DEFAULT_MODES,
+                    RTEMS_DEFAULT_ATTRIBUTES,
+                    &dhcp_poll_task_id
+                );
+                if (sc == RTEMS_SUCCESSFUL) {
+                    rtems_task_start(dhcp_poll_task_id, dhcp_poll_task, 0);
+                }
+            }
+        } else if (id == WIFI_EVENT_STA_DISCONNECTED) {
+            current_ip_info.ip = 0;
+            current_ip_info.netmask = 0;
+            current_ip_info.gateway = 0;
+            set_state(RTEMS_WIFI_DISCONNECTED);
+        }
+    }
+}
+
+int rtems_wifi_create_wlandev(void)
+{
+    return 0;
+}
+
+bool rtems_wifi_is_available(void)
+{
+    return true;
+}
+
+rtems_wifi_state_t rtems_wifi_get_state(void)
+{
+    return (rtems_wifi_state_t) atomic_load_explicit(&wifi_state, memory_order_acquire);
+}
+
+int rtems_wifi_get_ip_info(struct rtems_wifi_ip_info *info)
+{
+    if (info == NULL) {
+        return -1;
+    }
+    if (atomic_load_explicit(&wifi_state, memory_order_acquire) != RTEMS_WIFI_GOT_IP) {
+        return -1;
+    }
+    *info = current_ip_info;
+    return 0;
+}
+
+int rtems_wifi_start(const char *ssid, const char *psk)
+{
+    if (ssid == NULL) {
+        return -1;
+    }
+
+    if (!wifi_initialized) {
+        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+        esp_err_t err = esp_wifi_init(&cfg);
+        if (err != ESP_OK) {
+            fprintf(stderr, "AtomVM wifi: esp_wifi_init failed: %d\n", err);
+            return -1;
+        }
+
+        esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_wifi_event, NULL);
+        wifi_initialized = true;
+    }
+
+    esp_wifi_set_mode(WIFI_MODE_STA);
+
+    wifi_config_t sta_cfg = {0};
+    strncpy((char *) sta_cfg.sta.ssid, ssid, sizeof(sta_cfg.sta.ssid) - 1);
+    if (psk != NULL && strlen(psk) > 0) {
+        strncpy((char *) sta_cfg.sta.password, psk, sizeof(sta_cfg.sta.password) - 1);
+    }
+    esp_wifi_set_config(WIFI_IF_STA, &sta_cfg);
+
+    esp_err_t err = esp_wifi_start();
+    if (err != ESP_OK) {
+        fprintf(stderr, "AtomVM wifi: esp_wifi_start failed: %d\n", err);
+        return -1;
+    }
+
+    atomic_store_explicit(&wifi_enabled, true, memory_order_release);
+    esp_wifi_connect();
+    return 0;
+}
+
+int rtems_wifi_start_with_config_file(const char *conf_path)
+{
+    (void) conf_path;
+    return -1;
+}
+
+int rtems_wifi_stop(void)
+{
+    if (atomic_load_explicit(&wifi_enabled, memory_order_acquire)) {
+        esp_wifi_disconnect();
+        esp_wifi_stop();
+        atomic_store_explicit(&wifi_enabled, false, memory_order_release);
+        set_state(RTEMS_WIFI_DISCONNECTED);
+    }
+    return 0;
+}
+
+void rtems_wifi_set_event_callback(rtems_wifi_event_cb cb, void *arg)
+{
+    event_cb = cb;
+    event_cb_arg = arg;
+}
+
+void rtems_wifi_notify_dhcp_event(const char *interface, const char *reason,
+                                 uint32_t ip, uint32_t netmask, uint32_t gateway)
+{
+    (void) interface;
+    if (reason != NULL && strcmp(reason, "BOUND") == 0) {
+        current_ip_info.ip = ip;
+        current_ip_info.netmask = netmask;
+        current_ip_info.gateway = gateway;
+        set_state(RTEMS_WIFI_GOT_IP);
+    } else if (reason != NULL && (strcmp(reason, "STOP") == 0 || strcmp(reason, "FAIL") == 0)) {
+        current_ip_info.ip = 0;
+        current_ip_info.netmask = 0;
+        current_ip_info.gateway = 0;
+        set_state(RTEMS_WIFI_DISCONNECTED);
+    }
+}
+
+bool rtems_wifi_check_sd_config_and_start(void)
+{
+    return false;
+}
+
+#else /* !defined(RTEMS_HAS_LIBBSD) && !defined(RTEMS_WIFI_BACKEND_ESP32) */
 
 int rtems_wifi_create_wlandev(void) { return -1; }
 bool rtems_wifi_is_available(void) { return false; }
