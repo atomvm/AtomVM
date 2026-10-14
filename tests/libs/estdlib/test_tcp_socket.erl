@@ -33,11 +33,209 @@ test() ->
     ok = test_setopt_getopt(),
     case erlang:system_info(machine) of
         "ATOM" ->
+            ok = test_independent_read_write_selects(),
             ok = test_abandon_select();
         "BEAM" ->
             ok
     end,
     ok.
+
+test_independent_read_write_selects() ->
+    etest:flush_msg_queue(),
+    lists:foreach(
+        fun(Order) ->
+            ok = test_blocked_read_write(Order, close),
+            ok = test_blocked_read_write(Order, kill_writer),
+            ok = test_blocked_read_write(Order, drain),
+            ok = test_blocked_read_write(Order, read_eof)
+        end,
+        [reader_first, writer_first]
+    ),
+    ok.
+
+test_blocked_read_write(Order, Action) ->
+    {ok, ListenSocket} = socket:open(inet, stream, tcp),
+    ok = socket:setopt(ListenSocket, {socket, reuseaddr}, true),
+    ok = socket:bind(ListenSocket, #{family => inet, addr => loopback, port => 0}),
+    ok = socket:listen(ListenSocket),
+    {ok, #{port := Port}} = socket:sockname(ListenSocket),
+    {ok, ClientSocket} = socket:open(inet, stream, tcp),
+    ok = socket:connect(ClientSocket, #{family => inet, addr => loopback, port => Port}),
+    {ok, ServerSocket} = socket:accept(ListenSocket),
+
+    %% The accepted socket is shared by two selectors and closed by a third
+    %% process.  Its peer deliberately does not read until the drain case.
+    %% Raw sends prove EAGAIN, rather than selecting an immediately writable fd.
+    Packet = <<0:65536>>,
+    Parent = self(),
+    StartReader = fun() ->
+        start_registered(fun() ->
+            {select, {select_info, recv, _Ref}} = socket:recv(ServerSocket, 1, nowait),
+            Parent ! {self(), registered, 0},
+            %% Wait through the public receive path so EOF exercises its
+            %% selection cleanup while the independent writer is still waiting.
+            Result = socket:recv(ServerSocket, 1, 5000),
+            Parent ! {self(), result, Result}
+        end)
+    end,
+    StartWriter = fun() ->
+        start_registered(fun() ->
+            {Buffered, Rest} = fill_send_buffer(ServerSocket, Packet, 0, 8192),
+            Parent ! {self(), registered, Buffered + byte_size(Rest)},
+            %% Establish ownership before acknowledging registration, then
+            %% exercise the public blocking send and its own retry selection.
+            %% Hosts can grow their send buffers after EAGAIN. Reuse bounded
+            %% 32 KiB chunks until the public send really waits, rather than
+            %% assuming a particular payload size must block on every platform.
+            Result = send_until_blocked(ServerSocket, Parent, <<Rest/binary, 0:262144>>, 256),
+            Parent ! {self(), result, Result}
+        end)
+    end,
+    {{Reader, ReaderMonitor, 0}, {Writer, WriterMonitor, Buffered}} =
+        case Order of
+            reader_first ->
+                R = StartReader(),
+                W = StartWriter(),
+                {R, W};
+            writer_first ->
+                W = StartWriter(),
+                R = StartReader(),
+                {R, W}
+        end,
+    %% Observe the public send still pending while the peer is not draining;
+    %% raw EAGAIN alone does not prove the wrapper actually had to wait.
+    Total = wait_public_send_blocked(Writer, WriterMonitor, Buffered),
+    Writer ! finish,
+    ok = assert_writer_blocked(Writer, WriterMonitor),
+    case Action of
+        close ->
+            ok = socket:close(ServerSocket),
+            {error, closed} = wait_result(Reader),
+            {error, closed} = wait_result(Writer),
+            normal = wait_down(Writer, WriterMonitor);
+        kill_writer ->
+            exit(Writer, kill),
+            killed = wait_down(Writer, WriterMonitor),
+            ok = socket:send(ClientSocket, <<42>>),
+            {ok, <<42>>} = wait_result(Reader),
+            ok = socket:close(ServerSocket);
+        drain ->
+            %% Check every byte, including the unsent suffix from a partial send.
+            ok = drain_writer_data(ClientSocket, Total),
+            ok = wait_result(Writer),
+            normal = wait_down(Writer, WriterMonitor),
+            ok = socket:send(ClientSocket, <<42>>),
+            {ok, <<42>>} = wait_result(Reader),
+            ok = socket:close(ServerSocket);
+        read_eof ->
+            %% EOF must cancel only read selection, not the blocked writer.
+            ok = socket:shutdown(ClientSocket, write),
+            {error, closed} = wait_result(Reader),
+            ok = assert_writer_blocked(Writer, WriterMonitor),
+            ok = drain_writer_data(ClientSocket, Total),
+            ok = wait_result(Writer),
+            normal = wait_down(Writer, WriterMonitor),
+            ok = socket:close(ServerSocket)
+    end,
+    normal = wait_down(Reader, ReaderMonitor),
+    ok = socket:close(ClientSocket),
+    ok = socket:close(ListenSocket).
+
+send_until_blocked(_Socket, _Parent, _Data, 0) ->
+    error(public_send_did_not_block);
+send_until_blocked(Socket, Parent, Data, Attempts) ->
+    %% Rest from the raw send is already included in registered's byte count.
+    Parent ! {self(), sending, 32768},
+    case socket:send(Socket, Data) of
+        ok ->
+            receive
+                finish -> socket:send(Socket, <<91, 7, 73, 19>>)
+            after 0 ->
+                send_until_blocked(Socket, Parent, <<0:262144>>, Attempts - 1)
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+wait_public_send_blocked(Pid, Monitor, Total) ->
+    receive
+        {Pid, sending, Size} -> wait_public_send_blocked(Pid, Monitor, Total + Size);
+        {Pid, result, Result} -> error({writer_did_not_block, Result});
+        {'DOWN', Monitor, process, Pid, Reason} -> error({writer_exited, Reason})
+    after 250 ->
+        Total
+    end.
+
+%% Bound the amount of data queued even on hosts with large TCP buffers.
+fill_send_buffer(_Socket, _Packet, _Buffered, 0) ->
+    error(send_buffer_did_not_block);
+fill_send_buffer(Socket, Packet, Buffered, Attempts) ->
+    case socket:nif_send(Socket, Packet) of
+        ok ->
+            fill_send_buffer(Socket, <<0:65536>>, Buffered + byte_size(Packet), Attempts - 1);
+        {ok, Rest} ->
+            fill_send_buffer(
+                Socket, Rest, Buffered + byte_size(Packet) - byte_size(Rest), Attempts - 1
+            );
+        {error, eagain} ->
+            %% An initial EAGAIN can clear as ACKs arrive even though the peer
+            %% never reads. Keep filling until write readiness stays blocked.
+            Ref = make_ref(),
+            ok = socket:nif_select_write(Socket, Ref),
+            receive
+                {'$socket', Socket, select, Ref} ->
+                    fill_send_buffer(Socket, Packet, Buffered, Attempts - 1)
+            after 250 ->
+                {Buffered, Packet}
+            end
+    end.
+
+start_registered(Fun) ->
+    {Pid, Monitor} = spawn_opt(Fun, [monitor]),
+    Value = wait_registered(Pid),
+    {Pid, Monitor, Value}.
+
+wait_result(Pid) ->
+    receive
+        {Pid, result, Result} -> Result
+    after 5000 ->
+        error({timeout, result, Pid})
+    end.
+
+assert_writer_blocked(Pid, Monitor) ->
+    receive
+        {Pid, result, Result} -> error({writer_did_not_block, Result});
+        {'DOWN', Monitor, process, Pid, Reason} -> error({writer_exited, Reason})
+    after 250 ->
+        ok
+    end.
+
+drain_writer_data(Socket, Total) ->
+    ok = drain_zero_bytes(Socket, Total),
+    {ok, <<91, 7, 73, 19>>} = socket:recv(Socket, 4, 5000),
+    ok.
+
+drain_zero_bytes(_Socket, 0) ->
+    ok;
+drain_zero_bytes(Socket, Remaining) ->
+    Size = erlang:min(Remaining, 8192),
+    {ok, Data} = socket:recv(Socket, Size, 5000),
+    Data = <<0:(Size * 8)>>,
+    drain_zero_bytes(Socket, Remaining - Size).
+
+wait_registered(Pid) ->
+    receive
+        {Pid, registered, Value} -> Value
+    after 5000 ->
+        error({timeout, registered, Pid})
+    end.
+
+wait_down(Pid, Monitor) ->
+    receive
+        {'DOWN', Monitor, process, Pid, Reason} -> Reason
+    after 5000 ->
+        error({timeout, down, Pid})
+    end.
 
 -define(PACKET_SIZE, 7).
 

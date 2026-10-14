@@ -46,9 +46,11 @@
 %% internal nifs
 -export([
     nif_select_read/2,
+    nif_select_write/2,
     nif_accept/1,
     nif_recv/2,
     nif_recvfrom/2,
+    nif_select_read_stop/1,
     nif_select_stop/1,
     nif_send/2,
     nif_sendto/3
@@ -269,7 +271,7 @@ accept0(Socket, Timeout) ->
                 {'$socket', Socket, select, Ref} ->
                     case ?MODULE:nif_accept(Socket) of
                         {error, _} = E ->
-                            ?MODULE:nif_select_stop(Socket),
+                            ?MODULE:nif_select_read_stop(Socket),
                             E;
                         {ok, _Socket} = Reply ->
                             Reply
@@ -382,7 +384,7 @@ recv0(Socket, Length, Timeout) ->
                 {'$socket', Socket, select, Ref} ->
                     case ?MODULE:nif_recv(Socket, Length) of
                         {error, _} = E ->
-                            ?MODULE:nif_select_stop(Socket),
+                            ?MODULE:nif_select_read_stop(Socket),
                             E;
                         {ok, Data} ->
                             {ok, Data}
@@ -433,7 +435,7 @@ recv0_r(Socket, Length, Timeout, EndQuery, Acc) ->
                 {'$socket', Socket, select, Ref} ->
                     case ?MODULE:nif_recv(Socket, Length) of
                         {error, _} = E ->
-                            ?MODULE:nif_select_stop(Socket),
+                            ?MODULE:nif_select_read_stop(Socket),
                             E;
                         {ok, Data} ->
                             NewAcc = [Data | Acc],
@@ -537,7 +539,7 @@ recvfrom0(Socket, Length, Timeout) ->
                 {'$socket', Socket, select, Ref} ->
                     case ?MODULE:nif_recvfrom(Socket, Length) of
                         {error, _} = E ->
-                            ?MODULE:nif_select_stop(Socket),
+                            ?MODULE:nif_select_read_stop(Socket),
                             E;
                         {ok, {_Address, _Data}} = Reply ->
                             Reply
@@ -571,13 +573,12 @@ recvfrom0_nowait(Socket, Length, Ref) ->
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
 %% @param   Data the data to send
-%% @returns `{ok, Rest}' if successful; `{error, Reason}', otherwise.
+%% @returns `ok' if all data was accepted; `{error, Reason}', otherwise.
 %% @doc     Send data on the specified socket.
 %%
-%%          Note that this function will block until data is sent
-%%          on the socket.  The data may not have been received by the
-%%          intended recipient, and the data may not even have been sent
-%%          over the network.
+%%          For stream sockets, partial sends and transient backpressure are
+%%          retried internally until all data has been accepted or an error
+%%          occurs.
 %%
 %% Example:
 %%
@@ -585,23 +586,27 @@ recvfrom0_nowait(Socket, Length, Ref) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec send(Socket :: socket(), Data :: iodata()) ->
-    ok | {ok, Rest :: binary()} | {error, Reason :: term()}.
+    ok | {error, Reason :: term()}.
 send(Socket, Data) when is_binary(Data) ->
-    ?MODULE:nif_send(Socket, Data);
+    send_all_binary(Socket, Data);
 send(Socket, Data) ->
-    ?MODULE:nif_send(Socket, erlang:iolist_to_binary(Data)).
+    send_all_binary(Socket, erlang:iolist_to_binary(Data)).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
 %% @param   Data the data to send
 %% @param   Dest the destination to which to send the data
-%% @returns `{ok, Rest}' if successful; `{error, Reason}', otherwise.
+%% @returns `ok' if all data was accepted; `{ok, Rest}' for a partial send;
+%%          `{error, Reason}', otherwise.
 %% @doc     Send data on the specified socket to the specified destination.
 %%
-%%          Note that this function will block until data is sent
-%%          on the socket.  The data may not have been received by the
-%%          intended recipient, and the data may not even have been sent
-%%          over the network.
+%%          Transient backpressure is retried internally after waiting for
+%%          write readiness. Datagram boundaries are preserved: a partial
+%%          send is returned to the caller, not sent as another datagram.
+%%          Empty data sends an empty datagram.
+%%
+%%          Acceptance does not guarantee that the data has been transmitted
+%%          over the network or received by the intended recipient.
 %%
 %% Example:
 %%
@@ -611,9 +616,9 @@ send(Socket, Data) ->
 -spec sendto(Socket :: socket(), Data :: iodata(), Dest :: sockaddr()) ->
     ok | {ok, Rest :: binary()} | {error, Reason :: term()}.
 sendto(Socket, Data, Dest) when is_binary(Data) ->
-    ?MODULE:nif_sendto(Socket, Data, Dest);
+    sendto_binary(Socket, Data, Dest);
 sendto(Socket, Data, Dest) ->
-    ?MODULE:nif_sendto(Socket, erlang:iolist_to_binary(Data), Dest).
+    sendto_binary(Socket, erlang:iolist_to_binary(Data), Dest).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
@@ -709,6 +714,10 @@ nif_select_read(_Socket, _Ref) ->
     erlang:nif_error(undefined).
 
 %% @private
+nif_select_write(_Socket, _Ref) ->
+    erlang:nif_error(undefined).
+
+%% @private
 nif_accept(_Socket) ->
     erlang:nif_error(undefined).
 
@@ -718,6 +727,11 @@ nif_recv(_Socket, _Length) ->
 
 %% @private
 nif_recvfrom(_Socket, _Length) ->
+    erlang:nif_error(undefined).
+
+%% @private
+%% Cancel only read selection and its monitor, preserving any pending writer.
+nif_select_read_stop(_Socket) ->
     erlang:nif_error(undefined).
 
 %% @private
@@ -731,3 +745,51 @@ nif_send(_Socket, _Data) ->
 %% @private
 nif_sendto(_Socket, _Data, _Dest) ->
     erlang:nif_error(undefined).
+
+send_all_binary(Socket, Data) ->
+    case ?MODULE:nif_send(Socket, Data) of
+        ok ->
+            ok;
+        {ok, Rest} ->
+            send_all_binary(Socket, Rest);
+        {error, eagain} ->
+            case wait_write(Socket) of
+                ok ->
+                    send_all_binary(Socket, Data);
+                {error, _Reason} = Error ->
+                    Error
+            end;
+        {error, _Reason} = Error ->
+            Error
+    end.
+
+sendto_binary(Socket, Data, Dest) ->
+    case ?MODULE:nif_sendto(Socket, Data, Dest) of
+        {error, eagain} ->
+            case wait_write(Socket) of
+                ok ->
+                    %% Raw lwIP UDP readiness is advisory and immediate, even
+                    %% after ERR_MEM. Yield with a timer rather than busy-loop.
+                    receive
+                    after 10 -> sendto_binary(Socket, Data, Dest)
+                    end;
+                {error, _Reason} = Error ->
+                    Error
+            end;
+        Result ->
+            Result
+    end.
+
+wait_write(Socket) ->
+    Ref = erlang:make_ref(),
+    case ?MODULE:nif_select_write(Socket, Ref) of
+        ok ->
+            receive
+                {'$socket', Socket, select, Ref} ->
+                    ok;
+                {'$socket', Socket, abort, {Ref, closed}} ->
+                    {error, closed}
+            end;
+        {error, _Reason} = Error ->
+            Error
+    end.

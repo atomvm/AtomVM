@@ -102,11 +102,6 @@ struct LWIPEvent
         struct
         {
             struct SocketResource *rsrc_obj;
-            struct tcp_pcb *newpcb;
-        } tcp_accept;
-        struct
-        {
-            struct tcp_pcb *tpcb;
             struct pbuf *buf;
             err_t err;
         } tcp_recv;
@@ -127,10 +122,6 @@ struct LWIPEvent
             GlobalContext *global;
             int32_t target_pid;
         } trap_answer_closed;
-        struct
-        {
-            struct SocketResource *rsrc_obj;
-        } finalize_close;
         struct
         {
             tcpip_callback_fn function;
@@ -154,10 +145,15 @@ struct LWIPEvent
  * from ISR and in such case need to implement a queue mechanism to process
  * them in task context. GlobalContext is not always available in lwIP callbacks
  * so platforms using a queue need a global variable.
- * If lwIP callbacks are not called from ISR, calling handler with the event is
- * sufficient.
+ * Returns true only when the queue accepted ownership of the event.
  */
-void otp_socket_lwip_enqueue(struct LWIPEvent *event);
+bool otp_socket_lwip_enqueue(struct LWIPEvent *event);
+
+// Task-context work is retained independently of the bounded payload queue.
+void otp_socket_lwip_process_pending(void);
+bool otp_socket_lwip_has_pending(void);
+// Platform wake latch; safe from the lwIP callback synchronization domain.
+void otp_socket_lwip_signal(void);
 
 #endif
 

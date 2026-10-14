@@ -23,6 +23,7 @@
 -export([test/0]).
 
 test() ->
+    ok = test_datagram_send(),
     ok = test_echo(),
     ok = test_buf_size(),
     ok = test_timeout(),
@@ -49,6 +50,31 @@ test() ->
     ok.
 
 -define(PACKET_SIZE, 7).
+
+test_datagram_send() ->
+    {ok, Receiver} = socket:open(inet, dgram, udp),
+    ok = socket:bind(Receiver, #{family => inet, addr => loopback, port => 0}),
+    {ok, #{port := Port}} = socket:sockname(Receiver),
+    {ok, Sender} = socket:open(inet, dgram, udp),
+    Dest = #{family => inet, addr => loopback, port => Port},
+
+    ok = socket:sendto(Sender, <<>>, Dest),
+    {ok, {_EmptySource, <<>>}} = socket:recvfrom(Receiver, 0, 5000),
+    ok = socket:sendto(Sender, [<<91, 7>>, [19, <<73>>]], Dest),
+    {ok, {_DataSource, <<91, 7, 19, 73>>}} = socket:recvfrom(Receiver, 0, 5000),
+    %% A permanently oversized datagram must fail, not wait or split packets.
+    {error, emsgsize} = socket:sendto(Sender, <<0:(65508 * 8)>>, Dest),
+    {error, timeout} = socket:recvfrom(Receiver, 0, 0),
+
+    ok = socket:connect(Sender, Dest),
+
+    ok = socket:send(Sender, <<>>),
+    {ok, {_Source, <<>>}} = socket:recvfrom(Receiver, 0, 5000),
+
+    ok = socket:close(Sender),
+    {error, _} = socket:send(Sender, <<>>),
+    {error, _} = socket:sendto(Sender, <<>>, Dest),
+    ok = socket:close(Receiver).
 
 start_echo_server(Port) ->
     {ok, Socket} = socket:open(inet, dgram, udp),
