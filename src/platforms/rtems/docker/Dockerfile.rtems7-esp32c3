@@ -68,13 +68,14 @@ FROM scratch AS rtems-src
 # Stage 3: RTEMS Kernel & ESP32-C3 BSP ~30 sec build.
 # Layered on top of the cached RSB toolchain; if RTEMS BSP options change, only this fast step rebuilds.
 FROM rsb-toolchain AS bsp-builder
-ARG RTEMS_REF=main
-ARG RTEMS_GIT_URL=https://github.com/RTEMS/rtems.git
+ARG RTEMS_REF=esp32c3-rtems-esphome
+ARG RTEMS_GIT_URL=https://github.com/thesamprice/rtems.git
 
 WORKDIR /tmp/rtems
 ENV PATH="${RTEMS_PREFIX}/bin:${PATH}"
 
-# Copy patches directory from build context
+# Copy BSP configuration and patches directory from build context
+COPY esp32c3-wifi-bsp.ini /tmp/esp32c3-wifi-bsp.ini
 COPY patches/ /tmp/patches/
 
 # Copy optional local RTEMS source from build context (empty if not specified)
@@ -84,7 +85,7 @@ RUN if [ -f /tmp/rtems-local/waf ]; then \
         echo "==> Using local RTEMS source tree..." && \
         cp -a /tmp/rtems-local/. /tmp/rtems/ ; \
     else \
-        echo "==> Cloning upstream RTEMS (${RTEMS_GIT_URL} @ ${RTEMS_REF})..." && \
+        echo "==> Cloning RTEMS (${RTEMS_GIT_URL} @ ${RTEMS_REF})..." && \
         git clone --depth 1 "${RTEMS_GIT_URL}" -b "${RTEMS_REF}" . ; \
     fi \
     && if [ -d /tmp/patches ]; then \
@@ -95,10 +96,10 @@ RUN if [ -f /tmp/rtems-local/waf ]; then \
             fi; \
         done; \
     fi \
-    && ./waf configure --prefix="${RTEMS_PREFIX}" --rtems-bsps=riscv/esp32c3db \
+    && ./waf configure --prefix="${RTEMS_PREFIX}" --rtems-bsps=riscv/esp32c3db --rtems-config=/tmp/esp32c3-wifi-bsp.ini \
     && ./waf \
     && ./waf install \
-    && rm -rf /tmp/rtems /tmp/rtems-local /tmp/patches
+    && rm -rf /tmp/rtems /tmp/rtems-local /tmp/patches /tmp/esp32c3-wifi-bsp.ini
 
 # Strip debug symbols from host binaries to minimize final layer size
 RUN find ${RTEMS_PREFIX}/bin ${RTEMS_PREFIX}/libexec -type f -executable -exec strip {} + 2>/dev/null || true
