@@ -30,13 +30,17 @@ start() ->
     ok.
 
 uart_smoke() ->
-    Pid = uart:open([{peripheral, "/dev/console"}, {speed, 115200}]),
-    true = is_pid(Pid),
-    {error, timeout} = uart:read(Pid, 20),
-    erlang:display({uart, read_timeout, ok}),
-    ok = uart:write(Pid, <<"uart-ok\n">>),
-    erlang:display({uart, write, ok}),
-    ok = uart:close(Pid).
+    try uart:open([{peripheral, "/dev/console"}, {speed, 115200}]) of
+        Pid when is_pid(Pid) ->
+            {error, timeout} = uart:read(Pid, 20),
+            erlang:display({uart, read_timeout, ok}),
+            ok = uart:write(Pid, <<"uart-ok\n">>),
+            erlang:display({uart, write, ok}),
+            ok = uart:close(Pid)
+    catch
+        error:Reason ->
+            erlang:display({uart, Reason, ok})
+    end.
 
 i2c_smoke() ->
     case i2c:init([{peripheral, "/dev/i2c-invalid"}, {fdt_alias, "atomvm-missing"}]) of

@@ -39,7 +39,7 @@ Options:
   -h, --help          Show this help message
 
 EOF
-    exit 0
+    exit "${1:-0}"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -48,20 +48,28 @@ while [[ $# -gt 0 ]]; do
             PREFIX="$2"
             shift 2
             ;;
+        --prefix=*)
+            PREFIX="${1#*=}"
+            shift
+            ;;
         --build-dir)
             BUILD_DIR="$2"
             shift 2
+            ;;
+        --build-dir=*)
+            BUILD_DIR="${1#*=}"
+            shift
             ;;
         --clean)
             CLEAN=1
             shift
             ;;
         -h|--help)
-            usage
+            usage 0
             ;;
         *)
             echo "Unknown option: $1" >&2
-            usage
+            usage 1
             ;;
     esac
 done
@@ -125,6 +133,10 @@ cd "${BUILD_DIR}"
 
 if [ ! -d "esp32-wifi-lib/.git" ]; then
     git clone --depth 1 https://github.com/espressif/esp32-wifi-lib.git esp32-wifi-lib
+fi
+
+if [ ! -d "esp-phy-lib/.git" ]; then
+    git clone --depth 1 https://github.com/espressif/esp-phy-lib.git esp-phy-lib
 fi
 
 if [ ! -d "esp-hal-3rdparty/.git" ]; then
@@ -262,9 +274,10 @@ riscv-rtems7-gcc -march=rv32imc -mabi=ilp32 -DESP_PLATFORM ${COMMON_INC} \
 # Archive into librtems_esp_wifi.a
 riscv-rtems7-ar rcs "${BSP_LIB}/librtems_esp_wifi.a" "${BUILD_DIR}"/glue-obj/*.o
 
-# Copy 8 precompiled blobs to BSP lib directory
-echo "==> Installing Wi-Fi binary blobs into ${BSP_LIB}..."
+# Copy precompiled Wi-Fi and PHY blobs to BSP lib directory
+echo "==> Installing Wi-Fi and PHY binary blobs into ${BSP_LIB}..."
 cp "${BUILD_DIR}/esp32-wifi-lib/esp32c3/"lib*.a "${BSP_LIB}/"
+cp "${BUILD_DIR}/esp-phy-lib/esp32c3/"lib*.a "${BSP_LIB}/"
 
 # Copy Mask ROM linker scripts to BSP lib directory
 echo "==> Installing Mask ROM linker scripts into ${BSP_LIB}..."
@@ -277,8 +290,9 @@ cp "${ROM_LD}/esp32c3.rom.ld" \
 
 # Copy headers to BSP include directory
 echo "==> Installing Wi-Fi headers into ${BSP_INC}..."
-mkdir -p "${BSP_INC}/rtems-esp" "${BSP_INC}/esp_wifi" "${BSP_INC}/esp_event"
-cp -r "${GLUE}/include/rtems-esp/"* "${BSP_INC}/rtems-esp/"
+mkdir -p "${BSP_INC}/rtems-esp" "${BSP_INC}/esp_wifi" "${BSP_INC}/esp_event" "${BSP_INC}/freertos"
+cp -r "${GLUE}/include/"* "${BSP_INC}/"
+cp "${GLUE}/include/rtems-esp/sdkconfig.h" "${BSP_INC}/sdkconfig.h"
 cp "${HAL}/esp_wifi/include/"*.h "${BSP_INC}/" 2>/dev/null || true
 cp "${HAL}/esp_event/include/"*.h "${BSP_INC}/" 2>/dev/null || true
 cp "${HAL}/esp_phy/include/"*.h "${BSP_INC}/" 2>/dev/null || true

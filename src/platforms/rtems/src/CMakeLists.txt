@@ -120,8 +120,8 @@ if(RTEMS_BOARD STREQUAL "esp32c3" AND RTEMS_HAS_ESP_WIFI)
         -Wl,-T,${_esp32c3_lib_dir}/esp32c3.rom.eco3.ld
     )
     target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
-        rtems_esp_wifi
         -Wl,--start-group
+        rtems_esp_wifi
         wpa
         mbedtls
         net80211

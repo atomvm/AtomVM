@@ -312,7 +312,6 @@ bool rtems_wifi_check_sd_config_and_start(void)
 
 #include <esp_wifi.h>
 #include <esp_event.h>
-#include <esp_private/wifi_os_adapter.h>
 #include <rtems-esp/netif.h>
 #include <lwip/netif.h>
 #include <lwip/dhcp.h>
@@ -322,13 +321,37 @@ bool rtems_wifi_check_sd_config_and_start(void)
 #include <stdio.h>
 #include <rtems.h>
 
-static atomic_bool wifi_enabled = ATOMIC_VAR_INIT(false);
-static atomic_int wifi_state = ATOMIC_VAR_INIT(RTEMS_WIFI_DISCONNECTED);
+static atomic_bool wifi_enabled = false;
+static atomic_int wifi_state = RTEMS_WIFI_DISCONNECTED;
 static rtems_wifi_event_cb event_cb = NULL;
 static void *event_cb_arg = NULL;
 static struct rtems_wifi_ip_info current_ip_info = {0};
 static bool wifi_initialized = false;
 static rtems_id dhcp_poll_task_id = RTEMS_ID_NONE;
+
+int os_get_random(unsigned char *buf, size_t len)
+{
+    volatile uint32_t *rng = (volatile uint32_t *) 0x600260b0;
+    while (len > 0) {
+        uint32_t r = *rng;
+        size_t chunk = len < sizeof(uint32_t) ? len : sizeof(uint32_t);
+        memcpy(buf, &r, chunk);
+        buf += chunk;
+        len -= chunk;
+    }
+    return 0;
+}
+
+void os_sleep(long sec, long usec)
+{
+    rtems_interval ticks = RTEMS_MILLISECONDS_TO_TICKS(sec * 1000 + usec / 1000);
+    if (ticks == 0 && (sec > 0 || usec > 0)) {
+        ticks = 1;
+    }
+    if (ticks > 0) {
+        rtems_task_wake_after(ticks);
+    }
+}
 
 static void set_state(rtems_wifi_state_t new_state)
 {
@@ -409,6 +432,7 @@ int rtems_wifi_get_ip_info(struct rtems_wifi_ip_info *info)
     if (info == NULL) {
         return -1;
     }
+    memset(info, 0, sizeof(*info));
     if (atomic_load_explicit(&wifi_state, memory_order_acquire) != RTEMS_WIFI_GOT_IP) {
         return -1;
     }

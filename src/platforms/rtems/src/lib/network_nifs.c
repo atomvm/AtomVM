@@ -58,6 +58,14 @@ static term error_atom(Context *ctx, AtomString reason)
     return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, reason));
 }
 
+static term error_term(Context *ctx, term reason)
+{
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        return OUT_OF_MEMORY_ATOM;
+    }
+    return create_pair(ctx, ERROR_ATOM, reason);
+}
+
 static term nif_rtems_ifaddrs(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -132,21 +140,26 @@ static term nif_rtems_resolver_ready(Context *ctx, int argc, term argv[])
 #endif
 }
 
+static const struct Nif rtems_resolver_ready_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_rtems_resolver_ready
+};
+
 static term nif_rtems_wifi_start(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
-#if defined(RTEMS_HAS_LIBBSD) && defined(RTEMS_HAS_WIFI)
+#if (defined(RTEMS_HAS_LIBBSD) && defined(RTEMS_HAS_WIFI)) || defined(RTEMS_WIFI_BACKEND_ESP32)
     int ok = 0;
     char *ssid = interop_term_to_string(argv[0], &ok);
     if (!ok || ssid == NULL) {
-        return error_atom(ctx, BADARG_ATOM);
+        return error_term(ctx, BADARG_ATOM);
     }
     char *psk = NULL;
     if (argv[1] != NONE_ATOM && argv[1] != UNDEFINED_ATOM) {
         psk = interop_term_to_string(argv[1], &ok);
         if (!ok) {
             free(ssid);
-            return error_atom(ctx, BADARG_ATOM);
+            return error_term(ctx, BADARG_ATOM);
         }
     }
     int rv = rtems_wifi_start(ssid, psk);
@@ -166,9 +179,10 @@ static const struct Nif rtems_wifi_start_nif = {
 
 static term nif_rtems_wifi_stop(Context *ctx, int argc, term argv[])
 {
+    UNUSED(ctx);
     UNUSED(argc);
     UNUSED(argv);
-#if defined(RTEMS_HAS_LIBBSD) && defined(RTEMS_HAS_WIFI)
+#if (defined(RTEMS_HAS_LIBBSD) && defined(RTEMS_HAS_WIFI)) || defined(RTEMS_WIFI_BACKEND_ESP32)
     rtems_wifi_stop();
     return OK_ATOM;
 #else
@@ -185,9 +199,9 @@ static term nif_rtems_wifi_status(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
     UNUSED(argv);
-#if defined(RTEMS_HAS_LIBBSD) && defined(RTEMS_HAS_WIFI)
+#if (defined(RTEMS_HAS_LIBBSD) && defined(RTEMS_HAS_WIFI)) || defined(RTEMS_WIFI_BACKEND_ESP32)
     rtems_wifi_state_t state = rtems_wifi_get_state();
-    struct rtems_wifi_ip_info ip_info;
+    struct rtems_wifi_ip_info ip_info = {0};
     rtems_wifi_get_ip_info(&ip_info);
 
     size_t needed = TUPLE_SIZE(2) + TUPLE_SIZE(4) * 3 + TUPLE_SIZE(2) * 4 + CONS_SIZE * 4;
@@ -195,16 +209,24 @@ static term nif_rtems_wifi_status(Context *ctx, int argc, term argv[])
         return OUT_OF_MEMORY_ATOM;
     }
 
-    const char *state_str = "disconnected";
+    term state_atom;
     switch (state) {
-        case RTEMS_WIFI_SCANNING: state_str = "scanning"; break;
-        case RTEMS_WIFI_ASSOCIATING: state_str = "associating"; break;
-        case RTEMS_WIFI_ASSOCIATED: state_str = "associated"; break;
-        case RTEMS_WIFI_GOT_IP: state_str = "got_ip"; break;
-        default: state_str = "disconnected"; break;
+        case RTEMS_WIFI_SCANNING:
+            state_atom = globalcontext_make_atom(ctx->global, ATOM_STR("\x8", "scanning"));
+            break;
+        case RTEMS_WIFI_ASSOCIATING:
+            state_atom = globalcontext_make_atom(ctx->global, ATOM_STR("\xB", "associating"));
+            break;
+        case RTEMS_WIFI_ASSOCIATED:
+            state_atom = globalcontext_make_atom(ctx->global, ATOM_STR("\xA", "associated"));
+            break;
+        case RTEMS_WIFI_GOT_IP:
+            state_atom = globalcontext_make_atom(ctx->global, ATOM_STR("\x6", "got_ip"));
+            break;
+        default:
+            state_atom = globalcontext_make_atom(ctx->global, ATOM_STR("\xC", "disconnected"));
+            break;
     }
-
-    term state_atom = globalcontext_make_atom(ctx->global, (const AtomString) state_str);
 
     term ip = term_alloc_tuple(4, &ctx->heap);
     term_put_tuple_element(ip, 0, term_from_int((ip_info.ip >> 24) & 0xFF));

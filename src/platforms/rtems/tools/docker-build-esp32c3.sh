@@ -31,6 +31,7 @@ FORCE_REBUILD=0
 RTEMS_SRC_DIR="${RTEMS_SRC_DIR:-}"
 DOCKER_PLATFORM="${DOCKER_PLATFORM:-}"
 TEST_MODULE="test_boot"
+TEST_WIFI=0
 
 usage() {
     cat <<EOF
@@ -58,6 +59,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --test-wifi)
             TEST_MODULE="test_esp32c3_wifi"
+            TEST_WIFI=1
             shift
             ;;
         --rebuild)
@@ -156,26 +158,23 @@ echo "    src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin"
 # Step 3: Run simulation if requested
 if [ "${DO_SIMULATE}" -eq 1 ]; then
     echo "==> Running simulation with esp-emulator..."
-    EMU_WIFI_ARGS=()
-    if [ "${TEST_WIFI}" -eq 1 ]; then
-        EMU_WIFI_ARGS+=(--wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user)
-    fi
-
     if command -v esp-emu >/dev/null 2>&1; then
-        esp-emu --chip esp32c3 \
-            --firmware "${REPO_ROOT}/src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin" \
-            "${EMU_WIFI_ARGS[@]}" \
-            --timeout 30s --exit-on "Return value: ok"
+        EMU_CMD=(esp-emu --chip esp32c3 --firmware "${REPO_ROOT}/src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin")
+        if [ "${TEST_WIFI}" -eq 1 ]; then
+            EMU_CMD+=(--wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user)
+        fi
+        EMU_CMD+=(--timeout 30s --exit-on "Return value: ok")
+        "${EMU_CMD[@]}"
     else
         SIM_CMD=(docker run)
         if [ -n "${DOCKER_PLATFORM}" ]; then
             SIM_CMD+=(--platform "${DOCKER_PLATFORM}")
         fi
-        SIM_CMD+=(--rm -v "${REPO_ROOT}:/workspace" "${IMAGE_NAME}" \
-            esp-emu --chip esp32c3 \
-            --firmware /workspace/src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin \
-            "${EMU_WIFI_ARGS[@]}" \
-            --timeout 30s --exit-on "Return value: ok")
+        SIM_CMD+=(--rm -v "${REPO_ROOT}:/workspace" "${IMAGE_NAME}" esp-emu --chip esp32c3 --firmware /workspace/src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin)
+        if [ "${TEST_WIFI}" -eq 1 ]; then
+            SIM_CMD+=(--wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user)
+        fi
+        SIM_CMD+=(--timeout 30s --exit-on "Return value: ok")
         "${SIM_CMD[@]}"
     fi
 fi

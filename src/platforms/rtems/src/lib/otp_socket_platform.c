@@ -19,7 +19,7 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#ifdef RTEMS_HAS_LIBBSD
+#if defined(RTEMS_HAS_LIBBSD) || defined(RTEMS_HAS_LWIP)
 
 #include "otp_socket_platform.h"
 

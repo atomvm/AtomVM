@@ -88,6 +88,9 @@ elseif(RTEMS_BOARD STREQUAL "esp32c3")
             RTEMS_HAS_WIFI
             RTEMS_WIFI_BACKEND_ESP32
         )
+        target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
+            "${RTEMS_PREFIX}/${RTEMS_TARGET}/${RTEMS_BSP_NAME}/lib/include/rtems-esp"
+        )
     endif()
 endif()
 
