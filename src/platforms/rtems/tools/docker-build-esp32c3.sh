@@ -79,10 +79,9 @@ done
 command -v docker >/dev/null 2>&1 || { echo "Error: docker is required" >&2; exit 1; }
 
 # Step 1: Check or build Docker image
-BUILD_ARGS=()
-PLATFORM_ARGS=()
+BUILD_CMD=(docker build)
 if [ -n "${DOCKER_PLATFORM}" ]; then
-    PLATFORM_ARGS=(--platform "${DOCKER_PLATFORM}")
+    BUILD_CMD+=(--platform "${DOCKER_PLATFORM}")
 fi
 
 if [ -n "${RTEMS_SRC_DIR}" ]; then
@@ -92,18 +91,24 @@ if [ -n "${RTEMS_SRC_DIR}" ]; then
     fi
     RTEMS_SRC_DIR="$(cd "${RTEMS_SRC_DIR}" && pwd)"
     echo "==> Using local RTEMS source tree: ${RTEMS_SRC_DIR}"
-    BUILD_ARGS+=(--build-context "rtems-src=${RTEMS_SRC_DIR}")
+    BUILD_CMD+=(--build-context "rtems-src=${RTEMS_SRC_DIR}")
     FORCE_REBUILD=1
 fi
 
+BUILD_CMD+=(-t "${IMAGE_NAME}" -f "${DOCKERFILE}" "${REPO_ROOT}/src/platforms/rtems/docker")
+
 if [ "${FORCE_REBUILD}" -eq 1 ] || ! docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
     echo "==> Building Docker image '${IMAGE_NAME}' from ${DOCKERFILE}..."
-    docker build "${PLATFORM_ARGS[@]}" "${BUILD_ARGS[@]}" -t "${IMAGE_NAME}" -f "${DOCKERFILE}" "${REPO_ROOT}/src/platforms/rtems/docker"
+    "${BUILD_CMD[@]}"
 fi
 
 # Step 2: Build inside Docker container
 echo "==> Compiling AtomVM for ESP32-C3 under RTEMS 7 inside Docker..."
-docker run "${PLATFORM_ARGS[@]}" --rm -v "${REPO_ROOT}:/workspace" -w /workspace "${IMAGE_NAME}" bash -c '
+RUN_CMD=(docker run)
+if [ -n "${DOCKER_PLATFORM}" ]; then
+    RUN_CMD+=(--platform "${DOCKER_PLATFORM}")
+fi
+RUN_CMD+=(--rm -v "${REPO_ROOT}:/workspace" -w /workspace "${IMAGE_NAME}" bash -c '
     set -euo pipefail
 
     echo "==> Building host AVM pack..."
@@ -124,7 +129,8 @@ docker run "${PLATFORM_ARGS[@]}" --rm -v "${REPO_ROOT}:/workspace" -w /workspace
         -DRTEMS_VERSION=7 \
         -DAVM_PACK=/workspace/src/platforms/rtems/build-esp32c3/rtems_boot.avm
     cmake --build src/platforms/rtems/build-esp32c3
-'
+')
+"${RUN_CMD[@]}"
 
 echo "==> Build successful! Direct-boot image is ready at:"
 echo "    src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin"
@@ -137,9 +143,14 @@ if [ "${DO_SIMULATE}" -eq 1 ]; then
             --firmware "${REPO_ROOT}/src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin" \
             --timeout 30s --exit-on "Return value: ok"
     else
-        docker run "${PLATFORM_ARGS[@]}" --rm -v "${REPO_ROOT}:/workspace" "${IMAGE_NAME}" \
+        SIM_CMD=(docker run)
+        if [ -n "${DOCKER_PLATFORM}" ]; then
+            SIM_CMD+=(--platform "${DOCKER_PLATFORM}")
+        fi
+        SIM_CMD+=(--rm -v "${REPO_ROOT}:/workspace" "${IMAGE_NAME}" \
             esp-emu --chip esp32c3 \
             --firmware /workspace/src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin \
-            --timeout 30s --exit-on "Return value: ok"
+            --timeout 30s --exit-on "Return value: ok")
+        "${SIM_CMD[@]}"
     fi
 fi
