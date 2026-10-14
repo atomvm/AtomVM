@@ -49,6 +49,14 @@
 #ifdef RTEMS_HAS_IMX_I2C
 #define CLOSED_FD (-1)
 
+#ifndef I2C_M_TEN
+#define I2C_M_TEN 0x0010
+#endif
+
+#ifndef I2C_RETRIES
+#define I2C_RETRIES 0x0701
+#endif
+
 static ErlNifResourceType *i2c_resource_type;
 
 struct I2CResource
@@ -97,6 +105,9 @@ static term error_errno(Context *ctx, int err)
             break;
         case EIO:
             reason = ATOM_STR("\x3", "eio");
+            break;
+        case ENXIO:
+            reason = ATOM_STR("\x5", "enxio");
             break;
         case EBUSY:
             reason = ATOM_STR("\x5", "ebusy");
@@ -191,16 +202,19 @@ static int open_imx_bus(const char *path, const char *alias)
     return open(path, O_RDWR);
 }
 
-static bool get_i2c_address(term address_term, uint16_t *address)
+static bool get_i2c_address(term address_term, uint16_t *address, uint16_t *flags)
 {
     if (!term_is_integer(address_term)) {
         return false;
     }
     avm_int_t value = term_to_int(address_term);
-    if (value < 0 || value > 0x7F) {
+    if (value < 0 || value > 0x3FF) {
         return false;
     }
     *address = (uint16_t) value;
+    if (value > 0x7F) {
+        *flags |= I2C_M_TEN;
+    }
     return true;
 }
 
@@ -213,9 +227,11 @@ static term nif_i2c_init(Context *ctx, int argc, term argv[])
     GlobalContext *glb = ctx->global;
     static const char *const peripheral_str = ATOM_STR("\xA", "peripheral");
     static const char *const fdt_alias_str = ATOM_STR("\x9", "fdt_alias");
+    static const char *const retries_str = ATOM_STR("\x7", "retries");
 
     term peripheral_term = interop_kv_get_value(opts, peripheral_str, glb);
     term fdt_alias_term = interop_kv_get_value(opts, fdt_alias_str, glb);
+    term retries_term = interop_kv_get_value(opts, retries_str, glb);
 
     char *path = NULL;
     char *alias = NULL;
@@ -249,6 +265,23 @@ static term nif_i2c_init(Context *ctx, int argc, term argv[])
     free(path);
     if (fd < 0) {
         return error_errno(ctx, err ? err : EIO);
+    }
+
+    if (!term_is_invalid_term(retries_term)) {
+        if (!term_is_integer(retries_term)) {
+            close(fd);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        avm_int_t retries = term_to_int(retries_term);
+        if (retries < 0 || retries > 1000) {
+            close(fd);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        if (ioctl(fd, I2C_RETRIES, (unsigned long) retries) != 0) {
+            int retries_err = errno;
+            close(fd);
+            return error_errno(ctx, retries_err ? retries_err : EIO);
+        }
     }
 
     struct I2CResource *rsrc_obj = enif_alloc_resource(i2c_resource_type, sizeof(struct I2CResource));
@@ -305,7 +338,8 @@ static term nif_i2c_master_transmit(Context *ctx, int argc, term argv[])
     }
 
     uint16_t addr;
-    if (UNLIKELY(!get_i2c_address(argv[1], &addr))) {
+    uint16_t flags = 0;
+    if (UNLIKELY(!get_i2c_address(argv[1], &addr, &flags))) {
         RAISE_ERROR(BADARG_ATOM);
     }
     uint8_t *data = (uint8_t *) term_binary_data(argv[2]);
@@ -316,7 +350,7 @@ static term nif_i2c_master_transmit(Context *ctx, int argc, term argv[])
 
     struct i2c_msg msg = {
         .addr = addr,
-        .flags = 0,
+        .flags = flags,
         .len = (uint16_t) len,
         .buf = data
     };
@@ -350,7 +384,8 @@ static term nif_i2c_master_receive(Context *ctx, int argc, term argv[])
     }
 
     uint16_t addr;
-    if (UNLIKELY(!get_i2c_address(argv[1], &addr))) {
+    uint16_t flags = I2C_M_RD;
+    if (UNLIKELY(!get_i2c_address(argv[1], &addr, &flags))) {
         RAISE_ERROR(BADARG_ATOM);
     }
     avm_int_t count = term_to_int(argv[2]);
@@ -366,7 +401,7 @@ static term nif_i2c_master_receive(Context *ctx, int argc, term argv[])
 
     struct i2c_msg msg = {
         .addr = addr,
-        .flags = I2C_M_RD,
+        .flags = flags,
         .len = (uint16_t) count,
         .buf = buf
     };
@@ -418,7 +453,8 @@ static term nif_i2c_mem_read(Context *ctx, int argc, term argv[])
     }
 
     uint16_t addr;
-    if (UNLIKELY(!get_i2c_address(argv[1], &addr))) {
+    uint16_t flags = 0;
+    if (UNLIKELY(!get_i2c_address(argv[1], &addr, &flags))) {
         RAISE_ERROR(BADARG_ATOM);
     }
     avm_int_t mem_addr_value = term_to_int(argv[2]);
@@ -445,8 +481,8 @@ static term nif_i2c_mem_read(Context *ctx, int argc, term argv[])
     uint8_t *buf = (uint8_t *) term_binary_data(data);
 
     struct i2c_msg msgs[2] = {
-        { .addr = addr, .flags = 0, .len = reg_len, .buf = reg_buf },
-        { .addr = addr, .flags = I2C_M_RD, .len = (uint16_t) count, .buf = buf }
+        { .addr = addr, .flags = flags, .len = reg_len, .buf = reg_buf },
+        { .addr = addr, .flags = flags | I2C_M_RD, .len = (uint16_t) count, .buf = buf }
     };
     struct i2c_rdwr_ioctl_data xfer = {
         .msgs = msgs,
@@ -480,7 +516,8 @@ static term nif_i2c_mem_write(Context *ctx, int argc, term argv[])
     }
 
     uint16_t addr;
-    if (UNLIKELY(!get_i2c_address(argv[1], &addr))) {
+    uint16_t flags = 0;
+    if (UNLIKELY(!get_i2c_address(argv[1], &addr, &flags))) {
         RAISE_ERROR(BADARG_ATOM);
     }
     avm_int_t mem_addr_value = term_to_int(argv[2]);
@@ -510,7 +547,7 @@ static term nif_i2c_mem_write(Context *ctx, int argc, term argv[])
 
     struct i2c_msg msg = {
         .addr = addr,
-        .flags = 0,
+        .flags = flags,
         .len = (uint16_t) (reg_len + payload_len),
         .buf = tx
     };
@@ -525,6 +562,214 @@ static term nif_i2c_mem_write(Context *ctx, int argc, term argv[])
         return error_errno(ctx, err);
     }
     return term_from_int((int) payload_len);
+}
+
+static term nif_i2c_is_device_ready(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    struct I2CResource *rsrc_obj;
+    if (UNLIKELY(!get_i2c_resource(ctx, argv[0], &rsrc_obj))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (rsrc_obj->fd == CLOSED_FD) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    uint16_t addr;
+    uint16_t flags = 0;
+    if (UNLIKELY(!get_i2c_address(argv[1], &addr, &flags))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    VALIDATE_VALUE(argv[2], term_is_integer);
+    avm_int_t trials = term_to_int(argv[2]);
+    if (UNLIKELY(trials <= 0 || trials > 1000)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    int timeout_ms;
+    if (UNLIKELY(!get_timeout_ms(argv[3], &timeout_ms))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (UNLIKELY(set_transfer_timeout(rsrc_obj->fd, timeout_ms) != 0)) {
+        return error_errno(ctx, errno);
+    }
+
+    struct i2c_msg msg = {
+        .addr = addr,
+        .flags = flags,
+        .len = 0,
+        .buf = NULL
+    };
+    struct i2c_rdwr_ioctl_data xfer = {
+        .msgs = &msg,
+        .nmsgs = 1
+    };
+
+    int last_err = 0;
+    for (avm_int_t i = 0; i < trials; i++) {
+        if (ioctl(rsrc_obj->fd, I2C_RDWR, &xfer) == 0) {
+            return OK_ATOM;
+        }
+        last_err = errno;
+    }
+
+    return error_errno(ctx, last_err ? last_err : EIO);
+}
+
+static term nif_i2c_transfer(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    struct I2CResource *rsrc_obj;
+    if (UNLIKELY(!get_i2c_resource(ctx, argv[0], &rsrc_obj))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (rsrc_obj->fd == CLOSED_FD) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    VALIDATE_VALUE(argv[1], term_is_list);
+
+    if (term_is_nil(argv[1])) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return create_pair(ctx, OK_ATOM, term_nil());
+    }
+
+    int timeout_ms;
+    if (UNLIKELY(!get_timeout_ms(argv[2], &timeout_ms))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (UNLIKELY(set_transfer_timeout(rsrc_obj->fd, timeout_ms) != 0)) {
+        return error_errno(ctx, errno);
+    }
+
+    size_t nmsgs = 0;
+    term cur = argv[1];
+    while (term_is_nonempty_list(cur)) {
+        nmsgs++;
+        cur = term_get_list_tail(cur);
+    }
+    if (UNLIKELY(!term_is_nil(cur) || nmsgs > 256)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    struct i2c_msg stack_msgs[8];
+    bool stack_is_read[8];
+    term stack_result_terms[8];
+
+    struct i2c_msg *msgs = stack_msgs;
+    bool *is_read = stack_is_read;
+    term *result_terms = stack_result_terms;
+
+    if (nmsgs > 8) {
+        msgs = malloc(nmsgs * sizeof(struct i2c_msg));
+        is_read = malloc(nmsgs * sizeof(bool));
+        result_terms = malloc(nmsgs * sizeof(term));
+        if (IS_NULL_PTR(msgs) || IS_NULL_PTR(is_read) || IS_NULL_PTR(result_terms)) {
+            if (msgs != stack_msgs && msgs != NULL) free(msgs);
+            if (is_read != stack_is_read && is_read != NULL) free(is_read);
+            if (result_terms != stack_result_terms && result_terms != NULL) free(result_terms);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+    }
+
+#define CLEANUP_TRANSFER() do { \
+        if (msgs != stack_msgs) free(msgs); \
+        if (is_read != stack_is_read) free(is_read); \
+        if (result_terms != stack_result_terms) free(result_terms); \
+    } while (0)
+
+    size_t heap_needed = TUPLE_SIZE(2) + (nmsgs * 2);
+    GlobalContext *glb = ctx->global;
+
+    cur = argv[1];
+    for (size_t i = 0; i < nmsgs; i++) {
+        term msg_term = term_get_list_head(cur);
+        cur = term_get_list_tail(cur);
+
+        if (UNLIKELY(!term_is_tuple(msg_term) || term_get_tuple_arity(msg_term) != 3)) {
+            CLEANUP_TRANSFER();
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        term type_atom = term_get_tuple_element(msg_term, 0);
+        term addr_term = term_get_tuple_element(msg_term, 1);
+        term data_or_count = term_get_tuple_element(msg_term, 2);
+
+        uint16_t addr;
+        uint16_t flags = 0;
+        if (UNLIKELY(!get_i2c_address(addr_term, &addr, &flags))) {
+            CLEANUP_TRANSFER();
+            RAISE_ERROR(BADARG_ATOM);
+        }
+
+        if (globalcontext_is_term_equal_to_atom_string(glb, type_atom, ATOM_STR("\x5", "write"))) {
+            if (UNLIKELY(!term_is_binary(data_or_count))) {
+                CLEANUP_TRANSFER();
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            size_t bin_len = term_binary_size(data_or_count);
+            if (UNLIKELY(bin_len > UINT16_MAX)) {
+                CLEANUP_TRANSFER();
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            msgs[i].addr = addr;
+            msgs[i].flags = flags;
+            msgs[i].len = (uint16_t) bin_len;
+            msgs[i].buf = (uint8_t *) term_binary_data(data_or_count);
+            is_read[i] = false;
+        } else if (globalcontext_is_term_equal_to_atom_string(glb, type_atom, ATOM_STR("\x4", "read"))) {
+            if (UNLIKELY(!term_is_integer(data_or_count))) {
+                CLEANUP_TRANSFER();
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            avm_int_t count = term_to_int(data_or_count);
+            if (UNLIKELY(count < 0 || count > UINT16_MAX)) {
+                CLEANUP_TRANSFER();
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            msgs[i].addr = addr;
+            msgs[i].flags = flags | I2C_M_RD;
+            msgs[i].len = (uint16_t) count;
+            msgs[i].buf = NULL;
+            is_read[i] = true;
+            heap_needed += term_binary_heap_size((size_t) count);
+        } else {
+            CLEANUP_TRANSFER();
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
+
+    if (UNLIKELY(memory_ensure_free_opt(ctx, heap_needed, MEMORY_NO_GC) != MEMORY_GC_OK)) {
+        CLEANUP_TRANSFER();
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    for (size_t i = 0; i < nmsgs; i++) {
+        if (is_read[i]) {
+            term data = term_create_uninitialized_binary((size_t) msgs[i].len, &ctx->heap, glb);
+            msgs[i].buf = (uint8_t *) term_binary_data(data);
+            result_terms[i] = data;
+        } else {
+            result_terms[i] = OK_ATOM;
+        }
+    }
+
+    struct i2c_rdwr_ioctl_data xfer = {
+        .msgs = msgs,
+        .nmsgs = (uint32_t) nmsgs
+    };
+    int rv = ioctl(rsrc_obj->fd, I2C_RDWR, &xfer);
+    int err = errno;
+    CLEANUP_TRANSFER();
+#undef CLEANUP_TRANSFER
+
+    if (rv != 0) {
+        return error_errno(ctx, err);
+    }
+
+    term result_list = term_nil();
+    for (size_t i = nmsgs; i > 0; i--) {
+        result_list = term_list_prepend(result_terms[i - 1], result_list, &ctx->heap);
+    }
+    return create_pair(ctx, OK_ATOM, result_list);
 }
 
 static const ErlNifResourceTypeInit I2CResourceTypeInit = {
@@ -562,6 +807,16 @@ static const struct Nif i2c_mem_write_nif = {
     .nif_ptr = nif_i2c_mem_write
 };
 
+static const struct Nif i2c_is_device_ready_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_i2c_is_device_ready
+};
+
+static const struct Nif i2c_transfer_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_i2c_transfer
+};
+
 static void i2c_nif_init(GlobalContext *global)
 {
     ErlNifEnv env;
@@ -587,7 +842,9 @@ static const struct Nif *i2c_nif_get_nif(const char *nifname)
         || strcmp("master_transmit/4", rest) == 0
         || strcmp("master_receive/4", rest) == 0
         || strcmp("mem_read/6", rest) == 0
-        || strcmp("mem_write/6", rest) == 0) {
+        || strcmp("mem_write/6", rest) == 0
+        || strcmp("is_device_ready_nif/4", rest) == 0
+        || strcmp("transfer_nif/3", rest) == 0) {
         return &unsupported;
     }
     return NULL;
@@ -610,6 +867,12 @@ static const struct Nif *i2c_nif_get_nif(const char *nifname)
     }
     if (strcmp("mem_write/6", rest) == 0) {
         return &i2c_mem_write_nif;
+    }
+    if (strcmp("is_device_ready_nif/4", rest) == 0) {
+        return &i2c_is_device_ready_nif;
+    }
+    if (strcmp("transfer_nif/3", rest) == 0) {
+        return &i2c_transfer_nif;
     }
     return NULL;
 #endif

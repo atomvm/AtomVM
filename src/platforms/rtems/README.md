@@ -35,8 +35,12 @@ LibBSD, and on SPARC `erc32` and ARM `realview_pbx_a9_qemu`,
 UART implements `uart_hal` over RTEMS Termios (`/dev/console`, erc32
 `/dev/console_a` / `/dev/console_b`, imx7 `/dev/ttyS0` … `/dev/ttyS6`).
 I2C implements `i2c_hal` with Linux-style `I2C_RDWR` on imx7
-(`/dev/i2c-0`, registered from FDT alias `i2c0` on first open). SPARC erc32
-and ARM RealView have no supported I2C controller; `i2c:init/1` returns
+(`/dev/i2c-0`, registered from FDT alias `i2c0` on first open). Supports
+both 7-bit (`0..127`) and 10-bit (`128..1023`, `I2C_M_TEN`) addressing,
+bus probing (`is_device_ready/2,3,4`), bus scanning (`scan/1,3`), atomic
+multi-message transfers (`transfer/2,3`), configurable bus retries
+(`{retries, N}`), and explicit register address width (`{mem_add_size, 8 | 16}`).
+SPARC erc32 and ARM RealView have no supported I2C controller; `i2c:init/1` returns
 `{error, enotsup}`.
 SPI implements `spi_hal` with Linux-style `SPI_IOC_MESSAGE` on imx7
 (`/dev/spi-0`, registered from FDT alias `spi0` on first open). SPARC erc32
@@ -171,8 +175,17 @@ Open a second UART with `{peripheral, "/dev/ttyS1"}` (imx7) or
 `"/dev/console_b"` (erc32). I2C on imx7:
 
 ```erlang
-{ok, Bus} = i2c:init([{peripheral, "/dev/i2c-0"}, {fdt_alias, "i2c0"}]),
-i2c:master_transmit(Bus, 16#50, <<16#00>>, 500).
+%% Low-level NIF interface with bus retries and probing
+{ok, Bus} = i2c:init([{peripheral, "/dev/i2c-0"}, {fdt_alias, "i2c0"}, {retries, 2}]),
+ok = i2c:is_device_ready(Bus, 16#57),
+{ok, Devices} = i2c:scan(Bus),
+{ok, [ok, RegVal]} = i2c:transfer(Bus, [{write, 16#57, <<0>>}, {read, 16#57, 1}]),
+ok = i2c:deinit(Bus).
+
+%% High-level i2c_hal interface with 10-bit address and explicit register width
+I2C = i2c:open([{peripheral, "/dev/i2c-0"}, {fdt_alias, "i2c0"}]),
+{ok, Data} = i2c:read_bytes(I2C, 16#57, 0, 4, [{mem_add_size, 8}]),
+ok = i2c:close(I2C).
 ```
 
 SPI on imx7 (such as the GRiSP 2 Pmod SPI connector):

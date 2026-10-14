@@ -41,6 +41,8 @@ uart_smoke() ->
 i2c_smoke() ->
     case i2c:init([{peripheral, "/dev/i2c-invalid"}, {fdt_alias, "atomvm-missing"}]) of
         {error, enotsup} ->
+            {error, enotsup} = i2c:is_device_ready(make_ref(), 16#50, 1, 100),
+            {error, enotsup} = i2c:transfer(make_ref(), [{write, 16#50, <<0>>}], 100),
             erlang:display({i2c, enotsup});
         {error, _Reason} ->
             erlang:display({i2c, fdt_alias, ok}),
@@ -51,7 +53,7 @@ i2c_smoke() ->
     end.
 
 i2c_open_smoke() ->
-    case i2c:init([{peripheral, "/dev/i2c-0"}, {fdt_alias, "i2c0"}]) of
+    case i2c:init([{peripheral, "/dev/i2c-0"}, {fdt_alias, "i2c0"}, {retries, 1}]) of
         {ok, Resource} ->
             erlang:display({i2c, open, ok}),
             ok = i2c:deinit(Resource);

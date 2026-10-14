@@ -60,12 +60,30 @@ gpio_smoke() ->
 i2c_eeprom_smoke() ->
     {ok, Resource} = i2c:init([
         {peripheral, "/dev/i2c-0"},
-        {fdt_alias, "i2c0"}
+        {fdt_alias, "i2c0"},
+        {retries, 2}
     ]),
+    ok = i2c:is_device_ready(Resource, 16#57, 1, 1000),
+    {error, nack} = i2c:is_device_ready(Resource, 16#76, 1, 100),
+    {ok, Addresses} = i2c:scan(Resource),
+    true = lists:member(16#57, Addresses),
+    {ok, [ok, ReadBytes]} = i2c:transfer(Resource, [
+        {write, 16#57, <<0:8>>},
+        {read, 16#57, 4}
+    ], 1000),
+    4 = byte_size(ReadBytes),
     {ok, Data} = i2c:mem_read(Resource, 16#57, 0, 8, 8, 1000),
     8 = byte_size(Data),
-    erlang:display({grisp2, eeprom, ok}),
     ok = i2c:deinit(Resource),
+    I2C = i2c:open([
+        {peripheral, "/dev/i2c-0"},
+        {fdt_alias, "i2c0"}
+    ]),
+    ok = i2c:is_device_ready(I2C, 16#57),
+    {ok, DataHigh} = i2c:read_bytes(I2C, 16#57, 0, 4, [{mem_add_size, 8}]),
+    4 = byte_size(DataHigh),
+    ok = i2c:close(I2C),
+    erlang:display({grisp2, eeprom, ok}),
     ok.
 
 spi_smoke() ->
