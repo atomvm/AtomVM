@@ -314,7 +314,19 @@ the executable.
 Install `u-boot-tools` and `device-tree-compiler` (`dtc` on Homebrew) for
 image packaging and DTB validation.
 
-Build and package a hardware smoke test as follows:
+### Single-Command Docker Build & SD-Card Packaging (Recommended)
+
+If you have Docker (or OrbStack/Podman) installed, build the entire GRiSP 2 firmware and package the SD-card bundle with a single command without installing the RTEMS 6.2 ARM toolchain or LibBSD on your host:
+
+```sh
+./src/platforms/rtems/tools/docker-build-grisp2.sh --zip
+```
+
+This uses [`Dockerfile.rtems6-grisp2`](docker/Dockerfile.rtems6-grisp2) with cached multi-stage builds (`6/rtems-arm`, `arm/imx7` kernel, and `rtems-libbsd`), cross-compiles AtomVM for `RTEMS_BOARD=grisp2`, and generates the ready-to-copy `sd-card-bundle/` and `atomvm-grisp2-sd-card.zip`.
+
+### Native Host Build
+
+Build and package a hardware smoke test natively as follows:
 
 ```sh
 cmake -S . -B build-host -G Ninja

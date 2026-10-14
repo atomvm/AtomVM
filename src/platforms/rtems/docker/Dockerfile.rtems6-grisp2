@@ -1,0 +1,117 @@
+#
+# This file is part of AtomVM.
+#
+# Copyright 2026 Peter M. <petermm@gmail.com>
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+# Stage 1: Base build dependencies
+FROM ubuntu:24.04 AS build-base
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV RTEMS_PREFIX=/opt/rtems/6.2
+ENV RTEMS_VERSION=6
+ENV RTEMS_RELEASE=6.2
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    g++ \
+    gdb \
+    unzip \
+    pax \
+    bison \
+    flex \
+    texinfo \
+    python3-dev \
+    python-is-python3 \
+    python3-setuptools \
+    libncurses-dev \
+    zlib1g-dev \
+    ninja-build \
+    pkg-config \
+    cmake \
+    gperf \
+    wget \
+    xz-utils \
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Stage 2: Heavy RSB ARM Toolchain (GCC, Binutils, GDB, Newlib) ~15-20 min build.
+# Cached independently so it never rebuilds when BSP or LibBSD options change.
+FROM build-base AS rsb-toolchain
+
+WORKDIR /tmp/rsb
+RUN wget -q "https://ftp.rtems.org/pub/rtems/releases/6/${RTEMS_RELEASE}/sources/rtems-source-builder-${RTEMS_RELEASE}.tar.xz" \
+    && tar xJf "rtems-source-builder-${RTEMS_RELEASE}.tar.xz" \
+    && cd "rtems-source-builder-${RTEMS_RELEASE}/rtems" \
+    && ../source-builder/sb-set-builder --prefix="${RTEMS_PREFIX}" 6/rtems-arm
+
+# Stage 3: RTEMS 6.2 Kernel for arm/imx7 ~2 min build.
+FROM rsb-toolchain AS bsp-kernel
+
+WORKDIR /tmp/rsb/rtems-source-builder-${RTEMS_RELEASE}/rtems
+RUN ../source-builder/sb-set-builder --prefix="${RTEMS_PREFIX}" \
+    --target=arm-rtems6 \
+    --with-rtems-bsp=arm/imx7 \
+    --with-rtems-tests=no \
+    6/rtems-kernel
+
+# Stage 4: RTEMS LibBSD for arm/imx7 (FreeBSD 12 network stack & nexus drivers) ~10-15 min build.
+FROM bsp-kernel AS libbsd
+
+WORKDIR /tmp/rsb/rtems-source-builder-${RTEMS_RELEASE}/rtems
+RUN ../source-builder/sb-set-builder --prefix="${RTEMS_PREFIX}" \
+    --target=arm-rtems6 \
+    --with-rtems-bsp=arm/imx7 \
+    6/rtems-libbsd \
+    && rm -rf /tmp/rsb
+
+# Strip debug symbols from host binaries to minimize final layer size
+RUN find ${RTEMS_PREFIX}/bin ${RTEMS_PREFIX}/libexec -type f -executable -exec strip {} + 2>/dev/null || true
+
+# Stage 5: Final developer runtime & packaging environment.
+# AtomVM source is bind-mounted into /workspace at runtime (-v $PWD:/workspace),
+# ensuring that changes to AtomVM source code NEVER trigger a Docker image rebuild.
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV RTEMS_PREFIX=/opt/rtems/6.2
+ENV PATH="${RTEMS_PREFIX}/bin:${PATH}"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    ninja-build \
+    git \
+    python3 \
+    python3-pip \
+    gperf \
+    erlang-base \
+    erlang-dev \
+    erlang-parsetools \
+    u-boot-tools \
+    device-tree-compiler \
+    zip \
+    unzip \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy prebuilt RTEMS 6.2 ARM toolchain, imx7 BSP, and LibBSD
+COPY --from=libbsd /opt/rtems/6.2 /opt/rtems/6.2
+
+WORKDIR /workspace
+CMD ["bash"]
