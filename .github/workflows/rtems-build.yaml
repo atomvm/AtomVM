@@ -104,7 +104,7 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ matrix.prefix }}
-        key: rtems-${{ matrix.rtems_version == '7' && '7' || env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-libbsd-wifi-${{ runner.os }}
+        key: rtems-${{ matrix.rtems_version == '7' && '7' || env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-wifi-${{ runner.os }}
 
     - name: Build RTEMS ${{ matrix.rtems_version }} tools and ${{ matrix.bsp }} BSP
       if: steps.rtems-cache.outputs.cache-hit != 'true'
@@ -115,10 +115,12 @@ jobs:
         if [ "${{ matrix.rtems_version }}" = "7" ]; then
           git clone --depth 1 https://gitlab.rtems.org/rtems/tools/rtems-source-builder.git -b main rsb-7
           cd rsb-7/rtems
+          sed -i '/sis/d' config/7/rtems-riscv.bset
           ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" "7/rtems-${{ matrix.arch }}"
-          git clone --depth 1 https://gitlab.rtems.org/rtems/rtems.git -b main rtems-7
+          git clone --depth 1 https://github.com/thesamprice/rtems.git -b esp32c3-rtems-esphome rtems-7
           cd rtems-7
-          ./waf configure --prefix="${{ matrix.prefix }}" --rtems-bsps=${{ matrix.bsp }}
+          ./waf configure --prefix="${{ matrix.prefix }}" --rtems-bsps=${{ matrix.bsp }} \
+            --rtems-config="$GITHUB_WORKSPACE/src/platforms/rtems/docker/esp32c3-wifi-bsp.ini"
           ./waf
           ./waf install
         else
@@ -158,12 +160,25 @@ jobs:
         ./waf install
         rm -rf "$HOME/rtems-src/libbsd"
 
+    - name: Build rtems-lwip and Wi-Fi stack for ${{ matrix.bsp }}
+      if: matrix.bsp == 'riscv/esp32c3db'
+      run: |
+        set -euo pipefail
+        lwip="${{ matrix.prefix }}/${{ matrix.arch }}-rtems${{ matrix.rtems_version }}/${{ matrix.bsp_name }}/lib/liblwip.a"
+        if [ -f "$lwip" ]; then
+          echo "Using cached rtems-lwip at $lwip"
+          exit 0
+        fi
+        echo "Building rtems-lwip and Wi-Fi stack for ESP32-C3..."
+        export PATH="${{ matrix.prefix }}/bin:$PATH"
+        $GITHUB_WORKSPACE/src/platforms/rtems/tools/build-esp32c3-wifi-stack.sh --prefix="${{ matrix.prefix }}"
+
     - name: Save RTEMS ${{ matrix.rtems_version }} ${{ matrix.bsp }} toolchain
       if: steps.rtems-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
         path: ${{ matrix.prefix }}
-        key: rtems-${{ matrix.rtems_version == '7' && '7' || env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-libbsd-wifi-${{ runner.os }}
+        key: rtems-${{ matrix.rtems_version == '7' && '7' || env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-wifi-${{ runner.os }}
 
     - name: Add RTEMS tools to PATH
       run: echo "${{ matrix.prefix }}/bin" >> "$GITHUB_PATH"
