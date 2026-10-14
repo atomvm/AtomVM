@@ -109,7 +109,18 @@ fi
 # Step 2: Build RISC-V tools via RSB
 echo "==> Building RTEMS 7 RISC-V toolchain with RSB (this may take 15-30 mins)..."
 cd "${BUILD_DIR}/rsb/rtems"
-../source-builder/sb-set-builder --prefix="${PREFIX}" 7/rtems-riscv
+
+# On macOS, Homebrew python provides full libpython flags needed by RSB/GDB
+RSB_PYTHON_ARGS=""
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    if [ -x "/opt/homebrew/bin/python3" ]; then
+        RSB_PYTHON_ARGS="--with-python-version=/opt/homebrew/bin/python3"
+    elif command -v brew >/dev/null 2>&1 && [ -x "$(brew --prefix)/bin/python3" ]; then
+        RSB_PYTHON_ARGS="--with-python-version=$(brew --prefix)/bin/python3"
+    fi
+fi
+
+../source-builder/sb-set-builder --prefix="${PREFIX}" ${RSB_PYTHON_ARGS} 7/rtems-riscv
 
 export PATH="${PREFIX}/bin:${PATH}"
 
