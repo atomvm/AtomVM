@@ -38,6 +38,10 @@ I2C implements `i2c_hal` with Linux-style `I2C_RDWR` on imx7
 (`/dev/i2c-0`, registered from FDT alias `i2c0` on first open). SPARC erc32
 and ARM RealView have no supported I2C controller; `i2c:init/1` returns
 `{error, enotsup}`.
+SPI implements `spi_hal` with Linux-style `SPI_IOC_MESSAGE` on imx7
+(`/dev/spi-0`, registered from FDT alias `spi0` on first open). SPARC erc32
+and ARM RealView have no supported SPI controller; `spi:init/1` returns
+`{error, enotsup}`.
 GPIO implements `gpio_hal` using the RTEMS i.MX GPIO driver on imx7. Pins can
 be addressed as `{Bank, Pin}` (`1..7`, `0..31`) or through an FDT property.
 GPIO on erc32 and RealView returns `{error, enotsup}`.
@@ -171,6 +175,23 @@ Open a second UART with `{peripheral, "/dev/ttyS1"}` (imx7) or
 i2c:master_transmit(Bus, 16#50, <<16#00>>, 500).
 ```
 
+SPI on imx7 (such as the GRiSP 2 Pmod SPI connector):
+
+```erlang
+SPI = spi:open([
+    {bus_config, [{peripheral, "/dev/spi-0"}, {fdt_alias, "spi0"}]},
+    {device_config, [
+        {sensor, [
+            {cs, #{path => "/pmod-spi", property => "grisp,gpios", index => 0}},
+            {clock_speed_hz, 1000000},
+            {mode, 0}
+        ]}
+    ]}
+]),
+{ok, Value} = spi:read_at(SPI, sensor, 16#0F, 8),
+ok = spi:close(SPI).
+```
+
 GPIO direct bank/pin access requires the pin mux to have been configured by
 the BSP or device tree:
 
@@ -302,8 +323,8 @@ the [installation guide](boards/grisp2/INSTALL.md) for serial console setup
 and SD boot selection.
 
 The smoke test prints `{atomvm_grisp2,rtems}`, `{grisp2,uart,ok}`,
-`{grisp2,led,ok}`, `{grisp2,gpio,high}` or `{grisp2,gpio,low}`, and
-`{grisp2,eeprom,ok}`, followed by `Return value: ok`. The first RGB LED's
+`{grisp2,led,ok}`, `{grisp2,gpio,high}` or `{grisp2,gpio,low}`,
+`{grisp2,eeprom,ok}`, and `{grisp2,spi,ok}`, followed by `Return value: ok`. The first RGB LED's
 red channel lights for half a second. The EEPROM check reads eight bytes
 at I²C address `0x57` and does not write EEPROM contents.
 Use `rtems_net_test` separately to verify `ffec0` DHCP/DNS/TCP on the
@@ -314,7 +335,7 @@ the `atomvm-grisp2-sd-card-<commit>` artifact. It contains ready-to-copy
 `zImage`, `oftree` and `app.avm` files, a boot-loader entry, installation
 instructions, source revision details, device-tree sources and licenses.
 The debug ELF is named `debug/AtomVM-grisp2.elf` in the bundle. Physical
-boot, UART, GPIO, I²C and Ethernet remain manual checks; a successful cross-build does not establish
+boot, UART, GPIO, I²C, SPI and Ethernet remain manual checks; a successful cross-build does not establish
 that they work on a board.
 
 ### Updating the application on GRiSP 2

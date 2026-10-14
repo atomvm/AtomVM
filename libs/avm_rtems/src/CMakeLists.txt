@@ -27,6 +27,7 @@ set(ERLANG_MODULES
     uart
     i2c
     gpio
+    spi
 )
 
 pack_archive(avm_rtems DEPENDS_ON eavmlib ERLC_FLAGS +warnings_as_errors MODULES ${ERLANG_MODULES})

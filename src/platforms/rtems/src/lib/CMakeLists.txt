@@ -37,6 +37,7 @@ set(SOURCE_FILES
     uart_driver.c
     i2c_driver.c
     gpio_driver.c
+    spi_driver.c
     ../../../../libAtomVM/portnifloader.c
 )
 
@@ -54,7 +55,7 @@ endif()
 target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC libAtomVM)
 # Constructor-registered NIF collections are otherwise dropped from the static archive.
-set(_rtems_force_nifs uart_nif i2c_nif gpio_nif rtems_network_nif)
+set(_rtems_force_nifs uart_nif i2c_nif gpio_nif spi_nif rtems_network_nif)
 if(RTEMS_HAS_LIBBSD)
     list(APPEND _rtems_force_nifs otp_socket_nif otp_net_nif)
 endif()
@@ -68,6 +69,7 @@ if(RTEMS_ARCH STREQUAL "arm" AND RTEMS_BSP_NAME STREQUAL "imx7")
     target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
         RTEMS_HAS_IMX_GPIO
         RTEMS_HAS_IMX_I2C
+        RTEMS_HAS_IMX_SPI
     )
 endif()
 

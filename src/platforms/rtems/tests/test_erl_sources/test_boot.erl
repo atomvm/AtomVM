@@ -26,6 +26,7 @@ start() ->
     uart_smoke(),
     i2c_smoke(),
     gpio_smoke(),
+    spi_smoke(),
     ok.
 
 uart_smoke() ->
@@ -66,4 +67,15 @@ gpio_smoke() ->
             erlang:display({gpio, imx7, ok});
         Other ->
             erlang:error({gpio_smoke_failed, Other})
+    end.
+
+spi_smoke() ->
+    case spi:init([{peripheral, "/dev/spi-invalid"}, {fdt_alias, "atomvm-missing"}]) of
+        {error, enotsup} ->
+            erlang:display({spi, enotsup});
+        {error, _Reason} ->
+            erlang:display({spi, fdt_alias, ok});
+        {ok, Resource} ->
+            ok = spi:deinit(Resource),
+            erlang:error(spi_fdt_alias_ignored)
     end.

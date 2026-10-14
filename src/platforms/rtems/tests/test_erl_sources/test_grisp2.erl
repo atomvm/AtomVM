@@ -29,6 +29,7 @@ start() ->
     led_smoke(),
     gpio_smoke(),
     i2c_eeprom_smoke(),
+    spi_smoke(),
     ok.
 
 uart_smoke() ->
@@ -66,3 +67,12 @@ i2c_eeprom_smoke() ->
     erlang:display({grisp2, eeprom, ok}),
     ok = i2c:deinit(Resource),
     ok.
+
+spi_smoke() ->
+    case spi:init([{peripheral, "/dev/spi-0"}, {fdt_alias, "spi0"}]) of
+        {ok, Resource} ->
+            erlang:display({grisp2, spi, ok}),
+            ok = spi:deinit(Resource);
+        {error, Reason} ->
+            erlang:display({grisp2, spi, {error, Reason}})
+    end.
