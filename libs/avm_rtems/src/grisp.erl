@@ -72,7 +72,14 @@
     uart_close/1,
     % Pmod GPIO
     pmod_gpio_pin/1,
-    pin/1
+    pin/1,
+    % Wi-Fi
+    wifi_connect/2,
+    wifi_connect/3,
+    wifi_disconnect/0,
+    wifi_status/0,
+    wifi_wait/0,
+    wifi_wait/1
 ]).
 
 -define(I2C_EEPROM_ADDR, 16#57).
@@ -498,6 +505,78 @@ pin({spi, PinId}) ->
 pin({i2c, PinId}) ->
     i2c_pin(PinId);
 pin(_Other) ->
+    erlang:error(badarg).
+
+%%-----------------------------------------------------------------------------
+%% @doc Connect to a wireless access point using WPA-PSK or WPA2-PSK,
+%% waiting up to 15 seconds for association and DHCP lease.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec wifi_connect(SSID :: string() | binary(), PSK :: string() | binary() | none) ->
+    ok | {error, term()}.
+wifi_connect(SSID, PSK) ->
+    wifi_connect(SSID, PSK, []).
+
+%%-----------------------------------------------------------------------------
+%% @doc Connect to a wireless access point with custom options.
+%%
+%% Options:
+%% <ul>
+%%   <li>`{timeout, integer()}`: Timeout in milliseconds to wait for DHCP (default: 15000).</li>
+%%   <li>`{wait, boolean()}`: Whether to wait for DHCP lease (default: true).</li>
+%% </ul>
+%% @end
+%%-----------------------------------------------------------------------------
+-spec wifi_connect(SSID :: string() | binary(), PSK :: string() | binary() | none, Opts :: proplists:proplist()) ->
+    ok | {error, term()}.
+wifi_connect(SSID, PSK, Opts) when is_list(Opts) ->
+    case atomvm_rtems:wifi_start(SSID, PSK) of
+        ok ->
+            case proplists:get_value(wait, Opts, true) of
+                true ->
+                    Timeout = proplists:get_value(timeout, Opts, 15000),
+                    atomvm_rtems:wait_wifi(Timeout);
+                false ->
+                    ok
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end;
+wifi_connect(_SSID, _PSK, _Opts) ->
+    erlang:error(badarg).
+
+%%-----------------------------------------------------------------------------
+%% @doc Disconnect from the current Wi-Fi network and bring down `wlan0`.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec wifi_disconnect() -> ok | {error, term()}.
+wifi_disconnect() ->
+    atomvm_rtems:wifi_stop().
+
+%%-----------------------------------------------------------------------------
+%% @doc Return current wireless interface status, state, and IP parameters.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec wifi_status() -> {ok, [{atom(), term()}]} | {error, term()}.
+wifi_status() ->
+    atomvm_rtems:wifi_status().
+
+%%-----------------------------------------------------------------------------
+%% @doc Wait up to 15 seconds for Wi-Fi association and DHCP IP assignment.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec wifi_wait() -> ok | {error, timeout | enotsup | term()}.
+wifi_wait() ->
+    wifi_wait(15000).
+
+%%-----------------------------------------------------------------------------
+%% @doc Wait up to TimeoutMs for Wi-Fi association and DHCP IP assignment.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec wifi_wait(TimeoutMs :: non_neg_integer()) -> ok | {error, timeout | enotsup | term()}.
+wifi_wait(TimeoutMs) when is_integer(TimeoutMs) andalso TimeoutMs >= 0 ->
+    atomvm_rtems:wait_wifi(TimeoutMs);
+wifi_wait(_TimeoutMs) ->
     erlang:error(badarg).
 
 %%-----------------------------------------------------------------------------

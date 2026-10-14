@@ -45,6 +45,19 @@ SYSINIT_DRIVER_REFERENCE(ffec, simplebus);
 SYSINIT_DRIVER_REFERENCE(ukphy, miibus);
 #endif
 
+#ifdef RTEMS_HAS_WIFI
+#include <rtems/bsd/modules.h>
+
+SYSINIT_MODULE_REFERENCE(wlan_ratectl_none);
+SYSINIT_MODULE_REFERENCE(wlan_sta);
+SYSINIT_MODULE_REFERENCE(wlan_amrr);
+SYSINIT_MODULE_REFERENCE(wlan_wep);
+SYSINIT_MODULE_REFERENCE(wlan_tkip);
+SYSINIT_MODULE_REFERENCE(wlan_ccmp);
+SYSINIT_DRIVER_REFERENCE(rtwn_usb, uhub);
+SYSINIT_REFERENCE(rtwn_rtl8188eufw);
+#endif
+
 #define RTEMS_BSD_CONFIG_INIT
 
 #include <machine/rtems-bsd-config.h>

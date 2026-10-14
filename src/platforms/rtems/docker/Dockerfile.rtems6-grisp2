@@ -25,6 +25,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV RTEMS_PREFIX=/opt/rtems/6.2
 ENV RTEMS_VERSION=6
 ENV RTEMS_RELEASE=6.2
+ENV PATH="${RTEMS_PREFIX}/bin:${PATH}"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -70,15 +71,24 @@ RUN ../source-builder/sb-set-builder --prefix="${RTEMS_PREFIX}" \
     --with-rtems-tests=no \
     6/rtems-kernel
 
-# Stage 4: RTEMS LibBSD for arm/imx7 (FreeBSD 12 network stack & nexus drivers) ~10-15 min build.
+# Stage 4: RTEMS LibBSD for arm/imx7 with GRiSP 2 Wi-Fi modules ~10-15 min build.
 FROM bsp-kernel AS libbsd
 
-WORKDIR /tmp/rsb/rtems-source-builder-${RTEMS_RELEASE}/rtems
-RUN ../source-builder/sb-set-builder --prefix="${RTEMS_PREFIX}" \
-    --target=arm-rtems6 \
-    --with-rtems-bsp=arm/imx7 \
-    6/rtems-libbsd \
-    && rm -rf /tmp/rsb
+COPY src/platforms/rtems/docker/grisp2-libbsd.ini /tmp/grisp2-libbsd.ini
+
+WORKDIR /tmp/libbsd
+RUN rm -rf /tmp/rsb \
+    && wget -q "https://ftp.rtems.org/pub/rtems/releases/6/${RTEMS_RELEASE}/sources/rtems-libbsd-${RTEMS_RELEASE}.tar.xz" \
+    && tar xJf "rtems-libbsd-${RTEMS_RELEASE}.tar.xz" \
+    && cd "rtems-libbsd-${RTEMS_RELEASE}" \
+    && ./waf configure \
+        --prefix="${RTEMS_PREFIX}" \
+        --rtems-bsps=arm/imx7 \
+        --buildset=/tmp/grisp2-libbsd.ini \
+        --rtems-version=6 \
+    && ./waf \
+    && ./waf install \
+    && rm -rf /tmp/libbsd /tmp/grisp2-libbsd.ini
 
 # Strip debug symbols from host binaries to minimize final layer size
 RUN find ${RTEMS_PREFIX}/bin ${RTEMS_PREFIX}/libexec -type f -executable -exec strip {} + 2>/dev/null || true

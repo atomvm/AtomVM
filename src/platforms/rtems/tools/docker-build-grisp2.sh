@@ -111,6 +111,9 @@ docker run --rm -v "${REPO_ROOT}:/workspace" -w /workspace "${IMAGE_NAME}" bash 
     cp "$board/README.md" "$board/COPYING" "$board/grisp2-dtb-source.tar.gz" \
        "$board/grisp2-dtb-source.tar.gz.license" "$bundle/dtb-source/"
     cp "$board/imx6ul-grisp2.dtb" "$board/imx6ul-grisp2.dtb.license" "$bundle/dtb-source/"
+    if [ -f "$board/wpa_supplicant.conf.example" ]; then
+        cp "$board/wpa_supplicant.conf.example" "$bundle/"
+    fi
     cp -R LICENSES "$bundle/"
 '
 

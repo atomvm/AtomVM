@@ -29,7 +29,18 @@
 %%-----------------------------------------------------------------------------
 -module(atomvm_rtems).
 
--export([platform/0, wait_dhcp/1, wait_resolver/1, ifaddrs/0, resolver_ready/0]).
+-export([
+    platform/0,
+    wait_dhcp/1,
+    wait_dhcp/2,
+    wait_wifi/1,
+    wait_resolver/1,
+    ifaddrs/0,
+    resolver_ready/0,
+    wifi_start/2,
+    wifi_stop/0,
+    wifi_status/0
+]).
 
 -define(DHCP_POLL_INTERVAL_MS, 250).
 
@@ -38,12 +49,27 @@
 platform() ->
     atomvm:platform().
 
-%% @doc Wait until `ffec0` has an IPv4 address, or until TimeoutMs elapses.
+%% @doc Wait until `ffec0` or `wlan0` has an IPv4 address, or until TimeoutMs elapses.
 -spec wait_dhcp(TimeoutMs :: non_neg_integer()) -> ok | {error, timeout | enotsup | term()}.
 wait_dhcp(TimeoutMs) when is_integer(TimeoutMs) andalso TimeoutMs >= 0 ->
-    wait_dhcp_loop(TimeoutMs);
+    wait_dhcp_any_loop(TimeoutMs);
 wait_dhcp(_TimeoutMs) ->
     erlang:error(badarg).
+
+%% @doc Wait until specified interface (e.g. `"ffec0"` or `"wlan0"`) has an IPv4 address.
+-spec wait_dhcp(IfName :: string() | binary(), TimeoutMs :: non_neg_integer()) ->
+    ok | {error, timeout | enotsup | term()}.
+wait_dhcp(IfName, TimeoutMs) when is_binary(IfName) ->
+    wait_dhcp(binary_to_list(IfName), TimeoutMs);
+wait_dhcp(IfName, TimeoutMs) when is_list(IfName) andalso is_integer(TimeoutMs) andalso TimeoutMs >= 0 ->
+    wait_dhcp_loop(IfName, TimeoutMs);
+wait_dhcp(_IfName, _TimeoutMs) ->
+    erlang:error(badarg).
+
+%% @doc Wait until `wlan0` has associated and acquired an IPv4 address.
+-spec wait_wifi(TimeoutMs :: non_neg_integer()) -> ok | {error, timeout | enotsup | term()}.
+wait_wifi(TimeoutMs) ->
+    wait_dhcp("wlan0", TimeoutMs).
 
 %% @doc Wait until dhcpcd has atomically installed resolver configuration.
 -spec wait_resolver(TimeoutMs :: non_neg_integer()) -> ok | {error, timeout | enotsup | term()}.
@@ -63,11 +89,27 @@ ifaddrs() ->
 resolver_ready() ->
     erlang:nif_error(undefined).
 
+%% @doc Start Wi-Fi interface and associate to an SSID with PSK (or `none`).
+-spec wifi_start(SSID :: string() | binary(), PSK :: string() | binary() | none) ->
+    ok | {error, term()}.
+wifi_start(_SSID, _PSK) ->
+    erlang:nif_error(undefined).
+
+%% @doc Stop Wi-Fi interface and bring down `wlan0`.
+-spec wifi_stop() -> ok | {error, term()}.
+wifi_stop() ->
+    erlang:nif_error(undefined).
+
+%% @doc Return current Wi-Fi status and IP parameters.
+-spec wifi_status() -> {ok, [{atom(), term()}]} | {error, term()}.
+wifi_status() ->
+    erlang:nif_error(undefined).
+
 %% @private
-wait_dhcp_loop(RemainingMs) ->
+wait_dhcp_loop(IfName, RemainingMs) ->
     case ?MODULE:ifaddrs() of
         {ok, Addrs} ->
-            case has_ipv4_address(Addrs, "ffec0") of
+            case has_ipv4_address(Addrs, IfName) of
                 true ->
                     ok;
                 false when RemainingMs =:= 0 ->
@@ -75,12 +117,36 @@ wait_dhcp_loop(RemainingMs) ->
                 false ->
                     SleepMs = poll_interval(RemainingMs),
                     timer:sleep(SleepMs),
-                    wait_dhcp_loop(RemainingMs - SleepMs)
+                    wait_dhcp_loop(IfName, RemainingMs - SleepMs)
             end;
         {error, eagain} when RemainingMs > 0 ->
             SleepMs = poll_interval(RemainingMs),
             timer:sleep(SleepMs),
-            wait_dhcp_loop(RemainingMs - SleepMs);
+            wait_dhcp_loop(IfName, RemainingMs - SleepMs);
+        {error, eagain} ->
+            {error, timeout};
+        {error, _Reason} = Error ->
+            Error
+    end.
+
+%% @private
+wait_dhcp_any_loop(RemainingMs) ->
+    case ?MODULE:ifaddrs() of
+        {ok, Addrs} ->
+            case has_ipv4_address(Addrs, "ffec0") orelse has_ipv4_address(Addrs, "wlan0") of
+                true ->
+                    ok;
+                false when RemainingMs =:= 0 ->
+                    {error, timeout};
+                false ->
+                    SleepMs = poll_interval(RemainingMs),
+                    timer:sleep(SleepMs),
+                    wait_dhcp_any_loop(RemainingMs - SleepMs)
+            end;
+        {error, eagain} when RemainingMs > 0 ->
+            SleepMs = poll_interval(RemainingMs),
+            timer:sleep(SleepMs),
+            wait_dhcp_any_loop(RemainingMs - SleepMs);
         {error, eagain} ->
             {error, timeout};
         {error, _Reason} = Error ->

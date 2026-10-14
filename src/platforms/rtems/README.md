@@ -411,6 +411,15 @@ ok = grisp:uart_close(PmodUART).
 Pin1 = grisp:pmod_gpio_pin(1),          % FDT pin map for Pmod GPIO pin 1
 ok = gpio:set_pin_mode(Pin1, output),
 ok = gpio:digital_write(Pin1, high).
+
+%% Wi-Fi (Realtek RTL8188EU 802.11b/g/n)
+ok = grisp:wifi_connect(<<"MyWiFiSSID">>, <<"MyWiFiPassword">>),
+{ok, Status} = grisp:wifi_status(),     % #{state => got_ip, ip => {192,168,1,42}, ...}
+ok = grisp:wifi_disconnect().
+
+%% Or portable cross-platform AtomVM network API:
+network:start([{sta, [{ssid, "MyWiFiSSID"}, {psk, "MyWiFiPassword"}]}]),
+network:wait_for_sta().
 ```
 
 CI cross-builds the hardware image in the existing `arm/imx7` job and uploads

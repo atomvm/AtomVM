@@ -39,6 +39,9 @@
 #include <term.h>
 #include <utils.h>
 
+#include "wifi.h"
+#include <interop.h>
+
 static term create_pair(Context *ctx, term term1, term term2)
 {
     term ret = term_alloc_tuple(2, &ctx->heap);
@@ -129,9 +132,113 @@ static term nif_rtems_resolver_ready(Context *ctx, int argc, term argv[])
 #endif
 }
 
-static const struct Nif rtems_resolver_ready_nif = {
+static term nif_rtems_wifi_start(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+#if defined(RTEMS_HAS_LIBBSD) && defined(RTEMS_HAS_WIFI)
+    int ok = 0;
+    char *ssid = interop_term_to_string(argv[0], &ok);
+    if (!ok || ssid == NULL) {
+        return error_atom(ctx, BADARG_ATOM);
+    }
+    char *psk = NULL;
+    if (argv[1] != NONE_ATOM && argv[1] != UNDEFINED_ATOM) {
+        psk = interop_term_to_string(argv[1], &ok);
+        if (!ok) {
+            free(ssid);
+            return error_atom(ctx, BADARG_ATOM);
+        }
+    }
+    int rv = rtems_wifi_start(ssid, psk);
+    free(ssid);
+    free(psk);
+    return rv == 0 ? OK_ATOM : error_atom(ctx, ATOM_STR("\x5", "eio"));
+#else
+    (void) argv;
+    return error_atom(ctx, ATOM_STR("\x7", "enotsup"));
+#endif
+}
+
+static const struct Nif rtems_wifi_start_nif = {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_rtems_resolver_ready
+    .nif_ptr = nif_rtems_wifi_start
+};
+
+static term nif_rtems_wifi_stop(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+#if defined(RTEMS_HAS_LIBBSD) && defined(RTEMS_HAS_WIFI)
+    rtems_wifi_stop();
+    return OK_ATOM;
+#else
+    return error_atom(ctx, ATOM_STR("\x7", "enotsup"));
+#endif
+}
+
+static const struct Nif rtems_wifi_stop_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_rtems_wifi_stop
+};
+
+static term nif_rtems_wifi_status(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+#if defined(RTEMS_HAS_LIBBSD) && defined(RTEMS_HAS_WIFI)
+    rtems_wifi_state_t state = rtems_wifi_get_state();
+    struct rtems_wifi_ip_info ip_info;
+    rtems_wifi_get_ip_info(&ip_info);
+
+    size_t needed = TUPLE_SIZE(2) + TUPLE_SIZE(4) * 3 + TUPLE_SIZE(2) * 4 + CONS_SIZE * 4;
+    if (UNLIKELY(memory_ensure_free(ctx, needed) != MEMORY_GC_OK)) {
+        return OUT_OF_MEMORY_ATOM;
+    }
+
+    const char *state_str = "disconnected";
+    switch (state) {
+        case RTEMS_WIFI_SCANNING: state_str = "scanning"; break;
+        case RTEMS_WIFI_ASSOCIATING: state_str = "associating"; break;
+        case RTEMS_WIFI_ASSOCIATED: state_str = "associated"; break;
+        case RTEMS_WIFI_GOT_IP: state_str = "got_ip"; break;
+        default: state_str = "disconnected"; break;
+    }
+
+    term state_atom = globalcontext_make_atom(ctx->global, (const AtomString) state_str);
+
+    term ip = term_alloc_tuple(4, &ctx->heap);
+    term_put_tuple_element(ip, 0, term_from_int((ip_info.ip >> 24) & 0xFF));
+    term_put_tuple_element(ip, 1, term_from_int((ip_info.ip >> 16) & 0xFF));
+    term_put_tuple_element(ip, 2, term_from_int((ip_info.ip >> 8) & 0xFF));
+    term_put_tuple_element(ip, 3, term_from_int(ip_info.ip & 0xFF));
+
+    term netmask = term_alloc_tuple(4, &ctx->heap);
+    term_put_tuple_element(netmask, 0, term_from_int((ip_info.netmask >> 24) & 0xFF));
+    term_put_tuple_element(netmask, 1, term_from_int((ip_info.netmask >> 16) & 0xFF));
+    term_put_tuple_element(netmask, 2, term_from_int((ip_info.netmask >> 8) & 0xFF));
+    term_put_tuple_element(netmask, 3, term_from_int(ip_info.netmask & 0xFF));
+
+    term gw = term_alloc_tuple(4, &ctx->heap);
+    term_put_tuple_element(gw, 0, term_from_int((ip_info.gateway >> 24) & 0xFF));
+    term_put_tuple_element(gw, 1, term_from_int((ip_info.gateway >> 16) & 0xFF));
+    term_put_tuple_element(gw, 2, term_from_int((ip_info.gateway >> 8) & 0xFF));
+    term_put_tuple_element(gw, 3, term_from_int(ip_info.gateway & 0xFF));
+
+    term list = term_nil();
+    list = term_list_prepend(create_pair(ctx, globalcontext_make_atom(ctx->global, ATOM_STR("\x7", "gateway")), gw), list, &ctx->heap);
+    list = term_list_prepend(create_pair(ctx, globalcontext_make_atom(ctx->global, ATOM_STR("\x7", "netmask")), netmask), list, &ctx->heap);
+    list = term_list_prepend(create_pair(ctx, globalcontext_make_atom(ctx->global, ATOM_STR("\x2", "ip")), ip), list, &ctx->heap);
+    list = term_list_prepend(create_pair(ctx, globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "state")), state_atom), list, &ctx->heap);
+
+    return create_pair(ctx, OK_ATOM, list);
+#else
+    return error_atom(ctx, ATOM_STR("\x7", "enotsup"));
+#endif
+}
+
+static const struct Nif rtems_wifi_status_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_rtems_wifi_status
 };
 
 static const struct Nif *network_nif_get_nif(const char *nifname)
@@ -141,6 +248,15 @@ static const struct Nif *network_nif_get_nif(const char *nifname)
     }
     if (strcmp("atomvm_rtems:resolver_ready/0", nifname) == 0) {
         return &rtems_resolver_ready_nif;
+    }
+    if (strcmp("atomvm_rtems:wifi_start/2", nifname) == 0) {
+        return &rtems_wifi_start_nif;
+    }
+    if (strcmp("atomvm_rtems:wifi_stop/0", nifname) == 0) {
+        return &rtems_wifi_stop_nif;
+    }
+    if (strcmp("atomvm_rtems:wifi_status/0", nifname) == 0) {
+        return &rtems_wifi_status_nif;
     }
     return NULL;
 }

@@ -34,7 +34,10 @@
 #include <unistd.h>
 #endif
 
+#include "wifi.h"
+
 #ifdef RTEMS_HAS_LIBBSD
+#include <arpa/inet.h>
 static atomic_bool resolver_ready = ATOMIC_VAR_INIT(false);
 
 static const char dhcpcd_conf[] = "hostname atomvm\n"
@@ -43,8 +46,7 @@ static const char dhcpcd_conf[] = "hostname atomvm\n"
                                   "option classless_static_routes\n"
                                   "option interface_mtu\n"
                                   "require dhcp_server_identifier\n"
-                                  "waitip 4\n"
-                                  "interface ffec0\n";
+                                  "waitip 4\n";
 
 static int write_all(int fd, const char *buf, size_t len)
 {
@@ -152,6 +154,27 @@ static void dhcpcd_hook_handler(rtems_dhcpcd_hook *hook, char *const *env)
             fprintf(stderr, "failed to write DHCP resolver configuration\n");
         }
     }
+
+    const char *iface = dhcpcd_env_value(env, "interface");
+    const char *reason = dhcpcd_env_value(env, "reason");
+    const char *ip_str = dhcpcd_env_value(env, "new_ip_address");
+    const char *mask_str = dhcpcd_env_value(env, "new_subnet_mask");
+    const char *gw_str = dhcpcd_env_value(env, "new_routers");
+
+    if (iface != NULL && reason != NULL) {
+        uint32_t ip = 0, mask = 0, gw = 0;
+        struct in_addr addr;
+        if (ip_str != NULL && inet_aton(ip_str, &addr)) {
+            ip = ntohl(addr.s_addr);
+        }
+        if (mask_str != NULL && inet_aton(mask_str, &addr)) {
+            mask = ntohl(addr.s_addr);
+        }
+        if (gw_str != NULL && inet_aton(gw_str, &addr)) {
+            gw = ntohl(addr.s_addr);
+        }
+        rtems_wifi_notify_dhcp_event(iface, reason, ip, mask, gw);
+    }
 }
 
 static rtems_dhcpcd_hook dhcpcd_hook = {
@@ -196,6 +219,10 @@ int rtems_atomvm_network_init(void)
         fprintf(stderr, "rtems_dhcpcd_start failed: %s\n", rtems_status_text(sc));
         return -1;
     }
+
+#ifdef RTEMS_HAS_WIFI
+    rtems_wifi_check_sd_config_and_start();
+#endif
 
     return 0;
 #else

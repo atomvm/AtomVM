@@ -143,3 +143,41 @@ devicetree /oftree
 Then follow the serial console and SD boot steps above. The older bundle's
 `AtomVM-grisp2.exe` is an ELF debug executable; use the packaged boot image
 for SD boot.
+
+## Configure Wi-Fi
+
+The GRiSP 2 onboard Realtek RTL8188EU 802.11b/g/n Wi-Fi can be configured in two ways:
+
+### 1. Boot-time SD card configuration
+
+Copy [`wpa_supplicant.conf.example`](wpa_supplicant.conf.example) to `wpa_supplicant.conf` on the root of your FAT SD card partition:
+
+```text
+ctrl_interface=/var/run/wpa_supplicant
+
+network={
+    ssid="YourWiFiSSID"
+    psk="YourWiFiPassword"
+    key_mgmt=WPA-PSK
+}
+```
+
+When present at `/media/mmcsd-0-0/wpa_supplicant.conf`, AtomVM automatically clones `wlan0`, launches WPA Supplicant, and starts DHCP before loading `app.avm`.
+
+### 2. Runtime dynamic configuration via Erlang
+
+Connect dynamically from your Erlang application:
+
+```erlang
+%% High-level GRiSP 2 API
+ok = grisp:wifi_connect(<<"MyWiFiSSID">>, <<"MyWiFiPassword">>),
+{ok, Status} = grisp:wifi_status(),
+io:format("Wi-Fi connected: ~p~n", [Status]).
+
+%% Portable cross-platform AtomVM network API
+network:start([{sta, [
+    {ssid, "MyWiFiSSID"},
+    {psk, "MyWiFiPassword"}
+]}]),
+network:wait_for_sta().
+```
