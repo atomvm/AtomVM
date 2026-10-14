@@ -160,11 +160,17 @@ jobs:
           otp: "master"
           elixir_version: "main"
 
-        # Additional mbedtls@4 coverage with the default Linux toolchain
+        # Additional mbedtls@4 / mbedtls@4.1 coverage with the default Linux toolchain
         - cc: "cc"
           cxx: "c++"
           otp: "28"
           mbedtls: "mbedtls@4"
+
+        - cc: "cc"
+          cxx: "c++"
+          otp: "28"
+          mbedtls: "mbedtls@4.1"
+
 
         # Additional latest & -Os compiler builds
         - cc: "gcc-14"
@@ -705,26 +711,26 @@ jobs:
       run: sudo apt update -y
 
     - name: "Install deps"
-      if: matrix.container != '' && matrix.mbedtls != 'mbedtls@4'
+      if: matrix.container != '' && !startsWith(matrix.mbedtls, 'mbedtls@4')
       run: |
         sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen valgrind libmbedtls-dev socat
 
     - name: "Install deps (MbedTLS 4)"
-      if: matrix.container != '' && matrix.mbedtls == 'mbedtls@4'
+      if: matrix.container != '' && startsWith(matrix.mbedtls, 'mbedtls@4')
       run: |
-        sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen valgrind socat
+        sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen valgrind python3-jinja2 python3-jsonschema socat
 
     - name: "Install deps"
-      if: matrix.container == '' && matrix.mbedtls != 'mbedtls@4'
+      if: matrix.container == '' && !startsWith(matrix.mbedtls, 'mbedtls@4')
       run: |
         sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen libc6-dbg libmbedtls-dev socat
         # Get a more recent valgrind
         sudo snap install valgrind --classic
 
     - name: "Install deps (MbedTLS 4)"
-      if: matrix.container == '' && matrix.mbedtls == 'mbedtls@4'
+      if: matrix.container == '' && startsWith(matrix.mbedtls, 'mbedtls@4')
       run: |
-        sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen libc6-dbg socat
+        sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen libc6-dbg python3-jinja2 python3-jsonschema socat
         # Get a more recent valgrind
         sudo snap install valgrind --classic
 
@@ -761,9 +767,13 @@ jobs:
           https://cdn.jsdelivr.net/hex
 
     - name: "Install specific MbedTLS version"
-      if: matrix.mbedtls == 'mbedtls@4'
+      if: startsWith(matrix.mbedtls, 'mbedtls@4')
       run: |
-        git clone --depth 1 --branch mbedtls-4.0.0 --recurse-submodules https://github.com/Mbed-TLS/mbedtls
+        MBEDTLS_TAG="mbedtls-4.0.0"
+        if [ "${{ matrix.mbedtls }}" = "mbedtls@4.1" ]; then
+          MBEDTLS_TAG="mbedtls-4.1.1"
+        fi
+        git clone --depth 1 --branch "$MBEDTLS_TAG" --recurse-submodules https://github.com/Mbed-TLS/mbedtls
         cd mbedtls
         mkdir build
         cd build
@@ -810,7 +820,7 @@ jobs:
         key: ${{ matrix.otp || env.DEFAULT_OTP_VERSION }}-${{ hashFiles('**/build-and-test.yaml', 'tests/**/*.erl', 'tests/**/*.hrl', 'tests/**/*.ex') }}-${{ matrix.jit_target_arch || 'nojit' }}-${{ contains(matrix.cmake_opts_other, 'AVM_DISABLE_JIT_DWARF=OFF') && 'dwarf' || 'nodwarf' }}
 
     - name: "Build: run cmake"
-      if: matrix.mbedtls != 'mbedtls@4'
+      if: !startsWith(matrix.mbedtls, 'mbedtls@4')
       working-directory: build
       run: |
         cmake ${{ matrix.cmake_opts_fp }} ${{ matrix.cmake_opts_smp }} ${{ matrix.cmake_opts_other || env.DEFAULT_CMAKE_OPTS_OTHER }} ..
@@ -819,7 +829,7 @@ jobs:
         find . -name '*.beam' -exec touch {} \;
 
     - name: "Build: run cmake (MbedTLS 4)"
-      if: matrix.mbedtls == 'mbedtls@4'
+      if: startsWith(matrix.mbedtls, 'mbedtls@4')
       working-directory: build
       run: |
         cmake -DMBEDTLS_ROOT_DIR=/usr/local ${{ matrix.cmake_opts_fp }} ${{ matrix.cmake_opts_smp }} ${{ matrix.cmake_opts_other || env.DEFAULT_CMAKE_OPTS_OTHER }} ..

@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mbedtls: ["default", "mbedtls@4"]
+        mbedtls: ["default", "mbedtls@4", "mbedtls@4.1"]
 
     steps:
     - name: "Checkout repo"
@@ -44,7 +44,7 @@ jobs:
 
     - name: "Install deps"
       run: |
-        sudo apt install -y build-essential cmake gperf zlib1g-dev
+        sudo apt install -y build-essential cmake gperf zlib1g-dev python3-jinja2 python3-jsonschema
         if [[ "${{ matrix.mbedtls }}" == "default" ]]; then
             sudo apt install -y libmbedtls-dev
         fi
@@ -52,9 +52,13 @@ jobs:
         sudo snap install valgrind --classic
 
     - name: "Install specific MbedTLS version"
-      if: matrix.mbedtls == 'mbedtls@4'
+      if: startsWith(matrix.mbedtls, 'mbedtls@4')
       run: |
-        git clone --depth 1 --branch mbedtls-4.0.0 --recurse-submodules https://github.com/Mbed-TLS/mbedtls
+        MBEDTLS_TAG="mbedtls-4.0.0"
+        if [ "${{ matrix.mbedtls }}" = "mbedtls@4.1" ]; then
+          MBEDTLS_TAG="mbedtls-4.1.1"
+        fi
+        git clone --depth 1 --branch "$MBEDTLS_TAG" --recurse-submodules https://github.com/Mbed-TLS/mbedtls
         cd mbedtls
         mkdir build
         cd build

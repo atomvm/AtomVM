@@ -152,13 +152,13 @@ jobs:
             mbedtls_git_tag: "v3.6.3.1"
           - jit: ""
             mbedtls_label: "mbedtls4"
-            mbedtls_git_tag: "v4.0.0"
+            mbedtls_git_tag: "v4.1.1"
           - jit: "-DAVM_DISABLE_JIT=OFF"
             mbedtls_label: "mbedtls3"
             mbedtls_git_tag: "v3.6.3.1"
           - jit: "-DAVM_DISABLE_JIT=OFF"
             mbedtls_label: "mbedtls4"
-            mbedtls_git_tag: "v4.0.0"
+            mbedtls_git_tag: "v4.1.1"
 
     steps:
     - name: Checkout repo
@@ -265,7 +265,7 @@ jobs:
             flavor: ""
             language: "javascript-typescript"
             mbedtls_label: "mbedtls4"
-            mbedtls_git_tag: "v4.0.0"
+            mbedtls_git_tag: "v4.1.1"
           - jit: "-DAVM_DISABLE_JIT=OFF"
             flavor: "-jit"
             language: "javascript-typescript"
@@ -275,7 +275,7 @@ jobs:
             flavor: "-jit"
             language: "javascript-typescript"
             mbedtls_label: "mbedtls4"
-            mbedtls_git_tag: "v4.0.0"
+            mbedtls_git_tag: "v4.1.1"
 
     steps:
     - name: Checkout repo
