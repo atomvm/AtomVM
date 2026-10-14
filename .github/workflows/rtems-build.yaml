@@ -104,7 +104,7 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ matrix.prefix }}
-        key: rtems-${{ matrix.rtems_version == '7' && '7' || env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-libbsd-rsb-${{ runner.os }}
+        key: rtems-${{ matrix.rtems_version == '7' && '7' || env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-libbsd-wifi-${{ runner.os }}
 
     - name: Build RTEMS ${{ matrix.rtems_version }} tools and ${{ matrix.bsp }} BSP
       if: steps.rtems-cache.outputs.cache-hit != 'true'
@@ -142,25 +142,28 @@ jobs:
           echo "Using cached rtems-libbsd at $libbsd"
           exit 0
         fi
-        echo "Building rtems-libbsd because $libbsd is missing"
-        mkdir -p "$HOME/rtems-src"
-        cd "$HOME/rtems-src"
-        if [ ! -d "rtems-source-builder-${RTEMS_RELEASE}/rtems" ]; then
-          wget -q "https://ftp.rtems.org/pub/rtems/releases/6/${RTEMS_RELEASE}/sources/rtems-source-builder-${RTEMS_RELEASE}.tar.xz"
-          tar xJf "rtems-source-builder-${RTEMS_RELEASE}.tar.xz"
-        fi
-        cd "rtems-source-builder-${RTEMS_RELEASE}/rtems"
-        ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" \
-          --target="${{ matrix.arch }}-rtems${{ matrix.rtems_version }}" \
-          --with-rtems-bsp=${{ matrix.bsp }} \
-          "${{ matrix.rtems_version }}/rtems-libbsd"
+        echo "Building rtems-libbsd with GRiSP 2 Wi-Fi modules"
+        mkdir -p "$HOME/rtems-src/libbsd"
+        cd "$HOME/rtems-src/libbsd"
+        wget -q "https://ftp.rtems.org/pub/rtems/releases/6/${RTEMS_RELEASE}/sources/rtems-libbsd-${RTEMS_RELEASE}.tar.xz"
+        tar xJf "rtems-libbsd-${RTEMS_RELEASE}.tar.xz"
+        cd "rtems-libbsd-${RTEMS_RELEASE}"
+        export PATH="${{ matrix.prefix }}/bin:$PATH"
+        ./waf configure \
+          --prefix="${{ matrix.prefix }}" \
+          --rtems-bsps=${{ matrix.bsp }} \
+          --buildset="$GITHUB_WORKSPACE/src/platforms/rtems/docker/grisp2-libbsd.ini" \
+          --rtems-version="${{ matrix.rtems_version }}"
+        ./waf
+        ./waf install
+        rm -rf "$HOME/rtems-src/libbsd"
 
     - name: Save RTEMS ${{ matrix.rtems_version }} ${{ matrix.bsp }} toolchain
       if: steps.rtems-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
         path: ${{ matrix.prefix }}
-        key: rtems-${{ matrix.rtems_version == '7' && '7' || env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-libbsd-rsb-${{ runner.os }}
+        key: rtems-${{ matrix.rtems_version == '7' && '7' || env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-libbsd-wifi-${{ runner.os }}
 
     - name: Add RTEMS tools to PATH
       run: echo "${{ matrix.prefix }}/bin" >> "$GITHUB_PATH"
@@ -235,6 +238,9 @@ jobs:
         cp "$board/README.md" "$board/COPYING" "$board/grisp2-dtb-source.tar.gz" \
           "$board/grisp2-dtb-source.tar.gz.license" "$bundle/dtb-source/"
         cp "$board/imx6ul-grisp2.dtb" "$board/imx6ul-grisp2.dtb.license" "$bundle/dtb-source/"
+        if [ -f "$board/wpa_supplicant.conf.example" ]; then
+          cp "$board/wpa_supplicant.conf.example" "$bundle/"
+        fi
         cp -R LICENSES "$bundle/"
         printf 'Source: %s/%s/tree/%s\nBuild: %s/%s/actions/runs/%s\n' \
           "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_SHA" \
