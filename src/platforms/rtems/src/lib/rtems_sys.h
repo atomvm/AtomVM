@@ -25,7 +25,7 @@
 #include <portnifloader.h>
 #include <sys.h>
 
-#ifdef RTEMS_HAS_LIBBSD
+#if defined(RTEMS_HAS_LIBBSD) || defined(RTEMS_HAS_LWIP)
 #include <poll.h>
 #endif
 
@@ -33,7 +33,7 @@
 
 struct RTEMSPlatformData
 {
-#ifdef RTEMS_HAS_LIBBSD
+#if defined(RTEMS_HAS_LIBBSD) || defined(RTEMS_HAS_LWIP)
     struct pollfd *fds;
     int select_events_poll_count;
 #else

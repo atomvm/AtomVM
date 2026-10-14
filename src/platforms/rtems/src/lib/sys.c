@@ -31,7 +31,7 @@
 #include <resources.h>
 #include <utils.h>
 
-#ifdef RTEMS_HAS_LIBBSD
+#if defined(RTEMS_HAS_LIBBSD) || defined(RTEMS_HAS_LWIP)
 #include <poll.h>
 #endif
 
@@ -50,7 +50,7 @@ void sys_init_platform(GlobalContext *glb)
     if (IS_NULL_PTR(platform)) {
         AVM_ABORT();
     }
-#ifdef RTEMS_HAS_LIBBSD
+#if defined(RTEMS_HAS_LIBBSD) || defined(RTEMS_HAS_LWIP)
     platform->fds = NULL;
     platform->select_events_poll_count = -1;
 #else
@@ -61,7 +61,7 @@ void sys_init_platform(GlobalContext *glb)
 
 void sys_free_platform(GlobalContext *glb)
 {
-#ifdef RTEMS_HAS_LIBBSD
+#if defined(RTEMS_HAS_LIBBSD) || defined(RTEMS_HAS_LWIP)
     struct RTEMSPlatformData *platform = glb->platform_data;
     free(platform->fds);
 #endif
@@ -79,7 +79,67 @@ static rtems_interval timeout_ms_to_ticks(int timeout_ms)
     return ticks;
 }
 
-#ifdef RTEMS_HAS_LIBBSD
+#if defined(RTEMS_HAS_LWIP)
+#include <sys/select.h>
+
+int poll(struct pollfd fds[], nfds_t nfds, int timeout)
+{
+    fd_set readfds, writefds, exceptfds;
+    FD_ZERO(&readfds);
+    FD_ZERO(&writefds);
+    FD_ZERO(&exceptfds);
+    int maxfd = -1;
+    for (nfds_t i = 0; i < nfds; i++) {
+        fds[i].revents = 0;
+        if (fds[i].fd < 0) {
+            continue;
+        }
+        if (fds[i].events & (POLLIN | POLLRDNORM | POLLRDBAND)) {
+            FD_SET(fds[i].fd, &readfds);
+        }
+        if (fds[i].events & (POLLOUT | POLLWRNORM | POLLWRBAND)) {
+            FD_SET(fds[i].fd, &writefds);
+        }
+        if (fds[i].events & (POLLPRI | POLLERR)) {
+            FD_SET(fds[i].fd, &exceptfds);
+        }
+        if (fds[i].fd > maxfd) {
+            maxfd = fds[i].fd;
+        }
+    }
+    struct timeval tv, *tvp = NULL;
+    if (timeout >= 0) {
+        tv.tv_sec = timeout / 1000;
+        tv.tv_usec = (timeout % 1000) * 1000;
+        tvp = &tv;
+    }
+    int res = select(maxfd + 1, &readfds, &writefds, &exceptfds, tvp);
+    if (res <= 0) {
+        return res;
+    }
+    int count = 0;
+    for (nfds_t i = 0; i < nfds; i++) {
+        if (fds[i].fd < 0) {
+            continue;
+        }
+        if (FD_ISSET(fds[i].fd, &readfds)) {
+            fds[i].revents |= POLLIN;
+        }
+        if (FD_ISSET(fds[i].fd, &writefds)) {
+            fds[i].revents |= POLLOUT;
+        }
+        if (FD_ISSET(fds[i].fd, &exceptfds)) {
+            fds[i].revents |= POLLERR;
+        }
+        if (fds[i].revents != 0) {
+            count++;
+        }
+    }
+    return count;
+}
+#endif
+
+#if defined(RTEMS_HAS_LIBBSD) || defined(RTEMS_HAS_LWIP)
 static void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
 {
     struct RTEMSPlatformData *platform = glb->platform_data;
@@ -154,7 +214,7 @@ static void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
 void sys_poll_events(GlobalContext *glb, int timeout_ms)
 {
     gpio_interrupt_drain(glb);
-#ifdef RTEMS_HAS_LIBBSD
+#if defined(RTEMS_HAS_LIBBSD) || defined(RTEMS_HAS_LWIP)
     if (timeout_ms == SYS_POLL_EVENTS_DO_NOT_WAIT && synclist_is_empty(&glb->select_events)) {
         return;
     }
@@ -184,7 +244,7 @@ void sys_listener_destroy(struct ListHead *item)
 
 void sys_register_select_event(GlobalContext *global, ErlNifEvent event, bool is_write)
 {
-#ifdef RTEMS_HAS_LIBBSD
+#if defined(RTEMS_HAS_LIBBSD) || defined(RTEMS_HAS_LWIP)
     UNUSED(event);
     UNUSED(is_write);
     struct RTEMSPlatformData *platform = global->platform_data;
@@ -198,7 +258,7 @@ void sys_register_select_event(GlobalContext *global, ErlNifEvent event, bool is
 
 void sys_unregister_select_event(GlobalContext *global, ErlNifEvent event, bool is_write)
 {
-#ifdef RTEMS_HAS_LIBBSD
+#if defined(RTEMS_HAS_LIBBSD) || defined(RTEMS_HAS_LWIP)
     UNUSED(event);
     UNUSED(is_write);
     struct RTEMSPlatformData *platform = global->platform_data;

@@ -316,6 +316,7 @@ bool rtems_wifi_check_sd_config_and_start(void)
 #include <lwip/netif.h>
 #include <lwip/dhcp.h>
 #include <lwip/ip4_addr.h>
+#include <netstart.h>
 #include <stdatomic.h>
 #include <string.h>
 #include <stdio.h>
@@ -365,13 +366,21 @@ static rtems_task dhcp_poll_task(rtems_task_argument arg)
 {
     (void) arg;
     while (atomic_load_explicit(&wifi_enabled, memory_order_acquire)) {
-        struct netif *netif = netif_default;
-        if (netif != NULL && dhcp_supplied_address(netif)) {
-            uint32_t ip = ip4_addr_get_u32(netif_ip4_addr(netif));
-            uint32_t netmask = ip4_addr_get_u32(netif_ip4_netmask(netif));
-            uint32_t gw = ip4_addr_get_u32(netif_ip4_gw(netif));
+        struct netif *netif = rtems_esp_netif_get();
+        struct dhcp *d = netif ? netif_dhcp_data(netif) : NULL;
+        if (netif != NULL && (dhcp_supplied_address(netif) || (d != NULL && ip4_addr_get_u32(&d->offered_ip_addr) != 0))) {
+            if (!dhcp_supplied_address(netif)) {
+                netif_set_addr(netif, &d->offered_ip_addr, &d->offered_sn_mask, &d->offered_gw_addr);
+                netif_set_up(netif);
+            }
+            uint32_t ip = lwip_ntohl(ip4_addr_get_u32(netif_ip4_addr(netif)));
+            uint32_t netmask = lwip_ntohl(ip4_addr_get_u32(netif_ip4_netmask(netif)));
+            uint32_t gw = lwip_ntohl(ip4_addr_get_u32(netif_ip4_gw(netif)));
 
             rtems_wifi_notify_dhcp_event("wlan0", "BOUND", ip, netmask, gw);
+            printf("rtems-wifi: DHCP bound! IP=%u.%u.%u.%u, GW=%u.%u.%u.%u\n",
+                (ip >> 24) & 0xff, (ip >> 16) & 0xff, (ip >> 8) & 0xff, ip & 0xff,
+                (gw >> 24) & 0xff, (gw >> 16) & 0xff, (gw >> 8) & 0xff, gw & 0xff);
             break;
         }
         rtems_task_wake_after(RTEMS_MILLISECONDS_TO_TICKS(500));
@@ -389,18 +398,23 @@ static void on_wifi_event(void *arg, const char *base, int32_t id, void *data)
             set_state(RTEMS_WIFI_ASSOCIATING);
         } else if (id == WIFI_EVENT_STA_CONNECTED) {
             set_state(RTEMS_WIFI_ASSOCIATED);
-            if (dhcp_poll_task_id == RTEMS_ID_NONE && netif_default != NULL) {
-                dhcp_start(netif_default);
-                rtems_status_code sc = rtems_task_create(
-                    rtems_build_name('W', 'D', 'H', 'C'),
-                    120,
-                    4096,
-                    RTEMS_DEFAULT_MODES,
-                    RTEMS_DEFAULT_ATTRIBUTES,
-                    &dhcp_poll_task_id
-                );
-                if (sc == RTEMS_SUCCESSFUL) {
-                    rtems_task_start(dhcp_poll_task_id, dhcp_poll_task, 0);
+            rtems_esp_netif_reattach();
+            struct netif *netif = rtems_esp_netif_get();
+            if (netif != NULL) {
+                netif_set_default(netif);
+                if (dhcp_poll_task_id == RTEMS_ID_NONE) {
+                    dhcp_start(netif);
+                    rtems_status_code sc = rtems_task_create(
+                        rtems_build_name('W', 'D', 'H', 'C'),
+                        120,
+                        4096,
+                        RTEMS_DEFAULT_MODES,
+                        RTEMS_DEFAULT_ATTRIBUTES,
+                        &dhcp_poll_task_id
+                    );
+                    if (sc == RTEMS_SUCCESSFUL) {
+                        rtems_task_start(dhcp_poll_task_id, dhcp_poll_task, 0);
+                    }
                 }
             }
         } else if (id == WIFI_EVENT_STA_DISCONNECTED) {
@@ -452,6 +466,11 @@ int rtems_wifi_start(const char *ssid, const char *psk)
         if (err != ESP_OK) {
             fprintf(stderr, "AtomVM wifi: esp_wifi_init failed: %d\n", err);
             return -1;
+        }
+
+        int net_rc = start_networking(NULL, NULL, NULL, NULL, NULL);
+        if (net_rc != 0) {
+            fprintf(stderr, "AtomVM wifi: start_networking returned %d\n", net_rc);
         }
 
         esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_wifi_event, NULL);

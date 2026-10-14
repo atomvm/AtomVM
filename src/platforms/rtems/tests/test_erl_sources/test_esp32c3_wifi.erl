@@ -25,6 +25,7 @@ start() ->
     erlang:display({atomvm_esp32c3_wifi, atomvm:platform()}),
     wifi_smoke(),
     socket_smoke(),
+    http_smoke(),
     erlang:display({wifi_test_complete, ok}),
     ok.
 
@@ -76,4 +77,34 @@ socket_smoke() ->
     catch
         error:undef ->
             erlang:display({socket, undef})
+    end.
+
+http_smoke() ->
+    try
+        erlang:display(starting_http_test),
+        case ahttp_client:connect(http, "192.168.4.1", 8080, [{inet_backend, socket}, {active, false}]) of
+            {ok, Conn} ->
+                erlang:display({http_connected, ok}),
+                case ahttp_client:request(Conn, <<"GET">>, <<"/README.md">>, [], undefined) of
+                    {ok, Conn2, Ref} ->
+                        erlang:display({http_requested, Ref}),
+                        case ahttp_client:recv(Conn2, 0) of
+                            {ok, Conn3, Responses} ->
+                                erlang:display({http_responses, Responses}),
+                                ahttp_client:close(Conn3),
+                                erlang:display({http_closed, ok});
+                            {error, RecvErr} ->
+                                erlang:display({http_recv_error, RecvErr}),
+                                ahttp_client:close(Conn2)
+                        end;
+                    {error, ReqErr} ->
+                        erlang:display({http_request_error, ReqErr}),
+                        ahttp_client:close(Conn)
+                end;
+            {error, ConnErr} ->
+                erlang:display({http_connect_result, ConnErr})
+        end
+    catch
+        Class:Reason:Stack ->
+            erlang:display({http_exception, Class, Reason, Stack})
     end.

@@ -130,11 +130,14 @@ static const struct Nif rtems_ifaddrs_nif = {
 
 static term nif_rtems_resolver_ready(Context *ctx, int argc, term argv[])
 {
+    UNUSED(ctx);
     UNUSED(argc);
     UNUSED(argv);
 
 #ifdef RTEMS_HAS_LIBBSD
     return rtems_atomvm_resolver_ready() ? TRUE_ATOM : FALSE_ATOM;
+#elif defined(RTEMS_HAS_LWIP)
+    return TRUE_ATOM;
 #else
     return error_atom(ctx, ATOM_STR("\x7", "enotsup"));
 #endif

@@ -159,22 +159,41 @@ echo "    src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin"
 if [ "${DO_SIMULATE}" -eq 1 ]; then
     echo "==> Running simulation with esp-emulator..."
     if command -v esp-emu >/dev/null 2>&1; then
+        HTTP_PID=""
+        if [ "${TEST_WIFI}" -eq 1 ]; then
+            python3 -m http.server 8080 --directory "${REPO_ROOT}" >/dev/null 2>&1 &
+            HTTP_PID=$!
+        fi
         EMU_CMD=(esp-emu --chip esp32c3 --firmware "${REPO_ROOT}/src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin")
         if [ "${TEST_WIFI}" -eq 1 ]; then
             EMU_CMD+=(--wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user)
         fi
         EMU_CMD+=(--timeout 30s --exit-on "Return value: ok")
-        "${EMU_CMD[@]}"
+        "${EMU_CMD[@]}" || true
+        if [ -n "${HTTP_PID}" ]; then
+            kill "${HTTP_PID}" 2>/dev/null || true
+        fi
     else
         SIM_CMD=(docker run)
         if [ -n "${DOCKER_PLATFORM}" ]; then
             SIM_CMD+=(--platform "${DOCKER_PLATFORM}")
         fi
-        SIM_CMD+=(--rm -v "${REPO_ROOT}:/workspace" "${IMAGE_NAME}" esp-emu --chip esp32c3 --firmware /workspace/src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin)
         if [ "${TEST_WIFI}" -eq 1 ]; then
-            SIM_CMD+=(--wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user)
+            SIM_CMD+=(--rm -v "${REPO_ROOT}:/workspace" "${IMAGE_NAME}" bash -c '
+                python3 -m http.server 8080 --directory /workspace &
+                HTTP_PID=$!
+                trap "kill $HTTP_PID 2>/dev/null || true" EXIT
+                esp-emu --chip esp32c3 \
+                    --firmware /workspace/src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin \
+                    --wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user \
+                    --timeout 30s --exit-on "Return value: ok"
+            ')
+        else
+            SIM_CMD+=(--rm -v "${REPO_ROOT}:/workspace" "${IMAGE_NAME}" \
+                esp-emu --chip esp32c3 \
+                --firmware /workspace/src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin \
+                --timeout 30s --exit-on "Return value: ok")
         fi
-        SIM_CMD+=(--timeout 30s --exit-on "Return value: ok")
         "${SIM_CMD[@]}"
     fi
 fi
