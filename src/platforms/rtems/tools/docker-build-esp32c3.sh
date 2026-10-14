@@ -87,7 +87,11 @@ fi
 
 if [ "${FORCE_REBUILD}" -eq 1 ] || ! docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
     echo "==> Building Docker image '${IMAGE_NAME}' from ${DOCKERFILE}..."
-    docker build "${BUILD_ARGS[@]}" -t "${IMAGE_NAME}" -f "${DOCKERFILE}" "${REPO_ROOT}/src/platforms/rtems/docker"
+    if [ "${#BUILD_ARGS[@]}" -gt 0 ]; then
+        docker build "${BUILD_ARGS[@]}" -t "${IMAGE_NAME}" -f "${DOCKERFILE}" "${REPO_ROOT}/src/platforms/rtems/docker"
+    else
+        docker build -t "${IMAGE_NAME}" -f "${DOCKERFILE}" "${REPO_ROOT}/src/platforms/rtems/docker"
+    fi
 fi
 
 # Step 2: Build inside Docker container
