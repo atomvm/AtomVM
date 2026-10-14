@@ -64,8 +64,18 @@ i2c_open_smoke() ->
 gpio_smoke() ->
     case gpio:init(#{}) of
         {error, enotsup} ->
+            {error, enotsup} = gpio:set_pin_pull(#{}, up),
+            {error, enotsup} = gpio:set_pin_mode(#{}, output_od),
+            {error, enotsup} = gpio:set_int_nif(#{}, rising, self()),
+            {error, enotsup} = gpio:remove_int_nif(#{}),
+            {error, enotsup} = gpio:set_pin_mux(#{}, 0),
             erlang:display({gpio, enotsup});
         {error, invalid_pin} ->
+            {error, invalid_pin} = gpio:set_pin_pull(#{}, up),
+            {error, invalid_pin} = gpio:set_pin_mode(#{}, output_od),
+            {error, invalid_pin} = gpio:set_int_nif(#{}, rising, self()),
+            {error, invalid_pin} = gpio:remove_int_nif(#{}),
+            {error, invalid_pin} = gpio:set_pin_mux(#{}, 0),
             erlang:display({gpio, imx7, ok});
         Other ->
             erlang:error({gpio_smoke_failed, Other})

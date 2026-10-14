@@ -48,7 +48,10 @@ and ARM RealView have no supported SPI controller; `spi:init/1` returns
 `{error, enotsup}`.
 GPIO implements `gpio_hal` using the RTEMS i.MX GPIO driver on imx7. Pins can
 be addressed as `{Bank, Pin}` (`1..7`, `0..31`) or through an FDT property.
-GPIO on erc32 and RealView returns `{error, enotsup}`.
+Supports configurable pull resistors (`up`, `down`, `floating`), open-drain mode
+(`output_od`), hardware edge/level interrupts delivering `{gpio_interrupt, Pin}`
+notifications, and dynamic pinmuxing (`set_pin_mux/2`). GPIO on erc32 and
+RealView returns `{error, enotsup}`.
 
 ## Prerequisites
 
@@ -205,10 +208,10 @@ SPI = spi:open([
 ok = spi:close(SPI).
 ```
 
-GPIO direct bank/pin access requires the pin mux to have been configured by
-the BSP or device tree:
+GPIO direct bank/pin access addresses `{Bank, Pin}` (`1..7`, `0..31`), with optional dynamic pinmuxing via `gpio:set_pin_mux/2`:
 
 ```erlang
+ok = gpio:set_pin_mux({1, 3}, 5), % ALT5 = GPIO
 ok = gpio:set_pin_mode({1, 3}, output),
 ok = gpio:digital_write({1, 3}, high).
 ```
@@ -218,12 +221,23 @@ polarity:
 
 ```erlang
 Pin = #{path => "/leds/status", property => "gpios", index => 0},
-ok = gpio:set_pin_mode(Pin, output),
+ok = gpio:set_pin_mode(Pin, output_od),
 ok = gpio:digital_write(Pin, high).
 ```
 
-GPIO pull configuration, open-drain mode, and interrupts are not yet
-supported and return `{error, enotsup}`.
+Pull resistors, open-drain output mode, and hardware interrupts are supported on i.MX:
+
+```erlang
+ok = gpio:set_pin_pull(Pin, up),
+GPIO = gpio:start(),
+ok = gpio:set_int(GPIO, Pin, falling),
+receive
+    {gpio_interrupt, Pin} ->
+        io:format("GPIO triggered: ~p~n", [Pin])
+end,
+ok = gpio:remove_int(GPIO, Pin),
+ok = gpio:close(GPIO).
+```
 
 ## Host startup regression test
 
@@ -337,7 +351,7 @@ and SD boot selection.
 
 The smoke test prints `{atomvm_grisp2,rtems}`, `{grisp2,uart,ok}`,
 `{grisp2,led,ok}`, `{grisp2,gpio,high}` or `{grisp2,gpio,low}`,
-`{grisp2,eeprom,ok}`, and `{grisp2,spi,ok}`, followed by `Return value: ok`. The first RGB LED's
+`{grisp2,gpio_int,ok}`, `{grisp2,eeprom,ok}`, and `{grisp2,spi,ok}`, followed by `Return value: ok`. The first RGB LED's
 red channel lights for half a second. The EEPROM check reads eight bytes
 at I²C address `0x57` and does not write EEPROM contents.
 Use `rtems_net_test` separately to verify `ffec0` DHCP/DNS/TCP on the

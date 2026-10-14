@@ -41,4 +41,6 @@ struct RTEMSPlatformData
 #endif
 };
 
+void gpio_interrupt_drain(GlobalContext *glb);
+
 #endif /* _RTEMS_SYS_H_ */

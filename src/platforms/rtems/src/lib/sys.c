@@ -126,7 +126,8 @@ static void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
         } else {
             ticks = timeout_ms_to_ticks(timeout_ms);
         }
-        rtems_task_wake_after(ticks);
+        rtems_event_set out;
+        rtems_event_receive(RTEMS_EVENT_0, RTEMS_WAIT | RTEMS_EVENT_ANY, ticks, &out);
         return;
     }
 
@@ -152,14 +153,14 @@ static void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
 
 void sys_poll_events(GlobalContext *glb, int timeout_ms)
 {
+    gpio_interrupt_drain(glb);
 #ifdef RTEMS_HAS_LIBBSD
     if (timeout_ms == SYS_POLL_EVENTS_DO_NOT_WAIT && synclist_is_empty(&glb->select_events)) {
         return;
     }
     sys_poll_events_with_poll(glb, timeout_ms);
+    gpio_interrupt_drain(glb);
 #else
-    UNUSED(glb);
-
     if (timeout_ms == SYS_POLL_EVENTS_DO_NOT_WAIT) {
         return;
     }
@@ -170,7 +171,9 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
     } else {
         ticks = timeout_ms_to_ticks(timeout_ms);
     }
-    rtems_task_wake_after(ticks);
+    rtems_event_set out;
+    rtems_event_receive(RTEMS_EVENT_0, RTEMS_WAIT | RTEMS_EVENT_ANY, ticks, &out);
+    gpio_interrupt_drain(glb);
 #endif
 }
 

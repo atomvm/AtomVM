@@ -20,14 +20,17 @@
 %
 
 %%-----------------------------------------------------------------------------
-%% @doc GPIO implementation for the RTEMS i.MX7 BSP.
+%% @doc GPIO implementation for the RTEMS platform (i.MX7 / GRiSP 2).
 %%
 %% Pins are identified either as `{Bank, Pin}', where Bank is 1..7 and Pin is
 %% 0..31, or by an FDT property map:
-%% `#{path => Path, property => Property, index => Index}'. The direct form
-%% requires the pin mux to have already been configured by the BSP or FDT.
-%% GPIO is unsupported on erc32 and returns `{error, enotsup}'. Pull resistors,
-%% open-drain output, and interrupts are not currently supported.
+%% `#{path => Path, property => Property, index => Index}'.
+%%
+%% Supports basic digital I/O, configurable pull resistors (up, down, floating),
+%% open-drain output (output_od), hardware interrupts with notification messages
+%% (`{gpio_interrupt, Pin}'), and dynamic pinmuxing.
+%%
+%% GPIO on erc32 and RealView returns `{error, enotsup}'.
 %% @end
 %%-----------------------------------------------------------------------------
 -module(gpio).
@@ -51,8 +54,13 @@
     deinit/1,
     set_pin_mode/2,
     set_pin_pull/2,
+    set_pin_mux/2,
     digital_write/2,
-    digital_read/1
+    digital_read/1,
+    attach_interrupt/2,
+    detach_interrupt/1,
+    set_int_nif/3,
+    remove_int_nif/1
 ]).
 
 -type pin() :: {1..7, 0..31} | map().
@@ -73,19 +81,13 @@ start() ->
 
 -spec open() -> gpio().
 open() ->
-    Pid = spawn(fun gpio_loop/0),
+    Pid = spawn(fun() -> gpio_loop(#{}) end),
     register(gpio, Pid),
     Pid.
 
 -spec close(GPIO :: gpio()) -> ok | {error, timeout}.
 close(GPIO) ->
-    Ref = make_ref(),
-    GPIO ! {'$call', {self(), Ref}, close},
-    receive
-        {Ref, Result} -> Result
-    after 5000 ->
-        {error, timeout}
-    end.
+    call(GPIO, close).
 
 -spec stop() -> ok | {error, timeout}.
 stop() ->
@@ -108,18 +110,28 @@ set_direction(_GPIO, Pin, Direction) ->
 set_level(_GPIO, Pin, Level) ->
     digital_write(Pin, Level).
 
--spec set_int(GPIO :: gpio(), Pin :: pin(), Trigger :: trigger()) -> {error, enotsup}.
-set_int(_GPIO, _Pin, _Trigger) ->
-    {error, enotsup}.
+-spec set_int(GPIO :: gpio(), Pin :: pin(), Trigger :: trigger()) ->
+    ok | {error, atom()} | error.
+set_int(GPIO, Pin, Trigger) ->
+    set_int(GPIO, Pin, Trigger, self()).
 
 -spec set_int(GPIO :: gpio(), Pin :: pin(), Trigger :: trigger(), Pid :: pid()) ->
-    {error, enotsup}.
-set_int(_GPIO, _Pin, _Trigger, _Pid) ->
-    {error, enotsup}.
+    ok | {error, atom()} | error.
+set_int(GPIO, Pin, Trigger, Pid) when is_pid(Pid) ->
+    call(GPIO, {set_int, Pin, Trigger, Pid}).
 
--spec remove_int(GPIO :: gpio(), Pin :: pin()) -> {error, enotsup}.
-remove_int(_GPIO, _Pin) ->
-    {error, enotsup}.
+-spec remove_int(GPIO :: gpio(), Pin :: pin()) -> ok | {error, atom()} | error.
+remove_int(GPIO, Pin) ->
+    call(GPIO, {remove_int, Pin}).
+
+-spec attach_interrupt(Pin :: pin(), Trigger :: trigger()) ->
+    ok | {error, atom()} | error.
+attach_interrupt(Pin, Trigger) ->
+    set_int(start(), Pin, Trigger).
+
+-spec detach_interrupt(Pin :: pin()) -> ok | {error, atom()} | error.
+detach_interrupt(Pin) ->
+    remove_int(start(), Pin).
 
 -spec init(Pin :: pin()) -> ok | {error, atom()}.
 init(_Pin) ->
@@ -138,6 +150,10 @@ set_pin_mode(_Pin, _Direction) ->
 set_pin_pull(_Pin, _Pull) ->
     erlang:nif_error(undefined).
 
+-spec set_pin_mux(Pin :: pin(), Mux :: non_neg_integer()) -> ok | {error, atom()} | error.
+set_pin_mux(_Pin, _Mux) ->
+    erlang:nif_error(undefined).
+
 -spec digital_write(Pin :: pin(), Level :: level()) -> ok | {error, atom()} | error.
 digital_write(_Pin, _Level) ->
     erlang:nif_error(undefined).
@@ -146,9 +162,105 @@ digital_write(_Pin, _Level) ->
 digital_read(_Pin) ->
     erlang:nif_error(undefined).
 
-gpio_loop() ->
+-spec set_int_nif(Pin :: pin(), Trigger :: trigger(), Pid :: pid()) ->
+    ok | {error, atom()} | error.
+set_int_nif(_Pin, _Trigger, _Pid) ->
+    erlang:nif_error(undefined).
+
+-spec remove_int_nif(Pin :: pin()) -> ok | {error, atom()} | error.
+remove_int_nif(_Pin) ->
+    erlang:nif_error(undefined).
+
+call(GPIO, Request) ->
+    Ref = make_ref(),
+    GPIO ! {'$call', {self(), Ref}, Request},
+    receive
+        {Ref, Result} -> Result
+    after 5000 ->
+        {error, timeout}
+    end.
+
+gpio_loop(Listeners) ->
     receive
         {'$call', {Pid, Ref}, close} ->
+            maps:foreach(
+                fun(Pin, {_, MonRef}) ->
+                    remove_int_nif(Pin),
+                    demonitor(MonRef, [flush])
+                end,
+                Listeners
+            ),
             unregister(gpio),
-            Pid ! {Ref, ok}
+            Pid ! {Ref, ok};
+        {'$call', {Pid, Ref}, {set_int, Pin, none, _TargetPid}} ->
+            Res = remove_int_nif(Pin),
+            NewListeners =
+                case maps:find(Pin, Listeners) of
+                    {ok, {_, MonRef}} ->
+                        demonitor(MonRef, [flush]),
+                        maps:remove(Pin, Listeners);
+                    error ->
+                        Listeners
+                end,
+            Pid ! {Ref, Res},
+            gpio_loop(NewListeners);
+        {'$call', {Pid, Ref}, {set_int, Pin, Trigger, TargetPid}} ->
+            case set_int_nif(Pin, Trigger, self()) of
+                ok ->
+                    case maps:find(Pin, Listeners) of
+                        {ok, {_, PrevMon}} ->
+                            demonitor(PrevMon, [flush]);
+                        error ->
+                            ok
+                    end,
+                    MonRef = monitor(process, TargetPid),
+                    NewListeners = maps:put(Pin, {TargetPid, MonRef}, Listeners),
+                    Pid ! {Ref, ok},
+                    gpio_loop(NewListeners);
+                {error, Reason} ->
+                    Pid ! {Ref, {error, Reason}},
+                    gpio_loop(Listeners)
+            end;
+        {'$call', {Pid, Ref}, {remove_int, Pin}} ->
+            Res = remove_int_nif(Pin),
+            NewListeners =
+                case maps:find(Pin, Listeners) of
+                    {ok, {_, MonRef}} ->
+                        demonitor(MonRef, [flush]),
+                        maps:remove(Pin, Listeners);
+                    error ->
+                        Listeners
+                end,
+            Pid ! {Ref, Res},
+            gpio_loop(NewListeners);
+        {gpio_interrupt, DriverPin} ->
+            notify_listeners(DriverPin, Listeners),
+            gpio_loop(Listeners);
+        {'DOWN', MonRef, process, _Pid, _Reason} ->
+            NewListeners = maps:filter(
+                fun(Pin, {_, Ref}) ->
+                    if
+                        Ref =:= MonRef ->
+                            remove_int_nif(Pin),
+                            false;
+                        true ->
+                            true
+                    end
+                end,
+                Listeners
+            ),
+            gpio_loop(NewListeners)
+    end.
+
+notify_listeners(DriverPin, Listeners) ->
+    case maps:find(DriverPin, Listeners) of
+        {ok, {TargetPid, _}} ->
+            TargetPid ! {gpio_interrupt, DriverPin};
+        error ->
+            maps:foreach(
+                fun(Pin, {TargetPid, _}) ->
+                    TargetPid ! {gpio_interrupt, Pin}
+                end,
+                Listeners
+            )
     end.

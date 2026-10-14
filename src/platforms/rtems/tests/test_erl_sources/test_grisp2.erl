@@ -45,15 +45,28 @@ led_smoke() ->
     ok = gpio:digital_write(Pin, high),
     timer:sleep(500),
     ok = gpio:digital_write(Pin, low),
+    ok = gpio:set_pin_mode(Pin, output_od),
+    ok = gpio:digital_write(Pin, low),
+    ok = gpio:set_pin_mode(Pin, output),
     erlang:display({grisp2, led, ok}),
     ok.
 
 gpio_smoke() ->
     Pin = #{path => "/jumper-keys", property => "grisp,gpios", index => 0},
     ok = gpio:init(Pin),
+    ok = gpio:set_pin_pull(Pin, up),
+    ok = gpio:set_pin_pull(Pin, down),
+    ok = gpio:set_pin_pull(Pin, floating),
+    {error, enotsup} = gpio:set_pin_pull(Pin, up_down),
+    ok = gpio:set_pin_mux(Pin, 5),
     Level = gpio:digital_read(Pin),
     true = (Level =:= high orelse Level =:= low),
     erlang:display({grisp2, gpio, Level}),
+    GPIO = gpio:start(),
+    ok = gpio:set_int(GPIO, Pin, falling),
+    ok = gpio:remove_int(GPIO, Pin),
+    ok = gpio:close(GPIO),
+    erlang:display({grisp2, gpio_int, ok}),
     ok = gpio:deinit(Pin),
     ok.
 
