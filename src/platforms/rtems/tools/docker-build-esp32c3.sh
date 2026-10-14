@@ -160,9 +160,12 @@ if [ "${DO_SIMULATE}" -eq 1 ]; then
     echo "==> Running simulation with esp-emulator..."
     if command -v esp-emu >/dev/null 2>&1; then
         HTTP_PID=""
+        SNTP_PID=""
         if [ "${TEST_WIFI}" -eq 1 ]; then
             python3 -m http.server 8080 --directory "${REPO_ROOT}" >/dev/null 2>&1 &
             HTTP_PID=$!
+            python3 "${REPO_ROOT}/src/platforms/rtems/tools/mock_sntp_server.py" 12300 > /tmp/mock_sntp.log 2>&1 &
+            SNTP_PID=$!
         fi
         EMU_CMD=(esp-emu --chip esp32c3 --firmware "${REPO_ROOT}/src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin")
         if [ "${TEST_WIFI}" -eq 1 ]; then
@@ -173,6 +176,9 @@ if [ "${DO_SIMULATE}" -eq 1 ]; then
         if [ -n "${HTTP_PID}" ]; then
             kill "${HTTP_PID}" 2>/dev/null || true
         fi
+        if [ -n "${SNTP_PID}" ]; then
+            kill "${SNTP_PID}" 2>/dev/null || true
+        fi
     else
         SIM_CMD=(docker run)
         if [ -n "${DOCKER_PLATFORM}" ]; then
@@ -182,7 +188,9 @@ if [ "${DO_SIMULATE}" -eq 1 ]; then
             SIM_CMD+=(--rm -v "${REPO_ROOT}:/workspace" "${IMAGE_NAME}" bash -c '
                 python3 -m http.server 8080 --directory /workspace &
                 HTTP_PID=$!
-                trap "kill $HTTP_PID 2>/dev/null || true" EXIT
+                python3 /workspace/src/platforms/rtems/tools/mock_sntp_server.py 12300 > /tmp/mock_sntp.log 2>&1 &
+                SNTP_PID=$!
+                trap "kill $HTTP_PID $SNTP_PID 2>/dev/null || true" EXIT
                 esp-emu --chip esp32c3 \
                     --firmware /workspace/src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin \
                     --wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user \

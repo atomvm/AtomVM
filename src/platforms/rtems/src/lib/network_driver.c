@@ -18,6 +18,7 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#include "sntp.h"
 #include "wifi.h"
 
 #include <context.h>
@@ -43,6 +44,10 @@ static const char *const sta_connected_atom = ATOM_STR("\xD", "sta_connected");
 static const char *const sta_disconnected_atom = ATOM_STR("\x10", "sta_disconnected");
 static const char *const sta_got_ip_atom = ATOM_STR("\xA", "sta_got_ip");
 static const char *const rssi_atom = ATOM_STR("\x4", "rssi");
+static const char *const sntp_atom = ATOM_STR("\x4", "sntp");
+static const char *const host_atom = ATOM_STR("\x4", "host");
+static const char *const port_atom = ATOM_STR("\x4", "port");
+static const char *const sntp_sync_atom = ATOM_STR("\x9", "sntp_sync");
 
 enum network_cmd {
     NetworkInvalidCmd = 0,
@@ -66,6 +71,9 @@ struct NetworkDriverData {
     uint64_t ref_ticks;
     char *ssid;
     char *psk;
+    char *sntp_host;
+    int sntp_port;
+    bool sntp_enabled;
 };
 
 static struct NetworkDriverData *driver_data = NULL;
@@ -78,6 +86,27 @@ static term make_ip_tuple(Heap *heap, uint32_t addr)
     term_put_tuple_element(ip, 2, term_from_int11((addr >> 8) & 0xFF));
     term_put_tuple_element(ip, 3, term_from_int11(addr & 0xFF));
     return ip;
+}
+
+static void sntp_sync_callback(const struct timeval *tv, void *arg)
+{
+    (void) arg;
+    if (driver_data == NULL || driver_data->owner_process_id == 0) {
+        return;
+    }
+
+    GlobalContext *glb = driver_data->global;
+    BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) * 2 + BOXED_INT64_SIZE * 2, heap);
+    term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
+    term tv_tuple = port_heap_create_tuple2(&heap,
+        term_make_maybe_boxed_int64(tv->tv_sec, &heap),
+        term_make_maybe_boxed_int64(tv->tv_usec, &heap));
+    term payload = port_heap_create_tuple2(&heap,
+        globalcontext_make_atom(glb, sntp_sync_atom),
+        tv_tuple);
+    term msg = port_heap_create_tuple2(&heap, ref, payload);
+    globalcontext_send_message(glb, driver_data->owner_process_id, msg);
+    END_WITH_STACK_HEAP(heap, glb);
 }
 
 static void wifi_event_callback(rtems_wifi_state_t state, const struct rtems_wifi_ip_info *ip_info, void *arg)
@@ -123,6 +152,10 @@ static void wifi_event_callback(rtems_wifi_state_t state, const struct rtems_wif
             term_put_tuple_element(msg, 1, payload);
             globalcontext_send_message(glb, driver_data->owner_process_id, msg);
             END_WITH_STACK_HEAP(heap, glb);
+
+            if (driver_data->sntp_enabled) {
+                rtems_sntp_start(driver_data->sntp_host, driver_data->sntp_port, sntp_sync_callback, NULL);
+            }
             break;
         }
 
@@ -194,6 +227,30 @@ static void start_network(Context *ctx, term pid, term ref, term config)
                 port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, ERROR_ATOM));
                 return;
             }
+        }
+    }
+
+    term sntp_config = interop_kv_get_value_default(config, sntp_atom, term_invalid_term(), ctx->global);
+    if (!term_is_invalid_term(sntp_config)) {
+        driver_data->sntp_enabled = true;
+        term host_term = interop_kv_get_value_default(sntp_config, host_atom, term_invalid_term(), ctx->global);
+        if (!term_is_invalid_term(host_term)) {
+            int ok = 0;
+            char *host = interop_term_to_string(host_term, &ok);
+            if (ok && host != NULL) {
+                free(driver_data->sntp_host);
+                driver_data->sntp_host = host;
+            }
+        }
+        term port_term = interop_kv_get_value_default(sntp_config, port_atom, term_invalid_term(), ctx->global);
+        if (!term_is_invalid_term(port_term)) {
+            driver_data->sntp_port = term_to_int32(port_term);
+        } else {
+            driver_data->sntp_port = 123;
+        }
+
+        if (rtems_wifi_get_state() == RTEMS_WIFI_GOT_IP) {
+            rtems_sntp_start(driver_data->sntp_host, driver_data->sntp_port, sntp_sync_callback, NULL);
         }
     }
 
@@ -277,9 +334,11 @@ void network_driver_destroy(GlobalContext *global)
 {
     (void) global;
     if (driver_data != NULL) {
+        rtems_sntp_stop();
         rtems_wifi_stop();
         free(driver_data->ssid);
         free(driver_data->psk);
+        free(driver_data->sntp_host);
         free(driver_data);
         driver_data = NULL;
     }

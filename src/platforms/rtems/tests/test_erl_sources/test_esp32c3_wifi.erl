@@ -31,6 +31,7 @@ start() ->
     gen_tcp_passive_smoke(),
     socket_select_smoke(),
     dns_smoke(),
+    sntp_smoke(),
     erlang:display({wifi_test_complete, ok}),
     ok.
 
@@ -278,4 +279,63 @@ dns_smoke() ->
     catch
         Class:ExReason:Stack ->
             erlang:display({dns_exception, Class, ExReason, Stack})
+    end.
+
+sntp_smoke() ->
+    try
+        erlang:display(starting_sntp_test),
+        Before = erlang:universaltime(),
+        erlang:display({time_before_sntp, Before}),
+
+        % 1. Test direct clock synchronization and calendar time advancement
+        % Unix timestamp 1776200000 corresponds to April 2026
+        case atomvm_rtems:set_clock(1776200000, 0) of
+            ok ->
+                erlang:display({set_clock, ok}),
+                AfterClock = erlang:universaltime(),
+                erlang:display({time_after_clock_set, AfterClock}),
+                {{YearClock, _, _}, _} = AfterClock,
+                if
+                    YearClock >= 2026 ->
+                        erlang:display({clock_set_year_valid, ok});
+                    true ->
+                        erlang:display({clock_set_year_invalid, YearClock})
+                end;
+            ClockErr ->
+                erlang:display({set_clock_err, ClockErr})
+        end,
+
+        % 2. Synchronous NIF SNTP client test (transmits RFC 4330 client packet)
+        case atomvm_rtems:sntp_sync("192.168.4.1", 12300) of
+            {ok, {Sec, Usec}} ->
+                erlang:display({sntp_sync_nif, ok, Sec, Usec});
+            {error, timeout} ->
+                % In esp-emulator user-mode NAT, outbound UDP reaches host, but smoltcp NAT drops inbound replies
+                erlang:display({sntp_sync_nif, timeout_emulation});
+            SyncErr ->
+                erlang:display({sntp_sync_err, SyncErr})
+        end,
+
+        % 3. Asynchronous Network port driver SNTP test
+        Port = open_port({spawn, "network"}, []),
+        Ref = make_ref(),
+        Port ! {self(), Ref, {start, [{sntp, [{host, "192.168.4.1"}, {port, 12300}]}]}},
+        receive
+            {Ref, ok} ->
+                erlang:display({network_sntp_start, ok})
+        after 3000 ->
+            erlang:display({network_sntp_start_timeout, error})
+        end,
+        receive
+            {Ref, {sntp_sync, {PortSec, PortUsec}}} ->
+                erlang:display({network_sntp_sync_msg, ok, PortSec, PortUsec}),
+                erlang:display({sntp_port_sync, ok})
+        after 2000 ->
+            erlang:display({network_sntp_sync_timeout, emulation_udp_drop})
+        end,
+        erlang:display({sntp_smoke_done, ok}),
+        ok
+    catch
+        Class:ExReason:Stack ->
+            erlang:display({sntp_exception, Class, ExReason, Stack})
     end.

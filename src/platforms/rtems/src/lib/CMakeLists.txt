@@ -23,6 +23,7 @@ project(libAtomVMPlatformRTEMS)
 
 set(HEADER_FILES
     network.h
+    sntp.h
     wifi.h
     rtems_sys.h
     ../../../../libAtomVM/platform_nifs.h
@@ -34,6 +35,7 @@ set(SOURCE_FILES
     network.c
     network_driver.c
     network_nifs.c
+    sntp.c
     wifi.c
     platform_nifs.c
     sys.c

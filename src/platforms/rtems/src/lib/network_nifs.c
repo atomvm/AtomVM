@@ -19,8 +19,10 @@
  */
 
 #include "network.h"
+#include "sntp.h"
 
 #include <string.h>
+#include <time.h>
 
 #ifdef RTEMS_HAS_LIBBSD
 #include <arpa/inet.h>
@@ -307,6 +309,79 @@ static const struct Nif rtems_wifi_status_nif = {
     .nif_ptr = nif_rtems_wifi_status
 };
 
+static term nif_rtems_sntp_sync(Context *ctx, int argc, term argv[])
+{
+#if defined(RTEMS_HAS_LIBBSD) || defined(RTEMS_HAS_LWIP)
+    char *host = NULL;
+    int port = 123;
+
+    if (argc >= 1) {
+        int ok = 0;
+        host = interop_term_to_string(argv[0], &ok);
+        if (!ok || host == NULL) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
+    if (argc == 2) {
+        if (!term_is_integer(argv[1])) {
+            free(host);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        port = term_to_int(argv[1]);
+    }
+
+    struct timeval tv;
+    int res = rtems_sntp_sync_now(host, port, 4000, &tv);
+    free(host);
+
+    if (res != 0) {
+        return error_atom(ctx, ATOM_STR("\x7", "timeout"));
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2 + BOXED_INT64_SIZE * 2) != MEMORY_GC_OK)) {
+        return OUT_OF_MEMORY_ATOM;
+    }
+
+    term tv_tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(tv_tuple, 0, term_make_maybe_boxed_int64(tv.tv_sec, &ctx->heap));
+    term_put_tuple_element(tv_tuple, 1, term_make_maybe_boxed_int64(tv.tv_usec, &ctx->heap));
+
+    return create_pair(ctx, OK_ATOM, tv_tuple);
+#else
+    UNUSED(argc);
+    UNUSED(argv);
+    return error_atom(ctx, ATOM_STR("\x7", "enotsup"));
+#endif
+}
+
+static const struct Nif rtems_sntp_sync_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_rtems_sntp_sync
+};
+
+static term nif_rtems_set_clock(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    if (!term_is_any_integer(argv[0]) || !term_is_any_integer(argv[1])) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    int64_t sec = term_maybe_unbox_int64(argv[0]);
+    int64_t usec = term_maybe_unbox_int64(argv[1]);
+
+    struct timespec ts;
+    ts.tv_sec = (time_t) sec;
+    ts.tv_nsec = (long) usec * 1000L;
+    if (clock_settime(CLOCK_REALTIME, &ts) != 0) {
+        return error_atom(ctx, ATOM_STR("\x5", "error"));
+    }
+    return OK_ATOM;
+}
+
+static const struct Nif rtems_set_clock_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_rtems_set_clock
+};
+
 static const struct Nif *network_nif_get_nif(const char *nifname)
 {
     if (strcmp("atomvm_rtems:ifaddrs/0", nifname) == 0) {
@@ -323,6 +398,15 @@ static const struct Nif *network_nif_get_nif(const char *nifname)
     }
     if (strcmp("atomvm_rtems:wifi_status/0", nifname) == 0) {
         return &rtems_wifi_status_nif;
+    }
+    if (strcmp("atomvm_rtems:sntp_sync/1", nifname) == 0) {
+        return &rtems_sntp_sync_nif;
+    }
+    if (strcmp("atomvm_rtems:sntp_sync/2", nifname) == 0) {
+        return &rtems_sntp_sync_nif;
+    }
+    if (strcmp("atomvm_rtems:set_clock/2", nifname) == 0) {
+        return &rtems_set_clock_nif;
     }
     return NULL;
 }
