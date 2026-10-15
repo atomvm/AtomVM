@@ -35,7 +35,7 @@ Below are the key missing subsystems, prioritized by implementation feasibility 
 | **Deep / Light Sleep** | `RTC_CNTL` power domain state machine, timer & GPIO wakeup | **Supported** (`esp:deep_sleep/*`, `esp:light_sleep/0`, `esp:sleep_enable_*`, `gpio:deep_sleep_hold_*`) | Medium (register sequencing) | **Done** |
 | **MbedTLS / TLS / Crypto** | Hardware SHA, AES, RSA accelerators; software TLS | **Supported** (MbedTLS 3.6.3 LTS installed into `riscv-rtems7/esp32c3db`, `crypto` and `ssl` NIFs enabled) | Medium | **Done** |
 | **Hardware RNG** | True RNG at `0x6002_60B0` | **Supported** (Wired to MbedTLS entropy source & `crypto:strong_rand_bytes/1`) | Low | **Done** |
-| **LEDC (Hardware PWM)** | 6 independent channels with configurable duty & frequency | **Missing** (`ledc.erl` unsupported on RTEMS) | Medium (MMIO register programming) | Medium |
+| **LEDC (Hardware PWM)** | 6 independent channels with configurable duty & frequency | **Supported** (`ledc:*`, `Elixir.LEDC:*`, 17 NIFs) | Medium (MMIO register programming) | **Done** |
 | **SAR ADC** | 12-bit ADC, up to 6 channels on GPIO 0–4 | **Missing** (`esp_adc.erl` unsupported on RTEMS) | Medium (calibration & APB registers) | Medium |
 | **NVS / Flash Storage** | SPI Flash partitions, wear-leveling, LittleFS | **Missing** (only direct-boot read-only flash mapped) | High (SPI flash controller driver) | Low |
 | **Watchdog Timers (WDT)** | MWDT0, MWDT1, and RTC Watchdog (RWDT) | **Supported** (Task WDT, MWDT0, RWDT, `esp:task_wdt_*`, `esp:wdt_feed/0`) | Low-Medium (timer interrupt or register reset) | **Done** |
@@ -107,12 +107,16 @@ Below are the key missing subsystems, prioritized by implementation feasibility 
 
 ## 5. Additional Hardware Peripherals
 
-### 5.1 LEDC (Hardware PWM)
-- **Background**:
-  6 independent PWM channels driven by APB clock with hardware fading support.
-- **Action Items**:
-  1. Implement `ledc_driver.c` for RTEMS configuring `LEDC_CHn_CONF0_REG`, `LEDC_CHn_HPOINT_REG`, `LEDC_CHn_DUTY_REG`, and `LEDC_TIMERn_CONF_REG`.
-  2. Support AtomVM's standard `ledc.erl` interface (`set_pin`, `set_frequency`, `set_duty`).
+### 5.1 LEDC (Hardware PWM) — **Implemented**
+- **Status**: **Done**.
+- **Implementation**:
+  - `ledc_driver.c` and `ledc_driver.h` implement MMIO hardware register control for the ESP32-C3 LEDC peripheral (`0x6001_9000`).
+  - Supports 4 hardware timers (Timer 0–3) with 1–14 bit resolution and APB clock divider calculations ($\text{CLK\_DIV} = \frac{80,000,000 \cdot 256}{\text{freq\_hz} \cdot 2^{\text{duty\_res}}}$).
+  - Supports 6 low-speed channels (Channel 0–5) with GPIO matrix signal routing (`LEDC_LS_SIG_OUT0_IDX` to `LEDC_LS_SIG_OUT5_IDX`, signals 45–50).
+  - Direct control over peripheral clock gating and reset release via `SYSREG_PERIP_CLK_EN0_REG` / `SYSREG_PERIP_RST_EN0_REG` (bit 11), `HPOINT`, `DUTY`, and `CONF0` parameters.
+  - Implements software & hardware fade sequencing (`set_fade_with_time`, `set_fade_with_step`, `fade_start`, `fade_stop`, `set_fade_time_and_start`, `set_fade_step_and_start`).
+  - Implements all 17 NIFs required for standard AtomVM `ledc.erl`, `Elixir.LEDC`, and `atomvm_rtems:ledc_*`.
+  - Verified under `esp-emulator` simulation (`test_boot.erl`).
 
 ### 5.2 SAR ADC (12-bit Analog-to-Digital Converter)
 - **Background**:
@@ -158,7 +162,7 @@ flowchart TD
     end
 
     subgraph Phase 3: Hardware Control
-        H["3.1 LEDC (PWM Driver)<br>ledc:set_duty / set_freq"] --> I["3.2 SAR ADC (12-bit)<br>esp_adc:read"]
+        H["3.1 LEDC (PWM Driver) - Done<br>ledc:set_duty / set_freq"] --> I["3.2 SAR ADC (12-bit)<br>esp_adc:read"]
     end
 
     subgraph Phase 4: Storage & Flash
@@ -170,3 +174,4 @@ flowchart TD
     Phase 2 --> Phase 3
     Phase 3 --> Phase 4
 ```
+

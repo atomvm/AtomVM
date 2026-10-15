@@ -30,6 +30,7 @@ start() ->
     rtc_slow_smoke(),
     sleep_smoke(),
     wdt_smoke(),
+    ledc_smoke(),
     crypto_smoke(),
     ok.
 
@@ -295,5 +296,59 @@ wdt_smoke() ->
     erlang:display({task_wdt_lifecycle, ok}),
 
     erlang:display({wdt, esp32c3, ok}).
+
+ledc_smoke() ->
+    % Configure timer 0: 5000 Hz, 13-bit duty resolution, speed mode 1 (low speed)
+    TimerConfig = [
+        {duty_resolution, 13},
+        {freq_hz, 5000},
+        {speed_mode, 1},
+        {timer_num, 0}
+    ],
+    ok = ledc:timer_config(TimerConfig),
+    5000 = ledc:get_freq(1, 0),
+    ok = ledc:set_freq(1, 0, 10000),
+    10000 = ledc:get_freq(1, 0),
+    ok = ledc:set_freq(1, 0, 5000),
+    erlang:display({ledc_timer_config, ok}),
+
+    % Configure channel 0: GPIO 3, channel 0, timer 0, duty 1024, hpoint 0
+    ChannelConfig = [
+        {channel, 0},
+        {duty, 1024},
+        {gpio_num, 3},
+        {speed_mode, 1},
+        {hpoint, 0},
+        {timer_sel, 0}
+    ],
+    ok = ledc:channel_config(ChannelConfig),
+    1024 = ledc:get_duty(1, 0),
+    ok = ledc:set_duty(1, 0, 2048),
+    ok = ledc:update_duty(1, 0),
+    2048 = ledc:get_duty(1, 0),
+    ok = ledc:set_duty_and_update(1, 0, 4096, 0),
+    4096 = ledc:get_duty(1, 0),
+    erlang:display({ledc_channel_config, ok}),
+
+    % Fade functions
+    ok = ledc:fade_func_install(0),
+    ok = ledc:set_fade_with_time(1, 0, 1000, 100),
+    ok = ledc:fade_start(1, 0, 0),
+    1000 = ledc:get_duty(1, 0),
+    ok = ledc:fade_stop(1, 0),
+    ok = ledc:set_fade_with_step(1, 0, 500, 10, 1),
+    ok = ledc:set_fade_time_and_start(1, 0, 250, 50, 0),
+    250 = ledc:get_duty(1, 0),
+    ok = ledc:set_fade_step_and_start(1, 0, 100, 5, 1, 0),
+    100 = ledc:get_duty(1, 0),
+    ok = ledc:fade_func_uninstall(),
+    erlang:display({ledc_fade, ok}),
+
+    % Stop channel
+    ok = ledc:stop(1, 0, 0),
+    erlang:display({ledc_stop, ok}),
+
+    erlang:display({ledc, esp32c3, ok}).
+
 
 
