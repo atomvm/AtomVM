@@ -20,7 +20,7 @@
 
 #include <string.h>
 
-#ifdef RTEMS_HAS_IMX_SPI
+#ifdef RTEMS_HAS_SPI
 #include <bsp.h>
 #include <dev/spi/spi.h>
 #include <errno.h>
@@ -30,9 +30,14 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
+#if defined(RTEMS_HAS_IMX_SPI)
 int spi_bus_register_imx(const char *bus_path, const char *fdt_alias);
+#elif defined(RTEMS_HAS_ESP32C3_SPI)
+#include <bsp/spi.h>
+#endif
 #endif
 
 #include <context.h>
@@ -47,7 +52,7 @@ int spi_bus_register_imx(const char *bus_path, const char *fdt_alias);
 #include <term.h>
 #include <utils.h>
 
-#ifdef RTEMS_HAS_IMX_SPI
+#ifdef RTEMS_HAS_SPI
 #define CLOSED_FD (-1)
 
 static ErlNifResourceType *spi_resource_type;
@@ -77,7 +82,7 @@ static term error_atom(Context *ctx, AtomString reason)
     return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, reason));
 }
 
-#ifndef RTEMS_HAS_IMX_SPI
+#ifndef RTEMS_HAS_SPI
 static term nif_spi_unsupported(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -146,15 +151,28 @@ static void spi_resource_dtor(ErlNifEnv *caller_env, void *obj)
     }
 }
 
-static int open_imx_spi_bus(const char *path, const char *alias)
+static int open_spi_bus(const char *path, const char *alias)
 {
     int fd = open(path, O_RDWR);
     if (fd >= 0 || errno != ENOENT) {
         return fd;
     }
 
+#if defined(RTEMS_HAS_IMX_SPI)
     int rv = spi_bus_register_imx(path, alias);
+#elif defined(RTEMS_HAS_ESP32C3_SPI)
+    if (strcmp(path, "/dev/spi-0") != 0 || (alias != NULL && strcmp(alias, "spi0") != 0)) {
+        errno = ENOENT;
+        return -1;
+    }
+    mkdir("/dev", 0755);
+    int rv = (esp32c3_spi_register(path) == RTEMS_SUCCESSFUL) ? 0 : -1;
+#else
+    (void) alias;
+    int rv = -1;
+#endif
     if (rv != 0) {
+        errno = ENOENT;
         return -1;
     }
 
@@ -200,7 +218,7 @@ static term nif_spi_init(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    int fd = open_imx_spi_bus(path, alias);
+    int fd = open_spi_bus(path, alias);
     int err = errno;
     free(alias);
     free(path);
@@ -258,13 +276,13 @@ static term nif_spi_apply_device_config(Context *ctx, int argc, term argv[])
     term config = argv[1];
     VALIDATE_VALUE(config, term_is_map);
 
-    term clock_speed_hz_term = interop_map_get_value(config, ATOM_STR("\xE", "clock_speed_hz"), ctx->global);
+    term clock_speed_hz_term = interop_kv_get_value(config, ATOM_STR("\xE", "clock_speed_hz"), ctx->global);
     if (!term_is_invalid_term(clock_speed_hz_term)) {
         if (!term_is_integer(clock_speed_hz_term)) {
             RAISE_ERROR(BADARG_ATOM);
         }
         avm_int_t speed_val = term_to_int(clock_speed_hz_term);
-        if (speed_val <= 0 || speed_val > UINT32_MAX) {
+        if (speed_val <= 0) {
             RAISE_ERROR(BADARG_ATOM);
         }
         uint32_t speed = (uint32_t) speed_val;
@@ -274,7 +292,7 @@ static term nif_spi_apply_device_config(Context *ctx, int argc, term argv[])
         rsrc_obj->speed_hz = speed;
     }
 
-    term mode_term = interop_map_get_value(config, ATOM_STR("\x4", "mode"), ctx->global);
+    term mode_term = interop_kv_get_value(config, ATOM_STR("\x4", "mode"), ctx->global);
     if (!term_is_invalid_term(mode_term)) {
         if (!term_is_integer(mode_term)) {
             RAISE_ERROR(BADARG_ATOM);
@@ -290,7 +308,7 @@ static term nif_spi_apply_device_config(Context *ctx, int argc, term argv[])
         rsrc_obj->mode = mode;
     }
 
-    term bits_term = interop_map_get_value(config, ATOM_STR("\xD", "bits_per_word"), ctx->global);
+    term bits_term = interop_kv_get_value(config, ATOM_STR("\xD", "bits_per_word"), ctx->global);
     if (!term_is_invalid_term(bits_term)) {
         if (!term_is_integer(bits_term)) {
             RAISE_ERROR(BADARG_ATOM);
@@ -329,8 +347,8 @@ static term nif_spi_write_blocking(Context *ctx, int argc, term argv[])
     const uint8_t *tx = (const uint8_t *) term_binary_data(argv[1]);
     struct spi_ioc_transfer xfer;
     memset(&xfer, 0, sizeof(xfer));
-    xfer.tx_buf = (uintptr_t) tx;
-    xfer.rx_buf = 0;
+    xfer.tx_buf = tx;
+    xfer.rx_buf = NULL;
     xfer.len = (uint32_t) len;
     xfer.speed_hz = rsrc_obj->speed_hz;
     xfer.bits_per_word = rsrc_obj->bits_per_word;
@@ -381,8 +399,8 @@ static term nif_spi_read_blocking(Context *ctx, int argc, term argv[])
 
     struct spi_ioc_transfer xfer;
     memset(&xfer, 0, sizeof(xfer));
-    xfer.tx_buf = (uintptr_t) tx;
-    xfer.rx_buf = (uintptr_t) rx;
+    xfer.tx_buf = tx;
+    xfer.rx_buf = rx;
     xfer.len = (uint32_t) len;
     xfer.speed_hz = rsrc_obj->speed_hz;
     xfer.bits_per_word = rsrc_obj->bits_per_word;
@@ -434,8 +452,8 @@ static term nif_spi_write_read_blocking(Context *ctx, int argc, term argv[])
     const uint8_t *tx = (const uint8_t *) term_binary_data(argv[1]);
     struct spi_ioc_transfer xfer;
     memset(&xfer, 0, sizeof(xfer));
-    xfer.tx_buf = (uintptr_t) tx;
-    xfer.rx_buf = (uintptr_t) rx;
+    xfer.tx_buf = tx;
+    xfer.rx_buf = rx;
     xfer.len = (uint32_t) len;
     xfer.speed_hz = rsrc_obj->speed_hz;
     xfer.bits_per_word = rsrc_obj->bits_per_word;
@@ -499,14 +517,14 @@ static void spi_nif_init(GlobalContext *global)
     spi_resource_type = enif_init_resource_type(&env, "spi_resource", &SPIResourceTypeInit, ERL_NIF_RT_CREATE, NULL);
 }
 
-#endif /* RTEMS_HAS_IMX_SPI */
+#endif /* RTEMS_HAS_SPI */
 
 static const struct Nif *spi_nif_get_nif(const char *nifname)
 {
     if (strncmp("spi:", nifname, 4) != 0) {
         return NULL;
     }
-#ifndef RTEMS_HAS_IMX_SPI
+#ifndef RTEMS_HAS_SPI
     static const struct Nif unsupported = {
         .base.type = NIFFunctionType,
         .nif_ptr = nif_spi_unsupported
@@ -545,7 +563,7 @@ static const struct Nif *spi_nif_get_nif(const char *nifname)
 #endif
 }
 
-#ifdef RTEMS_HAS_IMX_SPI
+#ifdef RTEMS_HAS_SPI
 REGISTER_NIF_COLLECTION(spi, spi_nif_init, NULL, spi_nif_get_nif)
 #else
 REGISTER_NIF_COLLECTION(spi, NULL, NULL, spi_nif_get_nif)

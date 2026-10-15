@@ -21,7 +21,7 @@
 
 #include <string.h>
 
-#ifdef RTEMS_HAS_IMX_I2C
+#ifdef RTEMS_HAS_I2C
 #include <bsp.h>
 #include <dev/i2c/i2c.h>
 #include <errno.h>
@@ -31,7 +31,14 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <unistd.h>
+
+#if defined(RTEMS_HAS_IMX_I2C)
+int i2c_bus_register_imx(const char *bus_path, const char *fdt_alias);
+#elif defined(RTEMS_HAS_ESP32C3_I2C)
+#include <bsp/i2c.h>
+#endif
 #endif
 
 #include <context.h>
@@ -46,7 +53,7 @@
 #include <term.h>
 #include <utils.h>
 
-#ifdef RTEMS_HAS_IMX_I2C
+#ifdef RTEMS_HAS_I2C
 #define CLOSED_FD (-1)
 
 #ifndef I2C_M_TEN
@@ -81,7 +88,7 @@ static term error_atom(Context *ctx, AtomString reason)
     return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, reason));
 }
 
-#ifndef RTEMS_HAS_IMX_I2C
+#ifndef RTEMS_HAS_I2C
 static term nif_i2c_unsupported(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -187,15 +194,28 @@ static void i2c_resource_dtor(ErlNifEnv *caller_env, void *obj)
     }
 }
 
-static int open_imx_bus(const char *path, const char *alias)
+static int open_i2c_bus(const char *path, const char *alias)
 {
     int fd = open(path, O_RDWR);
     if (fd >= 0 || errno != ENOENT) {
         return fd;
     }
 
+#if defined(RTEMS_HAS_IMX_I2C)
     int rv = i2c_bus_register_imx(path, alias);
+#elif defined(RTEMS_HAS_ESP32C3_I2C)
+    if (strcmp(path, "/dev/i2c-0") != 0 || (alias != NULL && strcmp(alias, "i2c0") != 0)) {
+        errno = ENOENT;
+        return -1;
+    }
+    mkdir("/dev", 0755);
+    int rv = (esp32c3_i2c_register(path) == RTEMS_SUCCESSFUL) ? 0 : -1;
+#else
+    (void) alias;
+    int rv = -1;
+#endif
     if (rv != 0) {
+        errno = ENOENT;
         return -1;
     }
 
@@ -259,7 +279,7 @@ static term nif_i2c_init(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    int fd = open_imx_bus(path, alias);
+    int fd = open_i2c_bus(path, alias);
     int err = errno;
     free(alias);
     free(path);
@@ -824,14 +844,14 @@ static void i2c_nif_init(GlobalContext *global)
     i2c_resource_type = enif_init_resource_type(&env, "i2c_resource", &I2CResourceTypeInit, ERL_NIF_RT_CREATE, NULL);
 }
 
-#endif /* RTEMS_HAS_IMX_I2C */
+#endif /* RTEMS_HAS_I2C */
 
 static const struct Nif *i2c_nif_get_nif(const char *nifname)
 {
     if (strncmp("i2c:", nifname, 4) != 0) {
         return NULL;
     }
-#ifndef RTEMS_HAS_IMX_I2C
+#ifndef RTEMS_HAS_I2C
     static const struct Nif unsupported = {
         .base.type = NIFFunctionType,
         .nif_ptr = nif_i2c_unsupported
@@ -878,7 +898,7 @@ static const struct Nif *i2c_nif_get_nif(const char *nifname)
 #endif
 }
 
-#ifdef RTEMS_HAS_IMX_I2C
+#ifdef RTEMS_HAS_I2C
 REGISTER_NIF_COLLECTION(i2c, i2c_nif_init, NULL, i2c_nif_get_nif)
 #else
 REGISTER_NIF_COLLECTION(i2c, NULL, NULL, i2c_nif_get_nif)

@@ -21,15 +21,21 @@
 
 #include "rtems_sys.h"
 
-#ifdef RTEMS_HAS_IMX_GPIO
+#ifdef RTEMS_HAS_GPIO
 #include <bsp.h>
+#include <rtems.h>
+#include <rtems/irq-extension.h>
+#include <stdio.h>
+
+#if defined(RTEMS_HAS_IMX_GPIO)
 #include <bsp/fdt.h>
 #include <bsp/imx-gpio.h>
 #include <bsp/irq.h>
 #include <libfdt.h>
-#include <rtems.h>
-#include <rtems/irq-extension.h>
-#include <stdio.h>
+#elif defined(RTEMS_HAS_ESP32C3_GPIO)
+#include <bsp/gpio.h>
+#include <bsp/pin.h>
+#endif
 #endif
 
 #include <stdbool.h>
@@ -64,7 +70,7 @@ static term error_atom(Context *ctx, AtomString reason)
     return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, reason));
 }
 
-#ifndef RTEMS_HAS_IMX_GPIO
+#ifndef RTEMS_HAS_GPIO
 void gpio_interrupt_drain(GlobalContext *glb)
 {
     UNUSED(glb);
@@ -83,9 +89,11 @@ static const char *const low_atom = ATOM_STR("\x3", "low");
 static const char *const input_atom = ATOM_STR("\x5", "input");
 static const char *const output_atom = ATOM_STR("\x6", "output");
 static const char *const output_od_atom = ATOM_STR("\x9", "output_od");
+#if defined(RTEMS_HAS_IMX_GPIO)
 static const char *const path_atom = ATOM_STR("\x4", "path");
 static const char *const property_atom = ATOM_STR("\x8", "property");
 static const char *const index_atom = ATOM_STR("\x5", "index");
+#endif
 static const char *const rising_atom = ATOM_STR("\x6", "rising");
 static const char *const falling_atom = ATOM_STR("\x7", "falling");
 static const char *const both_atom = ATOM_STR("\x4", "both");
@@ -117,15 +125,77 @@ struct GPIOListener
     bool active;
     uint8_t bank;
     uint8_t pin;
+    bool is_int;
     int32_t target_local_pid;
 };
 
 static struct GPIOEventQueue gpio_event_queue;
 static struct GPIOListener gpio_listeners[MAX_GPIO_LISTENERS];
 static rtems_id atomvm_main_task_id = 0;
+#if defined(RTEMS_HAS_IMX_GPIO)
 static bool gpio_bank_irq_installed[7][2];
 static uint32_t open_drain_mask[7];
+#elif defined(RTEMS_HAS_ESP32C3_GPIO)
+#define ESP32C3_GPIO_REG_BASE 0x60004000
+#define ESP32C3_GPIO_PIN0_REG (ESP32C3_GPIO_REG_BASE + 0x74)
 
+static bool esp32c3_gpio_irq_installed = false;
+
+static void esp32c3_gpio_isr(void *arg)
+{
+    (void) arg;
+    uint32_t pending = rtems_gpio_bsp_interrupt_line(16);
+    if (pending == 0) {
+        return;
+    }
+
+    while (pending != 0) {
+        unsigned pin = (unsigned) __builtin_ctz(pending);
+        pending &= ~(1u << pin);
+
+        uint32_t head = gpio_event_queue.head;
+        uint32_t next_head = (head + 1) % GPIO_EVENT_QUEUE_SIZE;
+        if (next_head != gpio_event_queue.tail) {
+            gpio_event_queue.events[head].bank = 0;
+            gpio_event_queue.events[head].pin = (uint8_t) pin;
+            gpio_event_queue.head = next_head;
+        }
+    }
+
+    if (atomvm_main_task_id != 0) {
+        rtems_event_send(atomvm_main_task_id, RTEMS_EVENT_0);
+    }
+}
+
+static bool parse_esp32c3_pin(term pin_term, unsigned *pin_num, bool *is_int)
+{
+    if (term_is_integer(pin_term)) {
+        avm_int_t val = term_to_int(pin_term);
+        if (val >= 0 && val < BSP_GPIO_PIN_COUNT) {
+            *pin_num = (unsigned) val;
+            *is_int = true;
+            return true;
+        }
+        return false;
+    }
+    if (term_is_tuple(pin_term) && term_get_tuple_arity(pin_term) == 2) {
+        term bank_term = term_get_tuple_element(pin_term, 0);
+        term pin_t = term_get_tuple_element(pin_term, 1);
+        if (term_is_integer(bank_term) && term_is_integer(pin_t)) {
+            avm_int_t b = term_to_int(bank_term);
+            avm_int_t p = term_to_int(pin_t);
+            if ((b == 0 || b == 1) && p >= 0 && p < BSP_GPIO_PIN_COUNT) {
+                *pin_num = (unsigned) p;
+                *is_int = false;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+#endif
+
+#if defined(RTEMS_HAS_IMX_GPIO)
 static bool parse_bank_pin(term pin_term, unsigned *bank, unsigned *pin)
 {
     if (!term_is_tuple(pin_term) || term_get_tuple_arity(pin_term) != 2) {
@@ -205,6 +275,7 @@ static bool parse_direction(GlobalContext *glb, term dir_term, enum imx_gpio_mod
     }
     return false;
 }
+#endif
 
 static bool parse_level(GlobalContext *glb, term level_term, uint32_t *value)
 {
@@ -231,6 +302,7 @@ static bool parse_level(GlobalContext *glb, term level_term, uint32_t *value)
     return false;
 }
 
+#if defined(RTEMS_HAS_IMX_GPIO)
 static bool fill_bank_pin(unsigned bank, unsigned pin_num, enum imx_gpio_mode mode, struct imx_gpio_pin *out)
 {
     struct imx_gpio *gpio = imx_gpio_get_by_index(bank - 1);
@@ -346,6 +418,7 @@ static void imx_gpio_isr(void *arg)
         rtems_event_send(atomvm_main_task_id, RTEMS_EVENT_0);
     }
 }
+#endif
 
 void gpio_interrupt_drain(GlobalContext *glb)
 {
@@ -359,12 +432,18 @@ void gpio_interrupt_drain(GlobalContext *glb)
                 && gpio_listeners[i].bank == ev.bank
                 && gpio_listeners[i].pin == ev.pin) {
                 BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(2) + TUPLE_SIZE(2), heap);
+                term pin_term;
+                if (gpio_listeners[i].is_int) {
+                    pin_term = term_from_int(ev.pin);
+                } else {
+                    term pin_tuple = term_alloc_tuple(2, &heap);
+                    term_put_tuple_element(pin_tuple, 0, term_from_int11(ev.bank == 0 ? 1 : ev.bank));
+                    term_put_tuple_element(pin_tuple, 1, term_from_int11(ev.pin));
+                    pin_term = pin_tuple;
+                }
                 term int_msg = term_alloc_tuple(2, &heap);
-                term pin_tuple = term_alloc_tuple(2, &heap);
-                term_put_tuple_element(pin_tuple, 0, term_from_int11(ev.bank));
-                term_put_tuple_element(pin_tuple, 1, term_from_int11(ev.pin));
                 term_put_tuple_element(int_msg, 0, globalcontext_make_atom(glb, gpio_interrupt_atom));
-                term_put_tuple_element(int_msg, 1, pin_tuple);
+                term_put_tuple_element(int_msg, 1, pin_term);
 
                 globalcontext_send_message(glb, gpio_listeners[i].target_local_pid, int_msg);
                 END_WITH_STACK_HEAP(heap, glb);
@@ -373,6 +452,7 @@ void gpio_interrupt_drain(GlobalContext *glb)
     }
 }
 
+#if defined(RTEMS_HAS_IMX_GPIO)
 static volatile uint32_t *get_iomuxc_base(void)
 {
     static volatile uint32_t *base = NULL;
@@ -477,11 +557,25 @@ static bool get_pin_pad_mux(Context *ctx, term pin_term, volatile uint32_t **pad
     }
     return false;
 }
+#endif
 
 static term nif_gpio_init(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
+#if defined(RTEMS_HAS_ESP32C3_GPIO)
+    unsigned pin_num;
+    bool is_int;
+    if (parse_esp32c3_pin(argv[0], &pin_num, &is_int)) {
+        if (!bsp_pin_claim(pin_num, "AtomVM")) {
+            return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));
+        }
+        rtems_gpio_bsp_select_input(0, pin_num, NULL);
+        return OK_ATOM;
+    }
+#endif
+
+#if defined(RTEMS_HAS_IMX_GPIO)
     struct imx_gpio_pin pin;
     char *owned_prop;
     if (!fill_pin(ctx, argv[0], IMX_GPIO_MODE_INPUT, &pin, &owned_prop)) {
@@ -491,19 +585,62 @@ static term nif_gpio_init(Context *ctx, int argc, term argv[])
     imx_gpio_init(&pin);
     free(owned_prop);
     return OK_ATOM;
+#else
+    return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));
+#endif
 }
 
 static term nif_gpio_deinit(Context *ctx, int argc, term argv[])
 {
-    UNUSED(ctx);
     UNUSED(argc);
+
+#if defined(RTEMS_HAS_ESP32C3_GPIO)
+    unsigned pin_num;
+    bool is_int;
+    if (parse_esp32c3_pin(argv[0], &pin_num, &is_int)) {
+        bsp_pin_release(pin_num);
+        return OK_ATOM;
+    }
+#endif
+
+#if defined(RTEMS_HAS_IMX_GPIO)
+    UNUSED(ctx);
     UNUSED(argv);
     return OK_ATOM;
+#else
+    UNUSED(ctx);
+    return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));
+#endif
 }
 
 static term nif_gpio_set_pin_mode(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
+
+#if defined(RTEMS_HAS_ESP32C3_GPIO)
+    unsigned pin_num;
+    bool is_int;
+    if (parse_esp32c3_pin(argv[0], &pin_num, &is_int)) {
+        volatile uint32_t *reg = (volatile uint32_t *)(ESP32C3_GPIO_PIN0_REG + 4 * pin_num);
+        if (globalcontext_is_term_equal_to_atom_string(ctx->global, argv[1], input_atom)) {
+            rtems_gpio_bsp_select_input(0, pin_num, NULL);
+            *reg &= ~(1u << 2);
+            return OK_ATOM;
+        } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, argv[1], output_atom)) {
+            rtems_gpio_bsp_select_output(0, pin_num, NULL);
+            *reg &= ~(1u << 2);
+            return OK_ATOM;
+        } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, argv[1], output_od_atom)) {
+            rtems_gpio_bsp_select_output(0, pin_num, NULL);
+            *reg |= (1u << 2);
+            return OK_ATOM;
+        } else {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
+#endif
+
+#if defined(RTEMS_HAS_IMX_GPIO)
     enum imx_gpio_mode mode;
     bool is_od = false;
 
@@ -540,6 +677,9 @@ static term nif_gpio_set_pin_mode(Context *ctx, int argc, term argv[])
         }
     }
     return OK_ATOM;
+#else
+    return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));
+#endif
 }
 
 static term nif_gpio_set_pin_pull(Context *ctx, int argc, term argv[])
@@ -552,6 +692,28 @@ static term nif_gpio_set_pin_pull(Context *ctx, int argc, term argv[])
         return error_atom(ctx, enotsup_atom);
     }
 
+#if defined(RTEMS_HAS_ESP32C3_GPIO)
+    unsigned pin_num;
+    bool is_int;
+    if (parse_esp32c3_pin(pin_term, &pin_num, &is_int)) {
+        rtems_gpio_pull_mode pmode;
+        if (globalcontext_is_term_equal_to_atom_string(ctx->global, pull_term, up_atom)) {
+            pmode = PULL_UP;
+        } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, pull_term, down_atom)) {
+            pmode = PULL_DOWN;
+        } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, pull_term, floating_atom)) {
+            pmode = NO_PULL_RESISTOR;
+        } else {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        if (rtems_gpio_bsp_set_resistor_mode(0, pin_num, pmode) != RTEMS_SUCCESSFUL) {
+            return error_atom(ctx, ATOM_STR("\x7", "einval"));
+        }
+        return OK_ATOM;
+    }
+#endif
+
+#if defined(RTEMS_HAS_IMX_GPIO)
     volatile uint32_t *pad_reg = NULL;
     if (!get_pin_pad_mux(ctx, pin_term, &pad_reg, NULL) || pad_reg == NULL) {
         return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));
@@ -572,6 +734,9 @@ static term nif_gpio_set_pin_pull(Context *ctx, int argc, term argv[])
 
     *pad_reg = val;
     return OK_ATOM;
+#else
+    return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));
+#endif
 }
 
 static term nif_gpio_digital_write(Context *ctx, int argc, term argv[])
@@ -582,6 +747,20 @@ static term nif_gpio_digital_write(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
+#if defined(RTEMS_HAS_ESP32C3_GPIO)
+    unsigned pin_num;
+    bool is_int;
+    if (parse_esp32c3_pin(argv[0], &pin_num, &is_int)) {
+        if (value) {
+            rtems_gpio_bsp_set(0, pin_num);
+        } else {
+            rtems_gpio_bsp_clear(0, pin_num);
+        }
+        return OK_ATOM;
+    }
+#endif
+
+#if defined(RTEMS_HAS_IMX_GPIO)
     struct imx_gpio_pin pin;
     char *owned_prop;
     if (!fill_pin(ctx, argv[0], IMX_GPIO_MODE_OUTPUT, &pin, &owned_prop)) {
@@ -610,11 +789,25 @@ static term nif_gpio_digital_write(Context *ctx, int argc, term argv[])
     uint32_t output = pin.is_active_low ? !value : value;
     imx_gpio_set_output(&pin, output);
     return OK_ATOM;
+#else
+    return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));
+#endif
 }
 
 static term nif_gpio_digital_read(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
+
+#if defined(RTEMS_HAS_ESP32C3_GPIO)
+    unsigned pin_num;
+    bool is_int;
+    if (parse_esp32c3_pin(argv[0], &pin_num, &is_int)) {
+        uint32_t value = rtems_gpio_bsp_get_value(0, pin_num);
+        return globalcontext_make_atom(ctx->global, value ? high_atom : low_atom);
+    }
+#endif
+
+#if defined(RTEMS_HAS_IMX_GPIO)
     struct imx_gpio_pin pin;
     char *owned_prop;
     if (!fill_pin(ctx, argv[0], IMX_GPIO_MODE_INPUT, &pin, &owned_prop)) {
@@ -628,6 +821,9 @@ static term nif_gpio_digital_read(Context *ctx, int argc, term argv[])
     }
     free(owned_prop);
     return globalcontext_make_atom(ctx->global, value ? high_atom : low_atom);
+#else
+    return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));
+#endif
 }
 
 static term nif_gpio_remove_int(Context *ctx, int argc, term argv[]);
@@ -644,6 +840,74 @@ static term nif_gpio_set_int(Context *ctx, int argc, term argv[])
     }
     int32_t target_local_pid = term_to_local_process_id(pid_term);
 
+#if defined(RTEMS_HAS_ESP32C3_GPIO)
+    unsigned pin_num;
+    bool is_int;
+    if (parse_esp32c3_pin(pin_term, &pin_num, &is_int)) {
+        rtems_gpio_interrupt intr_type;
+        if (globalcontext_is_term_equal_to_atom_string(ctx->global, trigger_term, rising_atom)) {
+            intr_type = RISING_EDGE;
+        } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, trigger_term, falling_atom)) {
+            intr_type = FALLING_EDGE;
+        } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, trigger_term, both_atom)) {
+            intr_type = BOTH_EDGES;
+        } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, trigger_term, low_atom)) {
+            intr_type = LOW_LEVEL;
+        } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, trigger_term, high_atom)) {
+            intr_type = HIGH_LEVEL;
+        } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, trigger_term, none_atom)) {
+            return nif_gpio_remove_int(ctx, 1, argv);
+        } else {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+
+        atomvm_main_task_id = rtems_task_self();
+
+        if (!esp32c3_gpio_irq_installed) {
+            rtems_status_code sc = rtems_interrupt_handler_install(
+                16,
+                "atomvm_gpio",
+                RTEMS_INTERRUPT_SHARED,
+                esp32c3_gpio_isr,
+                NULL
+            );
+            if (sc != RTEMS_SUCCESSFUL) {
+                return error_atom(ctx, ATOM_STR("\xE", "irq_install_err"));
+            }
+            esp32c3_gpio_irq_installed = true;
+        }
+
+        if (rtems_gpio_bsp_enable_interrupt(0, pin_num, intr_type) != RTEMS_SUCCESSFUL) {
+            return error_atom(ctx, ATOM_STR("\xE", "irq_install_err"));
+        }
+
+        int free_slot = -1;
+        for (size_t i = 0; i < MAX_GPIO_LISTENERS; i++) {
+            if (gpio_listeners[i].active
+                && gpio_listeners[i].bank == 0
+                && gpio_listeners[i].pin == pin_num) {
+                free_slot = (int) i;
+                break;
+            }
+            if (!gpio_listeners[i].active && free_slot < 0) {
+                free_slot = (int) i;
+            }
+        }
+        if (free_slot < 0) {
+            return error_atom(ctx, ATOM_STR("\x10", "listeners_full"));
+        }
+
+        gpio_listeners[free_slot].active = true;
+        gpio_listeners[free_slot].bank = 0;
+        gpio_listeners[free_slot].pin = (uint8_t) pin_num;
+        gpio_listeners[free_slot].is_int = is_int;
+        gpio_listeners[free_slot].target_local_pid = target_local_pid;
+
+        return OK_ATOM;
+    }
+#endif
+
+#if defined(RTEMS_HAS_IMX_GPIO)
     enum imx_gpio_mode imx_mode;
     if (globalcontext_is_term_equal_to_atom_string(ctx->global, trigger_term, rising_atom)) {
         imx_mode = IMX_GPIO_MODE_INTERRUPT_RISING;
@@ -713,14 +977,37 @@ static term nif_gpio_set_int(Context *ctx, int argc, term argv[])
     gpio_listeners[free_slot].active = true;
     gpio_listeners[free_slot].bank = (uint8_t) bank;
     gpio_listeners[free_slot].pin = (uint8_t) pin_num;
+    gpio_listeners[free_slot].is_int = false;
     gpio_listeners[free_slot].target_local_pid = target_local_pid;
 
     return OK_ATOM;
+#else
+    return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));
+#endif
 }
 
 static term nif_gpio_remove_int(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
+
+#if defined(RTEMS_HAS_ESP32C3_GPIO)
+    unsigned pin_num;
+    bool is_int;
+    if (parse_esp32c3_pin(argv[0], &pin_num, &is_int)) {
+        rtems_gpio_bsp_disable_interrupt(0, pin_num, NONE);
+
+        for (size_t i = 0; i < MAX_GPIO_LISTENERS; i++) {
+            if (gpio_listeners[i].active
+                && gpio_listeners[i].bank == 0
+                && gpio_listeners[i].pin == pin_num) {
+                gpio_listeners[i].active = false;
+            }
+        }
+        return OK_ATOM;
+    }
+#endif
+
+#if defined(RTEMS_HAS_IMX_GPIO)
     struct imx_gpio_pin pin;
     char *owned_prop;
     if (!fill_pin(ctx, argv[0], IMX_GPIO_MODE_INPUT, &pin, &owned_prop)) {
@@ -745,11 +1032,24 @@ static term nif_gpio_remove_int(Context *ctx, int argc, term argv[])
         }
     }
     return OK_ATOM;
+#else
+    return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));
+#endif
 }
 
 static term nif_gpio_set_pin_mux(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
+
+#if defined(RTEMS_HAS_ESP32C3_GPIO)
+    unsigned pin_num;
+    bool is_int;
+    if (parse_esp32c3_pin(argv[0], &pin_num, &is_int)) {
+        return OK_ATOM;
+    }
+#endif
+
+#if defined(RTEMS_HAS_IMX_GPIO)
     term pin_term = argv[0];
     term mux_term = argv[1];
 
@@ -770,6 +1070,9 @@ static term nif_gpio_set_pin_mux(Context *ctx, int argc, term argv[])
     val = (val & ~0x0Fu) | ((uint32_t) mux_val & 0x0Fu);
     *mux_reg = val;
     return OK_ATOM;
+#else
+    return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));
+#endif
 }
 
 static const struct Nif gpio_init_nif = {
@@ -817,11 +1120,11 @@ static const struct Nif gpio_set_pin_mux_nif = {
     .nif_ptr = nif_gpio_set_pin_mux
 };
 
-#endif /* RTEMS_HAS_IMX_GPIO */
+#endif /* RTEMS_HAS_GPIO */
 
 static const struct Nif *gpio_nif_get_nif(const char *nifname)
 {
-#ifndef RTEMS_HAS_IMX_GPIO
+#ifndef RTEMS_HAS_GPIO
     static const struct Nif unsupported = {
         .base.type = NIFFunctionType,
         .nif_ptr = nif_gpio_unsupported

@@ -23,6 +23,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 
 #include <rtems.h>
 
@@ -135,6 +136,8 @@ rtems_task Init(rtems_task_argument ignored)
 
     fprintf(stdout, "%s", ATOMVM_BANNER);
     fprintf(stdout, "Starting AtomVM revision " ATOMVM_VERSION " on RTEMS\n");
+
+    mkdir("/dev", 0755);
 
 #ifdef RTEMS_BOARD_FDT_COMPATIBLE
     if (!board_fdt_is_valid()) {

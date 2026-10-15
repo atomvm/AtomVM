@@ -63,7 +63,7 @@
     remove_int_nif/1
 ]).
 
--type pin() :: {1..7, 0..31} | map().
+-type pin() :: non_neg_integer() | {1..7, 0..31} | map().
 -type direction() :: input | output | output_od.
 -type pull() :: up | down | up_down | floating.
 -type level() :: low | 0 | high | 1.
@@ -193,7 +193,7 @@ gpio_loop(Listeners) ->
             unregister(gpio),
             Pid ! {Ref, ok};
         {'$call', {Pid, Ref}, {set_int, Pin, none, _TargetPid}} ->
-            Res = remove_int_nif(Pin),
+            Res = ?MODULE:remove_int_nif(Pin),
             NewListeners =
                 case maps:find(Pin, Listeners) of
                     {ok, {_, MonRef}} ->
@@ -205,7 +205,7 @@ gpio_loop(Listeners) ->
             Pid ! {Ref, Res},
             gpio_loop(NewListeners);
         {'$call', {Pid, Ref}, {set_int, Pin, Trigger, TargetPid}} ->
-            case set_int_nif(Pin, Trigger, self()) of
+            case ?MODULE:set_int_nif(Pin, Trigger, self()) of
                 ok ->
                     case maps:find(Pin, Listeners) of
                         {ok, {_, PrevMon}} ->
@@ -222,7 +222,7 @@ gpio_loop(Listeners) ->
                     gpio_loop(Listeners)
             end;
         {'$call', {Pid, Ref}, {remove_int, Pin}} ->
-            Res = remove_int_nif(Pin),
+            Res = ?MODULE:remove_int_nif(Pin),
             NewListeners =
                 case maps:find(Pin, Listeners) of
                     {ok, {_, MonRef}} ->
@@ -241,7 +241,7 @@ gpio_loop(Listeners) ->
                 fun(Pin, {_, Ref}) ->
                     if
                         Ref =:= MonRef ->
-                            remove_int_nif(Pin),
+                            ?MODULE:remove_int_nif(Pin),
                             false;
                         true ->
                             true

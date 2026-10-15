@@ -494,8 +494,7 @@ RTEMS `main` (upcoming 7.0 release) introduces first-class support for Espressif
 Key characteristics of AtomVM on ESP32-C3:
 - **Architecture**: RISC-V RV32IMC (`-march=rv32imc -mabi=ilp32`), target triple `riscv-rtems7`.
 - **Direct-Boot**: Bootrom begins execution directly from flash using the 8-byte direct boot header at offset `0x0`. The flat binary (`.bin`) is produced automatically by CMake via `${RTEMS_OBJCOPY} -O binary`.
-- **Zero-SRAM Flash Execution**: Code (`.text`) is mapped to `0x42000000` and read-only data (`.rodata`) to `0x3c000000`. The embedded AVM pack (`embedded_avm.c`) resides in `.rodata` and executes directly from SPI flash, leaving the internal 320 KiB SRAM dedicated to AtomVM process heaps and runtime stacks.
-- **Console & Peripherals**: Termios console is active over UART0 or USB-serial-JTAG (`/dev/console`). Dedicated RTEMS I2C, SPI, and GPIO drivers for ESP32-C3 return `{error, enotsup}` until upstream drivers mature.
+- **Console & Peripherals**: Polled console is active over UART0 or USB-serial-JTAG (`/dev/console`). Dedicated RTEMS hardware drivers provide native support for **I2C** (`/dev/i2c-0`), general-purpose **SPI** (`/dev/spi-0`), and **GPIO** (pins 0..21 with pin claiming, input/output/open-drain modes, pull-up/down resistors, and edge-triggered interrupts).
 
 ### 1. Build RTEMS 7 Tools and BSP
 

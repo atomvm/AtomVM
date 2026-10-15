@@ -80,9 +80,32 @@ gpio_smoke() ->
             {error, invalid_pin} = gpio:set_int_nif(#{}, rising, self()),
             {error, invalid_pin} = gpio:remove_int_nif(#{}),
             {error, invalid_pin} = gpio:set_pin_mux(#{}, 0),
+            gpio_target_smoke(),
             erlang:display({gpio, imx7, ok});
         Other ->
             erlang:error({gpio_smoke_failed, Other})
+    end.
+
+gpio_target_smoke() ->
+    case gpio:init(2) of
+        ok ->
+            ok = gpio:set_pin_mode(2, output),
+            ok = gpio:digital_write(2, high),
+            true = is_atom(gpio:digital_read(2)),
+            ok = gpio:digital_write(2, low),
+            true = is_atom(gpio:digital_read(2)),
+            ok = gpio:set_pin_mode(2, input),
+            ok = gpio:set_pin_pull(2, up),
+            ok = gpio:set_pin_pull(2, down),
+            ok = gpio:set_pin_pull(2, floating),
+            ok = gpio:set_int_nif(2, rising, self()),
+            ok = gpio:remove_int_nif(2),
+            ok = gpio:attach_interrupt(2, rising),
+            ok = gpio:detach_interrupt(2),
+            ok = gpio:deinit(2),
+            erlang:display({gpio, esp32c3, ok});
+        {error, invalid_pin} ->
+            ok
     end.
 
 spi_smoke() ->
@@ -90,8 +113,19 @@ spi_smoke() ->
         {error, enotsup} ->
             erlang:display({spi, enotsup});
         {error, _Reason} ->
-            erlang:display({spi, fdt_alias, ok});
+            erlang:display({spi, fdt_alias, ok}),
+            spi_open_smoke();
         {ok, Resource} ->
             ok = spi:deinit(Resource),
             erlang:error(spi_fdt_alias_ignored)
+    end.
+
+spi_open_smoke() ->
+    case spi:init([{peripheral, "/dev/spi-0"}, {fdt_alias, "spi0"}]) of
+        {ok, Resource} ->
+            ok = spi:apply_device_config(Resource, #{clock_speed_hz => 1000000, mode => 0}),
+            erlang:display({spi, open, ok}),
+            ok = spi:deinit(Resource);
+        {error, _Reason} ->
+            ok
     end.

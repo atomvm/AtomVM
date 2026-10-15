@@ -72,8 +72,11 @@ target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${_rtems_force_link})
 
 if(RTEMS_ARCH STREQUAL "arm" AND RTEMS_BSP_NAME STREQUAL "imx7")
     target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
+        RTEMS_HAS_GPIO
         RTEMS_HAS_IMX_GPIO
+        RTEMS_HAS_I2C
         RTEMS_HAS_IMX_I2C
+        RTEMS_HAS_SPI
         RTEMS_HAS_IMX_SPI
     )
     if(RTEMS_BOARD STREQUAL "grisp2")
@@ -84,6 +87,12 @@ if(RTEMS_ARCH STREQUAL "arm" AND RTEMS_BSP_NAME STREQUAL "imx7")
 elseif(RTEMS_BOARD STREQUAL "esp32c3")
     target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
         RTEMS_BOARD_ESP32C3
+        RTEMS_HAS_GPIO
+        RTEMS_HAS_ESP32C3_GPIO
+        RTEMS_HAS_I2C
+        RTEMS_HAS_ESP32C3_I2C
+        RTEMS_HAS_SPI
+        RTEMS_HAS_ESP32C3_SPI
     )
     if(RTEMS_HAS_ESP_WIFI)
         target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
