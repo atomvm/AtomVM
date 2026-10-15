@@ -927,8 +927,13 @@ static term nif_socket_close(Context *ctx, int argc, term argv[])
             // 1. this caller's context heap (parameter to close)
             // 2. select
 
+            // Only directions still pending need an abort. Readiness may have
+            // already been delivered while the socket still remembers its owners.
+            ErlNifEnv *env = erl_nif_env_from_context(ctx);
+            int cancel_res = enif_select(env, rsrc_obj->fd, ERL_NIF_SELECT_READ | ERL_NIF_SELECT_WRITE | ERL_NIF_SELECT_CANCEL, rsrc_obj, NULL, term_nil());
+
             // Stop selecting.
-            int stop_res = enif_select(erl_nif_env_from_context(ctx), rsrc_obj->fd, ERL_NIF_SELECT_STOP, rsrc_obj, NULL, term_nil());
+            int stop_res = enif_select(env, rsrc_obj->fd, ERL_NIF_SELECT_STOP, rsrc_obj, NULL, term_nil());
             if (UNLIKELY(stop_res < 0)) {
                 SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
                 RAISE_ERROR(BADARG_ATOM);
@@ -940,13 +945,13 @@ static term nif_socket_close(Context *ctx, int argc, term argv[])
             // When using asynchronous API, the selecting process can be the
             // calling process. In this case we don't send any notification.
             //
-            if (read_process_id != INVALID_PROCESS_ID && read_process_id != ctx->process_id) {
+            if (cancel_res > 0 && (cancel_res & ERL_NIF_SELECT_READ_CANCELLED) && read_process_id != ctx->process_id) {
                 if (UNLIKELY(send_closed_notification(ctx, argv[0], read_process_id, read_ref_ticks) < 0)) {
                     SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                 }
             }
-            if (write_process_id != INVALID_PROCESS_ID && write_process_id != ctx->process_id) {
+            if (cancel_res > 0 && (cancel_res & ERL_NIF_SELECT_WRITE_CANCELLED) && write_process_id != ctx->process_id) {
                 if (UNLIKELY(send_closed_notification(ctx, argv[0], write_process_id, write_ref_ticks) < 0)) {
                     SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -2868,7 +2873,11 @@ static ssize_t do_socket_send(struct SocketResource *rsrc_obj, const uint8_t *bu
     } else {
         // If the socket is connection-mode, dest_addr shall be ignored.
         // Because we are copying, we cannot really send tcp_sndbuf(rsrc_obj->tcp_pcb) at once
-        size_t buflen = MIN(len, TCP_MSS);
+        size_t buflen = MIN(MIN(len, TCP_MSS), tcp_sndbuf(rsrc_obj->tcp_pcb));
+        if (len > 0 && buflen == 0) {
+            LWIP_END();
+            return SocketWouldBlock;
+        }
         int flags = TCP_WRITE_FLAG_COPY;
         if (buflen < len) {
             flags |= TCP_WRITE_FLAG_MORE;

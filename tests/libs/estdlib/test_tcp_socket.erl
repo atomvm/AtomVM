@@ -34,11 +34,76 @@ test() ->
     case erlang:system_info(machine) of
         "ATOM" ->
             ok = test_independent_read_write_selects(),
+            ok = test_close_after_readiness(),
             ok = test_abandon_select();
         "BEAM" ->
             ok
     end,
     ok.
+
+test_close_after_readiness() ->
+    lists:foreach(fun test_close_after_readiness/1, [false, true]),
+    ok.
+
+test_close_after_readiness(ReadReady) ->
+    {ok, ListenSocket} = socket:open(inet, stream, tcp),
+    ok = socket:bind(ListenSocket, #{family => inet, addr => loopback, port => 0}),
+    ok = socket:listen(ListenSocket),
+    {ok, #{port := Port}} = socket:sockname(ListenSocket),
+    {ok, ClientSocket} = socket:open(inet, stream, tcp),
+    ok = socket:connect(ClientSocket, #{family => inet, addr => loopback, port => Port}),
+    {ok, ServerSocket} = socket:accept(ListenSocket),
+    case ReadReady of
+        true -> ok = socket:send(ClientSocket, <<42>>);
+        false -> ok
+    end,
+    Parent = self(),
+    {Owner, Monitor, 0} = start_registered(fun() ->
+        ReadRef = make_ref(),
+        ok = socket:nif_select_read(ServerSocket, ReadRef),
+        case ReadReady of
+            true ->
+                receive
+                    {'$socket', ServerSocket, select, ReadRef} -> ok
+                after 5000 -> error(read_readiness_timeout)
+                end;
+            false ->
+                ok
+        end,
+        WriteRef = make_ref(),
+        ok = socket:nif_select_write(ServerSocket, WriteRef),
+        receive
+            {'$socket', ServerSocket, select, WriteRef} -> ok
+        after 5000 -> error(write_readiness_timeout)
+        end,
+        Parent ! {self(), registered, 0},
+        receive
+            closed -> ok
+        after 5000 -> error(close_timeout)
+        end,
+        %% A pending reader still needs its abort, but a direction whose
+        %% readiness was already consumed must not receive another notification.
+        case ReadReady of
+            false ->
+                receive
+                    {'$socket', ServerSocket, abort, {ReadRef, closed}} -> ok
+                after 5000 -> error(read_abort_timeout)
+                end;
+            true ->
+                ok
+        end,
+        receive
+            {'$socket', ServerSocket, abort, _} = Message -> error({unexpected_abort, Message})
+        after 0 -> ok
+        end,
+        Parent ! {self(), result, ok}
+    end),
+    ok = socket:close(ServerSocket),
+    Owner ! closed,
+    ok = wait_result(Owner),
+    normal = wait_down(Owner, Monitor),
+    ok = socket:close(ClientSocket),
+    ok = socket:close(ListenSocket).
 
 test_independent_read_write_selects() ->
     etest:flush_msg_queue(),
