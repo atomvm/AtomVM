@@ -39,7 +39,9 @@
     resolver_ready/0,
     wifi_start/2,
     wifi_stop/0,
-    wifi_status/0
+    wifi_status/0,
+    rtc_slow_get_binary/0,
+    rtc_slow_set_binary/1
 ]).
 
 -define(DHCP_POLL_INTERVAL_MS, 250).
@@ -103,6 +105,16 @@ wifi_stop() ->
 %% @doc Return current Wi-Fi status and IP parameters.
 -spec wifi_status() -> {ok, [{atom(), term()}]} | {error, term()}.
 wifi_status() ->
+    erlang:nif_error(undefined).
+
+%% @doc Return binary stored in RTC slow/fast memory (ESP32-C3).
+-spec rtc_slow_get_binary() -> binary().
+rtc_slow_get_binary() ->
+    erlang:nif_error(undefined).
+
+%% @doc Store binary in RTC slow/fast memory (ESP32-C3).
+-spec rtc_slow_set_binary(Bin :: binary()) -> ok.
+rtc_slow_set_binary(_Bin) ->
     erlang:nif_error(undefined).
 
 %% @private

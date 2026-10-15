@@ -43,6 +43,7 @@ set(SOURCE_FILES
     i2c_driver.c
     gpio_driver.c
     spi_driver.c
+    rtc_slow_nif.c
     ../../../../libAtomVM/portnifloader.c
 )
 
@@ -60,7 +61,7 @@ endif()
 target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC libAtomVM)
 # Constructor-registered NIF collections and port drivers are otherwise dropped from the static archive.
-set(_rtems_force_nifs uart_nif i2c_nif gpio_nif spi_nif rtems_network_nif networkregister_port_driver)
+set(_rtems_force_nifs uart_nif i2c_nif gpio_nif spi_nif rtems_network_nif networkregister_port_driver rtc_slow_nif)
 if(RTEMS_HAS_LIBBSD OR RTEMS_HAS_LWIP)
     list(APPEND _rtems_force_nifs otp_socket_nif otp_net_nif)
 endif()

@@ -27,6 +27,7 @@ start() ->
     i2c_smoke(),
     gpio_smoke(),
     spi_smoke(),
+    rtc_slow_smoke(),
     ok.
 
 uart_smoke() ->
@@ -128,4 +129,28 @@ spi_open_smoke() ->
             ok = spi:deinit(Resource);
         {error, _Reason} ->
             ok
+    end.
+
+rtc_slow_smoke() ->
+    case catch atomvm_rtems:rtc_slow_set_binary(<<>>) of
+        ok ->
+            <<>> = atomvm_rtems:rtc_slow_get_binary(),
+            <<>> = esp:rtc_slow_get_binary(),
+            ok = atomvm_rtems:rtc_slow_set_binary(<<42>>),
+            <<42>> = atomvm_rtems:rtc_slow_get_binary(),
+            ok = esp:rtc_slow_set_binary(<<"atomvm_rtc_ok">>),
+            <<"atomvm_rtc_ok">> = atomvm_rtems:rtc_slow_get_binary(),
+            <<"atomvm_rtc_ok">> = esp:rtc_slow_get_binary(),
+            LargeBin = <<0:(4087 * 8)>>,
+            ok =
+                try
+                    atomvm_rtems:rtc_slow_set_binary(LargeBin),
+                    should_fail
+                catch
+                    error:badarg -> ok
+                end,
+            <<"atomvm_rtc_ok">> = atomvm_rtems:rtc_slow_get_binary(),
+            erlang:display({rtc_slow, esp32c3, ok});
+        {'EXIT', {badarg, _}} ->
+            erlang:display({rtc_slow, unsupported, ok})
     end.

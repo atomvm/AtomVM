@@ -29,7 +29,7 @@ Below are the key missing subsystems, prioritized by implementation feasibility 
 
 | Subsystem / Peripheral | ESP32-C3 Hardware | Current RTEMS State | Implementation Difficulty | Priority |
 | :--- | :--- | :--- | :--- | :--- |
-| **RTC Slow/Fast Memory** | 8 KiB SRAM at `0x5000_0000`, retained across deep sleep | **Missing** (NIFs unsupported on RTEMS) | Low (direct register mapping) | **High** |
+| **RTC Slow/Fast Memory** | 8 KiB SRAM at `0x5000_0000`, retained across deep sleep | **Supported** (`esp:rtc_slow_*` & `atomvm_rtems:rtc_slow_*`) | Low (direct register mapping) | **Done** |
 | **RTC 64-bit Timer** | Continuous hardware counter in `RTC_CNTL` (`0x6000_8000`) | **Missing** (clock resets to 1988 on reboot until SNTP) | Low (MMIO register read/sync) | **High** |
 | **Reset Reason & Wakeup** | `RTC_CNTL_RESET_CAUSE_PROCPU` (`0x6000_8034`) | **Missing** (`esp:reset_reason/0` unsupported) | Low (read MMIO register) | **High** |
 | **Deep / Light Sleep** | `RTC_CNTL` power domain state machine, timer & GPIO wakeup | **Missing** (`esp:deep_sleep/1` unsupported) | Medium (register sequencing) | Medium |
@@ -45,19 +45,13 @@ Below are the key missing subsystems, prioritized by implementation feasibility 
 
 ## 3. Deep-Dive: RTC Subsystem & Power Management
 
-### 3.1 RTC Slow/Fast Memory (`0x5000_0000`)
-- **Background**:
-  The ESP32-C3 contains **8 KiB of RTC SRAM** (Fast and Slow RTC memory) located at physical address `0x5000_0000` to `0x5000_1FFF`. This memory is powered by the `VDD3P3_RTC` power domain and retains its state through deep sleep cycles, light sleep, and software resets (as long as chip power is not interrupted).
-- **Existing AtomVM Precedent**:
-  On the ESP-IDF port, `src/platforms/esp32/components/avm_builtins/rtc_slow_nif.c` implements:
-  - `esp:rtc_slow_get_binary/0 -> binary()`
-  - `esp:rtc_slow_set_binary/1 -> ok`
-  It stores a CRC32 checksum, 16-bit payload length, and raw bytes (up to 4086 bytes) in RTC memory with validation on read.
-- **Action Items**:
-  1. Port `rtc_slow_nif.c` to RTEMS (e.g. `src/platforms/rtems/src/lib/rtc_slow_nif.c`).
-  2. Map the storage buffer directly to `(volatile uint8_t *) 0x50000000`.
-  3. Register `esp:rtc_slow_get_binary/0` and `esp:rtc_slow_set_binary/1` in the RTEMS platform NIF table.
-  4. Add automated test cases asserting that data written to RTC memory survives within the runtime.
+### 3.1 RTC Slow/Fast Memory (`0x5000_0000`) — **Implemented**
+- **Status**: **Done**.
+- **Implementation**:
+  - `src/platforms/rtems/src/lib/rtc_slow_nif.c` maps `struct esp32c3_rtc_slow_storage` directly to `0x50000000`.
+  - Implements standard IEEE 802.3 CRC32 verification with magic initialization seed `0x55555555`.
+  - Exposes `esp:rtc_slow_get_binary/0` / `esp:rtc_slow_set_binary/1` as well as `atomvm_rtems:rtc_slow_get_binary/0` / `atomvm_rtems:rtc_slow_set_binary/1`.
+  - Verified under `esp-emulator` simulation (`test_boot.erl`).
 
 ### 3.2 Hardware RTC Timer & Offline Time Preservation
 - **Background**:
