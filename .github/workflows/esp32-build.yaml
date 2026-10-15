@@ -79,6 +79,12 @@ jobs:
           idf-version: 'v5.4.4'
           ethernet: 'ON'
           jit: false
+        # Merged into the esp32 v5.5.5 build: the v5.4.4 one already has libsodium and
+        # Ethernet and no room left in the app partition.
+        - esp-idf-target: "esp32"
+          idf-version: 'v5.5.5'
+          ppp: 'ON'
+          jit: false
         # JIT builds (v5.5.5 only)
         - esp-idf-target: "esp32c3"
           idf-version: 'v5.5.5'
@@ -125,6 +131,7 @@ jobs:
         USB_SERIAL: ${{ matrix.usb-serial || 'OFF' }}
         USB_CDC: ${{ matrix.usb-cdc || 'OFF' }}
         ETHERNET: ${{ matrix.ethernet || 'OFF' }}
+        PPP: ${{ matrix.ppp || 'OFF' }}
       run: |
         . $IDF_PATH/export.sh
         if [[ "${USB_SERIAL}" == "ON" ]]; then
@@ -138,6 +145,9 @@ jobs:
         fi
         if [[ "${ETHERNET}" == "ON" ]]; then
           echo 'CONFIG_AVM_ENABLE_ETHERNET=y' >> sdkconfig.defaults.in
+        fi
+        if [[ "${PPP}" == "ON" ]]; then
+          printf '%s\n' 'CONFIG_LWIP_PPP_SUPPORT=y' 'CONFIG_AVM_ENABLE_PPP=y' >> sdkconfig.defaults.in
         fi
         export IDF_TARGET=${{matrix.esp-idf-target}}
         if [ "${{ matrix.jit }}" = "true" ]; then

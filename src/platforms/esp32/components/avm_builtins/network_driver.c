@@ -60,6 +60,14 @@
 #endif
 #define HAVE_ETH 1
 #endif
+#ifdef CONFIG_AVM_ENABLE_PPP
+#include <driver/uart.h>
+#include <esp_netif_ppp.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
+#define HAVE_PPP 1
+#endif
 #pragma GCC diagnostic pop
 
 #include <stdint.h>
@@ -128,6 +136,20 @@ static const char *const route_priority_atom = ATOM_STR("\xE", "route_priority")
 static const char *const in_atom = ATOM_STR("\x2", "in");
 static const char *const out_atom = ATOM_STR("\x3", "out");
 #endif
+static const char *const ppp_atom = ATOM_STR("\x3", "ppp");
+#ifndef HAVE_PPP
+static const char *const ppp_not_supported_atom = ATOM_STR("\x11", "ppp_not_supported");
+#else
+static const char *const ppp_got_ip_atom = ATOM_STR("\xA", "ppp_got_ip");
+static const char *const ppp_disconnected_atom = ATOM_STR("\x10", "ppp_disconnected");
+static const char *const uart_atom = ATOM_STR("\x4", "uart");
+static const char *const tx_atom = ATOM_STR("\x2", "tx");
+static const char *const rx_atom = ATOM_STR("\x2", "rx");
+static const char *const speed_atom = ATOM_STR("\x5", "speed");
+#ifndef HAVE_ETH
+static const char *const route_priority_atom = ATOM_STR("\xE", "route_priority");
+#endif
+#endif
 
 ESP_EVENT_DECLARE_BASE(sntp_event_base);
 ESP_EVENT_DEFINE_BASE(sntp_event_base);
@@ -173,7 +195,53 @@ struct ClientData
     esp_netif_t *eth_netif;
     int eth_power;
 #endif
+#ifdef HAVE_PPP
+    struct PPPGlue *ppp_glue;
+#endif
 };
+
+#ifdef HAVE_PPP
+// The esp_netif driver of the PPP link: esp_netif_attach wants the base first. The rx task reads
+// the UART into the netif until `stop` is set, then gives `stopped`. `phase_dead` marks the
+// session dead and gives `died`; it takes the glue, not the ClientData, so that a teardown can
+// outlive the driver (see stop_ppp).
+struct PPPGlue
+{
+    esp_netif_driver_base_t base;
+    int uart;
+    bool running;
+    volatile bool dead;
+    size_t rx_bytes;
+    size_t tx_bytes;
+    volatile bool stop;
+    SemaphoreHandle_t stopped;
+    SemaphoreHandle_t died;
+    esp_event_handler_instance_t phase_dead;
+};
+
+// Lets the default route follow the route priorities now that the link is up, without pinning
+// it to PPP. On the TCP/IP task, so that a late event cannot bring back a link lwIP has since
+// taken down.
+static esp_err_t refresh_ppp_route(void *netif)
+{
+    if (esp_netif_is_netif_up(netif)) {
+        esp_netif_action_connected(netif, NULL, 0, NULL);
+    }
+    return ESP_OK;
+}
+
+static void ppp_phase_dead(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
+{
+    UNUSED(event_base);
+    UNUSED(event_id);
+    struct PPPGlue *glue = arg;
+    if (*(esp_netif_t **) event_data == glue->base.netif) {
+        ESP_LOGI(TAG, "PPP phase dead.");
+        glue->dead = true;
+        xSemaphoreGive(glue->died);
+    }
+}
+#endif
 
 struct ScanData
 {
@@ -519,12 +587,12 @@ static void send_sta_disconnected(struct ClientData *data)
     END_WITH_STACK_HEAP(heap, data->global);
 }
 
-#ifdef HAVE_ETH
-static void send_eth_event(struct ClientData *data, AtomString event_atom)
+#if defined(HAVE_ETH) || defined(HAVE_PPP)
+static void send_event_atom(struct ClientData *data, AtomString event_atom)
 {
-    TRACE("Sending eth event back to AtomVM\n");
+    TRACE("Sending eth or ppp event back to AtomVM\n");
 
-    // {Ref, eth_started | eth_connected | eth_disconnected}
+    // {Ref, eth_started | eth_connected | eth_disconnected | ppp_disconnected}
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
     {
         send_term(&heap, data, make_atom(data->global, event_atom));
@@ -899,6 +967,23 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
             }
 #endif
 
+#ifdef HAVE_PPP
+            case IP_EVENT_PPP_GOT_IP: {
+                ip_event_got_ip_t *event = (ip_event_got_ip_t *) event_data;
+                ESP_LOGI(TAG, "IP_EVENT_PPP_GOT_IP: %s", inet_ntoa(event->ip_info.ip));
+                esp_sntp_restart();
+                send_got_ip(data, (esp_netif_ip_info_t *) &event->ip_info.ip, ppp_got_ip_atom);
+                break;
+            }
+
+            // The carrier went away (the modem hung up): lwIP gives no status event for it.
+            case IP_EVENT_PPP_LOST_IP: {
+                ESP_LOGI(TAG, "IP_EVENT_PPP_LOST_IP received.");
+                send_event_atom(data, ppp_disconnected_atom);
+                break;
+            }
+#endif
+
             case IP_EVENT_AP_STAIPASSIGNED: {
                 ip_event_ap_staipassigned_t *event = (ip_event_ap_staipassigned_t *) event_data;
                 ESP_LOGI(TAG, "IP_EVENT_AP_STAIPASSIGNED: %s", inet_ntoa(event->ip));
@@ -917,25 +1002,45 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 
             case ETHERNET_EVENT_START: {
                 ESP_LOGI(TAG, "ETHERNET_EVENT_START received.");
-                send_eth_event(data, eth_started_atom);
+                send_event_atom(data, eth_started_atom);
                 break;
             }
 
             case ETHERNET_EVENT_CONNECTED: {
                 ESP_LOGI(TAG, "ETHERNET_EVENT_CONNECTED received.");
-                send_eth_event(data, eth_connected_atom);
+                send_event_atom(data, eth_connected_atom);
                 break;
             }
 
             case ETHERNET_EVENT_DISCONNECTED: {
                 ESP_LOGI(TAG, "ETHERNET_EVENT_DISCONNECTED received.");
-                send_eth_event(data, eth_disconnected_atom);
+                send_event_atom(data, eth_disconnected_atom);
                 break;
             }
 
             default:
                 ESP_LOGD(TAG, "Unhandled eth event: %" PRIi32 ".", event_id);
                 break;
+        }
+#endif
+#ifdef HAVE_PPP
+    } else if (event_base == NETIF_PPP_STATUS) {
+
+        // The dead phase is handled by ppp_phase_dead. Any error but the user's own close is a
+        // disconnect. lwIP sets the address before it brings the link up, so the address event
+        // finds the link down and the PPP netif is not considered for the default route; it is,
+        // by route priority, once the link is up.
+        if (event_id == NETIF_PPP_ERRORNONE) {
+            ESP_LOGI(TAG, "PPP connected.");
+            if (data->ppp_glue != NULL) {
+                esp_netif_tcpip_exec(refresh_ppp_route, data->ppp_glue->base.netif);
+            }
+        } else if (event_id > NETIF_PPP_ERRORNONE && event_id < NETIF_PP_PHASE_OFFSET && event_id != NETIF_PPP_ERRORUSER) {
+            ESP_LOGI(TAG, "PPP error %" PRIi32 ".", event_id);
+            send_event_atom(data, ppp_disconnected_atom);
+        } else if (event_id == NETIF_PPP_CONNECT_FAILED) {
+            ESP_LOGI(TAG, "PPP connect failed.");
+            send_event_atom(data, ppp_disconnected_atom);
         }
 #endif
     } else if (event_base == sntp_event_base) {
@@ -1536,6 +1641,229 @@ static void stop_eth(struct ClientData *data)
 }
 #endif
 
+#ifdef HAVE_PPP
+#define PPP_RX_BUFFER_SIZE 2048
+#define PPP_READ_SIZE 256
+#define PPP_RX_TASK_STACK 3072
+// Below the 5 s network:stop/0 waits for the port to answer.
+#define PPP_STOP_MS 3000
+#define PPP_TEARDOWN_MS 30000
+#define PPP_TEARDOWN_TASK_STACK 3072
+
+static esp_err_t ppp_transmit(void *handle, void *buffer, size_t len)
+{
+    struct PPPGlue *glue = handle;
+    glue->tx_bytes += len;
+    return uart_write_bytes(glue->uart, buffer, len) == (int) len ? ESP_OK : ESP_FAIL;
+}
+
+static esp_err_t ppp_post_attach(esp_netif_t *netif, void *args)
+{
+    struct PPPGlue *glue = args;
+    glue->base.netif = netif;
+    const esp_netif_driver_ifconfig_t driver = { .handle = glue, .transmit = ppp_transmit };
+    return esp_netif_set_driver_config(netif, &driver);
+}
+
+static void ppp_rx_task(void *args)
+{
+    struct PPPGlue *glue = args;
+    uint8_t buffer[PPP_READ_SIZE];
+    while (!glue->stop) {
+        int len = uart_read_bytes(glue->uart, buffer, sizeof(buffer), pdMS_TO_TICKS(100));
+        if (len > 0) {
+            glue->rx_bytes += len;
+            esp_netif_receive(glue->base.netif, buffer, len, NULL);
+        }
+    }
+    xSemaphoreGive(glue->stopped);
+    vTaskDelete(NULL);
+}
+
+static bool ppp_config_int(term config, AtomString key, int *value, GlobalContext *global)
+{
+    term t = interop_kv_get_value(config, key, global);
+    if (term_is_invalid_term(t)) {
+        return true;
+    }
+    if (!term_is_integer(t)) {
+        return false;
+    }
+    *value = term_to_int(t);
+    return true;
+}
+
+static void stop_ppp(struct ClientData *data);
+
+// Starts PPP on a UART whose other end is ready for it, e.g. a modem that answered CONNECT:
+//
+//   {ppp, [{uart, 2}, {tx, 3}, {rx, 46}, {speed, 115200}, {route_priority, 10}]}
+//
+// uart, tx and rx are required; speed defaults to 115200 and route_priority to 20, below
+// Ethernet and WiFi. The link negotiates its address and DNS servers. On failure, undoes its
+// own work, replies to the caller and returns false.
+static bool start_ppp(Context *ctx, term pid, term ref, struct ClientData *data, term ppp_config)
+{
+    GlobalContext *global = ctx->global;
+    int uart = -1;
+    int tx = -1;
+    int rx = -1;
+    int speed = 115200;
+    int route_priority = 20;
+    esp_err_t err;
+
+    if (!term_is_list(ppp_config)
+        || !ppp_config_int(ppp_config, uart_atom, &uart, global)
+        || !ppp_config_int(ppp_config, tx_atom, &tx, global)
+        || !ppp_config_int(ppp_config, rx_atom, &rx, global)
+        || !ppp_config_int(ppp_config, speed_atom, &speed, global)
+        || !ppp_config_int(ppp_config, route_priority_atom, &route_priority, global)
+        || uart < 0 || uart >= UART_NUM_MAX || tx < 0 || rx < 0 || speed <= 0
+        || route_priority < 0 || route_priority > 255) {
+        ESP_LOGE(TAG, "Invalid PPP configuration");
+        port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
+        return false;
+    }
+
+    struct PPPGlue *glue = calloc(1, sizeof(struct PPPGlue));
+    if (IS_NULL_PTR(glue)) {
+        err = ESP_ERR_NO_MEM;
+        goto error;
+    }
+    glue->uart = -1;
+    glue->base.post_attach = ppp_post_attach;
+    data->ppp_glue = glue;
+    glue->stopped = xSemaphoreCreateBinary();
+    glue->died = xSemaphoreCreateBinary();
+    if (IS_NULL_PTR(glue->stopped) || IS_NULL_PTR(glue->died)) {
+        err = ESP_ERR_NO_MEM;
+        goto error;
+    }
+
+    const uart_config_t uart_config = {
+        .baud_rate = speed,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+    if ((err = uart_driver_install(uart, PPP_RX_BUFFER_SIZE, 0, 0, NULL, 0)) != ESP_OK) {
+        goto error;
+    }
+    glue->uart = uart;
+    if ((err = uart_param_config(uart, &uart_config)) != ESP_OK
+        || (err = uart_set_pin(uart, tx, rx, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE)) != ESP_OK) {
+        goto error;
+    }
+
+    esp_netif_inherent_config_t netif_base = ESP_NETIF_INHERENT_DEFAULT_PPP();
+    netif_base.route_prio = route_priority;
+    esp_netif_config_t netif_config = { .base = &netif_base, .driver = NULL, .stack = ESP_NETIF_NETSTACK_DEFAULT_PPP };
+    esp_netif_t *netif = esp_netif_new(&netif_config);
+    if (IS_NULL_PTR(netif)) {
+        err = ESP_ERR_NO_MEM;
+        goto error;
+    }
+    glue->base.netif = netif;
+    const esp_netif_ppp_config_t ppp_params = { .ppp_phase_event_enabled = true, .ppp_error_event_enabled = true };
+    if ((err = esp_netif_attach(netif, glue)) != ESP_OK
+        || (err = esp_netif_ppp_set_params(netif, &ppp_params)) != ESP_OK
+        || (err = esp_event_handler_instance_register(NETIF_PPP_STATUS, NETIF_PPP_PHASE_DEAD, &ppp_phase_dead, glue, &glue->phase_dead)) != ESP_OK
+        || (err = esp_event_handler_register(NETIF_PPP_STATUS, ESP_EVENT_ANY_ID, &event_handler, data)) != ESP_OK
+        || (err = esp_event_handler_register(IP_EVENT, IP_EVENT_PPP_GOT_IP, &event_handler, data)) != ESP_OK
+        || (err = esp_event_handler_register(IP_EVENT, IP_EVENT_PPP_LOST_IP, &event_handler, data)) != ESP_OK) {
+        goto error;
+    }
+    if (xTaskCreate(ppp_rx_task, "ppp_rx", PPP_RX_TASK_STACK, glue, 5, NULL) != pdPASS) {
+        err = ESP_ERR_NO_MEM;
+        goto error;
+    }
+    glue->running = true;
+    esp_netif_action_start(netif, NULL, 0, NULL);
+    ESP_LOGI(TAG, "PPP started on UART%d", uart);
+    return true;
+
+error:
+    ESP_LOGE(TAG, "Failed to start PPP, reason: %s", esp_err_to_name(err));
+    stop_ppp(data);
+    port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, term_from_int(err)));
+    return false;
+}
+
+// Frees what start_ppp set up, once the session is dead (or never started): lwIP keeps timers
+// on a session until its dead phase, and the netif and its PPP control block must outlive them.
+static void free_ppp(struct PPPGlue *glue)
+{
+    esp_netif_t *netif = glue->base.netif;
+    if (glue->phase_dead != NULL) {
+        esp_event_handler_instance_unregister(NETIF_PPP_STATUS, NETIF_PPP_PHASE_DEAD, glue->phase_dead);
+    }
+    if (glue->running) {
+        ESP_LOGI(TAG, "PPP closed: %u bytes in, %u bytes out", (unsigned) glue->rx_bytes, (unsigned) glue->tx_bytes);
+        glue->stop = true;
+        xSemaphoreTake(glue->stopped, portMAX_DELAY);
+    }
+    if (glue->stopped != NULL) {
+        vSemaphoreDelete(glue->stopped);
+    }
+    if (glue->died != NULL) {
+        vSemaphoreDelete(glue->died);
+    }
+    if (netif != NULL) {
+        esp_netif_destroy(netif);
+    }
+    if (glue->uart != -1) {
+        uart_driver_delete(glue->uart);
+    }
+    free(glue);
+}
+
+// The rest of a teardown whose close outlasted PPP_STOP_MS: lwIP gives up on an unanswered
+// terminate after FSM_DEFTIMEOUT x FSM_DEFMAXTERMREQS (12 s by default), and the session is dead
+// then. A session that is still not dead after PPP_TEARDOWN_MS is left allocated: a leak, not
+// a use after free.
+static void ppp_teardown_task(void *args)
+{
+    struct PPPGlue *glue = args;
+    if (xSemaphoreTake(glue->died, pdMS_TO_TICKS(PPP_TEARDOWN_MS)) == pdTRUE) {
+        free_ppp(glue);
+        ESP_LOGI(TAG, "PPP closed late, freed");
+    } else {
+        ESP_LOGE(TAG, "PPP did not close in %d ms, left allocated", PPP_TEARDOWN_MS);
+    }
+    vTaskDelete(NULL);
+}
+
+// Undoes start_ppp, from whatever point it reached: closes the link (LCP terminate, so the
+// modem hangs up), waits for it to die, then frees the netif and the UART. A close that takes
+// longer than PPP_STOP_MS finishes in ppp_teardown_task, which then owns the glue: until it
+// does, the UART stays installed and a new PPP start on it fails. NULL-safe.
+static void stop_ppp(struct ClientData *data)
+{
+    esp_event_handler_unregister(IP_EVENT, IP_EVENT_PPP_GOT_IP, &event_handler);
+    esp_event_handler_unregister(IP_EVENT, IP_EVENT_PPP_LOST_IP, &event_handler);
+    esp_event_handler_unregister(NETIF_PPP_STATUS, ESP_EVENT_ANY_ID, &event_handler);
+    if (data == NULL || data->ppp_glue == NULL) {
+        return;
+    }
+    struct PPPGlue *glue = data->ppp_glue;
+    data->ppp_glue = NULL;
+    // A link that died on its own (the modem hung up) has nothing left to close.
+    if (glue->running && !glue->dead) {
+        esp_netif_action_stop(glue->base.netif, NULL, 0, NULL);
+        if (xSemaphoreTake(glue->died, pdMS_TO_TICKS(PPP_STOP_MS)) != pdTRUE) {
+            ESP_LOGW(TAG, "PPP did not close in %d ms, finishing in the background", PPP_STOP_MS);
+            if (xTaskCreate(ppp_teardown_task, "ppp_stop", PPP_TEARDOWN_TASK_STACK, glue, 5, NULL) != pdPASS) {
+                ESP_LOGE(TAG, "No task to finish the PPP close, left allocated");
+            }
+            return;
+        }
+    }
+    free_ppp(glue);
+}
+#endif
+
 static bool start_wifi(Context *ctx, term pid, term ref, struct ClientData *data,
     wifi_config_t *sta_wifi_config, wifi_config_t *ap_wifi_config, bool roaming,
     esp_netif_t **sta_wifi_interface, esp_netif_t **ap_wifi_interface)
@@ -1675,6 +2003,15 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     term sta_config = interop_kv_get_value_default(config, sta_atom, term_invalid_term(), ctx->global);
     term ap_config = interop_kv_get_value_default(config, ap_atom, term_invalid_term(), ctx->global);
     term eth_config = interop_kv_get_value_default(config, eth_atom, term_invalid_term(), ctx->global);
+    term ppp_config = interop_kv_get_value_default(config, ppp_atom, term_invalid_term(), ctx->global);
+#ifndef HAVE_PPP
+    if (UNLIKELY(!term_is_invalid_term(ppp_config))) {
+        ESP_LOGE(TAG, "PPP is not available (CONFIG_AVM_ENABLE_PPP off)");
+        term error = port_create_error_tuple(ctx, make_atom(ctx->global, ppp_not_supported_atom));
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    }
+#endif
 #ifndef HAVE_ETH
     if (UNLIKELY(!term_is_invalid_term(eth_config))) {
         ESP_LOGE(TAG, "Ethernet is not available (no EMAC, CONFIG_AVM_ENABLE_ETHERNET off, or ESP-IDF older than 5.4)");
@@ -1684,8 +2021,8 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     }
 #endif
     bool want_wifi = !term_is_invalid_term(sta_config) || !term_is_invalid_term(ap_config);
-    if (UNLIKELY(!want_wifi && term_is_invalid_term(eth_config))) {
-        ESP_LOGE(TAG, "Expected STA, AP or ETH configuration but got none");
+    if (UNLIKELY(!want_wifi && term_is_invalid_term(eth_config) && term_is_invalid_term(ppp_config))) {
+        ESP_LOGE(TAG, "Expected STA, AP, ETH or PPP configuration but got none");
         term error = port_create_error_tuple(ctx, BADARG_ATOM);
         port_send_reply(ctx, pid, ref, error);
         return;
@@ -1724,6 +2061,9 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     data->eth_netif = NULL;
     data->eth_power = -1;
 #endif
+#ifdef HAVE_PPP
+    data->ppp_glue = NULL;
+#endif
     struct ESP32PlatformData *platform = ctx->global->platform_data;
     platform->network_driver_data = data;
 
@@ -1743,6 +2083,11 @@ static void start_network(Context *ctx, term pid, term ref, term config)
 
 #ifdef HAVE_ETH
     if (!term_is_invalid_term(eth_config) && !start_eth(ctx, pid, ref, data, eth_config)) {
+        goto cleanup;
+    }
+#endif
+#ifdef HAVE_PPP
+    if (!term_is_invalid_term(ppp_config) && !start_ppp(ctx, pid, ref, data, ppp_config)) {
         goto cleanup;
     }
 #endif
@@ -1788,6 +2133,9 @@ static void stop_network(GlobalContext *global)
     esp_event_handler_unregister(sntp_event_base, SNTP_EVENT_BASE_SYNC, &event_handler);
 #ifdef HAVE_ETH
     stop_eth(platform->network_driver_data);
+#endif
+#ifdef HAVE_PPP
+    stop_ppp(platform->network_driver_data);
 #endif
 
     esp_netif_t *sta_wifi_interface = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");

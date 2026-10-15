@@ -491,6 +491,52 @@ case network:wait_for_eth(Config, 15000) of
 end
 ```
 
+## PPP over a UART (ESP32)
+
+On the ESP32 family, `network:start/1` can also run PPP on a UART, with a `ppp` entry in the
+configuration. The other end must already be ready for PPP: typically a cellular modem that the
+application has powered on and dialed over the same UART (`ATD*99#` answered `CONNECT`) before
+calling `network:start/1`. The network driver installs its own driver on that UART, so the
+application closes the port it dialed with (`uart:close/1`) first, and does not use the UART
+while PPP runs. The link negotiates its address and DNS servers. It can be used alone or next
+to `sta`, `ap` and `eth`; the default route goes to the interface that is up with the highest
+`route_priority`, so with its default of 20 PPP carries the traffic only when Ethernet and the
+STA are down.
+
+PPP is opt-in: it needs a build with `CONFIG_AVM_ENABLE_PPP=y` and `CONFIG_LWIP_PPP_SUPPORT=y`
+(`idf.py menuconfig`, or lines in `sdkconfig.defaults`). With the option off, a `ppp` entry makes
+`network:start/1` return `{error, ppp_not_supported}`.
+
+| Key | Value Type | Default | Description |
+|-----|------------|---------|-------------|
+| `uart` | `non_neg_integer()` | required | UART port number |
+| `tx` | `non_neg_integer()` | required | TX GPIO |
+| `rx` | `non_neg_integer()` | required | RX GPIO |
+| `speed` | `pos_integer()` | 115200 | Baud rate (8N1, no flow control) |
+| `route_priority` | `0..255` | 20 | Default route priority (Ethernet: 128, STA: 100, AP: 10) |
+| `got_ip` | `fun((ip_info()) -> term())` | none | The link is up and has an address |
+| `disconnected` | `fun(() -> term())` | none | The link ended or could not be negotiated; the application dials again and restarts the network |
+
+A missing or invalid `uart`, `tx` or `rx` makes `network:start/1` return `{error, badarg}`.
+`network:stop/0` closes the link with an LCP terminate, so the modem hangs up, and frees the UART.
+If the other end does not answer the terminate within 3 seconds, `network:stop/0` returns and the
+close finishes in the background (up to about 12 seconds); until then, the UART stays taken.
+
+For example, for a modem on UART2 (TX on GPIO 33, RX on GPIO 35), already dialed:
+
+```erlang
+Config = [
+    {ppp, [
+        {uart, 2},
+        {tx, 33},
+        {rx, 35},
+        {got_ip, fun(IpInfo) -> io:format("PPP got IP: ~p~n", [IpInfo]) end},
+        {disconnected, fun() -> io:format("PPP link ended~n") end}
+    ]}
+],
+{ok, _Pid} = network:start(Config).
+```
+
 ## SNTP Support
 
 You may configure the networking layer to automatically synchronize time on the ESP32 with an NTP server accessible on the network.
