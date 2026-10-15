@@ -29,6 +29,7 @@ start() ->
     spi_smoke(),
     rtc_slow_smoke(),
     sleep_smoke(),
+    wdt_smoke(),
     crypto_smoke(),
     ok.
 
@@ -259,4 +260,40 @@ sleep_smoke() ->
     true = (WakeupAfterLight =:= sleep_wakeup_timer orelse WakeupAfterLight =:= undefined),
 
     erlang:display({sleep, esp32c3, ok}).
+
+wdt_smoke() ->
+    % Test invalid config badarg rejection
+    {'EXIT', {badarg, _}} = (catch esp:task_wdt_reconfigure(config)),
+    {'EXIT', {badarg, _}} = (catch esp:task_wdt_reconfigure({-1, 0, false})),
+    {'EXIT', {badarg, _}} = (catch esp:task_wdt_reconfigure({0, 0, false})),
+    {'EXIT', {badarg, _}} = (catch esp:task_wdt_reconfigure({5000, -1, false})),
+    {'EXIT', {badarg, _}} = (catch esp:task_wdt_reconfigure({5000, 512, false})),
+    {'EXIT', {badarg, _}} = (catch esp:task_wdt_reconfigure({5000, 0, 0})),
+    erlang:display({task_wdt_badarg, ok}),
+
+    % Valid reconfiguration
+    ok = esp:task_wdt_reconfigure({5000, 0, false}),
+    erlang:display({task_wdt_reconfigure, ok}),
+
+    % Task WDT user management
+    {'EXIT', {badarg, _}} = (catch esp:task_wdt_add_user(42)),
+    {ok, Handle} = esp:task_wdt_add_user(<<"smoke_worker">>),
+    ok = esp:task_wdt_reset_user(Handle),
+    ok = esp:task_wdt_delete_user(Handle),
+    erlang:display({task_wdt_user, ok}),
+
+    % Hardware watchdog feed
+    ok = esp:wdt_feed(),
+    erlang:display({wdt_feed, ok}),
+
+    % Task WDT lifecycle: deinit, reconfigure-while-down, and re-init
+    ok = esp:task_wdt_deinit(),
+    {error, _} = esp:task_wdt_deinit(),
+    {error, noproc} = esp:task_wdt_reconfigure({5000, 0, false}),
+    ok = esp:task_wdt_init({5000, 0, false}),
+    {error, already_started} = esp:task_wdt_init({5000, 0, false}),
+    erlang:display({task_wdt_lifecycle, ok}),
+
+    erlang:display({wdt, esp32c3, ok}).
+
 

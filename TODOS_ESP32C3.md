@@ -38,7 +38,7 @@ Below are the key missing subsystems, prioritized by implementation feasibility 
 | **LEDC (Hardware PWM)** | 6 independent channels with configurable duty & frequency | **Missing** (`ledc.erl` unsupported on RTEMS) | Medium (MMIO register programming) | Medium |
 | **SAR ADC** | 12-bit ADC, up to 6 channels on GPIO 0–4 | **Missing** (`esp_adc.erl` unsupported on RTEMS) | Medium (calibration & APB registers) | Medium |
 | **NVS / Flash Storage** | SPI Flash partitions, wear-leveling, LittleFS | **Missing** (only direct-boot read-only flash mapped) | High (SPI flash controller driver) | Low |
-| **Watchdog Timers (WDT)** | MWDT0, MWDT1, and RTC Watchdog (RWDT) | **Missing** (`esp:task_wdt_*` unsupported) | Low-Medium (timer interrupt or register reset) | Low |
+| **Watchdog Timers (WDT)** | MWDT0, MWDT1, and RTC Watchdog (RWDT) | **Supported** (Task WDT, MWDT0, RWDT, `esp:task_wdt_*`, `esp:wdt_feed/0`) | Low-Medium (timer interrupt or register reset) | **Done** |
 | **Bluetooth LE (BLE 5.0)** | 2.4 GHz BLE controller in ROM & hardware baseband | **Missing** (no BLE host stack ported to RTEMS) | High (requires NimBLE / Zephyr controller glue) | Low |
 
 ---
@@ -129,11 +129,16 @@ Below are the key missing subsystems, prioritized by implementation feasibility 
   2. Mount LittleFS or FATFS partition for Erlang file operations (`file:read_file/1`, `file:write_file/2`).
   3. Implement `esp:nvs_*` key-value primitives.
 
-### 5.4 Watchdog Timers (WDT)
-- **Background**:
-  Provides hardware fault-recovery if the BEAM scheduler hangs or an ISR starves the system.
-- **Action Items**:
-  1. Implement `esp:task_wdt_init/1`, `esp:task_wdt_reset_user/1`, and `esp:task_wdt_deinit/0` using MWDT0.
+### 5.4 Watchdog Timers (WDT) — **Implemented**
+- **Status**: **Done**.
+- **Implementation**:
+  - `wdt.c` implements the Task Watchdog Timer (TWDT) subsystem and hardware watchdog interface for ESP32-C3 under RTEMS 7.
+  - Hardware MWDT0 programmed via `TIMG0_WDTCONFIG0..3_REG` (`0x6001_F048`), `TIMG0_WDTFEED_REG` (`0x6001_F060`), and write protect key `0x50D83AA1`.
+  - Hardware RWDT (RTC Watchdog) fed via `RTC_CNTL_WDTFEED` (`0x6000_80A0`) and `RTC_CNTL_WDTWPROTECT` (`0x6000_80A4`).
+  - RTEMS periodic timer runs in background to verify active user feed timestamps; triggers CPU reset via `RTC_CNTL_OPTIONS0_REG` if `trigger_panic` is true or logs warnings if false.
+  - Automatically initializes with default `{5000, 0, false}` configuration at startup for seamless compatibility with standard ESP-IDF TWDT behavior.
+  - Exposes `esp:task_wdt_init/1`, `esp:task_wdt_reconfigure/1`, `esp:task_wdt_deinit/0`, `esp:task_wdt_add_user/1`, `esp:task_wdt_reset_user/1`, `esp:task_wdt_delete_user/1`, and `esp:wdt_feed/0` (with `atomvm_rtems:` aliases).
+  - Verified under `esp-emulator` simulation (`test_boot.erl`).
 
 ---
 
