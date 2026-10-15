@@ -121,9 +121,11 @@ RUN find ${RTEMS_PREFIX}/bin ${RTEMS_PREFIX}/libexec -type f -executable -exec s
 FROM bsp-builder AS wifi-builder
 
 COPY build-esp32c3-wifi-stack.sh /tmp/build-esp32c3-wifi-stack.sh
+COPY build-esp32c5-wifi-stack.sh /tmp/build-esp32c5-wifi-stack.sh
 COPY build-esp32c6-wifi-stack.sh /tmp/build-esp32c6-wifi-stack.sh
 COPY patches/ /tmp/patches/
 RUN /tmp/build-esp32c3-wifi-stack.sh --prefix="${RTEMS_PREFIX}" --patch-dir=/tmp/patches \
+    && /tmp/build-esp32c5-wifi-stack.sh --prefix="${RTEMS_PREFIX}" --patch-dir=/tmp/patches \
     && /tmp/build-esp32c6-wifi-stack.sh --prefix="${RTEMS_PREFIX}" --patch-dir=/tmp/patches \
     && rm -rf /tmp/build-esp32*-wifi-stack.sh /tmp/patches /root/.cache/rtems7-wifi-*
 

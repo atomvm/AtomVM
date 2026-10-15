@@ -187,13 +187,68 @@ elseif(RTEMS_BOARD STREQUAL "esp32c6")
         )
     endif()
 elseif(RTEMS_BOARD STREQUAL "esp32c5")
-    target_link_options(${PROJECT_EXECUTABLE} PRIVATE
-        -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/../ld/esp32c5.rom.ld
-    )
-    target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
-        jffs2
-        z
-    )
+    if(RTEMS_HAS_ESP_WIFI)
+        set(RTEMS_ESP32C5_REV_MIN 100 CACHE STRING
+            "Minimum ESP32-C5 chip revision (100 for ECO2, 102 for ECO3)")
+        target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_HAS_WIFI RTEMS_WIFI_BACKEND_ESP32)
+        set(_esp32c5_lib_dir "${RTEMS_PREFIX}/${RTEMS_TARGET}/${RTEMS_BSP_NAME}/lib")
+        # Installed archives and scripts can change while the application
+        # sources stay unchanged during BSP and Wi-Fi bringup.
+        file(GLOB _esp32c5_link_inputs
+            "${_esp32c5_lib_dir}/*.a"
+            "${_esp32c5_lib_dir}/esp32c5.rom*.ld"
+            "${_esp32c5_lib_dir}/linkcmds*"
+        )
+        set_property(TARGET ${PROJECT_EXECUTABLE} APPEND PROPERTY LINK_DEPENDS
+            ${_esp32c5_link_inputs}
+            "${CMAKE_CURRENT_SOURCE_DIR}/../ld/esp32c5.rom.ld"
+        )
+        target_link_options(${PROJECT_EXECUTABLE} PRIVATE
+            -Wl,--no-relax-gp
+            -Wl,-u,esp32c5_netif_add
+            -Wl,-u,esp_supplicant_init
+            -Wl,-u,g_wifi_default_wpa_crypto_funcs
+            -Wl,-T,${_esp32c5_lib_dir}/esp32c5.rom.ld
+            -Wl,-T,${_esp32c5_lib_dir}/esp32c5.rom.api.ld
+            -Wl,-T,${_esp32c5_lib_dir}/esp32c5.rom.version.ld
+            -Wl,-T,${_esp32c5_lib_dir}/esp32c5.rom.phy.ld
+            -Wl,-T,${_esp32c5_lib_dir}/esp32c5.rom.net80211.ld
+            -Wl,-T,${_esp32c5_lib_dir}/esp32c5.rom.pp.ld
+            -Wl,-T,${_esp32c5_lib_dir}/esp32c5.rom.coexist.ld
+            -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/../ld/esp32c5.rom.ld
+        )
+        if(RTEMS_ESP32C5_REV_MIN GREATER_EQUAL 102)
+            target_link_options(${PROJECT_EXECUTABLE} PRIVATE
+                -Wl,-T,${_esp32c5_lib_dir}/esp32c5.rom.eco3.ld
+            )
+        endif()
+        target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
+            -Wl,--start-group
+            rtems_esp_wifi
+            lwip
+            wpa
+            mbedtls
+            net80211
+            pp
+            core
+            phy
+            mesh
+            espnow
+            smartconfig
+            wapi
+            jffs2
+            z
+            -Wl,--end-group
+        )
+    else()
+        target_link_options(${PROJECT_EXECUTABLE} PRIVATE
+            -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/../ld/esp32c5.rom.ld
+        )
+        target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
+            jffs2
+            z
+        )
+    endif()
 elseif(RTEMS_BOARD MATCHES "esp32")
     target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
         jffs2

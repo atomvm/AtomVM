@@ -5,6 +5,10 @@
  * SPDX-License-Identifier: Apache-2.0 OR BSD-2-Clause
  */
 SECTIONS {
+  /* Compatibility callbacks referenced by newer libpp even in ECO2 builds.
+   * These are data slots, not calls into ECO3-only ROM functions. */
+  PROVIDE ( s_offchan_tx_progress_in_ptr = 0x4085fc5c ) ;
+  PROVIDE ( s_phy_get_max_pwr_new_ptr = 0x4085fc58 ) ;
   PROVIDE ( .data_bss_ok = 0x4000174c ) ;
   PROVIDE ( .data_ok = 0x40001722 ) ;
   PROVIDE ( .stack_ok = 0x400016ea ) ;

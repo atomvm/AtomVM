@@ -49,14 +49,14 @@ index 0000000..8c9472e
 +#define RTEMSLWIP_ESP32C5_LWIPBSPOPTS_H
 +
 +/*
-+ * 16 KiB heap for lwIP dynamic allocations.
++ * 8 KiB heap for lwIP dynamic allocations.
 + */
-+#define MEM_SIZE           ( 16 * 1024 )
++#define MEM_SIZE           ( 8 * 1024 )
 +
 +/*
-+ * PBUF pool sizing: 24 pbufs of 1600 bytes.
++ * PBUF pool sizing: 8 pbufs of 1600 bytes.
 + */
-+#define PBUF_POOL_SIZE     24
++#define PBUF_POOL_SIZE      8
 +#define PBUF_POOL_BUFSIZE  1600
 +
 +#define MEMP_NUM_PBUF      16
