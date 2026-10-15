@@ -92,7 +92,14 @@ if(CMAKE_COMPILER_IS_GNUCC)
 endif()
 
 include(SystemArchitecture)
-avm_get_system_architecture_string(AVM_SYSTEM_ARCHITECTURE_STRING PLATFORM_VENDOR rtems PLATFORM_OS rtems)
+# The esp32 riscv toolchain reports "riscv-rtems7", which normalizes to "riscv".
+# Override to "riscv32" and tag the vendor as "esp" so the ESP32 boards mirror
+# the ESP-IDF form (e.g. riscv32-esp-esp_idf) with the RTEMS runtime in slot 3.
+if(RTEMS_BOARD MATCHES "^esp32")
+    avm_get_system_architecture_string(AVM_SYSTEM_ARCHITECTURE_STRING PLATFORM_ARCH riscv32 PLATFORM_VENDOR esp PLATFORM_OS rtems)
+else()
+    avm_get_system_architecture_string(AVM_SYSTEM_ARCHITECTURE_STRING PLATFORM_VENDOR rtems PLATFORM_OS rtems)
+endif()
 add_subdirectory(../../../libAtomVM libAtomVM)
 target_link_libraries(${PROJECT_EXECUTABLE} PUBLIC libAtomVM)
 

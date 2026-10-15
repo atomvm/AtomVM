@@ -36,6 +36,35 @@ start() ->
     flash_smoke(),
     nvs_smoke(),
     fs_smoke(),
+    system_info_smoke(),
+    ok.
+
+system_info_smoke() ->
+    % Cross-platform keys (available on every AtomVM platform)
+    SystemArchitecture = erlang:system_info(system_architecture),
+    true = is_binary(SystemArchitecture),
+    {0, _} = binary:match(SystemArchitecture, <<"riscv32-esp-rtems">>),
+    true = is_integer(erlang:system_info(wordsize)),
+    true = is_integer(erlang:system_info(process_count)),
+    true = is_integer(erlang:system_info(port_count)),
+    true = is_integer(erlang:system_info(atom_count)),
+    true = is_integer(erlang:system_info(schedulers)),
+    true = is_binary(erlang:system_info(atomvm_version)),
+    true = is_atom(erlang:system_info(emu_flavor)),
+    erlang:display({system_info_cross_platform, SystemArchitecture, ok}),
+
+    % Platform chip information (implementation defined per board)
+    ChipInfo = erlang:system_info(esp32_chip_info),
+    true = is_map(ChipInfo),
+    Model = maps:get(model, ChipInfo),
+    true = lists:member(Model, [esp32_c3, esp32_c5, esp32_c6, esp32_s31]),
+    Cores = maps:get(cores, ChipInfo),
+    true = is_integer(Cores) andalso Cores >= 1,
+    Features = maps:get(features, ChipInfo),
+    true = is_list(Features) andalso lists:member(bgn, Features),
+    erlang:display({system_info_chip, Model, Cores, Features, ok}),
+
+    erlang:display({system_info, ok}),
     ok.
 
 uart_smoke() ->

@@ -318,8 +318,91 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
     return port_driver_create_port(driver_name, glb, opts);
 }
 
+#if defined(RTEMS_BOARD_ESP32)
+/* Feature bits match the values exposed by ESP-IDF's esp_chip_info(). */
+#define RTEMS_CHIP_FEATURE_EMB_FLASH (1U << 0)
+#define RTEMS_CHIP_FEATURE_WIFI_BGN (1U << 1)
+#define RTEMS_CHIP_FEATURE_BLE (1U << 4)
+#define RTEMS_CHIP_FEATURE_BT (1U << 5)
+
+static term chip_model_atom(GlobalContext *glb)
+{
+#if defined(RTEMS_BOARD_ESP32C3)
+    return globalcontext_make_atom(glb, ATOM_STR("\x8", "esp32_c3"));
+#elif defined(RTEMS_BOARD_ESP32C5)
+    return globalcontext_make_atom(glb, ATOM_STR("\x8", "esp32_c5"));
+#elif defined(RTEMS_BOARD_ESP32C6)
+    return globalcontext_make_atom(glb, ATOM_STR("\x8", "esp32_c6"));
+#elif defined(RTEMS_BOARD_ESP32S31)
+    return globalcontext_make_atom(glb, ATOM_STR("\x9", "esp32_s31"));
+#else
+#error "Unsupported RTEMS ESP32 board"
+#endif
+}
+
+static int chip_cores(void)
+{
+#if defined(RTEMS_BOARD_ESP32S31)
+    return 2;
+#else
+    return 1;
+#endif
+}
+
+static unsigned int chip_features(void)
+{
+    unsigned int features = RTEMS_CHIP_FEATURE_WIFI_BGN | RTEMS_CHIP_FEATURE_BLE;
+#if defined(RTEMS_BOARD_ESP32S31)
+    features |= RTEMS_CHIP_FEATURE_BT;
+#endif
+    return features;
+}
+
+static term chip_features_to_term(Context *ctx)
+{
+    GlobalContext *glb = ctx->global;
+    unsigned int features = chip_features();
+    term ret = term_nil();
+
+    if (features & RTEMS_CHIP_FEATURE_EMB_FLASH) {
+        ret = term_list_prepend(globalcontext_make_atom(glb, ATOM_STR("\x9", "emb_flash")), ret, &ctx->heap);
+    }
+    if (features & RTEMS_CHIP_FEATURE_WIFI_BGN) {
+        ret = term_list_prepend(globalcontext_make_atom(glb, ATOM_STR("\x3", "bgn")), ret, &ctx->heap);
+    }
+    if (features & RTEMS_CHIP_FEATURE_BLE) {
+        ret = term_list_prepend(globalcontext_make_atom(glb, ATOM_STR("\x3", "ble")), ret, &ctx->heap);
+    }
+    if (features & RTEMS_CHIP_FEATURE_BT) {
+        ret = term_list_prepend(globalcontext_make_atom(glb, ATOM_STR("\x2", "bt")), ret, &ctx->heap);
+    }
+
+    return ret;
+}
+
+static term esp32_chip_info(Context *ctx)
+{
+    GlobalContext *glb = ctx->global;
+
+    if (UNLIKELY(memory_ensure_free(ctx, term_map_size_in_terms(3) + 3 * 2) != MEMORY_GC_OK)) {
+        return OUT_OF_MEMORY_ATOM;
+    }
+
+    term ret = term_alloc_map(3, &ctx->heap);
+    term_set_map_assoc(ret, 0, globalcontext_make_atom(glb, ATOM_STR("\x5", "cores")), term_from_int4(chip_cores()));
+    term_set_map_assoc(ret, 1, globalcontext_make_atom(glb, ATOM_STR("\x8", "features")), chip_features_to_term(ctx));
+    term_set_map_assoc(ret, 2, globalcontext_make_atom(glb, ATOM_STR("\x5", "model")), chip_model_atom(glb));
+    return ret;
+}
+#endif
+
 term sys_get_info(Context *ctx, term key)
 {
+#if defined(RTEMS_BOARD_ESP32)
+    if (key == globalcontext_make_atom(ctx->global, ATOM_STR("\xF", "esp32_chip_info"))) {
+        return esp32_chip_info(ctx);
+    }
+#endif
     UNUSED(ctx);
     UNUSED(key);
     return UNDEFINED_ATOM;
