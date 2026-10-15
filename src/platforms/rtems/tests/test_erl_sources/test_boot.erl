@@ -43,7 +43,7 @@ system_info_smoke() ->
     % Cross-platform keys (available on every AtomVM platform)
     SystemArchitecture = erlang:system_info(system_architecture),
     true = is_binary(SystemArchitecture),
-    {0, _} = binary:match(SystemArchitecture, <<"riscv32-esp-rtems">>),
+    <<"riscv32-esp-rtems">> = SystemArchitecture,
     true = is_integer(erlang:system_info(wordsize)),
     true = is_integer(erlang:system_info(process_count)),
     true = is_integer(erlang:system_info(port_count)),
