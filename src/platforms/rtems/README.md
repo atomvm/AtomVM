@@ -589,7 +589,7 @@ You can emulate the ESP32-C3 build locally or in CI without physical hardware us
 
 ```sh
 # Install esp-emulator
-curl -fsSL https://raw.githubusercontent.com/espressif/esp-emulator/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/espressif/esp-emulator/main/install.sh | sh -s -- --version 0.49.0
 export PATH="$HOME/.local/bin:$PATH"
 
 # Run emulation with automatic exit on completion

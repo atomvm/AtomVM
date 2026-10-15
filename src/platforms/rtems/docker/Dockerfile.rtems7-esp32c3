@@ -148,8 +148,9 @@ RUN curl -fsSL https://github.com/erlang/rebar3/releases/download/3.24.0/rebar3 
 # Copy prebuilt RTEMS 7 RISC-V toolchain, esp32c3db BSP, lwIP, and Wi-Fi stack
 COPY --from=wifi-builder /opt/rtems/7 /opt/rtems/7
 
+ARG ESP_EMU_VERSION="0.49.0"
 # Install esp-emulator for direct headless simulation
-RUN curl -fsSL https://raw.githubusercontent.com/espressif/esp-emulator/main/install.sh | sh \
+RUN curl -fsSL https://raw.githubusercontent.com/espressif/esp-emulator/main/install.sh | sh -s -- --version "${ESP_EMU_VERSION}" \
     && cp /root/.local/bin/esp-emu /usr/local/bin/esp-emu || true
 
 WORKDIR /workspace

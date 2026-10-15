@@ -371,7 +371,7 @@ jobs:
         set -euo pipefail
         BIN="src/platforms/rtems/build/AtomVM-esp32c3db.bin"
         test -f "$BIN"
-        curl -fsSL https://raw.githubusercontent.com/espressif/esp-emulator/main/install.sh | sh
+        curl -fsSL https://raw.githubusercontent.com/espressif/esp-emulator/main/install.sh | sh -s -- --version 0.49.0
         export PATH="$HOME/.local/bin:$PATH"
         set +e
         output=$(esp-emu --chip esp32c3 --firmware "$BIN" --timeout 30s --exit-on "Return value: ok" 2>&1)
