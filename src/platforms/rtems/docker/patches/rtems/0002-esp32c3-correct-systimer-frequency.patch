@@ -1,0 +1,28 @@
+From faf01c5ad77c819e756e6d1e8609de25f25a00cf Mon Sep 17 00:00:00 2001
+From: Samuel Price <thesamprice@gmail.com>
+Date: Wed, 16 Sep 2026 22:50:46 -0400
+Subject: [PATCH] esp32c3: Correct the systimer frequency
+
+Carried in this tree as patches/rtems/0002-esp32c3-systimer-frequency.patch, which had no commit message of
+its own; this subject was written when the patch stack was converted to a
+branch.
+
+Originally carried as patches/rtems/0002-esp32c3-systimer-frequency.patch.
+
+Signed-off-by: Samuel Price <thesamprice@gmail.com>
+Assisted-by: Claude Opus 5 (1M context) <noreply@anthropic.com>
+
+---
+diff --git a/bsps/riscv/esp32/clock/clockdrv_systimer.c b/bsps/riscv/esp32/clock/clockdrv_systimer.c
+index 6a54bbb4c87bb71b9d942e7322d50335be0fcfa1..6cfcf8fba2ef4b23fb3b87adddd1fa0f3093e978 100644
+--- a/bsps/riscv/esp32/clock/clockdrv_systimer.c
++++ b/bsps/riscv/esp32/clock/clockdrv_systimer.c
+@@ -115,7 +115,7 @@ static void systimer_clock_handler_install( rtems_interrupt_handler handler )
+ #define SYSTIMER_REG( reg ) *( (volatile uint32_t *) ( SYSTIMER_BASE + reg ) )
+ 
+ /* The SYSTIMER always operates at 16MHz */
+-#define SYSTIMER_FREQUENCY ( 16ULL * 1024 * 1024 )
++#define SYSTIMER_FREQUENCY ( 16000000ULL )
+ 
+ static uint32_t systimer_get_timecount( struct timecounter *arg )
+ {

@@ -119,9 +119,16 @@ jobs:
           sed -i '/with_rtems_gdb/d' config/tools/rtems-default-tools.bset
           sed -i -e '/0001-RTEMS-Add-riscv-multilibs/d' -e '/uCjG1KIhPuCR3H5G/d' config/tools/rtems-gcc-15.2-newlib-head.cfg
           ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" "7/rtems-${{ matrix.arch }}"
-          git clone --depth 1 https://github.com/thesamprice/rtems.git -b esp32c3-rtems-esphome rtems-7
+          git clone --depth 1 https://gitlab.rtems.org/rtems/rtos/rtems.git -b main rtems-7
           cd rtems-7
-          if [ -d "$GITHUB_WORKSPACE/src/platforms/rtems/docker/patches" ]; then
+          if [ -d "$GITHUB_WORKSPACE/src/platforms/rtems/docker/patches/rtems" ]; then
+            for patch in "$GITHUB_WORKSPACE"/src/platforms/rtems/docker/patches/rtems/*.patch; do
+              if [ -f "$patch" ]; then
+                echo "Applying $patch"
+                git apply "$patch" || patch -p1 < "$patch"
+              fi
+            done
+          elif [ -d "$GITHUB_WORKSPACE/src/platforms/rtems/docker/patches" ]; then
             for patch in "$GITHUB_WORKSPACE"/src/platforms/rtems/docker/patches/*.patch; do
               if [ -f "$patch" ]; then
                 echo "Applying $patch"

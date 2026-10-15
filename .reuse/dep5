@@ -5,3 +5,7 @@ Source: https://github.com/atomvm/AtomVM
 Files: CHANGELOG.md
 Copyright: AtomVM Contributors
 License: CC0-1.0
+
+Files: src/platforms/rtems/docker/patches/* src/platforms/rtems/docker/patches/**/*
+Copyright: 2026 Samuel Price <thesamprice@gmail.com>, 2026 Peter M. <petermm@gmail.com>
+License: BSD-2-Clause

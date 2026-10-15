@@ -1,0 +1,78 @@
+From 6859abf7d253ae4d736cda3eec98cb664fc28330 Mon Sep 17 00:00:00 2001
+From: Samuel Price <thesamprice@gmail.com>
+Date: Wed, 16 Sep 2026 22:50:46 -0400
+Subject: [PATCH] The esp32c3db BSP installs its chip definitions header to the wrong path, so <bsp/irq.h> cannot be included from an application built against the installed BSP.
+
+bspesp32c3db.yml installs bsps/riscv/esp32/include/c3/chip_definitions.h to
+
+    ${BSP_INCLUDEDIR}/${ESPRESSIF_CHIP_VARIANT}
+
+and ESPRESSIF_CHIP_VARIANT is defined nowhere in the tree.  The only option of
+that family is ESPRESSIF_CHIP_HEADER, in optvariant.yml, whose value is the
+header path "c3/chip_definitions.h".  The undefined variable expands to nothing,
+so the header lands in <bsp>/lib/include/chip_definitions.h.
+
+Meanwhile bsp/irq.h does
+
+    #include RTEMS_XSTRING( ESPRESSIF_CHIP_HEADER )
+
+which resolves to "c3/chip_definitions.h" -- a path that does not exist in the
+install tree.  Any application including <bsp/irq.h>, which is what an interrupt
+handler needs, fails to compile:
+
+    error: c3/chip_definitions.h: No such file or directory
+
+In-tree builds of RTEMS' own testsuite are unaffected, because the source path
+bsps/riscv/esp32/include/c3/chip_definitions.h resolves during those builds.
+That is why it has gone unnoticed: it only breaks the case installing exists for.
+
+Define the missing option rather than hardcoding "c3" in the destination, since
+the author's use of a variable there clearly anticipated further variants.
+
+Sent upstream; drop this when it lands.
+
+Originally carried as patches/rtems/0001-esp32c3-chip-header-install-path.patch.
+
+Signed-off-by: Samuel Price <thesamprice@gmail.com>
+Assisted-by: Claude Opus 5 (1M context) <noreply@anthropic.com>
+
+---
+diff --git a/spec/build/bsps/riscv/esp32/grp.yml b/spec/build/bsps/riscv/esp32/grp.yml
+index c4d0f704de82b4ddbb74d392ad584d3311bca0bf..23b09c6959fce86982c2e6689bbdfba86548ee76 100644
+--- a/spec/build/bsps/riscv/esp32/grp.yml
++++ b/spec/build/bsps/riscv/esp32/grp.yml
+@@ -18,6 +18,8 @@ links:
+   uid: ../../optconsolebaud
+ - role: build-dependency
+   uid: ../../optgcc
++- role: build-dependency
++  uid: optchipvariant
+ - role: build-dependency
+   uid: optvariant
+ - role: build-dependency
+diff --git a/spec/build/bsps/riscv/esp32/optchipvariant.yml b/spec/build/bsps/riscv/esp32/optchipvariant.yml
+new file mode 100644
+index 0000000000000000000000000000000000000000..8d497df97bfe39fece0516281f3e1c5e7d231ce1
+--- /dev/null
++++ b/spec/build/bsps/riscv/esp32/optchipvariant.yml
+@@ -0,0 +1,20 @@
++SPDX-License-Identifier: CC-BY-SA-4.0 OR BSD-2-Clause
++actions:
++- get-string: null
++- env-assign: null
++build-type: option
++copyrights:
++- Copyright (C) 2026 Kinsey Moore <wkmoore@gmail.com>
++default:
++- enabled-by: riscv/esp32c3db
++  value: 'c3'
++- enabled-by: true
++  value: 'invalid'
++description: |
++  Chip variant directory, used to install the chip definitions header where
++  ESPRESSIF_CHIP_HEADER says it will be
++enabled-by: true
++format: '{}'
++links: []
++name: ESPRESSIF_CHIP_VARIANT
++type: build

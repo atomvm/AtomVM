@@ -1,0 +1,200 @@
+From 832435e4e0bc19d0192dfedc5205f91b5c85dc58 Mon Sep 17 00:00:00 2001
+From: Samuel Price <thesamprice@gmail.com>
+Date: Wed, 16 Sep 2026 22:50:47 -0400
+Subject: [PATCH] esp32c3: Give the BSP a region for code that executes from RAM
+
+REGION_FAST_TEXT was aliased to CODE_FLASH_MAPPED, so the region whose
+whole purpose is RAM-resident code pointed at flash.
+
+That was not merely useless.  bsp_start_copy_sections() copies .fast_text
+from its load address to its start address, and with both in flash the
+destination is memory-mapped flash: any program that actually put
+something in .fast_text faulted at boot with a store access fault, rather
+than running slowly or linking cleanly.  Nothing noticed because nothing
+used the section.
+
+The part reaches one SRAM through two windows -- 0x3fc80000 on the data bus
+and 0x40380000 on the instruction bus -- so this carves the SRAM rather
+than adding memory.  RAM_CODE takes ESP32C_IRAM_REGION_SIZE bytes from the
+bottom and RAM starts that much higher; the two must not overlap or the
+linker hands the same storage out twice.
+
+The option defaults to zero, so a configuration that needs no RAM-resident
+code pays nothing and builds exactly as before.  One that puts something
+in .fast_text without raising it gets
+
+    section `.fast_text' will not fit in region `RAM_CODE'
+    region `RAM_CODE' overflowed by 62 bytes
+
+which names the region to look up rather than failing somewhere later.  A
+fixed size could not serve both users anyway: a SPI flash driver wants a
+few hundred bytes and the Espressif WiFi libraries want about 40 KiB.
+
+The copy writes through the data window.  .fast_text is linked in the
+instruction window so calls resolve there, but stores go to 0x3fc8xxxx --
+that is the access the part guarantees and how ESP-IDF loads its own IRAM.
+esp32c_iram_to_dram_delta comes from the linker script so the two places
+that know the window layout cannot drift.
+
+Tested three ways in the rtems-esphome tree, by tests/bsp-iram:
+
+  with a region, a function marked BSP_FAST_TEXT_SECTION links at
+  0x40380000, is loaded from flash offset 0x14544, and returns the right
+  answers when called -- so the copy ran and the executing copy is the one
+  in RAM, which it reports by reading its own address;
+
+  with the default of zero and nothing in .fast_text, the BSP and its whole
+  testsuite build unchanged, 4131 targets;
+
+  with the default of zero and something in .fast_text, the link fails as
+  quoted above.
+
+This is what rtems-esphome#42 needs before a flash driver can be written,
+and what the Espressif WiFi libraries need for their 40.5 KiB of IRAM.
+
+---
+diff --git a/bsps/riscv/esp32/start/bspstart.c b/bsps/riscv/esp32/start/bspstart.c
+index eb4a997aa7538c07191f4d23e08e6784b007614b..bed8ab00614b711b5010e9d8de9c9da51cc216dc 100644
+--- a/bsps/riscv/esp32/start/bspstart.c
++++ b/bsps/riscv/esp32/start/bspstart.c
+@@ -27,6 +27,8 @@
+ #include <bsp/fatal.h>
+ #include <bsp/irq-generic.h>
+ #include <bsp/linker-symbols.h>
++
++#include <stdint.h>
+ #include <bsp/start.h>
+ #include <bsp/utility.h>
+ 
+@@ -91,6 +93,13 @@ void bsp_start( void )
+ }
+ 
+ /* src is the offset in flash */
++/*
++ * The distance from the instruction window to the data window onto the same
++ * SRAM, defined in the BSP's linker script.  A LINKER_SYMBOL rather than a
++ * constant here so that changing the memory map changes one place.
++ */
++LINKER_SYMBOL( esp32c_iram_to_dram_delta );
++
+ BSP_START_TEXT_SECTION static inline void copy_from_flash_offset(
+   void       *dest,
+   const void *src,
+@@ -113,8 +122,17 @@ BSP_START_TEXT_SECTION void bsp_start_copy_sections( void )
+     (size_t) bsp_section_data_size
+   );
+ 
++  /*
++   * .fast_text is linked in the instruction window so that calls into it
++   * resolve to 0x4038xxxx, but it is *written* through the data window.  The
++   * two address the same SRAM; stores through the data bus are the access the
++   * part guarantees, and are how ESP-IDF loads its own IRAM.
++   *
++   * esp32c_iram_to_dram_delta comes from the linker script, so the two places
++   * that know the window layout cannot drift apart.
++   */
+   copy_from_flash_offset(
+-    bsp_section_fast_text_begin,
++    (char *) bsp_section_fast_text_begin + (intptr_t) esp32c_iram_to_dram_delta,
+     bsp_section_fast_text_load_begin,
+     (size_t) bsp_section_fast_text_size
+   );
+diff --git a/spec/build/bsps/riscv/esp32/grp.yml b/spec/build/bsps/riscv/esp32/grp.yml
+index 23b09c6959fce86982c2e6689bbdfba86548ee76..8398f996e778da0e6dc73cc594e5e8fbe7ed6d58 100644
+--- a/spec/build/bsps/riscv/esp32/grp.yml
++++ b/spec/build/bsps/riscv/esp32/grp.yml
+@@ -36,6 +36,8 @@ links:
+   uid: optcodesize
+ - role: build-dependency
+   uid: ../optespressifdirectboot
++- role: build-dependency
++  uid: optiramsize
+ - role: build-dependency
+   uid: optflashsize
+ - role: build-dependency
+diff --git a/spec/build/bsps/riscv/esp32/linkcmds.yml b/spec/build/bsps/riscv/esp32/linkcmds.yml
+index ff4ec804e50f747cd0e9bb485d6dd3811b78aaf0..c59d35ab0f2a678999e76d10827d3d8d546ad8bb 100644
+--- a/spec/build/bsps/riscv/esp32/linkcmds.yml
++++ b/spec/build/bsps/riscv/esp32/linkcmds.yml
+@@ -10,14 +10,42 @@ content: |
+     CODE_FLASH_RAW : ORIGIN = 0x0, LENGTH = ${ESP32C_CODE_REGION_SIZE}
+     DATA_FLASH_MAPPED : ORIGIN = 0x3c000000 + ${ESP32C_CODE_REGION_SIZE}, LENGTH = ${ESP32C_FLASH_SIZE} - ${ESP32C_CODE_REGION_SIZE}
+     DATA_FLASH_RAW : ORIGIN = 0x0 + ${ESP32C_CODE_REGION_SIZE}, LENGTH = ${ESP32C_FLASH_SIZE} - ${ESP32C_CODE_REGION_SIZE}
+-    RAM : ORIGIN = 0x3fc80000, LENGTH = 0x50000
++    /*
++     * One SRAM, two windows.  The part reaches the same bytes at 0x3fc80000
++     * on the data bus and at 0x40380000 on the instruction bus, so a byte
++     * given to RAM_CODE is a byte taken from RAM -- the two regions are carved
++     * out of one block rather than being separate memories, and they must not
++     * overlap or the linker will hand the same storage out twice.
++     *
++     * RAM_CODE holds code that must not execute from flash.  With
++     * ESP32C_IRAM_REGION_SIZE at its default of zero the region is empty and
++     * RAM is the whole SRAM, which is what a configuration that needs none
++     * should pay.
++     */
++    RAM_CODE : ORIGIN = 0x40380000, LENGTH = ${ESP32C_IRAM_REGION_SIZE}
++    RAM : ORIGIN = 0x3fc80000 + ${ESP32C_IRAM_REGION_SIZE}, LENGTH = 0x50000 - ${ESP32C_IRAM_REGION_SIZE}
+   }
+ 
++  /*
++   * Where the same bytes appear on the data bus, so that the boot copy can
++   * write .fast_text through the window the silicon guarantees for stores.
++   * bsp_start_copy_sections() uses it; see bspstart.c.
++   */
++  esp32c_iram_to_dram_delta = 0x3fc80000 - 0x40380000;
++
+   REGION_ALIAS ("REGION_START", CODE_FLASH_MAPPED);
+   REGION_ALIAS ("REGION_START_LOAD", CODE_FLASH_RAW);
+   REGION_ALIAS ("REGION_TEXT", CODE_FLASH_MAPPED);
+   REGION_ALIAS ("REGION_TEXT_LOAD", CODE_FLASH_RAW);
+-  REGION_ALIAS ("REGION_FAST_TEXT", CODE_FLASH_MAPPED);
++  /*
++   * Not CODE_FLASH_MAPPED.  The whole purpose of .fast_text is code that is
++   * not in flash -- a flash driver cannot erase the flash it is fetching from
++   * -- and pointing it at flash made the section useless while looking
++   * configured.  With the region empty by default, an application that puts
++   * nothing there still links; one that does gets a link error saying
++   * RAM_CODE overflowed, which names the option to raise.
++   */
++  REGION_ALIAS ("REGION_FAST_TEXT", RAM_CODE);
+   REGION_ALIAS ("REGION_FAST_TEXT_LOAD", CODE_FLASH_RAW);
+   REGION_ALIAS ("REGION_RODATA", DATA_FLASH_MAPPED);
+   REGION_ALIAS ("REGION_RODATA_LOAD", DATA_FLASH_RAW);
+diff --git a/spec/build/bsps/riscv/esp32/optiramsize.yml b/spec/build/bsps/riscv/esp32/optiramsize.yml
+new file mode 100644
+index 0000000000000000000000000000000000000000..a41851afde8bb310218afb80dc1bf020ff9a13ef
+--- /dev/null
++++ b/spec/build/bsps/riscv/esp32/optiramsize.yml
+@@ -0,0 +1,31 @@
++SPDX-License-Identifier: CC-BY-SA-4.0 OR BSD-2-Clause
++actions:
++- get-integer: null
++- assert-uint32: null
++- env-assign: null
++- format-and-define: null
++build-type: option
++copyrights:
++- Copyright (C) 2026 Samuel Price <thesamprice@gmail.com>
++default:
++- enabled-by: true
++  value: 0x0
++description: |
++  How much of the internal SRAM to reserve for code that executes from RAM
++  rather than from flash, in bytes, aligned to 4.
++
++  The ESP32-C3 reaches one SRAM through two windows: 0x3fc80000 on the data
++  bus and 0x40380000 on the instruction bus.  A byte reached through one is
++  the same byte reached through the other, so memory given to this region is
++  taken from the data region and from the heap with it -- which is why the
++  default is zero.  A configuration that needs none pays nothing.
++
++  Raise it for something that must not execute from flash.  A SPI flash
++  driver must not, because it cannot erase the flash it is fetching
++  instructions from; the Espressif WiFi libraries must not, and want about
++  40 KiB of it.
++enabled-by: true
++format: '{:#010x}'
++links: []
++name: ESP32C_IRAM_REGION_SIZE
++type: build

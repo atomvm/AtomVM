@@ -26,6 +26,13 @@ PREFIX="${DEFAULT_PREFIX}"
 BUILD_DIR="${HOME}/.cache/rtems7-wifi-build"
 CLEAN=0
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_PATCH_DIR="${SCRIPT_DIR}/patches"
+if [ ! -d "${DEFAULT_PATCH_DIR}" ] && [ -d "${SCRIPT_DIR}/../docker/patches" ]; then
+    DEFAULT_PATCH_DIR="${SCRIPT_DIR}/../docker/patches"
+fi
+PATCH_DIR="${DEFAULT_PATCH_DIR}"
+
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [options]
@@ -35,11 +42,12 @@ Builds and installs rtems-lwip and rtems-esp-wifi stack for riscv/esp32c3db.
 Options:
   --prefix <path>     Target RTEMS prefix (default: ${DEFAULT_PREFIX})
   --build-dir <path>  Temporary build directory (default: ${BUILD_DIR})
+  --patch-dir <path>  Path to patches directory (default: ${DEFAULT_PATCH_DIR})
   --clean             Wipe the build directory before building
   -h, --help          Show this help message
 
 EOF
-    exit 0
+    exit "${1:-0}"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -48,20 +56,36 @@ while [[ $# -gt 0 ]]; do
             PREFIX="$2"
             shift 2
             ;;
+        --prefix=*)
+            PREFIX="${1#*=}"
+            shift
+            ;;
         --build-dir)
             BUILD_DIR="$2"
             shift 2
+            ;;
+        --build-dir=*)
+            BUILD_DIR="${1#*=}"
+            shift
+            ;;
+        --patch-dir)
+            PATCH_DIR="$2"
+            shift 2
+            ;;
+        --patch-dir=*)
+            PATCH_DIR="${1#*=}"
+            shift
             ;;
         --clean)
             CLEAN=1
             shift
             ;;
         -h|--help)
-            usage
+            usage 0
             ;;
         *)
             echo "Unknown option: $1" >&2
-            usage
+            usage 1
             ;;
     esac
 done
@@ -70,6 +94,7 @@ echo "================================================================"
 echo "RTEMS 7 ESP32-C3 Wi-Fi & lwIP Stack Builder"
 echo "  Target Prefix: ${PREFIX}"
 echo "  Build Dir:     ${BUILD_DIR}"
+echo "  Patch Dir:     ${PATCH_DIR}"
 echo "================================================================"
 
 command -v riscv-rtems7-gcc >/dev/null 2>&1 || {
@@ -105,8 +130,16 @@ cd "${BUILD_DIR}"
 # -----------------------------------------------------------------------------
 echo "==> [1/4] Building rtems-lwip for riscv/esp32c3db..."
 if [ ! -d "rtems-lwip/.git" ]; then
-    git clone --depth 1 https://github.com/thesamprice/rtems-lwip.git -b esp32c3-port rtems-lwip
+    git clone --depth 1 https://gitlab.rtems.org/rtems/pkg/rtems-lwip.git -b main rtems-lwip
     git -C rtems-lwip submodule update --init --recursive --depth 1
+    if [ -n "${PATCH_DIR}" ] && [ -d "${PATCH_DIR}/rtems-lwip" ]; then
+        for p in "${PATCH_DIR}"/rtems-lwip/*.patch; do
+            if [ -f "$p" ]; then
+                echo "==> Applying rtems-lwip patch: $(basename "$p")..."
+                git -C rtems-lwip apply "$p" || patch -d rtems-lwip -p1 < "$p"
+            fi
+        done
+    fi
 fi
 
 cd "${BUILD_DIR}/rtems-lwip"
@@ -125,6 +158,10 @@ cd "${BUILD_DIR}"
 
 if [ ! -d "esp32-wifi-lib/.git" ]; then
     git clone --depth 1 https://github.com/espressif/esp32-wifi-lib.git esp32-wifi-lib
+fi
+
+if [ ! -d "esp-phy-lib/.git" ]; then
+    git clone --depth 1 https://github.com/espressif/esp-phy-lib.git esp-phy-lib
 fi
 
 if [ ! -d "esp-hal-3rdparty/.git" ]; then
@@ -256,9 +293,10 @@ riscv-rtems7-gcc -march=rv32imc -mabi=ilp32 -DESP_PLATFORM ${COMMON_INC} \
 # Archive into librtems_esp_wifi.a
 riscv-rtems7-ar rcs "${BSP_LIB}/librtems_esp_wifi.a" "${BUILD_DIR}"/glue-obj/*.o
 
-# Copy 8 precompiled blobs to BSP lib directory
-echo "==> Installing Wi-Fi binary blobs into ${BSP_LIB}..."
+# Copy precompiled Wi-Fi and PHY blobs to BSP lib directory
+echo "==> Installing Wi-Fi and PHY binary blobs into ${BSP_LIB}..."
 cp "${BUILD_DIR}/esp32-wifi-lib/esp32c3/"lib*.a "${BSP_LIB}/"
+cp "${BUILD_DIR}/esp-phy-lib/esp32c3/"lib*.a "${BSP_LIB}/"
 
 # Copy Mask ROM linker scripts to BSP lib directory
 echo "==> Installing Mask ROM linker scripts into ${BSP_LIB}..."
@@ -271,8 +309,9 @@ cp "${ROM_LD}/esp32c3.rom.ld" \
 
 # Copy headers to BSP include directory
 echo "==> Installing Wi-Fi headers into ${BSP_INC}..."
-mkdir -p "${BSP_INC}/rtems-esp" "${BSP_INC}/esp_wifi" "${BSP_INC}/esp_event"
-cp -r "${GLUE}/include/rtems-esp/"* "${BSP_INC}/rtems-esp/"
+mkdir -p "${BSP_INC}/rtems-esp" "${BSP_INC}/esp_wifi" "${BSP_INC}/esp_event" "${BSP_INC}/freertos"
+cp -r "${GLUE}/include/"* "${BSP_INC}/"
+cp "${GLUE}/include/rtems-esp/sdkconfig.h" "${BSP_INC}/sdkconfig.h"
 cp "${HAL}/esp_wifi/include/"*.h "${BSP_INC}/" 2>/dev/null || true
 cp "${HAL}/esp_event/include/"*.h "${BSP_INC}/" 2>/dev/null || true
 cp "${HAL}/esp_phy/include/"*.h "${BSP_INC}/" 2>/dev/null || true

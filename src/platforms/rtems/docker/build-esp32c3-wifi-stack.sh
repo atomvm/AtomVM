@@ -26,6 +26,13 @@ PREFIX="${DEFAULT_PREFIX}"
 BUILD_DIR="${HOME}/.cache/rtems7-wifi-build"
 CLEAN=0
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_PATCH_DIR="${SCRIPT_DIR}/patches"
+if [ ! -d "${DEFAULT_PATCH_DIR}" ] && [ -d "${SCRIPT_DIR}/../docker/patches" ]; then
+    DEFAULT_PATCH_DIR="${SCRIPT_DIR}/../docker/patches"
+fi
+PATCH_DIR="${DEFAULT_PATCH_DIR}"
+
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [options]
@@ -35,6 +42,7 @@ Builds and installs rtems-lwip and rtems-esp-wifi stack for riscv/esp32c3db.
 Options:
   --prefix <path>     Target RTEMS prefix (default: ${DEFAULT_PREFIX})
   --build-dir <path>  Temporary build directory (default: ${BUILD_DIR})
+  --patch-dir <path>  Path to patches directory (default: ${DEFAULT_PATCH_DIR})
   --clean             Wipe the build directory before building
   -h, --help          Show this help message
 
@@ -60,6 +68,14 @@ while [[ $# -gt 0 ]]; do
             BUILD_DIR="${1#*=}"
             shift
             ;;
+        --patch-dir)
+            PATCH_DIR="$2"
+            shift 2
+            ;;
+        --patch-dir=*)
+            PATCH_DIR="${1#*=}"
+            shift
+            ;;
         --clean)
             CLEAN=1
             shift
@@ -78,6 +94,7 @@ echo "================================================================"
 echo "RTEMS 7 ESP32-C3 Wi-Fi & lwIP Stack Builder"
 echo "  Target Prefix: ${PREFIX}"
 echo "  Build Dir:     ${BUILD_DIR}"
+echo "  Patch Dir:     ${PATCH_DIR}"
 echo "================================================================"
 
 command -v riscv-rtems7-gcc >/dev/null 2>&1 || {
@@ -113,8 +130,16 @@ cd "${BUILD_DIR}"
 # -----------------------------------------------------------------------------
 echo "==> [1/4] Building rtems-lwip for riscv/esp32c3db..."
 if [ ! -d "rtems-lwip/.git" ]; then
-    git clone --depth 1 https://github.com/thesamprice/rtems-lwip.git -b esp32c3-port rtems-lwip
+    git clone --depth 1 https://gitlab.rtems.org/rtems/pkg/rtems-lwip.git -b main rtems-lwip
     git -C rtems-lwip submodule update --init --recursive --depth 1
+    if [ -n "${PATCH_DIR}" ] && [ -d "${PATCH_DIR}/rtems-lwip" ]; then
+        for p in "${PATCH_DIR}"/rtems-lwip/*.patch; do
+            if [ -f "$p" ]; then
+                echo "==> Applying rtems-lwip patch: $(basename "$p")..."
+                git -C rtems-lwip apply "$p" || patch -d rtems-lwip -p1 < "$p"
+            fi
+        done
+    fi
 fi
 
 cd "${BUILD_DIR}/rtems-lwip"
