@@ -147,7 +147,7 @@ if(RTEMS_ARCH STREQUAL "riscv" AND RTEMS_BSP_NAME MATCHES "esp32")
     set(_rtems_esp_wifi "${RTEMS_PREFIX}/${RTEMS_TARGET}/${RTEMS_BSP_NAME}/lib/librtems_esp_wifi.a")
     if(EXISTS "${_rtems_esp_wifi}")
         set(RTEMS_HAS_ESP_WIFI ON)
-        message(STATUS "Enabling ESP32-C3 Wi-Fi stack from ${_rtems_esp_wifi}")
+        message(STATUS "Enabling ESP32 Wi-Fi stack from ${_rtems_esp_wifi}")
     endif()
 endif()
 

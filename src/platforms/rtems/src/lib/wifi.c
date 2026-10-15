@@ -333,7 +333,11 @@ static rtems_id dhcp_poll_task_id = RTEMS_ID_NONE;
 
 int os_get_random(unsigned char *buf, size_t len)
 {
+#if defined(RTEMS_BOARD_ESP32C6)
+    volatile uint32_t *rng = (volatile uint32_t *) 0x600B2808;
+#else
     volatile uint32_t *rng = (volatile uint32_t *) 0x600260b0;
+#endif
     while (len > 0) {
         uint32_t r = *rng;
         size_t chunk = len < sizeof(uint32_t) ? len : sizeof(uint32_t);
@@ -469,6 +473,12 @@ int rtems_wifi_start(const char *ssid, const char *psk)
 
     if (!wifi_initialized) {
         wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+#if defined(RTEMS_BOARD_ESP32C3)
+        cfg.static_rx_buf_num = 4;
+        cfg.dynamic_rx_buf_num = 16;
+        cfg.dynamic_tx_buf_num = 16;
+        cfg.rx_mgmt_buf_num = 2;
+#endif
         esp_err_t err = esp_wifi_init(&cfg);
         if (err != ESP_OK) {
             fprintf(stderr, "AtomVM wifi: esp_wifi_init failed: %d\n", err);

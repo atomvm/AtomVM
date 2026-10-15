@@ -140,13 +140,50 @@ if(RTEMS_BOARD STREQUAL "esp32c3" AND RTEMS_HAS_ESP_WIFI)
         -Wl,--end-group
     )
 elseif(RTEMS_BOARD STREQUAL "esp32c6")
-    target_link_options(${PROJECT_EXECUTABLE} PRIVATE
-        -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/../ld/esp32c6.rom.ld
-    )
-    target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
-        jffs2
-        z
-    )
+    if(RTEMS_HAS_ESP_WIFI)
+        target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_HAS_WIFI RTEMS_WIFI_BACKEND_ESP32)
+        set(_esp32c6_lib_dir "${RTEMS_PREFIX}/${RTEMS_TARGET}/${RTEMS_BSP_NAME}/lib")
+        target_link_options(${PROJECT_EXECUTABLE} PRIVATE
+            -Wl,--no-relax-gp
+            -Wl,-u,esp32c6_netif_add
+            -Wl,-u,esp_supplicant_init
+            -Wl,-u,g_wifi_default_wpa_crypto_funcs
+            -Wl,-T,${_esp32c6_lib_dir}/esp32c6.rom.ld
+            -Wl,-T,${_esp32c6_lib_dir}/esp32c6.rom.api.ld
+            -Wl,-T,${_esp32c6_lib_dir}/esp32c6.rom.version.ld
+            -Wl,-T,${_esp32c6_lib_dir}/esp32c6.rom.phy.ld
+            -Wl,-T,${_esp32c6_lib_dir}/esp32c6.rom.net80211.ld
+            -Wl,-T,${_esp32c6_lib_dir}/esp32c6.rom.pp.ld
+            -Wl,-T,${_esp32c6_lib_dir}/esp32c6.rom.coexist.ld
+            -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/../ld/esp32c6.rom.ld
+        )
+        target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
+            -Wl,--start-group
+            rtems_esp_wifi
+            lwip
+            wpa
+            mbedtls
+            net80211
+            pp
+            core
+            phy
+            mesh
+            espnow
+            smartconfig
+            wapi
+            jffs2
+            z
+            -Wl,--end-group
+        )
+    else()
+        target_link_options(${PROJECT_EXECUTABLE} PRIVATE
+            -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/../ld/esp32c6.rom.ld
+        )
+        target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
+            jffs2
+            z
+        )
+    endif()
 elseif(RTEMS_BOARD MATCHES "esp32")
     target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
         jffs2

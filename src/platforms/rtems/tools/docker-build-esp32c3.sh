@@ -135,7 +135,7 @@ RUN_CMD+=(--rm -v "${REPO_ROOT}:/workspace" -w /workspace "${IMAGE_NAME}" bash -
     cmake -S . -B build-host -G Ninja -DAVM_DISABLE_JIT=ON
     cmake --build build-host -t rtems_boot_test rtems_esp32c3_wifi_test atomvmlib-rtems
     mkdir -p src/platforms/rtems/build-esp32c3
-    ./build-host/tools/packbeam/packbeam create -s "${TEST_MOD}" \
+    ./build-host/tools/packbeam/packbeam create -p -s "${TEST_MOD}" \
         src/platforms/rtems/build-esp32c3/rtems_boot.avm \
         "build-host/src/platforms/rtems/tests/test_erl_sources/${TEST_MOD}.beam" \
         build-host/libs/atomvmlib-rtems.avm

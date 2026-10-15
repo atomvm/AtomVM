@@ -35,7 +35,7 @@ new file mode 100644
 index 0000000..8c9472e
 --- /dev/null
 +++ b/rtemslwip/esp32c6/lwipbspopts.h
-@@ -0,0 +1,88 @@
+@@ -0,0 +1,49 @@
 +/*
 + * lwIP sizing for riscv/esp32c6db.
 + *
@@ -90,7 +90,7 @@ new file mode 100644
 index 0000000..f5819ba
 --- /dev/null
 +++ b/rtemslwip/esp32c6/netstart.c
-@@ -0,0 +1,93 @@
+@@ -0,0 +1,84 @@
 +/*
 + * start_networking() for riscv/esp32c6db.
 + *

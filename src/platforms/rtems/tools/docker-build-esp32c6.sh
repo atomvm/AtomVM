@@ -28,6 +28,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 DO_SIMULATE=0
 DOCKER_PLATFORM="${DOCKER_PLATFORM:-}"
 TEST_MODULE="test_boot"
+TEST_WIFI=0
 
 usage() {
     cat <<EOF
@@ -37,6 +38,7 @@ Builds AtomVM for RTEMS 7 ESP32-C6 inside an isolated Docker container.
 
 Options:
   --simulate          Run the boot test in esp-emulator after compiling
+  --test-wifi         Embed and run the Wi-Fi test (test_esp32c6_wifi)
   --platform <arch>   Target Docker platform (e.g., linux/arm64, linux/amd64)
   -h, --help          Show this message
 
@@ -48,6 +50,11 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --simulate|--test)
             DO_SIMULATE=1
+            shift
+            ;;
+        --test-wifi)
+            TEST_MODULE="test_esp32c6_wifi"
+            TEST_WIFI=1
             shift
             ;;
         --platform)
@@ -88,7 +95,7 @@ RUN_CMD+=(--rm -v "${REPO_ROOT}:/workspace" -w /workspace "${IMAGE_NAME}" bash -
     TEST_MOD="'"${TEST_MODULE}"'"
     echo "==> Building host AVM pack (${TEST_MOD})..."
     cmake -S . -B build-host -G Ninja -DAVM_DISABLE_JIT=ON
-    cmake --build build-host -t rtems_boot_test atomvmlib-rtems
+    cmake --build build-host -t rtems_boot_test rtems_esp32c6_wifi_test atomvmlib-rtems
     mkdir -p src/platforms/rtems/build-esp32c6
     ./build-host/tools/packbeam/packbeam create -s "${TEST_MOD}" \
         src/platforms/rtems/build-esp32c6/rtems_boot.avm \
@@ -113,13 +120,49 @@ echo "    src/platforms/rtems/build-esp32c6/AtomVM-esp32c6db.bin"
 if [ "${DO_SIMULATE}" -eq 1 ]; then
     echo "==> Running simulation with esp-emulator..."
     if command -v esp-emu >/dev/null 2>&1; then
-        esp-emu --chip esp32c6 \
-            --firmware "${REPO_ROOT}/src/platforms/rtems/build-esp32c6/AtomVM-esp32c6db.bin" \
-            --timeout 30s --exit-on "Return value: ok"
+        HTTP_PID=""
+        SNTP_PID=""
+        if [ "${TEST_WIFI}" -eq 1 ]; then
+            python3 -m http.server 8080 --directory "${REPO_ROOT}" >/dev/null 2>&1 &
+            HTTP_PID=$!
+            python3 "${REPO_ROOT}/src/platforms/rtems/tools/mock_sntp_server.py" 12300 > /tmp/mock_sntp.log 2>&1 &
+            SNTP_PID=$!
+        fi
+        EMU_CMD=(esp-emu --chip esp32c6 --firmware "${REPO_ROOT}/src/platforms/rtems/build-esp32c6/AtomVM-esp32c6db.bin")
+        if [ "${TEST_WIFI}" -eq 1 ]; then
+            EMU_CMD+=(--wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user)
+        fi
+        EMU_CMD+=(--timeout 30s --exit-on "Return value: ok")
+        "${EMU_CMD[@]}" || true
+        if [ -n "${HTTP_PID}" ]; then
+            kill "${HTTP_PID}" 2>/dev/null || true
+        fi
+        if [ -n "${SNTP_PID}" ]; then
+            kill "${SNTP_PID}" 2>/dev/null || true
+        fi
     else
-        docker run "${IMAGE_NAME}" \
-            esp-emu --chip esp32c6 \
-            --firmware /workspace/src/platforms/rtems/build-esp32c6/AtomVM-esp32c6db.bin \
-            --timeout 30s --exit-on "Return value: ok"
+        SIM_CMD=(docker run)
+        if [ -n "${DOCKER_PLATFORM}" ]; then
+            SIM_CMD+=(--platform "${DOCKER_PLATFORM}")
+        fi
+        if [ "${TEST_WIFI}" -eq 1 ]; then
+            SIM_CMD+=(--rm -v "${REPO_ROOT}:/workspace" "${IMAGE_NAME}" bash -c '
+                python3 -m http.server 8080 --directory /workspace &
+                HTTP_PID=$!
+                python3 /workspace/src/platforms/rtems/tools/mock_sntp_server.py 12300 > /tmp/mock_sntp.log 2>&1 &
+                SNTP_PID=$!
+                trap "kill $HTTP_PID $SNTP_PID 2>/dev/null || true" EXIT
+                esp-emu --chip esp32c6 \
+                    --firmware /workspace/src/platforms/rtems/build-esp32c6/AtomVM-esp32c6db.bin \
+                    --wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user \
+                    --timeout 30s --exit-on "Return value: ok"
+            ')
+        else
+            SIM_CMD+=(--rm -v "${REPO_ROOT}:/workspace" "${IMAGE_NAME}" \
+                esp-emu --chip esp32c6 \
+                --firmware /workspace/src/platforms/rtems/build-esp32c6/AtomVM-esp32c6db.bin \
+                --timeout 30s --exit-on "Return value: ok")
+        fi
+        "${SIM_CMD[@]}"
     fi
 fi
