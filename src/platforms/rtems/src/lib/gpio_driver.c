@@ -20,6 +20,7 @@
  */
 
 #include "rtems_sys.h"
+#include "rtc.h"
 
 #ifdef RTEMS_HAS_GPIO
 #include <bsp.h>
@@ -1122,8 +1123,49 @@ static const struct Nif gpio_set_pin_mux_nif = {
 
 #endif /* RTEMS_HAS_GPIO */
 
+static term nif_gpio_deep_sleep_hold_en(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
+#if defined(RTEMS_BOARD_ESP32C3)
+    esp32c3_deep_sleep_hold_en();
+#endif
+    return OK_ATOM;
+}
+
+static term nif_gpio_deep_sleep_hold_dis(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
+#if defined(RTEMS_BOARD_ESP32C3)
+    esp32c3_deep_sleep_hold_dis();
+#endif
+    return OK_ATOM;
+}
+
+static const struct Nif gpio_deep_sleep_hold_en_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_gpio_deep_sleep_hold_en
+};
+
+static const struct Nif gpio_deep_sleep_hold_dis_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_gpio_deep_sleep_hold_dis
+};
+
 static const struct Nif *gpio_nif_get_nif(const char *nifname)
 {
+    if (strcmp("gpio:deep_sleep_hold_en/0", nifname) == 0
+        || strcmp("Elixir.GPIO:deep_sleep_hold_en/0", nifname) == 0) {
+        return &gpio_deep_sleep_hold_en_nif;
+    }
+    if (strcmp("gpio:deep_sleep_hold_dis/0", nifname) == 0
+        || strcmp("Elixir.GPIO:deep_sleep_hold_dis/0", nifname) == 0) {
+        return &gpio_deep_sleep_hold_dis_nif;
+    }
+
 #ifndef RTEMS_HAS_GPIO
     static const struct Nif unsupported = {
         .base.type = NIFFunctionType,

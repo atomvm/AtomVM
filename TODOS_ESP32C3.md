@@ -32,7 +32,7 @@ Below are the key missing subsystems, prioritized by implementation feasibility 
 | **RTC Slow/Fast Memory** | 8 KiB SRAM at `0x5000_0000`, retained across deep sleep | **Supported** (`esp:rtc_slow_*` & `atomvm_rtems:rtc_slow_*`) | Low (direct register mapping) | **Done** |
 | **RTC 64-bit Timer & SNTP Sync** | Continuous hardware counter in `RTC_CNTL` (`0x6000_8000`) & timekeeper | **Supported** (Latched counter in `0x6000_800C/10/14`, timekeeper at `0x5000_1000`, `esp:timer_get_time/0`) | Low (MMIO register read/sync) | **Done** |
 | **Reset Reason & Wakeup** | `RTC_CNTL_RESET_CAUSE_PROCPU` (`0x6000_8034`) | **Supported** (`esp:reset_reason/0` and `atomvm_rtems:reset_reason/0`) | Low (ROM reset reason decode) | **Done** |
-| **Deep / Light Sleep** | `RTC_CNTL` power domain state machine, timer & GPIO wakeup | **Missing** (`esp:deep_sleep/1` unsupported) | Medium (register sequencing) | Medium |
+| **Deep / Light Sleep** | `RTC_CNTL` power domain state machine, timer & GPIO wakeup | **Supported** (`esp:deep_sleep/*`, `esp:light_sleep/0`, `esp:sleep_enable_*`, `gpio:deep_sleep_hold_*`) | Medium (register sequencing) | **Done** |
 | **MbedTLS / TLS / Crypto** | Hardware SHA, AES, RSA accelerators; software TLS | **Supported** (MbedTLS 3.6.3 LTS installed into `riscv-rtems7/esp32c3db`, `crypto` and `ssl` NIFs enabled) | Medium | **Done** |
 | **Hardware RNG** | True RNG at `0x6002_60B0` | **Supported** (Wired to MbedTLS entropy source & `crypto:strong_rand_bytes/1`) | Low | **Done** |
 | **LEDC (Hardware PWM)** | 6 independent channels with configurable duty & frequency | **Missing** (`ledc.erl` unsupported on RTEMS) | Medium (MMIO register programming) | Medium |
@@ -70,12 +70,17 @@ Below are the key missing subsystems, prioritized by implementation feasibility 
   - Exposes `esp:reset_reason/0` and `atomvm_rtems:reset_reason/0`.
   - Verified under `esp-emulator` simulation (`test_boot.erl`).
 
-### 3.4 Deep Sleep & Light Sleep
-- **Background**:
-  Entering deep sleep powers off the CPU and digital peripherals, keeping only the RTC domain alive. Wakeup can be triggered by timer or RTC GPIO.
-- **Action Items**:
-  1. Implement `esp:deep_sleep/1` (sleep milliseconds) by programming `RTC_CNTL_SLP_TIMER0/1_REG` and triggering the sleep state machine in `RTC_CNTL_STATE0_REG`.
-  2. Implement `esp:deep_sleep_enable_gpio_wakeup/2`.
+### 3.4 Deep Sleep & Light Sleep — **Implemented**
+- **Status**: **Done**.
+- **Implementation**:
+  - `esp32c3_sleep_enable_timer_wakeup(uint64_t usecs)` programs `RTC_CNTL_SLP_TIMER0_REG` (`0x6000_8004`), `RTC_CNTL_SLP_TIMER1_REG` (`0x6000_8008`), and sets `RTC_TIMER_TRIG_EN` in `RTC_CNTL_WAKEUP_STATE_REG` (`0x6000_803C`).
+  - `esp32c3_deep_sleep_enable_gpio_wakeup(uint64_t mask, int mode)` configures RTC GPIO pins 0–5 via `GPIO_PINn_REG` (`0x6000_4074`) and enables `RTC_GPIO_TRIG_EN` in `RTC_CNTL_WAKEUP_STATE_REG`.
+  - `esp32c3_deep_sleep_hold_en()` and `esp32c3_deep_sleep_hold_dis()` program `RTC_CNTL_PAD_HOLD_REG` (`0x6000_8064`) to freeze pin state during deep sleep.
+  - `esp32c3_light_sleep()` puts the CPU into low power wait-for-interrupt (`wfi`) / nanosleep and restores execution, setting wakeup cause to `sleep_wakeup_timer` or `sleep_wakeup_gpio`.
+  - `esp32c3_deep_sleep(uint64_t usecs)` saves the SNTP timekeeper and sleep state to RTC slow SRAM (`0x5000_1040`), programs `RTC_CNTL_STATE0_REG` (`0x6000_8018`) bit 31 (`RTC_CNTL_SLEEP_EN`), commands soft reset trigger `RTC_CNTL_OPTIONS0_REG` (`0x6000_8000`), and halts via `wfi`.
+  - `esp32c3_sleep_get_wakeup_cause()` decodes the wakeup cause from ROM `rtc_get_wakeup_cause()` (`0x4000_0024`), `rtc_get_reset_reason(0)`, and RTC SRAM sleep state into standard AtomVM atoms (`sleep_wakeup_timer`, `sleep_wakeup_gpio`, `sleep_wakeup_ext0`, etc.).
+  - Exposes `esp:deep_sleep/0`, `esp:deep_sleep/1`, `esp:light_sleep/0`, `esp:sleep_enable_timer_wakeup/1`, `esp:deep_sleep_enable_gpio_wakeup/2`, `esp:sleep_enable_gpio_wakeup/0`, `esp:sleep_get_wakeup_cause/0`, `esp:deep_sleep_hold_en/0`, `esp:deep_sleep_hold_dis/0`, `gpio:deep_sleep_hold_en/0`, and `gpio:deep_sleep_hold_dis/0`.
+  - Verified under `esp-emulator` simulation (`test_boot.erl`).
 
 ---
 
@@ -136,19 +141,19 @@ Below are the key missing subsystems, prioritized by implementation feasibility 
 
 ```mermaid
 flowchart TD
-    subgraph Phase 1: RTC & State Retention
+    subgraph Phase 1: RTC & Power Management (Completed)
         A["1.1 RTC Slow Memory (0x50000000)<br>esp:rtc_slow_get/set_binary"] --> B["1.2 Reset Reason & Wakeup<br>esp:reset_reason"]
         B --> C["1.3 RTC Timer Sync<br>Preserve UTC time across resets"]
+        C --> D["1.4 Deep / Light Sleep<br>esp:deep_sleep, esp:light_sleep"]
     end
 
-    subgraph Phase 2: Security & Networking
-        D["2.1 Cross-compile MbedTLS 3.x<br>for riscv-rtems7"] --> E["2.2 HTTPS & TLS Sockets<br>Enable ssl & crypto modules"]
-        E --> F["2.3 Hardware RNG<br>crypto:strong_rand_bytes"]
+    subgraph Phase 2: Security & Networking (Completed)
+        E["2.1 Cross-compile MbedTLS 3.x<br>for riscv-rtems7"] --> F["2.2 HTTPS & TLS Sockets<br>Enable ssl & crypto modules"]
+        F --> G["2.3 Hardware RNG<br>crypto:strong_rand_bytes"]
     end
 
     subgraph Phase 3: Hardware Control
-        G["3.1 LEDC (PWM Driver)<br>ledc:set_duty / set_freq"] --> H["3.2 SAR ADC (12-bit)<br>esp_adc:read"]
-        H --> I["3.3 Deep Sleep Entry<br>esp:deep_sleep/1"]
+        H["3.1 LEDC (PWM Driver)<br>ledc:set_duty / set_freq"] --> I["3.2 SAR ADC (12-bit)<br>esp_adc:read"]
     end
 
     subgraph Phase 4: Storage & Flash

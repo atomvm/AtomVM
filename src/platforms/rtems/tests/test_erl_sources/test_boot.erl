@@ -28,6 +28,7 @@ start() ->
     gpio_smoke(),
     spi_smoke(),
     rtc_slow_smoke(),
+    sleep_smoke(),
     crypto_smoke(),
     ok.
 
@@ -227,3 +228,35 @@ crypto_smoke() ->
         {'EXIT', {undef, _}} ->
             erlang:display({crypto, undef, ok})
     end.
+
+sleep_smoke() ->
+    % Initial wakeup cause (should be undefined on cold boot)
+    WakeupCause = esp:sleep_get_wakeup_cause(),
+    erlang:display({esp_sleep_get_wakeup_cause, WakeupCause}),
+    true = is_atom(WakeupCause),
+
+    % Deep sleep hold enable/disable (both gpio and esp modules)
+    ok = gpio:deep_sleep_hold_en(),
+    ok = gpio:deep_sleep_hold_dis(),
+    ok = esp:deep_sleep_hold_en(),
+    ok = esp:deep_sleep_hold_dis(),
+    erlang:display({deep_sleep_hold, ok}),
+
+    % Parameter validation for sleep NIFs
+    {'EXIT', {badarg, _}} = (catch esp:deep_sleep(-1)),
+    {'EXIT', {badarg, _}} = (catch esp:sleep_enable_timer_wakeup(-1)),
+
+    % Sleep wakeup source configuration
+    ok = esp:sleep_enable_timer_wakeup(5000),
+    ok = esp:deep_sleep_enable_gpio_wakeup(1 bsl 2, 0),
+    ok = esp:sleep_enable_gpio_wakeup(),
+    erlang:display({sleep_enable_wakeup, ok}),
+
+    % Light sleep test (suspends and wakes up after timer)
+    ok = esp:light_sleep(),
+    WakeupAfterLight = esp:sleep_get_wakeup_cause(),
+    erlang:display({esp_light_sleep, ok, WakeupAfterLight}),
+    true = (WakeupAfterLight =:= sleep_wakeup_timer orelse WakeupAfterLight =:= undefined),
+
+    erlang:display({sleep, esp32c3, ok}).
+

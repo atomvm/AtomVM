@@ -29,11 +29,18 @@
 extern "C" {
 #endif
 
-#if defined(RTEMS_BOARD_ESP32C3)
 uint64_t esp32c3_rtc_get_counter(void);
 void esp32c3_rtc_timekeeper_record(const struct timeval *tv);
 bool esp32c3_rtc_timekeeper_restore(void);
-#endif
+
+void esp32c3_deep_sleep(uint64_t time_in_us);
+int esp32c3_light_sleep(void);
+int esp32c3_sleep_enable_timer_wakeup(uint64_t time_in_us);
+int esp32c3_deep_sleep_enable_gpio_wakeup(uint64_t mask, int mode);
+int esp32c3_sleep_enable_gpio_wakeup(void);
+uint32_t esp32c3_sleep_get_wakeup_cause(void);
+void esp32c3_deep_sleep_hold_en(void);
+void esp32c3_deep_sleep_hold_dis(void);
 
 #ifdef __cplusplus
 }
