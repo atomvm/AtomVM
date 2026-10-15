@@ -44,6 +44,7 @@
 #include <esp32_sys.h>
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
+#include <esp_idf_version.h>
 #include <esp_log.h>
 #include <esp_mac.h>
 #include <esp_netif.h>
@@ -1406,7 +1407,13 @@ static bool start_eth(Context *ctx, term pid, term ref, struct ClientData *data,
     mac = esp_eth_mac_new_esp32(&emac_config, &mac_config);
     phy = esp_eth_phy_new_generic(&phy_config);
 #endif
-    if (IS_NULL_PTR(mac) || IS_NULL_PTR(phy)) {
+    if (IS_NULL_PTR(mac)) {
+        // Most likely a pin configuration that IDF rejected, after logging why.
+        ESP_LOGE(TAG, "The Ethernet MAC rejected the configuration");
+        err = ESP_FAIL;
+        goto error;
+    }
+    if (IS_NULL_PTR(phy)) {
         err = ESP_ERR_NO_MEM;
         goto error;
     }
