@@ -214,13 +214,13 @@ static inline void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
         // - the signaling fd, which is eventfd or a pipe
         // - the listeners fd
         // - the sockets fd
+        // Select events are always counted again, even when only the listeners
+        // are dirty: enif_select sets read/write under this lock but marks the
+        // count dirty only after releasing it, so a cached count can be smaller
+        // than the number of entries the loop below writes.
         struct ListHead *select_events = synclist_wrlock(&glb->select_events);
         size_t select_events_new_count;
-        if (select_events_poll_count < 0) {
-            select_event_count_and_destroy_closed(select_events, NULL, NULL, &select_events_new_count, glb);
-        } else {
-            select_events_new_count = select_events_poll_count;
-        }
+        select_event_count_and_destroy_closed(select_events, NULL, NULL, &select_events_new_count, glb);
 
         size_t listeners_new_count = 0;
         struct ListHead *listeners = NULL;

@@ -20,6 +20,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "context.h"
 #include "defaultatoms.h"
@@ -27,9 +28,15 @@
 #include "erl_nif.h"
 #include "erl_nif_priv.h"
 #include "external_term.h"
+#include "generic_unix_sys.h"
 #include "globalcontext.h"
+#include "list.h"
+#include "mailbox.h"
 #include "memory.h"
+#include "resources.h"
 #include "scheduler.h"
+#include "synclist.h"
+#include "sys.h"
 #include "utils.h"
 
 static uint32_t cb_read_resource = 0;
@@ -704,6 +711,91 @@ void test_resource_release_in_down_handler_two_monitors(void)
     globalcontext_destroy(glb);
 }
 
+#ifndef HAVE_KQUEUE
+// Regression test for the generic_unix poll(2) backend: enif_select arms an
+// event under the select_events lock but marks select_events_poll_count dirty
+// only after unlocking. A listener-only rebuild in that window used to size
+// the pollfd array from the stale cached count and overflow it by one entry.
+static EventListener *regression_noop_listener_handler(GlobalContext *glb, EventListener *listener)
+{
+    UNUSED(glb);
+    return listener;
+}
+
+void test_select_event_armed_during_listener_only_rebuild(void)
+{
+    GlobalContext *glb = globalcontext_new();
+    Context *ctx = context_new(glb);
+    ErlNifEnv *env = erl_nif_env_from_context(ctx);
+
+    // Initial rebuild: both cached counts become clean (0 listeners, 0 select events).
+    sys_poll_events(glb, 1);
+
+    // Dirty only the listeners count.
+    int listener_pipe[2];
+    assert(pipe(listener_pipe) == 0);
+    EventListener listener;
+    listener.handler = regression_noop_listener_handler;
+    listener.fd = listener_pipe[0];
+    sys_register_listener(glb, &listener);
+
+    // Arm a select event exactly as enif_select_common does under the lock, but
+    // stop before sys_register_select_event: the cached count stays 0.
+    ErlNifResourceTypeInit init;
+    init.members = 1;
+    init.dtor = resource_dtor;
+    ErlNifResourceFlags flags;
+    ErlNifResourceType *resource_type = enif_init_resource_type(env, "test_select_resource", &init, ERL_NIF_RT_CREATE, &flags);
+    assert(resource_type != NULL);
+    void *ptr = enif_alloc_resource(resource_type, sizeof(uint32_t));
+    assert(ptr != NULL);
+
+    int select_pipe[2];
+    assert(pipe(select_pipe) == 0);
+    assert(write(select_pipe[1], "x", 1) == 1);
+
+    struct SelectEvent *select_event = malloc(sizeof(struct SelectEvent));
+    assert(select_event != NULL);
+    select_event->event = select_pipe[0];
+    select_event->resource = refc_binary_from_data(ptr);
+    select_event->read = true;
+    select_event->write = false;
+    select_event->close = false;
+    select_event->local_pid = ctx->process_id;
+    select_event->ref_ticks = 0;
+    select_event->message = NULL;
+    refc_binary_increment_refcount(select_event->resource);
+    list_init(&select_event->head);
+    struct ListHead *select_events = synclist_wrlock(&glb->select_events);
+    list_append(select_events, &select_event->head);
+    synclist_unlock(&glb->select_events);
+
+    // Listener-only rebuild. Must size the array from the list, not the cache.
+    sys_poll_events(glb, 0);
+#ifdef AVM_TASK_DRIVER_ENABLED
+    globalcontext_process_task_driver_queues(glb);
+#endif
+
+    // The armed event was part of the poll set: it was reported and notified.
+    select_events = synclist_wrlock(&glb->select_events);
+    bool still_armed = select_event->read;
+    synclist_unlock(&glb->select_events);
+    assert(!still_armed);
+    mailbox_process_outer_list_native(&ctx->mailbox);
+    assert(mailbox_has_next(&ctx->mailbox));
+
+    assert(enif_select(env, select_pipe[0], ERL_NIF_SELECT_STOP, ptr, NULL, term_nil()) == ERL_NIF_SELECT_STOP_CALLED);
+    assert(enif_release_resource(ptr));
+    sys_unregister_listener(glb, &listener);
+    close(listener_pipe[0]);
+    close(listener_pipe[1]);
+    close(select_pipe[0]);
+    close(select_pipe[1]);
+    scheduler_terminate(ctx);
+    globalcontext_destroy(glb);
+}
+#endif
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
@@ -719,6 +811,9 @@ int main(int argc, char **argv)
     test_resource_binaries();
     test_resource_release_in_down_handler();
     test_resource_release_in_down_handler_two_monitors();
+#ifndef HAVE_KQUEUE
+    test_select_event_armed_during_listener_only_rebuild();
+#endif
 
     return EXIT_SUCCESS;
 }
