@@ -386,7 +386,7 @@ jobs:
           echo "::error::ESP32-C3 boot test did not print {atomvm_rtems_boot,rtems} (status ${status})"
           exit 1
         fi
-        for marker in '{uart,enoent,ok}' '{i2c,fdt_alias,ok}' '{i2c,open,ok}' '{gpio,esp32c3,ok}' '{spi,fdt_alias,ok}' '{spi,open,ok}' '{rtc_slow,esp32c3,ok}'; do
+        for marker in '{uart,enoent,ok}' '{i2c,fdt_alias,ok}' '{i2c,open,ok}' '{gpio,esp32c3,ok}' '{spi,fdt_alias,ok}' '{spi,open,ok}' '{rtc_slow,esp32c3,ok}' '{crypto,esp32c3,ok}'; do
           if ! grep -Fq "$marker" <<< "$output"; then
             echo "::error::ESP32-C3 boot test did not print ${marker}"
             exit 1

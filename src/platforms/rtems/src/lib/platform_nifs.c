@@ -21,6 +21,9 @@
 
 #include <string.h>
 
+#include <defaultatoms.h>
+#include <interop.h>
+#include <memory.h>
 #include <nifs.h>
 #include <platform_nifs.h>
 #include <term.h>
@@ -29,6 +32,42 @@
 #include <trace.h>
 
 #include "rtems_sys.h"
+
+#if defined(ATOMVM_HAS_MBEDTLS)
+term nif_crypto_strong_rand_bytes(Context *ctx, int argc, term argv[]);
+
+static term nif_atomvm_rand_bytes(Context *ctx, int argc, term argv[])
+{
+    return nif_crypto_strong_rand_bytes(ctx, argc, argv);
+}
+
+static term nif_atomvm_random(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+    term ra[1] = { term_from_int(4) };
+    term t = nif_atomvm_rand_bytes(ctx, 1, ra);
+    if (term_is_invalid_term(t)) {
+        return t;
+    }
+    uint32_t *r = (uint32_t *) term_binary_data(t);
+    avm_int_t value = *r;
+    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    return term_make_boxed_int(value, &ctx->heap);
+}
+
+static const struct Nif atomvm_rand_bytes_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_rand_bytes
+};
+
+static const struct Nif atomvm_random_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_random
+};
+#endif
 
 static term nif_atomvm_platform(Context *ctx, int argc, term argv[])
 {
@@ -48,5 +87,15 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &atomvm_platform_nif;
     }
+#if defined(ATOMVM_HAS_MBEDTLS)
+    if (strcmp("atomvm:rand_bytes/1", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &atomvm_rand_bytes_nif;
+    }
+    if (strcmp("atomvm:random/0", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &atomvm_random_nif;
+    }
+#endif
     return nif_collection_resolve_nif(nifname);
 }

@@ -65,6 +65,36 @@ set(_rtems_force_nifs uart_nif i2c_nif gpio_nif spi_nif rtems_network_nif networ
 if(RTEMS_HAS_LIBBSD OR RTEMS_HAS_LWIP)
     list(APPEND _rtems_force_nifs otp_socket_nif otp_net_nif)
 endif()
+
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/../../../../CMakeModules")
+find_package(MbedTLS QUIET)
+if(NOT MbedTLS_FOUND)
+    include(MbedTLS)
+endif()
+if(MbedTLS_FOUND)
+    target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ATOMVM_HAS_MBEDTLS HAVE_MBEDTLS=1)
+    target_sources(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
+        otp_crypto_platform.c
+        ../../../../libAtomVM/otp_crypto.c
+        ../../../../libAtomVM/otp_crypto.h
+    )
+    target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC MbedTLS::mbedcrypto)
+    list(APPEND _rtems_force_nifs otp_crypto_nif)
+
+    if(RTEMS_HAS_LIBBSD OR RTEMS_HAS_LWIP)
+        target_sources(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
+            otp_ssl_platform.c
+            ../../../../libAtomVM/otp_ssl.c
+            ../../../../libAtomVM/otp_ssl.h
+        )
+        target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC
+            MbedTLS::mbedtls
+            MbedTLS::mbedx509
+        )
+        list(APPEND _rtems_force_nifs otp_ssl_nif)
+    endif()
+endif()
+
 set(_rtems_force_link)
 foreach(_nif ${_rtems_force_nifs})
     list(APPEND _rtems_force_link "SHELL:-Wl,-u -Wl,${_nif}")

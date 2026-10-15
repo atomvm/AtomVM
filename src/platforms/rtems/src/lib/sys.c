@@ -324,3 +324,72 @@ term sys_get_info(Context *ctx, term key)
     UNUSED(key);
     return UNDEFINED_ATOM;
 }
+
+#if defined(HAVE_MBEDTLS)
+#include <sys_mbedtls.h>
+#include <mbedtls/entropy.h>
+#include <mbedtls/ctr_drbg.h>
+
+#if defined(RTEMS_BOARD_ESP32C3)
+static int esp32c3_hardware_poll(void *data, unsigned char *output, size_t len, size_t *olen)
+{
+    (void) data;
+    for (size_t i = 0; i < len; i += 4) {
+        uint32_t r = *(volatile uint32_t *) 0x600260B0;
+        size_t chunk = (len - i < 4) ? (len - i) : 4;
+        memcpy(output + i, &r, chunk);
+    }
+    *olen = len;
+    return 0;
+}
+#endif
+
+int sys_mbedtls_entropy_func(void *entropy, unsigned char *buf, size_t size)
+{
+    return mbedtls_entropy_func(entropy, buf, size);
+}
+
+mbedtls_entropy_context *sys_mbedtls_get_entropy_context_lock(GlobalContext *global)
+{
+    (void) global;
+    static mbedtls_entropy_context entropy_ctx;
+    static bool entropy_initialized = false;
+    if (!entropy_initialized) {
+        mbedtls_entropy_init(&entropy_ctx);
+#if defined(RTEMS_BOARD_ESP32C3)
+        mbedtls_entropy_add_source(&entropy_ctx, esp32c3_hardware_poll, NULL, 32, MBEDTLS_ENTROPY_SOURCE_STRONG);
+#endif
+        entropy_initialized = true;
+    }
+    return &entropy_ctx;
+}
+
+void sys_mbedtls_entropy_context_unlock(GlobalContext *global)
+{
+    (void) global;
+}
+
+mbedtls_ctr_drbg_context *sys_mbedtls_get_ctr_drbg_context_lock(GlobalContext *global)
+{
+    (void) global;
+    static mbedtls_ctr_drbg_context ctr_drbg_ctx;
+    static bool drbg_initialized = false;
+    if (!drbg_initialized) {
+        mbedtls_ctr_drbg_init(&ctr_drbg_ctx);
+        mbedtls_entropy_context *entropy = sys_mbedtls_get_entropy_context_lock(global);
+        const char *seed = "AtomVM RTEMS initial entropy seed";
+        int err = mbedtls_ctr_drbg_seed(&ctr_drbg_ctx, sys_mbedtls_entropy_func, entropy,
+                                        (const unsigned char *) seed, strlen(seed));
+        if (err != 0) {
+            abort();
+        }
+        drbg_initialized = true;
+    }
+    return &ctr_drbg_ctx;
+}
+
+void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
+{
+    (void) global;
+}
+#endif

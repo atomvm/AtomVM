@@ -28,6 +28,7 @@ start() ->
     gpio_smoke(),
     spi_smoke(),
     rtc_slow_smoke(),
+    crypto_smoke(),
     ok.
 
 uart_smoke() ->
@@ -153,4 +154,39 @@ rtc_slow_smoke() ->
             erlang:display({rtc_slow, esp32c3, ok});
         {'EXIT', {badarg, _}} ->
             erlang:display({rtc_slow, unsupported, ok})
+    end.
+
+crypto_smoke() ->
+    case catch crypto:strong_rand_bytes(16) of
+        Rand1 when is_binary(Rand1) andalso byte_size(Rand1) =:= 16 ->
+            Rand2 = crypto:strong_rand_bytes(16),
+            true = is_binary(Rand2) andalso byte_size(Rand2) =:= 16,
+            true = (Rand1 =/= Rand2),
+            erlang:display({crypto, strong_rand_bytes, ok}),
+
+            % Hash testing
+            HelloHash = crypto:hash(sha256, <<"Hello">>),
+            <<24, 95, 141, 179, 34, 113, 254, 37, 245, 97, 166, 252, 147, 139, 46, 38,
+              67, 6, 236, 48, 78, 218, 81, 128, 7, 209, 118, 72, 38, 56, 25, 105>> = HelloHash,
+            erlang:display({crypto, sha256, ok}),
+
+            % AES-128-ECB one-time encrypt/decrypt
+            Key = <<1:128>>,
+            PlainText = <<"16-byte-block-ok">>,
+            CipherText = crypto:crypto_one_time(aes_128_ecb, Key, PlainText, true),
+            PlainText = crypto:crypto_one_time(aes_128_ecb, Key, CipherText, false),
+            erlang:display({crypto, aes_128_ecb, ok}),
+
+            % atomvm random NIFs
+            AtomRand = atomvm:rand_bytes(8),
+            8 = byte_size(AtomRand),
+            AtomRandInt = atomvm:random(),
+            true = is_integer(AtomRandInt),
+            erlang:display({crypto, atomvm_random, ok}),
+
+            erlang:display({crypto, esp32c3, ok});
+        {'EXIT', {badarg, _}} ->
+            erlang:display({crypto, unsupported, ok});
+        {'EXIT', {undef, _}} ->
+            erlang:display({crypto, undef, ok})
     end.

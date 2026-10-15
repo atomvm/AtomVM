@@ -33,8 +33,8 @@ Below are the key missing subsystems, prioritized by implementation feasibility 
 | **RTC 64-bit Timer** | Continuous hardware counter in `RTC_CNTL` (`0x6000_8000`) | **Missing** (clock resets to 1988 on reboot until SNTP) | Low (MMIO register read/sync) | **High** |
 | **Reset Reason & Wakeup** | `RTC_CNTL_RESET_CAUSE_PROCPU` (`0x6000_8034`) | **Missing** (`esp:reset_reason/0` unsupported) | Low (read MMIO register) | **High** |
 | **Deep / Light Sleep** | `RTC_CNTL` power domain state machine, timer & GPIO wakeup | **Missing** (`esp:deep_sleep/1` unsupported) | Medium (register sequencing) | Medium |
-| **MbedTLS / TLS / Crypto** | Hardware SHA, AES, RSA accelerators; software TLS | **Disabled** (`Could NOT find MbedTLS`) | Medium (cross-compile for `riscv-rtems7`) | **High** |
-| **Hardware RNG** | True RNG at `0x6002_60B0` | Used internally by Wi-Fi, not exposed to Erlang `crypto` | Low (wire into `/dev/urandom` or crypto NIF) | Medium |
+| **MbedTLS / TLS / Crypto** | Hardware SHA, AES, RSA accelerators; software TLS | **Supported** (MbedTLS 3.6.3 LTS installed into `riscv-rtems7/esp32c3db`, `crypto` and `ssl` NIFs enabled) | Medium | **Done** |
+| **Hardware RNG** | True RNG at `0x6002_60B0` | **Supported** (Wired to MbedTLS entropy source & `crypto:strong_rand_bytes/1`) | Low | **Done** |
 | **LEDC (Hardware PWM)** | 6 independent channels with configurable duty & frequency | **Missing** (`ledc.erl` unsupported on RTEMS) | Medium (MMIO register programming) | Medium |
 | **SAR ADC** | 12-bit ADC, up to 6 channels on GPIO 0–4 | **Missing** (`esp_adc.erl` unsupported on RTEMS) | Medium (calibration & APB registers) | Medium |
 | **NVS / Flash Storage** | SPI Flash partitions, wear-leveling, LittleFS | **Missing** (only direct-boot read-only flash mapped) | High (SPI flash controller driver) | Low |
@@ -87,28 +87,24 @@ Below are the key missing subsystems, prioritized by implementation feasibility 
 
 ---
 
-## 4. Cryptography, Security & TLS
+## 4. Cryptography, Security & TLS — **Implemented**
 
 ### 4.1 MbedTLS 3.x Cross-Compilation
-- **Background**:
-  AtomVM has complete Erlang modules for `ssl` and `crypto`, but disabled on RTEMS ESP32-C3 because MbedTLS was not compiled for `riscv-rtems7`.
-- **Action Items**:
-  1. Update `src/platforms/rtems/docker/Dockerfile.rtems7-esp32c3` to clone and build `mbedtls` (v3.6.x LTS) with CMake:
-     ```bash
-     cmake -B build-mbedtls -S mbedtls \
-       -DCMAKE_TOOLCHAIN_FILE=/opt/rtems/7/share/rtems/cmake/riscv-rtems7-esp32c3db.cmake \
-       -DCMAKE_INSTALL_PREFIX=/opt/rtems/7/riscv-rtems7/esp32c3db \
-       -DENABLE_TESTING=OFF -DENABLE_PROGRAMS=OFF
-     ```
-  2. Verify that CMake finds `MbedTLS` and automatically enables `ssl` and `crypto`.
-  3. Validate TLS client handshake (`ahttp_client` over HTTPS) in simulation.
+- **Status**: **Done**.
+- **Implementation**:
+  - Official MbedTLS 3.6.3 (`v3.6.3` LTS) cross-compiled for `riscv-rtems7` and installed into `${PREFIX}/riscv-rtems7/esp32c3db` (`libmbedcrypto.a`, `libmbedx509.a`, `libmbedtls.a`, and headers).
+  - Built with `MBEDTLS_NO_PLATFORM_ENTROPY=ON`, `MBEDTLS_TIMING_C=OFF`, `MBEDTLS_NET_C=OFF`.
+  - Toolchain CMake paths updated in `rtems-toolchain.cmake` (`CMAKE_PREFIX_PATH` and `CMAKE_FIND_ROOT_PATH`) to discover MbedTLS package.
+  - Enabled `otp_crypto_platform.c` (`crypto:strong_rand_bytes/1`, `crypto:hash/2`, `crypto:crypto_one_time/4`) and `otp_ssl_platform.c`.
+  - Added `atomvm:rand_bytes/1` and `atomvm:random/0` in RTEMS `platform_nifs.c`.
 
 ### 4.2 Hardware RNG Driver
-- **Background**:
-  ESP32-C3 contains a True Random Number Generator at `0x6002_60B0` (active when Wi-Fi/ADC is clocked).
-- **Action Items**:
-  1. Register `/dev/urandom` in IMFS or integrate with AtomVM's `sys_crypto_random_bytes()`.
-  2. Expose `crypto:strong_rand_bytes/1` without requiring external entropy daemons.
+- **Status**: **Done**.
+- **Implementation**:
+  - Polled ESP32-C3 hardware RNG register at `0x6002_60B0` in `sys.c`.
+  - Registered as `MBEDTLS_ENTROPY_SOURCE_STRONG` source via `mbedtls_entropy_add_source()`.
+  - Hooked into `sys_mbedtls_get_entropy_context_lock()` and `sys_mbedtls_get_ctr_drbg_context_lock()`.
+  - Verified under `esp-emulator` simulation in `test_boot.erl` (`{crypto, strong_rand_bytes, ok}`).
 
 ---
 

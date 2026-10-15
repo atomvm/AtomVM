@@ -144,7 +144,7 @@ if [ ! -d "esp-hal-3rdparty/.git" ]; then
 fi
 
 if [ ! -d "mbedtls/.git" ]; then
-    git clone --depth 1 https://github.com/thesamprice/mbedtls.git -b master mbedtls
+    git clone --depth 1 https://github.com/Mbed-TLS/mbedtls.git -b v3.6.3 mbedtls
 fi
 
 if [ ! -d "rtems-esp-wifi/.git" ]; then
@@ -154,33 +154,28 @@ fi
 # -----------------------------------------------------------------------------
 # Step 3: Build mbedtls and wpa_supplicant
 # -----------------------------------------------------------------------------
-echo "==> [3/4] Compiling mbedTLS and WPA Supplicant..."
+echo "==> [3/4] Compiling and installing MbedTLS 3.6.3 and WPA Supplicant..."
 GLUE="${BUILD_DIR}/rtems-esp-wifi"
 HAL="${BUILD_DIR}/esp-hal-3rdparty/components"
 WPA="${HAL}/wpa_supplicant"
 MBED="${BUILD_DIR}/mbedtls"
 
-# Build mbedTLS
-mkdir -p "${BUILD_DIR}/mbedtls-obj"
-MBED_INC="-isystem ${BSP_INC} -I ${GLUE}/include -I ${GLUE}/include/rtems-esp \
-          -I ${MBED}/include -I ${MBED}/library \
-          -I ${MBED}/tf-psa-crypto/include -I ${MBED}/tf-psa-crypto/drivers/builtin/include \
-          -I ${MBED}/tf-psa-crypto/core -I ${MBED}/tf-psa-crypto/drivers/builtin/src \
-          -I ${MBED}/tf-psa-crypto/utilities \
-          -I ${MBED}/3rdparty/everest/include -I ${MBED}/3rdparty/p256-m"
-
-for c in "${MBED}"/library/*.c "${MBED}"/tf-psa-crypto/core/*.c \
-         "${MBED}"/tf-psa-crypto/utilities/*.c \
-         "${MBED}"/tf-psa-crypto/platform/*.c \
-         "${MBED}"/tf-psa-crypto/drivers/builtin/src/*.c; do
-    [ -f "$c" ] || continue
-    o="${BUILD_DIR}/mbedtls-obj/$(basename "$(dirname "$c")")_$(basename "$c" .c).o"
-    riscv-rtems7-gcc -march=rv32imc -mabi=ilp32 \
-        -DMBEDTLS_CONFIG_FILE='<rtems-esp/mbedtls_config.h>' \
-        ${MBED_INC} -Os -ffunction-sections -fdata-sections \
-        -c -o "$o" "$c" 2>/dev/null || true
-done
-riscv-rtems7-ar rcs "${BSP_LIB}/libmbedtls.a" "${BUILD_DIR}"/mbedtls-obj/*.o
+# Build & install MbedTLS 3.6.3
+cd "${MBED}"
+python3 scripts/config.py set MBEDTLS_NO_PLATFORM_ENTROPY
+python3 scripts/config.py unset MBEDTLS_TIMING_C
+python3 scripts/config.py unset MBEDTLS_NET_C
+cmake -B build-mbedtls -G Ninja \
+  -DCMAKE_SYSTEM_NAME=Generic \
+  -DCMAKE_SYSTEM_PROCESSOR=riscv \
+  -DCMAKE_C_COMPILER=riscv-rtems7-gcc \
+  -DCMAKE_C_FLAGS="-march=rv32imc -mabi=ilp32 -Os" \
+  -DCMAKE_INSTALL_PREFIX="${PREFIX}/riscv-rtems7/esp32c3db" \
+  -DENABLE_TESTING=OFF \
+  -DENABLE_PROGRAMS=OFF \
+  -DMBEDTLS_FATAL_WARNINGS=OFF
+ninja -C build-mbedtls install
+cd "${BUILD_DIR}"
 
 # Build WPA Supplicant
 mkdir -p "${BUILD_DIR}/wpa-obj"
@@ -189,8 +184,7 @@ WPA_INC="-isystem ${BSP_INC} -I ${GLUE}/include -I ${GLUE}/include/rtems-esp \
          -I ${WPA}/include -I ${WPA}/port/include \
          -I ${WPA}/esp_supplicant/include -I ${WPA}/esp_supplicant/include/esp_private \
          -I ${WPA}/esp_supplicant/src \
-         -I ${MBED}/include -I ${MBED}/tf-psa-crypto/include \
-         -I ${MBED}/tf-psa-crypto/drivers/builtin/include \
+         -I ${MBED}/include \
          -I ${HAL}/esp_wifi/include -I ${HAL}/esp_wifi/wifi_apps/roaming_app/include \
          -I ${HAL}/esp_wifi/wifi_apps/roaming_app/src \
          -I ${HAL}/esp_wifi/wifi_apps/include/apps_private \
