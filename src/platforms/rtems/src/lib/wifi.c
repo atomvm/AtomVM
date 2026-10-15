@@ -333,7 +333,7 @@ static rtems_id dhcp_poll_task_id = RTEMS_ID_NONE;
 
 int os_get_random(unsigned char *buf, size_t len)
 {
-#if defined(RTEMS_BOARD_ESP32C6)
+#if defined(RTEMS_BOARD_ESP32C6) || defined(RTEMS_BOARD_ESP32C5)
     volatile uint32_t *rng = (volatile uint32_t *) 0x600B2808;
 #else
     volatile uint32_t *rng = (volatile uint32_t *) 0x600260b0;

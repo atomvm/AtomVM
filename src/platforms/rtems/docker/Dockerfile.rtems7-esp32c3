@@ -76,8 +76,10 @@ ARG RTEMS_GIT_URL=https://gitlab.rtems.org/rtems/rtos/rtems.git
 WORKDIR /tmp/rtems
 ENV PATH="${RTEMS_PREFIX}/bin:${PATH}"
 
-# Copy BSP configuration and patches directory from build context
+# Copy BSP configurations and patches directory from build context
 COPY esp32c3-wifi-bsp.ini /tmp/esp32c3-wifi-bsp.ini
+COPY esp32c5-wifi-bsp.ini /tmp/esp32c5-wifi-bsp.ini
+COPY esp32c6-wifi-bsp.ini /tmp/esp32c6-wifi-bsp.ini
 COPY patches/ /tmp/patches/
 
 # Copy optional local RTEMS source from build context (empty if not specified)
@@ -105,10 +107,11 @@ RUN if [ -f /tmp/rtems-local/waf ]; then \
             fi; \
         done; \
     fi \
-    && ./waf configure --prefix="${RTEMS_PREFIX}" --rtems-bsps=riscv/esp32c3db --rtems-config=/tmp/esp32c3-wifi-bsp.ini \
+    && cat /tmp/esp32c3-wifi-bsp.ini /tmp/esp32c5-wifi-bsp.ini /tmp/esp32c6-wifi-bsp.ini > /tmp/esp32-all.ini \
+    && ./waf configure --prefix="${RTEMS_PREFIX}" --rtems-bsps=riscv/esp32c3db,riscv/esp32c5db,riscv/esp32c6db --rtems-config=/tmp/esp32-all.ini \
     && ./waf \
     && ./waf install \
-    && rm -rf /tmp/rtems /tmp/rtems-local /tmp/patches /tmp/esp32c3-wifi-bsp.ini
+    && rm -rf /tmp/rtems /tmp/rtems-local /tmp/patches /tmp/*.ini
 
 # Strip debug symbols from host binaries to minimize final layer size
 RUN find ${RTEMS_PREFIX}/bin ${RTEMS_PREFIX}/libexec -type f -executable -exec strip {} + 2>/dev/null || true
@@ -118,9 +121,11 @@ RUN find ${RTEMS_PREFIX}/bin ${RTEMS_PREFIX}/libexec -type f -executable -exec s
 FROM bsp-builder AS wifi-builder
 
 COPY build-esp32c3-wifi-stack.sh /tmp/build-esp32c3-wifi-stack.sh
+COPY build-esp32c6-wifi-stack.sh /tmp/build-esp32c6-wifi-stack.sh
 COPY patches/ /tmp/patches/
 RUN /tmp/build-esp32c3-wifi-stack.sh --prefix="${RTEMS_PREFIX}" --patch-dir=/tmp/patches \
-    && rm -rf /tmp/build-esp32c3-wifi-stack.sh /tmp/patches /root/.cache/rtems7-wifi-build
+    && /tmp/build-esp32c6-wifi-stack.sh --prefix="${RTEMS_PREFIX}" --patch-dir=/tmp/patches \
+    && rm -rf /tmp/build-esp32*-wifi-stack.sh /tmp/patches /root/.cache/rtems7-wifi-*
 
 # Stage 5: Final developer runtime & simulation environment.
 # AtomVM source is bind-mounted into /workspace at runtime (-v $PWD:/workspace),

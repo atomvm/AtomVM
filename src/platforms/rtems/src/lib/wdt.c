@@ -55,7 +55,7 @@
 #define WRITE_PERI_REG(addr, val) (*((volatile uint32_t *) (addr)) = (uint32_t) (val))
 #define READ_PERI_REG(addr)       (*((volatile uint32_t *) (addr)))
 
-#if defined(RTEMS_BOARD_ESP32C6)
+#if defined(RTEMS_BOARD_ESP32C6) || defined(RTEMS_BOARD_ESP32C5)
 #define ESP32_TIMG0_BASE             0x60008000U
 #define ESP32_RTC_CNTL_BASE          0x600B1C00U
 #define ESP32_RTC_CNTL_OPTIONS0_REG  0x600B1000U

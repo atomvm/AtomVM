@@ -78,6 +78,8 @@ if(RTEMS_BOARD STREQUAL "grisp2")
         RTEMS_APP_PATH="${RTEMS_APP_PATH}")
 elseif(RTEMS_BOARD STREQUAL "esp32c3")
     target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BOARD_ESP32 RTEMS_BOARD_ESP32C3)
+elseif(RTEMS_BOARD STREQUAL "esp32c5")
+    target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BOARD_ESP32 RTEMS_BOARD_ESP32C5)
 elseif(RTEMS_BOARD STREQUAL "esp32c6")
     target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BOARD_ESP32 RTEMS_BOARD_ESP32C6)
 endif()
@@ -184,6 +186,14 @@ elseif(RTEMS_BOARD STREQUAL "esp32c6")
             z
         )
     endif()
+elseif(RTEMS_BOARD STREQUAL "esp32c5")
+    target_link_options(${PROJECT_EXECUTABLE} PRIVATE
+        -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/../ld/esp32c5.rom.ld
+    )
+    target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
+        jffs2
+        z
+    )
 elseif(RTEMS_BOARD MATCHES "esp32")
     target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
         jffs2
