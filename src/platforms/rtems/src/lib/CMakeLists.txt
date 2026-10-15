@@ -22,6 +22,7 @@ cmake_minimum_required(VERSION 3.13)
 project(libAtomVMPlatformRTEMS)
 
 set(HEADER_FILES
+    adc_driver.h
     ledc_driver.h
     network.h
     rtc.h
@@ -35,6 +36,7 @@ set(HEADER_FILES
 )
 
 set(SOURCE_FILES
+    adc_driver.c
     ledc_driver.c
     network.c
     network_driver.c
@@ -66,7 +68,7 @@ endif()
 target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC libAtomVM)
 # Constructor-registered NIF collections and port drivers are otherwise dropped from the static archive.
-set(_rtems_force_nifs uart_nif i2c_nif gpio_nif spi_nif rtems_network_nif networkregister_port_driver rtc_slow_nif wdt_nif ledc_nif)
+set(_rtems_force_nifs uart_nif i2c_nif gpio_nif spi_nif rtems_network_nif networkregister_port_driver rtc_slow_nif wdt_nif ledc_nif adc_nif)
 if(RTEMS_HAS_LIBBSD OR RTEMS_HAS_LWIP)
     list(APPEND _rtems_force_nifs otp_socket_nif otp_net_nif)
 endif()

@@ -36,7 +36,7 @@ Below are the key missing subsystems, prioritized by implementation feasibility 
 | **MbedTLS / TLS / Crypto** | Hardware SHA, AES, RSA accelerators; software TLS | **Supported** (MbedTLS 3.6.3 LTS installed into `riscv-rtems7/esp32c3db`, `crypto` and `ssl` NIFs enabled) | Medium | **Done** |
 | **Hardware RNG** | True RNG at `0x6002_60B0` | **Supported** (Wired to MbedTLS entropy source & `crypto:strong_rand_bytes/1`) | Low | **Done** |
 | **LEDC (Hardware PWM)** | 6 independent channels with configurable duty & frequency | **Supported** (`ledc:*`, `Elixir.LEDC:*`, 17 NIFs) | Medium (MMIO register programming) | **Done** |
-| **SAR ADC** | 12-bit ADC, up to 6 channels on GPIO 0–4 | **Missing** (`esp_adc.erl` unsupported on RTEMS) | Medium (calibration & APB registers) | Medium |
+| **SAR ADC** | 12-bit ADC, up to 6 channels on GPIO 0–4 | **Supported** (`esp_adc:*`, `Elixir.Esp.ADC:*`, gen_server) | Medium (calibration & APB registers) | **Done** |
 | **NVS / Flash Storage** | SPI Flash partitions, wear-leveling, LittleFS | **Missing** (only direct-boot read-only flash mapped) | High (SPI flash controller driver) | Low |
 | **Watchdog Timers (WDT)** | MWDT0, MWDT1, and RTC Watchdog (RWDT) | **Supported** (Task WDT, MWDT0, RWDT, `esp:task_wdt_*`, `esp:wdt_feed/0`) | Low-Medium (timer interrupt or register reset) | **Done** |
 | **Bluetooth LE (BLE 5.0)** | 2.4 GHz BLE controller in ROM & hardware baseband | **Missing** (no BLE host stack ported to RTEMS) | High (requires NimBLE / Zephyr controller glue) | Low |
@@ -118,12 +118,19 @@ Below are the key missing subsystems, prioritized by implementation feasibility 
   - Implements all 17 NIFs required for standard AtomVM `ledc.erl`, `Elixir.LEDC`, and `atomvm_rtems:ledc_*`.
   - Verified under `esp-emulator` simulation (`test_boot.erl`).
 
-### 5.2 SAR ADC (12-bit Analog-to-Digital Converter)
-- **Background**:
-  ADC1 supports up to 6 channels (GPIO 0–4).
-- **Action Items**:
-  1. Implement `adc_driver.c` configuring `APB_SARADC_SAR1_PATT_TAB_REG` and reading `APB_SARADC_SAR1_DATA_REG`.
-  2. Support AtomVM's `esp_adc.erl` interface (`adc:read/1`, `adc:read_mv/1` with factory eFuse calibration).
+### 5.2 SAR ADC (12-bit Analog-to-Digital Converter) — **Implemented**
+- **Status**: **Done**.
+- **Implementation**:
+  - `adc_driver.c` and `adc_driver.h` implement MMIO hardware register control for the ESP32-C3 APB_SARADC peripheral (`0x6004_0000`).
+  - Supports 12-bit analog sampling on ADC1 channels 0–4 (GPIO 0–4) and ADC2 channel 0 (GPIO 5).
+  - Programs `SYSREG_PERIP_CLK_EN0_REG` / `SYSREG_PERIP_RST_EN0_REG` (bits 28 and 30) for peripheral clock gating and reset deassertion.
+  - Programs `APB_SARADC_CLKM_CONF_REG`, `APB_SARADC_CTRL_REG`, `APB_SARADC_FSM_WAIT_REG`, and RTC power domains (`RTC_CNTL_ANA_CONF_REG` and `RTC_CNTL_SENSOR_CTRL_REG`).
+  - Configures pin IO_MUX for analog input (disables digital input buffer `FUN_IE = 0`, disables pull-ups/pull-downs) and claims pin via `bsp_pin_claim`.
+  - Performs one-shot conversions via `APB_SARADC_ONETIME_SAMPLE_REG` and reads digital output from `APB_SARADC_SAR1_DATA_STATUS_REG` / `SAR2`.
+  - Converts raw readings to calibrated millivolts using Espressif's recommended voltage approximation for attenuations `db_0`, `db_2_5`, `db_6`, and `db_11` / `db_12`.
+  - Implements resource management (`adc_unit_resource`, `adc_channel_resource`) and all standard NIFs: `esp_adc:init/0`, `esp_adc:deinit/1`, `esp_adc:acquire/4`, `esp_adc:acquire/2`, `esp_adc:release_channel/1`, `esp_adc:sample/3`, `esp_adc:sample/2` (with `Elixir.Esp.ADC` and `atomvm_rtems:adc_*` aliases).
+  - Includes `esp_adc.erl` in `avm_rtems`, providing full `gen_server` convenience API (`start/0,1,2`, `read/1,2`, `stop/0,1`).
+  - Verified under `esp-emulator` simulation (`test_boot.erl`).
 
 ### 5.3 Non-Volatile Flash Storage & NVS
 - **Background**:
@@ -161,8 +168,8 @@ flowchart TD
         F --> G["2.3 Hardware RNG<br>crypto:strong_rand_bytes"]
     end
 
-    subgraph Phase 3: Hardware Control
-        H["3.1 LEDC (PWM Driver) - Done<br>ledc:set_duty / set_freq"] --> I["3.2 SAR ADC (12-bit)<br>esp_adc:read"]
+    subgraph Phase 3: Hardware Control (Completed)
+        H["3.1 LEDC (PWM Driver)<br>ledc:set_duty / set_freq"] --> I["3.2 SAR ADC (12-bit)<br>esp_adc:read / sample"]
     end
 
     subgraph Phase 4: Storage & Flash

@@ -31,6 +31,7 @@ start() ->
     sleep_smoke(),
     wdt_smoke(),
     ledc_smoke(),
+    adc_smoke(),
     crypto_smoke(),
     ok.
 
@@ -349,6 +350,62 @@ ledc_smoke() ->
     erlang:display({ledc_stop, ok}),
 
     erlang:display({ledc, esp32c3, ok}).
+
+adc_smoke() ->
+    % Test init
+    {ok, Unit} = esp_adc:init(),
+    erlang:display({esp_adc_init, ok}),
+
+    % Parameter validation: invalid pin 42, invalid bitwidth, invalid atten
+    {'EXIT', {badarg, _}} = (catch esp_adc:acquire(42, Unit)),
+    {'EXIT', {badarg, _}} = (catch esp_adc:acquire(2, Unit, invalid_bits, db_11)),
+    {'EXIT', {badarg, _}} = (catch esp_adc:acquire(2, Unit, bit_12, invalid_atten)),
+    erlang:display({esp_adc_badarg, ok}),
+
+    % Acquire GPIO 2 (ADC1 channel 2)
+    {ok, Chan} = esp_adc:acquire(2, Unit, bit_12, db_11),
+    erlang:display({esp_adc_acquire, ok}),
+
+    % Sample with default options [raw, voltage, {samples, 64}]
+    {ok, {Raw1, Mv1}} = esp_adc:sample(Chan, Unit),
+    true = is_integer(Raw1) andalso Raw1 >= 0 andalso Raw1 =< 4095,
+    true = is_integer(Mv1) andalso Mv1 >= 0 andalso Mv1 =< 2500,
+    erlang:display({esp_adc_sample_default, Raw1, Mv1, ok}),
+
+    % Sample with [raw] option only
+    {ok, {Raw2, undefined}} = esp_adc:sample(Chan, Unit, [raw]),
+    true = is_integer(Raw2),
+    erlang:display({esp_adc_sample_raw, Raw2, ok}),
+
+    % Sample with [voltage] option only
+    {ok, {undefined, Mv2}} = esp_adc:sample(Chan, Unit, [voltage]),
+    true = is_integer(Mv2),
+    erlang:display({esp_adc_sample_voltage, Mv2, ok}),
+
+    % Sample with custom sample count
+    {ok, {Raw3, Mv3}} = esp_adc:sample(Chan, Unit, [raw, voltage, {samples, 16}]),
+    true = is_integer(Raw3) andalso is_integer(Mv3),
+    erlang:display({esp_adc_sample_samples16, Raw3, Mv3, ok}),
+
+    % Sample invalid option validation
+    {'EXIT', {badarg, _}} = (catch esp_adc:sample(Chan, Unit, [raw, {samples, 0}])),
+    {'EXIT', {badarg, _}} = (catch esp_adc:sample(Chan, Unit, not_a_list)),
+
+    % Release channel and deinit unit
+    ok = esp_adc:release_channel(Chan),
+    ok = esp_adc:deinit(Unit),
+    erlang:display({esp_adc_release_deinit, ok}),
+
+    % Test gen_server convenience API (start/1, read/1, stop/1, stop/0)
+    ok = esp_adc:start(2),
+    {ok, {RawGen, MvGen}} = esp_adc:read(2),
+    true = is_integer(RawGen) andalso is_integer(MvGen),
+    erlang:display({esp_adc_genserver_read, RawGen, MvGen, ok}),
+    ok = esp_adc:stop(2),
+    ok = esp_adc:stop(),
+    erlang:display({esp_adc_genserver_stop, ok}),
+
+    erlang:display({adc, esp32c3, ok}).
 
 
 
