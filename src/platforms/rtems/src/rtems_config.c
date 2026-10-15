@@ -44,7 +44,14 @@
 #define CONFIGURE_MAXIMUM_POSIX_KEYS 4
 #define CONFIGURE_MAXIMUM_FILE_DESCRIPTORS 16
 #define CONFIGURE_MAXIMUM_USER_EXTENSIONS 2
+#if defined(RTEMS_BOARD_ESP32S31)
+// ESP32-S31 links the Wi-Fi/PHY stack with the single-precision hard-float
+// ABI (ilp32f). Its larger stack frames overflow the 20 KiB baseline used by
+// the soft-float ESP32 boards, corrupting the workspace and breaking stdio.
+#define CONFIGURE_INIT_TASK_STACK_SIZE (64 * 1024)
+#else
 #define CONFIGURE_INIT_TASK_STACK_SIZE (20 * 1024)
+#endif
 #define CONFIGURE_EXTRA_TASK_STACKS 0
 #else
 #define CONFIGURE_UNLIMITED_OBJECTS

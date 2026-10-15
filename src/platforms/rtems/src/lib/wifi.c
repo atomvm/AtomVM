@@ -335,6 +335,9 @@ int os_get_random(unsigned char *buf, size_t len)
 {
 #if defined(RTEMS_BOARD_ESP32C6) || defined(RTEMS_BOARD_ESP32C5)
     volatile uint32_t *rng = (volatile uint32_t *) 0x600B2808;
+#elif defined(RTEMS_BOARD_ESP32S31)
+    /* TRNG_CRC_SYNC_DATA_REG, the source rng_ll_read() samples on the S31. */
+    volatile uint32_t *rng = (volatile uint32_t *) 0x20814048;
 #else
     volatile uint32_t *rng = (volatile uint32_t *) 0x600260b0;
 #endif

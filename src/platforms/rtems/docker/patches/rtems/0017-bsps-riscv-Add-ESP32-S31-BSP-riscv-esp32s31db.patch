@@ -692,8 +692,8 @@ index 78471b2..452ce74 100644
    - -mabi=ilp32
 +- enabled-by: riscv/esp32s31db
 +  value:
-+  - -march=rv32imac
-+  - -mabi=ilp32
++  - -march=rv32imafc
++  - -mabi=ilp32f
  - enabled-by: true
    value:
    - -march=rv32imc

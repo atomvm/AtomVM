@@ -271,6 +271,13 @@ elseif(RTEMS_BOARD STREQUAL "esp32s31")
             -Wl,-u,esp32s31_netif_add
             -Wl,-u,esp_supplicant_init
             -Wl,-u,g_wifi_default_wpa_crypto_funcs
+            -Wl,-T,${_esp32s31_lib_dir}/esp32s31.rom.ld
+            -Wl,-T,${_esp32s31_lib_dir}/esp32s31.rom.api.ld
+            -Wl,-T,${_esp32s31_lib_dir}/esp32s31.rom.version.ld
+            -Wl,-T,${_esp32s31_lib_dir}/esp32s31.rom.phy.ld
+            -Wl,-T,${_esp32s31_lib_dir}/esp32s31.rom.net80211.ld
+            -Wl,-T,${_esp32s31_lib_dir}/esp32s31.rom.pp.ld
+            -Wl,-T,${_esp32s31_lib_dir}/esp32s31.rom.coexist.ld
             -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/../ld/esp32s31.rom.ld
         )
         target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE

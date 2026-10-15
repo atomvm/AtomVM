@@ -158,7 +158,12 @@ if(NOT RTEMS_BSP_CFLAGS OR NOT RTEMS_BSP_LDFLAGS)
             "Is RTEMS ${RTEMS_VERSION} installed at ${RTEMS_PREFIX} with BSP ${RTEMS_BSP}?")
     endif()
     # RTEMS 6/7 no longer installs bsp_specs; -B plus -qrtems is enough.
-    if(RTEMS_ARCH STREQUAL "riscv" AND RTEMS_BSP_NAME MATCHES "esp32")
+    if(RTEMS_ARCH STREQUAL "riscv" AND RTEMS_BSP_NAME MATCHES "esp32s31")
+        # esp32s31 Wi-Fi/PHY prebuilt blobs use the single-precision hard-float
+        # ABI (ilp32f); match the BSP so every object links into one multilib.
+        set(RTEMS_BSP_CFLAGS "-B${_rtems_bsp_libdir}/ -qrtems -march=rv32imafc -mabi=ilp32f")
+        set(RTEMS_BSP_LDFLAGS "-B${_rtems_bsp_libdir}/ -qrtems -march=rv32imafc -mabi=ilp32f")
+    elseif(RTEMS_ARCH STREQUAL "riscv" AND RTEMS_BSP_NAME MATCHES "esp32")
         set(RTEMS_BSP_CFLAGS "-B${_rtems_bsp_libdir}/ -qrtems -march=rv32imc -mabi=ilp32")
         set(RTEMS_BSP_LDFLAGS "-B${_rtems_bsp_libdir}/ -qrtems -march=rv32imc -mabi=ilp32")
     else()
