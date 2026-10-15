@@ -48,22 +48,25 @@ elseif(RTEMS_ARCH STREQUAL "riscv" AND RTEMS_BSP_NAME MATCHES "esp32")
         set(_rtems_board_default "esp32c6")
     elseif(RTEMS_BSP_NAME MATCHES "esp32c5")
         set(_rtems_board_default "esp32c5")
+    elseif(RTEMS_BSP_NAME MATCHES "esp32s31")
+        set(_rtems_board_default "esp32s31")
     else()
         set(_rtems_board_default "esp32c3")
     endif()
 endif()
 set(RTEMS_BOARD "${_rtems_board_default}" CACHE STRING
-    "RTEMS board integration (generic, qemu, grisp2, esp32c3, esp32c5, or esp32c6)")
-set_property(CACHE RTEMS_BOARD PROPERTY STRINGS generic qemu grisp2 esp32c3 esp32c5 esp32c6)
+    "RTEMS board integration (generic, qemu, grisp2, esp32c3, esp32c5, esp32c6, or esp32s31)")
+set_property(CACHE RTEMS_BOARD PROPERTY STRINGS generic qemu grisp2 esp32c3 esp32c5 esp32c6 esp32s31)
 
 if(NOT RTEMS_BOARD STREQUAL "generic" AND
    NOT RTEMS_BOARD STREQUAL "qemu" AND
    NOT RTEMS_BOARD STREQUAL "grisp2" AND
    NOT RTEMS_BOARD STREQUAL "esp32c3" AND
    NOT RTEMS_BOARD STREQUAL "esp32c5" AND
-   NOT RTEMS_BOARD STREQUAL "esp32c6")
+   NOT RTEMS_BOARD STREQUAL "esp32c6" AND
+   NOT RTEMS_BOARD STREQUAL "esp32s31")
     message(FATAL_ERROR
-        "Unsupported RTEMS_BOARD='${RTEMS_BOARD}' (use generic, qemu, grisp2, esp32c3, esp32c5, or esp32c6)")
+        "Unsupported RTEMS_BOARD='${RTEMS_BOARD}' (use generic, qemu, grisp2, esp32c3, esp32c5, esp32c6, or esp32s31)")
 endif()
 
 if(RTEMS_BOARD STREQUAL "grisp2" AND
@@ -73,9 +76,9 @@ endif()
 if(RTEMS_BOARD STREQUAL "grisp2" AND NOT RTEMS_VERSION STREQUAL "6")
     message(FATAL_ERROR "RTEMS_BOARD=grisp2 requires RTEMS_VERSION=6")
 endif()
-if((RTEMS_BOARD STREQUAL "esp32c3" OR RTEMS_BOARD STREQUAL "esp32c5" OR RTEMS_BOARD STREQUAL "esp32c6") AND
+if((RTEMS_BOARD STREQUAL "esp32c3" OR RTEMS_BOARD STREQUAL "esp32c5" OR RTEMS_BOARD STREQUAL "esp32c6" OR RTEMS_BOARD STREQUAL "esp32s31") AND
    (NOT RTEMS_ARCH STREQUAL "riscv" OR NOT RTEMS_BSP_NAME MATCHES "esp32"))
-    message(FATAL_ERROR "RTEMS_BOARD=${RTEMS_BOARD} requires a RISC-V esp32 BSP (e.g. riscv/esp32c3db, riscv/esp32c5db, or riscv/esp32c6db)")
+    message(FATAL_ERROR "RTEMS_BOARD=${RTEMS_BOARD} requires a RISC-V esp32 BSP (e.g. riscv/esp32c3db, riscv/esp32c5db, riscv/esp32c6db, or riscv/esp32s31db)")
 endif()
 
 set(AVM_DISABLE_SMP ON CACHE BOOL "Disable SMP support." FORCE)

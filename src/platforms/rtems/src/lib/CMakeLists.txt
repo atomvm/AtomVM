@@ -128,7 +128,7 @@ if(RTEMS_ARCH STREQUAL "arm" AND RTEMS_BSP_NAME STREQUAL "imx7")
             RTEMS_HAS_WIFI
         )
     endif()
-elseif(RTEMS_BOARD STREQUAL "esp32c3" OR RTEMS_BOARD STREQUAL "esp32c5" OR RTEMS_BOARD STREQUAL "esp32c6")
+elseif(RTEMS_BOARD STREQUAL "esp32c3" OR RTEMS_BOARD STREQUAL "esp32c5" OR RTEMS_BOARD STREQUAL "esp32c6" OR RTEMS_BOARD STREQUAL "esp32s31")
     target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
         RTEMS_BOARD_ESP32
         RTEMS_HAS_GPIO
@@ -144,6 +144,8 @@ elseif(RTEMS_BOARD STREQUAL "esp32c3" OR RTEMS_BOARD STREQUAL "esp32c5" OR RTEMS
         target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE RTEMS_BOARD_ESP32C5)
     elseif(RTEMS_BOARD STREQUAL "esp32c6")
         target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE RTEMS_BOARD_ESP32C6)
+    elseif(RTEMS_BOARD STREQUAL "esp32s31")
+        target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE RTEMS_BOARD_ESP32S31)
     endif()
     target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/include"

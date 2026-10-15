@@ -43,7 +43,14 @@
 
 // Prototypes for ROM symbols
 extern uint32_t spi_flash_get_chip_size(void);
+#if defined(RTEMS_BOARD_ESP32S31)
+/* The S31 ROM exposes the generic cache invalidate rather than the I-cache
+ * specific one named by the other parts. */
+extern void Cache_Invalidate_All(void);
+#define Cache_Invalidate_ICache_All Cache_Invalidate_All
+#else
 extern void Cache_Invalidate_ICache_All(void);
+#endif
 extern void spi_flash_check_and_flush_cache(uint32_t);
 extern esp_rom_spiflash_result_t esp_rom_spiflash_unlock(void);
 

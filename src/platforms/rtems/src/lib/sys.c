@@ -334,7 +334,9 @@ term sys_get_info(Context *ctx, term key)
 static int esp32_hardware_poll(void *data, unsigned char *output, size_t len, size_t *olen)
 {
     (void) data;
-#if defined(RTEMS_BOARD_ESP32C6) || defined(RTEMS_BOARD_ESP32C5)
+#if defined(RTEMS_BOARD_ESP32S31)
+    uintptr_t rng_reg = 0x2081403CU; /* TRNG_SW_READ_REG */
+#elif defined(RTEMS_BOARD_ESP32C6) || defined(RTEMS_BOARD_ESP32C5)
     uintptr_t rng_reg = 0x600B2808U;
 #else
     uintptr_t rng_reg = 0x600260B0U;

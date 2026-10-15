@@ -82,6 +82,8 @@ elseif(RTEMS_BOARD STREQUAL "esp32c5")
     target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BOARD_ESP32 RTEMS_BOARD_ESP32C5)
 elseif(RTEMS_BOARD STREQUAL "esp32c6")
     target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BOARD_ESP32 RTEMS_BOARD_ESP32C6)
+elseif(RTEMS_BOARD STREQUAL "esp32s31")
+    target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BOARD_ESP32 RTEMS_BOARD_ESP32S31)
 endif()
 
 target_compile_features(${PROJECT_EXECUTABLE} PUBLIC c_std_11)
@@ -243,6 +245,55 @@ elseif(RTEMS_BOARD STREQUAL "esp32c5")
     else()
         target_link_options(${PROJECT_EXECUTABLE} PRIVATE
             -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/../ld/esp32c5.rom.ld
+        )
+        target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
+            jffs2
+            z
+        )
+    endif()
+elseif(RTEMS_BOARD STREQUAL "esp32s31")
+    if(RTEMS_HAS_ESP_WIFI)
+        set(RTEMS_ESP32S31_REV_MIN 0 CACHE STRING
+            "Minimum ESP32-S31 chip revision")
+        target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_HAS_WIFI RTEMS_WIFI_BACKEND_ESP32)
+        set(_esp32s31_lib_dir "${RTEMS_PREFIX}/${RTEMS_TARGET}/${RTEMS_BSP_NAME}/lib")
+        file(GLOB _esp32s31_link_inputs
+            "${_esp32s31_lib_dir}/*.a"
+            "${_esp32s31_lib_dir}/esp32s31.rom*.ld"
+            "${_esp32s31_lib_dir}/linkcmds*"
+        )
+        set_property(TARGET ${PROJECT_EXECUTABLE} APPEND PROPERTY LINK_DEPENDS
+            ${_esp32s31_link_inputs}
+            "${CMAKE_CURRENT_SOURCE_DIR}/../ld/esp32s31.rom.ld"
+        )
+        target_link_options(${PROJECT_EXECUTABLE} PRIVATE
+            -Wl,--no-relax-gp
+            -Wl,-u,esp32s31_netif_add
+            -Wl,-u,esp_supplicant_init
+            -Wl,-u,g_wifi_default_wpa_crypto_funcs
+            -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/../ld/esp32s31.rom.ld
+        )
+        target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
+            -Wl,--start-group
+            rtems_esp_wifi
+            lwip
+            wpa
+            mbedtls
+            net80211
+            pp
+            core
+            phy
+            mesh
+            espnow
+            smartconfig
+            wapi
+            jffs2
+            z
+            -Wl,--end-group
+        )
+    else()
+        target_link_options(${PROJECT_EXECUTABLE} PRIVATE
+            -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/../ld/esp32s31.rom.ld
         )
         target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
             jffs2

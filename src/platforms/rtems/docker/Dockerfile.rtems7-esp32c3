@@ -80,6 +80,7 @@ ENV PATH="${RTEMS_PREFIX}/bin:${PATH}"
 COPY esp32c3-wifi-bsp.ini /tmp/esp32c3-wifi-bsp.ini
 COPY esp32c5-wifi-bsp.ini /tmp/esp32c5-wifi-bsp.ini
 COPY esp32c6-wifi-bsp.ini /tmp/esp32c6-wifi-bsp.ini
+COPY esp32s31-wifi-bsp.ini /tmp/esp32s31-wifi-bsp.ini
 COPY patches/ /tmp/patches/
 
 # Copy optional local RTEMS source from build context (empty if not specified)
@@ -107,8 +108,8 @@ RUN if [ -f /tmp/rtems-local/waf ]; then \
             fi; \
         done; \
     fi \
-    && cat /tmp/esp32c3-wifi-bsp.ini /tmp/esp32c5-wifi-bsp.ini /tmp/esp32c6-wifi-bsp.ini > /tmp/esp32-all.ini \
-    && ./waf configure --prefix="${RTEMS_PREFIX}" --rtems-bsps=riscv/esp32c3db,riscv/esp32c5db,riscv/esp32c6db --rtems-config=/tmp/esp32-all.ini \
+    && cat /tmp/esp32c3-wifi-bsp.ini /tmp/esp32c5-wifi-bsp.ini /tmp/esp32c6-wifi-bsp.ini /tmp/esp32s31-wifi-bsp.ini > /tmp/esp32-all.ini \
+    && ./waf configure --prefix="${RTEMS_PREFIX}" --rtems-bsps=riscv/esp32c3db,riscv/esp32c5db,riscv/esp32c6db,riscv/esp32s31db --rtems-config=/tmp/esp32-all.ini \
     && ./waf \
     && ./waf install \
     && rm -rf /tmp/rtems /tmp/rtems-local /tmp/patches /tmp/*.ini

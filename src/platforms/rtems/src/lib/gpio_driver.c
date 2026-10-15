@@ -137,8 +137,13 @@ static rtems_id atomvm_main_task_id = 0;
 static bool gpio_bank_irq_installed[7][2];
 static uint32_t open_drain_mask[7];
 #elif defined(RTEMS_HAS_ESP32C3_GPIO)
+#if defined(RTEMS_BOARD_ESP32S31)
+#define ESP32C3_GPIO_REG_BASE 0x20583000
+#define ESP32C3_GPIO_PIN0_REG (ESP32C3_GPIO_REG_BASE + 0xF4)
+#else
 #define ESP32C3_GPIO_REG_BASE 0x60004000
 #define ESP32C3_GPIO_PIN0_REG (ESP32C3_GPIO_REG_BASE + 0x74)
+#endif
 
 static bool esp32c3_gpio_irq_installed = false;
 
