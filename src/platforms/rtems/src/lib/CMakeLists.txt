@@ -23,8 +23,11 @@ project(libAtomVMPlatformRTEMS)
 
 set(HEADER_FILES
     adc_driver.h
+    flash_driver.h
+    flash_fs.h
     ledc_driver.h
     network.h
+    nvs_driver.h
     rtc.h
     sntp.h
     wdt.h
@@ -37,10 +40,13 @@ set(HEADER_FILES
 
 set(SOURCE_FILES
     adc_driver.c
+    flash_driver.c
+    flash_fs.c
     ledc_driver.c
     network.c
     network_driver.c
     network_nifs.c
+    nvs_driver.c
     sntp.c
     wdt.c
     wifi.c
@@ -68,7 +74,7 @@ endif()
 target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC libAtomVM)
 # Constructor-registered NIF collections and port drivers are otherwise dropped from the static archive.
-set(_rtems_force_nifs uart_nif i2c_nif gpio_nif spi_nif rtems_network_nif networkregister_port_driver rtc_slow_nif wdt_nif ledc_nif adc_nif)
+set(_rtems_force_nifs uart_nif i2c_nif gpio_nif spi_nif rtems_network_nif networkregister_port_driver rtc_slow_nif wdt_nif ledc_nif adc_nif flash_nif nvs_nif flash_fs_nif)
 if(RTEMS_HAS_LIBBSD OR RTEMS_HAS_LWIP)
     list(APPEND _rtems_force_nifs otp_socket_nif otp_net_nif)
 endif()

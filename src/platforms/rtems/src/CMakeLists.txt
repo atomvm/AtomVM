@@ -133,6 +133,8 @@ if(RTEMS_BOARD STREQUAL "esp32c3" AND RTEMS_HAS_ESP_WIFI)
         espnow
         smartconfig
         wapi
+        jffs2
+        z
         -Wl,--end-group
     )
 endif()

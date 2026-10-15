@@ -37,7 +37,7 @@ Below are the key missing subsystems, prioritized by implementation feasibility 
 | **Hardware RNG** | True RNG at `0x6002_60B0` | **Supported** (Wired to MbedTLS entropy source & `crypto:strong_rand_bytes/1`) | Low | **Done** |
 | **LEDC (Hardware PWM)** | 6 independent channels with configurable duty & frequency | **Supported** (`ledc:*`, `Elixir.LEDC:*`, 17 NIFs) | Medium (MMIO register programming) | **Done** |
 | **SAR ADC** | 12-bit ADC, up to 6 channels on GPIO 0–4 | **Supported** (`esp_adc:*`, `Elixir.Esp.ADC:*`, gen_server) | Medium (calibration & APB registers) | **Done** |
-| **NVS / Flash Storage** | SPI Flash partitions, wear-leveling, LittleFS | **Missing** (only direct-boot read-only flash mapped) | High (SPI flash controller driver) | Low |
+| **NVS / Flash Storage** | SPI Flash partitions, wear-leveling, JFFS2 flash filesystem | **Supported** (ROM SPI flash driver, log-structured NVS partition at `0x3C0000`, JFFS2 filesystem mounted at `/flash`, `esp:flash_*`, `esp:nvs_*`, `file:*`) | Medium-High (ROM API & JFFS2 callbacks) | **Done** |
 | **Watchdog Timers (WDT)** | MWDT0, MWDT1, and RTC Watchdog (RWDT) | **Supported** (Task WDT, MWDT0, RWDT, `esp:task_wdt_*`, `esp:wdt_feed/0`) | Low-Medium (timer interrupt or register reset) | **Done** |
 | **Bluetooth LE (BLE 5.0)** | 2.4 GHz BLE controller in ROM & hardware baseband | **Missing** (no BLE host stack ported to RTEMS) | High (requires NimBLE / Zephyr controller glue) | Low |
 
@@ -132,13 +132,17 @@ Below are the key missing subsystems, prioritized by implementation feasibility 
   - Includes `esp_adc.erl` in `avm_rtems`, providing full `gen_server` convenience API (`start/0,1,2`, `read/1,2`, `stop/0,1`).
   - Verified under `esp-emulator` simulation (`test_boot.erl`).
 
-### 5.3 Non-Volatile Flash Storage & NVS
-- **Background**:
-  Direct flash boot runs from read-only SPI flash. To support file storage or persistent key-value configuration (`esp:nvs_*`), an SPI flash driver is needed.
-- **Action Items**:
-  1. Implement SPI flash erase/write routines using ROM SPI flash functions (`esp32c3.rom.api.ld`).
-  2. Mount LittleFS or FATFS partition for Erlang file operations (`file:read_file/1`, `file:write_file/2`).
-  3. Implement `esp:nvs_*` key-value primitives.
+### 5.3 Non-Volatile Flash Storage & NVS — **Implemented**
+- **Status**: **Done**.
+- **Implementation**:
+  - `flash_driver.c` and `flash_driver.h`: Low-level SPI Flash driver using ESP32-C3 ROM APIs (`esp_rom_spiflash_read`, `esp_rom_spiflash_write`, `esp_rom_spiflash_erase_sector`). Automatically overrides ROM default 2 MiB chip size to 4 MiB (`4 * 1024 * 1024`). Handles unaligned reads and writes transparently via 4-byte aligned stack buffers. Protects flash cache coherence during erase/write by disabling local interrupts and invalidating cache via `Cache_Invalidate_ICache_All()`.
+  - `nvs_driver.c` and `nvs_driver.h`: Log-structured key-value store in dedicated flash partition `0x003C0000` (128 KiB). Supports namespace isolation, key updates, wear-leveling in-place invalidation (`0xFF` -> `0xAA` -> `0x00`), CRC32 entry verification, and reformatting.
+  - `flash_fs.c` and `flash_fs.h`: RTEMS JFFS2 flash filesystem control callbacks (`read`, `write`, `erase`) mapped to flash partition `0x003E0000` (128 KiB), mounted at `/flash`. Supports POSIX Erlang file operations (`file:read_file/1`, `file:write_file/2`).
+  - Standard NIF APIs:
+    - Flash: `esp:flash_get_size/0`, `esp:flash_read/2`, `esp:flash_write/2`, `esp:flash_erase_sector/1`, `esp:flash_erase_range/2` (with `atomvm_rtems:` aliases).
+    - NVS: `esp:nvs_fetch_binary/2`, `esp:nvs_get_binary/1,2,3`, `esp:nvs_put_binary/3`, `esp:nvs_set_binary/2,3`, `esp:nvs_erase_key/1,2`, `esp:nvs_erase_all/0,1`, `esp:nvs_reformat/0` (with `atomvm_rtems:` aliases).
+    - Filesystem: `esp:flash_fs_mount/0,1`, `esp:flash_fs_unmount/0,1`, `esp:flash_fs_is_mounted/0`, `file:read_file/1`, `file:write_file/2`.
+  - Verified under `esp-emulator` simulation (`test_boot.erl`).
 
 ### 5.4 Watchdog Timers (WDT) — **Implemented**
 - **Status**: **Done**.
@@ -172,13 +176,18 @@ flowchart TD
         H["3.1 LEDC (PWM Driver)<br>ledc:set_duty / set_freq"] --> I["3.2 SAR ADC (12-bit)<br>esp_adc:read / sample"]
     end
 
-    subgraph Phase 4: Storage & Flash
-        J["4.1 ROM Flash Write/Erase"] --> K["4.2 NVS Key-Value Storage"]
-        K --> L["4.3 LittleFS Flash Mount"]
+    subgraph Phase 4: Storage & Flash (Completed)
+        J["4.1 ROM Flash Write/Erase<br>esp:flash_*"] --> K["4.2 NVS Key-Value Storage<br>esp:nvs_*"]
+        K --> L["4.3 JFFS2 Flash Mount (/flash)<br>file:read_file / write_file"]
+    end
+
+    subgraph Phase 5: Bluetooth Low Energy
+        M["5.1 BLE Controller Glue"] --> N["5.2 NimBLE / Host Stack"]
     end
 
     Phase 1 --> Phase 2
     Phase 2 --> Phase 3
     Phase 3 --> Phase 4
+    Phase 4 --> Phase 5
 ```
 

@@ -41,7 +41,24 @@
     wifi_stop/0,
     wifi_status/0,
     rtc_slow_get_binary/0,
-    rtc_slow_set_binary/1
+    rtc_slow_set_binary/1,
+    flash_get_size/0,
+    flash_read/2,
+    flash_write/2,
+    flash_erase_sector/1,
+    flash_erase_range/2,
+    nvs_fetch_binary/2,
+    nvs_put_binary/3,
+    nvs_erase_key/2,
+    nvs_erase_all/1,
+    nvs_reformat/0,
+    flash_fs_mount/0,
+    flash_fs_mount/1,
+    flash_fs_unmount/0,
+    flash_fs_unmount/1,
+    flash_fs_is_mounted/0,
+    read_file/1,
+    write_file/2
 ]).
 
 -define(DHCP_POLL_INTERVAL_MS, 250).
@@ -115,6 +132,93 @@ rtc_slow_get_binary() ->
 %% @doc Store binary in RTC slow/fast memory (ESP32-C3).
 -spec rtc_slow_set_binary(Bin :: binary()) -> ok.
 rtc_slow_set_binary(_Bin) ->
+    erlang:nif_error(undefined).
+
+%% @doc Return flash chip size in bytes.
+-spec flash_get_size() -> non_neg_integer().
+flash_get_size() ->
+    erlang:nif_error(undefined).
+
+%% @doc Read Length bytes from flash at Offset.
+-spec flash_read(Offset :: non_neg_integer(), Length :: non_neg_integer()) ->
+    {ok, binary()} | {error, term()}.
+flash_read(_Offset, _Length) ->
+    erlang:nif_error(undefined).
+
+%% @doc Write Binary to flash at Offset.
+-spec flash_write(Offset :: non_neg_integer(), Data :: binary()) -> ok | {error, term()}.
+flash_write(_Offset, _Data) ->
+    erlang:nif_error(undefined).
+
+%% @doc Erase a 4096-byte sector of flash.
+-spec flash_erase_sector(SectorNum :: non_neg_integer()) -> ok | {error, term()}.
+flash_erase_sector(_SectorNum) ->
+    erlang:nif_error(undefined).
+
+%% @doc Erase a range of flash sectors.
+-spec flash_erase_range(Offset :: non_neg_integer(), Length :: non_neg_integer()) -> ok | {error, term()}.
+flash_erase_range(_Offset, _Length) ->
+    erlang:nif_error(undefined).
+
+%% @doc Fetch binary stored at Namespace and Key in NVS.
+-spec nvs_fetch_binary(Namespace :: atom(), Key :: atom()) ->
+    {ok, binary()} | {error, not_found | namespace_not_found | term()}.
+nvs_fetch_binary(_Namespace, _Key) ->
+    erlang:nif_error(undefined).
+
+%% @doc Store binary in NVS key-value storage.
+-spec nvs_put_binary(Namespace :: atom(), Key :: atom(), Value :: binary()) -> ok.
+nvs_put_binary(_Namespace, _Key, _Value) ->
+    erlang:nif_error(undefined).
+
+%% @doc Erase key from specified namespace in NVS.
+-spec nvs_erase_key(Namespace :: atom(), Key :: atom()) -> ok.
+nvs_erase_key(_Namespace, _Key) ->
+    erlang:nif_error(undefined).
+
+%% @doc Erase all keys in specified namespace in NVS.
+-spec nvs_erase_all(Namespace :: atom()) -> ok.
+nvs_erase_all(_Namespace) ->
+    erlang:nif_error(undefined).
+
+%% @doc Reformat NVS storage partition.
+-spec nvs_reformat() -> ok.
+nvs_reformat() ->
+    erlang:nif_error(undefined).
+
+%% @doc Mount JFFS2 filesystem on `/flash`.
+-spec flash_fs_mount() -> ok | {error, term()}.
+flash_fs_mount() ->
+    erlang:nif_error(undefined).
+
+%% @doc Mount JFFS2 filesystem on specified mount point.
+-spec flash_fs_mount(MountPoint :: string() | binary()) -> ok | {error, term()}.
+flash_fs_mount(_MountPoint) ->
+    erlang:nif_error(undefined).
+
+%% @doc Unmount JFFS2 filesystem from `/flash`.
+-spec flash_fs_unmount() -> ok | {error, term()}.
+flash_fs_unmount() ->
+    erlang:nif_error(undefined).
+
+%% @doc Unmount JFFS2 filesystem from specified mount point.
+-spec flash_fs_unmount(MountPoint :: string() | binary()) -> ok | {error, term()}.
+flash_fs_unmount(_MountPoint) ->
+    erlang:nif_error(undefined).
+
+%% @doc Return whether flash filesystem is currently mounted.
+-spec flash_fs_is_mounted() -> boolean().
+flash_fs_is_mounted() ->
+    erlang:nif_error(undefined).
+
+%% @doc Read entire file into binary.
+-spec read_file(Path :: string() | binary()) -> {ok, binary()} | {error, term()}.
+read_file(_Path) ->
+    erlang:nif_error(undefined).
+
+%% @doc Write binary data to file.
+-spec write_file(Path :: string() | binary(), Data :: binary()) -> ok | {error, term()}.
+write_file(_Path, _Data) ->
     erlang:nif_error(undefined).
 
 %% @private

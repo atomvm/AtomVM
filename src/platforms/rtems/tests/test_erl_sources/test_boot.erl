@@ -33,6 +33,9 @@ start() ->
     ledc_smoke(),
     adc_smoke(),
     crypto_smoke(),
+    flash_smoke(),
+    nvs_smoke(),
+    fs_smoke(),
     ok.
 
 uart_smoke() ->
@@ -406,6 +409,115 @@ adc_smoke() ->
     erlang:display({esp_adc_genserver_stop, ok}),
 
     erlang:display({adc, esp32c3, ok}).
+
+flash_smoke() ->
+    FlashSize = esp:flash_get_size(),
+    true = is_integer(FlashSize) andalso FlashSize >= 4194304,
+    erlang:display({esp_flash_get_size, ok, FlashSize}),
+
+    % Parameter validation: invalid offset / length badargs
+    {'EXIT', {badarg, _}} = (catch esp:flash_read(-1, 16)),
+    {'EXIT', {badarg, _}} = (catch esp:flash_read(16#400000 + 1, 16)),
+    {'EXIT', {badarg, _}} = (catch esp:flash_write(-1, <<"data">>)),
+    {'EXIT', {badarg, _}} = (catch esp:flash_write(0, not_a_binary)),
+    {'EXIT', {badarg, _}} = (catch esp:flash_erase_sector(-1)),
+    {'EXIT', {badarg, _}} = (catch esp:flash_erase_range(1, 4096)),
+    erlang:display({esp_flash_badarg, ok}),
+
+    % Low-level erase and write/read at test sector 960 (0x3C0000)
+    TestOffset = 16#3C0000,
+    TestSector = TestOffset div 4096,
+    ok = esp:flash_erase_sector(TestSector),
+    erlang:display({esp_flash_erase_sector, ok}),
+
+    TestPattern = <<"AtomVM_Flash_LowLevel_RW_OK_1234">>,
+    ok = esp:flash_write(TestOffset, TestPattern),
+    {ok, ReadBack} = esp:flash_read(TestOffset, byte_size(TestPattern)),
+    TestPattern = ReadBack,
+    erlang:display({esp_flash_read_write, ok}),
+
+    % atomvm_rtems alias test
+    {ok, ReadBackAlias} = atomvm_rtems:flash_read(TestOffset, byte_size(TestPattern)),
+    TestPattern = ReadBackAlias,
+
+    erlang:display({flash, esp32c3, ok}).
+
+nvs_smoke() ->
+    % Reformat NVS
+    ok = esp:nvs_reformat(),
+    erlang:display({esp_nvs_reformat, ok}),
+
+    % Fetch non-existent key
+    case esp:nvs_fetch_binary(app_ns, missing_key) of
+        {error, not_found} -> ok;
+        {error, namespace_not_found} -> ok
+    end,
+    undefined = esp:nvs_get_binary(app_ns, missing_key),
+    <<"my_default">> = esp:nvs_get_binary(app_ns, missing_key, <<"my_default">>),
+    erlang:display({esp_nvs_not_found, ok}),
+
+    % Put and fetch binary
+    Val1 = <<"atomvm_nvs_payload_12345">>,
+    ok = esp:nvs_put_binary(app_ns, key1, Val1),
+    {ok, Val1} = esp:nvs_fetch_binary(app_ns, key1),
+    Val1 = esp:nvs_get_binary(app_ns, key1),
+    erlang:display({esp_nvs_put_fetch, ok}),
+
+    % Update existing key
+    Val2 = <<"atomvm_nvs_payload_updated_67890">>,
+    ok = esp:nvs_put_binary(app_ns, key1, Val2),
+    Val2 = esp:nvs_get_binary(app_ns, key1),
+    erlang:display({esp_nvs_update, ok}),
+
+    % Add second key in same namespace
+    Val3 = <<"another_key_value">>,
+    ok = esp:nvs_put_binary(app_ns, key2, Val3),
+    Val3 = esp:nvs_get_binary(app_ns, key2),
+    Val2 = esp:nvs_get_binary(app_ns, key1),
+    erlang:display({esp_nvs_multiple_keys, ok}),
+
+    % Erase single key
+    ok = esp:nvs_erase_key(app_ns, key1),
+    undefined = esp:nvs_get_binary(app_ns, key1),
+    Val3 = esp:nvs_get_binary(app_ns, key2),
+    erlang:display({esp_nvs_erase_key, ok}),
+
+    % Erase all keys in namespace
+    ok = esp:nvs_erase_all(app_ns),
+    undefined = esp:nvs_get_binary(app_ns, key2),
+    erlang:display({esp_nvs_erase_all, ok}),
+
+    % Default namespace convenience functions
+    ok = esp:nvs_set_binary(boot_mode, <<"fast_boot">>),
+    <<"fast_boot">> = esp:nvs_get_binary(boot_mode),
+    ok = esp:nvs_erase_key(boot_mode),
+    undefined = esp:nvs_get_binary(boot_mode),
+    erlang:display({esp_nvs_default_ns, ok}),
+
+    erlang:display({nvs, esp32c3, ok}).
+
+fs_smoke() ->
+    % Mount JFFS2 flash filesystem on /flash
+    ok = esp:flash_fs_mount(),
+    true = esp:flash_fs_is_mounted(),
+    erlang:display({esp_flash_fs_mount, ok}),
+
+    % Test file:write_file and file:read_file
+    FilePath = "/flash/atomvm_test.txt",
+    FileContent = <<"AtomVM persistent file storage on RTEMS ESP32-C3!\n">>,
+    ok = file:write_file(FilePath, FileContent),
+    {ok, ReadContent} = file:read_file(FilePath),
+    FileContent = ReadContent,
+    erlang:display({file_read_write, ok}),
+
+    % Non-existent file error handling
+    case file:read_file("/flash/non_existent_file.txt") of
+        {error, enoent} -> ok;
+        {error, _} -> ok
+    end,
+    erlang:display({file_not_found, ok}),
+
+    erlang:display({fs, esp32c3, ok}).
 
 
 

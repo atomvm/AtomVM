@@ -30,6 +30,7 @@ set(ERLANG_MODULES
     spi
     grisp
     esp_adc
+    esp
 )
 
 pack_archive(avm_rtems DEPENDS_ON eavmlib ERLC_FLAGS +warnings_as_errors MODULES ${ERLANG_MODULES})
