@@ -330,12 +330,17 @@ term sys_get_info(Context *ctx, term key)
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
 
-#if defined(RTEMS_BOARD_ESP32C3)
-static int esp32c3_hardware_poll(void *data, unsigned char *output, size_t len, size_t *olen)
+#if defined(RTEMS_BOARD_ESP32)
+static int esp32_hardware_poll(void *data, unsigned char *output, size_t len, size_t *olen)
 {
     (void) data;
+#if defined(RTEMS_BOARD_ESP32C6)
+    uintptr_t rng_reg = 0x600B2808U;
+#else
+    uintptr_t rng_reg = 0x600260B0U;
+#endif
     for (size_t i = 0; i < len; i += 4) {
-        uint32_t r = *(volatile uint32_t *) 0x600260B0;
+        uint32_t r = *(volatile uint32_t *) rng_reg;
         size_t chunk = (len - i < 4) ? (len - i) : 4;
         memcpy(output + i, &r, chunk);
     }
@@ -356,8 +361,8 @@ mbedtls_entropy_context *sys_mbedtls_get_entropy_context_lock(GlobalContext *glo
     static bool entropy_initialized = false;
     if (!entropy_initialized) {
         mbedtls_entropy_init(&entropy_ctx);
-#if defined(RTEMS_BOARD_ESP32C3)
-        mbedtls_entropy_add_source(&entropy_ctx, esp32c3_hardware_poll, NULL, 32, MBEDTLS_ENTROPY_SOURCE_STRONG);
+#if defined(RTEMS_BOARD_ESP32)
+        mbedtls_entropy_add_source(&entropy_ctx, esp32_hardware_poll, NULL, 32, MBEDTLS_ENTROPY_SOURCE_STRONG);
 #endif
         entropy_initialized = true;
     }

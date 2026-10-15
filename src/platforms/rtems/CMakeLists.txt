@@ -44,18 +44,23 @@ if(RTEMS_ARCH STREQUAL "arm" AND RTEMS_BSP_NAME STREQUAL "imx7")
     # board selection for physical-board assumptions.
     set(_rtems_board_default "qemu")
 elseif(RTEMS_ARCH STREQUAL "riscv" AND RTEMS_BSP_NAME MATCHES "esp32")
-    set(_rtems_board_default "esp32c3")
+    if(RTEMS_BSP_NAME MATCHES "esp32c6")
+        set(_rtems_board_default "esp32c6")
+    else()
+        set(_rtems_board_default "esp32c3")
+    endif()
 endif()
 set(RTEMS_BOARD "${_rtems_board_default}" CACHE STRING
-    "RTEMS board integration (generic, qemu, grisp2, or esp32c3)")
-set_property(CACHE RTEMS_BOARD PROPERTY STRINGS generic qemu grisp2 esp32c3)
+    "RTEMS board integration (generic, qemu, grisp2, esp32c3, or esp32c6)")
+set_property(CACHE RTEMS_BOARD PROPERTY STRINGS generic qemu grisp2 esp32c3 esp32c6)
 
 if(NOT RTEMS_BOARD STREQUAL "generic" AND
    NOT RTEMS_BOARD STREQUAL "qemu" AND
    NOT RTEMS_BOARD STREQUAL "grisp2" AND
-   NOT RTEMS_BOARD STREQUAL "esp32c3")
+   NOT RTEMS_BOARD STREQUAL "esp32c3" AND
+   NOT RTEMS_BOARD STREQUAL "esp32c6")
     message(FATAL_ERROR
-        "Unsupported RTEMS_BOARD='${RTEMS_BOARD}' (use generic, qemu, grisp2, or esp32c3)")
+        "Unsupported RTEMS_BOARD='${RTEMS_BOARD}' (use generic, qemu, grisp2, esp32c3, or esp32c6)")
 endif()
 
 if(RTEMS_BOARD STREQUAL "grisp2" AND
@@ -65,9 +70,9 @@ endif()
 if(RTEMS_BOARD STREQUAL "grisp2" AND NOT RTEMS_VERSION STREQUAL "6")
     message(FATAL_ERROR "RTEMS_BOARD=grisp2 requires RTEMS_VERSION=6")
 endif()
-if(RTEMS_BOARD STREQUAL "esp32c3" AND
+if((RTEMS_BOARD STREQUAL "esp32c3" OR RTEMS_BOARD STREQUAL "esp32c6") AND
    (NOT RTEMS_ARCH STREQUAL "riscv" OR NOT RTEMS_BSP_NAME MATCHES "esp32"))
-    message(FATAL_ERROR "RTEMS_BOARD=esp32c3 requires a RISC-V esp32 BSP (e.g. riscv/esp32c3db)")
+    message(FATAL_ERROR "RTEMS_BOARD=${RTEMS_BOARD} requires a RISC-V esp32 BSP (e.g. riscv/esp32c3db or riscv/esp32c6db)")
 endif()
 
 set(AVM_DISABLE_SMP ON CACHE BOOL "Disable SMP support." FORCE)

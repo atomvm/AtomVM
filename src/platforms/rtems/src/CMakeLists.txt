@@ -77,7 +77,9 @@ if(RTEMS_BOARD STREQUAL "grisp2")
         RTEMS_BOARD_FDT_COMPATIBLE="${RTEMS_BOARD_FDT_COMPATIBLE}"
         RTEMS_APP_PATH="${RTEMS_APP_PATH}")
 elseif(RTEMS_BOARD STREQUAL "esp32c3")
-    target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BOARD_ESP32C3)
+    target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BOARD_ESP32 RTEMS_BOARD_ESP32C3)
+elseif(RTEMS_BOARD STREQUAL "esp32c6")
+    target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BOARD_ESP32 RTEMS_BOARD_ESP32C6)
 endif()
 
 target_compile_features(${PROJECT_EXECUTABLE} PUBLIC c_std_11)
@@ -137,6 +139,19 @@ if(RTEMS_BOARD STREQUAL "esp32c3" AND RTEMS_HAS_ESP_WIFI)
         z
         -Wl,--end-group
     )
+elseif(RTEMS_BOARD STREQUAL "esp32c6")
+    target_link_options(${PROJECT_EXECUTABLE} PRIVATE
+        -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/../ld/esp32c6.rom.ld
+    )
+    target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
+        jffs2
+        z
+    )
+elseif(RTEMS_BOARD MATCHES "esp32")
+    target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
+        jffs2
+        z
+    )
 endif()
 
 if(RTEMS_SIZE)
@@ -152,7 +167,7 @@ if(RTEMS_CREATE_ZIMAGE)
     include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/boot_image.cmake)
 endif()
 
-if(RTEMS_BOARD STREQUAL "esp32c3")
+if(RTEMS_BOARD MATCHES "esp32")
     include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/esp32_image.cmake)
 endif()
 

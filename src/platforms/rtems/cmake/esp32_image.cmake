@@ -37,9 +37,9 @@ endif()
 find_program(ESP_EMU NAMES esp-emu)
 if(ESP_EMU)
     add_custom_target(simulate
-        COMMAND ${ESP_EMU} --chip esp32c3 --firmware ${_rtems_image_bin}
+        COMMAND ${ESP_EMU} --chip ${RTEMS_BOARD} --firmware ${_rtems_image_bin}
         DEPENDS ${_rtems_image_bin}
-        COMMENT "Running ESP32-C3 firmware simulation with esp-emu"
+        COMMENT "Running ${RTEMS_BOARD} firmware simulation with esp-emu"
         USES_TERMINAL
     )
 endif()

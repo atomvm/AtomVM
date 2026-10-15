@@ -128,15 +128,23 @@ if(RTEMS_ARCH STREQUAL "arm" AND RTEMS_BSP_NAME STREQUAL "imx7")
             RTEMS_HAS_WIFI
         )
     endif()
-elseif(RTEMS_BOARD STREQUAL "esp32c3")
+elseif(RTEMS_BOARD STREQUAL "esp32c3" OR RTEMS_BOARD STREQUAL "esp32c6")
     target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
-        RTEMS_BOARD_ESP32C3
+        RTEMS_BOARD_ESP32
         RTEMS_HAS_GPIO
         RTEMS_HAS_ESP32C3_GPIO
         RTEMS_HAS_I2C
         RTEMS_HAS_ESP32C3_I2C
         RTEMS_HAS_SPI
         RTEMS_HAS_ESP32C3_SPI
+    )
+    if(RTEMS_BOARD STREQUAL "esp32c3")
+        target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE RTEMS_BOARD_ESP32C3)
+    elseif(RTEMS_BOARD STREQUAL "esp32c6")
+        target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE RTEMS_BOARD_ESP32C6)
+    endif()
+    target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
     )
     if(RTEMS_HAS_ESP_WIFI)
         target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE

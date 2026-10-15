@@ -120,6 +120,7 @@ static uint32_t s_light_sleep_wakeup_cause = ESP32C3_WAKEUP_UNDEFINED;
 #endif
 
 static const char *const esp_rst_unknown_atom   = "\xF" "esp_rst_unknown";
+#if defined(RTEMS_BOARD_ESP32C3)
 static const char *const esp_rst_poweron_atom   = "\xF" "esp_rst_poweron";
 static const char *const esp_rst_ext_atom       = "\xB" "esp_rst_ext";
 static const char *const esp_rst_sw_atom        = "\xA" "esp_rst_sw";
@@ -146,6 +147,9 @@ static const char *const sntp_sec_atom          = "\x8" "sntp_sec";
 static const char *const sntp_usec_atom         = "\x9" "sntp_usec";
 static const char *const rtc_counter_atom       = "\xB" "rtc_counter";
 static const char *const elapsed_sec_atom       = "\xB" "elapsed_sec";
+#else
+static const char *const enotsup_atom           = "\x7" "enotsup";
+#endif
 
 static inline term make_tuple2(Context *ctx, term t1, term t2)
 {
@@ -155,6 +159,7 @@ static inline term make_tuple2(Context *ctx, term t1, term t2)
     return t;
 }
 
+#if defined(RTEMS_BOARD_ESP32C3)
 static uint32_t rtc_crc32_le(uint32_t crc, const uint8_t *buf, size_t len)
 {
     crc = ~crc;
@@ -167,7 +172,6 @@ static uint32_t rtc_crc32_le(uint32_t crc, const uint8_t *buf, size_t len)
     return ~crc;
 }
 
-#if defined(RTEMS_BOARD_ESP32C3)
 uint64_t esp32c3_rtc_get_counter(void)
 {
     volatile uint32_t *time_upd = (volatile uint32_t *) ESP32C3_RTC_CNTL_TIME_UPDATE;
@@ -588,6 +592,7 @@ static term nif_esp_sleep_get_wakeup_cause(Context *ctx, int argc, term argv[])
             return UNDEFINED_ATOM;
     }
 #else
+    UNUSED(ctx);
     return UNDEFINED_ATOM;
 #endif
 }
