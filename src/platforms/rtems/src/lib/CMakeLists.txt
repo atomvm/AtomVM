@@ -23,6 +23,7 @@ project(libAtomVMPlatformRTEMS)
 
 set(HEADER_FILES
     network.h
+    rtc.h
     sntp.h
     wifi.h
     rtems_sys.h

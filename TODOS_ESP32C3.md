@@ -30,8 +30,8 @@ Below are the key missing subsystems, prioritized by implementation feasibility 
 | Subsystem / Peripheral | ESP32-C3 Hardware | Current RTEMS State | Implementation Difficulty | Priority |
 | :--- | :--- | :--- | :--- | :--- |
 | **RTC Slow/Fast Memory** | 8 KiB SRAM at `0x5000_0000`, retained across deep sleep | **Supported** (`esp:rtc_slow_*` & `atomvm_rtems:rtc_slow_*`) | Low (direct register mapping) | **Done** |
-| **RTC 64-bit Timer** | Continuous hardware counter in `RTC_CNTL` (`0x6000_8000`) | **Missing** (clock resets to 1988 on reboot until SNTP) | Low (MMIO register read/sync) | **High** |
-| **Reset Reason & Wakeup** | `RTC_CNTL_RESET_CAUSE_PROCPU` (`0x6000_8034`) | **Missing** (`esp:reset_reason/0` unsupported) | Low (read MMIO register) | **High** |
+| **RTC 64-bit Timer & SNTP Sync** | Continuous hardware counter in `RTC_CNTL` (`0x6000_8000`) & timekeeper | **Supported** (Latched counter in `0x6000_800C/10/14`, timekeeper at `0x5000_1000`, `esp:timer_get_time/0`) | Low (MMIO register read/sync) | **Done** |
+| **Reset Reason & Wakeup** | `RTC_CNTL_RESET_CAUSE_PROCPU` (`0x6000_8034`) | **Supported** (`esp:reset_reason/0` and `atomvm_rtems:reset_reason/0`) | Low (ROM reset reason decode) | **Done** |
 | **Deep / Light Sleep** | `RTC_CNTL` power domain state machine, timer & GPIO wakeup | **Missing** (`esp:deep_sleep/1` unsupported) | Medium (register sequencing) | Medium |
 | **MbedTLS / TLS / Crypto** | Hardware SHA, AES, RSA accelerators; software TLS | **Supported** (MbedTLS 3.6.3 LTS installed into `riscv-rtems7/esp32c3db`, `crypto` and `ssl` NIFs enabled) | Medium | **Done** |
 | **Hardware RNG** | True RNG at `0x6002_60B0` | **Supported** (Wired to MbedTLS entropy source & `crypto:strong_rand_bytes/1`) | Low | **Done** |
@@ -53,30 +53,22 @@ Below are the key missing subsystems, prioritized by implementation feasibility 
   - Exposes `esp:rtc_slow_get_binary/0` / `esp:rtc_slow_set_binary/1` as well as `atomvm_rtems:rtc_slow_get_binary/0` / `atomvm_rtems:rtc_slow_set_binary/1`.
   - Verified under `esp-emulator` simulation (`test_boot.erl`).
 
-### 3.2 Hardware RTC Timer & Offline Time Preservation
-- **Background**:
-  `RTC_CNTL_TIME0_REG` (`0x6000_800C`) and `RTC_CNTL_TIME1_REG` (`0x6000_8010`) latch a 64-bit slow-clock counter when `RTC_CNTL_TIME_UPDATE_REG` is written. This counter runs continuously even in deep sleep.
-- **Action Items**:
-  1. Create an RTC timekeeper module:
-     - On SNTP sync, record the current UTC epoch along with the latched 64-bit RTC counter in RTC memory (`0x5000_0000`).
-     - On boot / reset, read the RTC memory structure. If valid, compute:
-       $$\text{Current UTC} = \text{Saved UTC} + \frac{\text{Current RTC Ticks} - \text{Saved RTC Ticks}}{F_{\text{RTC}}}$$
-       and immediately call `clock_settime(CLOCK_REALTIME)` before any network connection is established.
-  2. Expose `atomvm_rtems:get_rtc_time/0` or `esp:timer_get_time/0`.
+### 3.2 Hardware RTC Timer & Offline Time Preservation — **Implemented**
+- **Status**: **Done**.
+- **Implementation**:
+  - `esp32c3_rtc_get_counter()` commands the hardware update latch via `RTC_CNTL_TIME_UPDATE_REG` (`0x6000_800C`) and reads `RTC_CNTL_TIME0_REG` (`0x6000_8010`) / `RTC_CNTL_TIME1_REG` (`0x6000_8014`).
+  - Packed `struct esp32c3_rtc_timekeeper` stored at dedicated RTC slow SRAM `0x5000_1000` (separate from user binary storage at `0x5000_0000`) protected with CRC32.
+  - Automatically recorded upon successful SNTP sync in `sntp.c` (`esp32c3_rtc_timekeeper_record()`).
+  - Automatically restored on early boot in `main.c` `Init()` via `esp32c3_rtc_timekeeper_restore()`: computes elapsed offline time $\Delta t = \frac{\Delta\text{ticks}}{F_{\text{RTC}}}$ and calls `clock_settime(CLOCK_REALTIME)` so the system clock is immediately valid before networking connects.
+  - Exposes `esp:timer_get_time/0`, `esp:rtc_get_time_us/0`, `atomvm_rtems:get_rtc_counter/0`, `atomvm_rtems:rtc_timekeeper_record/2`, `atomvm_rtems:rtc_timekeeper_restore/0`, and `atomvm_rtems:rtc_timekeeper_status/0`.
+  - Verified under `esp-emulator` simulation (`test_boot.erl`).
 
-### 3.3 Reset Reason & Wakeup Causes
-- **Background**:
-  Register `RTC_CNTL_RESET_CAUSE_PROCPU` (`0x6000_8034`) encodes:
-  - `0x01`: Power-on reset (cold boot)
-  - `0x03`: Software reset (`esp_restart()`)
-  - `0x05`: Deep-sleep wakeup
-  - `0x07` / `0x08`: Main watchdog resets (MWDT0 / MWDT1)
-  - `0x09`: RTC watchdog reset (RWDT)
-  - `0x0F`: Brownout reset
-- **Action Items**:
-  1. Implement `esp:reset_reason/0` returning atoms matching AtomVM conventions:
-     - `chip_reset`, `software_reset`, `deep_sleep_wakeup`, `watchdog_reset`, `brownout_reset`, `unknown`.
-  2. Implement `esp:sleep_get_wakeup_cause/0` reading `RTC_CNTL_WAKEUP_STATE_REG`.
+### 3.3 Reset Reason & Wakeup Causes — **Implemented**
+- **Status**: **Done** (`esp:reset_reason/0` supported).
+- **Implementation**:
+  - `rtc_get_reset_reason(0)` reads ROM reset reason vector and decodes hardware status into standard AtomVM atoms: `esp_rst_poweron`, `esp_rst_sw`, `esp_rst_deepsleep`, `esp_rst_wdt`, `esp_rst_brownout`, and `esp_rst_unknown`.
+  - Exposes `esp:reset_reason/0` and `atomvm_rtems:reset_reason/0`.
+  - Verified under `esp-emulator` simulation (`test_boot.erl`).
 
 ### 3.4 Deep Sleep & Light Sleep
 - **Background**:

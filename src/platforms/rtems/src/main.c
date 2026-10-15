@@ -46,6 +46,7 @@
 
 #include "app_loader.h"
 #include "lib/network.h"
+#include "lib/rtc.h"
 #include "lib/rtems_sys.h"
 
 #define TAG "AtomVM"
@@ -138,6 +139,10 @@ rtems_task Init(rtems_task_argument ignored)
     fprintf(stdout, "Starting AtomVM revision " ATOMVM_VERSION " on RTEMS\n");
 
     mkdir("/dev", 0755);
+
+#if defined(RTEMS_BOARD_ESP32C3)
+    esp32c3_rtc_timekeeper_restore();
+#endif
 
 #ifdef RTEMS_BOARD_FDT_COMPATIBLE
     if (!board_fdt_is_valid()) {

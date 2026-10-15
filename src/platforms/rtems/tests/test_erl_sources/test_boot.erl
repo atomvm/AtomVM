@@ -151,6 +151,43 @@ rtc_slow_smoke() ->
                     error:badarg -> ok
                 end,
             <<"atomvm_rtc_ok">> = atomvm_rtems:rtc_slow_get_binary(),
+
+            % Hardware timer & monotonic timer testing
+            T1 = esp:timer_get_time(),
+            true = is_integer(T1) andalso T1 >= 0,
+            T2 = esp:timer_get_time(),
+            true = is_integer(T2) andalso T2 >= T1,
+            erlang:display({esp_timer_get_time, ok, T1, T2}),
+
+            RtcUs = esp:rtc_get_time_us(),
+            true = is_integer(RtcUs) andalso RtcUs >= 0,
+            RtcCnt = atomvm_rtems:get_rtc_counter(),
+            true = is_integer(RtcCnt) andalso RtcCnt >= 0,
+            erlang:display({rtc_counter, ok, RtcCnt}),
+
+            % Reset reason testing
+            ResetReason = esp:reset_reason(),
+            true = is_atom(ResetReason),
+            erlang:display({esp_reset_reason, ResetReason}),
+
+            % RTC Slow memory Timekeeper persistence testing
+            InitStatus = atomvm_rtems:rtc_timekeeper_status(),
+            erlang:display({rtc_timekeeper_initial_status, InitStatus}),
+
+            ok = atomvm_rtems:rtc_timekeeper_record(1700000000, 123456),
+            {ok, StatusMap} = atomvm_rtems:rtc_timekeeper_status(),
+            #{sntp_sec := 1700000000, sntp_usec := 123456, rtc_counter := CntSaved, elapsed_sec := ElapsedSec} = StatusMap,
+            true = is_integer(CntSaved) andalso CntSaved >= 0,
+            true = is_integer(ElapsedSec) andalso ElapsedSec >= 0,
+            erlang:display({rtc_timekeeper_recorded_status, ok, StatusMap}),
+
+            true = atomvm_rtems:rtc_timekeeper_restore(),
+            erlang:display({rtc_timekeeper_restored, ok}),
+
+            % Ensure user binary in RTC slow memory was preserved independently
+            <<"atomvm_rtc_ok">> = atomvm_rtems:rtc_slow_get_binary(),
+            <<"atomvm_rtc_ok">> = esp:rtc_slow_get_binary(),
+
             erlang:display({rtc_slow, esp32c3, ok});
         {'EXIT', {badarg, _}} ->
             erlang:display({rtc_slow, unsupported, ok})

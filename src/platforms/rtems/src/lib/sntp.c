@@ -19,6 +19,7 @@
  */
 
 #include "sntp.h"
+#include "rtc.h"
 
 #include <stdatomic.h>
 #include <stdio.h>
@@ -165,6 +166,10 @@ int rtems_sntp_sync_now(const char *hostname, int port, int timeout_ms, struct t
     ts.tv_sec = unix_sec;
     ts.tv_nsec = (long) unix_usec * 1000L;
     clock_settime(CLOCK_REALTIME, &ts);
+
+#if defined(RTEMS_BOARD_ESP32C3)
+    esp32c3_rtc_timekeeper_record(&tv);
+#endif
 
     if (tv_out != NULL) {
         *tv_out = tv;

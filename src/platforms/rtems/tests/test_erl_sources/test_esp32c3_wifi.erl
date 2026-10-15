@@ -333,6 +333,12 @@ sntp_smoke() ->
         after 2000 ->
             erlang:display({network_sntp_sync_timeout, emulation_udp_drop})
         end,
+        case atomvm_rtems:rtc_timekeeper_status() of
+            {ok, #{sntp_sec := TkSec}} ->
+                erlang:display({rtc_timekeeper_wifi_sntp, ok, TkSec});
+            OtherTk ->
+                erlang:display({rtc_timekeeper_wifi_sntp, OtherTk})
+        end,
         erlang:display({sntp_smoke_done, ok}),
         ok
     catch
