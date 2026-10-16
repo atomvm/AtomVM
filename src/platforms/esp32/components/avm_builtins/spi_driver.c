@@ -334,7 +334,7 @@ static term spidriver_close(Context *ctx)
     } else {
         ESP_LOGI(TAG, "Stopped SPI Bus.");
     }
-    free(spi_data);
+    // context_destroy frees ctx->platform_data after the port terminates.
 
     return OK_ATOM;
 }
