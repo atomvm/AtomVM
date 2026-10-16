@@ -610,6 +610,28 @@ qemu-system-riscv32 -nographic -machine esp32c3 \
     -drive file=flash.bin,if=mtd,format=raw -serial mon:stdio
 ```
 
+## Benchmark suite
+
+[`run-atomvm-benchmark.sh`](tools/run-atomvm-benchmark.sh) builds and runs
+[pguyot/atomvm_benchmark](https://github.com/pguyot/atomvm_benchmark) on an
+RTEMS ESP32 board under esp-emulator.  It builds the benchmark (rebar3 +
+`atomvm_rebar3_plugin`) inside the Docker image, packs a runnable with
+`atomvmlib-rtems`, cross-compiles the firmware for the requested board and runs
+it.  It needs the Docker image and `esp-emu` on `PATH`.
+
+```sh
+# Build and run the suite on ESP32-C5
+./src/platforms/rtems/tools/run-atomvm-benchmark.sh --board esp32c5
+
+# Pick a board and a longer emulator timeout (the suite is heavy)
+./src/platforms/rtems/tools/run-atomvm-benchmark.sh --board esp32s31 --timeout 3600s
+```
+
+`--board` is one of `esp32c3`, `esp32c5`, `esp32c6`, `esp32s31`.  The suite
+times itself with `erlang:system_time/1`, which follows the emulated CPU clock
+that `bsp_start()` programs, so the reported numbers are deterministic and
+independent of host speed -- useful for comparing builds.
+
 ## CMake options
 
 | Option | Default | Description |
