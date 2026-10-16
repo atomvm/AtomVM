@@ -39,7 +39,7 @@ set(AVM_BUILTIN_COMPONENT_SRCS
 )
 
 if (IDF_VERSION_MAJOR GREATER_EQUAL 5)
-    set(ADDITIONAL_PRIV_REQUIRES "esp_hw_support" "efuse" "esp_adc")
+    set(ADDITIONAL_PRIV_REQUIRES "esp_hw_support" "efuse" "esp_adc" "esp_psram")
     set(AVM_BUILTIN_COMPONENT_SRCS "adc_driver.c" ${AVM_BUILTIN_COMPONENT_SRCS})
 else()
     set(ADDITIONAL_PRIV_REQUIRES "")
@@ -56,7 +56,7 @@ endif()
 idf_component_register(
     SRCS ${AVM_BUILTIN_COMPONENT_SRCS}
     INCLUDE_DIRS "include"
-    PRIV_REQUIRES "libatomvm" "avm_sys" "nvs_flash" "driver" "esp_event" "esp_wifi" "fatfs" ${ADDITIONAL_PRIV_REQUIRES}
+    PRIV_REQUIRES "libatomvm" "avm_sys" "nvs_flash" "driver" "esp_event" "esp_wifi" "esp_eth" "fatfs" ${ADDITIONAL_PRIV_REQUIRES}
     ${OPTIONAL_WHOLE_ARCHIVE}
 )
 

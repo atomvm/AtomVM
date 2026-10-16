@@ -42,6 +42,7 @@
 
 #include <esp_eth.h>
 #include <esp_event.h>
+#include <esp_idf_version.h>
 #include <esp_log.h>
 #include <esp_netif.h>
 #include <esp_vfs.h>
@@ -671,6 +672,31 @@ TEST_CASE("test_ssl", "[test_run]")
     ESP_LOGI(TAG, "Stopping network\n");
     eth_stop(eth_netif);
 
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+#endif
+
+// Not in JIT-only builds (AVM_NO_EMU): the esp32boot archive there carries
+// avm_network as bytecode only, so the network module cannot be loaded.
+#if CONFIG_AVM_ENABLE_ETHERNET && CONFIG_ETH_USE_OPENETH \
+    && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0) && !defined(AVM_NO_EMU)
+TEST_CASE("test_eth", "[test_run]")
+{
+    // Unlike the cases above, network:start/1 brings Ethernet up itself.
+    term ret_value = avm_test_case("test_eth.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+
+TEST_CASE("test_eth_teardown", "[test_run]")
+{
+    // test_eth_teardown.beam starts Ethernet and intentionally returns without
+    // calling network:stop(): the network driver destroy callback must release
+    // the driver, netif and handlers when the GlobalContext is destroyed. Run
+    // it twice, as the second run only succeeds if the first teardown was
+    // complete.
+    term ret_value = avm_test_case("test_eth_teardown.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+    ret_value = avm_test_case("test_eth_teardown.beam");
     TEST_ASSERT(ret_value == OK_ATOM);
 }
 #endif
