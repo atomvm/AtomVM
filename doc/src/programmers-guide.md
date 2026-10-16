@@ -1967,6 +1967,8 @@ The second parameter is a properties list, containing the following elements:
 | `stop_bits` | `1 \| 2` | no | 1 | UART stop bits |
 | `flow_control` | `hardware \| software \| none` | no | `none` | Flow control |
 | `parity` | `even \| odd \| none` | no | `none` | UART parity check |
+| `rts` | `integer()` | no | -1 (`UART_PIN_NO_CHANGE`) | RTS GPIO Pin (DE in `rs485_half_duplex` mode) |
+| `mode` | `uart \| rs485_half_duplex` | no | `uart` | `rs485_half_duplex` drives `rts` as the RS485 transceiver's DE |
 
 
 These are the usual RX and TX pins for the various UARTs on the ESP32 (as always check your board specs):
@@ -1983,6 +1985,17 @@ For example,
 UART = uart:open("UART0", [{rx, 3}, {tx, 1}, {speed, 9600}])
 ```
 
+In `rs485_half_duplex` mode ESP-IDF raises `rts` while a frame goes out and lowers it from the
+transmit-done interrupt, so it can drive the DE (and /RE) pin of a half-duplex RS485
+transceiver; the turnaround is subject to interrupt latency, and what the receiver picks up
+while sending is dropped. Leave `flow_control` as `none`: `hardware` conflicts with this mode.
+For example, for a Modbus RTU bus on an ESP32 with DE on GPIO 33, away from the console pins
+(GPIO 1 and 3):
+
+```erlang
+UART = uart:open("UART1", [{rx, 26}, {tx, 27}, {rts, 33}, {speed, 9600}, {mode, rs485_half_duplex}])
+```
+
 #### USB-Serial-JTAG
 
 On ESP32 chips that integrate a USB-Serial-JTAG controller (C3/C5/C6/C61/H2/H21/H4/P4/S3),
@@ -1994,8 +2007,9 @@ USB = uart:open("USB_SERIAL_JTAG", [])
 ```
 
 Pin and line-coding options (`rx`, `tx`, `speed`, `data_bits`, `stop_bits`,
-`flow_control`, `parity`) are parsed and validated like regular UART options,
-but otherwise ignored: the device's USB pins and framing are fixed in hardware.
+`flow_control`, `parity`, `mode`) are parsed and validated like regular UART options,
+but otherwise ignored: the device's USB pins and framing are fixed in hardware, and
+`rs485_half_duplex` drives no RTS pin.
 The `read/1,2` and `write/2` operations behave the same as for a real UART, so
 the same code path works for both hardware UART and the integrated USB CDC
 interface.

@@ -299,6 +299,14 @@ TEST_CASE("test_file", "[test_run]")
 }
 #endif
 
+#if CONFIG_AVM_ENABLE_UART_PORT_DRIVER && CONFIG_ESP_CONSOLE_UART_NUM != 1
+TEST_CASE("test_uart_mode", "[test_run]")
+{
+    term ret_value = avm_test_case("test_uart_mode.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+#endif
+
 // SPI SD CARD, is configured for esp32 simulator in diagram.esp32.json
 #if (!CONFIG_ETH_USE_OPENETH && CONFIG_IDF_TARGET_ESP32)
 
