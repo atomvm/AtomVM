@@ -394,9 +394,16 @@ wait_for_eth(EthConfig, Timeout) ->
         {disconnected, fun() -> Self ! disconnected end}
         | EthConfig
     ],
-    case start([{eth, NewEthConfig}]) of
-        {ok, _Pid} ->
-            wait_for_ip(Timeout);
+    % Monitored from the start: a configuration the driver refuses stops the
+    % server after start/1 returned, and its reason would otherwise become a
+    % timeout.
+    case gen_server:start_monitor({local, ?MODULE}, ?MODULE, [{eth, NewEthConfig}], []) of
+        {ok, {Pid, Monitor}} ->
+            try
+                wait_for_eth_ip(Timeout, Pid, Monitor)
+            after
+                erlang:demonitor(Monitor, [flush])
+            end;
         Error ->
             Error
     end.
@@ -1240,6 +1247,12 @@ update_config(OldConfig, NewConfig) ->
                 undefined -> [];
                 Ap -> {ap, Ap}
             end,
+        % Kept as it is: the callbacks of a running Ethernet are looked up here.
+        ETH =
+            case proplists:get_value(eth, OldConfig) of
+                undefined -> [];
+                Eth -> {eth, Eth}
+            end,
         MDNS =
             case
                 update_opts(
@@ -1260,7 +1273,7 @@ update_config(OldConfig, NewConfig) ->
                 [] -> [];
                 NewSntp -> {sntp, NewSntp}
             end,
-        lists:flatten([STA, AP, MDNS, SNTP])
+        lists:flatten([STA, AP, ETH, MDNS, SNTP])
     catch
         error:Reason -> {error, Reason}
     end.
@@ -1271,6 +1284,23 @@ update_opts(OldOpts, NewOpts) ->
     New = proplists:to_map(NewOpts),
     NewMap = maps:merge(Old, New),
     proplists:from_map(NewMap).
+
+%% @private
+wait_for_eth_ip(Timeout, Pid, Monitor) ->
+    receive
+        connected ->
+            wait_for_eth_ip(Timeout, Pid, Monitor);
+        {ok, _IpInfo} = Started ->
+            Started;
+        disconnected ->
+            {error, disconnected};
+        {'DOWN', Monitor, process, Pid, {start_port_failed, Reason}} ->
+            {error, Reason};
+        {'DOWN', Monitor, process, Pid, Reason} ->
+            {error, Reason}
+    after Timeout ->
+        {error, timeout}
+    end.
 
 %% @private
 wait_for_ip(Timeout) ->

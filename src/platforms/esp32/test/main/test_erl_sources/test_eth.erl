@@ -26,6 +26,7 @@
 %% runs it with a DP83848 PHY at address 1 (see start_eth in network_driver.c).
 start() ->
     ok = test_badarg(),
+    ok = test_wait_for_eth_refused(),
     ok = test_callbacks_in_order(),
     ok = test_wait_for_eth_after_stop(),
     ok.
@@ -51,6 +52,15 @@ expect_badarg(EthConfig) ->
         {'DOWN', Monitor, process, Pid, {start_port_failed, badarg}} -> ok;
         {'DOWN', Monitor, process, Pid, Other} -> error({unexpected, EthConfig, Other})
     after 5000 -> error({timeout, EthConfig})
+    end.
+
+%% wait_for_eth/2 returns the driver's reason, not a timeout, and leaves no
+%% monitor message behind.
+test_wait_for_eth_refused() ->
+    {error, badarg} = network:wait_for_eth([{phy_addr, 32}], 5000),
+    receive
+        {'DOWN', _, process, _, _} = Down -> error({stale, Down})
+    after 0 -> ok
     end.
 
 %% Pid callbacks are sent from the network gen_server itself, so they arrive in
