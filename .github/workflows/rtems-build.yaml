@@ -47,6 +47,9 @@ jobs:
           - arch: sparc
             bsp: sparc/erc32
             bsp_name: erc32
+            chip: ""
+            board: ""
+            bsp_config: ""
             cache_key: sparc-erc32
             rtems_version: "6"
             prefix: /home/runner/rtems/6.2
@@ -54,6 +57,9 @@ jobs:
           - arch: arm
             bsp: arm/imx7
             bsp_name: imx7
+            chip: ""
+            board: ""
+            bsp_config: ""
             cache_key: arm-imx7
             rtems_version: "6"
             prefix: /home/runner/rtems/6.2
@@ -61,6 +67,9 @@ jobs:
           - arch: arm
             bsp: arm/realview_pbx_a9_qemu
             bsp_name: realview_pbx_a9_qemu
+            chip: ""
+            board: ""
+            bsp_config: ""
             cache_key: arm-realview-pbx-a9-qemu
             rtems_version: "6"
             prefix: /home/runner/rtems/6.2
@@ -68,7 +77,44 @@ jobs:
           - arch: riscv
             bsp: riscv/esp32c3db
             bsp_name: esp32c3db
+            chip: esp32c3
+            board: esp32c3
+            bsp_config: esp32c3-wifi-bsp.ini
+            boot_markers: "{uart,enoent,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,esp32c3,ok} {crypto,esp32c3,ok}"
             cache_key: riscv-esp32c3db-v2
+            rtems_version: "7"
+            prefix: /home/runner/rtems/7
+            qemu: ""
+          - arch: riscv
+            bsp: riscv/esp32c5db
+            bsp_name: esp32c5db
+            chip: esp32c5
+            board: esp32c5
+            bsp_config: esp32c5-wifi-bsp.ini
+            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,unsupported,ok} {crypto,esp32c3,ok}"
+            cache_key: riscv-esp32c5db-v1
+            rtems_version: "7"
+            prefix: /home/runner/rtems/7
+            qemu: ""
+          - arch: riscv
+            bsp: riscv/esp32c6db
+            bsp_name: esp32c6db
+            chip: esp32c6
+            board: esp32c6
+            bsp_config: esp32c6-wifi-bsp.ini
+            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,unsupported,ok} {crypto,esp32c3,ok}"
+            cache_key: riscv-esp32c6db-v1
+            rtems_version: "7"
+            prefix: /home/runner/rtems/7
+            qemu: ""
+          - arch: riscv
+            bsp: riscv/esp32s31db
+            bsp_name: esp32s31db
+            chip: esp32s31
+            board: esp32s31
+            bsp_config: esp32s31-wifi-bsp.ini
+            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,unsupported,ok} {crypto,esp32c3,ok}"
+            cache_key: riscv-esp32s31db-v1
             rtems_version: "7"
             prefix: /home/runner/rtems/7
             qemu: ""
@@ -137,7 +183,7 @@ jobs:
             done
           fi
           ./waf configure --prefix="${{ matrix.prefix }}" --rtems-bsps=${{ matrix.bsp }} \
-            --rtems-config="$GITHUB_WORKSPACE/src/platforms/rtems/docker/esp32c3-wifi-bsp.ini"
+            --rtems-config="$GITHUB_WORKSPACE/src/platforms/rtems/docker/${{ matrix.bsp_config }}"
           ./waf
           ./waf install
         else
@@ -178,7 +224,7 @@ jobs:
         rm -rf "$HOME/rtems-src/libbsd"
 
     - name: Build rtems-lwip and Wi-Fi stack for ${{ matrix.bsp }}
-      if: matrix.bsp == 'riscv/esp32c3db'
+      if: matrix.bsp_config != ''
       run: |
         set -euo pipefail
         lwip="${{ matrix.prefix }}/${{ matrix.arch }}-rtems${{ matrix.rtems_version }}/${{ matrix.bsp_name }}/lib/liblwip.a"
@@ -186,9 +232,9 @@ jobs:
           echo "Using cached rtems-lwip at $lwip"
           exit 0
         fi
-        echo "Building rtems-lwip and Wi-Fi stack for ESP32-C3..."
+        echo "Building rtems-lwip and Wi-Fi stack for ${{ matrix.chip }}..."
         export PATH="${{ matrix.prefix }}/bin:$PATH"
-        $GITHUB_WORKSPACE/src/platforms/rtems/tools/build-esp32c3-wifi-stack.sh --prefix="${{ matrix.prefix }}"
+        $GITHUB_WORKSPACE/src/platforms/rtems/tools/build-${{ matrix.chip }}-wifi-stack.sh --prefix="${{ matrix.prefix }}"
 
     - name: Save RTEMS ${{ matrix.rtems_version }} ${{ matrix.bsp }} toolchain
       if: steps.rtems-cache.outputs.cache-hit != 'true'
@@ -209,7 +255,7 @@ jobs:
       run: |
         set -euo pipefail
         cmake -S . -B build-host -G Ninja -DAVM_DISABLE_JIT=ON
-        cmake --build build-host -t rtems_boot_test rtems_net_test rtems_grisp2_test rtems_esp32c3_wifi_test atomvmlib-rtems
+        cmake --build build-host -t rtems_boot_test rtems_net_test rtems_grisp2_test atomvmlib-rtems ${{ matrix.chip != '' && format('rtems_{0}_wifi_test', matrix.chip) || '' }}
         mkdir -p src/platforms/rtems/build
         ./build-host/tools/packbeam/packbeam create -s test_boot \
           src/platforms/rtems/build/rtems_boot.avm \
@@ -223,10 +269,12 @@ jobs:
           src/platforms/rtems/build/rtems_grisp2.avm \
           build-host/src/platforms/rtems/tests/test_erl_sources/test_grisp2.beam \
           build-host/libs/atomvmlib-rtems.avm
-        ./build-host/tools/packbeam/packbeam create -s test_esp32c3_wifi \
-          src/platforms/rtems/build/rtems_esp32c3_wifi.avm \
-          build-host/src/platforms/rtems/tests/test_erl_sources/test_esp32c3_wifi.beam \
-          build-host/libs/atomvmlib-rtems.avm
+        if [ -n "${{ matrix.chip }}" ]; then
+          ./build-host/tools/packbeam/packbeam create -s test_${{ matrix.chip }}_wifi \
+            src/platforms/rtems/build/rtems_${{ matrix.chip }}_wifi.avm \
+            build-host/src/platforms/rtems/tests/test_erl_sources/test_${{ matrix.chip }}_wifi.beam \
+            build-host/libs/atomvmlib-rtems.avm
+        fi
 
     - name: Test loading replaceable AVM files on the host
       if: matrix.bsp == 'arm/imx7'
@@ -296,8 +344,8 @@ jobs:
       run: |
         set -euo pipefail
         board_arg=""
-        if [ "${{ matrix.bsp }}" = "riscv/esp32c3db" ]; then
-          board_arg="-DRTEMS_BOARD=esp32c3"
+        if [ -n "${{ matrix.board }}" ]; then
+          board_arg="-DRTEMS_BOARD=${{ matrix.board }}"
         fi
         cmake -S src/platforms/rtems -B src/platforms/rtems/build -G Ninja \
           -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
@@ -373,40 +421,40 @@ jobs:
         echo "RealView boot test completed successfully"
 
     - name: Run boot test on esp-emulator
-      if: matrix.bsp == 'riscv/esp32c3db'
+      if: matrix.chip != ''
       run: |
         set -euo pipefail
-        BIN="src/platforms/rtems/build/AtomVM-esp32c3db.bin"
+        BIN="src/platforms/rtems/build/AtomVM-${{ matrix.bsp_name }}.bin"
         test -f "$BIN"
         curl -fsSL https://raw.githubusercontent.com/espressif/esp-emulator/main/install.sh | sh -s -- --version 0.49.0
         export PATH="$HOME/.local/bin:$PATH"
         set +e
-        output=$(esp-emu --chip esp32c3 --firmware "$BIN" --timeout 30s --exit-on "Return value: ok" 2>&1)
+        output=$(esp-emu --chip ${{ matrix.chip }} --firmware "$BIN" --timeout 30s --exit-on "Return value: ok" 2>&1)
         status=$?
         set -e
         printf '%s\n' "$output"
         if grep -q "Failed load module" <<< "$output"; then
-          echo "::error::ESP32-C3 boot failed to load a BEAM module"
+          echo "::error::${{ matrix.chip }} boot failed to load a BEAM module"
           exit 1
         fi
         if ! grep -Fq '{atomvm_rtems_boot,rtems}' <<< "$output"; then
-          echo "::error::ESP32-C3 boot test did not print {atomvm_rtems_boot,rtems} (status ${status})"
+          echo "::error::${{ matrix.chip }} boot test did not print {atomvm_rtems_boot,rtems} (status ${status})"
           exit 1
         fi
-        for marker in '{uart,enoent,ok}' '{i2c,fdt_alias,ok}' '{i2c,open,ok}' '{gpio,esp32c3,ok}' '{spi,fdt_alias,ok}' '{spi,open,ok}' '{rtc_slow,esp32c3,ok}' '{crypto,esp32c3,ok}'; do
+        for marker in ${{ matrix.boot_markers }}; do
           if ! grep -Fq "$marker" <<< "$output"; then
-            echo "::error::ESP32-C3 boot test did not print ${marker}"
+            echo "::error::${{ matrix.chip }} boot test did not print ${marker}"
             exit 1
           fi
         done
         if ! grep -q "Return value: ok" <<< "$output"; then
-          echo "::error::ESP32-C3 boot test did not return ok"
+          echo "::error::${{ matrix.chip }} boot test did not return ok"
           exit 1
         fi
-        echo "ESP32-C3 boot test completed successfully"
+        echo "${{ matrix.chip }} boot test completed successfully"
 
-    - name: Cross-compile AtomVM Wi-Fi and HTTP test for ESP32-C3
-      if: matrix.bsp == 'riscv/esp32c3db'
+    - name: Cross-compile AtomVM Wi-Fi and HTTP test for ${{ matrix.chip }}
+      if: matrix.chip != ''
       run: |
         set -euo pipefail
         cmake -S src/platforms/rtems -B src/platforms/rtems/build-wifi -G Ninja \
@@ -414,15 +462,15 @@ jobs:
           -DRTEMS_PREFIX="${{ matrix.prefix }}" \
           -DRTEMS_BSP="${{ matrix.bsp }}" \
           -DRTEMS_VERSION="${{ matrix.rtems_version }}" \
-          -DRTEMS_BOARD=esp32c3 \
-          -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_esp32c3_wifi.avm"
+          -DRTEMS_BOARD=${{ matrix.board }} \
+          -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_${{ matrix.chip }}_wifi.avm"
         cmake --build src/platforms/rtems/build-wifi
 
     - name: Run Wi-Fi and HTTP test on esp-emulator
-      if: matrix.bsp == 'riscv/esp32c3db'
+      if: matrix.chip != ''
       run: |
         set -euo pipefail
-        BIN="src/platforms/rtems/build-wifi/AtomVM-esp32c3db.bin"
+        BIN="src/platforms/rtems/build-wifi/AtomVM-${{ matrix.bsp_name }}.bin"
         test -f "$BIN"
         export PATH="$HOME/.local/bin:$PATH"
         python3 -m http.server 8080 --directory "$GITHUB_WORKSPACE" >/dev/null 2>&1 &
@@ -431,7 +479,7 @@ jobs:
         SNTP_PID=$!
         trap 'kill "$HTTP_PID" "$SNTP_PID" 2>/dev/null || true' EXIT
         set +e
-        output=$(esp-emu --chip esp32c3 \
+        output=$(esp-emu --chip ${{ matrix.chip }} \
           --firmware "$BIN" \
           --wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user \
           --timeout 30s --exit-on "Return value: ok" 2>&1)
@@ -439,27 +487,27 @@ jobs:
         set -e
         printf '%s\n' "$output"
         if grep -q "Failed load module" <<< "$output"; then
-          echo "::error::ESP32-C3 Wi-Fi test failed to load a BEAM module"
+          echo "::error::${{ matrix.chip }} Wi-Fi test failed to load a BEAM module"
           exit 1
         fi
-        if ! grep -Fq '{atomvm_esp32c3_wifi,rtems}' <<< "$output"; then
-          echo "::error::ESP32-C3 Wi-Fi test did not print {atomvm_esp32c3_wifi,rtems} (status ${status})"
+        if ! grep -Fq '{atomvm_${{ matrix.chip }}_wifi,rtems}' <<< "$output"; then
+          echo "::error::${{ matrix.chip }} Wi-Fi test did not print {atomvm_${{ matrix.chip }}_wifi,rtems} (status ${status})"
           exit 1
         fi
         for marker in '{wifi_start,ok}' '{wifi_status,got_ip}' '{ifaddrs_match,ok}' '{socket_open,ok}' '{socket_close,ok}' '{udp_echo,ok}' '{tcp_echo,ok}' '{gen_tcp_passive,ok}' '{socket_select,ok}' '{dns_numeric_match,ok}' '{dns_inet_getaddr,ok}' '{set_clock,ok}' '{clock_set_year_valid,ok}' '{network_sntp_start,ok}' '{sntp_smoke_done,ok}' '{wifi_test_complete,ok}'; do
           if ! grep -Fq "$marker" <<< "$output"; then
-            echo "::error::ESP32-C3 Wi-Fi test did not print ${marker}"
+            echo "::error::${{ matrix.chip }} Wi-Fi test did not print ${marker}"
             exit 1
           fi
         done
         if ! grep -q "Return value: ok" <<< "$output"; then
-          echo "::error::ESP32-C3 Wi-Fi test did not return ok"
+          echo "::error::${{ matrix.chip }} Wi-Fi test did not return ok"
           exit 1
         fi
-        echo "ESP32-C3 Wi-Fi network and SNTP test suite completed successfully"
+        echo "${{ matrix.chip }} Wi-Fi network and SNTP test suite completed successfully"
 
     - name: Cross-compile AtomVM net test for ${{ matrix.bsp }}
-      if: matrix.bsp != 'riscv/esp32c3db'
+      if: matrix.chip == ''
       run: |
         set -euo pipefail
         cmake -S src/platforms/rtems -B src/platforms/rtems/build-net -G Ninja \
@@ -628,3 +676,13 @@ jobs:
           exit 1
         fi
         echo "Networking smoke test obtained DHCP, DNS, TCP, echo, and hostfwd"
+
+    - name: Upload firmware artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: atomvm-rtems-${{ matrix.bsp_name }}-${{ github.run_id }}
+        if-no-files-found: warn
+        path: |
+          src/platforms/rtems/build/AtomVM-${{ matrix.bsp_name }}.bin
+          src/platforms/rtems/build/AtomVM-${{ matrix.bsp_name }}.exe
+          src/platforms/rtems/build-wifi/AtomVM-${{ matrix.bsp_name }}.bin

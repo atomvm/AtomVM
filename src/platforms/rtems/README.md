@@ -576,11 +576,21 @@ This generates `AtomVM-esp32c3db.exe` and the flash-ready direct-boot image `Ato
 
 ### 3. Flashing to Physical Board
 
-Flash the binary using `esptool.py` (or `ninja -C src/platforms/rtems/build-esp32c3 flash`):
+The flash-ready direct-boot image is written to flash at offset `0x0` with
+`esptool.py`, for any of the ESP32 boards (`AtomVM-esp32c3db.bin`,
+`AtomVM-esp32c5db.bin`, `AtomVM-esp32c6db.bin`, `AtomVM-esp32s31db.bin`).  CMake
+also exposes a `flash` target for the board you configured:
 
 ```sh
-esptool.py --port /dev/ttyACM0 --baud 921600 write_flash 0x0 AtomVM-esp32c3db.bin
+esptool.py --chip esp32c3 --port /dev/ttyACM0 --baud 921600 \
+    write_flash 0x0 AtomVM-esp32c3db.bin
+# or
+ninja -C src/platforms/rtems/build-esp32c3 flash
 ```
+
+CI publishes these images as `atomvm-rtems-<bsp_name>-<run_id>` artifacts: the
+direct-boot `.bin` for the ESP32 boards and the `.exe` (loadable with QEMU or
+`rtems-run`) for the emulated boards.
 
 ### 4. Fast Emulation with esp-emulator (Recommended)
 
