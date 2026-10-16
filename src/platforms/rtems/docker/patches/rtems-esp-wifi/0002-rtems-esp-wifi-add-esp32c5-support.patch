@@ -104,7 +104,7 @@ diff --git a/src/rtems_esp_wifi_init.c b/src/rtems_esp_wifi_init.c
  static void rtems_esp_wifi_cpu_clock_to_pll( void )
  {
    uint32_t reg;
-@@ -608,7 +610,35 @@
+@@ -608,7 +610,34 @@
  
    rtems_esp_wifi_copy_sections();
  
@@ -118,7 +118,6 @@ diff --git a/src/rtems_esp_wifi_init.c b/src/rtems_esp_wifi_init.c
 +  rtems_wifi_reg_write( 0x600AF000u, rtems_wifi_reg_read( 0x600AF000u ) | 1u );
 +  rtems_wifi_reg_write( 0x600AF018u, 0xFFFFFFFFu );
 +  rtems_wifi_reg_write( 0x600AF01Cu, 0xFFFFFFFFu );
-+  ets_update_cpu_frequency( 160u );
 +  rtems_wifi_reg_write( 0x600990C4u, 0 );
 +  rtems_wifi_reg_write( 0x600998C4u, 0 );
 +  rtems_wifi_reg_write( 0x6009A0C4u, 0 );

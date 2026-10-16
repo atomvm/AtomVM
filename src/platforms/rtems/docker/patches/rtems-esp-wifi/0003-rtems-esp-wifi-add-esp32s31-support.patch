@@ -14,9 +14,9 @@ Signed-off-by: Peter M <petermm@gmail.com>
  include/rtems-esp/sdkconfig.h |  4 +++
  src/rtems_esp_glue.c          |  2 +-
  src/rtems_esp_netif.c         |  7 +++++
- src/rtems_esp_wifi_init.c     | 45 +++++++++++++++++++++++++++++---
+ src/rtems_esp_wifi_init.c     | 44 ++++++++++++++++++++++++++++---
  src/rtems_wifi_os_adapter.c   | 48 ++++++++++++++++++++++++++++++++---
- 5 files changed, 97 insertions(+), 9 deletions(-)
+ 5 files changed, 96 insertions(+), 9 deletions(-)
 
 diff --git a/include/rtems-esp/sdkconfig.h b/include/rtems-esp/sdkconfig.h
 index 55286dd..7ba19d9 100644
@@ -109,7 +109,7 @@ index 04bf4f2..0b5614a 100644
  static void rtems_esp_wifi_cpu_clock_to_pll( void )
  {
    uint32_t reg;
-@@ -610,7 +619,35 @@ esp_err_t esp_wifi_init( const wifi_init_config_t *config )
+@@ -610,7 +619,34 @@ esp_err_t esp_wifi_init( const wifi_init_config_t *config )
  
    rtems_esp_wifi_copy_sections();
  
@@ -123,7 +123,6 @@ index 04bf4f2..0b5614a 100644
 +  rtems_wifi_reg_write( 0x2010F000u, rtems_wifi_reg_read( 0x2010F000u ) | 1u );
 +  rtems_wifi_reg_write( 0x2010F018u, 0xFFFFFFFFu );
 +  rtems_wifi_reg_write( 0x2010F01Cu, 0xFFFFFFFFu );
-+  ets_update_cpu_frequency( 160u );
 +  rtems_wifi_reg_write( 0x205044C4u, 0 );
 +  rtems_wifi_reg_write( 0x205048C4u, 0 );
 +  rtems_wifi_reg_write( 0x20504CC4u, 0 );
