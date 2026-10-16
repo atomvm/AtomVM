@@ -204,6 +204,42 @@ static size_t usj_drain_rx(struct UARTData *uart_data, uint8_t *out, size_t max_
 }
 #endif
 
+static size_t uart_received_len(struct UARTData *uart_data)
+{
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
+    if (uart_data->use_usj) {
+        return usj_rx_available(uart_data);
+    }
+#endif
+    size_t count = 0;
+    uart_get_buffered_data_len(uart_data->uart_num, &count);
+    return count;
+}
+
+// Reads up to max_len received bytes without waiting, and returns how many it read.
+// The other scheduler may have taken some since they were counted: waiting for them
+// would block this one until the peer sends more, which may be never.
+static size_t uart_read_received(struct UARTData *uart_data, uint8_t *buf, size_t max_len)
+{
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
+    if (uart_data->use_usj) {
+        return usj_drain_rx(uart_data, buf, max_len);
+    }
+#endif
+    int read = uart_read_bytes(uart_data->uart_num, buf, max_len, 0);
+    return read > 0 ? (size_t) read : 0;
+}
+
+static uint8_t *alloc_read_buf(size_t count)
+{
+    uint8_t *buf = malloc(count);
+    if (IS_NULL_PTR(buf)) {
+        fprintf(stderr, "Failed to allocate memory size %i: %s:%i.\n", (int) count, __FILE__, __LINE__);
+        AVM_ABORT();
+    }
+    return buf;
+}
+
 EventListener *uart_interrupt_callback(GlobalContext *glb, EventListener *listener)
 {
     struct UARTData *uart_data = GET_LIST_ENTRY(listener, struct UARTData, listener);
@@ -214,49 +250,28 @@ EventListener *uart_interrupt_callback(GlobalContext *glb, EventListener *listen
             case UART_DATA_BREAK:
             case UART_DATA:
                 if (uart_data->reader_process_pid != term_invalid_term()) {
-                    size_t count = event.size;
-                    uint8_t *usj_buf = NULL;
-#if SOC_USB_SERIAL_JTAG_SUPPORTED
-                    if (uart_data->use_usj) {
-                        count = usj_rx_available(uart_data);
-                        if (count == 0) {
-                            break;
-                        }
-                        usj_buf = malloc(count);
-                        if (IS_NULL_PTR(usj_buf)) {
-                            fprintf(stderr, "Failed to allocate memory size %i: %s:%i.\n", (int) count, __FILE__, __LINE__);
-                            AVM_ABORT();
-                        }
-                        count = usj_drain_rx(uart_data, usj_buf, count);
-                        if (count == 0) {
-                            free(usj_buf);
-                            break;
-                        }
+                    // Not event.size: a read that found data took the bytes of events still
+                    // queued, so an event may announce more than the buffer holds, even nothing.
+                    size_t count = uart_received_len(uart_data);
+                    if (count == 0) {
+                        break;
                     }
-#endif
-                    int bin_size = term_binary_heap_size(count);
+                    uint8_t *buf = alloc_read_buf(count);
+                    count = uart_read_received(uart_data, buf, count);
+                    if (count == 0) {
+                        free(buf);
+                        break;
+                    }
 
                     Heap heap;
-                    if (UNLIKELY(memory_init_heap(&heap, bin_size + TERM_BOXED_REFERENCE_SHORT_SIZE + TUPLE_SIZE(2) * 2) != MEMORY_GC_OK)) {
-                        free(usj_buf);
+                    if (UNLIKELY(memory_init_heap(&heap, term_binary_heap_size(count) + TERM_BOXED_REFERENCE_SHORT_SIZE + TUPLE_SIZE(2) * 2) != MEMORY_GC_OK)) {
+                        free(buf);
                         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
                         AVM_ABORT();
                     }
 
-                    term bin = term_create_uninitialized_binary(count, &heap, glb);
-                    uint8_t *bin_buf = (uint8_t *) term_binary_data(bin);
-#if SOC_USB_SERIAL_JTAG_SUPPORTED
-                    if (uart_data->use_usj) {
-                        memcpy(bin_buf, usj_buf, count);
-                        free(usj_buf);
-                    }
-#endif
-#if SOC_USB_SERIAL_JTAG_SUPPORTED
-                    if (!uart_data->use_usj)
-#endif
-                    {
-                        uart_read_bytes(uart_data->uart_num, bin_buf, count, portMAX_DELAY);
-                    }
+                    term bin = term_from_literal_binary(buf, count, &heap, glb);
+                    free(buf);
 
                     term ok_tuple = term_alloc_tuple(2, &heap);
                     term_put_tuple_element(ok_tuple, 0, OK_ATOM);
@@ -588,68 +603,35 @@ static void uart_driver_do_read(Context *ctx, GenMessage gen_message)
         return;
     }
 
-    size_t count = 0;
-#if SOC_USB_SERIAL_JTAG_SUPPORTED
-    if (uart_data->use_usj) {
-        count = usj_rx_available(uart_data);
-    }
-#endif
-#if SOC_USB_SERIAL_JTAG_SUPPORTED
-    if (!uart_data->use_usj)
-#endif
-    {
-        uart_get_buffered_data_len(uart_data->uart_num, &count);
-    }
-
-    if (count > 0) {
-        uint8_t *usj_buf = NULL;
-#if SOC_USB_SERIAL_JTAG_SUPPORTED
-        if (uart_data->use_usj) {
-            usj_buf = malloc(count);
-            if (IS_NULL_PTR(usj_buf)) {
-                fprintf(stderr, "Failed to allocate memory size %i: %s:%i.\n", (int) count, __FILE__, __LINE__);
-                AVM_ABORT();
-            }
-            count = usj_drain_rx(uart_data, usj_buf, count);
-            if (count == 0) {
-                free(usj_buf);
-                safe_update_reader_data(uart_data, pid, ref_ticks);
-                return;
-            }
-        }
-#endif
-        int bin_size = term_binary_heap_size(count);
-        if (UNLIKELY(memory_ensure_free_with_roots(ctx, bin_size + TUPLE_SIZE(2) * 2, 1, &ref, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            free(usj_buf);
-            ESP_LOGE(TAG, "[uart_driver_do_read] Failed to allocate space for return value");
-            globalcontext_send_message(glb, local_pid, OUT_OF_MEMORY_ATOM);
-            return;
-        }
-
-        term bin = term_create_uninitialized_binary(count, &ctx->heap, glb);
-        uint8_t *bin_buf = (uint8_t *) term_binary_data(bin);
-#if SOC_USB_SERIAL_JTAG_SUPPORTED
-        if (uart_data->use_usj) {
-            memcpy(bin_buf, usj_buf, count);
-            free(usj_buf);
-        }
-#endif
-#if SOC_USB_SERIAL_JTAG_SUPPORTED
-        if (!uart_data->use_usj)
-#endif
-        {
-            uart_read_bytes(uart_data->uart_num, bin_buf, count, portMAX_DELAY);
-        }
-
-        term ok_tuple = term_alloc_tuple(2, &ctx->heap);
-        term_put_tuple_element(ok_tuple, 0, OK_ATOM);
-        term_put_tuple_element(ok_tuple, 1, bin);
-
-        port_send_reply(ctx, pid, ref, ok_tuple);
-
-    } else {
+    size_t count = uart_received_len(uart_data);
+    if (count == 0) {
         safe_update_reader_data(uart_data, pid, ref_ticks);
+        return;
     }
+
+    // Before reading: on failure the bytes stay for the next read.
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, term_binary_heap_size(count) + TUPLE_SIZE(2) * 2, 1, &ref, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "[uart_driver_do_read] Failed to allocate space for return value");
+        globalcontext_send_message(glb, local_pid, OUT_OF_MEMORY_ATOM);
+        return;
+    }
+
+    uint8_t *buf = alloc_read_buf(count);
+    count = uart_read_received(uart_data, buf, count);
+    if (count == 0) {
+        free(buf);
+        safe_update_reader_data(uart_data, pid, ref_ticks);
+        return;
+    }
+
+    term bin = term_from_literal_binary(buf, count, &ctx->heap, glb);
+    free(buf);
+
+    term ok_tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(ok_tuple, 0, OK_ATOM);
+    term_put_tuple_element(ok_tuple, 1, bin);
+
+    port_send_reply(ctx, pid, ref, ok_tuple);
 }
 
 static void uart_driver_do_cancel_read(Context *ctx, GenMessage gen_message)
