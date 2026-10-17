@@ -106,6 +106,7 @@ struct twdt_state {
 };
 
 static struct twdt_state s_twdt;
+RTEMS_INTERRUPT_LOCK_DEFINE(static, s_twdt_lock, "twdt_lock")
 
 static const char *const already_started_atom = ATOM_STR("\xF", "already_started");
 
@@ -128,10 +129,10 @@ static void twdt_timer_tick(rtems_id timer_id, void *arg)
 {
     UNUSED(arg);
 
-    rtems_interrupt_level level;
-    rtems_interrupt_local_disable(level);
+    rtems_interrupt_lock_context lock_context;
+    rtems_interrupt_lock_acquire(&s_twdt_lock, &lock_context);
     if (!s_twdt.initialized) {
-        rtems_interrupt_local_enable(level);
+        rtems_interrupt_lock_release(&s_twdt_lock, &lock_context);
         return;
     }
 
@@ -151,7 +152,7 @@ static void twdt_timer_tick(rtems_id timer_id, void *arg)
         }
     }
     bool trigger_panic = s_twdt.config.trigger_panic;
-    rtems_interrupt_local_enable(level);
+    rtems_interrupt_lock_release(&s_twdt_lock, &lock_context);
 
     if (any_user_timeout) {
         if (trigger_panic) {
@@ -172,7 +173,7 @@ static void twdt_timer_tick(rtems_id timer_id, void *arg)
         esp32c3_wdt_feed_hw();
     }
 
-    rtems_interrupt_local_disable(level);
+    rtems_interrupt_lock_acquire(&s_twdt_lock, &lock_context);
     if (s_twdt.initialized && s_twdt.timer_active) {
         rtems_interval ticks = rtems_clock_get_ticks_per_second() / 4;
         if (ticks == 0) {
@@ -180,7 +181,7 @@ static void twdt_timer_tick(rtems_id timer_id, void *arg)
         }
         rtems_timer_fire_after(timer_id, ticks, twdt_timer_tick, NULL);
     }
-    rtems_interrupt_local_enable(level);
+    rtems_interrupt_lock_release(&s_twdt_lock, &lock_context);
 }
 
 int esp32c3_task_wdt_init(const esp_task_wdt_config_t *config)
@@ -201,8 +202,8 @@ int esp32c3_task_wdt_init(const esp_task_wdt_config_t *config)
         s_twdt.timer_active = true;
     }
 
-    rtems_interrupt_level level;
-    rtems_interrupt_local_disable(level);
+    rtems_interrupt_lock_context lock_context;
+    rtems_interrupt_lock_acquire(&s_twdt_lock, &lock_context);
 
     s_twdt.config = *config;
     s_twdt.initialized = true;
@@ -237,7 +238,7 @@ int esp32c3_task_wdt_init(const esp_task_wdt_config_t *config)
     }
     rtems_timer_fire_after(s_twdt.timer_id, ticks, twdt_timer_tick, NULL);
 
-    rtems_interrupt_local_enable(level);
+    rtems_interrupt_lock_release(&s_twdt_lock, &lock_context);
     return ESP_OK;
 }
 
@@ -247,10 +248,10 @@ int esp32c3_task_wdt_reconfigure(const esp_task_wdt_config_t *config)
         return ESP_ERR_INVALID_ARG;
     }
 
-    rtems_interrupt_level level;
-    rtems_interrupt_local_disable(level);
+    rtems_interrupt_lock_context lock_context;
+    rtems_interrupt_lock_acquire(&s_twdt_lock, &lock_context);
     if (!s_twdt.initialized) {
-        rtems_interrupt_local_enable(level);
+        rtems_interrupt_lock_release(&s_twdt_lock, &lock_context);
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -275,7 +276,7 @@ int esp32c3_task_wdt_reconfigure(const esp_task_wdt_config_t *config)
     WRITE_PERI_REG(ESP32_TIMG0_WDTWPROTECT_REG, 0);
 #endif
 
-    rtems_interrupt_local_enable(level);
+    rtems_interrupt_lock_release(&s_twdt_lock, &lock_context);
     return ESP_OK;
 }
 
@@ -283,10 +284,10 @@ int esp32c3_task_wdt_deinit(void)
 {
     char *names_to_free[MAX_TWDT_USERS] = {0};
 
-    rtems_interrupt_level level;
-    rtems_interrupt_local_disable(level);
+    rtems_interrupt_lock_context lock_context;
+    rtems_interrupt_lock_acquire(&s_twdt_lock, &lock_context);
     if (!s_twdt.initialized) {
-        rtems_interrupt_local_enable(level);
+        rtems_interrupt_lock_release(&s_twdt_lock, &lock_context);
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -307,7 +308,7 @@ int esp32c3_task_wdt_deinit(void)
             s_twdt.users[i].in_use = false;
         }
     }
-    rtems_interrupt_local_enable(level);
+    rtems_interrupt_lock_release(&s_twdt_lock, &lock_context);
 
     for (int i = 0; i < MAX_TWDT_USERS; i++) {
         if (names_to_free[i]) {
@@ -335,10 +336,10 @@ int esp32c3_task_wdt_add_user(const char *user_name, esp_task_wdt_user_handle_t 
         return ESP_ERR_NO_MEM;
     }
 
-    rtems_interrupt_level level;
-    rtems_interrupt_local_disable(level);
+    rtems_interrupt_lock_context lock_context;
+    rtems_interrupt_lock_acquire(&s_twdt_lock, &lock_context);
     if (!s_twdt.initialized) {
-        rtems_interrupt_local_enable(level);
+        rtems_interrupt_lock_release(&s_twdt_lock, &lock_context);
         free(name_copy);
         return ESP_ERR_INVALID_STATE;
     }
@@ -349,12 +350,12 @@ int esp32c3_task_wdt_add_user(const char *user_name, esp_task_wdt_user_handle_t 
             s_twdt.users[i].name = name_copy;
             s_twdt.users[i].last_feed_ms = (int64_t) (rtems_clock_get_uptime_nanoseconds() / 1000000ULL);
             *user_handle = &s_twdt.users[i];
-            rtems_interrupt_local_enable(level);
+            rtems_interrupt_lock_release(&s_twdt_lock, &lock_context);
             return ESP_OK;
         }
     }
 
-    rtems_interrupt_local_enable(level);
+    rtems_interrupt_lock_release(&s_twdt_lock, &lock_context);
     free(name_copy);
     return ESP_ERR_NO_MEM;
 }
@@ -365,23 +366,23 @@ int esp32c3_task_wdt_reset_user(esp_task_wdt_user_handle_t user_handle)
         return ESP_ERR_INVALID_ARG;
     }
 
-    rtems_interrupt_level level;
-    rtems_interrupt_local_disable(level);
+    rtems_interrupt_lock_context lock_context;
+    rtems_interrupt_lock_acquire(&s_twdt_lock, &lock_context);
     if (!s_twdt.initialized) {
-        rtems_interrupt_local_enable(level);
+        rtems_interrupt_lock_release(&s_twdt_lock, &lock_context);
         return ESP_ERR_INVALID_STATE;
     }
 
     struct twdt_user *user = (struct twdt_user *) user_handle;
     if (user < &s_twdt.users[0] || user >= &s_twdt.users[MAX_TWDT_USERS] || !user->in_use) {
-        rtems_interrupt_local_enable(level);
+        rtems_interrupt_lock_release(&s_twdt_lock, &lock_context);
         return ESP_ERR_NOT_FOUND;
     }
 
     user->last_feed_ms = (int64_t) (rtems_clock_get_uptime_nanoseconds() / 1000000ULL);
     esp32c3_wdt_feed_hw();
 
-    rtems_interrupt_local_enable(level);
+    rtems_interrupt_lock_release(&s_twdt_lock, &lock_context);
     return ESP_OK;
 }
 
@@ -392,23 +393,23 @@ int esp32c3_task_wdt_delete_user(esp_task_wdt_user_handle_t user_handle)
     }
 
     char *name_to_free = NULL;
-    rtems_interrupt_level level;
-    rtems_interrupt_local_disable(level);
+    rtems_interrupt_lock_context lock_context;
+    rtems_interrupt_lock_acquire(&s_twdt_lock, &lock_context);
     if (!s_twdt.initialized) {
-        rtems_interrupt_local_enable(level);
+        rtems_interrupt_lock_release(&s_twdt_lock, &lock_context);
         return ESP_ERR_INVALID_STATE;
     }
 
     struct twdt_user *user = (struct twdt_user *) user_handle;
     if (user < &s_twdt.users[0] || user >= &s_twdt.users[MAX_TWDT_USERS] || !user->in_use) {
-        rtems_interrupt_local_enable(level);
+        rtems_interrupt_lock_release(&s_twdt_lock, &lock_context);
         return ESP_ERR_NOT_FOUND;
     }
 
     name_to_free = user->name;
     user->name = NULL;
     user->in_use = false;
-    rtems_interrupt_local_enable(level);
+    rtems_interrupt_lock_release(&s_twdt_lock, &lock_context);
 
     if (name_to_free) {
         free(name_to_free);

@@ -60,7 +60,7 @@ jobs:
             chip: ""
             board: ""
             bsp_config: ""
-            cache_key: arm-imx7
+            cache_key: arm-imx7-smp-v1
             rtems_version: "6"
             prefix: /home/runner/rtems/6.2
             qemu: qemu-system-arm
@@ -70,7 +70,7 @@ jobs:
             chip: ""
             board: ""
             bsp_config: ""
-            cache_key: arm-realview-pbx-a9-qemu
+            cache_key: arm-realview-pbx-a9-qemu-smp-v1
             rtems_version: "6"
             prefix: /home/runner/rtems/6.2
             qemu: qemu-system-arm
@@ -114,7 +114,7 @@ jobs:
             board: esp32s31
             bsp_config: esp32s31-wifi-bsp.ini
             boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,unsupported,ok} {crypto,esp32c3,ok}"
-            cache_key: riscv-esp32s31db-v1
+            cache_key: riscv-esp32s31db-smp-v1
             rtems_version: "7"
             prefix: /home/runner/rtems/7
             qemu: ""
@@ -191,11 +191,17 @@ jobs:
           tar xJf "rtems-source-builder-${RTEMS_RELEASE}.tar.xz"
           cd "rtems-source-builder-${RTEMS_RELEASE}/rtems"
           ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" "${{ matrix.rtems_version }}/rtems-${{ matrix.arch }}"
-          ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" \
-            --target="${{ matrix.arch }}-rtems${{ matrix.rtems_version }}" \
-            --with-rtems-bsp=${{ matrix.bsp }} \
-            --with-rtems-tests=no \
-            "${{ matrix.rtems_version }}/rtems-kernel"
+          kernel_cmd=(
+            ../source-builder/sb-set-builder
+            --prefix="${{ matrix.prefix }}"
+            --target="${{ matrix.arch }}-rtems${{ matrix.rtems_version }}"
+            --with-rtems-bsp=${{ matrix.bsp }}
+          )
+          if [ "${{ matrix.arch }}" = "arm" ]; then
+            kernel_cmd+=(--with-rtems-smp)
+          fi
+          kernel_cmd+=(--with-rtems-tests=no "${{ matrix.rtems_version }}/rtems-kernel")
+          "${kernel_cmd[@]}"
         fi
 
     - name: Build rtems-libbsd for ${{ matrix.bsp }}
@@ -234,7 +240,7 @@ jobs:
         fi
         echo "Building rtems-lwip and Wi-Fi stack for ${{ matrix.chip }}..."
         export PATH="${{ matrix.prefix }}/bin:$PATH"
-        $GITHUB_WORKSPACE/src/platforms/rtems/tools/build-${{ matrix.chip }}-wifi-stack.sh --prefix="${{ matrix.prefix }}"
+        "$GITHUB_WORKSPACE/src/platforms/rtems/tools/build-${{ matrix.chip }}-wifi-stack.sh" --prefix="${{ matrix.prefix }}"
 
     - name: Save RTEMS ${{ matrix.rtems_version }} ${{ matrix.bsp }} toolchain
       if: steps.rtems-cache.outputs.cache-hit != 'true'
@@ -255,11 +261,15 @@ jobs:
       run: |
         set -euo pipefail
         cmake -S . -B build-host -G Ninja -DAVM_DISABLE_JIT=ON
-        cmake --build build-host -t rtems_boot_test rtems_net_test rtems_grisp2_test atomvmlib-rtems ${{ matrix.chip != '' && format('rtems_{0}_wifi_test', matrix.chip) || '' }}
+        cmake --build build-host -t rtems_boot_test rtems_net_test rtems_grisp2_test rtems_smp_test atomvmlib-rtems ${{ matrix.chip != '' && format('rtems_{0}_wifi_test', matrix.chip) || '' }}
         mkdir -p src/platforms/rtems/build
         ./build-host/tools/packbeam/packbeam create -s test_boot \
           src/platforms/rtems/build/rtems_boot.avm \
           build-host/src/platforms/rtems/tests/test_erl_sources/test_boot.beam \
+          build-host/libs/atomvmlib-rtems.avm
+        ./build-host/tools/packbeam/packbeam create -s test_smp \
+          src/platforms/rtems/build/rtems_smp.avm \
+          build-host/src/platforms/rtems/tests/test_erl_sources/test_smp.beam \
           build-host/libs/atomvmlib-rtems.avm
         ./build-host/tools/packbeam/packbeam create -s test_net \
           src/platforms/rtems/build/rtems_net.avm \
@@ -420,6 +430,36 @@ jobs:
         fi
         echo "RealView boot test completed successfully"
 
+    - name: Run SMP multi-core test on QEMU RealView PBX-A9
+      if: matrix.bsp == 'arm/realview_pbx_a9_qemu'
+      run: |
+        set -euo pipefail
+        cmake -S src/platforms/rtems -B src/platforms/rtems/build-smp -G Ninja \
+          -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
+          -DRTEMS_PREFIX="${{ matrix.prefix }}" \
+          -DRTEMS_BSP="${{ matrix.bsp }}" \
+          -DRTEMS_VERSION="${{ matrix.rtems_version }}" \
+          -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_smp.avm"
+        cmake --build src/platforms/rtems/build-smp
+        ELF="src/platforms/rtems/build-smp/AtomVM-realview_pbx_a9_qemu.exe"
+        test -f "$ELF"
+        set +e
+        output=$(timeout 90 qemu-system-arm \
+          -net none -nographic -no-reboot -M realview-pbx-a9 -m 256M -smp 2 \
+          -kernel "$ELF" 2>&1)
+        status=$?
+        set -e
+        printf '%s\n' "$output"
+        if ! grep -Fq '{smp_parallel_compute,ok}' <<< "$output"; then
+          echo "::error::RealView SMP test failed (status ${status})"
+          exit 1
+        fi
+        if ! grep -q "Return value: ok" <<< "$output"; then
+          echo "::error::RealView SMP test did not return ok (status ${status})"
+          exit 1
+        fi
+        echo "RealView SMP test completed successfully"
+
     - name: Run boot test on esp-emulator
       if: matrix.chip != ''
       run: |
@@ -505,6 +545,36 @@ jobs:
           exit 1
         fi
         echo "${{ matrix.chip }} Wi-Fi network and SNTP test suite completed successfully"
+
+    - name: Run SMP multi-core test on esp-emulator
+      if: matrix.chip == 'esp32s31'
+      run: |
+        set -euo pipefail
+        cmake -S src/platforms/rtems -B src/platforms/rtems/build-smp -G Ninja \
+          -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
+          -DRTEMS_PREFIX="${{ matrix.prefix }}" \
+          -DRTEMS_BSP="${{ matrix.bsp }}" \
+          -DRTEMS_VERSION="${{ matrix.rtems_version }}" \
+          -DRTEMS_BOARD=${{ matrix.board }} \
+          -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_smp.avm"
+        cmake --build src/platforms/rtems/build-smp
+        BIN="src/platforms/rtems/build-smp/AtomVM-${{ matrix.bsp_name }}.bin"
+        test -f "$BIN"
+        export PATH="$HOME/.local/bin:$PATH"
+        set +e
+        output=$(esp-emu --chip esp32s31 --batch-size 50000 --firmware "$BIN" --timeout 30s --exit-on "Return value: ok" 2>&1)
+        status=$?
+        set -e
+        printf '%s\n' "$output"
+        if ! grep -Fq '{smp_parallel_compute,ok}' <<< "$output"; then
+          echo "::error::esp32s31 SMP test failed (status ${status})"
+          exit 1
+        fi
+        if ! grep -q "Return value: ok" <<< "$output"; then
+          echo "::error::esp32s31 SMP test did not return ok (status ${status})"
+          exit 1
+        fi
+        echo "esp32s31 SMP test completed successfully"
 
     - name: Cross-compile AtomVM net test for ${{ matrix.bsp }}
       if: matrix.chip == ''
@@ -614,6 +684,37 @@ jobs:
         fi
         echo "Boot test output contained {atomvm_rtems_boot,rtems} and Return value: ok"
 
+    - name: Run SMP multi-core test on QEMU mcimx7d-sabre
+      if: matrix.bsp == 'arm/imx7'
+      run: |
+        set -euo pipefail
+        cmake -S src/platforms/rtems -B src/platforms/rtems/build-smp -G Ninja \
+          -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
+          -DRTEMS_PREFIX="${{ matrix.prefix }}" \
+          -DRTEMS_BSP="${{ matrix.bsp }}" \
+          -DRTEMS_VERSION="${{ matrix.rtems_version }}" \
+          -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_smp.avm"
+        cmake --build src/platforms/rtems/build-smp
+        ELF="src/platforms/rtems/build-smp/AtomVM-imx7.exe"
+        DTB="src/platforms/rtems/build/imx7d-sdb-qemu.dtb"
+        test -f "$ELF"
+        test -f "$DTB"
+        chmod +x src/platforms/rtems/tools/run-imx7-qemu.sh
+        set +e
+        output=$(src/platforms/rtems/tools/run-imx7-qemu.sh -d "$DTB" -s 2 -t 90 "$ELF" 2>&1)
+        status=$?
+        set -e
+        printf '%s\n' "$output"
+        if ! grep -Fq '{smp_parallel_compute,ok}' <<< "$output"; then
+          echo "::error::imx7 SMP test failed (status ${status})"
+          exit 1
+        fi
+        if ! grep -q "Return value: ok" <<< "$output"; then
+          echo "::error::imx7 SMP test did not return ok (status ${status})"
+          exit 1
+        fi
+        echo "imx7 SMP test completed successfully"
+
     - name: Run networking tests on QEMU mcimx7d-sabre
       if: matrix.bsp == 'arm/imx7'
       run: |
@@ -686,3 +787,5 @@ jobs:
           src/platforms/rtems/build/AtomVM-${{ matrix.bsp_name }}.bin
           src/platforms/rtems/build/AtomVM-${{ matrix.bsp_name }}.exe
           src/platforms/rtems/build-wifi/AtomVM-${{ matrix.bsp_name }}.bin
+          src/platforms/rtems/build-smp/AtomVM-${{ matrix.bsp_name }}.bin
+          src/platforms/rtems/build-smp/AtomVM-${{ matrix.bsp_name }}.exe

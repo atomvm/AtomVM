@@ -22,6 +22,9 @@
 
 #include "rtems_sys.h"
 
+#include <errno.h>
+#include <inttypes.h>
+#include <pthread.h>
 #include <rtems.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -53,22 +56,52 @@ void sys_init_platform(GlobalContext *glb)
 #if defined(RTEMS_HAS_LIBBSD) || defined(RTEMS_HAS_LWIP)
     platform->fds = NULL;
     platform->select_events_poll_count = -1;
-#else
-    platform->dummy = 0;
 #endif
+#ifndef AVM_NO_SMP
+    pthread_mutex_init(&platform->poll_mutex, NULL);
+    pthread_condattr_t cv_attr;
+    pthread_condattr_init(&cv_attr);
+    pthread_condattr_setclock(&cv_attr, CLOCK_MONOTONIC);
+    pthread_cond_init(&platform->poll_cv, &cv_attr);
+    pthread_condattr_destroy(&cv_attr);
+#endif
+    platform->signaled = false;
+
+#if defined(HAVE_MBEDTLS)
+#ifndef AVM_NO_SMP
+    platform->entropy_mutex = smp_mutex_create();
+    platform->random_mutex = smp_mutex_create();
+#endif
+    platform->entropy_is_initialized = false;
+    platform->random_is_initialized = false;
+#endif
+
     glb->platform_data = platform;
 }
 
 void sys_free_platform(GlobalContext *glb)
 {
-#if defined(RTEMS_HAS_LIBBSD) || defined(RTEMS_HAS_LWIP)
     struct RTEMSPlatformData *platform = glb->platform_data;
-    free(platform->fds);
+    if (platform != NULL) {
+#if defined(RTEMS_HAS_LIBBSD) || defined(RTEMS_HAS_LWIP)
+        free(platform->fds);
 #endif
-    free(glb->platform_data);
-    glb->platform_data = NULL;
+#if defined(HAVE_MBEDTLS)
+#ifndef AVM_NO_SMP
+        smp_mutex_destroy(platform->entropy_mutex);
+        smp_mutex_destroy(platform->random_mutex);
+#endif
+#endif
+#ifndef AVM_NO_SMP
+        pthread_cond_destroy(&platform->poll_cv);
+        pthread_mutex_destroy(&platform->poll_mutex);
+#endif
+        free(platform);
+        glb->platform_data = NULL;
+    }
 }
 
+#ifdef AVM_NO_SMP
 static rtems_interval timeout_ms_to_ticks(int timeout_ms)
 {
     rtems_interval ticks_per_second = rtems_clock_get_ticks_per_second();
@@ -78,6 +111,7 @@ static rtems_interval timeout_ms_to_ticks(int timeout_ms)
     }
     return ticks;
 }
+#endif
 
 #if defined(RTEMS_HAS_LWIP)
 #include <sys/select.h>
@@ -139,6 +173,45 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout)
 }
 #endif
 
+static void sys_poll_events_wait(struct RTEMSPlatformData *platform, int timeout_ms)
+{
+#ifndef AVM_NO_SMP
+    struct timespec ts, now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    ts = now;
+    int wait_ms = (timeout_ms < 0) ? 100 : timeout_ms;
+    ts.tv_sec += wait_ms / 1000;
+    ts.tv_nsec += (long) (wait_ms % 1000) * 1000000L;
+    if (ts.tv_nsec >= 1000000000L) {
+        ts.tv_sec += 1;
+        ts.tv_nsec -= 1000000000L;
+    }
+    while (!platform->signaled) {
+        struct timespec cur;
+        clock_gettime(CLOCK_MONOTONIC, &cur);
+        if (cur.tv_sec > ts.tv_sec || (cur.tv_sec == ts.tv_sec && cur.tv_nsec >= ts.tv_nsec)) {
+            break;
+        }
+        pthread_mutex_unlock(&platform->poll_mutex);
+        for (volatile int i = 0; i < 1000; i++) {
+            __asm__ volatile ("" : : : "memory");
+        }
+        sched_yield();
+        pthread_mutex_lock(&platform->poll_mutex);
+    }
+    platform->signaled = false;
+#else
+    rtems_interval ticks;
+    if (timeout_ms < 0) {
+        ticks = timeout_ms_to_ticks(100);
+    } else {
+        ticks = timeout_ms_to_ticks(timeout_ms);
+    }
+    rtems_task_wake_after(ticks);
+    platform->signaled = false;
+#endif
+}
+
 #if defined(RTEMS_HAS_LIBBSD) || defined(RTEMS_HAS_LWIP)
 static void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
 {
@@ -180,18 +253,22 @@ static void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
         if (timeout_ms == SYS_POLL_EVENTS_DO_NOT_WAIT) {
             return;
         }
-        rtems_interval ticks;
-        if (timeout_ms == SYS_POLL_EVENTS_WAIT_FOREVER) {
-            ticks = timeout_ms_to_ticks(100);
-        } else {
-            ticks = timeout_ms_to_ticks(timeout_ms);
-        }
-        rtems_event_set out;
-        rtems_event_receive(RTEMS_EVENT_0, RTEMS_WAIT | RTEMS_EVENT_ANY, ticks, &out);
+        sys_poll_events_wait(platform, timeout_ms);
         return;
     }
 
-    int nb_descriptors = poll(fds, select_events_poll_count, timeout_ms);
+    int effective_timeout = timeout_ms;
+    if (effective_timeout < 0 || effective_timeout > 50) {
+        effective_timeout = 50;
+    }
+#ifndef AVM_NO_SMP
+    pthread_mutex_unlock(&platform->poll_mutex);
+#endif
+    int nb_descriptors = poll(fds, select_events_poll_count, effective_timeout);
+#ifndef AVM_NO_SMP
+    pthread_mutex_lock(&platform->poll_mutex);
+#endif
+    platform->signaled = false;
     if (nb_descriptors <= 0) {
         return;
     }
@@ -214,28 +291,58 @@ static void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
 void sys_poll_events(GlobalContext *glb, int timeout_ms)
 {
     gpio_interrupt_drain(glb);
+    struct RTEMSPlatformData *platform = glb->platform_data;
+    (void) platform;
+
+#ifndef AVM_NO_SMP
+    if (timeout_ms == SYS_POLL_EVENTS_DO_NOT_WAIT) {
+        if (pthread_mutex_trylock(&platform->poll_mutex) != 0) {
+            return;
+        }
+    } else {
+        pthread_mutex_lock(&platform->poll_mutex);
+    }
+
+    if (platform->signaled) {
+        platform->signaled = false;
+        timeout_ms = SYS_POLL_EVENTS_DO_NOT_WAIT;
+    }
+#endif
+
 #if defined(RTEMS_HAS_LIBBSD) || defined(RTEMS_HAS_LWIP)
     if (timeout_ms == SYS_POLL_EVENTS_DO_NOT_WAIT && synclist_is_empty(&glb->select_events)) {
+#ifndef AVM_NO_SMP
+        pthread_mutex_unlock(&platform->poll_mutex);
+#endif
         return;
     }
     sys_poll_events_with_poll(glb, timeout_ms);
     gpio_interrupt_drain(glb);
 #else
-    if (timeout_ms == SYS_POLL_EVENTS_DO_NOT_WAIT) {
-        return;
+    if (timeout_ms != SYS_POLL_EVENTS_DO_NOT_WAIT) {
+        sys_poll_events_wait(platform, timeout_ms);
     }
-
-    rtems_interval ticks;
-    if (timeout_ms == SYS_POLL_EVENTS_WAIT_FOREVER) {
-        ticks = timeout_ms_to_ticks(100);
-    } else {
-        ticks = timeout_ms_to_ticks(timeout_ms);
-    }
-    rtems_event_set out;
-    rtems_event_receive(RTEMS_EVENT_0, RTEMS_WAIT | RTEMS_EVENT_ANY, ticks, &out);
     gpio_interrupt_drain(glb);
 #endif
+
+#ifndef AVM_NO_SMP
+    pthread_mutex_unlock(&platform->poll_mutex);
+#endif
 }
+
+#if !defined(AVM_NO_SMP) || defined(AVM_TASK_DRIVER_ENABLED)
+void sys_signal(GlobalContext *glb)
+{
+    struct RTEMSPlatformData *platform = glb->platform_data;
+    if (IS_NULL_PTR(platform)) {
+        return;
+    }
+    platform->signaled = true;
+#ifndef AVM_NO_SMP
+    pthread_cond_signal(&platform->poll_cv);
+#endif
+}
+#endif
 
 void sys_listener_destroy(struct ListHead *item)
 {
@@ -249,6 +356,9 @@ void sys_register_select_event(GlobalContext *global, ErlNifEvent event, bool is
     UNUSED(is_write);
     struct RTEMSPlatformData *platform = global->platform_data;
     platform->select_events_poll_count = -1;
+#if !defined(AVM_NO_SMP) || defined(AVM_TASK_DRIVER_ENABLED)
+    sys_signal(global);
+#endif
 #else
     UNUSED(global);
     UNUSED(event);
@@ -263,6 +373,9 @@ void sys_unregister_select_event(GlobalContext *global, ErlNifEvent event, bool 
     UNUSED(is_write);
     struct RTEMSPlatformData *platform = global->platform_data;
     platform->select_events_poll_count = -1;
+#if !defined(AVM_NO_SMP) || defined(AVM_TASK_DRIVER_ENABLED)
+    sys_signal(global);
+#endif
 #else
     UNUSED(global);
     UNUSED(event);
@@ -441,45 +554,51 @@ int sys_mbedtls_entropy_func(void *entropy, unsigned char *buf, size_t size)
 
 mbedtls_entropy_context *sys_mbedtls_get_entropy_context_lock(GlobalContext *global)
 {
-    (void) global;
-    static mbedtls_entropy_context entropy_ctx;
-    static bool entropy_initialized = false;
-    if (!entropy_initialized) {
-        mbedtls_entropy_init(&entropy_ctx);
+    struct RTEMSPlatformData *platform = global->platform_data;
+    SMP_MUTEX_LOCK(platform->entropy_mutex);
+
+    if (!platform->entropy_is_initialized) {
+        mbedtls_entropy_init(&platform->entropy_ctx);
 #if defined(RTEMS_BOARD_ESP32)
-        mbedtls_entropy_add_source(&entropy_ctx, esp32_hardware_poll, NULL, 32, MBEDTLS_ENTROPY_SOURCE_STRONG);
+        mbedtls_entropy_add_source(&platform->entropy_ctx, esp32_hardware_poll, NULL, 32, MBEDTLS_ENTROPY_SOURCE_STRONG);
 #endif
-        entropy_initialized = true;
+        platform->entropy_is_initialized = true;
     }
-    return &entropy_ctx;
+    return &platform->entropy_ctx;
 }
 
 void sys_mbedtls_entropy_context_unlock(GlobalContext *global)
 {
-    (void) global;
+    struct RTEMSPlatformData *platform = global->platform_data;
+    (void) platform;
+    SMP_MUTEX_UNLOCK(platform->entropy_mutex);
 }
 
 mbedtls_ctr_drbg_context *sys_mbedtls_get_ctr_drbg_context_lock(GlobalContext *global)
 {
-    (void) global;
-    static mbedtls_ctr_drbg_context ctr_drbg_ctx;
-    static bool drbg_initialized = false;
-    if (!drbg_initialized) {
-        mbedtls_ctr_drbg_init(&ctr_drbg_ctx);
+    struct RTEMSPlatformData *platform = global->platform_data;
+    SMP_MUTEX_LOCK(platform->random_mutex);
+
+    if (!platform->random_is_initialized) {
+        mbedtls_ctr_drbg_init(&platform->random_ctx);
         mbedtls_entropy_context *entropy = sys_mbedtls_get_entropy_context_lock(global);
+        sys_mbedtls_entropy_context_unlock(global);
+
         const char *seed = "AtomVM RTEMS initial entropy seed";
-        int err = mbedtls_ctr_drbg_seed(&ctr_drbg_ctx, sys_mbedtls_entropy_func, entropy,
+        int err = mbedtls_ctr_drbg_seed(&platform->random_ctx, sys_mbedtls_entropy_func, entropy,
                                         (const unsigned char *) seed, strlen(seed));
         if (err != 0) {
             abort();
         }
-        drbg_initialized = true;
+        platform->random_is_initialized = true;
     }
-    return &ctr_drbg_ctx;
+    return &platform->random_ctx;
 }
 
 void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
 {
-    (void) global;
+    struct RTEMSPlatformData *platform = global->platform_data;
+    (void) platform;
+    SMP_MUTEX_UNLOCK(platform->random_mutex);
 }
 #endif

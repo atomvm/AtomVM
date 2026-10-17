@@ -68,6 +68,7 @@ WORKDIR /tmp/rsb/rtems-source-builder-${RTEMS_RELEASE}/rtems
 RUN ../source-builder/sb-set-builder --prefix="${RTEMS_PREFIX}" \
     --target=arm-rtems6 \
     --with-rtems-bsp=arm/imx7 \
+    --with-rtems-smp \
     --with-rtems-tests=no \
     6/rtems-kernel
 

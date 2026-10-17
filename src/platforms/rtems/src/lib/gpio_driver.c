@@ -133,6 +133,7 @@ struct GPIOListener
 static struct GPIOEventQueue gpio_event_queue;
 static struct GPIOListener gpio_listeners[MAX_GPIO_LISTENERS];
 static rtems_id atomvm_main_task_id = 0;
+RTEMS_INTERRUPT_LOCK_DEFINE(static, gpio_lock, "gpio_lock")
 #if defined(RTEMS_HAS_IMX_GPIO)
 static bool gpio_bank_irq_installed[7][2];
 static uint32_t open_drain_mask[7];
@@ -155,6 +156,9 @@ static void esp32c3_gpio_isr(void *arg)
         return;
     }
 
+    rtems_interrupt_lock_context lock_context;
+    rtems_interrupt_lock_acquire(&gpio_lock, &lock_context);
+
     while (pending != 0) {
         unsigned pin = (unsigned) __builtin_ctz(pending);
         pending &= ~(1u << pin);
@@ -167,6 +171,8 @@ static void esp32c3_gpio_isr(void *arg)
             gpio_event_queue.head = next_head;
         }
     }
+
+    rtems_interrupt_lock_release(&gpio_lock, &lock_context);
 
     if (atomvm_main_task_id != 0) {
         rtems_event_send(atomvm_main_task_id, RTEMS_EVENT_0);
@@ -407,6 +413,9 @@ static void imx_gpio_isr(void *arg)
     }
     regs[6] = pending; /* Write 1 to clear pending flags */
 
+    rtems_interrupt_lock_context lock_context;
+    rtems_interrupt_lock_acquire(&gpio_lock, &lock_context);
+
     while (pending != 0) {
         unsigned pin = (unsigned) __builtin_ctz(pending);
         pending &= ~(1u << pin);
@@ -420,6 +429,8 @@ static void imx_gpio_isr(void *arg)
         }
     }
 
+    rtems_interrupt_lock_release(&gpio_lock, &lock_context);
+
     if (atomvm_main_task_id != 0) {
         rtems_event_send(atomvm_main_task_id, RTEMS_EVENT_0);
     }
@@ -428,32 +439,46 @@ static void imx_gpio_isr(void *arg)
 
 void gpio_interrupt_drain(GlobalContext *glb)
 {
-    while (gpio_event_queue.head != gpio_event_queue.tail) {
+    while (1) {
+        rtems_interrupt_lock_context lock_context;
+        rtems_interrupt_lock_acquire(&gpio_lock, &lock_context);
+        if (gpio_event_queue.head == gpio_event_queue.tail) {
+            rtems_interrupt_lock_release(&gpio_lock, &lock_context);
+            break;
+        }
+
         uint32_t tail = gpio_event_queue.tail;
         struct GPIOEvent ev = gpio_event_queue.events[tail];
         gpio_event_queue.tail = (tail + 1) % GPIO_EVENT_QUEUE_SIZE;
 
+        struct GPIOListener matched[MAX_GPIO_LISTENERS];
+        size_t matched_count = 0;
         for (size_t i = 0; i < MAX_GPIO_LISTENERS; i++) {
             if (gpio_listeners[i].active
                 && gpio_listeners[i].bank == ev.bank
                 && gpio_listeners[i].pin == ev.pin) {
-                BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(2) + TUPLE_SIZE(2), heap);
-                term pin_term;
-                if (gpio_listeners[i].is_int) {
-                    pin_term = term_from_int(ev.pin);
-                } else {
-                    term pin_tuple = term_alloc_tuple(2, &heap);
-                    term_put_tuple_element(pin_tuple, 0, term_from_int11(ev.bank == 0 ? 1 : ev.bank));
-                    term_put_tuple_element(pin_tuple, 1, term_from_int11(ev.pin));
-                    pin_term = pin_tuple;
-                }
-                term int_msg = term_alloc_tuple(2, &heap);
-                term_put_tuple_element(int_msg, 0, globalcontext_make_atom(glb, gpio_interrupt_atom));
-                term_put_tuple_element(int_msg, 1, pin_term);
-
-                globalcontext_send_message(glb, gpio_listeners[i].target_local_pid, int_msg);
-                END_WITH_STACK_HEAP(heap, glb);
+                matched[matched_count++] = gpio_listeners[i];
             }
+        }
+        rtems_interrupt_lock_release(&gpio_lock, &lock_context);
+
+        for (size_t i = 0; i < matched_count; i++) {
+            BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(2) + TUPLE_SIZE(2), heap);
+            term pin_term;
+            if (matched[i].is_int) {
+                pin_term = term_from_int(ev.pin);
+            } else {
+                term pin_tuple = term_alloc_tuple(2, &heap);
+                term_put_tuple_element(pin_tuple, 0, term_from_int11(ev.bank == 0 ? 1 : ev.bank));
+                term_put_tuple_element(pin_tuple, 1, term_from_int11(ev.pin));
+                pin_term = pin_tuple;
+            }
+            term int_msg = term_alloc_tuple(2, &heap);
+            term_put_tuple_element(int_msg, 0, globalcontext_make_atom(glb, gpio_interrupt_atom));
+            term_put_tuple_element(int_msg, 1, pin_term);
+
+            globalcontext_send_message(glb, matched[i].target_local_pid, int_msg);
+            END_WITH_STACK_HEAP(heap, glb);
         }
     }
 }
@@ -887,6 +912,9 @@ static term nif_gpio_set_int(Context *ctx, int argc, term argv[])
             return error_atom(ctx, ATOM_STR("\xE", "irq_install_err"));
         }
 
+        rtems_interrupt_lock_context lock_context;
+        rtems_interrupt_lock_acquire(&gpio_lock, &lock_context);
+
         int free_slot = -1;
         for (size_t i = 0; i < MAX_GPIO_LISTENERS; i++) {
             if (gpio_listeners[i].active
@@ -900,6 +928,7 @@ static term nif_gpio_set_int(Context *ctx, int argc, term argv[])
             }
         }
         if (free_slot < 0) {
+            rtems_interrupt_lock_release(&gpio_lock, &lock_context);
             return error_atom(ctx, ATOM_STR("\x10", "listeners_full"));
         }
 
@@ -908,6 +937,8 @@ static term nif_gpio_set_int(Context *ctx, int argc, term argv[])
         gpio_listeners[free_slot].pin = (uint8_t) pin_num;
         gpio_listeners[free_slot].is_int = is_int;
         gpio_listeners[free_slot].target_local_pid = target_local_pid;
+
+        rtems_interrupt_lock_release(&gpio_lock, &lock_context);
 
         return OK_ATOM;
     }
@@ -964,6 +995,9 @@ static term nif_gpio_set_int(Context *ctx, int argc, term argv[])
 
     imx_gpio_init(&pin);
 
+    rtems_interrupt_lock_context lock_context;
+    rtems_interrupt_lock_acquire(&gpio_lock, &lock_context);
+
     int free_slot = -1;
     for (size_t i = 0; i < MAX_GPIO_LISTENERS; i++) {
         if (gpio_listeners[i].active
@@ -977,6 +1011,7 @@ static term nif_gpio_set_int(Context *ctx, int argc, term argv[])
         }
     }
     if (free_slot < 0) {
+        rtems_interrupt_lock_release(&gpio_lock, &lock_context);
         return error_atom(ctx, ATOM_STR("\x10", "listeners_full"));
     }
 
@@ -985,6 +1020,8 @@ static term nif_gpio_set_int(Context *ctx, int argc, term argv[])
     gpio_listeners[free_slot].pin = (uint8_t) pin_num;
     gpio_listeners[free_slot].is_int = false;
     gpio_listeners[free_slot].target_local_pid = target_local_pid;
+
+    rtems_interrupt_lock_release(&gpio_lock, &lock_context);
 
     return OK_ATOM;
 #else
@@ -1002,6 +1039,8 @@ static term nif_gpio_remove_int(Context *ctx, int argc, term argv[])
     if (parse_esp32c3_pin(argv[0], &pin_num, &is_int)) {
         rtems_gpio_bsp_disable_interrupt(0, pin_num, NONE);
 
+        rtems_interrupt_lock_context lock_context;
+        rtems_interrupt_lock_acquire(&gpio_lock, &lock_context);
         for (size_t i = 0; i < MAX_GPIO_LISTENERS; i++) {
             if (gpio_listeners[i].active
                 && gpio_listeners[i].bank == 0
@@ -1009,6 +1048,7 @@ static term nif_gpio_remove_int(Context *ctx, int argc, term argv[])
                 gpio_listeners[i].active = false;
             }
         }
+        rtems_interrupt_lock_release(&gpio_lock, &lock_context);
         return OK_ATOM;
     }
 #endif
@@ -1030,6 +1070,8 @@ static term nif_gpio_remove_int(Context *ctx, int argc, term argv[])
     /* Mask pin in IMR and set mode to standard input */
     imx_gpio_init(&pin);
 
+    rtems_interrupt_lock_context lock_context;
+    rtems_interrupt_lock_acquire(&gpio_lock, &lock_context);
     for (size_t i = 0; i < MAX_GPIO_LISTENERS; i++) {
         if (gpio_listeners[i].active
             && gpio_listeners[i].bank == bank
@@ -1037,6 +1079,7 @@ static term nif_gpio_remove_int(Context *ctx, int argc, term argv[])
             gpio_listeners[i].active = false;
         }
     }
+    rtems_interrupt_lock_release(&gpio_lock, &lock_context);
     return OK_ATOM;
 #else
     return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));

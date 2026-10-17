@@ -55,6 +55,7 @@ extern void spi_flash_check_and_flush_cache(uint32_t);
 extern esp_rom_spiflash_result_t esp_rom_spiflash_unlock(void);
 
 static uint32_t s_flash_chip_size = 0;
+RTEMS_INTERRUPT_LOCK_DEFINE(static, s_flash_lock, "flash_lock")
 
 static void flash_cache_flush(void)
 {
@@ -178,15 +179,15 @@ int esp32c3_flash_write(uint32_t offset, const void *src, size_t size)
 
         memcpy(((uint8_t *) word_buf) + lead_in, in, chunk_size);
 
-        // Disable local interrupts while writing flash to protect cache coherence
-        rtems_interrupt_level level;
-        rtems_interrupt_local_disable(level);
+        // Lock interrupts and cross-core access while writing flash to protect cache coherence
+        rtems_interrupt_lock_context lock_context;
+        rtems_interrupt_lock_acquire(&s_flash_lock, &lock_context);
 
         esp_rom_spiflash_unlock();
         esp_rom_spiflash_result_t res = esp_rom_spiflash_write(aligned_offset, word_buf, (int32_t) aligned_write_len);
         flash_cache_flush();
 
-        rtems_interrupt_local_enable(level);
+        rtems_interrupt_lock_release(&s_flash_lock, &lock_context);
 
         if (res != ESP_ROM_SPIFLASH_RESULT_OK) {
             return -1;
@@ -208,14 +209,14 @@ int esp32c3_flash_erase_sector(uint32_t sector_num)
         return -1;
     }
 
-    rtems_interrupt_level level;
-    rtems_interrupt_local_disable(level);
+    rtems_interrupt_lock_context lock_context;
+    rtems_interrupt_lock_acquire(&s_flash_lock, &lock_context);
 
     esp_rom_spiflash_unlock();
     esp_rom_spiflash_result_t res = esp_rom_spiflash_erase_sector(sector_num);
     flash_cache_flush();
 
-    rtems_interrupt_local_enable(level);
+    rtems_interrupt_lock_release(&s_flash_lock, &lock_context);
 
     return (res == ESP_ROM_SPIFLASH_RESULT_OK) ? 0 : -1;
 }

@@ -23,10 +23,22 @@
 
 #include <interop.h>
 #include <portnifloader.h>
+#include <smp.h>
 #include <sys.h>
+
+#include <rtems.h>
 
 #if defined(RTEMS_HAS_LIBBSD) || defined(RTEMS_HAS_LWIP)
 #include <poll.h>
+#endif
+
+#if defined(HAVE_MBEDTLS)
+#include <mbedtls/ctr_drbg.h>
+#include <mbedtls/entropy.h>
+#endif
+
+#ifndef AVM_NO_SMP
+#include <pthread.h>
 #endif
 
 #define RTEMS_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "rtems"))
@@ -35,9 +47,23 @@ struct RTEMSPlatformData
 {
 #if defined(RTEMS_HAS_LIBBSD) || defined(RTEMS_HAS_LWIP)
     struct pollfd *fds;
-    int select_events_poll_count;
-#else
-    int dummy;
+    int ATOMIC select_events_poll_count;
+#endif
+#ifndef AVM_NO_SMP
+    pthread_mutex_t poll_mutex;
+    pthread_cond_t poll_cv;
+#endif
+    bool ATOMIC signaled;
+
+#if defined(HAVE_MBEDTLS)
+#ifndef AVM_NO_SMP
+    Mutex *entropy_mutex;
+    Mutex *random_mutex;
+#endif
+    mbedtls_entropy_context entropy_ctx;
+    bool entropy_is_initialized;
+    mbedtls_ctr_drbg_context random_ctx;
+    bool random_is_initialized;
 #endif
 };
 

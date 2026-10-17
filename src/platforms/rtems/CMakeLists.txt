@@ -81,7 +81,25 @@ if((RTEMS_BOARD STREQUAL "esp32c3" OR RTEMS_BOARD STREQUAL "esp32c5" OR RTEMS_BO
     message(FATAL_ERROR "RTEMS_BOARD=${RTEMS_BOARD} requires a RISC-V esp32 BSP (e.g. riscv/esp32c3db, riscv/esp32c5db, riscv/esp32c6db, or riscv/esp32s31db)")
 endif()
 
-set(AVM_DISABLE_SMP ON CACHE BOOL "Disable SMP support." FORCE)
+include(CheckCSourceCompiles)
+set(_saved_req_flags "${CMAKE_REQUIRED_FLAGS}")
+set(CMAKE_REQUIRED_FLAGS "${CMAKE_C_FLAGS}")
+check_c_source_compiles("
+#include <rtems/score/cpuopts.h>
+#ifndef RTEMS_SMP
+#error \"RTEMS_SMP not defined\"
+#endif
+int main(void) { return 0; }
+" RTEMS_BSP_HAS_SMP)
+set(CMAKE_REQUIRED_FLAGS "${_saved_req_flags}")
+
+if(RTEMS_BSP_HAS_SMP AND NOT RTEMS_BOARD STREQUAL "grisp2")
+    set(DEFAULT_AVM_DISABLE_SMP OFF)
+else()
+    set(DEFAULT_AVM_DISABLE_SMP ON)
+endif()
+
+option(AVM_DISABLE_SMP "Disable SMP support." ${DEFAULT_AVM_DISABLE_SMP})
 set(AVM_DISABLE_TASK_DRIVER ON CACHE BOOL "Disable task driver support." FORCE)
 
 if(NOT AVM_DISABLE_JIT)

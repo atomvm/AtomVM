@@ -52,6 +52,11 @@ while [[ $# -gt 0 ]]; do
             DO_SIMULATE=1
             shift
             ;;
+        --test-smp)
+            TEST_MODULE="test_smp"
+            DO_SIMULATE=1
+            shift
+            ;;
         --test-wifi)
             TEST_MODULE="test_esp32s31_wifi"
             TEST_WIFI=1
@@ -88,14 +93,14 @@ RUN_CMD+=(--rm -v "${REPO_ROOT}:/workspace" -w /workspace "${IMAGE_NAME}" bash -
         chmod +x /usr/local/bin/rebar3
     fi
 
-    if [ -f build-host/CMakeCache.txt ] && grep -q "REBAR3-NOTFOUND" build-host/CMakeCache.txt; then
+    if [ -f build-host/CMakeCache.txt ] && (grep -q "REBAR3-NOTFOUND" build-host/CMakeCache.txt || grep -q "Darwin" build-host/CMakeCache.txt || grep -q "/usr/bin/cc" build-host/CMakeCache.txt); then
         rm -rf build-host/CMakeCache.txt build-host/CMakeFiles
     fi
 
     TEST_MOD="'"${TEST_MODULE}"'"
     echo "==> Building host AVM pack (${TEST_MOD})..."
     cmake -S . -B build-host -G Ninja -DAVM_DISABLE_JIT=ON
-    cmake --build build-host -t rtems_boot_test rtems_esp32s31_wifi_test atomvmlib-rtems
+    cmake --build build-host -t rtems_boot_test rtems_esp32s31_wifi_test rtems_smp_test atomvmlib-rtems
     mkdir -p src/platforms/rtems/build-esp32s31
     ./build-host/tools/packbeam/packbeam create -s "${TEST_MOD}" \
         src/platforms/rtems/build-esp32s31/rtems_boot.avm \
@@ -128,7 +133,8 @@ if [ "${DO_SIMULATE}" -eq 1 ]; then
             python3 "${REPO_ROOT}/src/platforms/rtems/tools/mock_sntp_server.py" 12300 > /tmp/mock_sntp.log 2>&1 &
             SNTP_PID=$!
         fi
-        EMU_CMD=(esp-emu --chip esp32s31 --firmware "${REPO_ROOT}/src/platforms/rtems/build-esp32s31/AtomVM-esp32s31db.bin")
+        BATCH_SIZE=50000
+        EMU_CMD=(esp-emu --chip esp32s31 --batch-size "${BATCH_SIZE}" --firmware "${REPO_ROOT}/src/platforms/rtems/build-esp32s31/AtomVM-esp32s31db.bin")
         if [ "${TEST_WIFI}" -eq 1 ]; then
             EMU_CMD+=(--wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user)
         fi
@@ -145,6 +151,7 @@ if [ "${DO_SIMULATE}" -eq 1 ]; then
         if [ -n "${DOCKER_PLATFORM}" ]; then
             SIM_CMD+=(--platform "${DOCKER_PLATFORM}")
         fi
+        BATCH_SIZE=50000
         if [ "${TEST_WIFI}" -eq 1 ]; then
             SIM_CMD+=(--rm -v "${REPO_ROOT}:/workspace" "${IMAGE_NAME}" bash -c '
                 python3 -m http.server 8080 --directory /workspace &
@@ -152,14 +159,14 @@ if [ "${DO_SIMULATE}" -eq 1 ]; then
                 python3 /workspace/src/platforms/rtems/tools/mock_sntp_server.py 12300 > /tmp/mock_sntp.log 2>&1 &
                 SNTP_PID=$!
                 trap "kill $HTTP_PID $SNTP_PID 2>/dev/null || true" EXIT
-                esp-emu --chip esp32s31 \
+                esp-emu --chip esp32s31 --batch-size '"${BATCH_SIZE}"' \
                     --firmware /workspace/src/platforms/rtems/build-esp32s31/AtomVM-esp32s31db.bin \
                     --wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user \
                     --timeout 30s --exit-on "Return value: ok"
             ')
         else
             SIM_CMD+=(--rm -v "${REPO_ROOT}:/workspace" "${IMAGE_NAME}" \
-                esp-emu --chip esp32s31 \
+                esp-emu --chip esp32s31 --batch-size "${BATCH_SIZE}" \
                 --firmware /workspace/src/platforms/rtems/build-esp32s31/AtomVM-esp32s31db.bin \
                 --timeout 30s --exit-on "Return value: ok")
         fi

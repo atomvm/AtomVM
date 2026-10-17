@@ -57,6 +57,7 @@ set(SOURCE_FILES
     gpio_driver.c
     spi_driver.c
     rtc_slow_nif.c
+    smp.c
     ../../../../libAtomVM/portnifloader.c
 )
 

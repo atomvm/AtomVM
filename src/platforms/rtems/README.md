@@ -11,23 +11,30 @@ This directory contains the RTEMS port of AtomVM, supporting RTEMS 6.2 as well a
 Supported bring-up targets:
 
 - SPARC `erc32` on SIS (`rtems-run --rtems-bsps=erc32-sis`)
-- ARM `realview_pbx_a9_qemu` on QEMU (`qemu-system-arm -M realview-pbx-a9`)
-- ARM `imx7` on QEMU (`qemu-system-arm -M mcimx7d-sabre`)
+- ARM `realview_pbx_a9_qemu` on QEMU (`qemu-system-arm -M realview-pbx-a9 -smp 2`)
+- ARM `imx7` on QEMU (`qemu-system-arm -M mcimx7d-sabre -smp 2`)
 - GRiSP 2 (`arm/imx7` with `RTEMS_BOARD=grisp2`; hardware validation pending)
 - RISC-V `esp32c3db` on ESP32-C3 (`esp-emu --chip esp32c3` or QEMU `qemu-system-riscv32 -M esp32c3`)
+- RISC-V `esp32c5db` on ESP32-C5 (`esp-emu --chip esp32c5`)
+- RISC-V `esp32c6db` on ESP32-C6 (`esp-emu --chip esp32c6`)
+- RISC-V `esp32s31db` on ESP32-S31 dual-core SMP (`esp-emu --chip esp32s31`)
 
-Other RTEMS 6 BSPs can be selected at configure time once a matching toolchain
+Other RTEMS 6 and 7 BSPs can be selected at configure time once a matching toolchain
 and BSP are installed. `imx7` is the NXP i.MX 7Dual BSP; QEMU models the
 SABRE board, not GRiSP 2 (same BSP family, different pinmux, PHY, and FDT).
 The GRiSP 2 build selects the board-specific LibBSD nexus and checks that the
 bootloader supplied an FDT with the `embeddedbrains,grisp2` compatible string.
 
-This is a bring-up port: no SMP or JIT. Applications are compiled on the host
+SMP multi-core BEAM execution is supported on dual-core and multi-core targets
+(`esp32s31db`, `realview_pbx_a9_qemu`, and `imx7`), dynamically scaling
+schedulers with `rtems_scheduler_get_processor_maximum()`. Uniprocessor targets
+(`erc32`, `esp32c3db`, `esp32c5db`, `esp32c6db`, `grisp2`) build with uniprocessor
+optimizations (`AVM_DISABLE_SMP=ON`). Applications are compiled on the host
 and embedded in the RTEMS executable. GRiSP 2 can instead load `app.avm`
 from its SD card, using the embedded application as a fallback.
 Pack `atomvmlib-rtems.avm` (estdlib + eavmlib + `avm_network` +
 `avm_rtems`) together with the application so `init:boot/1` can start the
-entry module.
+entry module. JIT is currently disabled.
 
 Sockets are provided on `arm/imx7` when `rtems-libbsd` is installed. Without
 LibBSD, and on SPARC `erc32` and ARM `realview_pbx_a9_qemu`,
@@ -132,7 +139,7 @@ resulting ELF directly in QEMU; this BSP does not require a DTB or debugger
 bootstrap:
 
 ```sh
-qemu-system-arm -net none -nographic -no-reboot -M realview-pbx-a9 -m 256M \
+qemu-system-arm -net none -nographic -no-reboot -M realview-pbx-a9 -m 256M -smp 2 \
     -kernel src/platforms/rtems/build/AtomVM-realview_pbx_a9_qemu.exe
 ```
 
@@ -168,7 +175,7 @@ unimplemented system-counter MMIO:
 fdtput -t x imx7d-sdb-qemu.dtb /memory@80000000 reg 0x80000000 0x40000000
 fdtput -t x imx7d-sdb-qemu.dtb /timer clock-frequency 0x7a1200
 src/platforms/rtems/tools/run-imx7-qemu.sh \
-    -d imx7d-sdb-qemu.dtb \
+    -d imx7d-sdb-qemu.dtb -s 2 \
     src/platforms/rtems/build/AtomVM-imx7.exe
 ```
 
@@ -620,6 +627,55 @@ qemu-system-riscv32 -nographic -machine esp32c3 \
     -drive file=flash.bin,if=mtd,format=raw -serial mon:stdio
 ```
 
+## SMP Multi-Core Support
+
+AtomVM on RTEMS supports symmetric multiprocessing (SMP) on targets with multi-core BSPs:
+- **RISC-V ESP32-S31**: Dual-core RV32IMAFC microcontroller simulated in `esp-emulator` (`--chip esp32s31`).
+- **ARM RealView PBX-A9**: Multi-core ARM Cortex-A9 simulated in QEMU (`-M realview-pbx-a9 -smp 2` or `-smp 4`).
+- **ARM i.MX 7Dual SABRE**: Dual-core ARM Cortex-A7 simulated in QEMU (`-M mcimx7d-sabre -smp 2`).
+
+### Architecture & Schedulers
+
+When built with an SMP-enabled RTEMS kernel (`RTEMS_SMP` defined in `<rtems/score/cpuopts.h>`), AtomVM detects the number of available cores at startup:
+- Queries `rtems_scheduler_get_processor_maximum()` (or `CONFIGURE_MAXIMUM_PROCESSORS`).
+- Spawns background scheduler threads (`smp_scheduler_thread`) using RTEMS POSIX threads (`pthread_create`).
+- Synchronizes using fine-grained POSIX mutexes and condition variables with bounded deadline waits (`pthread_cond_timedwait`) for scheduler sleep and wakeups.
+- Schedulers run BEAM processes concurrently across all available cores. In Erlang, `erlang:system_info(schedulers)` and `erlang:system_info(schedulers_online)` report the detected number of cores.
+
+Uniprocessor targets (such as `erc32`, `esp32c3`, `esp32c5`, `esp32c6`, and `grisp2`) automatically default to `AVM_DISABLE_SMP=ON`, eliminating lock overhead and ensuring uniprocessor execution.
+
+### Emulating ESP32-S31 Dual-Core with esp-emulator
+ 
+```sh
+esp-emu --chip esp32s31 \
+    --firmware src/platforms/rtems/build-esp32s31/AtomVM-esp32s31db.bin \
+    --timeout 30s --exit-on "Return value: ok"
+```
+
+Or using the automated docker script:
+```sh
+./src/platforms/rtems/tools/docker-build-esp32s31.sh --test-smp
+```
+
+### Running SMP on QEMU RealView PBX-A9
+
+Run with `-smp 2` (or `-smp 4`):
+
+```sh
+qemu-system-arm -net none -nographic -no-reboot -M realview-pbx-a9 -m 256M -smp 2 \
+    -kernel src/platforms/rtems/build/AtomVM-realview_pbx_a9_qemu.exe
+```
+
+### Running SMP on QEMU i.MX 7 SABRE
+
+Pass `-s <cores>` (default is 2) to `run-imx7-qemu.sh`:
+
+```sh
+src/platforms/rtems/tools/run-imx7-qemu.sh \
+    -d imx7d-sdb-qemu.dtb -s 2 \
+    src/platforms/rtems/build/AtomVM-imx7.exe
+```
+
 ## Benchmark suite
 
 [`run-atomvm-benchmark.sh`](tools/run-atomvm-benchmark.sh) builds and runs
@@ -656,4 +712,4 @@ independent of host speed -- useful for comparing builds.
 | `RTEMS_DTB` | bundled `boards/grisp2/imx6ul-grisp2.dtb` | Board DTB to validate and copy as `oftree` when packaging |
 | `RTEMS_APP_PATH` | `/media/mmcsd-0-0/app.avm` | RTEMS filesystem path for the replaceable application (GRiSP 2 only) |
 | `AVM_DISABLE_JIT` | `ON` | JIT is not supported yet |
-| `AVM_DISABLE_SMP` | `ON` | Forced off for this port |
+| `AVM_DISABLE_SMP` | `OFF` on SMP BSPs, `ON` otherwise | Disable SMP multi-core support |

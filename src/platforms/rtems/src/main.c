@@ -20,12 +20,16 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 
 #include <rtems.h>
+#if !defined(AVM_NO_SMP) && defined(RTEMS_SMP)
+#include <rtems/score/percpu.h>
+#endif
 
 #ifdef RTEMS_BOARD_FDT_COMPATIBLE
 #include <bsp/fdt.h>
@@ -43,6 +47,8 @@
 #include <globalcontext.h>
 #include <module.h>
 #include <utils.h>
+
+#include <smp.h>
 
 #include "app_loader.h"
 #include "lib/network.h"
@@ -119,8 +125,13 @@ static int run_app(const struct RtemsApp *app)
 
     fprintf(stdout, "Starting: %s...\n", app->startup_name);
     fprintf(stdout, "---\n");
+    fflush(stdout);
 
     run_result_t result = globalcontext_run(glb, mod, stdout, 0, NULL);
+
+#ifndef AVM_NO_SMP
+    smp_scheduler_join_all();
+#endif
 
     nif_collection_destroy_all(glb);
     globalcontext_destroy(glb);
@@ -136,7 +147,25 @@ rtems_task Init(rtems_task_argument ignored)
     setvbuf(stderr, NULL, _IONBF, 0);
 
     fprintf(stdout, "%s", ATOMVM_BANNER);
+#ifndef AVM_NO_SMP
+    (void) smp_is_main_thread(NULL);
+    fprintf(stdout, "Starting AtomVM revision " ATOMVM_VERSION " on RTEMS (%d CPU(s) online)\n", smp_get_online_processors());
+#if defined(RTEMS_SMP)
+    for (uint32_t i = 1; i < (uint32_t) smp_get_online_processors(); i++) {
+        const Per_CPU_Control *cpu = _Per_CPU_Get_by_index(i);
+        uint32_t timeout_ticks = 100;
+        while (_Per_CPU_Get_state(cpu) != PER_CPU_STATE_UP && --timeout_ticks > 0) {
+            rtems_task_wake_after(1);
+        }
+        if (_Per_CPU_Get_state(cpu) != PER_CPU_STATE_UP) {
+            fprintf(stderr, TAG ": Warning: CPU %" PRIu32 " failed to start (state %d)\n",
+                    i, (int) _Per_CPU_Get_state(cpu));
+        }
+    }
+#endif
+#else
     fprintf(stdout, "Starting AtomVM revision " ATOMVM_VERSION " on RTEMS\n");
+#endif
 
     mkdir("/dev", 0755);
 
