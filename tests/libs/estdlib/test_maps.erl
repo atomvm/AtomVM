@@ -85,6 +85,8 @@ test_get() ->
     ok = check_bad_key(fun() -> maps:get(bar, id(#{foo => bar})) end, bar),
 
     ?ASSERT_MATCH(maps:get(gnu, id(#{foo => bar}), gnat), gnat),
+    ?ASSERT_MATCH(maps:get(foo, id(#{foo => bar}), gnat), bar),
+    ?ASSERT_ERROR(maps:get(gnu, id({hello}), gnat), {badmap, {hello}}),
     ?ASSERT_ERROR(maps:get({hello}, id(#{foo => bar})), {badkey, {hello}}),
     ?ASSERT_ERROR(maps:get(gnu, id({hello})), {badmap, {hello}}),
     ok.
@@ -224,6 +226,7 @@ test_find() ->
     ?ASSERT_MATCH(maps:find(c, #{a => 1, b => 2, c => 3}), {ok, 3}),
     ?ASSERT_MATCH(maps:find(foo, #{a => 1, b => 2, c => 3}), error),
     ok = check_bad_map(fun() -> maps:find(foo, id(not_a_map)) end),
+    ?ASSERT_ERROR(maps:find(foo, id({hello})), {badmap, {hello}}),
     ok.
 
 test_filter() ->
