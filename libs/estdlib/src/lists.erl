@@ -153,16 +153,12 @@ member(_, []) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec delete(E :: term(), L :: list()) -> Result :: list().
-delete(E, L) ->
-    delete(E, L, []).
-
-%% @private
-delete(_, [], Accum) ->
-    ?MODULE:reverse(Accum);
-delete(E, [E | T], Accum) ->
-    ?MODULE:reverse(Accum) ++ T;
-delete(E, [H | T], Accum) ->
-    delete(E, T, [H | Accum]).
+delete(Item, [Item | Rest]) ->
+    Rest;
+delete(Item, [H | Rest]) ->
+    [H | delete(Item, Rest)];
+delete(_, []) ->
+    [].
 
 %%-----------------------------------------------------------------------------
 %% @param   L the list to reverse
