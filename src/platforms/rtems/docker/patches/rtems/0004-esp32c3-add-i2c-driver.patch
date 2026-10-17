@@ -1,0 +1,661 @@
+From 311187be13063383c857d5d621f26d3cc5b6e5d0 Mon Sep 17 00:00:00 2001
+From: Samuel Price <thesamprice@gmail.com>
+Date: Wed, 16 Sep 2026 22:50:47 -0400
+Subject: [PATCH] esp32c3: Add an I2C driver
+
+Carried in this tree as patches/rtems/0004-esp32c3-i2c-driver.patch, which had no commit message of
+its own; this subject was written when the patch stack was converted to a
+branch.
+
+Originally carried as patches/rtems/0004-esp32c3-i2c-driver.patch.
+
+Signed-off-by: Samuel Price <thesamprice@gmail.com>
+Assisted-by: Claude Opus 5 (1M context) <noreply@anthropic.com>
+
+---
+diff --git a/bsps/riscv/esp32/i2c/i2c_c3.c b/bsps/riscv/esp32/i2c/i2c_c3.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..b4618795da0138463aa052536c0cdb369b1dc0a7
+--- /dev/null
++++ b/bsps/riscv/esp32/i2c/i2c_c3.c
+@@ -0,0 +1,519 @@
++/* SPDX-License-Identifier: BSD-2-Clause */
++
++/**
++ * @file
++ *
++ * @ingroup RTEMSBSPsRISCVESP32
++ *
++ * @brief ESP32-C3 I2C master driver.
++ */
++
++/*
++ * Copyright (C) 2026 Samuel Price <thesamprice@gmail.com>
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ */
++
++/*
++ * The controller is driven by a short program rather than a byte at a time.
++ * Eight command registers hold opcodes -- RSTART, WRITE, READ, STOP, END --
++ * each naming a byte count, and setting TRANS_START runs them against the TX
++ * and RX FIFOs.  So a transfer here is: lay out the commands, fill the TX
++ * FIFO, start, wait, drain the RX FIFO.
++ *
++ * One part of this is not testable under emulation and is called out here so
++ * that it is not mistaken for tested: routing the two signals to pads.  QEMU
++ * models the controller but has no pads, so a driver that never touched the
++ * GPIO matrix would pass every test and drive nothing on a real board.
++ * esp32c3_i2c_route_pin() is written from the technical reference manual, not
++ * from a passing test.
++ *
++ * Two limits follow from the command layout, and both are enforced rather
++ * than hoped for:
++ * eight commands, and 32 bytes of FIFO in each direction.  A message longer
++ * than the FIFO is split into chunks joined by END, which pauses the
++ * controller with the bus still held so the next chunk continues the same
++ * transfer.
++ */
++
++#include <bsp.h>
++#include <bsp/i2c.h>
++#include <bsp/irq.h>
++
++#include <dev/i2c/i2c.h>
++#include <rtems/counter.h>
++
++#include <errno.h>
++#include <stdlib.h>
++
++#define I2C_REG( off ) ( *( (volatile uint32_t *) ( I2C_BASE + (off) ) ) )
++
++#define I2C_SCL_LOW_PERIOD   0x0000
++#define I2C_CTR              0x0004
++#define I2C_SR               0x0008
++#define I2C_TO               0x000c
++#define I2C_FIFO_CONF        0x0018
++#define I2C_DATA             0x001c
++#define I2C_INT_RAW          0x0020
++#define I2C_INT_CLR          0x0024
++#define I2C_INT_ENA          0x0028
++#define I2C_SDA_HOLD         0x0030
++#define I2C_SDA_SAMPLE       0x0034
++#define I2C_SCL_HIGH_PERIOD  0x0038
++#define I2C_SCL_START_HOLD   0x0040
++#define I2C_SCL_RSTART_SETUP 0x0044
++#define I2C_SCL_STOP_HOLD    0x0048
++#define I2C_SCL_STOP_SETUP   0x004c
++#define I2C_FILTER_CFG       0x0050
++#define I2C_CLK_CONF         0x0054
++#define I2C_COMD( n )        ( 0x0058 + 4 * (n) )
++
++/* I2C_CTR */
++#define I2C_CTR_SDA_FORCE_OUT  ( 1U << 0 )
++#define I2C_CTR_SCL_FORCE_OUT  ( 1U << 1 )
++#define I2C_CTR_MS_MODE        ( 1U << 4 )
++#define I2C_CTR_TRANS_START    ( 1U << 5 )
++#define I2C_CTR_CLK_EN         ( 1U << 8 )
++#define I2C_CTR_CONF_UPGATE    ( 1U << 11 )
++
++/* I2C_FIFO_CONF */
++#define I2C_FIFO_CONF_NONFIFO_EN  ( 1U << 10 )
++#define I2C_FIFO_CONF_RX_FIFO_RST ( 1U << 12 )
++#define I2C_FIFO_CONF_TX_FIFO_RST ( 1U << 13 )
++#define I2C_FIFO_CONF_FIFO_PRT_EN ( 1U << 14 )
++
++/* Interrupt bits, shared by INT_RAW, INT_CLR and INT_ENA */
++#define I2C_INT_END_DETECT     ( 1U << 3 )
++#define I2C_INT_ARBITRATION    ( 1U << 5 )
++#define I2C_INT_TRANS_COMPLETE ( 1U << 7 )
++#define I2C_INT_TIME_OUT       ( 1U << 8 )
++#define I2C_INT_NACK           ( 1U << 10 )
++#define I2C_INT_ALL            0xffffffffU
++
++/* I2C_CLK_CONF */
++#define I2C_CLK_CONF_SCLK_ACTIVE ( 1U << 21 )
++
++/* Command word */
++#define I2C_CMD_BYTE_NUM_SHIFT 0
++#define I2C_CMD_ACK_CHECK_EN   ( 1U << 8 )
++#define I2C_CMD_ACK_VAL        ( 1U << 10 )
++#define I2C_CMD_OPCODE_SHIFT   11
++
++/*
++ * The C-series numbering, which is not the original ESP32's: RSTART moved from
++ * 0 to 6, and READ and STOP swapped.  Getting this wrong does not fail loudly.
++ * Every value is a valid command, just a different one.
++ */
++#define I2C_OP_WRITE  1
++#define I2C_OP_STOP   2
++#define I2C_OP_READ   3
++#define I2C_OP_END    4
++#define I2C_OP_RSTART 6
++
++#define I2C_CMD_COUNT   8
++#define I2C_FIFO_LENGTH 32
++
++/*
++ * Pad routing.  The controller does not reach a pin by itself: the GPIO matrix
++ * has to be told which pad carries each of its two signals, in both directions,
++ * and the pad has to be put in open drain -- which is not an optimization on
++ * this bus but the protocol, since a slave signals by pulling the line down
++ * while the master is releasing it.
++ *
++ * These are GPIO and IO_MUX registers rather than I2C ones.  Reaching across
++ * to them from here is right: whoever configures a pin owns its muxing, and
++ * the alternative is a driver that transfers correctly into a pad that is not
++ * connected to it.
++ */
++#define GPIO_ENABLE_W1TS_REG  ( GPIO_BASE + 0x0024 )
++#define GPIO_PIN_REG( n )     ( GPIO_BASE + 0x0074 + 4 * (n) )
++#define GPIO_FUNC_IN_SEL_REG( sig )  ( GPIO_BASE + 0x0154 + 4 * (sig) )
++#define GPIO_FUNC_OUT_SEL_REG( pin ) ( GPIO_BASE + 0x0554 + 4 * (pin) )
++#define IO_MUX_PIN_REG( n )   ( IO_MUX_BASE + 0x0004 + 4 * (n) )
++
++#define GPIO_PIN_PAD_DRIVER   ( 1U << 2 )   /* open drain */
++#define GPIO_FUNC_IN_SEL_ENA  ( 1U << 6 )   /* take the signal from the matrix */
++#define IO_MUX_FUN_PU         ( 1U << 8 )
++#define IO_MUX_FUN_IE         ( 1U << 9 )
++#define IO_MUX_MCU_SEL_SHIFT  12
++#define IO_MUX_MCU_SEL_MASK   ( 0x7U << IO_MUX_MCU_SEL_SHIFT )
++#define IO_MUX_FUNC_GPIO      1
++
++/* GPIO matrix signal numbers for the one I2C controller this chip has. */
++#define I2C_SIG_SCL 53
++#define I2C_SIG_SDA 54
++
++/* Where the bus is on the ESP32-C3-DevKitM-1, and what esp-idf's examples
++ * use.  A board that wires it elsewhere wants these changed; they are here
++ * rather than in a parameter because a BSP describes one board. */
++#define I2C_SCL_PIN 6
++#define I2C_SDA_PIN 5
++
++/* XTAL_CLK, which is what SCLK_SEL = 0 selects. */
++#define I2C_SOURCE_CLOCK_HZ 40000000U
++
++#define I2C_DEFAULT_CLOCK_HZ 100000U
++
++/* Long enough that a bus held by a stuck slave gives up rather than wedging
++ * the calling task, short enough not to look like a hang. */
++#define I2C_TRANSFER_TIMEOUT_US 100000U
++
++typedef struct {
++  i2c_bus base;
++  unsigned long clock;
++} esp32c3_i2c_bus;
++
++static void esp32c3_i2c_route_pin( uint32_t pin, uint32_t signal )
++{
++  volatile uint32_t *mux = (volatile uint32_t *) IO_MUX_PIN_REG( pin );
++  uint32_t value = *mux;
++
++  value &= ~IO_MUX_MCU_SEL_MASK;
++  value |= (uint32_t) IO_MUX_FUNC_GPIO << IO_MUX_MCU_SEL_SHIFT;
++
++  /* The input buffer stays on for both lines: the controller reads SDA to
++   * take a slave's ACK, and it reads SCL to notice clock stretching. */
++  value |= IO_MUX_FUN_IE;
++
++  /* A weak internal pull-up, because a bus with no external one does not
++   * idle high and nothing works.  It is far too weak for a real bus at any
++   * speed and is not a substitute for the resistors a board should have. */
++  value |= IO_MUX_FUN_PU;
++
++  *mux = value;
++
++  /* Open drain, which is the protocol rather than a preference. */
++  *(volatile uint32_t *) GPIO_PIN_REG( pin ) |= GPIO_PIN_PAD_DRIVER;
++
++  *(volatile uint32_t *) GPIO_ENABLE_W1TS_REG = 1U << pin;
++  *(volatile uint32_t *) GPIO_FUNC_OUT_SEL_REG( pin ) = signal;
++  *(volatile uint32_t *) GPIO_FUNC_IN_SEL_REG( signal ) =
++    pin | GPIO_FUNC_IN_SEL_ENA;
++}
++
++static void esp32c3_i2c_command( unsigned index, uint32_t command )
++{
++  I2C_REG( I2C_COMD( index ) ) = command;
++}
++
++static uint32_t esp32c3_i2c_op( unsigned op, unsigned bytes, uint32_t flags )
++{
++  return ( (uint32_t) op << I2C_CMD_OPCODE_SHIFT )
++    | ( (uint32_t) bytes << I2C_CMD_BYTE_NUM_SHIFT )
++    | flags;
++}
++
++static void esp32c3_i2c_reset_fifo( void )
++{
++  uint32_t conf = I2C_REG( I2C_FIFO_CONF );
++
++  conf &= ~I2C_FIFO_CONF_NONFIFO_EN;
++  conf |= I2C_FIFO_CONF_FIFO_PRT_EN;
++
++  I2C_REG( I2C_FIFO_CONF ) = conf | I2C_FIFO_CONF_TX_FIFO_RST
++    | I2C_FIFO_CONF_RX_FIFO_RST;
++  I2C_REG( I2C_FIFO_CONF ) = conf;
++}
++
++/*
++ * Run the commands already loaded and wait for the interrupt that ends them.
++ * Polled rather than interrupt driven: a transfer at 100 kHz is tens of
++ * microseconds, less than the cost of blocking and being woken, and it keeps
++ * the driver usable before the interrupt machinery is up.
++ */
++static int esp32c3_i2c_run( uint32_t done_mask )
++{
++  rtems_counter_ticks limit = rtems_counter_nanoseconds_to_ticks(
++    I2C_TRANSFER_TIMEOUT_US * 1000
++  );
++  rtems_counter_ticks start;
++  uint32_t status;
++
++  I2C_REG( I2C_INT_CLR ) = I2C_INT_ALL;
++  I2C_REG( I2C_CTR ) |= I2C_CTR_CONF_UPGATE;
++  I2C_REG( I2C_CTR ) |= I2C_CTR_TRANS_START;
++
++  start = rtems_counter_read();
++
++  for ( ; ; ) {
++    status = I2C_REG( I2C_INT_RAW );
++
++    if ( ( status & I2C_INT_NACK ) != 0 ) {
++      I2C_REG( I2C_INT_CLR ) = I2C_INT_ALL;
++      return -EIO;
++    }
++
++    if ( ( status & ( I2C_INT_TIME_OUT | I2C_INT_ARBITRATION ) ) != 0 ) {
++      I2C_REG( I2C_INT_CLR ) = I2C_INT_ALL;
++      return -EIO;
++    }
++
++    if ( ( status & done_mask ) != 0 ) {
++      I2C_REG( I2C_INT_CLR ) = done_mask;
++      return 0;
++    }
++
++    if ( rtems_counter_read() - start > limit ) {
++      return -ETIMEDOUT;
++    }
++  }
++}
++
++/*
++ * One chunk of one message: at most a FIFO's worth, ending in STOP if this is
++ * the last chunk of the last message and in END otherwise.  END leaves the bus
++ * held, which is what makes a repeated start work.
++ */
++static int esp32c3_i2c_chunk(
++  const i2c_msg *msg,
++  size_t offset,
++  size_t length,
++  bool first_chunk,
++  bool last
++)
++{
++  const bool read = ( msg->flags & I2C_M_RD ) != 0;
++  unsigned index = 0;
++  uint32_t done;
++  int rv;
++
++  esp32c3_i2c_reset_fifo();
++
++  if ( first_chunk ) {
++    esp32c3_i2c_command( index, esp32c3_i2c_op( I2C_OP_RSTART, 0, 0 ) );
++    ++index;
++
++    /* The address byte is written from the TX FIFO like any other, so it is
++     * part of a WRITE command's byte count.  For a write it joins the data
++     * below; for a read it needs a command of its own, because the bytes that
++     * follow it are read rather than written. */
++    I2C_REG( I2C_DATA ) = ( (uint32_t) msg->addr << 1 ) | ( read ? 1U : 0U );
++
++    if ( read ) {
++      esp32c3_i2c_command(
++        index,
++        esp32c3_i2c_op( I2C_OP_WRITE, 1, I2C_CMD_ACK_CHECK_EN )
++      );
++      ++index;
++    }
++  }
++
++  if ( read ) {
++    /* A read must NACK the final byte of the whole message and ACK every
++     * other one, or the slave keeps driving the bus.  So the last byte gets a
++     * command of its own, and only when this really is the end. */
++    size_t acked = length;
++
++    if ( last && length > 0 ) {
++      acked = length - 1;
++    }
++
++    if ( acked > 0 ) {
++      esp32c3_i2c_command( index, esp32c3_i2c_op( I2C_OP_READ, acked, 0 ) );
++      ++index;
++    }
++
++    if ( acked != length ) {
++      esp32c3_i2c_command(
++        index,
++        esp32c3_i2c_op( I2C_OP_READ, 1, I2C_CMD_ACK_VAL )
++      );
++      ++index;
++    }
++  } else {
++    size_t written = length;
++
++    for ( size_t i = 0; i < length; ++i ) {
++      I2C_REG( I2C_DATA ) = msg->buf[ offset + i ];
++    }
++
++    if ( first_chunk ) {
++      /* Plus the address byte already in the FIFO. */
++      written += 1;
++    }
++
++    if ( written > 0 ) {
++      esp32c3_i2c_command(
++        index,
++        esp32c3_i2c_op( I2C_OP_WRITE, written, I2C_CMD_ACK_CHECK_EN )
++      );
++      ++index;
++    }
++  }
++
++  if ( last ) {
++    esp32c3_i2c_command( index, esp32c3_i2c_op( I2C_OP_STOP, 0, 0 ) );
++    done = I2C_INT_TRANS_COMPLETE;
++  } else {
++    esp32c3_i2c_command( index, esp32c3_i2c_op( I2C_OP_END, 0, 0 ) );
++    done = I2C_INT_END_DETECT;
++  }
++
++  ++index;
++
++  if ( index > I2C_CMD_COUNT ) {
++    return -EINVAL;
++  }
++
++  rv = esp32c3_i2c_run( done );
++
++  if ( rv != 0 ) {
++    return rv;
++  }
++
++  if ( read ) {
++    for ( size_t i = 0; i < length; ++i ) {
++      msg->buf[ offset + i ] = (uint8_t) I2C_REG( I2C_DATA );
++    }
++  }
++
++  return 0;
++}
++
++static int esp32c3_i2c_transfer(
++  i2c_bus *bus,
++  i2c_msg *msgs,
++  uint32_t msg_count
++)
++{
++  (void) bus;
++
++  for ( uint32_t m = 0; m < msg_count; ++m ) {
++    const i2c_msg *msg = &msgs[ m ];
++    size_t offset = 0;
++    bool first_chunk = true;
++
++    if ( ( msg->flags & I2C_M_TEN ) != 0 ) {
++      /* Ten-bit addressing needs a second address byte and a different
++       * command layout.  Refuse it rather than send a seven-bit transfer to
++       * whatever the low bits of the address happen to name. */
++      return -EINVAL;
++    }
++
++    do {
++      size_t length = msg->len - offset;
++      bool last;
++      int rv;
++
++      /* One byte of the TX FIFO belongs to the address, so a chunk is one
++       * short of the FIFO.  Reads are bounded by the same number for the RX
++       * FIFO, which is the same size. */
++      if ( length > I2C_FIFO_LENGTH - 1 ) {
++        length = I2C_FIFO_LENGTH - 1;
++      }
++
++      last = ( m + 1 == msg_count ) && ( offset + length == msg->len );
++
++      rv = esp32c3_i2c_chunk( msg, offset, length, first_chunk, last );
++
++      if ( rv != 0 ) {
++        return rv;
++      }
++
++      offset += length;
++      first_chunk = false;
++    } while ( offset < msg->len );
++  }
++
++  return 0;
++}
++
++static int esp32c3_i2c_set_clock( i2c_bus *bus, unsigned long clock )
++{
++  esp32c3_i2c_bus *self = (esp32c3_i2c_bus *) bus;
++  uint32_t half;
++
++  if ( clock == 0 || clock > 1000000 ) {
++    return -EINVAL;
++  }
++
++  /* Half a bit period in source clock cycles, which is what the high and low
++   * period registers count. */
++  half = ( I2C_SOURCE_CLOCK_HZ / clock ) / 2;
++
++  if ( half < 2 ) {
++    return -EINVAL;
++  }
++
++  I2C_REG( I2C_CLK_CONF ) = I2C_CLK_CONF_SCLK_ACTIVE;
++  I2C_REG( I2C_SCL_LOW_PERIOD ) = half;
++  I2C_REG( I2C_SCL_HIGH_PERIOD ) = half;
++  I2C_REG( I2C_SCL_START_HOLD ) = half / 2;
++  I2C_REG( I2C_SCL_RSTART_SETUP ) = half / 2;
++  I2C_REG( I2C_SCL_STOP_HOLD ) = half / 2;
++  I2C_REG( I2C_SCL_STOP_SETUP ) = half / 2;
++  I2C_REG( I2C_SDA_HOLD ) = half / 4;
++  I2C_REG( I2C_SDA_SAMPLE ) = half / 4;
++  I2C_REG( I2C_CTR ) |= I2C_CTR_CONF_UPGATE;
++
++  self->clock = clock;
++
++  return 0;
++}
++
++static void esp32c3_i2c_destroy( i2c_bus *bus )
++{
++  I2C_REG( I2C_CTR ) = 0;
++  i2c_bus_destroy_and_free( bus );
++}
++
++rtems_status_code esp32c3_i2c_register( const char *bus_path )
++{
++  esp32c3_i2c_bus *self;
++  int rv;
++
++  self = (esp32c3_i2c_bus *) i2c_bus_alloc_and_init( sizeof( *self ) );
++
++  if ( self == NULL ) {
++    return RTEMS_NO_MEMORY;
++  }
++
++  esp32c3_i2c_route_pin( I2C_SCL_PIN, I2C_SIG_SCL );
++  esp32c3_i2c_route_pin( I2C_SDA_PIN, I2C_SIG_SDA );
++
++  I2C_REG( I2C_CTR ) = I2C_CTR_MS_MODE | I2C_CTR_CLK_EN
++    | I2C_CTR_SDA_FORCE_OUT | I2C_CTR_SCL_FORCE_OUT;
++  I2C_REG( I2C_TO ) = 0x10;
++  I2C_REG( I2C_FILTER_CFG ) = 0;
++  I2C_REG( I2C_INT_ENA ) = 0;
++  I2C_REG( I2C_INT_CLR ) = I2C_INT_ALL;
++  esp32c3_i2c_reset_fifo();
++
++  self->base.transfer = esp32c3_i2c_transfer;
++  self->base.set_clock = esp32c3_i2c_set_clock;
++  self->base.destroy = esp32c3_i2c_destroy;
++
++  rv = esp32c3_i2c_set_clock( &self->base, I2C_DEFAULT_CLOCK_HZ );
++
++  if ( rv != 0 ) {
++    i2c_bus_destroy_and_free( &self->base );
++    return RTEMS_INVALID_NUMBER;
++  }
++
++  rv = i2c_bus_register( &self->base, bus_path );
++
++  if ( rv != 0 ) {
++    return RTEMS_UNSATISFIED;
++  }
++
++  return RTEMS_SUCCESSFUL;
++}
+diff --git a/bsps/riscv/esp32/include/bsp/i2c.h b/bsps/riscv/esp32/include/bsp/i2c.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..fb2e76382d5bdc5f03156659ac9a1ec5eea24ef8
+--- /dev/null
++++ b/bsps/riscv/esp32/include/bsp/i2c.h
+@@ -0,0 +1,84 @@
++/* SPDX-License-Identifier: BSD-2-Clause */
++
++/**
++ * @file
++ *
++ * @ingroup RTEMSBSPsRISCVESP32
++ *
++ * @brief ESP32 I2C master driver interface.
++ */
++
++/*
++ * Copyright (C) 2026 Samuel Price <thesamprice@gmail.com>
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ */
++
++#ifndef LIBBSP_ESP32_BSP_I2C_H
++#define LIBBSP_ESP32_BSP_I2C_H
++
++#include <rtems.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/**
++ * @brief Registers the I2C master controller as a bus device.
++ *
++ * The bus appears at @a bus_path and is driven through <dev/i2c/i2c.h>, so a
++ * device on it is reached with the ordinary open(), ioctl() and read()/write()
++ * that any other RTEMS I2C bus offers.
++ *
++ * The controller starts at 100 kHz.  Use the I2C_BUS_SET_CLOCK ioctl to change
++ * it.
++ *
++ * @param bus_path The path of the bus device file, for example "/dev/i2c-0".
++ *
++ * @retval RTEMS_SUCCESSFUL Successful operation.
++ * @retval RTEMS_NO_MEMORY The bus could not be allocated.
++ * @retval RTEMS_INVALID_NUMBER The default clock could not be set.
++ * @retval RTEMS_UNSATISFIED The bus could not be registered at @a bus_path.
++ */
++rtems_status_code esp32c3_i2c_register( const char *bus_path );
++
++/**
++ * @brief BSP-neutral names for what this BSP's I2C controller is called and
++ *        how many of them there are.
++ *
++ * RTEMS has no convention for registering an I2C bus the way it has one for
++ * the console, so every BSP that offers one names the call after its own
++ * chip.  A consumer that wants "this board's I2C, whatever it is called" then
++ * has no way to ask for it without naming the chip, which is exactly what
++ * portable code must not do.
++ *
++ * Defining these here lets such a consumer test for <bsp/i2c.h> and use
++ * BSP_I2C_REGISTER, with no chip name of its own.
++ */
++#define BSP_I2C_REGISTER esp32c3_i2c_register
++#define BSP_I2C_BUS_COUNT 1
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* LIBBSP_ESP32_BSP_I2C_H */
+diff --git a/bsps/riscv/esp32/include/c3/chip_definitions.h b/bsps/riscv/esp32/include/c3/chip_definitions.h
+index 39827e6bbbbaefac6b7d13f67971ae8778e3c031..ebb5e4508f74be50ba799cfdc0c6c0a14bbfebee 100644
+--- a/bsps/riscv/esp32/include/c3/chip_definitions.h
++++ b/bsps/riscv/esp32/include/c3/chip_definitions.h
+@@ -101,6 +101,7 @@
+ #define RISCV_INTERRUPT_VECTOR_TIMER    SYSTIMER_TARGET0_INTR
+ 
+ #define GPIO_BASE            ( (uintptr_t) 0x60004000U )
++#define I2C_BASE             ( (uintptr_t) 0x60013000U )
+ #define IO_MUX_BASE          ( (uintptr_t) 0x60009000U )
+ #define SYSTIMER_BASE        ( (uintptr_t) 0x60023000U )
+ #define USB_SERIAL_JTAG_BASE ( (uintptr_t) 0x60043000U )
+diff --git a/spec/build/bsps/riscv/esp32/obj.yml b/spec/build/bsps/riscv/esp32/obj.yml
+index f98e1b21eaeb69909641feba87941f97c975ee05..4254553e591bd12cf966f0a0a7caa89d9a8f5868 100644
+--- a/spec/build/bsps/riscv/esp32/obj.yml
++++ b/spec/build/bsps/riscv/esp32/obj.yml
+@@ -13,12 +13,14 @@ install:
+   - bsps/riscv/esp32/include/bsp.h
+ - destination: ${BSP_INCLUDEDIR}/bsp
+   source:
++  - bsps/riscv/esp32/include/bsp/i2c.h
+   - bsps/riscv/esp32/include/bsp/irq.h
+ links: []
+ source:
+ - bsps/riscv/esp32/console/console-config.c
+ - bsps/riscv/esp32/clock/clockdrv_systimer.c
+ - bsps/riscv/esp32/gpio/gpio_c3.c
++- bsps/riscv/esp32/i2c/i2c_c3.c
+ - bsps/riscv/esp32/irq/irq_c3.c
+ - bsps/riscv/esp32/start/bspstart.c
+ - bsps/shared/atomics/__atomic_test_and_set.c

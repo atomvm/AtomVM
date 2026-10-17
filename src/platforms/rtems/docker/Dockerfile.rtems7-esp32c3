@@ -1,0 +1,176 @@
+#
+# This file is part of AtomVM.
+#
+# Copyright 2026 Peter M. <petermm@gmail.com>
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+# Stage 1: Base build dependencies
+FROM ubuntu:24.04 AS build-base
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV RTEMS_PREFIX=/opt/rtems/7
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    g++ \
+    gdb \
+    unzip \
+    pax \
+    bison \
+    flex \
+    texinfo \
+    python3-dev \
+    python-is-python3 \
+    python3-setuptools \
+    libncurses-dev \
+    zlib1g-dev \
+    ninja-build \
+    pkg-config \
+    cmake \
+    gperf \
+    git \
+    wget \
+    xz-utils \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Stage 2: Heavy RSB Toolchain (GCC, Binutils, GDB, Newlib) ~15-20 min build.
+# Cached independently so it never rebuilds when BSP or application code changes.
+FROM build-base AS rsb-toolchain
+ARG RSB_REF=main
+
+WORKDIR /tmp/rsb
+RUN git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b ${RSB_REF} . \
+    && sed -i '/sis/d' rtems/config/7/rtems-riscv.bset \
+    && sed -i '/with_rtems_gdb/d' rtems/config/tools/rtems-default-tools.bset \
+    && sed -i -e '/0001-RTEMS-Add-riscv-multilibs/d' -e '/uCjG1KIhPuCR3H5G/d' rtems/config/tools/rtems-gcc-15.2-newlib-head.cfg \
+    && cd rtems \
+    && ../source-builder/sb-set-builder --prefix="${RTEMS_PREFIX}" 7/rtems-riscv \
+    && rm -rf /tmp/rsb
+
+# Context for optional local RTEMS source tree (defaults to empty scratch stage)
+# Override via: docker build --build-context rtems-src=/path/to/local/rtems ...
+FROM scratch AS rtems-src
+
+# Stage 3: RTEMS Kernel & ESP32-C3 BSP ~30 sec build.
+# Layered on top of the cached RSB toolchain; if RTEMS BSP options change, only this fast step rebuilds.
+FROM rsb-toolchain AS bsp-builder
+ARG RTEMS_REF=main
+ARG RTEMS_GIT_URL=https://gitlab.rtems.org/rtems/rtos/rtems.git
+
+WORKDIR /tmp/rtems
+ENV PATH="${RTEMS_PREFIX}/bin:${PATH}"
+
+# Copy BSP configurations and patches directory from build context
+COPY esp32c3-wifi-bsp.ini /tmp/esp32c3-wifi-bsp.ini
+COPY esp32c5-wifi-bsp.ini /tmp/esp32c5-wifi-bsp.ini
+COPY esp32c6-wifi-bsp.ini /tmp/esp32c6-wifi-bsp.ini
+COPY esp32s31-wifi-bsp.ini /tmp/esp32s31-wifi-bsp.ini
+COPY patches/ /tmp/patches/
+
+# Copy optional local RTEMS source from build context (empty if not specified)
+COPY --from=rtems-src . /tmp/rtems-local/
+
+RUN if [ -f /tmp/rtems-local/waf ]; then \
+        echo "==> Using local RTEMS source tree..." && \
+        cp -a /tmp/rtems-local/. /tmp/rtems/ ; \
+    else \
+        echo "==> Cloning RTEMS (${RTEMS_GIT_URL} @ ${RTEMS_REF})..." && \
+        git clone --depth 1 "${RTEMS_GIT_URL}" -b "${RTEMS_REF}" . ; \
+    fi \
+    && if [ -d /tmp/patches/rtems ]; then \
+        for patch in /tmp/patches/rtems/*.patch /tmp/patches/rtems/*.diff; do \
+            if [ -f "$patch" ]; then \
+                echo "==> Applying RTEMS patch: $(basename "$patch")..." && \
+                git apply "$patch" || patch -p1 < "$patch"; \
+            fi; \
+        done; \
+    elif [ -d /tmp/patches ]; then \
+        for patch in /tmp/patches/*.patch /tmp/patches/*.diff; do \
+            if [ -f "$patch" ]; then \
+                echo "==> Applying patch: $(basename "$patch")..." && \
+                git apply "$patch" || patch -p1 < "$patch"; \
+            fi; \
+        done; \
+    fi \
+    && cat /tmp/esp32c3-wifi-bsp.ini /tmp/esp32c5-wifi-bsp.ini /tmp/esp32c6-wifi-bsp.ini /tmp/esp32s31-wifi-bsp.ini > /tmp/esp32-all.ini \
+    && ./waf configure --prefix="${RTEMS_PREFIX}" --rtems-bsps=riscv/esp32c3db,riscv/esp32c5db,riscv/esp32c6db,riscv/esp32s31db --rtems-config=/tmp/esp32-all.ini \
+    && ./waf \
+    && ./waf install \
+    && rm -rf /tmp/rtems /tmp/rtems-local /tmp/patches /tmp/*.ini
+
+# Strip debug symbols from host binaries to minimize final layer size
+RUN find ${RTEMS_PREFIX}/bin ${RTEMS_PREFIX}/libexec -type f -executable -exec strip {} + 2>/dev/null || true
+
+# Stage 4: Wi-Fi & lwIP Stack (rtems-lwip + rtems-esp-wifi) ~1-2 min build.
+# Cached on top of bsp-builder; rebuilds only if Wi-Fi stack components change.
+FROM bsp-builder AS wifi-builder
+
+COPY build-esp32c3-wifi-stack.sh /tmp/build-esp32c3-wifi-stack.sh
+COPY build-esp32c5-wifi-stack.sh /tmp/build-esp32c5-wifi-stack.sh
+COPY build-esp32c6-wifi-stack.sh /tmp/build-esp32c6-wifi-stack.sh
+COPY build-esp32s31-wifi-stack.sh /tmp/build-esp32s31-wifi-stack.sh
+COPY patches/ /tmp/patches/
+RUN /tmp/build-esp32c3-wifi-stack.sh --prefix="${RTEMS_PREFIX}" --patch-dir=/tmp/patches \
+    && /tmp/build-esp32c5-wifi-stack.sh --prefix="${RTEMS_PREFIX}" --patch-dir=/tmp/patches \
+    && /tmp/build-esp32c6-wifi-stack.sh --prefix="${RTEMS_PREFIX}" --patch-dir=/tmp/patches \
+    && /tmp/build-esp32s31-wifi-stack.sh --prefix="${RTEMS_PREFIX}" --patch-dir=/tmp/patches \
+    && rm -rf /tmp/build-esp32*-wifi-stack.sh /tmp/patches /root/.cache/rtems7-wifi-*
+
+# Stage 5: Final developer runtime & simulation environment.
+# AtomVM source is bind-mounted into /workspace at runtime (-v $PWD:/workspace),
+# ensuring that changes to AtomVM source code NEVER trigger a Docker image rebuild.
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV RTEMS_PREFIX=/opt/rtems/7
+ENV PATH="${RTEMS_PREFIX}/bin:/root/.local/bin:${PATH}"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    ninja-build \
+    python3 \
+    python-is-python3 \
+    python3-pip \
+    curl \
+    git \
+    gperf \
+    ca-certificates \
+    zlib1g-dev \
+    erlang-nox \
+    erlang-dev \
+    erlang-tools \
+    erlang-parsetools \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install rebar3 for host packbeam target
+RUN curl -fsSL https://github.com/erlang/rebar3/releases/download/3.24.0/rebar3 -o /usr/local/bin/rebar3 \
+    && chmod +x /usr/local/bin/rebar3
+
+# Copy prebuilt RTEMS 7 RISC-V toolchain, esp32c3db BSP, lwIP, and Wi-Fi stack
+COPY --from=wifi-builder /opt/rtems/7 /opt/rtems/7
+
+ARG ESP_EMU_VERSION="0.49.0"
+# Install esp-emulator for direct headless simulation
+RUN curl -fsSL https://raw.githubusercontent.com/espressif/esp-emulator/main/install.sh | sh -s -- --version "${ESP_EMU_VERSION}" \
+    && cp /root/.local/bin/esp-emu /usr/local/bin/esp-emu || true
+
+WORKDIR /workspace
+
+CMD ["/bin/bash"]

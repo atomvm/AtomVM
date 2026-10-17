@@ -1,0 +1,190 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Peter M <petermm@gmail.com>
+Date: Fri, 16 Oct 2026 00:00:00 +0000
+Subject: [PATCH] esp32: set the CPU clock in bsp_start
+
+ESP-IDF's second-stage bootloader programs the clock tree in rtc_clk_init().
+A direct-boot image has no second stage, so the ROM leaves the CPU on the
+crystal (20 MHz on the C3) and only throughput suffers -- the tick comes from
+the crystal-derived systimer, so timing still looks right.
+
+Bring the CPU up to the chip maximum in bsp_start(), the way IDF would.  The
+PLL that feeds it is already running (the USB-Serial-JTAG that carries the
+console is fed from it), so only the mux and dividers move.
+
+The target is a compile-time BSP_ESP32_CPU_FREQ_MHZ, defaulting to the chip
+maximum (C3/C5/C6 160 MHz, S31 320 MHz).
+
+Signed-off-by: Peter M <petermm@gmail.com>
+---
+ bsps/riscv/esp32/start/bspstart.c | 157 +++++
+ 1 file changed, 157 insertions(+)
+
+--- a/bsps/riscv/esp32/start/bspstart.c
++++ b/bsps/riscv/esp32/start/bspstart.c
+@@ -78,8 +78,165 @@
+ #define WRITE_REG( base, reg, value ) \
+   *(volatile uint32_t *) ( base + reg ) = value
+ 
++/*
++ * ---------------------------------------------------------------------------
++ * CPU clock
++ * ---------------------------------------------------------------------------
++ * ESP-IDF's second-stage bootloader programs the clock tree in
++ * rtc_clk_init().  A direct-boot image has no second stage, so the ROM leaves
++ * the CPU on the crystal (20 MHz on the C3) and only throughput suffers: the
++ * tick comes from the crystal-derived systimer, so timing still looks right.
++ *
++ * Bring the CPU up to its maximum here, the way IDF would.  The BBPLL/CPLL
++ * that feeds it is already running -- the USB-Serial-JTAG that carries this
++ * console is fed from it -- so only the mux and dividers move.
++ *
++ * BSP_ESP32_CPU_FREQ_MHZ selects the target in MHz and defaults to the chip
++ * maximum; only the maximum is implemented so far.
++ */
++#if defined( LIBBSP_ESP32_C3_CHIP_DEFINITIONS_H )
++#define BSP_ESP32_CPU_FREQ_MAX_MHZ 160
++#define CLK_SYSTEM_BASE (uintptr_t) 0x600c0000
++#define CLK_CPU_PER_CONF_REG (uintptr_t) 0x08
++#define CLK_SYSCLK_CONF_REG (uintptr_t) 0x58
++#elif defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H )
++#define BSP_ESP32_CPU_FREQ_MAX_MHZ 160
++#define CLK_PCR_BASE (uintptr_t) 0x60096000
++#define CLK_PCR_SYSCLK_CONF_REG (uintptr_t) 0x110
++#define CLK_PCR_CPU_FREQ_CONF_REG (uintptr_t) 0x118
++#define CLK_PCR_AHB_FREQ_CONF_REG (uintptr_t) 0x11c
++#define CLK_PCR_BUS_CLK_UPDATE_REG (uintptr_t) 0x144
++#elif defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++#define BSP_ESP32_CPU_FREQ_MAX_MHZ 160
++#define CLK_PCR_BASE (uintptr_t) 0x60096000
++#define CLK_PCR_SYSCLK_CONF_REG (uintptr_t) 0x110
++#define CLK_PCR_CPU_FREQ_CONF_REG (uintptr_t) 0x118
++#elif defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++#define BSP_ESP32_CPU_FREQ_MAX_MHZ 320
++#define CLK_PMU_BASE (uintptr_t) 0x20704000
++#define CLK_HP_ALIVE_SYS_BASE (uintptr_t) 0x20589000
++#define CLK_HP_SYS_CLKRST_BASE (uintptr_t) 0x20587000
++#else
++#error "unknown ESP32 chip variant"
++#endif
++
++#ifndef BSP_ESP32_CPU_FREQ_MHZ
++#define BSP_ESP32_CPU_FREQ_MHZ BSP_ESP32_CPU_FREQ_MAX_MHZ
++#endif
++
++#if BSP_ESP32_CPU_FREQ_MHZ != BSP_ESP32_CPU_FREQ_MAX_MHZ
++#error "only the chip maximum CPU frequency is implemented; add the sequence for a lower value"
++#endif
++
++/*
++ * From the ROM, so ets_delay_us() and friends agree with the new clock.  It is
++ * referenced weakly: the ROM symbols live in the application's linker script,
++ * which a bare BSP testsuite does not pull in.  When it is absent the clock is
++ * still programmed and only the ROM's delay loop stays stale.
++ */
++extern void ets_update_cpu_frequency( uint32_t cpu_mhz )
++  __attribute__( ( weak ) );
++
++static void bsp_clock_init( void )
++{
++#if defined( LIBBSP_ESP32_C3_CHIP_DEFINITIONS_H )
++
++  uint32_t reg;
++
++  /* CPUPERIOD_SEL 1 is 480/3 = 160 MHz on the 480 MHz BBPLL.  The period is
++   * chosen before the source that makes it apply, as IDF does. */
++  reg = READ_REG( CLK_SYSTEM_BASE, CLK_CPU_PER_CONF_REG );
++  WRITE_REG( CLK_SYSTEM_BASE, CLK_CPU_PER_CONF_REG, ( reg & ~0x3u ) | 1u );
++
++  /* PRE_DIV_CNT back to divide-by-one and the CPU mux to the PLL. */
++  reg = READ_REG( CLK_SYSTEM_BASE, CLK_SYSCLK_CONF_REG );
++  WRITE_REG(
++    CLK_SYSTEM_BASE,
++    CLK_SYSCLK_CONF_REG,
++    ( reg & ~0x3FFu ) | ( 1u << 10 )
++  );
++
++#elif defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H )
++
++  uint32_t reg;
++
++  /* CPU = PLL_F160M / 1, AHB = CPU / 6 (kept <= 48 MHz). */
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG );
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG, reg & ~0xFFu );
++
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_AHB_FREQ_CONF_REG );
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_AHB_FREQ_CONF_REG, ( reg & ~0xFFu ) | 5u );
++
++  /* SOC_CLK_SEL = PLL_F160M (2). */
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_SYSCLK_CONF_REG );
++  WRITE_REG(
++    CLK_PCR_BASE,
++    CLK_PCR_SYSCLK_CONF_REG,
++    ( reg & ~( 0x3u << 16 ) ) | ( 2u << 16 )
++  );
++
++  /* Latch the change and wait for the bus to settle. */
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_BUS_CLK_UPDATE_REG, 1u );
++  while ( READ_REG( CLK_PCR_BASE, CLK_PCR_BUS_CLK_UPDATE_REG ) != 0u ) {
++  }
++
++#elif defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++
++  uint32_t reg;
++
++  /* CPU = PLL(480) with the HS divider at 3 -> 160 MHz. */
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG );
++  reg &= ~( 0xFFu << 8 );
++  reg &= ~( 1u << 16 );
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG, reg );
++
++  /* SOC_CLK_SEL = PLL (1). */
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_SYSCLK_CONF_REG );
++  WRITE_REG(
++    CLK_PCR_BASE,
++    CLK_PCR_SYSCLK_CONF_REG,
++    ( reg & ~( 0x3u << 16 ) ) | ( 1u << 16 )
++  );
++
++#elif defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++
++  uint32_t reg;
++
++  /* Bring the CPLL up: power it, ungate it and enable its clock. */
++  reg = READ_REG( CLK_PMU_BASE, 0xf4 );
++  WRITE_REG(
++    CLK_PMU_BASE,
++    0xf4,
++    reg | ( 1u << 27 ) | ( 1u << 23 ) | ( 1u << 19 )
++  );
++  reg = READ_REG( CLK_PMU_BASE, 0x1c );
++  WRITE_REG( CLK_PMU_BASE, 0x1c, reg | ( 1u << 27 ) | ( 1u << 23 ) );
++  reg = READ_REG( CLK_HP_ALIVE_SYS_BASE, 0x0 );
++  WRITE_REG( CLK_HP_ALIVE_SYS_BASE, 0x0, reg | ( 1u << 29 ) );
++
++  /* CPLL 320 -> CPU /1 (320), MEM /2 (160), SYS /3 (106.67), APB /2 (53.33). */
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x8, 1u );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0xc, 2u );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x10, 1u );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x4, 0u );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x0, 1u );
++
++  /* Latch and wait. */
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x14, 1u );
++  while ( ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x14 ) & 0x1u ) != 0u ) {
++  }
++
++#endif
++
++  if ( ets_update_cpu_frequency != NULL ) {
++    ets_update_cpu_frequency( BSP_ESP32_CPU_FREQ_MHZ );
++  }
++}
++
+ void bsp_start( void )
+ {
++  bsp_clock_init();
++
+   uint32_t timg_wdtconfig0;
+ 
+ #if defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)

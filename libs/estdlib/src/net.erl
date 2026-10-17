@@ -45,7 +45,7 @@
 %% @doc     Retrieve address information for a given hostname.
 %% @end
 %%-----------------------------------------------------------------------------
--spec getaddrinfo(Host :: string()) -> {ok, AddrInfo :: addrinfo()} | {error, Reason :: term()}.
+-spec getaddrinfo(Host :: string()) -> {ok, AddrInfos :: [addrinfo()]} | {error, Reason :: term()}.
 getaddrinfo(Host) when is_list(Host) ->
     ?MODULE:getaddrinfo(Host, undefined).
 
@@ -67,7 +67,7 @@ getaddrinfo(Host) when is_list(Host) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec getaddrinfo(Host :: string() | undefined, Service :: service() | undefined) ->
-    {ok, AddrInfo :: addrinfo()} | {error, Reason :: term()}.
+    {ok, AddrInfos :: [addrinfo()]} | {error, Reason :: term()}.
 getaddrinfo(Host, Service) when
     (is_list(Host) orelse Host =:= undefined) andalso
         (is_list(Service) orelse Service =:= undefined) andalso

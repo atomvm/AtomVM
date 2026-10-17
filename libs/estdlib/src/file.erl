@@ -20,11 +20,17 @@
 
 -module(file).
 
--export([native_name_encoding/0, get_cwd/0]).
+-export([native_name_encoding/0, get_cwd/0, read_file/1, write_file/2]).
 
 -spec native_name_encoding() -> latin1 | utf8.
 native_name_encoding() ->
     utf8.
 
 get_cwd() ->
+    erlang:nif_error(undefined).
+
+read_file(_Filename) ->
+    erlang:nif_error(undefined).
+
+write_file(_Filename, _Bytes) ->
     erlang:nif_error(undefined).
