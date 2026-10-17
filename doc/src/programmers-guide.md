@@ -1212,7 +1212,13 @@ for details on how to ensure the entropy source is properly initialized before p
 cryptographic operations.
 ```
 
-When AtomVM is built with `-DAVM_USE_LIBSODIUM=ON`, Ed25519 signing and verification (`crypto:sign/4`, `crypto:verify/5`) and X25519 key agreement (`crypto:generate_key/2`, `crypto:compute_key/4`) are also available.  This option requires libsodium to be installed on the build host (e.g. `libsodium-dev` on Debian/Ubuntu), or the `espressif/libsodium` component on ESP32.
+When AtomVM is built with `-DAVM_USE_LIBSODIUM=ON`, Ed25519 signing and verification
+(`crypto:sign/4`, `crypto:verify/5`), X25519 key agreement (`crypto:generate_key/2`,
+`crypto:compute_key/4`) and, with libsodium 1.0.22 or later, ML-KEM-768 key encapsulation
+(`crypto:encapsulate_key/2`, `crypto:decapsulate_key/3`) are also available.  This option requires
+libsodium to be installed on the build host (e.g. `libsodium-dev` on Debian/Ubuntu), or the
+`espressif/libsodium` component on ESP32.  On generic UNIX, `-DAVM_STATIC_LIBSODIUM=ON` links
+`libsodium.a` into the AtomVM binary instead of depending on the shared library at run time.
 
 ```{important}
 **Increase the ESP32 task stack size when using libsodium.**
