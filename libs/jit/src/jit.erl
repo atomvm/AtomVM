@@ -2872,9 +2872,11 @@ first_pass_bs_create_bin_insert_value(
 first_pass_bs_create_bin_insert_value(
     float, Flags, Src, Size, _SegmentUnit, Fail, CreatedBin, Offset, MMod, MSt0
 ) ->
-    {MSt1, SrcReg} = MMod:move_to_native_register(MSt0, Src),
-    {MSt2, FlagsValue} = decode_flags_list(Flags, MMod, MSt1),
-    {MSt3, SizeValue} = term_to_int(Size, Fail, MMod, MSt2),
+    % term_to_int can raise a badarg and use a temp register for this, start
+    % with it.
+    {MSt1, SizeValue} = term_to_int(Size, Fail, MMod, MSt0),
+    {MSt2, SrcReg} = MMod:move_to_native_register(MSt1, Src),
+    {MSt3, FlagsValue} = decode_flags_list(Flags, MMod, MSt2),
     % Call single primitive with size parameter
     {MSt4, BoolResult} = MMod:call_primitive(MSt3, ?PRIM_BITSTRING_INSERT_FLOAT, [
         CreatedBin, Offset, {free, SrcReg}, SizeValue, {free, FlagsValue}

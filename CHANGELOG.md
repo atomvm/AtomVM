@@ -66,6 +66,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   example corrupting a binary built with a `little` utf16 segment followed by other segments
 - Fixed `erlang:list_to_binary/1`, `erlang:iolist_to_binary/1`, `erlang:iolist_size/1` and the
   `unicode:characters_to_*` functions accepting an integer improper tail, such as `[1 | 2]`
+- Fixed float segments at a bit offset that is not a multiple of 8, which raised `badarg` on
+  construction and did not match
+- Fixed the x86_64 JIT failing to compile a float segment of variable size
 
 ## [0.7.0-beta.0] - 2026-09-28
 

@@ -558,148 +558,190 @@ term bitstring_slice(term bs_bin, size_t offset, size_t len_bits, Heap *heap, Gl
     return bin;
 }
 
+// Read the IEEE bits of a 16, 32 or 64-bit float segment at any bit offset.
+static bool bitstring_read_float_bits(
+    term src_bin, size_t offset, size_t n, enum BitstringFlags bs_flags, uint64_t *bits)
+{
+    if (term_bit_size(src_bin) - offset < n) {
+        return false;
+    }
+    const uint8_t *src = (const uint8_t *) term_binary_data(src_bin) + (offset >> 3);
+    if ((offset & 0x7) != 0) {
+        union maybe_unsigned_int64 raw;
+        if (!bitstring_extract_any_integer(
+                src, offset & 0x7, n, (enum BitstringFlags)(bs_flags & ~SignedInteger), &raw)) {
+            return false;
+        }
+        *bits = raw.u;
+        return true;
+    }
+    bool little_endian = bs_flags & LittleEndianIntegerMask;
+    switch (n) {
+        case 16:
+            if (little_endian) {
+                *bits = (uint16_t) READ_16LE_UNALIGNED(src);
+            } else {
+                *bits = (uint16_t) READ_16_UNALIGNED(src);
+            }
+            return true;
+        case 32:
+            if (little_endian) {
+                *bits = (uint32_t) READ_32LE_UNALIGNED(src);
+            } else {
+                *bits = (uint32_t) READ_32_UNALIGNED(src);
+            }
+            return true;
+        case 64:
+            if (little_endian) {
+                *bits = (uint64_t) READ_64LE_UNALIGNED(src);
+            } else {
+                *bits = (uint64_t) READ_64_UNALIGNED(src);
+            }
+            return true;
+        default:
+            return false;
+    }
+}
+
+// Write the IEEE bits of a 16, 32 or 64-bit float segment at any bit offset.
+static bool bitstring_write_float_bits(
+    term dst_bin, size_t offset, uint64_t bits, size_t n, enum BitstringFlags bs_flags)
+{
+    if (8 * term_binary_size(dst_bin) - offset < n) {
+        return false;
+    }
+    uint8_t *dst = (uint8_t *) term_binary_data(dst_bin);
+    if ((offset & 0x7) != 0) {
+        return bitstring_insert_any_integer(
+            dst, offset, (avm_int64_t) bits, n, (enum BitstringFlags)(bs_flags & ~SignedInteger));
+    }
+    dst += offset >> 3;
+    bool little_endian = bs_flags & LittleEndianIntegerMask;
+    switch (n) {
+        case 16:
+            if (little_endian) {
+                WRITE_16LE_UNALIGNED(dst, (uint16_t) bits);
+            } else {
+                WRITE_16_UNALIGNED(dst, (uint16_t) bits);
+            }
+            return true;
+        case 32:
+            if (little_endian) {
+                WRITE_32LE_UNALIGNED(dst, (uint32_t) bits);
+            } else {
+                WRITE_32_UNALIGNED(dst, (uint32_t) bits);
+            }
+            return true;
+        case 64:
+            if (little_endian) {
+                WRITE_64LE_UNALIGNED(dst, bits);
+            } else {
+                WRITE_64_UNALIGNED(dst, bits);
+            }
+            return true;
+        default:
+            return false;
+    }
+}
+
 bool bitstring_extract_f16(
     term src_bin, size_t offset, avm_int_t n, enum BitstringFlags bs_flags, avm_float_t *dst)
 {
-    unsigned long capacity = term_binary_size(src_bin);
-    if (8 * capacity - offset < (unsigned long) n) {
+    uint64_t raw;
+    if (!bitstring_read_float_bits(src_bin, offset, n, bs_flags, &raw)) {
         return false;
     }
+    uint16_t f16_bits = (uint16_t) raw;
 
-    if ((offset & 0x7) == 0) {
-        int byte_offset = offset >> 3;
-        const uint8_t *src = (const uint8_t *) term_binary_data(src_bin) + byte_offset;
+    // Convert IEEE 754 half-precision to single-precision
+    uint32_t sign = (f16_bits >> 15) & 0x1;
+    uint32_t f16_exp = (f16_bits >> 10) & 0x1F;
+    uint32_t f16_mantissa = f16_bits & 0x3FF;
 
-        // Read 16-bit value
-        uint16_t f16_bits;
-        if (bs_flags & LittleEndianIntegerMask) {
-            f16_bits = READ_16LE_UNALIGNED(src);
+    uint32_t f32_bits;
+    if (f16_exp == 0) {
+        if (f16_mantissa == 0) {
+            // Zero
+            f32_bits = sign << 31;
         } else {
-            f16_bits = READ_16_UNALIGNED(src);
-        }
-
-        // Convert IEEE 754 half-precision to single-precision
-        uint32_t sign = (f16_bits >> 15) & 0x1;
-        uint32_t f16_exp = (f16_bits >> 10) & 0x1F;
-        uint32_t f16_mantissa = f16_bits & 0x3FF;
-
-        uint32_t f32_bits;
-        if (f16_exp == 0) {
-            if (f16_mantissa == 0) {
-                // Zero
-                f32_bits = sign << 31;
-            } else {
-                // Subnormal number - normalize it
-                int e = -1;
-                uint32_t m = f16_mantissa;
-                do {
-                    e++;
-                    m <<= 1;
-                } while ((m & 0x400) == 0);
-                f16_mantissa = m & 0x3FF;
-                f16_exp = -e;
-                int32_t f32_exp = (int32_t) f16_exp + 127 - 15;
-                f32_bits = (sign << 31) | (f32_exp << 23) | (f16_mantissa << 13);
-            }
-        } else if (f16_exp == 0x1F) {
-            // Inf or NaN - not finite
-            return false;
-        } else {
-            // Normalized number
+            // Subnormal number - normalize it
+            int e = -1;
+            uint32_t m = f16_mantissa;
+            do {
+                e++;
+                m <<= 1;
+            } while ((m & 0x400) == 0);
+            f16_mantissa = m & 0x3FF;
+            f16_exp = -e;
             int32_t f32_exp = (int32_t) f16_exp + 127 - 15;
             f32_bits = (sign << 31) | (f32_exp << 23) | (f16_mantissa << 13);
         }
-
-        union
-        {
-            uint32_t bits;
-            float fvalue;
-        } f32;
-        f32.bits = f32_bits;
-
-        *dst = f32.fvalue;
-        return true;
-    } else {
-        // TODO: add support to floats not aligned to byte boundary
+    } else if (f16_exp == 0x1F) {
+        // Inf or NaN - not finite
         return false;
+    } else {
+        // Normalized number
+        int32_t f32_exp = (int32_t) f16_exp + 127 - 15;
+        f32_bits = (sign << 31) | (f32_exp << 23) | (f16_mantissa << 13);
     }
+
+    union
+    {
+        uint32_t bits;
+        float fvalue;
+    } f32;
+    f32.bits = f32_bits;
+
+    *dst = f32.fvalue;
+    return true;
 }
 
 bool bitstring_extract_f32(
     term src_bin, size_t offset, avm_int_t n, enum BitstringFlags bs_flags, avm_float_t *dst)
 {
-    unsigned long capacity = term_binary_size(src_bin);
-    if (8 * capacity - offset < (unsigned long) n) {
+    uint64_t raw;
+    if (!bitstring_read_float_bits(src_bin, offset, n, bs_flags, &raw)) {
         return false;
     }
 
-    if ((offset & 0x7) == 0) {
-        int byte_offset = offset >> 3;
-        const uint8_t *src = (const uint8_t *) term_binary_data(src_bin) + byte_offset;
+    _Static_assert(sizeof(float) == 4, "Unsupported float size");
 
-        _Static_assert(sizeof(float) == 4, "Unsupported float size");
+    union
+    {
+        uint32_t bits;
+        float fvalue;
+    } f32;
 
-        union
-        {
-            uint32_t bits;
-            float fvalue;
-        } f32;
-
-        if (bs_flags & LittleEndianIntegerMask) {
-            f32.bits = READ_32LE_UNALIGNED(src);
-        } else {
-            f32.bits = READ_32_UNALIGNED(src);
-        }
-        if (UNLIKELY(!isfinite(f32.fvalue))) {
-            return false;
-        }
-        *dst = f32.fvalue;
-        return true;
-    } else {
-        // TODO: add support to doubles not aligned to byte boundary
+    f32.bits = (uint32_t) raw;
+    if (UNLIKELY(!isfinite(f32.fvalue))) {
         return false;
     }
+    *dst = f32.fvalue;
+    return true;
 }
 
 bool bitstring_extract_f64(
     term src_bin, size_t offset, avm_int_t n, enum BitstringFlags bs_flags, avm_float_t *dst)
 {
-    unsigned long capacity = term_binary_size(src_bin);
-    if (8 * capacity - offset < (unsigned long) n) {
+    uint64_t raw;
+    if (!bitstring_read_float_bits(src_bin, offset, n, bs_flags, &raw)) {
         return false;
     }
 
-    if ((offset & 0x7) == 0) {
-        int byte_offset = offset >> 3;
-        const uint8_t *src = (const uint8_t *) term_binary_data(src_bin) + byte_offset;
+    _Static_assert(sizeof(double) == 8, "Unsupported double size");
 
-        uint64_t bin64;
-        if (bs_flags & LittleEndianIntegerMask) {
-            bin64 = READ_64LE_UNALIGNED(src);
-        } else {
-            bin64 = READ_64_UNALIGNED(src);
-        }
+    union
+    {
+        uint64_t bits;
+        double fvalue;
+    } f64;
 
-        _Static_assert(sizeof(double) == 8, "Unsupported double size");
-
-        union
-        {
-            uint64_t bits;
-            double fvalue;
-        } f64;
-
-        f64.bits = bin64;
-        if (UNLIKELY(!isfinite(f64.fvalue))) {
-            return false;
-        }
-        *dst = f64.fvalue;
-
-        return true;
-
-    } else {
-        // TODO: add support to doubles not aligned to byte boundary
+    f64.bits = raw;
+    if (UNLIKELY(!isfinite(f64.fvalue))) {
         return false;
     }
+    *dst = f64.fvalue;
+    return true;
 }
 
 intn_from_integer_options_t bitstring_flags_to_intn_opts(enum BitstringFlags bf)
@@ -722,154 +764,98 @@ intn_from_integer_options_t bitstring_flags_to_intn_opts(enum BitstringFlags bf)
 bool bitstring_insert_f16(
     term dst_bin, size_t offset, avm_float_t value, enum BitstringFlags bs_flags)
 {
-    unsigned long capacity = term_binary_size(dst_bin);
-    if (8 * capacity - offset < 16) {
-        return false;
-    }
-
     if (!isfinite(value)) {
         return false;
     }
 
-    if ((offset & 0x7) == 0) {
-        int byte_offset = offset >> 3;
-        uint8_t *dst = (uint8_t *) term_binary_data(dst_bin) + byte_offset;
+    _Static_assert(sizeof(float) == 4, "Unsupported float size");
 
-        _Static_assert(sizeof(float) == 4, "Unsupported float size");
+    // Convert double to float first
+    union
+    {
+        uint32_t bits;
+        float fvalue;
+    } f32;
 
-        // Convert double to float first
-        union
-        {
-            uint32_t bits;
-            float fvalue;
-        } f32;
+    f32.fvalue = (float) value;
+    uint32_t f32_bits = f32.bits;
 
-        f32.fvalue = (float) value;
-        uint32_t f32_bits = f32.bits;
+    // Extract components from float (32-bit)
+    uint32_t sign = (f32_bits >> 31) & 0x1;
+    int32_t exp = ((f32_bits >> 23) & 0xFF) - 127; // Remove float bias
+    uint32_t mantissa = f32_bits & 0x7FFFFF;
 
-        // Extract components from float (32-bit)
-        uint32_t sign = (f32_bits >> 31) & 0x1;
-        int32_t exp = ((f32_bits >> 23) & 0xFF) - 127; // Remove float bias
-        uint32_t mantissa = f32_bits & 0x7FFFFF;
+    uint16_t f16_bits;
 
-        uint16_t f16_bits;
-
-        // Handle special cases
-        if (exp > 15) {
+    // Handle special cases
+    if (exp > 15) {
+        // Overflow to infinity
+        f16_bits = (sign << 15) | 0x7C00;
+    } else if (exp < -14) {
+        // Underflow to zero or denormal
+        if (exp < -24) {
+            // Too small, round to zero
+            f16_bits = sign << 15;
+        } else {
+            // Denormal number
+            uint32_t denorm_mantissa = (mantissa | 0x800000) >> (-14 - exp);
+            f16_bits = (sign << 15) | (denorm_mantissa >> 13);
+        }
+    } else {
+        // Normal number
+        uint32_t f16_exp = exp + 15; // Add half-precision bias
+        // Round to nearest even (bit 12 is the rounding bit)
+        uint32_t f16_mantissa = (mantissa + 0x1000) >> 13; // Round and keep top 10 bits
+        // Handle mantissa overflow
+        if (f16_mantissa > 0x3FF) {
+            f16_mantissa = 0;
+            f16_exp++;
+        }
+        if (f16_exp > 30) {
             // Overflow to infinity
             f16_bits = (sign << 15) | 0x7C00;
-        } else if (exp < -14) {
-            // Underflow to zero or denormal
-            if (exp < -24) {
-                // Too small, round to zero
-                f16_bits = sign << 15;
-            } else {
-                // Denormal number
-                uint32_t denorm_mantissa = (mantissa | 0x800000) >> (-14 - exp);
-                f16_bits = (sign << 15) | (denorm_mantissa >> 13);
-            }
         } else {
-            // Normal number
-            uint32_t f16_exp = exp + 15; // Add half-precision bias
-            // Round to nearest even (bit 12 is the rounding bit)
-            uint32_t f16_mantissa = (mantissa + 0x1000) >> 13; // Round and keep top 10 bits
-            // Handle mantissa overflow
-            if (f16_mantissa > 0x3FF) {
-                f16_mantissa = 0;
-                f16_exp++;
-            }
-            if (f16_exp > 30) {
-                // Overflow to infinity
-                f16_bits = (sign << 15) | 0x7C00;
-            } else {
-                f16_bits = (sign << 15) | (f16_exp << 10) | f16_mantissa;
-            }
+            f16_bits = (sign << 15) | (f16_exp << 10) | f16_mantissa;
         }
-
-        if (bs_flags & LittleEndianIntegerMask) {
-            WRITE_16LE_UNALIGNED(dst, f16_bits);
-        } else {
-            WRITE_16_UNALIGNED(dst, f16_bits);
-        }
-        return true;
-    } else {
-        // TODO: add support to floats not aligned to byte boundary
-        return false;
     }
+
+    return bitstring_write_float_bits(dst_bin, offset, f16_bits, 16, bs_flags);
 }
 
 bool bitstring_insert_f32(
     term dst_bin, size_t offset, avm_float_t value, enum BitstringFlags bs_flags)
 {
-    unsigned long capacity = term_binary_size(dst_bin);
-    if (8 * capacity - offset < 32) {
-        return false;
-    }
-
     if (!isfinite(value)) {
         return false;
     }
 
-    if ((offset & 0x7) == 0) {
-        int byte_offset = offset >> 3;
-        uint8_t *dst = (uint8_t *) term_binary_data(dst_bin) + byte_offset;
+    _Static_assert(sizeof(float) == 4, "Unsupported float size");
 
-        _Static_assert(sizeof(float) == 4, "Unsupported float size");
+    union
+    {
+        uint32_t bits;
+        float fvalue;
+    } f32;
 
-        union
-        {
-            uint32_t bits;
-            float fvalue;
-        } f32;
-
-        f32.fvalue = (float) value;
-
-        if (bs_flags & LittleEndianIntegerMask) {
-            WRITE_32LE_UNALIGNED(dst, f32.bits);
-        } else {
-            WRITE_32_UNALIGNED(dst, f32.bits);
-        }
-        return true;
-    } else {
-        // TODO: add support to floats not aligned to byte boundary
-        return false;
-    }
+    f32.fvalue = (float) value;
+    return bitstring_write_float_bits(dst_bin, offset, f32.bits, 32, bs_flags);
 }
 
 bool bitstring_insert_f64(
     term dst_bin, size_t offset, avm_float_t value, enum BitstringFlags bs_flags)
 {
-    unsigned long capacity = term_binary_size(dst_bin);
-    if (8 * capacity - offset < 64) {
-        return false;
-    }
-
     if (!isfinite(value)) {
         return false;
     }
 
-    if ((offset & 0x7) == 0) {
-        int byte_offset = offset >> 3;
-        uint8_t *dst = (uint8_t *) term_binary_data(dst_bin) + byte_offset;
+    _Static_assert(sizeof(double) == 8, "Unsupported double size");
 
-        _Static_assert(sizeof(double) == 8, "Unsupported double size");
+    union
+    {
+        uint64_t bits;
+        double fvalue;
+    } f64;
 
-        union
-        {
-            uint64_t bits;
-            double fvalue;
-        } f64;
-
-        f64.fvalue = value;
-
-        if (bs_flags & LittleEndianIntegerMask) {
-            WRITE_64LE_UNALIGNED(dst, f64.bits);
-        } else {
-            WRITE_64_UNALIGNED(dst, f64.bits);
-        }
-        return true;
-    } else {
-        // TODO: add support to doubles not aligned to byte boundary
-        return false;
-    }
+    f64.fvalue = value;
+    return bitstring_write_float_bits(dst_bin, offset, f64.bits, 64, bs_flags);
 }

@@ -31,6 +31,7 @@ start() ->
     ok = test_utf16(),
     ok = test_utf32(),
     ok = test_uint64_bignum(),
+    ok = test_float(),
     0.
 
 test_utf8() ->
@@ -96,6 +97,51 @@ test_uint64_bignum() ->
     MaxBin = <<0:3, Max:64, 0:5>>,
     MaxBin = <<0:3, 16#FFFFFFFFFFFFFFFF:64, 0:5>>,
     ok.
+
+test_float() ->
+    F = ?MODULE:id(1.0),
+    <<159, 192, 0, 0, 0:1>> = <<1:1, F:32/float>>,
+    <<19, 248, 0, 0, 2>> = <<1:4, F:32/float, 2:4>>,
+    1.0 = (fun(<<_:1, V:32/float>>) -> V end)(?MODULE:id(<<1:1, 1.0:32/float>>)),
+    %% 16, 32 and 64 bits in both byte orders at every unaligned offset
+    Values = ?MODULE:id([1.5, -2.25, 0.0, 65504.0, 3.0e-5]),
+    ok = check_floats([16, 32, 64], Values),
+    ok.
+
+check_floats([], _Values) ->
+    ok;
+check_floats([Size | Sizes], Values) ->
+    ok = check_floats(Size, 1, Values),
+    check_floats(Sizes, Values).
+
+check_floats(_Size, 8, _Values) ->
+    ok;
+check_floats(Size, Offset, Values) ->
+    ok = check_floats_at(Size, Offset, Values),
+    check_floats(Size, Offset + 1, Values).
+
+check_floats_at(_Size, _Offset, []) ->
+    ok;
+check_floats_at(Size, Offset, [V | Values]) ->
+    ok = check_float(Size, Offset, V),
+    check_floats_at(Size, Offset, Values).
+
+check_float(Size, Offset, V) ->
+    Big = <<0:Offset, V:Size/float, 0:(8 - Offset)>>,
+    Little = <<0:Offset, V:Size/little-float, 0:(8 - Offset)>>,
+    %% the bits are those of the same float at a byte-aligned offset
+    <<0:Offset, Bits:Size/bits, 0:(8 - Offset)>> = Big,
+    Bits = <<V:Size/float>>,
+    <<0:Offset, LBits:Size/bits, 0:(8 - Offset)>> = Little,
+    LBits = <<V:Size/little-float>>,
+    Expected = round_float(Size, V),
+    Expected = (fun(<<_:Offset, X:Size/float, _/bits>>) -> X end)(?MODULE:id(Big)),
+    Expected = (fun(<<_:Offset, X:Size/little-float, _/bits>>) -> X end)(?MODULE:id(Little)),
+    ok.
+
+round_float(Size, V) ->
+    <<X:Size/float>> = <<V:Size/float>>,
+    X.
 
 -spec id(T) -> T.
 id(X) ->
