@@ -31,8 +31,19 @@ start() ->
     PIError = abs((PI - 3.141592653589793) / 3.141592653589793),
     PIErrorThreshold = PIError < 0.01,
     erlang:display({?MODULE, ?LINE}),
+    % A synchronous main thread script traps the caller until the main thread
+    % has run it and answered back, which is a different path from the async
+    % one every other script here takes.
+    SyncResult = emscripten:run_script(
+        <<"document.querySelector('#sync').append('ran');">>,
+        [main_thread]
+    ),
+    erlang:display({?MODULE, ?LINE}),
     emscripten:run_script(
         [
+            <<"document.querySelector('#sync').append('">>,
+            atom_to_list(SyncResult),
+            <<"');">>,
             <<"document.querySelector('#platform').append('">>,
             atom_to_list(Platform),
             <<"');">>,

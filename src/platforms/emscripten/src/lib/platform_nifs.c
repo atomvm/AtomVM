@@ -77,11 +77,11 @@ static void do_run_script(GlobalContext *global, char *script, int sync, int syn
 {
     emscripten_run_script(script);
     if (sync) {
-        Context *target = globalcontext_get_process_lock(global, sync_caller_pid);
-        if (target) {
-            mailbox_send_term_signal(target, TrapAnswerSignal, OK_ATOM);
-            globalcontext_get_process_unlock(global, target);
-        } // else: sender died
+        // This runs on the main thread, which is not a scheduler: readying the
+        // caller from here has to wake the polling scheduler, or the answer
+        // sits in the mailbox of a process nobody comes back to. That is what
+        // the _from_task variant does; it is a no-op if the caller died.
+        globalcontext_send_message_from_task(global, sync_caller_pid, TrapAnswerSignal, OK_ATOM);
     }
 }
 

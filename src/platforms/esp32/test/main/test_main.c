@@ -138,6 +138,10 @@ static void prepare_event_queue(void)
 
     QueueSetMemberHandle_t source;
     while ((source = xQueueSelectFromSet(event_set, 0)) != NULL) {
+        if (source == signal_semaphore) {
+            xSemaphoreTake(signal_semaphore, 0);
+            continue;
+        }
         if (UNLIKELY(source != event_queue)) {
             fprintf(stderr, "Stale member in ESP32 event queue set.\n");
             AVM_ABORT();
