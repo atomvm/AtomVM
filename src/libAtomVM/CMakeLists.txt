@@ -54,6 +54,7 @@ set(HEADER_FILES
     opcodesswitch.h
     overflow_helpers.h
     nifs.h
+    persistent_term.h
     platform_nifs.h
     port.h
     posix_nifs.h
@@ -66,6 +67,7 @@ set(HEADER_FILES
     sys.h
     term_typedef.h
     term.h
+    term_hash.h
     timer_list.h
     trace.h
     unicode.h
@@ -99,6 +101,7 @@ set(SOURCE_FILES
     memory.c
     module.c
     nifs.c
+    persistent_term.c
     port.c
     posix_nifs.c
     refc_binary.c
@@ -106,6 +109,7 @@ set(SOURCE_FILES
     scheduler.c
     stacktrace.c
     term.c
+    term_hash.c
     timer_list.c
     unicode.c
     unlocalized.c
