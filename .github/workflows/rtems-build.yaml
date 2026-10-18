@@ -45,9 +45,12 @@ jobs:
     - name: Checkout repo
       uses: actions/checkout@v4
 
+    - name: Test pinned source checkouts
+      run: bash src/platforms/rtems/tests/test-source-pins.sh
+
     - uses: erlef/setup-beam@v1
       with:
-        otp-version: "28"
+        otp-version: "28.5.0.8"
         rebar3-version: "3.25.1"
         hexpm-mirrors: |
           https://builds.hex.pm
@@ -70,7 +73,7 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/rtems/6
-        key: rtems-${{ env.RTEMS_RELEASE }}-sparc-erc32-wifi-${{ runner.os }}
+        key: rtems-${{ env.RTEMS_RELEASE }}-sparc-erc32-wifi-${{ runner.os }}-${{ hashFiles('src/platforms/rtems/docker/dependencies.sh') }}
 
     - name: Build RTEMS 6 tools and sparc/erc32 BSP
       if: steps.rtems-cache.outputs.cache-hit != 'true'
@@ -78,7 +81,8 @@ jobs:
         set -euo pipefail
         mkdir -p "$HOME/rtems-src" /home/runner/rtems/6
         cd "$HOME/rtems-src"
-        git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb-6
+        . "$GITHUB_WORKSPACE/src/platforms/rtems/docker/dependencies.sh"
+        rtems_clone_pinned https://github.com/RTEMS/rtems-source-builder.git "${RTEMS_RSB6_COMMIT}" rsb-6
         cd "rsb-6/rtems"
         # SIS runs directly; CI does not need GDB or its GitLab-only patches.
         sed -i '/with_rtems_gdb/d' config/tools/rtems-default-tools.bset
@@ -99,7 +103,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/rtems/6
-        key: rtems-${{ env.RTEMS_RELEASE }}-sparc-erc32-wifi-${{ runner.os }}
+        key: rtems-${{ env.RTEMS_RELEASE }}-sparc-erc32-wifi-${{ runner.os }}-${{ hashFiles('src/platforms/rtems/docker/dependencies.sh') }}
 
     - name: Add RTEMS tools to PATH
       run: echo "/home/runner/rtems/6/bin" >> "$GITHUB_PATH"
@@ -221,7 +225,7 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/rtems/6
-        key: rtems-6-arm-toolchain-${{ runner.os }}-v1
+        key: rtems-6-arm-toolchain-${{ runner.os }}-v1-${{ hashFiles('src/platforms/rtems/docker/dependencies.sh') }}
 
     - name: Install build dependencies
       if: steps.toolchain-cache.outputs.cache-hit != 'true'
@@ -239,7 +243,8 @@ jobs:
         set -euo pipefail
         mkdir -p "$HOME/rtems-src" /home/runner/rtems/6
         cd "$HOME/rtems-src"
-        git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb-6
+        . "$GITHUB_WORKSPACE/src/platforms/rtems/docker/dependencies.sh"
+        rtems_clone_pinned https://github.com/RTEMS/rtems-source-builder.git "${RTEMS_RSB6_COMMIT}" rsb-6
         cd "rsb-6/rtems"
         # QEMU runs directly; CI does not need GDB or its GitLab-only patches.
         sed -i '/with_rtems_gdb/d' config/tools/rtems-default-tools.bset
@@ -255,7 +260,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/rtems/6
-        key: rtems-6-arm-toolchain-${{ runner.os }}-v1
+        key: rtems-6-arm-toolchain-${{ runner.os }}-v1-${{ hashFiles('src/platforms/rtems/docker/dependencies.sh') }}
 
     - name: Verify ARM toolchain
       run: |
@@ -310,7 +315,7 @@ jobs:
 
     - uses: erlef/setup-beam@v1
       with:
-        otp-version: "28"
+        otp-version: "28.5.0.8"
         rebar3-version: "3.25.1"
         hexpm-mirrors: |
           https://builds.hex.pm
@@ -335,7 +340,7 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ matrix.prefix }}
-        key: rtems-${{ env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-wifi-${{ runner.os }}
+        key: rtems-${{ env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-wifi-${{ runner.os }}-${{ hashFiles('src/platforms/rtems/docker/dependencies.sh') }}
 
     - name: Download ARM toolchain
       if: steps.rtems-cache.outputs.cache-hit != 'true'
@@ -371,7 +376,8 @@ jobs:
         echo "Building RTEMS 6 BSP for ${{ matrix.bsp }}..."
         mkdir -p "$HOME/rtems-src"
         cd "$HOME/rtems-src"
-        git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb-6
+        . "$GITHUB_WORKSPACE/src/platforms/rtems/docker/dependencies.sh"
+        rtems_clone_pinned https://github.com/RTEMS/rtems-source-builder.git "${RTEMS_RSB6_COMMIT}" rsb-6
         cd "rsb-6/rtems"
         ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" \
           --target="${{ matrix.arch }}-rtems${{ matrix.rtems_version }}" \
@@ -395,7 +401,8 @@ jobs:
         cd "$HOME/rtems-src/libbsd"
         git config --global --add url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems-waf" || true
         git config --global --add url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems_waf" || true
-        git clone --depth 1 https://github.com/RTEMS/rtems-libbsd.git -b 6-freebsd-12 rtems-libbsd
+        . "$GITHUB_WORKSPACE/src/platforms/rtems/docker/dependencies.sh"
+        rtems_clone_pinned https://github.com/RTEMS/rtems-libbsd.git "${RTEMS_LIBBSD_COMMIT}" rtems-libbsd
         cd "rtems-libbsd"
         git submodule update --init rtems_waf
         python3 -c "
@@ -420,7 +427,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: ${{ matrix.prefix }}
-        key: rtems-${{ env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-wifi-${{ runner.os }}
+        key: rtems-${{ env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-wifi-${{ runner.os }}-${{ hashFiles('src/platforms/rtems/docker/dependencies.sh') }}
 
     - name: Add RTEMS tools to PATH
       run: echo "${{ matrix.prefix }}/bin" >> "$GITHUB_PATH"
@@ -628,11 +635,16 @@ jobs:
       run: |
         set -euo pipefail
         mkdir -p src/platforms/rtems/build /tmp/linux-dts
-        git clone --depth 1 --filter=blob:none --sparse --branch v6.1 \
-          https://github.com/torvalds/linux.git /tmp/linux-dts
+        . "$GITHUB_WORKSPACE/src/platforms/rtems/docker/dependencies.sh"
+        git init -q /tmp/linux-dts
+        git -C /tmp/linux-dts remote add origin https://github.com/torvalds/linux.git
+        git -C /tmp/linux-dts config remote.origin.promisor true
+        git -C /tmp/linux-dts config remote.origin.partialclonefilter blob:none
+        git -C /tmp/linux-dts fetch --depth 1 --filter=blob:none origin "${RTEMS_LINUX_DTS_COMMIT}"
         # linux-event-codes.h is a symlink into include/uapi.
         git -C /tmp/linux-dts sparse-checkout set \
           arch/arm/boot/dts include/dt-bindings include/uapi/linux
+        git -C /tmp/linux-dts checkout --detach FETCH_HEAD
         cpp -nostdinc -undef -P -x assembler-with-cpp \
           -I /tmp/linux-dts/arch/arm/boot/dts \
           -I /tmp/linux-dts/include \
@@ -795,7 +807,7 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/rtems/7
-        key: rtems-7-riscv-toolchain-${{ runner.os }}-v2
+        key: rtems-7-riscv-toolchain-${{ runner.os }}-v2-${{ hashFiles('src/platforms/rtems/docker/dependencies.sh') }}
 
     - name: Install build dependencies
       if: steps.toolchain-cache.outputs.cache-hit != 'true'
@@ -813,7 +825,8 @@ jobs:
         set -euo pipefail
         mkdir -p "$HOME/rtems-src" /home/runner/rtems/7
         cd "$HOME/rtems-src"
-        git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b main rsb-7
+        . "$GITHUB_WORKSPACE/src/platforms/rtems/docker/dependencies.sh"
+        rtems_clone_pinned https://github.com/RTEMS/rtems-source-builder.git "${RTEMS_RSB7_COMMIT}" rsb-7
         cd rsb-7/rtems
         sed -i '/sis/d' config/7/rtems-riscv.bset
         sed -i '/with_rtems_gdb/d' config/tools/rtems-default-tools.bset
@@ -832,7 +845,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: /home/runner/rtems/7
-        key: rtems-7-riscv-toolchain-${{ runner.os }}-v2
+        key: rtems-7-riscv-toolchain-${{ runner.os }}-v2-${{ hashFiles('src/platforms/rtems/docker/dependencies.sh') }}
 
     - name: Verify RISC-V toolchain
       run: |
@@ -913,7 +926,7 @@ jobs:
 
     - uses: erlef/setup-beam@v1
       with:
-        otp-version: "28"
+        otp-version: "28.5.0.8"
         rebar3-version: "3.25.1"
         hexpm-mirrors: |
           https://builds.hex.pm
@@ -973,7 +986,8 @@ jobs:
         export PATH="${{ matrix.prefix }}/bin:$PATH"
         mkdir -p "$HOME/rtems-src"
         cd "$HOME/rtems-src"
-        git clone --depth 1 https://github.com/RTEMS/rtems.git -b main rtems-7
+        . "$GITHUB_WORKSPACE/src/platforms/rtems/docker/dependencies.sh"
+        rtems_clone_pinned https://github.com/RTEMS/rtems.git "${RTEMS_KERNEL7_COMMIT}" rtems-7
         cd rtems-7
         if [ -d "$GITHUB_WORKSPACE/src/platforms/rtems/docker/patches/rtems" ]; then
           for patch in "$GITHUB_WORKSPACE"/src/platforms/rtems/docker/patches/rtems/*.patch; do
@@ -1058,7 +1072,10 @@ jobs:
         set -euo pipefail
         BIN="src/platforms/rtems/build/AtomVM-${{ matrix.bsp_name }}.bin"
         test -f "$BIN"
-        curl -fsSL https://raw.githubusercontent.com/espressif/esp-emulator/main/install.sh | sh -s -- --version 0.49.0
+        . "$GITHUB_WORKSPACE/src/platforms/rtems/docker/dependencies.sh"
+        curl -fsSL "https://raw.githubusercontent.com/espressif/esp-emulator/${ESP_EMU_INSTALL_COMMIT}/install.sh" \
+          -o "$RUNNER_TEMP/esp-emu-install.sh"
+        sh "$RUNNER_TEMP/esp-emu-install.sh" --version "${RTEMS_ESP_EMU_VERSION}"
         export PATH="$HOME/.local/bin:$PATH"
         emu_opts=(--timeout 30s)
         if [ "${{ matrix.chip }}" = "esp32s31" ]; then

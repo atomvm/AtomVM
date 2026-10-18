@@ -27,6 +27,12 @@ BUILD_DIR="${HOME}/.cache/rtems7-wifi-s31-build"
 CLEAN=0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEPENDENCIES="${SCRIPT_DIR}/dependencies.sh"
+if [ ! -f "${DEPENDENCIES}" ]; then
+    DEPENDENCIES="${SCRIPT_DIR}/../docker/dependencies.sh"
+fi
+. "${DEPENDENCIES}"
+
 DEFAULT_PATCH_DIR="${SCRIPT_DIR}/patches"
 if [ ! -d "${DEFAULT_PATCH_DIR}" ] && [ -d "${SCRIPT_DIR}/../docker/patches" ]; then
     DEFAULT_PATCH_DIR="${SCRIPT_DIR}/../docker/patches"
@@ -130,14 +136,13 @@ cd "${BUILD_DIR}"
 # -----------------------------------------------------------------------------
 echo "==> [1/4] Building rtems-lwip for riscv/esp32s31db..."
 if [ ! -d "rtems-lwip/.git" ]; then
-    git clone --depth 1 https://github.com/RTEMS/rtems-lwip.git -b main rtems-lwip
+    rtems_clone_pinned https://github.com/RTEMS/rtems-lwip.git "${RTEMS_LWIP_COMMIT}" rtems-lwip
     # Fetch the pinned lwIP commit from its mirror to avoid Savannah TLS/HTTP failures.
     git -C rtems-lwip config submodule.lwip-upstream.url https://github.com/lwip-tcpip/lwip.git
     git -C rtems-lwip submodule update --init --recursive --depth 1 lwip-upstream
     # The upstream Waf gitlink is not available in the GitHub mirror.
     # Use a compatible, pinned mirror revision instead.
-    git clone https://github.com/RTEMS/rtems_waf.git rtems-lwip/rtems_waf
-    git -C rtems-lwip/rtems_waf checkout --detach 8bd39e6047a93aca82d28638644b92cc7a141286
+    rtems_clone_pinned https://github.com/RTEMS/rtems_waf.git "${RTEMS_LWIP_WAF_COMMIT}" rtems-lwip/rtems_waf
     if [ -n "${PATCH_DIR}" ] && [ -d "${PATCH_DIR}/rtems-lwip" ]; then
         for p in "${PATCH_DIR}"/rtems-lwip/*.patch; do
             if [ -f "$p" ]; then
@@ -147,6 +152,11 @@ if [ ! -d "rtems-lwip/.git" ]; then
         done
     fi
 fi
+
+rtems_clone_pinned https://github.com/RTEMS/rtems-lwip.git "${RTEMS_LWIP_COMMIT}" rtems-lwip
+rtems_clone_pinned https://github.com/lwip-tcpip/lwip.git \
+    "$(git -C rtems-lwip rev-parse HEAD:lwip-upstream)" rtems-lwip/lwip-upstream
+rtems_clone_pinned https://github.com/RTEMS/rtems_waf.git "${RTEMS_LWIP_WAF_COMMIT}" rtems-lwip/rtems_waf
 
 cd "${BUILD_DIR}/rtems-lwip"
 ./waf configure --prefix="${PREFIX}" --rtems-bsps=riscv/esp32s31db
@@ -162,25 +172,15 @@ ls -lh "${BSP_LIB}/liblwip.a"
 echo "==> [2/4] Fetching Wi-Fi components and blobs..."
 cd "${BUILD_DIR}"
 
-if [ ! -d "esp32-wifi-lib/.git" ]; then
-    git clone --depth 1 https://github.com/espressif/esp32-wifi-lib.git esp32-wifi-lib
-fi
+rtems_clone_pinned https://github.com/espressif/esp32-wifi-lib.git "${ESP_WIFI_COMMIT}" esp32-wifi-lib
 
-if [ ! -d "esp-phy-lib/.git" ]; then
-    git clone --depth 1 https://github.com/espressif/esp-phy-lib.git esp-phy-lib
-fi
+rtems_clone_pinned https://github.com/espressif/esp-phy-lib.git "${ESP_PHY_COMMIT}" esp-phy-lib
 
-if [ ! -d "esp-hal-3rdparty/.git" ]; then
-    git clone --depth 1 https://github.com/espressif/esp-hal-3rdparty.git -b sync/master.c esp-hal-3rdparty
-fi
+rtems_clone_pinned https://github.com/espressif/esp-hal-3rdparty.git "${ESP_HAL_COMMIT}" esp-hal-3rdparty
 
-if [ ! -d "mbedtls/.git" ]; then
-    git clone --depth 1 https://github.com/Mbed-TLS/mbedtls.git -b v3.6.3 mbedtls
-fi
+rtems_clone_pinned https://github.com/Mbed-TLS/mbedtls.git "${RTEMS_MBEDTLS_COMMIT}" mbedtls
 
-if [ ! -d "rtems-esp-wifi/.git" ]; then
-    git clone --depth 1 https://github.com/thesamprice/rtems-esp-wifi.git rtems-esp-wifi
-fi
+rtems_clone_pinned https://github.com/thesamprice/rtems-esp-wifi.git "${RTEMS_ESP_WIFI_COMMIT}" rtems-esp-wifi
 git -C rtems-esp-wifi checkout -- .
 if [ -n "${PATCH_DIR}" ] && [ -d "${PATCH_DIR}/rtems-esp-wifi" ]; then
     for p in "${PATCH_DIR}"/rtems-esp-wifi/*.patch; do

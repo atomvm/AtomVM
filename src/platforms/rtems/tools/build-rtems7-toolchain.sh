@@ -27,13 +27,15 @@ BUILD_DIR="${HOME}/.cache/rtems7-build"
 PREFIX="${DEFAULT_PREFIX}"
 BSP="${DEFAULT_BSP}"
 RTEMS_SRC_DIR="${RTEMS_SRC_DIR:-}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${SCRIPT_DIR}/../docker/dependencies.sh"
 CLEAN=0
 
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [options]
 
-Builds RTEMS 7 RISC-V cross-compiler tools and BSP from upstream main.
+Builds RTEMS 7 RISC-V cross-compiler tools and BSP from pinned upstream commits.
 
 Options:
   --prefix <path>     Target installation directory (default: ${DEFAULT_PREFIX})
@@ -102,15 +104,9 @@ mkdir -p "${BUILD_DIR}" "${PREFIX}"
 RSB_REPO="https://github.com/RTEMS/rtems-source-builder.git"
 RTEMS_REPO="https://github.com/RTEMS/rtems.git"
 
-# Step 1: Clone or update RSB
+# Step 1: Fetch the pinned RSB revision
 cd "${BUILD_DIR}"
-if [ ! -d "rsb/.git" ]; then
-    echo "==> Cloning RTEMS Source Builder (main)..."
-    git clone --depth 1 "${RSB_REPO}" -b main rsb
-else
-    echo "==> Updating RTEMS Source Builder..."
-    git -C rsb pull --ff-only || true
-fi
+rtems_clone_pinned "${RSB_REPO}" "${RTEMS_RSB7_COMMIT}" rsb
 
 # Step 2: Build RISC-V tools via RSB
 echo "==> Building RTEMS 7 RISC-V toolchain with RSB (this may take 15-30 mins)..."
@@ -149,13 +145,7 @@ if [ -n "${RTEMS_SRC_DIR}" ]; then
     RTEMS_BUILD_DIR="${RTEMS_SRC_DIR}"
 else
     cd "${BUILD_DIR}"
-    if [ ! -d "rtems/.git" ]; then
-        echo "==> Cloning RTEMS kernel (main)..."
-        git clone --depth 1 "${RTEMS_REPO}" -b main rtems
-    else
-        echo "==> Updating RTEMS kernel..."
-        git -C rtems pull --ff-only || true
-    fi
+    rtems_clone_pinned "${RTEMS_REPO}" "${RTEMS_KERNEL7_COMMIT}" rtems
     RTEMS_BUILD_DIR="${BUILD_DIR}/rtems"
 fi
 

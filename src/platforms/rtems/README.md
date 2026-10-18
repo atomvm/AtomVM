@@ -507,6 +507,21 @@ Key characteristics of AtomVM on ESP32-C3:
 
 You can build the toolchain and BSP using Docker, the automated build script, or manually via RSB.
 
+CI, both RTEMS Dockerfiles, and the native build scripts share the commit pins in
+[`docker/dependencies.sh`](docker/dependencies.sh), taken from successful CI run
+[39153602941](https://github.com/petermm/AtomVM/actions/runs/39153602941). This pins
+RSB, the RTEMS 7 kernel, LibBSD, lwIP, the Wi-Fi sources and blobs, MbedTLS, and
+the emulator installer. RSB pins its compiler and RTEMS 6 kernel archives by
+revision and checksum; lwIP and LibBSD pin their submodules through gitlinks.
+The workflow also pins the Erlang/OTP version.
+
+To update sources, edit the pins, rebuild the Docker image with `--rebuild`,
+and run the relevant boot, Wi-Fi and SMP tests. CI cache keys include the pins.
+Native builders reject a cached checkout at another commit; use `--clean`
+to fetch the new pins. Explicit local RTEMS trees remain available through
+`--rtems-src`; Docker's `RSB_REF` and `RTEMS_REF` overrides require full commit IDs.
+Ubuntu packages continue to come from the configured distribution repositories.
+
 #### Option A: Single-Command Docker Build & Emulation (Recommended)
 
 If you have Docker (or OrbStack/Podman) installed, build the entire firmware and run the boot test in `esp-emulator` with a single command:

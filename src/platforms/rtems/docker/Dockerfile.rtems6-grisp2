@@ -52,13 +52,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+COPY dependencies.sh /tmp/dependencies.sh
+
 # Stage 2: Heavy RSB ARM Toolchain (GCC, Binutils, Newlib) ~15-20 min build.
 # Cached independently so it never rebuilds when BSP or LibBSD options change.
 # GDB is not needed to compile or package GRiSP 2 firmware.
 FROM build-base AS rsb-toolchain
 
 WORKDIR /tmp/rsb
-RUN git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb \
+RUN . /tmp/dependencies.sh \
+    && rtems_clone_pinned https://github.com/RTEMS/rtems-source-builder.git "${RTEMS_RSB6_COMMIT}" rsb \
     && sed -i '/with_rtems_gdb/d' rsb/rtems/config/tools/rtems-default-tools.bset \
     && sed -i 's|https://gmplib.org/download/gmp|https://ftp.gnu.org/gnu/gmp|g' rsb/source-builder/config/gmp.cfg \
     && cd rsb/rtems \
@@ -79,15 +82,17 @@ RUN ../source-builder/sb-set-builder --prefix="${RTEMS_PREFIX}" \
 # Stage 4: RTEMS LibBSD for arm/imx7 with GRiSP 2 Wi-Fi modules ~10-15 min build.
 FROM bsp-kernel AS libbsd
 
-COPY src/platforms/rtems/docker/grisp2-libbsd.ini /tmp/grisp2-libbsd.ini
+COPY grisp2-libbsd.ini /tmp/grisp2-libbsd.ini
 
 WORKDIR /tmp/libbsd
-RUN rm -rf /tmp/rsb \
+RUN . /tmp/dependencies.sh \
+    && rm -rf /tmp/rsb \
     && git config --global --add url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems-waf" \
     && git config --global --add url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems_waf" \
-    && git clone --depth 1 https://github.com/RTEMS/rtems-libbsd.git -b 6-freebsd-12 rtems-libbsd \
+    && rtems_clone_pinned https://github.com/RTEMS/rtems-libbsd.git "${RTEMS_LIBBSD_COMMIT}" rtems-libbsd \
     && cd rtems-libbsd \
     && git submodule update --init rtems_waf \
+    && sed -i '1i#ifndef LIBIO_FLAGS_CLOSE_BUSY\n#define LIBIO_FLAGS_CLOSE_BUSY 0x0400U\n#endif' rtemsbsd/include/machine/rtems-bsd-libio.h \
     && ./waf configure \
         --prefix="${RTEMS_PREFIX}" \
         --rtems-bsps=arm/imx7 \

@@ -49,13 +49,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+COPY dependencies.sh /tmp/dependencies.sh
+
 # Stage 2: Heavy RSB Toolchain (GCC, Binutils, GDB, Newlib) ~15-20 min build.
 # Cached independently so it never rebuilds when BSP or application code changes.
 FROM build-base AS rsb-toolchain
-ARG RSB_REF=main
+ARG RSB_REF
 
 WORKDIR /tmp/rsb
-RUN git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b ${RSB_REF} . \
+RUN . /tmp/dependencies.sh \
+    && rtems_clone_pinned https://github.com/RTEMS/rtems-source-builder.git "${RSB_REF:-${RTEMS_RSB7_COMMIT}}" . \
     && sed -i '/sis/d' rtems/config/7/rtems-riscv.bset \
     && sed -i '/with_rtems_gdb/d' rtems/config/tools/rtems-default-tools.bset \
     && sed -i -e '/0001-RTEMS-Add-riscv-multilibs/d' -e '/uCjG1KIhPuCR3H5G/d' rtems/config/tools/rtems-gcc-15.2-newlib-head.cfg \
@@ -70,7 +73,7 @@ FROM scratch AS rtems-src
 # Stage 3: RTEMS Kernel & ESP32-C3 BSP ~30 sec build.
 # Layered on top of the cached RSB toolchain; if RTEMS BSP options change, only this fast step rebuilds.
 FROM rsb-toolchain AS bsp-builder
-ARG RTEMS_REF=main
+ARG RTEMS_REF
 ARG RTEMS_GIT_URL=https://github.com/RTEMS/rtems.git
 
 WORKDIR /tmp/rtems
@@ -86,12 +89,13 @@ COPY patches/ /tmp/patches/
 # Copy optional local RTEMS source from build context (empty if not specified)
 COPY --from=rtems-src . /tmp/rtems-local/
 
-RUN if [ -f /tmp/rtems-local/waf ]; then \
+RUN . /tmp/dependencies.sh \
+    && if [ -f /tmp/rtems-local/waf ]; then \
         echo "==> Using local RTEMS source tree..." && \
         cp -a /tmp/rtems-local/. /tmp/rtems/ ; \
     else \
-        echo "==> Cloning RTEMS (${RTEMS_GIT_URL} @ ${RTEMS_REF})..." && \
-        git clone --depth 1 "${RTEMS_GIT_URL}" -b "${RTEMS_REF}" . ; \
+        echo "==> Cloning RTEMS (${RTEMS_GIT_URL} @ ${RTEMS_REF:-${RTEMS_KERNEL7_COMMIT}})..." && \
+        rtems_clone_pinned "${RTEMS_GIT_URL}" "${RTEMS_REF:-${RTEMS_KERNEL7_COMMIT}}" . ; \
     fi \
     && if [ -d /tmp/patches/rtems ]; then \
         for patch in /tmp/patches/rtems/*.patch /tmp/patches/rtems/*.diff; do \
@@ -166,10 +170,14 @@ RUN curl -fsSL https://github.com/erlang/rebar3/releases/download/3.24.0/rebar3 
 # Copy prebuilt RTEMS 7 RISC-V toolchain, esp32c3db BSP, lwIP, and Wi-Fi stack
 COPY --from=wifi-builder /opt/rtems/7 /opt/rtems/7
 
-ARG ESP_EMU_VERSION="0.49.0"
+COPY dependencies.sh /tmp/dependencies.sh
+ARG ESP_EMU_VERSION
 # Install esp-emulator for direct headless simulation
-RUN curl -fsSL https://raw.githubusercontent.com/espressif/esp-emulator/main/install.sh | sh -s -- --version "${ESP_EMU_VERSION}" \
-    && cp /root/.local/bin/esp-emu /usr/local/bin/esp-emu || true
+RUN . /tmp/dependencies.sh \
+    && curl -fsSL "https://raw.githubusercontent.com/espressif/esp-emulator/${ESP_EMU_INSTALL_COMMIT}/install.sh" -o /tmp/esp-emu-install.sh \
+    && sh /tmp/esp-emu-install.sh --version "${ESP_EMU_VERSION:-${RTEMS_ESP_EMU_VERSION}}" \
+    && cp /root/.local/bin/esp-emu /usr/local/bin/esp-emu \
+    && rm /tmp/esp-emu-install.sh
 
 WORKDIR /workspace
 
