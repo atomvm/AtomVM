@@ -77,8 +77,9 @@ COPY src/platforms/rtems/docker/grisp2-libbsd.ini /tmp/grisp2-libbsd.ini
 
 WORKDIR /tmp/libbsd
 RUN rm -rf /tmp/rsb \
-    && git clone --depth 1 https://gitlab.rtems.org/rtems/pkg/rtems-libbsd.git -b "${RTEMS_RELEASE}" rtems-libbsd \
+    && git clone --depth 1 https://gitlab.rtems.org/rtems/pkg/rtems-libbsd.git -b 6-freebsd-12 rtems-libbsd \
     && cd rtems-libbsd \
+    && git submodule update --init rtems_waf \
     && ./waf configure \
         --prefix="${RTEMS_PREFIX}" \
         --rtems-bsps=arm/imx7 \

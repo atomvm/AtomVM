@@ -282,7 +282,7 @@ jobs:
           - arch: arm
             bsp: arm/imx7
             bsp_name: imx7
-            cache_key: arm-imx7-v2
+            cache_key: arm-imx7-v3
             rtems_version: "6"
             prefix: /home/runner/rtems/6.2
             qemu: qemu-system-arm
@@ -383,7 +383,7 @@ jobs:
         echo "Building rtems-libbsd with GRiSP 2 Wi-Fi modules"
         mkdir -p "$HOME/rtems-src/libbsd"
         cd "$HOME/rtems-src/libbsd"
-        git clone --depth 1 https://gitlab.rtems.org/rtems/pkg/rtems-libbsd.git -b "${RTEMS_RELEASE}" rtems-libbsd
+        git clone --depth 1 https://gitlab.rtems.org/rtems/pkg/rtems-libbsd.git -b 6-freebsd-12 rtems-libbsd
         cd "rtems-libbsd"
         git submodule update --init rtems_waf
         python3 -c "
