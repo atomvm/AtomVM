@@ -383,8 +383,8 @@ jobs:
         echo "Building rtems-libbsd with GRiSP 2 Wi-Fi modules"
         mkdir -p "$HOME/rtems-src/libbsd"
         cd "$HOME/rtems-src/libbsd"
-        git config --global url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems-waf" || true
-        git config --global url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems_waf" || true
+        git config --global --add url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems-waf" || true
+        git config --global --add url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems_waf" || true
         git clone --depth 1 https://github.com/RTEMS/rtems-libbsd.git -b 6-freebsd-12 rtems-libbsd
         cd "rtems-libbsd"
         git submodule update --init rtems_waf

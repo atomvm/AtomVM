@@ -74,7 +74,7 @@ if [ "${FORCE_REBUILD}" -eq 1 ] || ! docker image inspect "${IMAGE_NAME}" >/dev/
 fi
 
 # Step 2: Build inside Docker container
-echo "==> Compiling AtomVM for GRiSP 2 under RTEMS 6.2 inside Docker..."
+echo "==> Compiling AtomVM for GRiSP 2 under RTEMS 6 inside Docker..."
 docker run --rm -v "${REPO_ROOT}:/workspace" -w /workspace "${IMAGE_NAME}" bash -c '
     set -euo pipefail
 
@@ -90,7 +90,7 @@ docker run --rm -v "${REPO_ROOT}:/workspace" -w /workspace "${IMAGE_NAME}" bash 
     echo "==> Cross-compiling AtomVM for GRiSP 2 (arm/imx7 with LibBSD)..."
     cmake -S src/platforms/rtems -B src/platforms/rtems/build-grisp2 -G Ninja \
         -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
-        -DRTEMS_PREFIX=/opt/rtems/6.2 \
+        -DRTEMS_PREFIX="${RTEMS_PREFIX}" \
         -DRTEMS_BSP=arm/imx7 \
         -DRTEMS_BOARD=grisp2 \
         -DRTEMS_VERSION=6 \

@@ -77,8 +77,8 @@ COPY src/platforms/rtems/docker/grisp2-libbsd.ini /tmp/grisp2-libbsd.ini
 
 WORKDIR /tmp/libbsd
 RUN rm -rf /tmp/rsb \
-    && git config --global url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems-waf" \
-    && git config --global url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems_waf" \
+    && git config --global --add url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems-waf" \
+    && git config --global --add url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems_waf" \
     && git clone --depth 1 https://github.com/RTEMS/rtems-libbsd.git -b 6-freebsd-12 rtems-libbsd \
     && cd rtems-libbsd \
     && git submodule update --init rtems_waf \
@@ -100,7 +100,7 @@ RUN find ${RTEMS_PREFIX}/bin ${RTEMS_PREFIX}/libexec -type f -executable -exec s
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV RTEMS_PREFIX=/opt/rtems/6.2
+ENV RTEMS_PREFIX=/opt/rtems/6
 ENV PATH="${RTEMS_PREFIX}/bin:${PATH}"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -121,8 +121,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy prebuilt RTEMS 6.2 ARM toolchain, imx7 BSP, and LibBSD
-COPY --from=libbsd /opt/rtems/6.2 /opt/rtems/6.2
+# Copy prebuilt RTEMS 6 ARM toolchain, imx7 BSP, and LibBSD
+COPY --from=libbsd /opt/rtems/6 /opt/rtems/6
 
 WORKDIR /workspace
 CMD ["bash"]
