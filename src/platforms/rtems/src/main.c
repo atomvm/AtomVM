@@ -127,7 +127,12 @@ void __wrap__RISCV_Interrupt_dispatch(uintptr_t mcause, Per_CPU_Control *cpu_sel
 
 #define ARM_SMP_MMU_READY_MAGIC 0x52544d53U
 
-BSP_START_DATA_SECTION static volatile uint32_t arm_smp_mmu_ready = 0;
+/*
+ * The BSP maps .bsp_start_data read-only when it enables the MMU.  Keep this
+ * flag in writable .data, with an initial value loaded by QEMU before any
+ * processor enters _start and restored by bsp_start_copy_sections().
+ */
+static volatile uint32_t arm_smp_mmu_ready = ~ARM_SMP_MMU_READY_MAGIC;
 #endif
 
 extern void __real_bsp_start_hook_0(void);
