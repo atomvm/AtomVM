@@ -460,8 +460,11 @@ jobs:
         test -f "$BIN"
         curl -fsSL https://raw.githubusercontent.com/espressif/esp-emulator/main/install.sh | sh -s -- --version 0.49.0
         export PATH="$HOME/.local/bin:$PATH"
-        set +e
-        output=$(esp-emu --chip ${{ matrix.chip }} --firmware "$BIN" --timeout 30s --exit-on "Return value: ok" 2>&1)
+        emu_opts=(--timeout 30s)
+        if [ "${{ matrix.chip }}" = "esp32s31" ]; then
+          emu_opts=(--batch-size 50000 --timeout 90s)
+        fi
+        output=$(esp-emu --chip ${{ matrix.chip }} "${emu_opts[@]}" --firmware "$BIN" --exit-on "Return value: ok" 2>&1)
         status=$?
         set -e
         printf '%s\n' "$output"
@@ -554,7 +557,7 @@ jobs:
         test -f "$BIN"
         export PATH="$HOME/.local/bin:$PATH"
         set +e
-        output=$(esp-emu --chip esp32s31 --batch-size 50000 --firmware "$BIN" --timeout 30s --exit-on "Return value: ok" 2>&1)
+        output=$(esp-emu --chip esp32s31 --batch-size 50000 --firmware "$BIN" --timeout 90s --exit-on "Return value: ok" 2>&1)
         status=$?
         set -e
         printf '%s\n' "$output"

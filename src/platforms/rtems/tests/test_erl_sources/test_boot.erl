@@ -140,6 +140,7 @@ gpio_target_smoke() ->
             ok = gpio:remove_int_nif(2),
             ok = gpio:attach_interrupt(2, rising),
             ok = gpio:detach_interrupt(2),
+            ok = gpio:stop(),
             ok = gpio:deinit(2),
             erlang:display({gpio, esp32c3, ok});
         {error, invalid_pin} ->

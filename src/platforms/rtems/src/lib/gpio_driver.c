@@ -151,7 +151,7 @@ static bool esp32c3_gpio_irq_installed = false;
 static void esp32c3_gpio_isr(void *arg)
 {
     (void) arg;
-    uint32_t pending = rtems_gpio_bsp_interrupt_line(16);
+    uint32_t pending = rtems_gpio_bsp_interrupt_line(rtems_gpio_bsp_get_vector(0));
     if (pending == 0) {
         return;
     }
@@ -615,10 +615,9 @@ static term nif_gpio_init(Context *ctx, int argc, term argv[])
     unsigned pin_num;
     bool is_int;
     if (parse_esp32c3_pin(argv[0], &pin_num, &is_int)) {
-        if (!bsp_pin_claim(pin_num, "AtomVM")) {
+        if (rtems_gpio_bsp_select_input(0, pin_num, NULL) != RTEMS_SUCCESSFUL) {
             return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));
         }
-        rtems_gpio_bsp_select_input(0, pin_num, NULL);
         return OK_ATOM;
     }
 #endif
@@ -913,7 +912,7 @@ static term nif_gpio_set_int(Context *ctx, int argc, term argv[])
 
         if (!esp32c3_gpio_irq_installed) {
             rtems_status_code sc = rtems_interrupt_handler_install(
-                16,
+                rtems_gpio_bsp_get_vector(0),
                 "atomvm_gpio",
                 RTEMS_INTERRUPT_SHARED,
                 esp32c3_gpio_isr,
@@ -1240,9 +1239,7 @@ static const struct Nif *gpio_nif_get_nif(const char *nifname)
         || strcmp("gpio:set_pin_pull/2", nifname) == 0
         || strcmp("gpio:digital_write/2", nifname) == 0
         || strcmp("gpio:digital_read/1", nifname) == 0
-        || strcmp("gpio:set_int/3", nifname) == 0
         || strcmp("gpio:set_int_nif/3", nifname) == 0
-        || strcmp("gpio:remove_int/1", nifname) == 0
         || strcmp("gpio:remove_int_nif/1", nifname) == 0
         || strcmp("gpio:set_pin_mux/2", nifname) == 0) {
         return &unsupported;
@@ -1267,10 +1264,10 @@ static const struct Nif *gpio_nif_get_nif(const char *nifname)
     if (strcmp("gpio:digital_read/1", nifname) == 0) {
         return &gpio_digital_read_nif;
     }
-    if (strcmp("gpio:set_int/3", nifname) == 0 || strcmp("gpio:set_int_nif/3", nifname) == 0) {
+    if (strcmp("gpio:set_int_nif/3", nifname) == 0) {
         return &gpio_set_int_nif;
     }
-    if (strcmp("gpio:remove_int/1", nifname) == 0 || strcmp("gpio:remove_int_nif/1", nifname) == 0) {
+    if (strcmp("gpio:remove_int_nif/1", nifname) == 0) {
         return &gpio_remove_int_nif;
     }
     if (strcmp("gpio:set_pin_mux/2", nifname) == 0) {

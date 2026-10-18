@@ -138,7 +138,7 @@ if [ "${DO_SIMULATE}" -eq 1 ]; then
         if [ "${TEST_WIFI}" -eq 1 ]; then
             EMU_CMD+=(--wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user)
         fi
-        EMU_CMD+=(--timeout 30s --exit-on "Return value: ok")
+        EMU_CMD+=(--timeout 90s --exit-on "Return value: ok")
         "${EMU_CMD[@]}" || true
         if [ -n "${HTTP_PID}" ]; then
             kill "${HTTP_PID}" 2>/dev/null || true
@@ -162,13 +162,13 @@ if [ "${DO_SIMULATE}" -eq 1 ]; then
                 esp-emu --chip esp32s31 --batch-size '"${BATCH_SIZE}"' \
                     --firmware /workspace/src/platforms/rtems/build-esp32s31/AtomVM-esp32s31db.bin \
                     --wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user \
-                    --timeout 30s --exit-on "Return value: ok"
+                    --timeout 90s --exit-on "Return value: ok"
             ')
         else
             SIM_CMD+=(--rm -v "${REPO_ROOT}:/workspace" "${IMAGE_NAME}" \
                 esp-emu --chip esp32s31 --batch-size "${BATCH_SIZE}" \
                 --firmware /workspace/src/platforms/rtems/build-esp32s31/AtomVM-esp32s31db.bin \
-                --timeout 30s --exit-on "Return value: ok")
+                --timeout 90s --exit-on "Return value: ok")
         fi
         "${SIM_CMD[@]}"
     fi

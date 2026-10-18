@@ -48,6 +48,7 @@
 #include <module.h>
 #include <utils.h>
 
+#include <scheduler.h>
 #include <smp.h>
 
 #include "app_loader.h"
@@ -130,6 +131,7 @@ static int run_app(const struct RtemsApp *app)
     run_result_t result = globalcontext_run(glb, mod, stdout, 0, NULL);
 
 #ifndef AVM_NO_SMP
+    scheduler_stop_all(glb);
     smp_scheduler_join_all();
 #endif
 
