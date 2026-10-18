@@ -34,8 +34,242 @@ env:
   RTEMS_PREFIX: /home/runner/rtems/6.2
 
 jobs:
-  rtems-arm-sparc:
+  rtems-sparc:
+    name: rtems (erc32)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      actions: write
+      contents: read
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - uses: erlef/setup-beam@v1
+      with:
+        otp-version: "28"
+        rebar3-version: "3.25.1"
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://repo.hex.pm
+          https://cdn.jsdelivr.net/hex
+
+    - name: "apt update"
+      run: sudo apt update
+
+    - name: "Install deps"
+      run: |
+        sudo apt install -y \
+          build-essential g++ gdb unzip pax bison flex texinfo \
+          python3-dev python-is-python3 python3-setuptools \
+          libncurses-dev zlib1g-dev ninja-build pkg-config \
+          cmake gperf wget xz-utils python3-pip
+
+    - name: Restore RTEMS 6 sparc/erc32 toolchain
+      id: rtems-cache
+      uses: actions/cache/restore@v4
+      with:
+        path: /home/runner/rtems/6.2
+        key: rtems-${{ env.RTEMS_RELEASE }}-sparc-erc32-wifi-${{ runner.os }}
+
+    - name: Build RTEMS 6 tools and sparc/erc32 BSP
+      if: steps.rtems-cache.outputs.cache-hit != 'true'
+      run: |
+        set -euo pipefail
+        mkdir -p "$HOME/rtems-src" /home/runner/rtems/6.2
+        cd "$HOME/rtems-src"
+        git clone --depth 1 https://gitlab.rtems.org/rtems/tools/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb-6
+        cd "rsb-6/rtems"
+        ../source-builder/sb-set-builder --prefix=/home/runner/rtems/6.2 "6/rtems-sparc"
+        ../source-builder/sb-set-builder --prefix=/home/runner/rtems/6.2 \
+          --target="sparc-rtems6" \
+          --with-rtems-bsp=sparc/erc32 \
+          --with-rtems-tests=no \
+          "6/rtems-kernel"
+        find /home/runner/rtems/6.2/bin /home/runner/rtems/6.2/libexec -type f -executable -exec strip {} + 2>/dev/null || true
+        rm -rf "$HOME/rtems-src"
+
+    - name: Save RTEMS 6 sparc/erc32 toolchain
+      if: steps.rtems-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/rtems/6.2
+        key: rtems-${{ env.RTEMS_RELEASE }}-sparc-erc32-wifi-${{ runner.os }}
+
+    - name: Add RTEMS tools to PATH
+      run: echo "/home/runner/rtems/6.2/bin" >> "$GITHUB_PATH"
+
+    - name: Check RTEMS toolchain
+      run: |
+        set -euo pipefail
+        sparc-rtems6-gcc --version
+
+    - name: Build host AtomVM and RTEMS boot AVM
+      run: |
+        set -euo pipefail
+        cmake -S . -B build-host -G Ninja -DAVM_DISABLE_JIT=ON
+        cmake --build build-host -t rtems_boot_test rtems_net_test atomvmlib-rtems
+        mkdir -p src/platforms/rtems/build
+        ./build-host/tools/packbeam/packbeam create -s test_boot \
+          src/platforms/rtems/build/rtems_boot.avm \
+          build-host/src/platforms/rtems/tests/test_erl_sources/test_boot.beam \
+          build-host/libs/atomvmlib-rtems.avm
+        ./build-host/tools/packbeam/packbeam create -s test_net \
+          src/platforms/rtems/build/rtems_net.avm \
+          build-host/src/platforms/rtems/tests/test_erl_sources/test_net.beam \
+          build-host/libs/atomvmlib-rtems.avm
+
+    - name: Cross-compile AtomVM for sparc/erc32
+      run: |
+        set -euo pipefail
+        cmake -S src/platforms/rtems -B src/platforms/rtems/build -G Ninja \
+          -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
+          -DRTEMS_PREFIX=/home/runner/rtems/6.2 \
+          -DRTEMS_BSP=sparc/erc32 \
+          -DRTEMS_VERSION="6" \
+          -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_boot.avm"
+        cmake --build src/platforms/rtems/build
+
+    - name: Run boot test on SIS
+      run: |
+        set -euo pipefail
+        ELF="src/platforms/rtems/build/AtomVM-erc32.exe"
+        test -f "$ELF"
+        set +e
+        output=$(timeout 90 rtems-run --rtems-bsps=erc32-sis "$ELF" 2>&1)
+        status=$?
+        set -e
+        printf '%s\n' "$output"
+        if grep -q "Failed load module" <<< "$output"; then
+          echo "::error::RTEMS boot still failed to load a BEAM module"
+          exit 1
+        fi
+        if ! grep -Fq '{atomvm_rtems_boot,rtems}' <<< "$output"; then
+          echo "::error::RTEMS boot test did not print {atomvm_rtems_boot,rtems} (rtems-run status ${status})"
+          exit 1
+        fi
+        for marker in '{uart,read_timeout,ok}' '{uart,write,ok}' '{i2c,enotsup}' '{gpio,enotsup}'; do
+          if ! grep -Fq "$marker" <<< "$output"; then
+            echo "::error::RTEMS boot test did not print ${marker}"
+            exit 1
+          fi
+        done
+        if ! grep -q "Return value: ok" <<< "$output"; then
+          echo "::error::RTEMS boot test did not return ok"
+          exit 1
+        fi
+        echo "Boot test output contained {atomvm_rtems_boot,rtems} and Return value: ok"
+
+    - name: Cross-compile AtomVM net test for sparc/erc32
+      run: |
+        set -euo pipefail
+        cmake -S src/platforms/rtems -B src/platforms/rtems/build-net -G Ninja \
+          -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
+          -DRTEMS_PREFIX=/home/runner/rtems/6.2 \
+          -DRTEMS_BSP=sparc/erc32 \
+          -DRTEMS_VERSION="6" \
+          -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_net.avm"
+        cmake --build src/platforms/rtems/build-net
+
+    - name: Run unsupported-networking test on SIS
+      run: |
+        set -euo pipefail
+        ELF="src/platforms/rtems/build-net/AtomVM-erc32.exe"
+        test -f "$ELF"
+        set +e
+        output=$(timeout 90 rtems-run --rtems-bsps=erc32-sis "$ELF" 2>&1)
+        status=$?
+        set -e
+        printf '%s\n' "$output"
+        if ! grep -Fq '{net,enotsup}' <<< "$output"; then
+          echo "::error::erc32 net test did not print {net,enotsup} (status ${status})"
+          exit 1
+        fi
+        if ! grep -q "Return value: ok" <<< "$output"; then
+          echo "::error::erc32 net test did not return ok"
+          exit 1
+        fi
+        echo "erc32 explicitly reported unsupported networking"
+
+    - name: Upload firmware artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: atomvm-rtems-erc32-${{ github.run_id }}
+        if-no-files-found: warn
+        path: |
+          src/platforms/rtems/build/AtomVM-erc32.exe
+          src/platforms/rtems/build-net/AtomVM-erc32.exe
+
+  rtems-arm-toolchain:
+    name: rtems-arm (toolchain)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      actions: write
+      contents: read
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Restore ARM RTEMS 6 toolchain
+      id: toolchain-cache
+      uses: actions/cache/restore@v4
+      with:
+        path: /home/runner/rtems/6.2
+        key: rtems-6.2-arm-toolchain-${{ runner.os }}-v1
+
+    - name: Install build dependencies
+      if: steps.toolchain-cache.outputs.cache-hit != 'true'
+      run: |
+        sudo apt update
+        sudo apt install -y \
+          build-essential g++ gdb unzip pax bison flex texinfo \
+          python3-dev python-is-python3 python3-setuptools \
+          libncurses-dev zlib1g-dev ninja-build pkg-config \
+          cmake gperf wget xz-utils python3-pip
+
+    - name: Build RSB ARM toolchain
+      if: steps.toolchain-cache.outputs.cache-hit != 'true'
+      run: |
+        set -euo pipefail
+        mkdir -p "$HOME/rtems-src" /home/runner/rtems/6.2
+        cd "$HOME/rtems-src"
+        git clone --depth 1 https://gitlab.rtems.org/rtems/tools/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb-6
+        cd "rsb-6/rtems"
+        ../source-builder/sb-set-builder --prefix=/home/runner/rtems/6.2 "6/rtems-arm"
+        find /home/runner/rtems/6.2/bin /home/runner/rtems/6.2/libexec -type f -executable -exec strip {} + 2>/dev/null || true
+        rm -rf "$HOME/rtems-src"
+
+    - name: Save ARM RTEMS 6 toolchain
+      if: steps.toolchain-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/rtems/6.2
+        key: rtems-6.2-arm-toolchain-${{ runner.os }}-v1
+
+    - name: Verify ARM toolchain
+      run: |
+        set -euo pipefail
+        /home/runner/rtems/6.2/bin/arm-rtems6-gcc --version
+
+    - name: Archive ARM toolchain
+      run: |
+        set -euo pipefail
+        # Preserve executable permissions and symlinks across artifact transfer.
+        tar -C /home/runner/rtems/6.2 -czf "$RUNNER_TEMP/rtems-6-arm-toolchain.tar.gz" .
+
+    - name: Upload ARM toolchain
+      uses: actions/upload-artifact@v4
+      with:
+        name: rtems-6-arm-toolchain-${{ runner.os }}
+        path: ${{ runner.temp }}/rtems-6-arm-toolchain.tar.gz
+        if-no-files-found: error
+        compression-level: 0
+        overwrite: true
+
+  rtems-arm:
     name: rtems (${{ matrix.bsp_name }})
+    needs: [rtems-arm-toolchain]
     runs-on: ubuntu-24.04
     timeout-minutes: 300
     permissions:
@@ -45,22 +279,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - arch: sparc
-            bsp: sparc/erc32
-            bsp_name: erc32
-            chip: ""
-            board: ""
-            bsp_config: ""
-            cache_key: sparc-erc32
-            rtems_version: "6"
-            prefix: /home/runner/rtems/6.2
-            qemu: ""
           - arch: arm
             bsp: arm/imx7
             bsp_name: imx7
-            chip: ""
-            board: ""
-            bsp_config: ""
             cache_key: arm-imx7
             rtems_version: "6"
             prefix: /home/runner/rtems/6.2
@@ -68,9 +289,6 @@ jobs:
           - arch: arm
             bsp: arm/realview_pbx_a9_qemu
             bsp_name: realview_pbx_a9_qemu
-            chip: ""
-            board: ""
-            bsp_config: ""
             cache_key: arm-realview-pbx-a9-qemu
             rtems_version: "6"
             prefix: /home/runner/rtems/6.2
@@ -102,27 +320,55 @@ jobs:
           device-tree-compiler u-boot-tools gdb-multiarch \
           ${{ matrix.qemu }}
 
-    - name: Restore RTEMS ${{ matrix.rtems_version }} ${{ matrix.bsp }} toolchain
+    - name: Restore RTEMS 6 ${{ matrix.bsp }} toolchain and BSP
       id: rtems-cache
       uses: actions/cache/restore@v4
       with:
         path: ${{ matrix.prefix }}
-        key: rtems-${{ matrix.rtems_version == '7' && '7' || env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-wifi-${{ runner.os }}
+        key: rtems-${{ env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-wifi-${{ runner.os }}
 
-    - name: Build RTEMS ${{ matrix.rtems_version }} tools and ${{ matrix.bsp }} BSP
+    - name: Download ARM toolchain
+      if: steps.rtems-cache.outputs.cache-hit != 'true'
+      uses: actions/download-artifact@v4
+      with:
+        name: rtems-6-arm-toolchain-${{ runner.os }}
+        path: ${{ runner.temp }}
+
+    - name: Extract ARM toolchain
       if: steps.rtems-cache.outputs.cache-hit != 'true'
       run: |
         set -euo pipefail
-        mkdir -p "$HOME/rtems-src" "${{ matrix.prefix }}"
+        mkdir -p "${{ matrix.prefix }}"
+        tar -C "${{ matrix.prefix }}" -xzf "$RUNNER_TEMP/rtems-6-arm-toolchain.tar.gz"
+
+    - name: Verify ARM toolchain
+      run: |
+        set -euo pipefail
+        if [ ! -x "${{ matrix.prefix }}/bin/${{ matrix.arch }}-rtems${{ matrix.rtems_version }}-gcc" ]; then
+          echo "::error::ARM toolchain not found at ${{ matrix.prefix }}/bin/${{ matrix.arch }}-rtems${{ matrix.rtems_version }}-gcc"
+          exit 1
+        fi
+        "${{ matrix.prefix }}/bin/${{ matrix.arch }}-rtems${{ matrix.rtems_version }}-gcc" --version
+
+    - name: Build RTEMS 6 ${{ matrix.bsp }} BSP
+      run: |
+        set -euo pipefail
+        libbsp="${{ matrix.prefix }}/${{ matrix.arch }}-rtems${{ matrix.rtems_version }}/${{ matrix.bsp_name }}/lib/librtemsbsp.a"
+        if [ -f "$libbsp" ]; then
+          echo "Using cached RTEMS BSP at $libbsp"
+          exit 0
+        fi
+        echo "Building RTEMS 6 BSP for ${{ matrix.bsp }}..."
+        mkdir -p "$HOME/rtems-src"
         cd "$HOME/rtems-src"
         git clone --depth 1 https://gitlab.rtems.org/rtems/tools/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb-6
         cd "rsb-6/rtems"
-        ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" "${{ matrix.rtems_version }}/rtems-${{ matrix.arch }}"
         ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" \
           --target="${{ matrix.arch }}-rtems${{ matrix.rtems_version }}" \
           --with-rtems-bsp=${{ matrix.bsp }} \
           --with-rtems-tests=no \
           "${{ matrix.rtems_version }}/rtems-kernel"
+        rm -rf "$HOME/rtems-src"
 
     - name: Build rtems-libbsd for ${{ matrix.bsp }}
       if: matrix.bsp == 'arm/imx7'
@@ -148,20 +394,15 @@ jobs:
         ./waf install
         rm -rf "$HOME/rtems-src/libbsd"
 
-    - name: Save RTEMS ${{ matrix.rtems_version }} ${{ matrix.bsp }} toolchain
+    - name: Save RTEMS 6 ${{ matrix.bsp }} toolchain and BSP
       if: steps.rtems-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
         path: ${{ matrix.prefix }}
-        key: rtems-${{ matrix.rtems_version == '7' && '7' || env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-wifi-${{ runner.os }}
+        key: rtems-${{ env.RTEMS_RELEASE }}-${{ matrix.cache_key }}-wifi-${{ runner.os }}
 
     - name: Add RTEMS tools to PATH
       run: echo "${{ matrix.prefix }}/bin" >> "$GITHUB_PATH"
-
-    - name: Check RTEMS toolchain
-      run: |
-        set -euo pipefail
-        "${{ matrix.arch }}-rtems${{ matrix.rtems_version }}-gcc" --version
 
     - name: Build host AtomVM and RTEMS boot AVM
       run: |
@@ -253,49 +494,13 @@ jobs:
     - name: Cross-compile AtomVM for ${{ matrix.bsp }}
       run: |
         set -euo pipefail
-        board_arg=""
-        if [ -n "${{ matrix.board }}" ]; then
-          board_arg="-DRTEMS_BOARD=${{ matrix.board }}"
-        fi
         cmake -S src/platforms/rtems -B src/platforms/rtems/build -G Ninja \
           -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
           -DRTEMS_PREFIX="${{ matrix.prefix }}" \
           -DRTEMS_BSP="${{ matrix.bsp }}" \
           -DRTEMS_VERSION="${{ matrix.rtems_version }}" \
-          $board_arg \
           -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_boot.avm"
         cmake --build src/platforms/rtems/build
-
-    - name: Run boot test on SIS
-      if: matrix.bsp == 'sparc/erc32'
-      run: |
-        set -euo pipefail
-        ELF="src/platforms/rtems/build/AtomVM-erc32.exe"
-        test -f "$ELF"
-        set +e
-        output=$(timeout 90 rtems-run --rtems-bsps=erc32-sis "$ELF" 2>&1)
-        status=$?
-        set -e
-        printf '%s\n' "$output"
-        if grep -q "Failed load module" <<< "$output"; then
-          echo "::error::RTEMS boot still failed to load a BEAM module"
-          exit 1
-        fi
-        if ! grep -Fq '{atomvm_rtems_boot,rtems}' <<< "$output"; then
-          echo "::error::RTEMS boot test did not print {atomvm_rtems_boot,rtems} (rtems-run status ${status})"
-          exit 1
-        fi
-        for marker in '{uart,read_timeout,ok}' '{uart,write,ok}' '{i2c,enotsup}' '{gpio,enotsup}'; do
-          if ! grep -Fq "$marker" <<< "$output"; then
-            echo "::error::RTEMS boot test did not print ${marker}"
-            exit 1
-          fi
-        done
-        if ! grep -q "Return value: ok" <<< "$output"; then
-          echo "::error::RTEMS boot test did not return ok"
-          exit 1
-        fi
-        echo "Boot test output contained {atomvm_rtems_boot,rtems} and Return value: ok"
 
     - name: Run boot test on QEMU RealView PBX-A9
       if: matrix.bsp == 'arm/realview_pbx_a9_qemu'
@@ -370,27 +575,6 @@ jobs:
           -DRTEMS_VERSION="${{ matrix.rtems_version }}" \
           -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_net.avm"
         cmake --build src/platforms/rtems/build-net
-
-    - name: Run unsupported-networking test on SIS
-      if: matrix.bsp == 'sparc/erc32'
-      run: |
-        set -euo pipefail
-        ELF="src/platforms/rtems/build-net/AtomVM-erc32.exe"
-        test -f "$ELF"
-        set +e
-        output=$(timeout 90 rtems-run --rtems-bsps=erc32-sis "$ELF" 2>&1)
-        status=$?
-        set -e
-        printf '%s\n' "$output"
-        if ! grep -Fq '{net,enotsup}' <<< "$output"; then
-          echo "::error::erc32 net test did not print {net,enotsup} (status ${status})"
-          exit 1
-        fi
-        if ! grep -q "Return value: ok" <<< "$output"; then
-          echo "::error::erc32 net test did not return ok"
-          exit 1
-        fi
-        echo "erc32 explicitly reported unsupported networking"
 
     - name: Run unsupported-networking test on QEMU RealView PBX-A9
       if: matrix.bsp == 'arm/realview_pbx_a9_qemu'
