@@ -81,7 +81,7 @@ bool rtems_app_validate(const void *data, size_t size, struct RtemsApp *app)
     static const uint8_t footer[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'e', 'n', 'd', 0 };
     const uint8_t *bytes = data;
     struct RtemsApp candidate = { .data = data, .size = size };
-    *app = (struct RtemsApp) { 0 };
+    *app = (struct RtemsApp){ 0 };
     if (data == NULL || size < sizeof(header) + sizeof(footer) || size > RTEMS_APP_MAX_SIZE
         || memcmp(data, header, sizeof(header)) != 0) {
         return false;
@@ -135,7 +135,7 @@ bool rtems_app_validate(const void *data, size_t size, struct RtemsApp *app)
 
 enum RtemsAppLoadResult rtems_app_load_file(const char *path, struct RtemsApp *app)
 {
-    *app = (struct RtemsApp) { 0 };
+    *app = (struct RtemsApp){ 0 };
     FILE *file = fopen(path, "rb");
     if (file == NULL) {
         return errno == ENOENT || errno == ENOTDIR ? RTEMS_APP_NOT_FOUND : RTEMS_APP_IO_ERROR;

@@ -77,7 +77,7 @@
 
 /* GPIO and IO_MUX registers */
 #define GPIO_ENABLE_W1TC_REG 0x60004028U
-#define IO_MUX_GPIOn_REG(n) (0x60090004U + (n) * 4U)
+#define IO_MUX_GPIOn_REG(n) (0x60090004U + (n) *4U)
 #define IO_MUX_FUN_IE (1u << 9)
 #define IO_MUX_FUN_WPU (1u << 7)
 #define IO_MUX_FUN_WPD (1u << 8)

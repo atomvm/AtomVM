@@ -58,7 +58,7 @@ void *__wrap_malloc(size_t size)
     if (ptr) {
         struct Allocation *slot = find_allocation(NULL);
         assert(slot);
-        *slot = (struct Allocation) { ptr, size };
+        *slot = (struct Allocation){ ptr, size };
         app_heap_used += size;
     }
     UNLOCK();
@@ -86,7 +86,7 @@ void __wrap_free(void *ptr)
     struct Allocation *slot = find_allocation(ptr);
     if (slot) {
         app_heap_used -= slot->size;
-        *slot = (struct Allocation) { 0 };
+        *slot = (struct Allocation){ 0 };
     }
     __real_free(ptr);
     UNLOCK();
@@ -112,7 +112,7 @@ void *__wrap_realloc(void *ptr, size_t size)
     void *result = __real_realloc(ptr, size);
     if (result) {
         app_heap_used = app_heap_used - slot->size + size;
-        *slot = (struct Allocation) { result, size };
+        *slot = (struct Allocation){ result, size };
     }
     UNLOCK();
     return result;

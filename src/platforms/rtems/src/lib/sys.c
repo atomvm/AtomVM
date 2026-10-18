@@ -194,7 +194,10 @@ static void sys_poll_events_wait(struct RTEMSPlatformData *platform, int timeout
         }
         pthread_mutex_unlock(&platform->poll_mutex);
         for (volatile int i = 0; i < 1000; i++) {
-            __asm__ volatile("" : : : "memory");
+            __asm__ volatile(""
+                             :
+                             :
+                             : "memory");
         }
         sched_yield();
         pthread_mutex_lock(&platform->poll_mutex);
