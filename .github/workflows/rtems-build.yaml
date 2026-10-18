@@ -627,6 +627,21 @@ jobs:
         set -euo pipefail
         /home/runner/rtems/7/bin/riscv-rtems7-gcc --version
 
+    - name: Archive RISC-V toolchain
+      run: |
+        set -euo pipefail
+        # Preserve executable permissions and symlinks across artifact transfer.
+        tar -C /home/runner/rtems/7 -czf "$RUNNER_TEMP/rtems-7-riscv-toolchain.tar.gz" .
+
+    - name: Upload RISC-V toolchain
+      uses: actions/upload-artifact@v4
+      with:
+        name: rtems-7-riscv-toolchain-${{ runner.os }}
+        path: ${{ runner.temp }}/rtems-7-riscv-toolchain.tar.gz
+        if-no-files-found: error
+        compression-level: 0
+        overwrite: true
+
   rtems-riscv:
     name: rtems (${{ matrix.bsp_name }})
     needs: [rtems-riscv-toolchain]
@@ -646,7 +661,7 @@ jobs:
             board: esp32c3
             bsp_config: esp32c3-wifi-bsp.ini
             boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,esp32c3,ok} {crypto,esp32c3,ok}"
-            cache_key: riscv-esp32c3db-v3
+            cache_key: riscv-esp32c3db-v4
             rtems_version: "7"
             prefix: /home/runner/rtems/7
           - arch: riscv
@@ -656,7 +671,7 @@ jobs:
             board: esp32c5
             bsp_config: esp32c5-wifi-bsp.ini
             boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,unsupported,ok} {crypto,esp32c3,ok}"
-            cache_key: riscv-esp32c5db-v2
+            cache_key: riscv-esp32c5db-v3
             rtems_version: "7"
             prefix: /home/runner/rtems/7
           - arch: riscv
@@ -666,7 +681,7 @@ jobs:
             board: esp32c6
             bsp_config: esp32c6-wifi-bsp.ini
             boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,unsupported,ok} {crypto,esp32c3,ok}"
-            cache_key: riscv-esp32c6db-v2
+            cache_key: riscv-esp32c6db-v3
             rtems_version: "7"
             prefix: /home/runner/rtems/7
           - arch: riscv
@@ -676,7 +691,7 @@ jobs:
             board: esp32s31
             bsp_config: esp32s31-wifi-bsp.ini
             boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,unsupported,ok} {crypto,esp32c3,ok}"
-            cache_key: riscv-esp32s31db-smp-v2
+            cache_key: riscv-esp32s31db-smp-v3
             rtems_version: "7"
             prefix: /home/runner/rtems/7
 
@@ -710,9 +725,20 @@ jobs:
       with:
         path: ${{ matrix.prefix }}
         key: rtems-7-${{ matrix.cache_key }}-wifi-${{ runner.os }}-${{ hashFiles('src/platforms/rtems/docker/**', 'src/platforms/rtems/docker/patches/**') }}
-        restore-keys: |
-          rtems-7-${{ matrix.cache_key }}-wifi-${{ runner.os }}-
-          rtems-7-riscv-toolchain-${{ runner.os }}-v2
+
+    - name: Download RISC-V toolchain
+      if: steps.rtems-cache.outputs.cache-hit != 'true'
+      uses: actions/download-artifact@v4
+      with:
+        name: rtems-7-riscv-toolchain-${{ runner.os }}
+        path: ${{ runner.temp }}
+
+    - name: Extract RISC-V toolchain
+      if: steps.rtems-cache.outputs.cache-hit != 'true'
+      run: |
+        set -euo pipefail
+        mkdir -p "${{ matrix.prefix }}"
+        tar -C "${{ matrix.prefix }}" -xzf "$RUNNER_TEMP/rtems-7-riscv-toolchain.tar.gz"
 
     - name: Verify RISC-V toolchain
       run: |
