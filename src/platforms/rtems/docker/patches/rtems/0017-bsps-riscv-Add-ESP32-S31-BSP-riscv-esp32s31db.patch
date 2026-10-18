@@ -1,5 +1,5 @@
 diff --git a/bsps/riscv/esp32/bt/bt_c3.c b/bsps/riscv/esp32/bt/bt_c3.c
-index b37373a..281fe9a 100644
+index b37373a3..281fe9a6 100644
 --- a/bsps/riscv/esp32/bt/bt_c3.c
 +++ b/bsps/riscv/esp32/bt/bt_c3.c
 @@ -40,7 +40,7 @@
@@ -18,7 +18,7 @@ index b37373a..281fe9a 100644
 -#endif /* !defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) && !defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) */
 +#endif /* C5/C6/S31 only */
 diff --git a/bsps/riscv/esp32/console/uart_c3.c b/bsps/riscv/esp32/console/uart_c3.c
-index 8ad7219..7bf0eb1 100644
+index 8ad72197..6487533b 100644
 --- a/bsps/riscv/esp32/console/uart_c3.c
 +++ b/bsps/riscv/esp32/console/uart_c3.c
 @@ -72,7 +72,11 @@
@@ -33,7 +33,7 @@ index 8ad7219..7bf0eb1 100644
  
  #define UART_STATUS_RXFIFO_CNT_SHIFT 0
  #define UART_STATUS_RXFIFO_CNT_MASK  ( 0x3ffU << UART_STATUS_RXFIFO_CNT_SHIFT )
-@@ -129,10 +133,17 @@
+@@ -129,12 +133,19 @@
   * manual rather than from a passing test, and is called out here so it is not
   * mistaken for tested.
   */
@@ -42,15 +42,18 @@ index 8ad7219..7bf0eb1 100644
 +#define GPIO_FUNC_IN_SEL_REG( sig )  ( GPIO_BASE + 0x02f4 + 4 * (sig) )
 +#define GPIO_FUNC_OUT_SEL_REG( pin ) ( GPIO_BASE + 0x0af4 + 4 * (pin) )
 +#define IO_MUX_PIN_REG( n )   ( IO_MUX_BASE + 4 * (n) )
++#define GPIO_FUNC_IN_SEL_ENA  ( 1U << 9 )
 +#else
  #define GPIO_ENABLE_W1TS_REG  ( GPIO_BASE + 0x0024 )
  #define GPIO_FUNC_IN_SEL_REG( sig )  ( GPIO_BASE + 0x0154 + 4 * (sig) )
  #define GPIO_FUNC_OUT_SEL_REG( pin ) ( GPIO_BASE + 0x0554 + 4 * (pin) )
  #define IO_MUX_PIN_REG( n )   ( IO_MUX_BASE + 0x0004 + 4 * (n) )
-+#endif
- 
+-
  #define GPIO_FUNC_IN_SEL_ENA  ( 1U << 6 )
++#endif
  #define IO_MUX_FUN_PU         ( 1U << 8 )
+ #define IO_MUX_FUN_IE         ( 1U << 9 )
+ #define IO_MUX_MCU_SEL_SHIFT  12
 @@ -144,8 +155,13 @@
  /* GPIO matrix signal numbers.  The same number names the transmit signal out
   * and the receive signal in, which is a coincidence of the map rather than a
@@ -88,7 +91,7 @@ index 8ad7219..7bf0eb1 100644
    UART_REG( ctx, UART_CLKDIV ) =
      integer | ( frag << UART_CLKDIV_FRAG_SHIFT );
 diff --git a/bsps/riscv/esp32/gpio/gpio_c3.c b/bsps/riscv/esp32/gpio/gpio_c3.c
-index e6e2032..e0ba6e4 100644
+index e6e20322..e0ba6e44 100644
 --- a/bsps/riscv/esp32/gpio/gpio_c3.c
 +++ b/bsps/riscv/esp32/gpio/gpio_c3.c
 @@ -60,6 +60,16 @@
@@ -145,10 +148,10 @@ index e6e2032..e0ba6e4 100644
  static const char esp32c3_gpio_owner[] = "esp32c3 gpio";
  
 diff --git a/bsps/riscv/esp32/i2c/i2c_c3.c b/bsps/riscv/esp32/i2c/i2c_c3.c
-index cda7503..718d19e 100644
+index cda75038..a26e34ad 100644
 --- a/bsps/riscv/esp32/i2c/i2c_c3.c
 +++ b/bsps/riscv/esp32/i2c/i2c_c3.c
-@@ -148,11 +148,19 @@
+@@ -148,14 +148,23 @@
   * the alternative is a driver that transfers correctly into a pad that is not
   * connected to it.
   */
@@ -158,17 +161,22 @@ index cda7503..718d19e 100644
 +#define GPIO_FUNC_IN_SEL_REG( sig )  ( GPIO_BASE + 0x02f4 + 4 * (sig) )
 +#define GPIO_FUNC_OUT_SEL_REG( pin ) ( GPIO_BASE + 0x0af4 + 4 * (pin) )
 +#define IO_MUX_PIN_REG( n )   ( IO_MUX_BASE + 4 * (n) )
++#define GPIO_FUNC_IN_SEL_ENA  ( 1U << 9 )   /* take the signal from the matrix */
 +#else
  #define GPIO_ENABLE_W1TS_REG  ( GPIO_BASE + 0x0024 )
  #define GPIO_PIN_REG( n )     ( GPIO_BASE + 0x0074 + 4 * (n) )
  #define GPIO_FUNC_IN_SEL_REG( sig )  ( GPIO_BASE + 0x0154 + 4 * (sig) )
  #define GPIO_FUNC_OUT_SEL_REG( pin ) ( GPIO_BASE + 0x0554 + 4 * (pin) )
  #define IO_MUX_PIN_REG( n )   ( IO_MUX_BASE + 0x0004 + 4 * (n) )
++#define GPIO_FUNC_IN_SEL_ENA  ( 1U << 6 )   /* take the signal from the matrix */
 +#endif
  
  #define GPIO_PIN_PAD_DRIVER   ( 1U << 2 )   /* open drain */
- #define GPIO_FUNC_IN_SEL_ENA  ( 1U << 6 )   /* take the signal from the matrix */
-@@ -168,6 +176,9 @@
+-#define GPIO_FUNC_IN_SEL_ENA  ( 1U << 6 )   /* take the signal from the matrix */
+ #define IO_MUX_FUN_PU         ( 1U << 8 )
+ #define IO_MUX_FUN_IE         ( 1U << 9 )
+ #define IO_MUX_MCU_SEL_SHIFT  12
+@@ -168,6 +177,9 @@
  #elif defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H)
  #define I2C_SIG_SCL 45
  #define I2C_SIG_SDA 46
@@ -178,9 +186,21 @@ index cda7503..718d19e 100644
  #else
  #define I2C_SIG_SCL 53
  #define I2C_SIG_SDA 54
+diff --git a/bsps/riscv/esp32/include/bsp/pin.h b/bsps/riscv/esp32/include/bsp/pin.h
+index e8d777f1..5d222101 100644
+--- a/bsps/riscv/esp32/include/bsp/pin.h
++++ b/bsps/riscv/esp32/include/bsp/pin.h
+@@ -36,6 +36,7 @@
+ #ifndef LIBBSP_RISCV_ESP32_BSP_PIN_H
+ #define LIBBSP_RISCV_ESP32_BSP_PIN_H
+ 
++#include <bsp.h>
+ #include <stdbool.h>
+ #include <stdint.h>
+ 
 diff --git a/bsps/riscv/esp32/include/s31/chip_definitions.h b/bsps/riscv/esp32/include/s31/chip_definitions.h
 new file mode 100644
-index 0000000..df176ab
+index 00000000..df176ab8
 --- /dev/null
 +++ b/bsps/riscv/esp32/include/s31/chip_definitions.h
 @@ -0,0 +1,177 @@
@@ -362,7 +382,7 @@ index 0000000..df176ab
 +
 +#endif /* LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H */
 diff --git a/bsps/riscv/esp32/irq/irq_c3.c b/bsps/riscv/esp32/irq/irq_c3.c
-index cc88962..2252dc9 100644
+index cc889626..2252dc99 100644
 --- a/bsps/riscv/esp32/irq/irq_c3.c
 +++ b/bsps/riscv/esp32/irq/irq_c3.c
 @@ -46,7 +46,51 @@ typedef struct peripheral_irq_map {
@@ -631,11 +651,60 @@ index cc88962..2252dc9 100644
    if ( priority > 6U ) {
      return RTEMS_INVALID_PRIORITY;
    }
+diff --git a/bsps/riscv/esp32/pin/pin.c b/bsps/riscv/esp32/pin/pin.c
+index cc99b842..5246144b 100644
+--- a/bsps/riscv/esp32/pin/pin.c
++++ b/bsps/riscv/esp32/pin/pin.c
+@@ -52,7 +52,7 @@
+ 
+ RTEMS_INTERRUPT_LOCK_DEFINE( static, esp32c3_pin_lock, "ESP32C3 pin" )
+ 
+-static uint32_t esp32c3_pin_claimed;
++static uint64_t esp32c3_pin_claimed;
+ 
+ static const char *esp32c3_pin_owners[ BSP_PIN_COUNT ];
+ 
+@@ -67,7 +67,7 @@ bool bsp_pin_claim( uint32_t pin, const char *owner )
+ 
+   rtems_interrupt_lock_acquire( &esp32c3_pin_lock, &lock_context );
+ 
+-  if ( ( esp32c3_pin_claimed & ( 1U << pin ) ) != 0 ) {
++  if ( ( esp32c3_pin_claimed & ( 1ULL << pin ) ) != 0 ) {
+     /*
+      * Re-claiming a pad already held is how a driver that configures one in
+      * several steps -- select the function, then set a direction -- avoids
+@@ -76,7 +76,7 @@ bool bsp_pin_claim( uint32_t pin, const char *owner )
+      */
+     claimed = esp32c3_pin_owners[ pin ] == owner;
+   } else {
+-    esp32c3_pin_claimed |= 1U << pin;
++    esp32c3_pin_claimed |= 1ULL << pin;
+     esp32c3_pin_owners[ pin ] = owner;
+     claimed = true;
+   }
+@@ -95,7 +95,7 @@ void bsp_pin_release( uint32_t pin )
+   }
+ 
+   rtems_interrupt_lock_acquire( &esp32c3_pin_lock, &lock_context );
+-  esp32c3_pin_claimed &= ~( 1U << pin );
++  esp32c3_pin_claimed &= ~( 1ULL << pin );
+   esp32c3_pin_owners[ pin ] = NULL;
+   rtems_interrupt_lock_release( &esp32c3_pin_lock, &lock_context );
+ }
+@@ -110,7 +110,7 @@ const char *bsp_pin_owner( uint32_t pin )
+   }
+ 
+   rtems_interrupt_lock_acquire( &esp32c3_pin_lock, &lock_context );
+-  owner = ( esp32c3_pin_claimed & ( 1U << pin ) ) != 0 ?
++  owner = ( esp32c3_pin_claimed & ( 1ULL << pin ) ) != 0 ?
+     esp32c3_pin_owners[ pin ] : NULL;
+   rtems_interrupt_lock_release( &esp32c3_pin_lock, &lock_context );
+ 
 diff --git a/bsps/riscv/esp32/spi/spi_c3.c b/bsps/riscv/esp32/spi/spi_c3.c
-index e6b10ba..3b0e2e0 100644
+index e6b10ba8..e4529e75 100644
 --- a/bsps/riscv/esp32/spi/spi_c3.c
 +++ b/bsps/riscv/esp32/spi/spi_c3.c
-@@ -92,10 +92,17 @@
+@@ -92,22 +92,37 @@
  
  /* Pad routing.  As in the I2C driver, these are GPIO and IO_MUX registers
   * rather than SPI ones: whoever configures a pin owns its muxing. */
@@ -644,17 +713,20 @@ index e6b10ba..3b0e2e0 100644
 +#define GPIO_FUNC_IN_SEL_REG( sig )  ( GPIO_BASE + 0x02f4 + 4 * (sig) )
 +#define GPIO_FUNC_OUT_SEL_REG( pin ) ( GPIO_BASE + 0x0af4 + 4 * (pin) )
 +#define IO_MUX_PIN_REG( n )   ( IO_MUX_BASE + 4 * (n) )
++#define GPIO_FUNC_IN_SEL_ENA  ( 1U << 9 )
 +#else
  #define GPIO_ENABLE_W1TS_REG  ( GPIO_BASE + 0x0024 )
  #define GPIO_FUNC_IN_SEL_REG( sig )  ( GPIO_BASE + 0x0154 + 4 * (sig) )
  #define GPIO_FUNC_OUT_SEL_REG( pin ) ( GPIO_BASE + 0x0554 + 4 * (pin) )
  #define IO_MUX_PIN_REG( n )   ( IO_MUX_BASE + 0x0004 + 4 * (n) )
++#define GPIO_FUNC_IN_SEL_ENA  ( 1U << 6 )
 +#endif
  
  #define IO_MUX_FUN_IE         ( 1U << 9 )
  #define IO_MUX_MCU_SEL_SHIFT  12
-@@ -104,10 +111,17 @@
- #define GPIO_FUNC_IN_SEL_ENA  ( 1U << 6 )
+ #define IO_MUX_MCU_SEL_MASK   ( 0x7U << IO_MUX_MCU_SEL_SHIFT )
+ #define IO_MUX_FUNC_GPIO      1
+-#define GPIO_FUNC_IN_SEL_ENA  ( 1U << 6 )
  
  /* GPIO matrix signal numbers, from esp-idf soc/esp32c3 gpio_sig_map.h. */
 +#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
@@ -672,7 +744,7 @@ index e6b10ba..3b0e2e0 100644
  /*
   * Pads.  The IO_MUX defaults for FSPI on this part are GPIO6, 7, 2 and 10,
 diff --git a/bsps/riscv/esp32/start/bspstart.c b/bsps/riscv/esp32/start/bspstart.c
-index bb505d5..d0b49b1 100644
+index bb505d56..d0b49b1f 100644
 --- a/bsps/riscv/esp32/start/bspstart.c
 +++ b/bsps/riscv/esp32/start/bspstart.c
 @@ -82,8 +82,8 @@ void bsp_start( void )
@@ -698,7 +770,7 @@ index bb505d5..d0b49b1 100644
  #else
    uintptr_t flash_base = 0x3c000000;
 diff --git a/spec/build/bsps/riscv/esp32/abi.yml b/spec/build/bsps/riscv/esp32/abi.yml
-index 78471b2..452ce74 100644
+index 78471b23..5dd083e9 100644
 --- a/spec/build/bsps/riscv/esp32/abi.yml
 +++ b/spec/build/bsps/riscv/esp32/abi.yml
 @@ -20,6 +20,10 @@ default:
@@ -714,7 +786,7 @@ index 78471b2..452ce74 100644
    - -march=rv32imc
 diff --git a/spec/build/bsps/riscv/esp32/bspesp32s31db.yml b/spec/build/bsps/riscv/esp32/bspesp32s31db.yml
 new file mode 100644
-index 0000000..0c5ccb8
+index 00000000..0c5ccb8d
 --- /dev/null
 +++ b/spec/build/bsps/riscv/esp32/bspesp32s31db.yml
 @@ -0,0 +1,22 @@
@@ -741,7 +813,7 @@ index 0000000..0c5ccb8
 +source: []
 +type: build
 diff --git a/spec/build/bsps/riscv/esp32/grp.yml b/spec/build/bsps/riscv/esp32/grp.yml
-index 5fb8e4b..e69da98 100644
+index 5fb8e4b9..e69da98a 100644
 --- a/spec/build/bsps/riscv/esp32/grp.yml
 +++ b/spec/build/bsps/riscv/esp32/grp.yml
 @@ -48,6 +48,8 @@ links:
@@ -754,7 +826,7 @@ index 5fb8e4b..e69da98 100644
    uid: optiramdelta
  - role: build-dependency
 diff --git a/spec/build/bsps/riscv/esp32/linkcmds.yml b/spec/build/bsps/riscv/esp32/linkcmds.yml
-index 27e6a79..9c48c17 100644
+index 27e6a797..9c48c172 100644
 --- a/spec/build/bsps/riscv/esp32/linkcmds.yml
 +++ b/spec/build/bsps/riscv/esp32/linkcmds.yml
 @@ -3,10 +3,11 @@ build-type: config-file
@@ -772,7 +844,7 @@ index 27e6a79..9c48c17 100644
      DATA_FLASH_MAPPED : ORIGIN = ${ESP32C_DATA_FLASH_MAPPED_BASE} + ${ESP32C_CODE_REGION_SIZE}, LENGTH = ${ESP32C_FLASH_SIZE} - ${ESP32C_CODE_REGION_SIZE}
      DATA_FLASH_RAW : ORIGIN = 0x0 + ${ESP32C_CODE_REGION_SIZE}, LENGTH = ${ESP32C_FLASH_SIZE} - ${ESP32C_CODE_REGION_SIZE}
 diff --git a/spec/build/bsps/riscv/esp32/optchipvariant.yml b/spec/build/bsps/riscv/esp32/optchipvariant.yml
-index 09723d2..de2704c 100644
+index 09723d2e..de2704cc 100644
 --- a/spec/build/bsps/riscv/esp32/optchipvariant.yml
 +++ b/spec/build/bsps/riscv/esp32/optchipvariant.yml
 @@ -13,6 +13,8 @@ default:
@@ -786,7 +858,7 @@ index 09723d2..de2704c 100644
  description: |
 diff --git a/spec/build/bsps/riscv/esp32/optcodeflashmappedbase.yml b/spec/build/bsps/riscv/esp32/optcodeflashmappedbase.yml
 new file mode 100644
-index 0000000..1c924e1
+index 00000000..1c924e16
 --- /dev/null
 +++ b/spec/build/bsps/riscv/esp32/optcodeflashmappedbase.yml
 @@ -0,0 +1,26 @@
@@ -817,7 +889,7 @@ index 0000000..1c924e1
 +name: ESP32C_CODE_FLASH_MAPPED_BASE
 +type: build
 diff --git a/spec/build/bsps/riscv/esp32/optdataflashmappedbase.yml b/spec/build/bsps/riscv/esp32/optdataflashmappedbase.yml
-index 3849893..0cc742d 100644
+index 38498936..0cc742d8 100644
 --- a/spec/build/bsps/riscv/esp32/optdataflashmappedbase.yml
 +++ b/spec/build/bsps/riscv/esp32/optdataflashmappedbase.yml
 @@ -14,6 +14,8 @@ default:
@@ -830,7 +902,7 @@ index 3849893..0cc742d 100644
    value: 0x3c000000
  description: |
 diff --git a/spec/build/bsps/riscv/esp32/optdramromreserve.yml b/spec/build/bsps/riscv/esp32/optdramromreserve.yml
-index d4a9b96..220abe9 100644
+index d4a9b963..220abe90 100644
 --- a/spec/build/bsps/riscv/esp32/optdramromreserve.yml
 +++ b/spec/build/bsps/riscv/esp32/optdramromreserve.yml
 @@ -12,6 +12,8 @@ default:
@@ -843,7 +915,7 @@ index d4a9b96..220abe9 100644
    value: 0x0
  description: |
 diff --git a/spec/build/bsps/riscv/esp32/optiramdelta.yml b/spec/build/bsps/riscv/esp32/optiramdelta.yml
-index 4899a06..ee74b6a 100644
+index 4899a06d..ee74b6a9 100644
 --- a/spec/build/bsps/riscv/esp32/optiramdelta.yml
 +++ b/spec/build/bsps/riscv/esp32/optiramdelta.yml
 @@ -14,6 +14,8 @@ default:
@@ -856,7 +928,7 @@ index 4899a06..ee74b6a 100644
    value: '0'
  description: |
 diff --git a/spec/build/bsps/riscv/esp32/optramcodeorigin.yml b/spec/build/bsps/riscv/esp32/optramcodeorigin.yml
-index 4d33442..fb82c01 100644
+index 4d33442b..fb82c01d 100644
 --- a/spec/build/bsps/riscv/esp32/optramcodeorigin.yml
 +++ b/spec/build/bsps/riscv/esp32/optramcodeorigin.yml
 @@ -14,6 +14,8 @@ default:
@@ -869,7 +941,7 @@ index 4d33442..fb82c01 100644
    value: 0x40380000
  description: |
 diff --git a/spec/build/bsps/riscv/esp32/optramorigin.yml b/spec/build/bsps/riscv/esp32/optramorigin.yml
-index 7a8b76f..41c4152 100644
+index 7a8b76f5..41c4152f 100644
 --- a/spec/build/bsps/riscv/esp32/optramorigin.yml
 +++ b/spec/build/bsps/riscv/esp32/optramorigin.yml
 @@ -14,6 +14,8 @@ default:
@@ -882,7 +954,7 @@ index 7a8b76f..41c4152 100644
    value: 0x3fc80000
  description: |
 diff --git a/spec/build/bsps/riscv/esp32/optramsize.yml b/spec/build/bsps/riscv/esp32/optramsize.yml
-index 519ccc2..61e943a 100644
+index 519ccc26..61e943a5 100644
 --- a/spec/build/bsps/riscv/esp32/optramsize.yml
 +++ b/spec/build/bsps/riscv/esp32/optramsize.yml
 @@ -14,6 +14,8 @@ default:
@@ -895,7 +967,7 @@ index 519ccc2..61e943a 100644
    value: 0x50000
  description: |
 diff --git a/spec/build/bsps/riscv/esp32/optvariant.yml b/spec/build/bsps/riscv/esp32/optvariant.yml
-index 4f7b672..7c628fb 100644
+index 4f7b6721..7c628fb5 100644
 --- a/spec/build/bsps/riscv/esp32/optvariant.yml
 +++ b/spec/build/bsps/riscv/esp32/optvariant.yml
 @@ -14,6 +14,8 @@ default:
@@ -908,7 +980,7 @@ index 4f7b672..7c628fb 100644
    value: 'invalid'
  description: ''
 diff --git a/spec/build/bsps/riscv/optbspstartcopysections.yml b/spec/build/bsps/riscv/optbspstartcopysections.yml
-index c5b9cf8..b9e0adb 100644
+index c5b9cf8f..b9e0adb0 100644
 --- a/spec/build/bsps/riscv/optbspstartcopysections.yml
 +++ b/spec/build/bsps/riscv/optbspstartcopysections.yml
 @@ -11,6 +11,7 @@ default:
@@ -920,7 +992,7 @@ index c5b9cf8..b9e0adb 100644
  - enabled-by: true
    value: false
 diff --git a/spec/build/bsps/riscv/optespressifdirectboot.yml b/spec/build/bsps/riscv/optespressifdirectboot.yml
-index bc6181a..d48026c 100644
+index bc6181a8..d48026c7 100644
 --- a/spec/build/bsps/riscv/optespressifdirectboot.yml
 +++ b/spec/build/bsps/riscv/optespressifdirectboot.yml
 @@ -11,6 +11,7 @@ default:

@@ -176,9 +176,8 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout)
 static void sys_poll_events_wait(struct RTEMSPlatformData *platform, int timeout_ms)
 {
 #ifndef AVM_NO_SMP
-    struct timespec ts, now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    ts = now;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
     int wait_ms = (timeout_ms < 0) ? 100 : timeout_ms;
     ts.tv_sec += wait_ms / 1000;
     ts.tv_nsec += (long) (wait_ms % 1000) * 1000000L;
@@ -186,21 +185,8 @@ static void sys_poll_events_wait(struct RTEMSPlatformData *platform, int timeout
         ts.tv_sec += 1;
         ts.tv_nsec -= 1000000000L;
     }
-    while (!platform->signaled) {
-        struct timespec cur;
-        clock_gettime(CLOCK_MONOTONIC, &cur);
-        if (cur.tv_sec > ts.tv_sec || (cur.tv_sec == ts.tv_sec && cur.tv_nsec >= ts.tv_nsec)) {
-            break;
-        }
-        pthread_mutex_unlock(&platform->poll_mutex);
-        for (volatile int i = 0; i < 1000; i++) {
-            __asm__ volatile(""
-                             :
-                             :
-                             : "memory");
-        }
-        sched_yield();
-        pthread_mutex_lock(&platform->poll_mutex);
+    if (!platform->signaled) {
+        (void) pthread_cond_timedwait(&platform->poll_cv, &platform->poll_mutex, &ts);
     }
     platform->signaled = false;
 #else
@@ -271,7 +257,9 @@ static void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
 #ifndef AVM_NO_SMP
     pthread_mutex_lock(&platform->poll_mutex);
 #endif
-    platform->signaled = false;
+    if (timeout_ms != SYS_POLL_EVENTS_DO_NOT_WAIT) {
+        platform->signaled = false;
+    }
     if (nb_descriptors <= 0) {
         return;
     }
@@ -304,11 +292,10 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
         }
     } else {
         pthread_mutex_lock(&platform->poll_mutex);
-    }
-
-    if (platform->signaled) {
-        platform->signaled = false;
-        timeout_ms = SYS_POLL_EVENTS_DO_NOT_WAIT;
+        if (platform->signaled) {
+            platform->signaled = false;
+            timeout_ms = SYS_POLL_EVENTS_DO_NOT_WAIT;
+        }
     }
 #endif
 

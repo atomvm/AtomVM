@@ -1,5 +1,18 @@
+diff --git a/bsps/riscv/esp32/clock/clockdrv_systimer.c b/bsps/riscv/esp32/clock/clockdrv_systimer.c
+index 6cfcf8fb..9456ed3a 100644
+--- a/bsps/riscv/esp32/clock/clockdrv_systimer.c
++++ b/bsps/riscv/esp32/clock/clockdrv_systimer.c
+@@ -208,4 +208,8 @@ static void systimer_clock_at_tick( void )
+ 
+ #define Clock_driver_support_at_tick( arg ) systimer_clock_at_tick()
+ 
++#if defined(RTEMS_SMP)
++#define CLOCK_DRIVER_USE_ONLY_BOOT_PROCESSOR
++#endif
++
+ #include "../../../shared/dev/clock/clockimpl.h"
 diff --git a/bsps/riscv/esp32/irq/irq_c3.c b/bsps/riscv/esp32/irq/irq_c3.c
-index 2252dc9..2d95f8d 100644
+index 2252dc99..3bd426ee 100644
 --- a/bsps/riscv/esp32/irq/irq_c3.c
 +++ b/bsps/riscv/esp32/irq/irq_c3.c
 @@ -40,6 +40,7 @@
@@ -52,7 +65,43 @@ index 2252dc9..2d95f8d 100644
  #endif
      default:
        return 0;
-@@ -488,6 +495,19 @@ void _RISCV_Interrupt_dispatch( uintptr_t mcause, Per_CPU_Control *cpu_self )
+@@ -472,6 +479,35 @@ static uintptr_t periph_int_to_map_reg( rtems_vector_number vector )
+   return vector * sizeof( uint32_t );
+ }
+ 
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++static inline void esp32_clic_clear_active_level( void )
++{
++  uintptr_t tmp;
++  uintptr_t status;
++
++  __asm__ volatile (
++    ".option push\n"
++    ".option arch, +zicsr\n"
++    "csrr %1, mstatus\n"
++    "li %0, 0xb0000000\n"
++    "csrw mcause, %0\n"
++    "li %0, ~0x88\n"
++    "and %0, %1, %0\n"
++    "li %1, 0x1800\n"
++    "or %0, %0, %1\n"
++    "csrw mstatus, %0\n"
++    "la %0, 1f\n"
++    "csrw mepc, %0\n"
++    "mret\n"
++    "1:\n"
++    ".option pop\n"
++    : "=&r" ( tmp ), "=&r" ( status )
++    :
++    : "memory"
++  );
++}
++#endif
++
+ void _RISCV_Interrupt_dispatch( uintptr_t mcause, Per_CPU_Control *cpu_self )
+ {
+   (void) cpu_self;
+@@ -488,6 +524,20 @@ void _RISCV_Interrupt_dispatch( uintptr_t mcause, Per_CPU_Control *cpu_self )
    uint8_t cpu_vector = mcause & 0x1f;
  #endif
  
@@ -65,6 +114,7 @@ index 2252dc9..2d95f8d 100644
 +      *( (volatile uint32_t *) 0x20586014U ) = 0U;
 +    }
 +    _SMP_Inter_processor_interrupt_handler( cpu_self );
++    esp32_clic_clear_active_level();
 +    return;
 +  }
 +#endif
@@ -72,9 +122,29 @@ index 2252dc9..2d95f8d 100644
    /*
     * All interrupts on the ESP32-C3 are external except for exceptions which
     * are handled elsewhere
+@@ -504,6 +554,9 @@ void _RISCV_Interrupt_dispatch( uintptr_t mcause, Per_CPU_Control *cpu_self )
+    */
+   if ( active == NO_ACTIVE_VECTOR ) {
+     esp32_cpu_int_clear( cpu_vector );
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++    esp32_clic_clear_active_level();
++#endif
+     return;
+   }
+ 
+@@ -513,6 +566,9 @@ void _RISCV_Interrupt_dispatch( uintptr_t mcause, Per_CPU_Control *cpu_self )
+ 
+   /* mark interrupt serviced in matrix */
+   bsp_interrupt_clear( active );
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++  esp32_clic_clear_active_level();
++#endif
+ }
+ 
+ void bsp_interrupt_facility_initialize( void )
 diff --git a/bsps/riscv/esp32/start/bspsmp.c b/bsps/riscv/esp32/start/bspsmp.c
 new file mode 100644
-index 0000000..963cc79
+index 00000000..963cc79c
 --- /dev/null
 +++ b/bsps/riscv/esp32/start/bspsmp.c
 @@ -0,0 +1,164 @@
@@ -243,7 +313,7 @@ index 0000000..963cc79
 +
 +#endif /* RTEMS_SMP && LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H */
 diff --git a/bsps/riscv/esp32/start/bspstart.c b/bsps/riscv/esp32/start/bspstart.c
-index dcc7454..a5e3523 100644
+index dcc74546..a5e3523b 100644
 --- a/bsps/riscv/esp32/start/bspstart.c
 +++ b/bsps/riscv/esp32/start/bspstart.c
 @@ -221,9 +221,12 @@ static void bsp_clock_init( void )
@@ -262,7 +332,7 @@ index dcc7454..a5e3523 100644
  
  #endif
 diff --git a/bsps/riscv/shared/start/start.S b/bsps/riscv/shared/start/start.S
-index 368f7e2..96a5e64 100644
+index 368f7e2a..96a5e645 100644
 --- a/bsps/riscv/shared/start/start.S
 +++ b/bsps/riscv/shared/start/start.S
 @@ -118,6 +118,10 @@ SYM(_start):
@@ -318,7 +388,7 @@ index 368f7e2..96a5e64 100644
  	.type	.Lsecondary_processor_go, @object
  
 diff --git a/bsps/shared/atomics/__atomic_test_and_set.c b/bsps/shared/atomics/__atomic_test_and_set.c
-index 6117b4f..a55f8bd 100644
+index 6117b4fd..a55f8bde 100644
 --- a/bsps/shared/atomics/__atomic_test_and_set.c
 +++ b/bsps/shared/atomics/__atomic_test_and_set.c
 @@ -45,6 +45,7 @@
@@ -335,7 +405,7 @@ index 6117b4f..a55f8bd 100644
  }
 +#endif
 diff --git a/spec/build/bsps/riscv/esp32/obj.yml b/spec/build/bsps/riscv/esp32/obj.yml
-index 75f32f4..27326f0 100644
+index 75f32f45..27326f01 100644
 --- a/spec/build/bsps/riscv/esp32/obj.yml
 +++ b/spec/build/bsps/riscv/esp32/obj.yml
 @@ -31,6 +31,7 @@ source:
@@ -347,7 +417,7 @@ index 75f32f4..27326f0 100644
  - bsps/shared/cache/nocache.c
  - bsps/shared/dev/btimer/btimer-cpucounter.c
 diff --git a/spec/build/cpukit/optsmp.yml b/spec/build/cpukit/optsmp.yml
-index 06714cb..c80783d 100644
+index 06714cba..c80783d9 100644
 --- a/spec/build/cpukit/optsmp.yml
 +++ b/spec/build/cpukit/optsmp.yml
 @@ -30,6 +30,7 @@ enabled-by:
@@ -358,16 +428,3 @@ index 06714cb..c80783d 100644
  - riscv/grv32imafdc
  - riscv/mpfs64imafdc
  - riscv/noel32imafd
-diff --git a/bsps/riscv/esp32/clock/clockdrv_systimer.c b/bsps/riscv/esp32/clock/clockdrv_systimer.c
-index 6cfcf8f..8a1c92d 100644
---- a/bsps/riscv/esp32/clock/clockdrv_systimer.c
-+++ b/bsps/riscv/esp32/clock/clockdrv_systimer.c
-@@ -208,4 +208,8 @@ static void systimer_clock_at_tick( void )
- #define Clock_driver_support_at_tick( arg ) systimer_clock_at_tick()
- 
-+#if defined(RTEMS_SMP)
-+#define CLOCK_DRIVER_USE_ONLY_BOOT_PROCESSOR
-+#endif
-+
- #include "../../../shared/dev/clock/clockimpl.h"
-
