@@ -63,8 +63,9 @@
 // JFFS2 mount/scan, crypto, Wi-Fi bring-up) peak at ~22.6 KiB. The old 20 KiB
 // stack overflowed into the unified workspace and clobbered the mounted flag of
 // the root mount-table entry, so file operations intermittently failed with
-// ENXIO. 32 KiB leaves ~9 KiB of headroom over the observed peak.
-#define CONFIGURE_INIT_TASK_STACK_SIZE (32 * 1024)
+// ENXIO. 26 KiB leaves >3 KiB of headroom over the observed peak while keeping
+// enough unified heap free for ESP32-C3 Wi-Fi + OTP gen_tcp/socket tests.
+#define CONFIGURE_INIT_TASK_STACK_SIZE (26 * 1024)
 #define CONFIGURE_EXTRA_TASK_STACKS 0
 #endif
 #else

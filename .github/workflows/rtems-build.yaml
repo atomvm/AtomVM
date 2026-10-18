@@ -1012,19 +1012,19 @@ jobs:
         cmake -S . -B build-host -G Ninja -DAVM_DISABLE_JIT=ON
         cmake --build build-host -t rtems_boot_test rtems_net_test rtems_grisp2_test rtems_smp_test atomvmlib-rtems rtems_${{ matrix.chip }}_wifi_test
         mkdir -p src/platforms/rtems/build
-        ./build-host/tools/packbeam/packbeam create -s test_boot \
+        ./build-host/tools/packbeam/packbeam create -p -r -s test_boot \
           src/platforms/rtems/build/rtems_boot.avm \
           build-host/src/platforms/rtems/tests/test_erl_sources/test_boot.beam \
           build-host/libs/atomvmlib-rtems.avm
-        ./build-host/tools/packbeam/packbeam create -s test_smp \
+        ./build-host/tools/packbeam/packbeam create -p -r -s test_smp \
           src/platforms/rtems/build/rtems_smp.avm \
           build-host/src/platforms/rtems/tests/test_erl_sources/test_smp.beam \
           build-host/libs/atomvmlib-rtems.avm
-        ./build-host/tools/packbeam/packbeam create -s test_net \
+        ./build-host/tools/packbeam/packbeam create -p -r -s test_net \
           src/platforms/rtems/build/rtems_net.avm \
           build-host/src/platforms/rtems/tests/test_erl_sources/test_net.beam \
           build-host/libs/atomvmlib-rtems.avm
-        ./build-host/tools/packbeam/packbeam create -s test_${{ matrix.chip }}_wifi \
+        ./build-host/tools/packbeam/packbeam create -p -r -s test_${{ matrix.chip }}_wifi \
           src/platforms/rtems/build/rtems_${{ matrix.chip }}_wifi.avm \
           build-host/src/platforms/rtems/tests/test_erl_sources/test_${{ matrix.chip }}_wifi.beam \
           build-host/libs/atomvmlib-rtems.avm

@@ -468,10 +468,14 @@ int rtems_wifi_start(const char *ssid, const char *psk)
     if (!wifi_initialized) {
         wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
 #if defined(RTEMS_BOARD_ESP32C3) || defined(RTEMS_BOARD_ESP32C5)
-        cfg.static_rx_buf_num = 4;
-        cfg.dynamic_rx_buf_num = 16;
-        cfg.dynamic_tx_buf_num = 16;
+        cfg.static_rx_buf_num = 3;
+        cfg.dynamic_rx_buf_num = 8;
+        cfg.dynamic_tx_buf_num = 8;
         cfg.rx_mgmt_buf_num = 2;
+        cfg.mgmt_sbuf_num = 6;
+        cfg.ampdu_rx_enable = 0;
+        cfg.ampdu_tx_enable = 0;
+        cfg.nvs_enable = 0;
 #endif
         esp_err_t err = esp_wifi_init(&cfg);
         if (err != ESP_OK) {
