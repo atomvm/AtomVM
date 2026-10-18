@@ -282,14 +282,14 @@ jobs:
           - arch: arm
             bsp: arm/imx7
             bsp_name: imx7
-            cache_key: arm-imx7
+            cache_key: arm-imx7-v2
             rtems_version: "6"
             prefix: /home/runner/rtems/6.2
             qemu: qemu-system-arm
           - arch: arm
             bsp: arm/realview_pbx_a9_qemu
             bsp_name: realview_pbx_a9_qemu
-            cache_key: arm-realview-pbx-a9-qemu
+            cache_key: arm-realview-pbx-a9-qemu-v2
             rtems_version: "6"
             prefix: /home/runner/rtems/6.2
             qemu: qemu-system-arm
@@ -366,6 +366,7 @@ jobs:
         ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" \
           --target="${{ matrix.arch }}-rtems${{ matrix.rtems_version }}" \
           --with-rtems-bsp=${{ matrix.bsp }} \
+          --with-rtems-smp \
           --with-rtems-tests=no \
           "${{ matrix.rtems_version }}/rtems-kernel"
         rm -rf "$HOME/rtems-src"
@@ -384,6 +385,7 @@ jobs:
         cd "$HOME/rtems-src/libbsd"
         git clone --depth 1 https://gitlab.rtems.org/rtems/pkg/rtems-libbsd.git -b "${RTEMS_RELEASE}" rtems-libbsd
         cd "rtems-libbsd"
+        git submodule update --init rtems_waf
         export PATH="${{ matrix.prefix }}/bin:$PATH"
         ./waf configure \
           --prefix="${{ matrix.prefix }}" \
