@@ -187,9 +187,8 @@ jobs:
           ./waf
           ./waf install
         else
-          wget -q "https://ftp.rtems.org/pub/rtems/releases/6/${RTEMS_RELEASE}/sources/rtems-source-builder-${RTEMS_RELEASE}.tar.xz"
-          tar xJf "rtems-source-builder-${RTEMS_RELEASE}.tar.xz"
-          cd "rtems-source-builder-${RTEMS_RELEASE}/rtems"
+          git clone --depth 1 https://gitlab.rtems.org/rtems/tools/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb-6
+          cd "rsb-6/rtems"
           ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" "${{ matrix.rtems_version }}/rtems-${{ matrix.arch }}"
           ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" \
             --target="${{ matrix.arch }}-rtems${{ matrix.rtems_version }}" \
@@ -210,9 +209,8 @@ jobs:
         echo "Building rtems-libbsd with GRiSP 2 Wi-Fi modules"
         mkdir -p "$HOME/rtems-src/libbsd"
         cd "$HOME/rtems-src/libbsd"
-        wget -q "https://ftp.rtems.org/pub/rtems/releases/6/${RTEMS_RELEASE}/sources/rtems-libbsd-${RTEMS_RELEASE}.tar.xz"
-        tar xJf "rtems-libbsd-${RTEMS_RELEASE}.tar.xz"
-        cd "rtems-libbsd-${RTEMS_RELEASE}"
+        git clone --depth 1 https://gitlab.rtems.org/rtems/pkg/rtems-libbsd.git -b "${RTEMS_RELEASE}" rtems-libbsd
+        cd "rtems-libbsd"
         export PATH="${{ matrix.prefix }}/bin:$PATH"
         ./waf configure \
           --prefix="${{ matrix.prefix }}" \
