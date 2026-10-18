@@ -88,10 +88,10 @@ index 8ad7219..7bf0eb1 100644
    UART_REG( ctx, UART_CLKDIV ) =
      integer | ( frag << UART_CLKDIV_FRAG_SHIFT );
 diff --git a/bsps/riscv/esp32/gpio/gpio_c3.c b/bsps/riscv/esp32/gpio/gpio_c3.c
-index e6e2032..f57e4c7 100644
+index e6e2032..e0ba6e4 100644
 --- a/bsps/riscv/esp32/gpio/gpio_c3.c
 +++ b/bsps/riscv/esp32/gpio/gpio_c3.c
-@@ -60,12 +60,26 @@
+@@ -60,6 +60,16 @@
  #define GPIO_OUT          0x0004
  #define GPIO_OUT_W1TS     0x0008
  #define GPIO_OUT_W1TC     0x000c
@@ -108,14 +108,15 @@ index e6e2032..f57e4c7 100644
  #define GPIO_ENABLE       0x0020
  #define GPIO_ENABLE_W1TS  0x0024
  #define GPIO_ENABLE_W1TC  0x0028
- #define GPIO_IN           0x003c
- #define GPIO_STATUS       0x0044
+@@ -68,6 +78,7 @@
  #define GPIO_STATUS_W1TC  0x004c
-+#define GPIO_PIN( n )     ( 0x0074 + 4 * (n) )
-+#define GPIO_FUNC_OUT_SEL_CFG( n ) ( 0x0554 + 4 * (n) )
+ #define GPIO_PIN( n )     ( 0x0074 + 4 * (n) )
+ #define GPIO_FUNC_OUT_SEL_CFG( n ) ( 0x0554 + 4 * (n) )
 +#endif
  
-@@ -83,8 +97,14 @@
+ #define GPIO_PIN_INT_TYPE_SHIFT  7
+ #define GPIO_PIN_INT_TYPE_MASK   ( 0x7U << GPIO_PIN_INT_TYPE_SHIFT )
+@@ -83,8 +94,14 @@
  #define GPIO_INT_TYPE_LOW_LEVEL   4
  #define GPIO_INT_TYPE_HIGH_LEVEL  5
  
@@ -131,7 +132,7 @@ index e6e2032..f57e4c7 100644
  #define IO_MUX_FUN_PD     ( 1U << 7 )
  #define IO_MUX_FUN_PU     ( 1U << 8 )
  #define IO_MUX_FUN_IE     ( 1U << 9 )
-@@ -110,7 +130,11 @@
+@@ -94,7 +111,11 @@
  /* IO_MUX function number that routes a pad to the GPIO peripheral, and the
   * GPIO matrix signal that means "driven by GPIO_OUT". */
  #define IO_MUX_FUNC_GPIO  1
@@ -140,6 +141,9 @@ index e6e2032..f57e4c7 100644
 +#else
  #define SIG_GPIO_OUT_IDX  128
 +#endif
+ 
+ static const char esp32c3_gpio_owner[] = "esp32c3 gpio";
+ 
 diff --git a/bsps/riscv/esp32/i2c/i2c_c3.c b/bsps/riscv/esp32/i2c/i2c_c3.c
 index cda7503..718d19e 100644
 --- a/bsps/riscv/esp32/i2c/i2c_c3.c
