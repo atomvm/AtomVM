@@ -34,11 +34,12 @@ env:
   RTEMS_PREFIX: /home/runner/rtems/6.2
 
 jobs:
-  rtems:
+  rtems-arm-sparc:
+    name: rtems (${{ matrix.bsp_name }})
     runs-on: ubuntu-24.04
     timeout-minutes: 300
     permissions:
-      actions: read
+      actions: write
       contents: read
     strategy:
       fail-fast: false
@@ -74,50 +75,6 @@ jobs:
             rtems_version: "6"
             prefix: /home/runner/rtems/6.2
             qemu: qemu-system-arm
-          - arch: riscv
-            bsp: riscv/esp32c3db
-            bsp_name: esp32c3db
-            chip: esp32c3
-            board: esp32c3
-            bsp_config: esp32c3-wifi-bsp.ini
-            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,esp32c3,ok} {crypto,esp32c3,ok}"
-            cache_key: riscv-esp32c3db-v2
-            rtems_version: "7"
-            prefix: /home/runner/rtems/7
-            qemu: ""
-          - arch: riscv
-            bsp: riscv/esp32c5db
-            bsp_name: esp32c5db
-            chip: esp32c5
-            board: esp32c5
-            bsp_config: esp32c5-wifi-bsp.ini
-            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,unsupported,ok} {crypto,esp32c3,ok}"
-            cache_key: riscv-esp32c5db-v1
-            rtems_version: "7"
-            prefix: /home/runner/rtems/7
-            qemu: ""
-          - arch: riscv
-            bsp: riscv/esp32c6db
-            bsp_name: esp32c6db
-            chip: esp32c6
-            board: esp32c6
-            bsp_config: esp32c6-wifi-bsp.ini
-            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,unsupported,ok} {crypto,esp32c3,ok}"
-            cache_key: riscv-esp32c6db-v1
-            rtems_version: "7"
-            prefix: /home/runner/rtems/7
-            qemu: ""
-          - arch: riscv
-            bsp: riscv/esp32s31db
-            bsp_name: esp32s31db
-            chip: esp32s31
-            board: esp32s31
-            bsp_config: esp32s31-wifi-bsp.ini
-            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,unsupported,ok} {crypto,esp32c3,ok}"
-            cache_key: riscv-esp32s31db-smp-v1
-            rtems_version: "7"
-            prefix: /home/runner/rtems/7
-            qemu: ""
 
     steps:
     - name: Checkout repo
@@ -158,44 +115,14 @@ jobs:
         set -euo pipefail
         mkdir -p "$HOME/rtems-src" "${{ matrix.prefix }}"
         cd "$HOME/rtems-src"
-        if [ "${{ matrix.rtems_version }}" = "7" ]; then
-          git clone --depth 1 https://gitlab.rtems.org/rtems/tools/rtems-source-builder.git -b main rsb-7
-          cd rsb-7/rtems
-          sed -i '/sis/d' config/7/rtems-riscv.bset
-          sed -i '/with_rtems_gdb/d' config/tools/rtems-default-tools.bset
-          sed -i -e '/0001-RTEMS-Add-riscv-multilibs/d' -e '/uCjG1KIhPuCR3H5G/d' config/tools/rtems-gcc-15.2-newlib-head.cfg
-          ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" "7/rtems-${{ matrix.arch }}"
-          git clone --depth 1 https://gitlab.rtems.org/rtems/rtos/rtems.git -b main rtems-7
-          cd rtems-7
-          if [ -d "$GITHUB_WORKSPACE/src/platforms/rtems/docker/patches/rtems" ]; then
-            for patch in "$GITHUB_WORKSPACE"/src/platforms/rtems/docker/patches/rtems/*.patch; do
-              if [ -f "$patch" ]; then
-                echo "Applying $patch"
-                git apply "$patch" || patch -p1 < "$patch"
-              fi
-            done
-          elif [ -d "$GITHUB_WORKSPACE/src/platforms/rtems/docker/patches" ]; then
-            for patch in "$GITHUB_WORKSPACE"/src/platforms/rtems/docker/patches/*.patch; do
-              if [ -f "$patch" ]; then
-                echo "Applying $patch"
-                git apply "$patch" || patch -p1 < "$patch"
-              fi
-            done
-          fi
-          ./waf configure --prefix="${{ matrix.prefix }}" --rtems-bsps=${{ matrix.bsp }} \
-            --rtems-config="$GITHUB_WORKSPACE/src/platforms/rtems/docker/${{ matrix.bsp_config }}"
-          ./waf
-          ./waf install
-        else
-          git clone --depth 1 https://gitlab.rtems.org/rtems/tools/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb-6
-          cd "rsb-6/rtems"
-          ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" "${{ matrix.rtems_version }}/rtems-${{ matrix.arch }}"
-          ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" \
-            --target="${{ matrix.arch }}-rtems${{ matrix.rtems_version }}" \
-            --with-rtems-bsp=${{ matrix.bsp }} \
-            --with-rtems-tests=no \
-            "${{ matrix.rtems_version }}/rtems-kernel"
-        fi
+        git clone --depth 1 https://gitlab.rtems.org/rtems/tools/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb-6
+        cd "rsb-6/rtems"
+        ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" "${{ matrix.rtems_version }}/rtems-${{ matrix.arch }}"
+        ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" \
+          --target="${{ matrix.arch }}-rtems${{ matrix.rtems_version }}" \
+          --with-rtems-bsp=${{ matrix.bsp }} \
+          --with-rtems-tests=no \
+          "${{ matrix.rtems_version }}/rtems-kernel"
 
     - name: Build rtems-libbsd for ${{ matrix.bsp }}
       if: matrix.bsp == 'arm/imx7'
@@ -221,19 +148,6 @@ jobs:
         ./waf install
         rm -rf "$HOME/rtems-src/libbsd"
 
-    - name: Build rtems-lwip and Wi-Fi stack for ${{ matrix.bsp }}
-      if: matrix.bsp_config != ''
-      run: |
-        set -euo pipefail
-        lwip="${{ matrix.prefix }}/${{ matrix.arch }}-rtems${{ matrix.rtems_version }}/${{ matrix.bsp_name }}/lib/liblwip.a"
-        if [ -f "$lwip" ]; then
-          echo "Using cached rtems-lwip at $lwip"
-          exit 0
-        fi
-        echo "Building rtems-lwip and Wi-Fi stack for ${{ matrix.chip }}..."
-        export PATH="${{ matrix.prefix }}/bin:$PATH"
-        "$GITHUB_WORKSPACE/src/platforms/rtems/docker/build-${{ matrix.chip }}-wifi-stack.sh" --prefix="${{ matrix.prefix }}"
-
     - name: Save RTEMS ${{ matrix.rtems_version }} ${{ matrix.bsp }} toolchain
       if: steps.rtems-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
@@ -253,7 +167,7 @@ jobs:
       run: |
         set -euo pipefail
         cmake -S . -B build-host -G Ninja -DAVM_DISABLE_JIT=ON
-        cmake --build build-host -t rtems_boot_test rtems_net_test rtems_grisp2_test rtems_smp_test atomvmlib-rtems ${{ matrix.chip != '' && format('rtems_{0}_wifi_test', matrix.chip) || '' }}
+        cmake --build build-host -t rtems_boot_test rtems_net_test rtems_grisp2_test rtems_smp_test atomvmlib-rtems
         mkdir -p src/platforms/rtems/build
         ./build-host/tools/packbeam/packbeam create -s test_boot \
           src/platforms/rtems/build/rtems_boot.avm \
@@ -271,12 +185,6 @@ jobs:
           src/platforms/rtems/build/rtems_grisp2.avm \
           build-host/src/platforms/rtems/tests/test_erl_sources/test_grisp2.beam \
           build-host/libs/atomvmlib-rtems.avm
-        if [ -n "${{ matrix.chip }}" ]; then
-          ./build-host/tools/packbeam/packbeam create -s test_${{ matrix.chip }}_wifi \
-            src/platforms/rtems/build/rtems_${{ matrix.chip }}_wifi.avm \
-            build-host/src/platforms/rtems/tests/test_erl_sources/test_${{ matrix.chip }}_wifi.beam \
-            build-host/libs/atomvmlib-rtems.avm
-        fi
 
     - name: Test loading replaceable AVM files on the host
       if: matrix.bsp == 'arm/imx7'
@@ -452,127 +360,7 @@ jobs:
         fi
         echo "RealView SMP test completed successfully"
 
-    - name: Run boot test on esp-emulator
-      if: matrix.chip != ''
-      run: |
-        set -euo pipefail
-        BIN="src/platforms/rtems/build/AtomVM-${{ matrix.bsp_name }}.bin"
-        test -f "$BIN"
-        curl -fsSL https://raw.githubusercontent.com/espressif/esp-emulator/main/install.sh | sh -s -- --version 0.49.0
-        export PATH="$HOME/.local/bin:$PATH"
-        emu_opts=(--timeout 30s)
-        if [ "${{ matrix.chip }}" = "esp32s31" ]; then
-          emu_opts=(--batch-size 50000 --timeout 90s)
-        fi
-        output=$(esp-emu --chip ${{ matrix.chip }} "${emu_opts[@]}" --firmware "$BIN" --exit-on "Return value: ok" 2>&1)
-        status=$?
-        set -e
-        printf '%s\n' "$output"
-        if grep -q "Failed load module" <<< "$output"; then
-          echo "::error::${{ matrix.chip }} boot failed to load a BEAM module"
-          exit 1
-        fi
-        if ! grep -Fq '{atomvm_rtems_boot,rtems}' <<< "$output"; then
-          echo "::error::${{ matrix.chip }} boot test did not print {atomvm_rtems_boot,rtems} (status ${status})"
-          exit 1
-        fi
-        for marker in ${{ matrix.boot_markers }}; do
-          if ! grep -Fq "$marker" <<< "$output"; then
-            echo "::error::${{ matrix.chip }} boot test did not print ${marker}"
-            exit 1
-          fi
-        done
-        if ! grep -q "Return value: ok" <<< "$output"; then
-          echo "::error::${{ matrix.chip }} boot test did not return ok"
-          exit 1
-        fi
-        echo "${{ matrix.chip }} boot test completed successfully"
-
-    - name: Cross-compile AtomVM Wi-Fi and HTTP test for ${{ matrix.chip }}
-      if: matrix.chip != ''
-      run: |
-        set -euo pipefail
-        cmake -S src/platforms/rtems -B src/platforms/rtems/build-wifi -G Ninja \
-          -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
-          -DRTEMS_PREFIX="${{ matrix.prefix }}" \
-          -DRTEMS_BSP="${{ matrix.bsp }}" \
-          -DRTEMS_VERSION="${{ matrix.rtems_version }}" \
-          -DRTEMS_BOARD=${{ matrix.board }} \
-          -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_${{ matrix.chip }}_wifi.avm"
-        cmake --build src/platforms/rtems/build-wifi
-
-    - name: Run Wi-Fi and HTTP test on esp-emulator
-      if: matrix.chip != ''
-      run: |
-        set -euo pipefail
-        BIN="src/platforms/rtems/build-wifi/AtomVM-${{ matrix.bsp_name }}.bin"
-        test -f "$BIN"
-        export PATH="$HOME/.local/bin:$PATH"
-        python3 -m http.server 8080 --directory "$GITHUB_WORKSPACE" >/dev/null 2>&1 &
-        HTTP_PID=$!
-        python3 src/platforms/rtems/tools/mock_sntp_server.py 12300 >/dev/null 2>&1 &
-        SNTP_PID=$!
-        trap 'kill "$HTTP_PID" "$SNTP_PID" 2>/dev/null || true' EXIT
-        set +e
-        output=$(esp-emu --chip ${{ matrix.chip }} \
-          --firmware "$BIN" \
-          --wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user \
-          --timeout 30s --exit-on "Return value: ok" 2>&1)
-        status=$?
-        set -e
-        printf '%s\n' "$output"
-        if grep -q "Failed load module" <<< "$output"; then
-          echo "::error::${{ matrix.chip }} Wi-Fi test failed to load a BEAM module"
-          exit 1
-        fi
-        if ! grep -Fq '{atomvm_${{ matrix.chip }}_wifi,rtems}' <<< "$output"; then
-          echo "::error::${{ matrix.chip }} Wi-Fi test did not print {atomvm_${{ matrix.chip }}_wifi,rtems} (status ${status})"
-          exit 1
-        fi
-        for marker in '{wifi_start,ok}' '{wifi_status,got_ip}' '{ifaddrs_match,ok}' '{socket_open,ok}' '{socket_close,ok}' '{udp_echo,ok}' '{tcp_echo,ok}' '{gen_tcp_passive,ok}' '{socket_select,ok}' '{dns_numeric_match,ok}' '{dns_inet_getaddr,ok}' '{set_clock,ok}' '{clock_set_year_valid,ok}' '{network_sntp_start,ok}' '{sntp_smoke_done,ok}' '{wifi_test_complete,ok}'; do
-          if ! grep -Fq "$marker" <<< "$output"; then
-            echo "::error::${{ matrix.chip }} Wi-Fi test did not print ${marker}"
-            exit 1
-          fi
-        done
-        if ! grep -q "Return value: ok" <<< "$output"; then
-          echo "::error::${{ matrix.chip }} Wi-Fi test did not return ok"
-          exit 1
-        fi
-        echo "${{ matrix.chip }} Wi-Fi network and SNTP test suite completed successfully"
-
-    - name: Run SMP multi-core test on esp-emulator
-      if: matrix.chip == 'esp32s31'
-      run: |
-        set -euo pipefail
-        cmake -S src/platforms/rtems -B src/platforms/rtems/build-smp -G Ninja \
-          -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
-          -DRTEMS_PREFIX="${{ matrix.prefix }}" \
-          -DRTEMS_BSP="${{ matrix.bsp }}" \
-          -DRTEMS_VERSION="${{ matrix.rtems_version }}" \
-          -DRTEMS_BOARD=${{ matrix.board }} \
-          -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_smp.avm"
-        cmake --build src/platforms/rtems/build-smp
-        BIN="src/platforms/rtems/build-smp/AtomVM-${{ matrix.bsp_name }}.bin"
-        test -f "$BIN"
-        export PATH="$HOME/.local/bin:$PATH"
-        set +e
-        output=$(esp-emu --chip esp32s31 --batch-size 50000 --firmware "$BIN" --timeout 90s --exit-on "Return value: ok" 2>&1)
-        status=$?
-        set -e
-        printf '%s\n' "$output"
-        if ! grep -Fq '{smp_parallel_compute,ok}' <<< "$output"; then
-          echo "::error::esp32s31 SMP test failed (status ${status})"
-          exit 1
-        fi
-        if ! grep -q "Return value: ok" <<< "$output"; then
-          echo "::error::esp32s31 SMP test did not return ok (status ${status})"
-          exit 1
-        fi
-        echo "esp32s31 SMP test completed successfully"
-
     - name: Cross-compile AtomVM net test for ${{ matrix.bsp }}
-      if: matrix.chip == ''
       run: |
         set -euo pipefail
         cmake -S src/platforms/rtems -B src/platforms/rtems/build-net -G Ninja \
@@ -779,8 +567,376 @@ jobs:
         name: atomvm-rtems-${{ matrix.bsp_name }}-${{ github.run_id }}
         if-no-files-found: warn
         path: |
-          src/platforms/rtems/build/AtomVM-${{ matrix.bsp_name }}.bin
           src/platforms/rtems/build/AtomVM-${{ matrix.bsp_name }}.exe
+          src/platforms/rtems/build-net/AtomVM-${{ matrix.bsp_name }}.exe
+          src/platforms/rtems/build-smp/AtomVM-${{ matrix.bsp_name }}.exe
+
+  rtems-riscv-toolchain:
+    name: rtems-riscv (toolchain)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      actions: write
+      contents: read
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Restore RISC-V RTEMS 7 toolchain
+      id: toolchain-cache
+      uses: actions/cache/restore@v4
+      with:
+        path: /home/runner/rtems/7
+        key: rtems-7-riscv-toolchain-${{ runner.os }}-v2
+
+    - name: Install build dependencies
+      if: steps.toolchain-cache.outputs.cache-hit != 'true'
+      run: |
+        sudo apt update
+        sudo apt install -y \
+          build-essential g++ gdb unzip pax bison flex texinfo \
+          python3-dev python-is-python3 python3-setuptools \
+          libncurses-dev zlib1g-dev ninja-build pkg-config \
+          cmake gperf wget xz-utils python3-pip
+
+    - name: Build RSB RISC-V toolchain
+      if: steps.toolchain-cache.outputs.cache-hit != 'true'
+      run: |
+        set -euo pipefail
+        mkdir -p "$HOME/rtems-src" /home/runner/rtems/7
+        cd "$HOME/rtems-src"
+        git clone --depth 1 https://gitlab.rtems.org/rtems/tools/rtems-source-builder.git -b main rsb-7
+        cd rsb-7/rtems
+        sed -i '/sis/d' config/7/rtems-riscv.bset
+        sed -i '/with_rtems_gdb/d' config/tools/rtems-default-tools.bset
+        sed -i -e '/0001-RTEMS-Add-riscv-multilibs/d' -e '/uCjG1KIhPuCR3H5G/d' config/tools/rtems-gcc-15.2-newlib-head.cfg
+        ../source-builder/sb-set-builder --prefix=/home/runner/rtems/7 "7/rtems-riscv"
+        # Strip host debug symbols to save cache bandwidth and storage
+        find /home/runner/rtems/7/bin /home/runner/rtems/7/libexec -type f -executable -exec strip {} + 2>/dev/null || true
+        rm -rf "$HOME/rtems-src"
+
+    - name: Save RISC-V RTEMS 7 toolchain
+      if: steps.toolchain-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: /home/runner/rtems/7
+        key: rtems-7-riscv-toolchain-${{ runner.os }}-v2
+
+    - name: Verify RISC-V toolchain
+      run: |
+        set -euo pipefail
+        /home/runner/rtems/7/bin/riscv-rtems7-gcc --version
+
+  rtems-riscv:
+    name: rtems (${{ matrix.bsp_name }})
+    needs: [rtems-riscv-toolchain]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      actions: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: riscv
+            bsp: riscv/esp32c3db
+            bsp_name: esp32c3db
+            chip: esp32c3
+            board: esp32c3
+            bsp_config: esp32c3-wifi-bsp.ini
+            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,esp32c3,ok} {crypto,esp32c3,ok}"
+            cache_key: riscv-esp32c3db-v3
+            rtems_version: "7"
+            prefix: /home/runner/rtems/7
+          - arch: riscv
+            bsp: riscv/esp32c5db
+            bsp_name: esp32c5db
+            chip: esp32c5
+            board: esp32c5
+            bsp_config: esp32c5-wifi-bsp.ini
+            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,unsupported,ok} {crypto,esp32c3,ok}"
+            cache_key: riscv-esp32c5db-v2
+            rtems_version: "7"
+            prefix: /home/runner/rtems/7
+          - arch: riscv
+            bsp: riscv/esp32c6db
+            bsp_name: esp32c6db
+            chip: esp32c6
+            board: esp32c6
+            bsp_config: esp32c6-wifi-bsp.ini
+            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,unsupported,ok} {crypto,esp32c3,ok}"
+            cache_key: riscv-esp32c6db-v2
+            rtems_version: "7"
+            prefix: /home/runner/rtems/7
+          - arch: riscv
+            bsp: riscv/esp32s31db
+            bsp_name: esp32s31db
+            chip: esp32s31
+            board: esp32s31
+            bsp_config: esp32s31-wifi-bsp.ini
+            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,unsupported,ok} {crypto,esp32c3,ok}"
+            cache_key: riscv-esp32s31db-smp-v2
+            rtems_version: "7"
+            prefix: /home/runner/rtems/7
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - uses: erlef/setup-beam@v1
+      with:
+        otp-version: "28"
+        rebar3-version: "3.25.1"
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://repo.hex.pm
+          https://cdn.jsdelivr.net/hex
+
+    - name: "apt update"
+      run: sudo apt update
+
+    - name: "Install deps"
+      run: |
+        sudo apt install -y \
+          build-essential g++ gdb unzip pax bison flex texinfo \
+          python3-dev python-is-python3 python3-setuptools \
+          libncurses-dev zlib1g-dev ninja-build pkg-config \
+          cmake gperf wget xz-utils python3-pip curl
+
+    - name: Restore RTEMS 7 ${{ matrix.bsp }} toolchain and BSP
+      id: rtems-cache
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ matrix.prefix }}
+        key: rtems-7-${{ matrix.cache_key }}-wifi-${{ runner.os }}-${{ hashFiles('src/platforms/rtems/docker/**', 'src/platforms/rtems/docker/patches/**') }}
+        restore-keys: |
+          rtems-7-${{ matrix.cache_key }}-wifi-${{ runner.os }}-
+          rtems-7-riscv-toolchain-${{ runner.os }}-v2
+
+    - name: Verify RISC-V toolchain
+      run: |
+        set -euo pipefail
+        if [ ! -x "${{ matrix.prefix }}/bin/${{ matrix.arch }}-rtems${{ matrix.rtems_version }}-gcc" ]; then
+          echo "::error::RISC-V toolchain not found at ${{ matrix.prefix }}/bin/${{ matrix.arch }}-rtems${{ matrix.rtems_version }}-gcc"
+          exit 1
+        fi
+        "${{ matrix.prefix }}/bin/${{ matrix.arch }}-rtems${{ matrix.rtems_version }}-gcc" --version
+
+    - name: Build RTEMS 7 ${{ matrix.bsp }} BSP
+      run: |
+        set -euo pipefail
+        libbsp="${{ matrix.prefix }}/${{ matrix.arch }}-rtems${{ matrix.rtems_version }}/${{ matrix.bsp_name }}/lib/librtemsbsp.a"
+        if [ -f "$libbsp" ]; then
+          echo "Using cached RTEMS BSP at $libbsp"
+          exit 0
+        fi
+        echo "Building RTEMS 7 BSP for ${{ matrix.bsp }}..."
+        export PATH="${{ matrix.prefix }}/bin:$PATH"
+        mkdir -p "$HOME/rtems-src"
+        cd "$HOME/rtems-src"
+        git clone --depth 1 https://gitlab.rtems.org/rtems/rtos/rtems.git -b main rtems-7
+        cd rtems-7
+        if [ -d "$GITHUB_WORKSPACE/src/platforms/rtems/docker/patches/rtems" ]; then
+          for patch in "$GITHUB_WORKSPACE"/src/platforms/rtems/docker/patches/rtems/*.patch; do
+            if [ -f "$patch" ]; then
+              echo "Applying $patch"
+              git apply "$patch" || patch -p1 < "$patch"
+            fi
+          done
+        elif [ -d "$GITHUB_WORKSPACE/src/platforms/rtems/docker/patches" ]; then
+          for patch in "$GITHUB_WORKSPACE"/src/platforms/rtems/docker/patches/*.patch; do
+            if [ -f "$patch" ]; then
+              echo "Applying $patch"
+              git apply "$patch" || patch -p1 < "$patch"
+            fi
+          done
+        fi
+        ./waf configure --prefix="${{ matrix.prefix }}" --rtems-bsps=${{ matrix.bsp }} \
+          --rtems-config="$GITHUB_WORKSPACE/src/platforms/rtems/docker/${{ matrix.bsp_config }}"
+        ./waf
+        ./waf install
+        rm -rf "$HOME/rtems-src"
+
+    - name: Build rtems-lwip and Wi-Fi stack for ${{ matrix.bsp }}
+      run: |
+        set -euo pipefail
+        lwip="${{ matrix.prefix }}/${{ matrix.arch }}-rtems${{ matrix.rtems_version }}/${{ matrix.bsp_name }}/lib/liblwip.a"
+        if [ -f "$lwip" ]; then
+          echo "Using cached rtems-lwip at $lwip"
+          exit 0
+        fi
+        echo "Building rtems-lwip and Wi-Fi stack for ${{ matrix.chip }}..."
+        export PATH="${{ matrix.prefix }}/bin:$PATH"
+        "$GITHUB_WORKSPACE/src/platforms/rtems/docker/build-${{ matrix.chip }}-wifi-stack.sh" --prefix="${{ matrix.prefix }}"
+
+    - name: Save RTEMS 7 ${{ matrix.bsp }} toolchain and BSP
+      if: steps.rtems-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ matrix.prefix }}
+        key: rtems-7-${{ matrix.cache_key }}-wifi-${{ runner.os }}-${{ hashFiles('src/platforms/rtems/docker/**', 'src/platforms/rtems/docker/patches/**') }}
+
+    - name: Add RTEMS tools to PATH
+      run: echo "${{ matrix.prefix }}/bin" >> "$GITHUB_PATH"
+
+    - name: Build host AtomVM and RTEMS boot AVM
+      run: |
+        set -euo pipefail
+        cmake -S . -B build-host -G Ninja -DAVM_DISABLE_JIT=ON
+        cmake --build build-host -t rtems_boot_test rtems_net_test rtems_grisp2_test rtems_smp_test atomvmlib-rtems rtems_${{ matrix.chip }}_wifi_test
+        mkdir -p src/platforms/rtems/build
+        ./build-host/tools/packbeam/packbeam create -s test_boot \
+          src/platforms/rtems/build/rtems_boot.avm \
+          build-host/src/platforms/rtems/tests/test_erl_sources/test_boot.beam \
+          build-host/libs/atomvmlib-rtems.avm
+        ./build-host/tools/packbeam/packbeam create -s test_smp \
+          src/platforms/rtems/build/rtems_smp.avm \
+          build-host/src/platforms/rtems/tests/test_erl_sources/test_smp.beam \
+          build-host/libs/atomvmlib-rtems.avm
+        ./build-host/tools/packbeam/packbeam create -s test_net \
+          src/platforms/rtems/build/rtems_net.avm \
+          build-host/src/platforms/rtems/tests/test_erl_sources/test_net.beam \
+          build-host/libs/atomvmlib-rtems.avm
+        ./build-host/tools/packbeam/packbeam create -s test_${{ matrix.chip }}_wifi \
+          src/platforms/rtems/build/rtems_${{ matrix.chip }}_wifi.avm \
+          build-host/src/platforms/rtems/tests/test_erl_sources/test_${{ matrix.chip }}_wifi.beam \
+          build-host/libs/atomvmlib-rtems.avm
+
+    - name: Cross-compile AtomVM for ${{ matrix.bsp }}
+      run: |
+        set -euo pipefail
+        cmake -S src/platforms/rtems -B src/platforms/rtems/build -G Ninja \
+          -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
+          -DRTEMS_PREFIX="${{ matrix.prefix }}" \
+          -DRTEMS_BSP="${{ matrix.bsp }}" \
+          -DRTEMS_VERSION="${{ matrix.rtems_version }}" \
+          -DRTEMS_BOARD=${{ matrix.board }} \
+          -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_boot.avm"
+        cmake --build src/platforms/rtems/build
+
+    - name: Run boot test on esp-emulator
+      run: |
+        set -euo pipefail
+        BIN="src/platforms/rtems/build/AtomVM-${{ matrix.bsp_name }}.bin"
+        test -f "$BIN"
+        curl -fsSL https://raw.githubusercontent.com/espressif/esp-emulator/main/install.sh | sh -s -- --version 0.49.0
+        export PATH="$HOME/.local/bin:$PATH"
+        emu_opts=(--timeout 30s)
+        if [ "${{ matrix.chip }}" = "esp32s31" ]; then
+          emu_opts=(--batch-size 50000 --timeout 90s)
+        fi
+        output=$(esp-emu --chip ${{ matrix.chip }} "${emu_opts[@]}" --firmware "$BIN" --exit-on "Return value: ok" 2>&1)
+        status=$?
+        set -e
+        printf '%s\n' "$output"
+        if grep -q "Failed load module" <<< "$output"; then
+          echo "::error::${{ matrix.chip }} boot failed to load a BEAM module"
+          exit 1
+        fi
+        if ! grep -Fq '{atomvm_rtems_boot,rtems}' <<< "$output"; then
+          echo "::error::${{ matrix.chip }} boot test did not print {atomvm_rtems_boot,rtems} (status ${status})"
+          exit 1
+        fi
+        for marker in ${{ matrix.boot_markers }}; do
+          if ! grep -Fq "$marker" <<< "$output"; then
+            echo "::error::${{ matrix.chip }} boot test did not print ${marker}"
+            exit 1
+          fi
+        done
+        if ! grep -q "Return value: ok" <<< "$output"; then
+          echo "::error::${{ matrix.chip }} boot test did not return ok"
+          exit 1
+        fi
+        echo "${{ matrix.chip }} boot test completed successfully"
+
+    - name: Cross-compile AtomVM Wi-Fi and HTTP test for ${{ matrix.chip }}
+      run: |
+        set -euo pipefail
+        cmake -S src/platforms/rtems -B src/platforms/rtems/build-wifi -G Ninja \
+          -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
+          -DRTEMS_PREFIX="${{ matrix.prefix }}" \
+          -DRTEMS_BSP="${{ matrix.bsp }}" \
+          -DRTEMS_VERSION="${{ matrix.rtems_version }}" \
+          -DRTEMS_BOARD=${{ matrix.board }} \
+          -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_${{ matrix.chip }}_wifi.avm"
+        cmake --build src/platforms/rtems/build-wifi
+
+    - name: Run Wi-Fi and HTTP test on esp-emulator
+      run: |
+        set -euo pipefail
+        BIN="src/platforms/rtems/build-wifi/AtomVM-${{ matrix.bsp_name }}.bin"
+        test -f "$BIN"
+        export PATH="$HOME/.local/bin:$PATH"
+        python3 -m http.server 8080 --directory "$GITHUB_WORKSPACE" >/dev/null 2>&1 &
+        HTTP_PID=$!
+        python3 src/platforms/rtems/tools/mock_sntp_server.py 12300 >/dev/null 2>&1 &
+        SNTP_PID=$!
+        trap 'kill "$HTTP_PID" "$SNTP_PID" 2>/dev/null || true' EXIT
+        set +e
+        output=$(esp-emu --chip ${{ matrix.chip }} \
+          --firmware "$BIN" \
+          --wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user \
+          --timeout 30s --exit-on "Return value: ok" 2>&1)
+        status=$?
+        set -e
+        printf '%s\n' "$output"
+        if grep -q "Failed load module" <<< "$output"; then
+          echo "::error::${{ matrix.chip }} Wi-Fi test failed to load a BEAM module"
+          exit 1
+        fi
+        if ! grep -Fq '{atomvm_${{ matrix.chip }}_wifi,rtems}' <<< "$output"; then
+          echo "::error::${{ matrix.chip }} Wi-Fi test did not print {atomvm_${{ matrix.chip }}_wifi,rtems} (status ${status})"
+          exit 1
+        fi
+        for marker in '{wifi_start,ok}' '{wifi_status,got_ip}' '{ifaddrs_match,ok}' '{socket_open,ok}' '{socket_close,ok}' '{udp_echo,ok}' '{tcp_echo,ok}' '{gen_tcp_passive,ok}' '{socket_select,ok}' '{dns_numeric_match,ok}' '{dns_inet_getaddr,ok}' '{set_clock,ok}' '{clock_set_year_valid,ok}' '{network_sntp_start,ok}' '{sntp_smoke_done,ok}' '{wifi_test_complete,ok}'; do
+          if ! grep -Fq "$marker" <<< "$output"; then
+            echo "::error::${{ matrix.chip }} Wi-Fi test did not print ${marker}"
+            exit 1
+          fi
+        done
+        if ! grep -q "Return value: ok" <<< "$output"; then
+          echo "::error::${{ matrix.chip }} Wi-Fi test did not return ok"
+          exit 1
+        fi
+        echo "${{ matrix.chip }} Wi-Fi network and SNTP test suite completed successfully"
+
+    - name: Run SMP multi-core test on esp-emulator
+      if: matrix.chip == 'esp32s31'
+      run: |
+        set -euo pipefail
+        cmake -S src/platforms/rtems -B src/platforms/rtems/build-smp -G Ninja \
+          -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
+          -DRTEMS_PREFIX="${{ matrix.prefix }}" \
+          -DRTEMS_BSP="${{ matrix.bsp }}" \
+          -DRTEMS_VERSION="${{ matrix.rtems_version }}" \
+          -DRTEMS_BOARD=${{ matrix.board }} \
+          -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_smp.avm"
+        cmake --build src/platforms/rtems/build-smp
+        BIN="src/platforms/rtems/build-smp/AtomVM-${{ matrix.bsp_name }}.bin"
+        test -f "$BIN"
+        export PATH="$HOME/.local/bin:$PATH"
+        set +e
+        output=$(esp-emu --chip esp32s31 --batch-size 50000 --firmware "$BIN" --timeout 90s --exit-on "Return value: ok" 2>&1)
+        status=$?
+        set -e
+        printf '%s\n' "$output"
+        if ! grep -Fq '{smp_parallel_compute,ok}' <<< "$output"; then
+          echo "::error::esp32s31 SMP test failed (status ${status})"
+          exit 1
+        fi
+        if ! grep -q "Return value: ok" <<< "$output"; then
+          echo "::error::esp32s31 SMP test did not return ok (status ${status})"
+          exit 1
+        fi
+        echo "esp32s31 SMP test completed successfully"
+
+    - name: Upload firmware artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: atomvm-rtems-${{ matrix.bsp_name }}-${{ github.run_id }}
+        if-no-files-found: warn
+        path: |
+          src/platforms/rtems/build/AtomVM-${{ matrix.bsp_name }}.bin
           src/platforms/rtems/build-wifi/AtomVM-${{ matrix.bsp_name }}.bin
           src/platforms/rtems/build-smp/AtomVM-${{ matrix.bsp_name }}.bin
-          src/platforms/rtems/build-smp/AtomVM-${{ matrix.bsp_name }}.exe
