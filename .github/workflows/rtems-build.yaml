@@ -781,7 +781,7 @@ jobs:
           build-essential g++ gdb unzip pax bison flex texinfo \
           python3-dev python-is-python3 python3-setuptools \
           libncurses-dev zlib1g-dev ninja-build pkg-config \
-          cmake gperf wget xz-utils python3-pip
+          cmake gperf wget xz-utils python3-pip curl
 
     - name: Build RSB RISC-V toolchain
       if: steps.toolchain-cache.outputs.cache-hit != 'true'
@@ -794,6 +794,10 @@ jobs:
         sed -i '/sis/d' config/7/rtems-riscv.bset
         sed -i '/with_rtems_gdb/d' config/tools/rtems-default-tools.bset
         sed -i -e '/0001-RTEMS-Add-riscv-multilibs/d' -e '/uCjG1KIhPuCR3H5G/d' config/tools/rtems-gcc-15.2-newlib-head.cfg
+        sed -i 's|https://gmplib.org/download/gmp|https://ftp.gnu.org/gnu/gmp|g' ../source-builder/config/gmp.cfg
+        mkdir -p sources
+        curl -fSL --retry 3 https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.bz2 -o sources/gmp-6.3.0.tar.bz2
+        curl -fSL --retry 3 https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.1.tar.bz2 -o sources/mpfr-4.2.1.tar.bz2
         ../source-builder/sb-set-builder --prefix=/home/runner/rtems/7 "7/rtems-riscv"
         # Strip host debug symbols to save cache bandwidth and storage
         find /home/runner/rtems/7/bin /home/runner/rtems/7/libexec -type f -executable -exec strip {} + 2>/dev/null || true
