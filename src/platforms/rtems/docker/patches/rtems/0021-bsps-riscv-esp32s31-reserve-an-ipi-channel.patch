@@ -1,0 +1,66 @@
+From: Peter M <petermm@gmail.com>
+Subject: [PATCH] bsps/riscv/esp32s31: dedicate a channel to SMP interrupts
+
+Channel 1 carries Wi-Fi MAC, power, baseband and software interrupts.
+The SMP dispatcher handles every interrupt on this channel as an IPI,
+clearing the software trigger and returning without servicing Wi-Fi.
+Once the MAC raises an interrupt it stays asserted, starving the clock
+and preventing association.
+
+Route inter-processor software interrupts to the unused channel 31 on
+both cores and recognize only that channel in the SMP dispatcher. Keep
+Wi-Fi on its existing shared peripheral interrupt path.
+
+Signed-off-by: Peter M <petermm@gmail.com>
+---
+diff --git a/bsps/riscv/esp32/include/bsp/irq.h b/bsps/riscv/esp32/include/bsp/irq.h
+--- a/bsps/riscv/esp32/include/bsp/irq.h
++++ b/bsps/riscv/esp32/include/bsp/irq.h
+@@ -51,4 +51,9 @@
+ 
+ #include RTEMS_XSTRING( ESPRESSIF_CHIP_HEADER )
+ 
++#if defined(RTEMS_SMP) && defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++/* Keep inter-processor interrupts separate from the Wi-Fi channel (1). */
++#define BSP_ESP32S31_IPI_CHANNEL 31U
++#endif
++
+ #endif /* LIBBSP_ESP32_BSP_IRQ_H */
+diff --git a/bsps/riscv/esp32/irq/irq_c3.c b/bsps/riscv/esp32/irq/irq_c3.c
+--- a/bsps/riscv/esp32/irq/irq_c3.c
++++ b/bsps/riscv/esp32/irq/irq_c3.c
+@@ -525,7 +525,7 @@
+ #endif
+ 
+ #if defined(RTEMS_SMP) && defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
+-  if ( cpu_vector == 1 ) {
++  if ( cpu_vector == BSP_ESP32S31_IPI_CHANNEL ) {
+     uint32_t cpu_index = _Per_CPU_Get_index( cpu_self );
+     if ( cpu_index == 0 ) {
+       *( (volatile uint32_t *) 0x20586010U ) = 0U;
+diff --git a/bsps/riscv/esp32/start/bspsmp.c b/bsps/riscv/esp32/start/bspsmp.c
+--- a/bsps/riscv/esp32/start/bspsmp.c
++++ b/bsps/riscv/esp32/start/bspsmp.c
+@@ -102,8 +102,9 @@
+ void _CPU_SMP_Finalize_initialization( uint32_t cpu_count )
+ {
+   (void) cpu_count;
+-  /* Route SW_INTR_0 (source 65) on Core 0 to CPU channel 1 (CLIC interrupt ID 17 = 1 + 16) */
+-  *( (volatile uint32_t *) ( 0x20585000U + 65U * 4U ) ) = 1U + 16U;
++  /* Route SW_INTR_0 to the dedicated IPI channel on Core 0. */
++  *( (volatile uint32_t *) ( 0x20585000U + SW_INTR_0 * 4U ) ) =
++    BSP_ESP32S31_IPI_CHANNEL + 16U;
+   set_csr( mie, MIP_MEIP );
+ }
+ 
+@@ -152,8 +153,8 @@
+       ".option pop\n" : : "r" ( mtvec ) : "memory"
+     );
+ 
+-    /* Route SW_INTR_1 (source 66) on Core 1 to CPU channel 1 (CLIC interrupt ID 17 = 1 + 16) */
+-    CORE1_MATRIX_REG( 66U * 4U ) = 1U + 16U;
++    /* Route SW_INTR_1 to the dedicated IPI channel on Core 1. */
++    CORE1_MATRIX_REG( SW_INTR_1 * 4U ) = BSP_ESP32S31_IPI_CHANNEL + 16U;
+ 
+     set_csr( mie, MIP_MEIP );
+ 
