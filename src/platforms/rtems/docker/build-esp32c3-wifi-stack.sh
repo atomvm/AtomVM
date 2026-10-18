@@ -131,6 +131,8 @@ cd "${BUILD_DIR}"
 echo "==> [1/4] Building rtems-lwip for riscv/esp32c3db..."
 if [ ! -d "rtems-lwip/.git" ]; then
     git clone --depth 1 https://github.com/RTEMS/rtems-lwip.git -b main rtems-lwip
+    # Fetch the pinned lwIP commit from its mirror to avoid Savannah TLS/HTTP failures.
+    git -C rtems-lwip config submodule.lwip-upstream.url https://github.com/lwip-tcpip/lwip.git
     git -C rtems-lwip submodule update --init --recursive --depth 1 lwip-upstream
     # The upstream Waf gitlink is not available in the GitHub mirror.
     # Use a compatible, pinned mirror revision instead.
