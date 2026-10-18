@@ -386,6 +386,13 @@ jobs:
         git clone --depth 1 https://gitlab.rtems.org/rtems/pkg/rtems-libbsd.git -b "${RTEMS_RELEASE}" rtems-libbsd
         cd "rtems-libbsd"
         git submodule update --init rtems_waf
+        python3 -c "
+        p = 'rtemsbsd/include/machine/rtems-bsd-libio.h'
+        with open(p, 'r+') as f:
+            c = f.read()
+            f.seek(0)
+            f.write('#ifndef LIBIO_FLAGS_CLOSE_BUSY\n#define LIBIO_FLAGS_CLOSE_BUSY 0x0400U\n#endif\n' + c)
+        "
         export PATH="${{ matrix.prefix }}/bin:$PATH"
         ./waf configure \
           --prefix="${{ matrix.prefix }}" \
@@ -510,6 +517,7 @@ jobs:
         set -euo pipefail
         ELF="src/platforms/rtems/build/AtomVM-realview_pbx_a9_qemu.exe"
         test -f "$ELF"
+        export QEMU_AUDIO_DRV="none"
         set +e
         output=$(timeout 90 qemu-system-arm \
           -net none -nographic -no-reboot -M realview-pbx-a9 -m 256M \
@@ -550,9 +558,10 @@ jobs:
         cmake --build src/platforms/rtems/build-smp
         ELF="src/platforms/rtems/build-smp/AtomVM-realview_pbx_a9_qemu.exe"
         test -f "$ELF"
+        export QEMU_AUDIO_DRV="none"
         set +e
         output=$(timeout 90 qemu-system-arm \
-          -net none -nographic -no-reboot -M realview-pbx-a9 -m 256M -smp 2 \
+          -net none -nographic -no-reboot -M realview-pbx-a9 -m 512M -smp 4 \
           -kernel "$ELF" 2>&1)
         status=$?
         set -e
@@ -584,6 +593,7 @@ jobs:
         set -euo pipefail
         ELF="src/platforms/rtems/build-net/AtomVM-realview_pbx_a9_qemu.exe"
         test -f "$ELF"
+        export QEMU_AUDIO_DRV="none"
         set +e
         output=$(timeout 90 qemu-system-arm \
           -net none -nographic -no-reboot -M realview-pbx-a9 -m 256M \
