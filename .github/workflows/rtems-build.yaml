@@ -30,8 +30,8 @@ concurrency:
 
 env:
   RTEMS_VERSION: "6"
-  RTEMS_RELEASE: "6.2"
-  RTEMS_PREFIX: /home/runner/rtems/6.2
+  RTEMS_RELEASE: "6"
+  RTEMS_PREFIX: /home/runner/rtems/6
 
 jobs:
   rtems-sparc:
@@ -69,35 +69,35 @@ jobs:
       id: rtems-cache
       uses: actions/cache/restore@v4
       with:
-        path: /home/runner/rtems/6.2
+        path: /home/runner/rtems/6
         key: rtems-${{ env.RTEMS_RELEASE }}-sparc-erc32-wifi-${{ runner.os }}
 
     - name: Build RTEMS 6 tools and sparc/erc32 BSP
       if: steps.rtems-cache.outputs.cache-hit != 'true'
       run: |
         set -euo pipefail
-        mkdir -p "$HOME/rtems-src" /home/runner/rtems/6.2
+        mkdir -p "$HOME/rtems-src" /home/runner/rtems/6
         cd "$HOME/rtems-src"
-        git clone --depth 1 https://gitlab.rtems.org/rtems/tools/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb-6
+        git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb-6
         cd "rsb-6/rtems"
-        ../source-builder/sb-set-builder --prefix=/home/runner/rtems/6.2 "6/rtems-sparc"
-        ../source-builder/sb-set-builder --prefix=/home/runner/rtems/6.2 \
+        ../source-builder/sb-set-builder --prefix=/home/runner/rtems/6 "6/rtems-sparc"
+        ../source-builder/sb-set-builder --prefix=/home/runner/rtems/6 \
           --target="sparc-rtems6" \
           --with-rtems-bsp=sparc/erc32 \
           --with-rtems-tests=no \
           "6/rtems-kernel"
-        find /home/runner/rtems/6.2/bin /home/runner/rtems/6.2/libexec -type f -executable -exec strip {} + 2>/dev/null || true
+        find /home/runner/rtems/6/bin /home/runner/rtems/6/libexec -type f -executable -exec strip {} + 2>/dev/null || true
         rm -rf "$HOME/rtems-src"
 
     - name: Save RTEMS 6 sparc/erc32 toolchain
       if: steps.rtems-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
-        path: /home/runner/rtems/6.2
+        path: /home/runner/rtems/6
         key: rtems-${{ env.RTEMS_RELEASE }}-sparc-erc32-wifi-${{ runner.os }}
 
     - name: Add RTEMS tools to PATH
-      run: echo "/home/runner/rtems/6.2/bin" >> "$GITHUB_PATH"
+      run: echo "/home/runner/rtems/6/bin" >> "$GITHUB_PATH"
 
     - name: Check RTEMS toolchain
       run: |
@@ -124,7 +124,7 @@ jobs:
         set -euo pipefail
         cmake -S src/platforms/rtems -B src/platforms/rtems/build -G Ninja \
           -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
-          -DRTEMS_PREFIX=/home/runner/rtems/6.2 \
+          -DRTEMS_PREFIX="${{ env.RTEMS_PREFIX }}" \
           -DRTEMS_BSP=sparc/erc32 \
           -DRTEMS_VERSION="6" \
           -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_boot.avm"
@@ -165,7 +165,7 @@ jobs:
         set -euo pipefail
         cmake -S src/platforms/rtems -B src/platforms/rtems/build-net -G Ninja \
           -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
-          -DRTEMS_PREFIX=/home/runner/rtems/6.2 \
+          -DRTEMS_PREFIX="${{ env.RTEMS_PREFIX }}" \
           -DRTEMS_BSP=sparc/erc32 \
           -DRTEMS_VERSION="6" \
           -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_net.avm"
@@ -215,8 +215,8 @@ jobs:
       id: toolchain-cache
       uses: actions/cache/restore@v4
       with:
-        path: /home/runner/rtems/6.2
-        key: rtems-6.2-arm-toolchain-${{ runner.os }}-v1
+        path: /home/runner/rtems/6
+        key: rtems-6-arm-toolchain-${{ runner.os }}-v1
 
     - name: Install build dependencies
       if: steps.toolchain-cache.outputs.cache-hit != 'true'
@@ -232,31 +232,31 @@ jobs:
       if: steps.toolchain-cache.outputs.cache-hit != 'true'
       run: |
         set -euo pipefail
-        mkdir -p "$HOME/rtems-src" /home/runner/rtems/6.2
+        mkdir -p "$HOME/rtems-src" /home/runner/rtems/6
         cd "$HOME/rtems-src"
-        git clone --depth 1 https://gitlab.rtems.org/rtems/tools/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb-6
+        git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb-6
         cd "rsb-6/rtems"
-        ../source-builder/sb-set-builder --prefix=/home/runner/rtems/6.2 "6/rtems-arm"
-        find /home/runner/rtems/6.2/bin /home/runner/rtems/6.2/libexec -type f -executable -exec strip {} + 2>/dev/null || true
+        ../source-builder/sb-set-builder --prefix=/home/runner/rtems/6 "6/rtems-arm"
+        find /home/runner/rtems/6/bin /home/runner/rtems/6/libexec -type f -executable -exec strip {} + 2>/dev/null || true
         rm -rf "$HOME/rtems-src"
 
     - name: Save ARM RTEMS 6 toolchain
       if: steps.toolchain-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
-        path: /home/runner/rtems/6.2
-        key: rtems-6.2-arm-toolchain-${{ runner.os }}-v1
+        path: /home/runner/rtems/6
+        key: rtems-6-arm-toolchain-${{ runner.os }}-v1
 
     - name: Verify ARM toolchain
       run: |
         set -euo pipefail
-        /home/runner/rtems/6.2/bin/arm-rtems6-gcc --version
+        /home/runner/rtems/6/bin/arm-rtems6-gcc --version
 
     - name: Archive ARM toolchain
       run: |
         set -euo pipefail
         # Preserve executable permissions and symlinks across artifact transfer.
-        tar -C /home/runner/rtems/6.2 -czf "$RUNNER_TEMP/rtems-6-arm-toolchain.tar.gz" .
+        tar -C /home/runner/rtems/6 -czf "$RUNNER_TEMP/rtems-6-arm-toolchain.tar.gz" .
 
     - name: Upload ARM toolchain
       uses: actions/upload-artifact@v4
@@ -284,14 +284,14 @@ jobs:
             bsp_name: imx7
             cache_key: arm-imx7-v3
             rtems_version: "6"
-            prefix: /home/runner/rtems/6.2
+            prefix: /home/runner/rtems/6
             qemu: qemu-system-arm
           - arch: arm
             bsp: arm/realview_pbx_a9_qemu
             bsp_name: realview_pbx_a9_qemu
             cache_key: arm-realview-pbx-a9-qemu-v2
             rtems_version: "6"
-            prefix: /home/runner/rtems/6.2
+            prefix: /home/runner/rtems/6
             qemu: qemu-system-arm
 
     steps:
@@ -361,7 +361,7 @@ jobs:
         echo "Building RTEMS 6 BSP for ${{ matrix.bsp }}..."
         mkdir -p "$HOME/rtems-src"
         cd "$HOME/rtems-src"
-        git clone --depth 1 https://gitlab.rtems.org/rtems/tools/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb-6
+        git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb-6
         cd "rsb-6/rtems"
         ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" \
           --target="${{ matrix.arch }}-rtems${{ matrix.rtems_version }}" \
@@ -383,7 +383,9 @@ jobs:
         echo "Building rtems-libbsd with GRiSP 2 Wi-Fi modules"
         mkdir -p "$HOME/rtems-src/libbsd"
         cd "$HOME/rtems-src/libbsd"
-        git clone --depth 1 https://gitlab.rtems.org/rtems/pkg/rtems-libbsd.git -b 6-freebsd-12 rtems-libbsd
+        git config --global url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems-waf" || true
+        git config --global url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems_waf" || true
+        git clone --depth 1 https://github.com/RTEMS/rtems-libbsd.git -b 6-freebsd-12 rtems-libbsd
         cd "rtems-libbsd"
         git submodule update --init rtems_waf
         python3 -c "
@@ -801,7 +803,7 @@ jobs:
         set -euo pipefail
         mkdir -p "$HOME/rtems-src" /home/runner/rtems/7
         cd "$HOME/rtems-src"
-        git clone --depth 1 https://gitlab.rtems.org/rtems/tools/rtems-source-builder.git -b main rsb-7
+        git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b main rsb-7
         cd rsb-7/rtems
         sed -i '/sis/d' config/7/rtems-riscv.bset
         sed -i '/with_rtems_gdb/d' config/tools/rtems-default-tools.bset
@@ -961,7 +963,7 @@ jobs:
         export PATH="${{ matrix.prefix }}/bin:$PATH"
         mkdir -p "$HOME/rtems-src"
         cd "$HOME/rtems-src"
-        git clone --depth 1 https://gitlab.rtems.org/rtems/rtos/rtems.git -b main rtems-7
+        git clone --depth 1 https://github.com/RTEMS/rtems.git -b main rtems-7
         cd rtems-7
         if [ -d "$GITHUB_WORKSPACE/src/platforms/rtems/docker/patches/rtems" ]; then
           for patch in "$GITHUB_WORKSPACE"/src/platforms/rtems/docker/patches/rtems/*.patch; do

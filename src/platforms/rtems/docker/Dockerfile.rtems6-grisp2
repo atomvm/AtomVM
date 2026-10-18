@@ -22,9 +22,9 @@
 FROM ubuntu:24.04 AS build-base
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV RTEMS_PREFIX=/opt/rtems/6.2
+ENV RTEMS_PREFIX=/opt/rtems/6
 ENV RTEMS_VERSION=6
-ENV RTEMS_RELEASE=6.2
+ENV RTEMS_RELEASE=6
 ENV PATH="${RTEMS_PREFIX}/bin:${PATH}"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -56,11 +56,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 FROM build-base AS rsb-toolchain
 
 WORKDIR /tmp/rsb
-RUN git clone --depth 1 https://gitlab.rtems.org/rtems/tools/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb \
+RUN git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb \
     && cd rsb/rtems \
     && ../source-builder/sb-set-builder --prefix="${RTEMS_PREFIX}" 6/rtems-arm
 
-# Stage 3: RTEMS 6.2 Kernel for arm/imx7 ~2 min build.
+# Stage 3: RTEMS 6 Kernel for arm/imx7 ~2 min build.
 FROM rsb-toolchain AS bsp-kernel
 
 WORKDIR /tmp/rsb/rsb/rtems
@@ -77,7 +77,9 @@ COPY src/platforms/rtems/docker/grisp2-libbsd.ini /tmp/grisp2-libbsd.ini
 
 WORKDIR /tmp/libbsd
 RUN rm -rf /tmp/rsb \
-    && git clone --depth 1 https://gitlab.rtems.org/rtems/pkg/rtems-libbsd.git -b 6-freebsd-12 rtems-libbsd \
+    && git config --global url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems-waf" \
+    && git config --global url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems_waf" \
+    && git clone --depth 1 https://github.com/RTEMS/rtems-libbsd.git -b 6-freebsd-12 rtems-libbsd \
     && cd rtems-libbsd \
     && git submodule update --init rtems_waf \
     && ./waf configure \

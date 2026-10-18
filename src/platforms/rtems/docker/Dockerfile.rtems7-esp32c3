@@ -71,7 +71,7 @@ FROM scratch AS rtems-src
 # Layered on top of the cached RSB toolchain; if RTEMS BSP options change, only this fast step rebuilds.
 FROM rsb-toolchain AS bsp-builder
 ARG RTEMS_REF=main
-ARG RTEMS_GIT_URL=https://gitlab.rtems.org/rtems/rtos/rtems.git
+ARG RTEMS_GIT_URL=https://github.com/RTEMS/rtems.git
 
 WORKDIR /tmp/rtems
 ENV PATH="${RTEMS_PREFIX}/bin:${PATH}"

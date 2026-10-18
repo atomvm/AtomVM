@@ -130,7 +130,9 @@ cd "${BUILD_DIR}"
 # -----------------------------------------------------------------------------
 echo "==> [1/4] Building rtems-lwip for riscv/esp32c6db..."
 if [ ! -d "rtems-lwip/.git" ]; then
-    git clone --depth 1 https://gitlab.rtems.org/rtems/pkg/rtems-lwip.git -b main rtems-lwip
+    git config --global url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems-waf" || true
+    git config --global url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems_waf" || true
+    git clone --depth 1 https://github.com/RTEMS/rtems-lwip.git -b main rtems-lwip
     git -C rtems-lwip submodule update --init --recursive --depth 1
     if [ -n "${PATCH_DIR}" ] && [ -d "${PATCH_DIR}/rtems-lwip" ]; then
         for p in "${PATCH_DIR}"/rtems-lwip/*.patch; do

@@ -7,11 +7,11 @@ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 # RTEMS & RTEMS-lwIP Patches
 
 Patches applied on top of official upstream repositories:
-- `rtems/`: Applied to the upstream RTEMS kernel (`https://gitlab.rtems.org/rtems/rtos/rtems.git`).
+- `rtems/`: Applied to the upstream RTEMS kernel (`https://github.com/RTEMS/rtems.git`).
   - Device drivers: GPIO (`/dev/gpio-0`), I2C (`/dev/i2c-0`), UART (`/dev/ttyS0`), GPSPI2 (`/dev/spi-0`), pin arbitration.
   - Subsystems: Wi-Fi RAM execution region (`.wifi*iram`), peripheral interrupt 0, timer frequency correction, ROM boundary.
   - Emulation: IRQ assertion fallback for `esp-emulator`.
-- `rtems-lwip/`: Applied to upstream RTEMS lwIP (`https://gitlab.rtems.org/rtems/pkg/rtems-lwip.git`).
+- `rtems-lwip/`: Applied to upstream RTEMS lwIP (`https://github.com/RTEMS/rtems-lwip.git`).
   - Board definition: `riscv/esp32c3db.json`, `lwipbspopts.h`, decoupled `netstart.c`.
   - Sizing tuning: SRAM-efficient pbuf pool and heap sizes.
 
