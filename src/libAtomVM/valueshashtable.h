@@ -48,6 +48,7 @@ struct ValuesHashTable
 };
 
 struct ValuesHashTable *valueshashtable_new(void);
+// Frees the table and its nodes; keys and values remain caller-owned.
 void valueshashtable_destroy(struct ValuesHashTable *hash_table);
 int valueshashtable_insert(struct ValuesHashTable *hash_table, uintptr_t key, uintptr_t value);
 uintptr_t valueshashtable_get_value(const struct ValuesHashTable *hash_table, uintptr_t key, uintptr_t default_value);

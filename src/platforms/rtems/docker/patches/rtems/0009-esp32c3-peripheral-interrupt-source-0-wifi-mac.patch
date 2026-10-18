@@ -1,0 +1,202 @@
+From 65b74c4516e86724b139eda1e5efdca52baf9237 Mon Sep 17 00:00:00 2001
+From: Samuel Price <thesamprice@gmail.com>
+Date: Wed, 16 Sep 2026 22:50:47 -0400
+Subject: [PATCH] esp32c3: Make peripheral interrupt source 0 usable, because it is the WiFi MAC
+
+ETS_WIFI_MAC_INTR_SOURCE is 0 on this part -- the first entry in a table
+ESP-IDF's soc/interrupts.h labels "decided by hardware, don't touch this".
+This BSP uses an RTEMS vector number as a peripheral interrupt source, so
+vector 0 has to work, and three things stopped it.
+
+bsp_interrupt_is_valid_vector() rejected 0 outright.  The comment beside the
+check explains the intent -- interrupt 0 is invalid but counted -- and that is
+true of the CPU interrupt *channel*, which the hardware reserves.  It is not
+true of the peripheral source, and the two numbering spaces had been
+conflated.
+
+get_active_interrupt() returned 0 to mean "no mapped source is asserting", so
+source 0 firing could not be told apart from nothing firing at all.  It now
+returns NO_ACTIVE_VECTOR, one past the last valid vector, and the dispatcher
+returns early on it rather than indexing off the end of the handler table --
+which is also the right response to a genuinely spurious interrupt, something
+the old code could not distinguish either.
+
+irq_mappings[] had no WiFi entry, so even a source that passed the first two
+checks failed to enable with RTEMS_UNSATISFIED.  The WiFi MAC, PWR and BB
+sources now map to CPU channel 1.
+
+Channel 1 is shared rather than dedicated, and the reason is that all 31
+usable channels were already assigned; giving WiFi one of its own would mean
+taking it from a peripheral another application uses.  Grouping is this
+table's established idiom -- four software interrupts already share channel 1,
+EFUSE shares 7 with LEDC, both watchdogs share 14 -- and
+_RISCV_Interrupt_dispatch() resolves which source actually fired.  It is also
+what the WiFi libraries ask for: they request intr_num 1 for both the MAC and
+PWR sources.  The cost is a shared priority and a status-word scan per
+interrupt, which is worth revisiting if receive latency ever matters; a
+dynamic mapping rather than a static table is the real answer.
+
+The two initialisation loops now start at vector 0 instead of 1, so source 0
+gets a priority and starts unmapped like every other.
+
+tests/bsp-irq0 covers it: vector 0 is valid, a handler installs on it,
+enabling programs the interrupt matrix and disabling clears it.  Delivery is
+deliberately not tested -- bsp_interrupt_raise() handles only the four
+software interrupts, because a peripheral source cannot be triggered by
+writing a register, which is correct hardware behaviour rather than a gap.
+Shown to fail: restoring just the vector-0 rejection makes the test report
+"vector 0 is a valid vector FAIL" and the install return RTEMS_INVALID_ID,
+which is the same error the WiFi port was reporting on every start.
+
+Originally carried as patches/rtems/0010-esp32c3-irq-source-zero.patch.
+
+Signed-off-by: Samuel Price <thesamprice@gmail.com>
+Assisted-by: Claude Opus 5 (1M context) <noreply@anthropic.com>
+
+---
+diff --git a/bsps/riscv/esp32/include/c3/chip_definitions.h b/bsps/riscv/esp32/include/c3/chip_definitions.h
+index bcbd8fbbc90bc8b664e39afe31464bd786659575..c1e55d7d7c2a9582fc1a6649e55a6a0e41ac4086 100644
+--- a/bsps/riscv/esp32/include/c3/chip_definitions.h
++++ b/bsps/riscv/esp32/include/c3/chip_definitions.h
+@@ -54,6 +54,21 @@
+ 
+ #define BSP_INTERRUPT_CUSTOM_VALID_VECTOR
+ 
++/*
++ * The WiFi sources, which are the first four peripheral interrupts on this
++ * part.  soc/interrupts.h in ESP-IDF calls the table they come from "decided
++ * by hardware, don't touch this"; these are ETS_WIFI_MAC_INTR_SOURCE and its
++ * three neighbours.
++ *
++ * WIFI_MAC_INTR being zero is the whole reason the dispatcher below has a
++ * sentinel other than zero: a peripheral source of 0 is legitimate here, even
++ * though a CPU interrupt channel of 0 is not.
++ */
++#define WIFI_MAC_INTR          0
++#define WIFI_MAC_NMI_INTR      1
++#define WIFI_PWR_INTR          2
++#define WIFI_BB_INTR           3
++
+ #define UHCI0_INTR            15
+ #define GPIO_PROCPU_INTR      16
+ #define GPSPI2_INTR_2         19
+diff --git a/bsps/riscv/esp32/irq/irq_c3.c b/bsps/riscv/esp32/irq/irq_c3.c
+index 8cf25ff92a262d23773c406bef59431b667aad45..1e15339289d2ba5c717b1b229cd5f53ebf9c0d38 100644
+--- a/bsps/riscv/esp32/irq/irq_c3.c
++++ b/bsps/riscv/esp32/irq/irq_c3.c
+@@ -47,6 +47,27 @@ typedef struct peripheral_irq_map {
+ } peripheral_irq_map_t;
+ 
+ static peripheral_irq_map_t irq_mappings[] = {
++  /*
++   * WiFi, grouped onto channel 1 with the software interrupts.
++   *
++   * All 31 usable CPU channels were already assigned, and giving WiFi one of
++   * its own would mean taking it from a peripheral another application uses.
++   * Grouping is this table's established idiom -- four software interrupts
++   * already share channel 1, EFUSE shares 7 with LEDC, both watchdogs share 14
++   * -- and _RISCV_Interrupt_dispatch() resolves which source actually fired.
++   *
++   * Channel 1 is also what the WiFi libraries themselves ask for: they call
++   * the OS adapter's _set_intr with intr_num 1 for both the MAC and PWR
++   * sources.
++   *
++   * The cost is that a WiFi interrupt shares a priority with the software
++   * interrupts, and that dispatch scans the status word to identify the
++   * source.  Worth revisiting if WiFi receive latency ever matters; a dynamic
++   * mapping rather than this static table would be the real answer.
++   */
++  { .peripheral_int = WIFI_MAC_INTR, .cpu_int = 1 },
++  { .peripheral_int = WIFI_PWR_INTR, .cpu_int = 1 },
++  { .peripheral_int = WIFI_BB_INTR, .cpu_int = 1 },
+   { .peripheral_int = UHCI0_INTR, .cpu_int = 1 },
+   /* Group software interrupts on interrupt 1 */
+   { .peripheral_int = SW_INTR_0, .cpu_int = 1 },
+@@ -110,6 +131,19 @@ static peripheral_irq_map_t irq_mappings[] = {
+ 
+ #define MATRIX_REG( reg ) *( (volatile uint32_t *) ( INT_MATRIX_BASE + reg ) )
+ 
++/*
++ * Returned by get_active_interrupt() when no mapped source is asserting.
++ *
++ * It cannot be 0.  ETS_WIFI_MAC_INTR_SOURCE is peripheral source 0 on this
++ * part, so 0 is a legitimate vector here and using it as "none" makes the
++ * WiFi MAC interrupt indistinguishable from no interrupt at all -- which is
++ * exactly what it did, and why the radio could never receive.
++ *
++ * RISCV_MAXIMUM_EXTERNAL_INTERRUPTS is one past the last valid vector, so it
++ * can never collide with a real one.
++ */
++#define NO_ACTIVE_VECTOR ( (rtems_vector_number) RISCV_MAXIMUM_EXTERNAL_INTERRUPTS )
++
+ static uint64_t get_int_status( void )
+ {
+   uint64_t total_set = MATRIX_REG( INTERRUPT_CORE0_INTR_STATUS_1_REG );
+@@ -144,7 +178,7 @@ static rtems_vector_number get_active_interrupt( uint8_t cpu_vector )
+     total_set >>= 1;
+   }
+ 
+-  return 0;
++  return NO_ACTIVE_VECTOR;
+ }
+ 
+ static uintptr_t periph_int_to_map_reg( rtems_vector_number vector )
+@@ -172,6 +206,16 @@ void _RISCV_Interrupt_dispatch( uintptr_t mcause, Per_CPU_Control *cpu_self )
+   /* Check this CPU vector to see which peripheral has an active interrupt */
+   active = get_active_interrupt( cpu_vector );
+ 
++  /*
++   * A spurious interrupt on this channel, or one whose source has been
++   * unmapped between asserting and being dispatched.  Returning is the only
++   * safe response: dispatching NO_ACTIVE_VECTOR would index off the end of the
++   * handler table.
++   */
++  if ( active == NO_ACTIVE_VECTOR ) {
++    return;
++  }
++
+   bsp_interrupt_assert( bsp_interrupt_is_valid_vector( active ) );
+ 
+   bsp_interrupt_handler_dispatch_unchecked( active );
+@@ -193,31 +237,29 @@ void bsp_interrupt_facility_initialize( void )
+   /* Set everything to level interrupts */
+   MATRIX_REG( INTERRUPT_CORE0_CPU_INT_TYPE_REG ) = 0x0U;
+   /*
+-   * Start at interrupt 1, interrupt 0 is invalid but included in the external
+-   * interrupt count
++   * From 0, because source 0 is the WiFi MAC.  The CPU-side channel 0 is the
++   * reserved one, and nothing here indexes channels by vector.
+    */
+-  for ( uint8_t vec = 1; vec < RISCV_MAXIMUM_EXTERNAL_INTERRUPTS; vec++ ) {
++  for ( uint8_t vec = 0; vec < RISCV_MAXIMUM_EXTERNAL_INTERRUPTS; vec++ ) {
+     bsp_interrupt_set_priority( vec, 14 );
+   }
+ 
+   _RISCV_MMIO_store_release_fence();
+   riscv_interrupt_enable( cookie );
+ 
+-  /*
+-   * Clear all mappings. Start at interrupt 1, interrupt 0 is invalid but
+-   * included in the external interrupt count
+-   */
+-  for ( uint8_t vec = 1; vec < RISCV_MAXIMUM_EXTERNAL_INTERRUPTS; vec++ ) {
++  /* Clear all mappings, source 0 included. */
++  for ( uint8_t vec = 0; vec < RISCV_MAXIMUM_EXTERNAL_INTERRUPTS; vec++ ) {
+     bsp_interrupt_vector_disable( vec );
+   }
+ }
+ 
+ bool bsp_interrupt_is_valid_vector( rtems_vector_number vector )
+ {
+-  if ( vector == 0 ) {
+-    return false;
+-  }
+-
++  /*
++   * Vector 0 IS valid.  A vector here is a peripheral interrupt source, not a
++   * CPU interrupt channel, and while channel 0 is reserved by the hardware,
++   * source 0 is the WiFi MAC.  Rejecting it made that interrupt unusable.
++   */
+   return vector < (rtems_vector_number) RISCV_MAXIMUM_EXTERNAL_INTERRUPTS;
+ }
+ 

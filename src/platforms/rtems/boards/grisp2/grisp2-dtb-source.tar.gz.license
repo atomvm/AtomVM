@@ -1,0 +1,17 @@
+SPDX-FileCopyrightText: 2020 embedded brains GmbH
+SPDX-FileCopyrightText: 2016 PHYTEC Messtechnik GmbH
+SPDX-FileCopyrightText: 2014-2015 Freescale Semiconductor, Inc.
+SPDX-FileCopyrightText: 1999-2002 Vojtech Pavlik
+SPDX-FileCopyrightText: 2015 Hans de Goede <hdegoede@redhat.com>
+SPDX-FileCopyrightText: 1992-2020 The FreeBSD Project
+
+SPDX-License-Identifier: BSD-2-Clause AND GPL-2.0-only AND (GPL-2.0-or-later OR BSD-2-Clause) AND (GPL-2.0-only OR MIT) AND (GPL-2.0-only WITH Linux-syscall-note)
+
+The expression covers the archive's component licenses. Original per-file
+notices and license alternatives are retained in the archive; see README.md
+for source provenance and regeneration instructions.
+
+The bundled make_dtb.sh comes from FreeBSD revision
+076981e2f3f27306bef1c0ea5b0b458971d92236 and is covered by its BSD-2-Clause
+COPYRIGHT notice:
+https://github.com/freebsd/freebsd-src/blob/076981e2f3f27306bef1c0ea5b0b458971d92236/COPYRIGHT

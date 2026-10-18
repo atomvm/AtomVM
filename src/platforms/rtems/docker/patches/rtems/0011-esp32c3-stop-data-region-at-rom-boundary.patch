@@ -1,0 +1,184 @@
+From f30da5ae1510bedd048987aba028f632acda858e Mon Sep 17 00:00:00 2001
+From: Samuel Price <thesamprice@gmail.com>
+Date: Wed, 16 Sep 2026 22:50:48 -0400
+Subject: [PATCH] esp32c3: Stop the data region where the ROM's own data begins
+
+The RAM region ran to 0x3fcd0000, the end of the internal SRAM.  The ROM's
+data starts at 0x3fcce710, so the last 6384 bytes of the region were memory
+the ROM believes it owns.
+
+That address is not a guess.  ESP-IDF stops there too, and derives it the
+same way -- esp_system/ld/memory.ld sizes dram0_0_seg as
+
+    org = (0x3FC7C000 + 0x4000)
+    len = 0x403CE710 - (0x4037C000 - 0x3FC7C000) - (0x3FC7C000 + 0x4000)
+
+whose 0x403CE710, carried through the instruction window's 0x700000 offset,
+is 0x3FCCE710 on the data bus.  Both sides start at 0x3fc80000 and only the
+ceiling differed.
+
+Nothing in this tree has been traced to the overlap, and that is worth
+stating plainly rather than dressing a latent fault up as a fixed one.  What
+makes it worth a constant now is that the exposure is not conditional: the
+BSP calls ROM code on every path -- the ets_* entry points, the PHY
+routines, and the ROM halves of the WiFi libraries, which announce
+themselves as "pp rom version: 9387209" and "net80211 rom version: 9387209".
+The blobs reach their ROM halves through address literals of their own, so
+no link-time check can show which of those addresses are live.  The failure
+it would produce is corruption of whatever the allocator happened to place
+last, on a path that only runs sometimes, which is the shape that is
+miserable to find later and cheap to remove now.
+
+ESP32C_DRAM_ROM_RESERVE_SIZE comes off the top of the region for the same
+reason ESP32C_IRAM_REGION_SIZE comes off the bottom: memory that exists but
+is spoken for.  It defaults to 0x18f0, the 6384 bytes between the two
+addresses, and an image that wants the old behaviour can set it to zero.
+
+The cost is 6384 bytes of work area and nothing else -- no section moves,
+because .work is the only thing the linker sizes from what remains of RAM.
+Measured on the two images that have the least of it, the MicroPython WiFi
+example goes from 130576 bytes to 124192 and wifi-net from 135184 to
+128800.  That work area is already the tight resource on this part
+(rtems-esphome#121), which is an argument for the 71.5 KiB of static lwIP
+pools in .bss and not an argument for keeping the overlap.
+
+esp32c_dram_rom_reserve_begin is exported from the linker script so that a
+program can read the boundary out of the image it is running rather than
+carry its own copy of the constant, and so that a weak reference to it
+distinguishes "this BSP reserves nothing" from "this BSP reserves a
+different amount".  A literal can do neither, and both are things a test
+needs to be able to say.
+
+Built: the esp32c3db BSP and its whole testsuite, 1485 targets, with the
+region capped.  RamEnd and bsp_section_work_end are both 0x3fcce710 in the
+resulting images, and esp32c_dram_rom_reserve_begin is there beside them.
+
+Whether the ROM really writes to those 6384 bytes is a separate question
+and this does not answer it; examples/rom-overlap in the rtems-esp-wifi
+tree is the measurement.  It asserts bsp_section_work_end against the
+boundary, fills the range the reserve gave back with an address-derived
+pattern before the radio comes up, drives esp_wifi_init through
+association, and reads it back -- and declines to call a clean window
+evidence unless the station actually associated, because most of the ROM
+that matters runs during the scan and the handshake.
+
+Both of its negative controls link today; neither has been run on hardware
+yet, and the run is the point.  Against an unpatched BSP the image links
+(the boundary symbol is referenced weakly) with bsp_section_work_end at
+0x3fcd0000 and no reserve symbol, which is the state the first two checks
+are written to fail on; -DROM_OVERLAP_SELF_TEST corrupts one word after the
+fill and is the control for the read-back half.
+---
+ spec/build/bsps/riscv/esp32/grp.yml               |  2 +
+ spec/build/bsps/riscv/esp32/linkcmds.yml          | 20 +++++++++-
+ spec/build/bsps/riscv/esp32/optdramromreserve.yml | 35 ++++++++++++++++++
+ 3 files changed, 56 insertions(+), 1 deletion(-)
+ create mode 100644 spec/build/bsps/riscv/esp32/optdramromreserve.yml
+
+Originally carried as patches/rtems/0013-esp32c3-dram-rom-reserve.patch.
+
+Signed-off-by: Samuel Price <thesamprice@gmail.com>
+Assisted-by: Claude Opus 5 (1M context) <noreply@anthropic.com>
+
+---
+diff --git a/spec/build/bsps/riscv/esp32/grp.yml b/spec/build/bsps/riscv/esp32/grp.yml
+index 8398f996e778da0e6dc73cc594e5e8fbe7ed6d58..b47bfbb9dd0e37af116bb57e2de302c5d1f134fc 100644
+--- a/spec/build/bsps/riscv/esp32/grp.yml
++++ b/spec/build/bsps/riscv/esp32/grp.yml
+@@ -38,6 +38,8 @@ links:
+   uid: ../optespressifdirectboot
+ - role: build-dependency
+   uid: optiramsize
++- role: build-dependency
++  uid: optdramromreserve
+ - role: build-dependency
+   uid: optflashsize
+ - role: build-dependency
+diff --git a/spec/build/bsps/riscv/esp32/linkcmds.yml b/spec/build/bsps/riscv/esp32/linkcmds.yml
+index c59d35ab0f2a678999e76d10827d3d8d546ad8bb..98281d09e04a91bd585aba7415de586c537cf488 100644
+--- a/spec/build/bsps/riscv/esp32/linkcmds.yml
++++ b/spec/build/bsps/riscv/esp32/linkcmds.yml
+@@ -21,9 +21,16 @@ content: |
+      * ESP32C_IRAM_REGION_SIZE at its default of zero the region is empty and
+      * RAM is the whole SRAM, which is what a configuration that needs none
+      * should pay.
++     *
++     * The top of the block is not ours either.  The ROM keeps its own data
++     * there, from 0x3fcce710 up, and this BSP calls ROM code continuously --
++     * ets_*, the PHY routines, and the WiFi libraries' ROM halves.  So
++     * ESP32C_DRAM_ROM_RESERVE_SIZE comes off the top for the same reason
++     * ESP32C_IRAM_REGION_SIZE comes off the bottom: it is memory that
++     * exists and is spoken for.
+      */
+     RAM_CODE : ORIGIN = 0x40380000, LENGTH = ${ESP32C_IRAM_REGION_SIZE}
+-    RAM : ORIGIN = 0x3fc80000 + ${ESP32C_IRAM_REGION_SIZE}, LENGTH = 0x50000 - ${ESP32C_IRAM_REGION_SIZE}
++    RAM : ORIGIN = 0x3fc80000 + ${ESP32C_IRAM_REGION_SIZE}, LENGTH = 0x50000 - ${ESP32C_IRAM_REGION_SIZE} - ${ESP32C_DRAM_ROM_RESERVE_SIZE}
+   }
+ 
+   /*
+@@ -33,6 +40,15 @@ content: |
+    */
+   esp32c_iram_to_dram_delta = 0x3fc80000 - 0x40380000;
+ 
++  /*
++   * The first address above the region, which is the first address the ROM
++   * owns.  Exported so that a program checking the boundary reads it from the
++   * image it is actually running rather than from a copy of the constant, and
++   * so that a weak reference can tell a BSP that reserves nothing from one
++   * that reserves a different amount.  A literal can do neither.
++   */
++  esp32c_dram_rom_reserve_begin = 0x3fc80000 + 0x50000 - ${ESP32C_DRAM_ROM_RESERVE_SIZE};
++
+   REGION_ALIAS ("REGION_START", CODE_FLASH_MAPPED);
+   REGION_ALIAS ("REGION_START_LOAD", CODE_FLASH_RAW);
+   REGION_ALIAS ("REGION_TEXT", CODE_FLASH_MAPPED);
+diff --git a/spec/build/bsps/riscv/esp32/optdramromreserve.yml b/spec/build/bsps/riscv/esp32/optdramromreserve.yml
+new file mode 100644
+index 0000000000000000000000000000000000000000..ec813e07141665c9482d7a4158aa215f365bbc22
+--- /dev/null
++++ b/spec/build/bsps/riscv/esp32/optdramromreserve.yml
+@@ -0,0 +1,44 @@
++SPDX-License-Identifier: CC-BY-SA-4.0 OR BSD-2-Clause
++actions:
++- get-integer: null
++- assert-uint32: null
++- env-assign: null
++- format-and-define: null
++build-type: option
++copyrights:
++- Copyright (C) 2026 Samuel Price <thesamprice@gmail.com>
++default:
++- enabled-by: true
++  value: 0x0
++description: |
++  How many bytes at the top of the internal SRAM belong to the ROM rather than
++  to the application, in bytes, aligned to 4.
++
++  The correct value on this part is 0x18f0, and the default here is 0 anyway.
++  Read that as a debt, not as a judgement that the memory is free: the reserve
++  costs 6384 bytes of work area, and measured on hardware that is enough to
++  stop the MicroPython WiFi example associating -- it leaves 6880 bytes of C
++  heap where 14416 works, and the WiFi libraries then fail the way they fail
++  at 2128, which is an empty scan rather than an allocation error.  So this
++  ships switched off until lwIP stops holding 71.5 KiB in static pools, and
++  is set to 0x18f0 in the same change that frees it.
++
++  The ESP32-C3's ROM keeps its own data in the SRAM, from 0x3fcce710 to the
++  end of the block at 0x3fcd0000.  That is where ESP-IDF stops: esp_system's
++  memory.ld computes dram0_0_seg's length from the same address, and the
++  0x18f0 default here is 0x3fcd0000 - 0x3fcce710.
++
++  A BSP that ends its data region at 0x3fcd0000 instead does not gain 6384
++  bytes; it hands out 6384 bytes the ROM believes it owns, to whatever the
++  allocator places last.  Every image built for this part calls ROM code --
++  the ets_* entry points, the PHY routines, and the ROM halves of the WiFi
++  libraries -- so the overlap is not conditional on using a particular driver.
++
++  Lower it only for an image that calls no ROM code at all, and know that the
++  PHY and WiFi blobs do so from their own ROM address literals, not through
++  anything the link can be made to show.
++enabled-by: true
++format: '{:#010x}'
++links: []
++name: ESP32C_DRAM_ROM_RESERVE_SIZE
++type: build

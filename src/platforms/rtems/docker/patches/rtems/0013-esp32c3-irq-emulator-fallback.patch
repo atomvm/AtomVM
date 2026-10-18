@@ -1,0 +1,31 @@
+diff --git a/bsps/riscv/esp32/irq/irq_c3.c b/bsps/riscv/esp32/irq/irq_c3.c
+index 36ccbd4..572c550 100644
+--- a/bsps/riscv/esp32/irq/irq_c3.c
++++ b/bsps/riscv/esp32/irq/irq_c3.c
+@@ -197,6 +197,17 @@ static rtems_vector_number get_active_interrupt( uint8_t cpu_vector )
+     total_set >>= 1;
+   }
+ 
++  /*
++   * Fallback for emulators (e.g. esp-emulator) that assert CPU interrupt lines
++   * without populating the optional INTR_STATUS_0/1 hardware registers:
++   * map directly from the asserted CPU vector to the configured peripheral source.
++   */
++  for ( size_t i = 0; i < RTEMS_ARRAY_SIZE( irq_mappings ); i++ ) {
++    if ( irq_mappings[ i ].cpu_int == cpu_vector ) {
++      return irq_mappings[ i ].peripheral_int;
++    }
++  }
++
+   return NO_ACTIVE_VECTOR;
+ }
+ 
+@@ -232,6 +243,8 @@ void _RISCV_Interrupt_dispatch( uintptr_t mcause, Per_CPU_Control *cpu_self )
+    * handler table.
+    */
+   if ( active == NO_ACTIVE_VECTOR ) {
++    MATRIX_REG( INTERRUPT_CORE0_CPU_INT_CLEAR_REG ) = 1U << cpu_vector;
++    MATRIX_REG( INTERRUPT_CORE0_CPU_INT_CLEAR_REG ) = 0U;
+     return;
+   }
+ 
