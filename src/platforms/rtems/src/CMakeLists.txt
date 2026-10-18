@@ -84,6 +84,12 @@ elseif(RTEMS_BOARD STREQUAL "esp32c6")
     target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BOARD_ESP32 RTEMS_BOARD_ESP32C6)
 elseif(RTEMS_BOARD STREQUAL "esp32s31")
     target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BOARD_ESP32 RTEMS_BOARD_ESP32S31)
+elseif(RTEMS_ARCH STREQUAL "arm" AND RTEMS_BSP_NAME STREQUAL "realview_pbx_a9_qemu")
+    target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BSP_REALVIEW_PBX_A9_QEMU)
+    target_link_options(${PROJECT_EXECUTABLE} PRIVATE
+        -Wl,--wrap=bsp_start_hook_0
+        -Wl,--wrap=bsp_start_hook_1
+    )
 endif()
 
 target_compile_features(${PROJECT_EXECUTABLE} PUBLIC c_std_11)

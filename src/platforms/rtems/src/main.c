@@ -119,6 +119,61 @@ void __wrap__RISCV_Interrupt_dispatch(uintptr_t mcause, Per_CPU_Control *cpu_sel
 }
 #endif
 
+#if defined(RTEMS_BSP_REALVIEW_PBX_A9_QEMU)
+#include <bsp/start.h>
+#if defined(RTEMS_SMP)
+#include <libcpu/arm-cp15.h>
+#include <rtems/score/smpimpl.h>
+
+#define ARM_SMP_MMU_READY_MAGIC 0x52544d53U
+
+BSP_START_DATA_SECTION static volatile uint32_t arm_smp_mmu_ready = 0;
+#endif
+
+extern void __real_bsp_start_hook_0(void);
+extern void __real_bsp_start_hook_1(void);
+
+BSP_START_TEXT_SECTION void __wrap_bsp_start_hook_0(void)
+{
+#if defined(RTEMS_SMP)
+    uint32_t cpu_index_self = _SMP_Get_current_processor();
+    if (cpu_index_self != 0) {
+        if (!_SMP_Should_start_processor(cpu_index_self)) {
+            while (true) {
+                _ARM_Wait_for_event();
+            }
+        }
+        /*
+         * Under QEMU -smp N, all Cortex-A9 cores enter _start simultaneously.
+         * Secondary cores skip CPU 0's cache invalidation loop in start.S and
+         * would otherwise enable their MMU in arm_a9mpcore_start_hook_0()
+         * using bsp_translation_table_base while CPU 0 is still setting up the
+         * page table or clearing .bss in bsp_start_hook_1(). Wait here (with
+         * MMU and D-cache still off on secondary cores) until CPU 0 signals
+         * that bsp_start_hook_1() has completed.
+         */
+        while (arm_smp_mmu_ready != ARM_SMP_MMU_READY_MAGIC) {
+            _ARM_Wait_for_event();
+        }
+        _ARM_Data_memory_barrier();
+    }
+#endif
+    __real_bsp_start_hook_0();
+}
+
+BSP_START_TEXT_SECTION void __wrap_bsp_start_hook_1(void)
+{
+    __real_bsp_start_hook_1();
+#if defined(RTEMS_SMP)
+    arm_smp_mmu_ready = ARM_SMP_MMU_READY_MAGIC;
+    arm_cp15_data_cache_clean_and_invalidate_line((const void *) &arm_smp_mmu_ready);
+    rtems_cache_flush_entire_data();
+    _ARM_Data_synchronization_barrier();
+    _ARM_Send_event();
+#endif
+}
+#endif
+
 #ifdef RTEMS_BOARD_FDT_COMPATIBLE
 static bool board_fdt_is_valid(void)
 {
