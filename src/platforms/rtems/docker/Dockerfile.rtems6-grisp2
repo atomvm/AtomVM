@@ -46,18 +46,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
     gperf \
     wget \
+    curl \
     xz-utils \
     git \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Stage 2: Heavy RSB ARM Toolchain (GCC, Binutils, GDB, Newlib) ~15-20 min build.
+# Stage 2: Heavy RSB ARM Toolchain (GCC, Binutils, Newlib) ~15-20 min build.
 # Cached independently so it never rebuilds when BSP or LibBSD options change.
+# GDB is not needed to compile or package GRiSP 2 firmware.
 FROM build-base AS rsb-toolchain
 
 WORKDIR /tmp/rsb
 RUN git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb \
+    && sed -i '/with_rtems_gdb/d' rsb/rtems/config/tools/rtems-default-tools.bset \
+    && sed -i 's|https://gmplib.org/download/gmp|https://ftp.gnu.org/gnu/gmp|g' rsb/source-builder/config/gmp.cfg \
     && cd rsb/rtems \
+    && mkdir -p sources \
+    && curl -fSL --retry 3 --retry-all-errors https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.bz2 -o sources/gmp-6.3.0.tar.bz2 \
     && ../source-builder/sb-set-builder --prefix="${RTEMS_PREFIX}" 6/rtems-arm
 
 # Stage 3: RTEMS 6 Kernel for arm/imx7 ~2 min build.

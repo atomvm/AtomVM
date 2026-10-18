@@ -63,7 +63,7 @@ jobs:
           build-essential g++ gdb unzip pax bison flex texinfo \
           python3-dev python-is-python3 python3-setuptools \
           libncurses-dev zlib1g-dev ninja-build pkg-config \
-          cmake gperf wget xz-utils python3-pip
+          cmake gperf wget xz-utils python3-pip curl
 
     - name: Restore RTEMS 6 sparc/erc32 toolchain
       id: rtems-cache
@@ -80,6 +80,11 @@ jobs:
         cd "$HOME/rtems-src"
         git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb-6
         cd "rsb-6/rtems"
+        # SIS runs directly; CI does not need GDB or its GitLab-only patches.
+        sed -i '/with_rtems_gdb/d' config/tools/rtems-default-tools.bset
+        sed -i 's|https://gmplib.org/download/gmp|https://ftp.gnu.org/gnu/gmp|g' ../source-builder/config/gmp.cfg
+        mkdir -p sources
+        curl -fSL --retry 3 --retry-all-errors https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.bz2 -o sources/gmp-6.3.0.tar.bz2
         ../source-builder/sb-set-builder --prefix=/home/runner/rtems/6 "6/rtems-sparc"
         ../source-builder/sb-set-builder --prefix=/home/runner/rtems/6 \
           --target="sparc-rtems6" \
@@ -226,7 +231,7 @@ jobs:
           build-essential g++ gdb unzip pax bison flex texinfo \
           python3-dev python-is-python3 python3-setuptools \
           libncurses-dev zlib1g-dev ninja-build pkg-config \
-          cmake gperf wget xz-utils python3-pip
+          cmake gperf wget xz-utils python3-pip curl
 
     - name: Build RSB ARM toolchain
       if: steps.toolchain-cache.outputs.cache-hit != 'true'
@@ -236,6 +241,11 @@ jobs:
         cd "$HOME/rtems-src"
         git clone --depth 1 https://github.com/RTEMS/rtems-source-builder.git -b "${RTEMS_RELEASE}" rsb-6
         cd "rsb-6/rtems"
+        # QEMU runs directly; CI does not need GDB or its GitLab-only patches.
+        sed -i '/with_rtems_gdb/d' config/tools/rtems-default-tools.bset
+        sed -i 's|https://gmplib.org/download/gmp|https://ftp.gnu.org/gnu/gmp|g' ../source-builder/config/gmp.cfg
+        mkdir -p sources
+        curl -fSL --retry 3 --retry-all-errors https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.bz2 -o sources/gmp-6.3.0.tar.bz2
         ../source-builder/sb-set-builder --prefix=/home/runner/rtems/6 "6/rtems-arm"
         find /home/runner/rtems/6/bin /home/runner/rtems/6/libexec -type f -executable -exec strip {} + 2>/dev/null || true
         rm -rf "$HOME/rtems-src"

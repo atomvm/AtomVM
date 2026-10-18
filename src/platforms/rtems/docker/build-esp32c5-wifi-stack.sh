@@ -130,10 +130,12 @@ cd "${BUILD_DIR}"
 # -----------------------------------------------------------------------------
 echo "==> [1/4] Building rtems-lwip for riscv/esp32c5db..."
 if [ ! -d "rtems-lwip/.git" ]; then
-    git config --global --add url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems-waf" || true
-    git config --global --add url."https://github.com/RTEMS/rtems_waf".insteadOf "https://gitlab.rtems.org/rtems/tools/rtems_waf" || true
     git clone --depth 1 https://github.com/RTEMS/rtems-lwip.git -b main rtems-lwip
-    git -C rtems-lwip submodule update --init --recursive --depth 1
+    git -C rtems-lwip submodule update --init --recursive --depth 1 lwip-upstream
+    # The upstream Waf gitlink is not available in the GitHub mirror.
+    # Use a compatible, pinned mirror revision instead.
+    git clone https://github.com/RTEMS/rtems_waf.git rtems-lwip/rtems_waf
+    git -C rtems-lwip/rtems_waf checkout --detach 8bd39e6047a93aca82d28638644b92cc7a141286
     if [ -n "${PATCH_DIR}" ] && [ -d "${PATCH_DIR}/rtems-lwip" ]; then
         for p in "${PATCH_DIR}"/rtems-lwip/*.patch; do
             if [ -f "$p" ]; then
