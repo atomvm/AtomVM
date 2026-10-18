@@ -60,7 +60,7 @@ jobs:
             chip: ""
             board: ""
             bsp_config: ""
-            cache_key: arm-imx7-smp-v1
+            cache_key: arm-imx7
             rtems_version: "6"
             prefix: /home/runner/rtems/6.2
             qemu: qemu-system-arm
@@ -70,7 +70,7 @@ jobs:
             chip: ""
             board: ""
             bsp_config: ""
-            cache_key: arm-realview-pbx-a9-qemu-smp-v1
+            cache_key: arm-realview-pbx-a9-qemu
             rtems_version: "6"
             prefix: /home/runner/rtems/6.2
             qemu: qemu-system-arm
@@ -80,7 +80,7 @@ jobs:
             chip: esp32c3
             board: esp32c3
             bsp_config: esp32c3-wifi-bsp.ini
-            boot_markers: "{uart,enoent,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,esp32c3,ok} {crypto,esp32c3,ok}"
+            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,esp32c3,ok} {crypto,esp32c3,ok}"
             cache_key: riscv-esp32c3db-v2
             rtems_version: "7"
             prefix: /home/runner/rtems/7
@@ -191,17 +191,11 @@ jobs:
           tar xJf "rtems-source-builder-${RTEMS_RELEASE}.tar.xz"
           cd "rtems-source-builder-${RTEMS_RELEASE}/rtems"
           ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" "${{ matrix.rtems_version }}/rtems-${{ matrix.arch }}"
-          kernel_cmd=(
-            ../source-builder/sb-set-builder
-            --prefix="${{ matrix.prefix }}"
-            --target="${{ matrix.arch }}-rtems${{ matrix.rtems_version }}"
-            --with-rtems-bsp=${{ matrix.bsp }}
-          )
-          if [ "${{ matrix.arch }}" = "arm" ]; then
-            kernel_cmd+=(--with-rtems-smp)
-          fi
-          kernel_cmd+=(--with-rtems-tests=no "${{ matrix.rtems_version }}/rtems-kernel")
-          "${kernel_cmd[@]}"
+          ../source-builder/sb-set-builder --prefix="${{ matrix.prefix }}" \
+            --target="${{ matrix.arch }}-rtems${{ matrix.rtems_version }}" \
+            --with-rtems-bsp=${{ matrix.bsp }} \
+            --with-rtems-tests=no \
+            "${{ matrix.rtems_version }}/rtems-kernel"
         fi
 
     - name: Build rtems-libbsd for ${{ matrix.bsp }}
@@ -240,7 +234,7 @@ jobs:
         fi
         echo "Building rtems-lwip and Wi-Fi stack for ${{ matrix.chip }}..."
         export PATH="${{ matrix.prefix }}/bin:$PATH"
-        "$GITHUB_WORKSPACE/src/platforms/rtems/tools/build-${{ matrix.chip }}-wifi-stack.sh" --prefix="${{ matrix.prefix }}"
+        "$GITHUB_WORKSPACE/src/platforms/rtems/docker/build-${{ matrix.chip }}-wifi-stack.sh" --prefix="${{ matrix.prefix }}"
 
     - name: Save RTEMS ${{ matrix.rtems_version }} ${{ matrix.bsp }} toolchain
       if: steps.rtems-cache.outputs.cache-hit != 'true'

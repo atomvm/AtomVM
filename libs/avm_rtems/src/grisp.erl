@@ -88,8 +88,17 @@
 
 -type led_id() :: 1 | 2.
 -type color() ::
-    off | black | red | green | blue | yellow | magenta | cyan | white |
-    {0..255, 0..255, 0..255} | {boolean(), boolean(), boolean()}.
+    off
+    | black
+    | red
+    | green
+    | blue
+    | yellow
+    | magenta
+    | cyan
+    | white
+    | {0..255, 0..255, 0..255}
+    | {boolean(), boolean(), boolean()}.
 -type jumper_id() :: 1..5.
 -type level() :: high | low.
 -type eeprom_info() :: #{
@@ -196,9 +205,9 @@ eeprom() ->
     I2C = i2c:open(i2c_bus_config(internal)),
     try
         case i2c:read_bytes(I2C, ?I2C_EEPROM_ADDR, 0, 16, [{mem_add_size, 8}]) of
-            {ok, <<SigVer:8, _Pad:3/binary, Serial:32/little, Batch:16/little,
-                   PcbVar:8, PcbVer:8, AssVar:8, AssVer:8,
-                   CRC16:16/little, _Rest/binary>> = Bin} ->
+            {ok,
+                <<SigVer:8, _Pad:3/binary, Serial:32/little, Batch:16/little, PcbVar:8, PcbVer:8,
+                    AssVar:8, AssVer:8, CRC16:16/little, _Rest/binary>> = Bin} ->
                 HeaderBytes = binary:part(Bin, 0, 14),
                 case calc_crc16(HeaderBytes) =:= CRC16 of
                     true ->
@@ -289,7 +298,9 @@ mac_address() ->
 mac_address_string() ->
     case mac_address() of
         {ok, <<A, B, C, D, E, F>>} ->
-            Formatted = io_lib:format("~2.16.0B:~2.16.0B:~2.16.0B:~2.16.0B:~2.16.0B:~2.16.0B", [A, B, C, D, E, F]),
+            Formatted = io_lib:format("~2.16.0B:~2.16.0B:~2.16.0B:~2.16.0B:~2.16.0B:~2.16.0B", [
+                A, B, C, D, E, F
+            ]),
             {ok, lists:flatten(Formatted)};
         {error, Reason} ->
             {error, Reason}
@@ -351,13 +362,14 @@ spi_open(DeviceName) ->
 %%-----------------------------------------------------------------------------
 -spec spi_open(DeviceName :: atom(), DeviceOpts :: proplists:proplist()) -> spi:spi().
 spi_open(DeviceName, DeviceOpts) ->
-    CsPin = case proplists:get_value(cs, DeviceOpts, cs1) of
-        cs1 -> spi_pin(cs1);
-        cs2 -> spi_pin(cs2);
-        cs3 -> spi_pin(cs3);
-        cs4 -> spi_pin(cs4);
-        Pin when is_map(Pin) orelse is_tuple(Pin) -> Pin
-    end,
+    CsPin =
+        case proplists:get_value(cs, DeviceOpts, cs1) of
+            cs1 -> spi_pin(cs1);
+            cs2 -> spi_pin(cs2);
+            cs3 -> spi_pin(cs3);
+            cs4 -> spi_pin(cs4);
+            Pin when is_map(Pin) orelse is_tuple(Pin) -> Pin
+        end,
     Speed = proplists:get_value(clock_speed_hz, DeviceOpts, 1000000),
     Mode = proplists:get_value(mode, DeviceOpts, 0),
     BusConfig = spi_bus_config(),
@@ -415,11 +427,11 @@ i2c_close(I2C) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec i2c_address(Component :: eeprom | eui | crypto | onewire) -> 16#18 | 16#36 | 16#57 | 16#5F.
-i2c_address(eeprom)  -> ?I2C_EEPROM_ADDR;
-i2c_address(eui)     -> ?I2C_EUI_ADDR;
-i2c_address(crypto)  -> 16#36;
+i2c_address(eeprom) -> ?I2C_EEPROM_ADDR;
+i2c_address(eui) -> ?I2C_EUI_ADDR;
+i2c_address(crypto) -> 16#36;
 i2c_address(onewire) -> 16#18;
-i2c_address(_Comp)   -> erlang:error(badarg).
+i2c_address(_Comp) -> erlang:error(badarg).
 
 %%-----------------------------------------------------------------------------
 %% @doc Return the FDT pin map for Pmod I2C interrupt and reset lines.
@@ -457,7 +469,8 @@ uart_open(Port) ->
 %% @doc Open a UART port with custom baud rate or configuration options.
 %% @end
 %%-----------------------------------------------------------------------------
--spec uart_open(Port :: console | pmod, SpeedOrOpts :: integer() | proplists:proplist()) -> uart:uart().
+-spec uart_open(Port :: console | pmod, SpeedOrOpts :: integer() | proplists:proplist()) ->
+    uart:uart().
 uart_open(Port, Speed) when is_integer(Speed) ->
     uart_open(Port, [{speed, Speed}]);
 uart_open(Port, Opts) when is_list(Opts) ->
@@ -493,7 +506,14 @@ pmod_gpio_pin(_Pin) ->
 %% @doc General pin resolver for GRiSP 2 pins.
 %% @end
 %%-----------------------------------------------------------------------------
--spec pin(PinSpec :: {led, led_id(), red | green | blue} | {jumper, jumper_id()} | {pmod_gpio, 1..8} | {spi, atom()} | {i2c, atom()}) -> gpio:pin().
+-spec pin(
+    PinSpec ::
+        {led, led_id(), red | green | blue}
+        | {jumper, jumper_id()}
+        | {pmod_gpio, 1..8}
+        | {spi, atom()}
+        | {i2c, atom()}
+) -> gpio:pin().
 pin({led, Led, Channel}) ->
     led_pin(Led, Channel);
 pin({jumper, Jumper}) ->
@@ -527,7 +547,9 @@ wifi_connect(SSID, PSK) ->
 %% </ul>
 %% @end
 %%-----------------------------------------------------------------------------
--spec wifi_connect(SSID :: string() | binary(), PSK :: string() | binary() | none, Opts :: proplists:proplist()) ->
+-spec wifi_connect(
+    SSID :: string() | binary(), PSK :: string() | binary() | none, Opts :: proplists:proplist()
+) ->
     ok | {error, term()}.
 wifi_connect(SSID, PSK, Opts) when is_list(Opts) ->
     case atomvm_rtems:wifi_start(SSID, PSK) of
@@ -587,27 +609,29 @@ wifi_wait(_TimeoutMs) ->
 set_led_channel(Led, Channel, Value) ->
     Pin = led_pin(Led, Channel),
     ok = gpio:set_pin_mode(Pin, output),
-    Level = if Value > 0 -> high; true -> low end,
+    Level =
+        if
+            Value > 0 -> high;
+            true -> low
+        end,
     gpio:digital_write(Pin, Level).
 
 %% @private
-color_to_rgb(off)   -> {0, 0, 0};
+color_to_rgb(off) -> {0, 0, 0};
 color_to_rgb(black) -> {0, 0, 0};
-color_to_rgb(red)   -> {1, 0, 0};
+color_to_rgb(red) -> {1, 0, 0};
 color_to_rgb(green) -> {0, 1, 0};
-color_to_rgb(blue)  -> {0, 0, 1};
-color_to_rgb(yellow)-> {1, 1, 0};
-color_to_rgb(magenta)->{1, 0, 1};
-color_to_rgb(cyan)  -> {0, 1, 1};
+color_to_rgb(blue) -> {0, 0, 1};
+color_to_rgb(yellow) -> {1, 1, 0};
+color_to_rgb(magenta) -> {1, 0, 1};
+color_to_rgb(cyan) -> {0, 1, 1};
 color_to_rgb(white) -> {1, 1, 1};
-color_to_rgb({R, G, B}) ->
-    {to_int_val(R), to_int_val(G), to_int_val(B)};
-color_to_rgb(_Other) ->
-    erlang:error(badarg).
+color_to_rgb({R, G, B}) -> {to_int_val(R), to_int_val(G), to_int_val(B)};
+color_to_rgb(_Other) -> erlang:error(badarg).
 
 %% @private
 to_int_val(true) -> 1;
-to_int_val(false)-> 0;
+to_int_val(false) -> 0;
 to_int_val(N) when is_integer(N) andalso N > 0 -> 1;
 to_int_val(0) -> 0;
 to_int_val(_) -> 0.
@@ -625,67 +649,259 @@ calc_crc16(<<B:8, Rest/binary>>, CRC) ->
     calc_crc16(Rest, NewCRC).
 
 %% CRC-16 table for polynomial 0x8408 (RFC 1331 / CCITT-16 reversed)
-crc16_table(0) -> 16#0000; crc16_table(1) -> 16#1189; crc16_table(2) -> 16#2312; crc16_table(3) -> 16#329B;
-crc16_table(4) -> 16#4624; crc16_table(5) -> 16#57AD; crc16_table(6) -> 16#6536; crc16_table(7) -> 16#74BF;
-crc16_table(8) -> 16#8C48; crc16_table(9) -> 16#9DC1; crc16_table(10) -> 16#AF5A; crc16_table(11) -> 16#BED3;
-crc16_table(12) -> 16#CA6C; crc16_table(13) -> 16#DBE5; crc16_table(14) -> 16#E97E; crc16_table(15) -> 16#F8F7;
-crc16_table(16) -> 16#1081; crc16_table(17) -> 16#0108; crc16_table(18) -> 16#3393; crc16_table(19) -> 16#221A;
-crc16_table(20) -> 16#56A5; crc16_table(21) -> 16#472C; crc16_table(22) -> 16#75B7; crc16_table(23) -> 16#643E;
-crc16_table(24) -> 16#9CC9; crc16_table(25) -> 16#8D40; crc16_table(26) -> 16#BFDB; crc16_table(27) -> 16#AE52;
-crc16_table(28) -> 16#DAED; crc16_table(29) -> 16#CB64; crc16_table(30) -> 16#F9FF; crc16_table(31) -> 16#E876;
-crc16_table(32) -> 16#2102; crc16_table(33) -> 16#308B; crc16_table(34) -> 16#0210; crc16_table(35) -> 16#1399;
-crc16_table(36) -> 16#6726; crc16_table(37) -> 16#76AF; crc16_table(38) -> 16#4434; crc16_table(39) -> 16#55BD;
-crc16_table(40) -> 16#AD4A; crc16_table(41) -> 16#BCC3; crc16_table(42) -> 16#8E58; crc16_table(43) -> 16#9FD1;
-crc16_table(44) -> 16#EB6E; crc16_table(45) -> 16#FAE7; crc16_table(46) -> 16#C87C; crc16_table(47) -> 16#D9F5;
-crc16_table(48) -> 16#3183; crc16_table(49) -> 16#200A; crc16_table(50) -> 16#1291; crc16_table(51) -> 16#0318;
-crc16_table(52) -> 16#77A7; crc16_table(53) -> 16#662E; crc16_table(54) -> 16#54B5; crc16_table(55) -> 16#453C;
-crc16_table(56) -> 16#BDCB; crc16_table(57) -> 16#AC42; crc16_table(58) -> 16#9ED9; crc16_table(59) -> 16#8F50;
-crc16_table(60) -> 16#FBEF; crc16_table(61) -> 16#EA66; crc16_table(62) -> 16#D8FD; crc16_table(63) -> 16#C974;
-crc16_table(64) -> 16#4204; crc16_table(65) -> 16#538D; crc16_table(66) -> 16#6116; crc16_table(67) -> 16#709F;
-crc16_table(68) -> 16#0420; crc16_table(69) -> 16#15A9; crc16_table(70) -> 16#2732; crc16_table(71) -> 16#36BB;
-crc16_table(72) -> 16#CE4C; crc16_table(73) -> 16#DFC5; crc16_table(74) -> 16#ED5E; crc16_table(75) -> 16#FCD7;
-crc16_table(76) -> 16#8868; crc16_table(77) -> 16#99E1; crc16_table(78) -> 16#AB7A; crc16_table(79) -> 16#BAF3;
-crc16_table(80) -> 16#5285; crc16_table(81) -> 16#430C; crc16_table(82) -> 16#7197; crc16_table(83) -> 16#601E;
-crc16_table(84) -> 16#14A1; crc16_table(85) -> 16#0528; crc16_table(86) -> 16#37B3; crc16_table(87) -> 16#263A;
-crc16_table(88) -> 16#DECD; crc16_table(89) -> 16#CF44; crc16_table(90) -> 16#FDDF; crc16_table(91) -> 16#EC56;
-crc16_table(92) -> 16#98E9; crc16_table(93) -> 16#8960; crc16_table(94) -> 16#BBFB; crc16_table(95) -> 16#AA72;
-crc16_table(96) -> 16#6306; crc16_table(97) -> 16#728F; crc16_table(98) -> 16#4014; crc16_table(99) -> 16#519D;
-crc16_table(100) -> 16#2522; crc16_table(101) -> 16#34AB; crc16_table(102) -> 16#0630; crc16_table(103) -> 16#17B9;
-crc16_table(104) -> 16#EF4E; crc16_table(105) -> 16#FEC7; crc16_table(106) -> 16#CC5C; crc16_table(107) -> 16#DDD5;
-crc16_table(108) -> 16#A96A; crc16_table(109) -> 16#B8E3; crc16_table(110) -> 16#8A78; crc16_table(111) -> 16#9BF1;
-crc16_table(112) -> 16#7387; crc16_table(113) -> 16#620E; crc16_table(114) -> 16#5095; crc16_table(115) -> 16#411C;
-crc16_table(116) -> 16#35A3; crc16_table(117) -> 16#242A; crc16_table(118) -> 16#16B1; crc16_table(119) -> 16#0738;
-crc16_table(120) -> 16#FFCF; crc16_table(121) -> 16#EE46; crc16_table(122) -> 16#DCDD; crc16_table(123) -> 16#CD54;
-crc16_table(124) -> 16#B9EB; crc16_table(125) -> 16#A862; crc16_table(126) -> 16#9AF9; crc16_table(127) -> 16#8B70;
-crc16_table(128) -> 16#8408; crc16_table(129) -> 16#9581; crc16_table(130) -> 16#A71A; crc16_table(131) -> 16#B693;
-crc16_table(132) -> 16#C22C; crc16_table(133) -> 16#D3A5; crc16_table(134) -> 16#E13E; crc16_table(135) -> 16#F0B7;
-crc16_table(136) -> 16#0840; crc16_table(137) -> 16#19C9; crc16_table(138) -> 16#2B52; crc16_table(139) -> 16#3ADB;
-crc16_table(140) -> 16#4E64; crc16_table(141) -> 16#5FED; crc16_table(142) -> 16#6D76; crc16_table(143) -> 16#7CFF;
-crc16_table(144) -> 16#9489; crc16_table(145) -> 16#8500; crc16_table(146) -> 16#B79B; crc16_table(147) -> 16#A612;
-crc16_table(148) -> 16#D2AD; crc16_table(149) -> 16#C324; crc16_table(150) -> 16#F1BF; crc16_table(151) -> 16#E036;
-crc16_table(152) -> 16#18C1; crc16_table(153) -> 16#0948; crc16_table(154) -> 16#3BD3; crc16_table(155) -> 16#2A5A;
-crc16_table(156) -> 16#5EE5; crc16_table(157) -> 16#4F6C; crc16_table(158) -> 16#7DF7; crc16_table(159) -> 16#6C7E;
-crc16_table(160) -> 16#A50A; crc16_table(161) -> 16#B483; crc16_table(162) -> 16#8618; crc16_table(163) -> 16#9791;
-crc16_table(164) -> 16#E32E; crc16_table(165) -> 16#F2A7; crc16_table(166) -> 16#C03C; crc16_table(167) -> 16#D1B5;
-crc16_table(168) -> 16#2942; crc16_table(169) -> 16#38CB; crc16_table(170) -> 16#0A50; crc16_table(171) -> 16#1BD9;
-crc16_table(172) -> 16#6F66; crc16_table(173) -> 16#7EEF; crc16_table(174) -> 16#4C74; crc16_table(175) -> 16#5DFD;
-crc16_table(176) -> 16#B58B; crc16_table(177) -> 16#A402; crc16_table(178) -> 16#9699; crc16_table(179) -> 16#8710;
-crc16_table(180) -> 16#F3AF; crc16_table(181) -> 16#E226; crc16_table(182) -> 16#D0BD; crc16_table(183) -> 16#C134;
-crc16_table(184) -> 16#39C3; crc16_table(185) -> 16#284A; crc16_table(186) -> 16#1AD1; crc16_table(187) -> 16#0B58;
-crc16_table(188) -> 16#7FE7; crc16_table(189) -> 16#6E6E; crc16_table(190) -> 16#5CF5; crc16_table(191) -> 16#4D7C;
-crc16_table(192) -> 16#C60C; crc16_table(193) -> 16#D785; crc16_table(194) -> 16#E51E; crc16_table(195) -> 16#F497;
-crc16_table(196) -> 16#8028; crc16_table(197) -> 16#91A1; crc16_table(198) -> 16#A33A; crc16_table(199) -> 16#B2B3;
-crc16_table(200) -> 16#4A44; crc16_table(201) -> 16#5BCD; crc16_table(202) -> 16#6956; crc16_table(203) -> 16#78DF;
-crc16_table(204) -> 16#0C60; crc16_table(205) -> 16#1DE9; crc16_table(206) -> 16#2F72; crc16_table(207) -> 16#3EFB;
-crc16_table(208) -> 16#D68D; crc16_table(209) -> 16#C704; crc16_table(210) -> 16#F59F; crc16_table(211) -> 16#E416;
-crc16_table(212) -> 16#90A9; crc16_table(213) -> 16#8120; crc16_table(214) -> 16#B3BB; crc16_table(215) -> 16#A232;
-crc16_table(216) -> 16#5AC5; crc16_table(217) -> 16#4B4C; crc16_table(218) -> 16#79D7; crc16_table(219) -> 16#685E;
-crc16_table(220) -> 16#1CE1; crc16_table(221) -> 16#0D68; crc16_table(222) -> 16#3FF3; crc16_table(223) -> 16#2E7A;
-crc16_table(224) -> 16#E70E; crc16_table(225) -> 16#F687; crc16_table(226) -> 16#C41C; crc16_table(227) -> 16#D595;
-crc16_table(228) -> 16#A12A; crc16_table(229) -> 16#B0A3; crc16_table(230) -> 16#8238; crc16_table(231) -> 16#93B1;
-crc16_table(232) -> 16#6B46; crc16_table(233) -> 16#7ACF; crc16_table(234) -> 16#4854; crc16_table(235) -> 16#59DD;
-crc16_table(236) -> 16#2D62; crc16_table(237) -> 16#3CEB; crc16_table(238) -> 16#0E70; crc16_table(239) -> 16#1FF9;
-crc16_table(240) -> 16#F78F; crc16_table(241) -> 16#E606; crc16_table(242) -> 16#D49D; crc16_table(243) -> 16#C514;
-crc16_table(244) -> 16#B1AB; crc16_table(245) -> 16#A022; crc16_table(246) -> 16#92B9; crc16_table(247) -> 16#8330;
-crc16_table(248) -> 16#7BC7; crc16_table(249) -> 16#6A4E; crc16_table(250) -> 16#58D5; crc16_table(251) -> 16#495C;
-crc16_table(252) -> 16#3DE3; crc16_table(253) -> 16#2C6A; crc16_table(254) -> 16#1EF1; crc16_table(255) -> 16#0F78.
+crc16_table(0) -> 16#0000;
+crc16_table(1) -> 16#1189;
+crc16_table(2) -> 16#2312;
+crc16_table(3) -> 16#329B;
+crc16_table(4) -> 16#4624;
+crc16_table(5) -> 16#57AD;
+crc16_table(6) -> 16#6536;
+crc16_table(7) -> 16#74BF;
+crc16_table(8) -> 16#8C48;
+crc16_table(9) -> 16#9DC1;
+crc16_table(10) -> 16#AF5A;
+crc16_table(11) -> 16#BED3;
+crc16_table(12) -> 16#CA6C;
+crc16_table(13) -> 16#DBE5;
+crc16_table(14) -> 16#E97E;
+crc16_table(15) -> 16#F8F7;
+crc16_table(16) -> 16#1081;
+crc16_table(17) -> 16#0108;
+crc16_table(18) -> 16#3393;
+crc16_table(19) -> 16#221A;
+crc16_table(20) -> 16#56A5;
+crc16_table(21) -> 16#472C;
+crc16_table(22) -> 16#75B7;
+crc16_table(23) -> 16#643E;
+crc16_table(24) -> 16#9CC9;
+crc16_table(25) -> 16#8D40;
+crc16_table(26) -> 16#BFDB;
+crc16_table(27) -> 16#AE52;
+crc16_table(28) -> 16#DAED;
+crc16_table(29) -> 16#CB64;
+crc16_table(30) -> 16#F9FF;
+crc16_table(31) -> 16#E876;
+crc16_table(32) -> 16#2102;
+crc16_table(33) -> 16#308B;
+crc16_table(34) -> 16#0210;
+crc16_table(35) -> 16#1399;
+crc16_table(36) -> 16#6726;
+crc16_table(37) -> 16#76AF;
+crc16_table(38) -> 16#4434;
+crc16_table(39) -> 16#55BD;
+crc16_table(40) -> 16#AD4A;
+crc16_table(41) -> 16#BCC3;
+crc16_table(42) -> 16#8E58;
+crc16_table(43) -> 16#9FD1;
+crc16_table(44) -> 16#EB6E;
+crc16_table(45) -> 16#FAE7;
+crc16_table(46) -> 16#C87C;
+crc16_table(47) -> 16#D9F5;
+crc16_table(48) -> 16#3183;
+crc16_table(49) -> 16#200A;
+crc16_table(50) -> 16#1291;
+crc16_table(51) -> 16#0318;
+crc16_table(52) -> 16#77A7;
+crc16_table(53) -> 16#662E;
+crc16_table(54) -> 16#54B5;
+crc16_table(55) -> 16#453C;
+crc16_table(56) -> 16#BDCB;
+crc16_table(57) -> 16#AC42;
+crc16_table(58) -> 16#9ED9;
+crc16_table(59) -> 16#8F50;
+crc16_table(60) -> 16#FBEF;
+crc16_table(61) -> 16#EA66;
+crc16_table(62) -> 16#D8FD;
+crc16_table(63) -> 16#C974;
+crc16_table(64) -> 16#4204;
+crc16_table(65) -> 16#538D;
+crc16_table(66) -> 16#6116;
+crc16_table(67) -> 16#709F;
+crc16_table(68) -> 16#0420;
+crc16_table(69) -> 16#15A9;
+crc16_table(70) -> 16#2732;
+crc16_table(71) -> 16#36BB;
+crc16_table(72) -> 16#CE4C;
+crc16_table(73) -> 16#DFC5;
+crc16_table(74) -> 16#ED5E;
+crc16_table(75) -> 16#FCD7;
+crc16_table(76) -> 16#8868;
+crc16_table(77) -> 16#99E1;
+crc16_table(78) -> 16#AB7A;
+crc16_table(79) -> 16#BAF3;
+crc16_table(80) -> 16#5285;
+crc16_table(81) -> 16#430C;
+crc16_table(82) -> 16#7197;
+crc16_table(83) -> 16#601E;
+crc16_table(84) -> 16#14A1;
+crc16_table(85) -> 16#0528;
+crc16_table(86) -> 16#37B3;
+crc16_table(87) -> 16#263A;
+crc16_table(88) -> 16#DECD;
+crc16_table(89) -> 16#CF44;
+crc16_table(90) -> 16#FDDF;
+crc16_table(91) -> 16#EC56;
+crc16_table(92) -> 16#98E9;
+crc16_table(93) -> 16#8960;
+crc16_table(94) -> 16#BBFB;
+crc16_table(95) -> 16#AA72;
+crc16_table(96) -> 16#6306;
+crc16_table(97) -> 16#728F;
+crc16_table(98) -> 16#4014;
+crc16_table(99) -> 16#519D;
+crc16_table(100) -> 16#2522;
+crc16_table(101) -> 16#34AB;
+crc16_table(102) -> 16#0630;
+crc16_table(103) -> 16#17B9;
+crc16_table(104) -> 16#EF4E;
+crc16_table(105) -> 16#FEC7;
+crc16_table(106) -> 16#CC5C;
+crc16_table(107) -> 16#DDD5;
+crc16_table(108) -> 16#A96A;
+crc16_table(109) -> 16#B8E3;
+crc16_table(110) -> 16#8A78;
+crc16_table(111) -> 16#9BF1;
+crc16_table(112) -> 16#7387;
+crc16_table(113) -> 16#620E;
+crc16_table(114) -> 16#5095;
+crc16_table(115) -> 16#411C;
+crc16_table(116) -> 16#35A3;
+crc16_table(117) -> 16#242A;
+crc16_table(118) -> 16#16B1;
+crc16_table(119) -> 16#0738;
+crc16_table(120) -> 16#FFCF;
+crc16_table(121) -> 16#EE46;
+crc16_table(122) -> 16#DCDD;
+crc16_table(123) -> 16#CD54;
+crc16_table(124) -> 16#B9EB;
+crc16_table(125) -> 16#A862;
+crc16_table(126) -> 16#9AF9;
+crc16_table(127) -> 16#8B70;
+crc16_table(128) -> 16#8408;
+crc16_table(129) -> 16#9581;
+crc16_table(130) -> 16#A71A;
+crc16_table(131) -> 16#B693;
+crc16_table(132) -> 16#C22C;
+crc16_table(133) -> 16#D3A5;
+crc16_table(134) -> 16#E13E;
+crc16_table(135) -> 16#F0B7;
+crc16_table(136) -> 16#0840;
+crc16_table(137) -> 16#19C9;
+crc16_table(138) -> 16#2B52;
+crc16_table(139) -> 16#3ADB;
+crc16_table(140) -> 16#4E64;
+crc16_table(141) -> 16#5FED;
+crc16_table(142) -> 16#6D76;
+crc16_table(143) -> 16#7CFF;
+crc16_table(144) -> 16#9489;
+crc16_table(145) -> 16#8500;
+crc16_table(146) -> 16#B79B;
+crc16_table(147) -> 16#A612;
+crc16_table(148) -> 16#D2AD;
+crc16_table(149) -> 16#C324;
+crc16_table(150) -> 16#F1BF;
+crc16_table(151) -> 16#E036;
+crc16_table(152) -> 16#18C1;
+crc16_table(153) -> 16#0948;
+crc16_table(154) -> 16#3BD3;
+crc16_table(155) -> 16#2A5A;
+crc16_table(156) -> 16#5EE5;
+crc16_table(157) -> 16#4F6C;
+crc16_table(158) -> 16#7DF7;
+crc16_table(159) -> 16#6C7E;
+crc16_table(160) -> 16#A50A;
+crc16_table(161) -> 16#B483;
+crc16_table(162) -> 16#8618;
+crc16_table(163) -> 16#9791;
+crc16_table(164) -> 16#E32E;
+crc16_table(165) -> 16#F2A7;
+crc16_table(166) -> 16#C03C;
+crc16_table(167) -> 16#D1B5;
+crc16_table(168) -> 16#2942;
+crc16_table(169) -> 16#38CB;
+crc16_table(170) -> 16#0A50;
+crc16_table(171) -> 16#1BD9;
+crc16_table(172) -> 16#6F66;
+crc16_table(173) -> 16#7EEF;
+crc16_table(174) -> 16#4C74;
+crc16_table(175) -> 16#5DFD;
+crc16_table(176) -> 16#B58B;
+crc16_table(177) -> 16#A402;
+crc16_table(178) -> 16#9699;
+crc16_table(179) -> 16#8710;
+crc16_table(180) -> 16#F3AF;
+crc16_table(181) -> 16#E226;
+crc16_table(182) -> 16#D0BD;
+crc16_table(183) -> 16#C134;
+crc16_table(184) -> 16#39C3;
+crc16_table(185) -> 16#284A;
+crc16_table(186) -> 16#1AD1;
+crc16_table(187) -> 16#0B58;
+crc16_table(188) -> 16#7FE7;
+crc16_table(189) -> 16#6E6E;
+crc16_table(190) -> 16#5CF5;
+crc16_table(191) -> 16#4D7C;
+crc16_table(192) -> 16#C60C;
+crc16_table(193) -> 16#D785;
+crc16_table(194) -> 16#E51E;
+crc16_table(195) -> 16#F497;
+crc16_table(196) -> 16#8028;
+crc16_table(197) -> 16#91A1;
+crc16_table(198) -> 16#A33A;
+crc16_table(199) -> 16#B2B3;
+crc16_table(200) -> 16#4A44;
+crc16_table(201) -> 16#5BCD;
+crc16_table(202) -> 16#6956;
+crc16_table(203) -> 16#78DF;
+crc16_table(204) -> 16#0C60;
+crc16_table(205) -> 16#1DE9;
+crc16_table(206) -> 16#2F72;
+crc16_table(207) -> 16#3EFB;
+crc16_table(208) -> 16#D68D;
+crc16_table(209) -> 16#C704;
+crc16_table(210) -> 16#F59F;
+crc16_table(211) -> 16#E416;
+crc16_table(212) -> 16#90A9;
+crc16_table(213) -> 16#8120;
+crc16_table(214) -> 16#B3BB;
+crc16_table(215) -> 16#A232;
+crc16_table(216) -> 16#5AC5;
+crc16_table(217) -> 16#4B4C;
+crc16_table(218) -> 16#79D7;
+crc16_table(219) -> 16#685E;
+crc16_table(220) -> 16#1CE1;
+crc16_table(221) -> 16#0D68;
+crc16_table(222) -> 16#3FF3;
+crc16_table(223) -> 16#2E7A;
+crc16_table(224) -> 16#E70E;
+crc16_table(225) -> 16#F687;
+crc16_table(226) -> 16#C41C;
+crc16_table(227) -> 16#D595;
+crc16_table(228) -> 16#A12A;
+crc16_table(229) -> 16#B0A3;
+crc16_table(230) -> 16#8238;
+crc16_table(231) -> 16#93B1;
+crc16_table(232) -> 16#6B46;
+crc16_table(233) -> 16#7ACF;
+crc16_table(234) -> 16#4854;
+crc16_table(235) -> 16#59DD;
+crc16_table(236) -> 16#2D62;
+crc16_table(237) -> 16#3CEB;
+crc16_table(238) -> 16#0E70;
+crc16_table(239) -> 16#1FF9;
+crc16_table(240) -> 16#F78F;
+crc16_table(241) -> 16#E606;
+crc16_table(242) -> 16#D49D;
+crc16_table(243) -> 16#C514;
+crc16_table(244) -> 16#B1AB;
+crc16_table(245) -> 16#A022;
+crc16_table(246) -> 16#92B9;
+crc16_table(247) -> 16#8330;
+crc16_table(248) -> 16#7BC7;
+crc16_table(249) -> 16#6A4E;
+crc16_table(250) -> 16#58D5;
+crc16_table(251) -> 16#495C;
+crc16_table(252) -> 16#3DE3;
+crc16_table(253) -> 16#2C6A;
+crc16_table(254) -> 16#1EF1;
+crc16_table(255) -> 16#0F78.

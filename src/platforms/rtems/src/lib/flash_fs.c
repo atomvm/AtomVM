@@ -30,8 +30,8 @@
 #include <sys/stat.h>
 
 #include <rtems.h>
-#include <rtems/libio.h>
 #include <rtems/jffs2.h>
+#include <rtems/libio.h>
 
 #include <atom.h>
 #include <defaultatoms.h>
@@ -86,7 +86,8 @@ static int jffs2_flash_erase(
     return 0;
 }
 
-static struct {
+static struct
+{
     rtems_jffs2_flash_control super;
 } s_jffs2_flash_device = {
     .super = {
@@ -96,8 +97,7 @@ static struct {
         .read = jffs2_flash_read,
         .write = jffs2_flash_write,
         .erase = jffs2_flash_erase,
-        .block_is_bad = NULL
-    }
+        .block_is_bad = NULL }
 };
 
 static rtems_jffs2_mount_data s_jffs2_mount_config = {
@@ -123,8 +123,7 @@ bool esp32c3_flash_fs_mount(const char *mount_point)
         mount_point,
         RTEMS_FILESYSTEM_TYPE_JFFS2,
         RTEMS_FILESYSTEM_READ_WRITE,
-        &s_jffs2_mount_config
-    );
+        &s_jffs2_mount_config);
 
     if (rv != 0) {
         // If mounting failed, erase the partition and retry cleanly
@@ -136,8 +135,7 @@ bool esp32c3_flash_fs_mount(const char *mount_point)
             mount_point,
             RTEMS_FILESYSTEM_TYPE_JFFS2,
             RTEMS_FILESYSTEM_READ_WRITE,
-            &s_jffs2_mount_config
-        );
+            &s_jffs2_mount_config);
     }
 
     if (rv == 0) {
@@ -378,38 +376,28 @@ void flash_fs_nif_init(GlobalContext *global)
 
 const struct Nif *flash_fs_nif_get_nif(const char *nifname)
 {
-    if (strcmp("esp:flash_fs_mount/0", nifname) == 0 ||
-        strcmp("atomvm_rtems:flash_fs_mount/0", nifname) == 0) {
+    if (strcmp("esp:flash_fs_mount/0", nifname) == 0 || strcmp("atomvm_rtems:flash_fs_mount/0", nifname) == 0) {
         return &esp_flash_fs_mount_0_nif;
     }
-    if (strcmp("esp:flash_fs_mount/1", nifname) == 0 ||
-        strcmp("atomvm_rtems:flash_fs_mount/1", nifname) == 0) {
+    if (strcmp("esp:flash_fs_mount/1", nifname) == 0 || strcmp("atomvm_rtems:flash_fs_mount/1", nifname) == 0) {
         return &esp_flash_fs_mount_1_nif;
     }
-    if (strcmp("esp:flash_fs_unmount/0", nifname) == 0 ||
-        strcmp("atomvm_rtems:flash_fs_unmount/0", nifname) == 0) {
+    if (strcmp("esp:flash_fs_unmount/0", nifname) == 0 || strcmp("atomvm_rtems:flash_fs_unmount/0", nifname) == 0) {
         return &esp_flash_fs_unmount_0_nif;
     }
-    if (strcmp("esp:flash_fs_unmount/1", nifname) == 0 ||
-        strcmp("atomvm_rtems:flash_fs_unmount/1", nifname) == 0) {
+    if (strcmp("esp:flash_fs_unmount/1", nifname) == 0 || strcmp("atomvm_rtems:flash_fs_unmount/1", nifname) == 0) {
         return &esp_flash_fs_unmount_1_nif;
     }
-    if (strcmp("esp:flash_fs_is_mounted/0", nifname) == 0 ||
-        strcmp("atomvm_rtems:flash_fs_is_mounted/0", nifname) == 0) {
+    if (strcmp("esp:flash_fs_is_mounted/0", nifname) == 0 || strcmp("atomvm_rtems:flash_fs_is_mounted/0", nifname) == 0) {
         return &esp_flash_fs_is_mounted_nif;
     }
-    if (strcmp("file:read_file/1", nifname) == 0 ||
-        strcmp("atomvm_rtems:read_file/1", nifname) == 0 ||
-        strcmp("esp:read_file/1", nifname) == 0) {
+    if (strcmp("file:read_file/1", nifname) == 0 || strcmp("atomvm_rtems:read_file/1", nifname) == 0 || strcmp("esp:read_file/1", nifname) == 0) {
         return &file_read_file_nif;
     }
-    if (strcmp("file:write_file/2", nifname) == 0 ||
-        strcmp("atomvm_rtems:write_file/2", nifname) == 0 ||
-        strcmp("esp:write_file/2", nifname) == 0) {
+    if (strcmp("file:write_file/2", nifname) == 0 || strcmp("atomvm_rtems:write_file/2", nifname) == 0 || strcmp("esp:write_file/2", nifname) == 0) {
         return &file_write_file_nif;
     }
     return NULL;
 }
 
 REGISTER_NIF_COLLECTION(flash_fs, flash_fs_nif_init, NULL, flash_fs_nif_get_nif)
-

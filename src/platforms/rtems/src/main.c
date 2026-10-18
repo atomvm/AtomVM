@@ -159,7 +159,7 @@ rtems_task Init(rtems_task_argument ignored)
         }
         if (_Per_CPU_Get_state(cpu) != PER_CPU_STATE_UP) {
             fprintf(stderr, TAG ": Warning: CPU %" PRIu32 " failed to start (state %d)\n",
-                    i, (int) _Per_CPU_Get_state(cpu));
+                i, (int) _Per_CPU_Get_state(cpu));
         }
     }
 #endif

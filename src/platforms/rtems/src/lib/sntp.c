@@ -21,9 +21,9 @@
 #include "sntp.h"
 #include "rtc.h"
 
+#include <errno.h>
 #include <stdatomic.h>
 #include <stdio.h>
-#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -219,8 +219,7 @@ int rtems_sntp_start(const char *hostname, int port, rtems_sntp_sync_cb cb, void
         SNTP_TASK_STACK_SIZE,
         RTEMS_DEFAULT_MODES,
         RTEMS_DEFAULT_ATTRIBUTES,
-        &sntp_task_id
-    );
+        &sntp_task_id);
 
     if (sc != RTEMS_SUCCESSFUL) {
         atomic_store_explicit(&sntp_running, false, memory_order_release);

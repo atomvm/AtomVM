@@ -49,7 +49,8 @@ static const char *const host_atom = ATOM_STR("\x4", "host");
 static const char *const port_atom = ATOM_STR("\x4", "port");
 static const char *const sntp_sync_atom = ATOM_STR("\x9", "sntp_sync");
 
-enum network_cmd {
+enum network_cmd
+{
     NetworkInvalidCmd = 0,
     NetworkStartCmd,
     NetworkConnectCmd,
@@ -65,7 +66,8 @@ static const AtomStringIntPair cmd_table[] = {
     SELECT_INT_DEFAULT(NetworkInvalidCmd)
 };
 
-struct NetworkDriverData {
+struct NetworkDriverData
+{
     GlobalContext *global;
     uint32_t owner_process_id;
     uint64_t ref_ticks;

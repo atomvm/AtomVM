@@ -18,8 +18,8 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#include "rtems_sys.h"
 #include <nifs.h>
 #include <otp_ssl.h>
-#include "rtems_sys.h"
 
 REGISTER_NIF_COLLECTION(otp_ssl, otp_ssl_init, NULL, otp_ssl_nif_get_nif)

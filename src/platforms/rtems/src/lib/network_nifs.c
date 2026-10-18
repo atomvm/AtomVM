@@ -31,9 +31,9 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #elif defined(RTEMS_HAS_LWIP)
-#include <lwip/netif.h>
-#include <lwip/ip4_addr.h>
 #include <lwip/inet.h>
+#include <lwip/ip4_addr.h>
+#include <lwip/netif.h>
 #include <stdio.h>
 #endif
 
@@ -247,7 +247,7 @@ static term nif_rtems_wifi_status(Context *ctx, int argc, term argv[])
     UNUSED(argv);
 #if (defined(RTEMS_HAS_LIBBSD) && defined(RTEMS_HAS_WIFI)) || defined(RTEMS_WIFI_BACKEND_ESP32)
     rtems_wifi_state_t state = rtems_wifi_get_state();
-    struct rtems_wifi_ip_info ip_info = {0};
+    struct rtems_wifi_ip_info ip_info = { 0 };
     rtems_wifi_get_ip_info(&ip_info);
 
     size_t needed = TUPLE_SIZE(2) + TUPLE_SIZE(4) * 3 + TUPLE_SIZE(2) * 4 + CONS_SIZE * 4;

@@ -207,8 +207,11 @@ scan(I2C) ->
     EndAddr :: address()
 ) -> {ok, [address()]} | {error, term()}.
 scan(I2C, StartAddr, EndAddr) when
-    is_integer(StartAddr), is_integer(EndAddr),
-    StartAddr >= 0, EndAddr =< 1023, StartAddr =< EndAddr
+    is_integer(StartAddr),
+    is_integer(EndAddr),
+    StartAddr >= 0,
+    EndAddr =< 1023,
+    StartAddr =< EndAddr
 ->
     do_scan(I2C, StartAddr, EndAddr, []);
 scan(_I2C, _StartAddr, _EndAddr) ->
@@ -340,7 +343,8 @@ get_mem_add_size(Opts, Register) when is_map(Opts) ->
 get_mem_add_size(_Opts, _Register) ->
     error(badarg).
 
-normalize_transfer_msgs([]) -> [];
+normalize_transfer_msgs([]) ->
+    [];
 normalize_transfer_msgs([{write, Addr, Byte} | Rest]) when is_integer(Byte) ->
     [{write, Addr, <<Byte:8>>} | normalize_transfer_msgs(Rest)];
 normalize_transfer_msgs([{write, _Addr, Bin} = Msg | Rest]) when is_binary(Bin) ->
@@ -406,7 +410,9 @@ handle_request(Resource, SendTimeoutMs, TxState, {read_bytes, Address, Register,
     MemAddSize = mem_add_size(Register),
     Result = ?MODULE:mem_read(Resource, Address, Register, MemAddSize, Count, SendTimeoutMs),
     {reply, Result, TxState};
-handle_request(Resource, SendTimeoutMs, TxState, {read_bytes, Address, Register, Count, MemAddSize}) ->
+handle_request(
+    Resource, SendTimeoutMs, TxState, {read_bytes, Address, Register, Count, MemAddSize}
+) ->
     Result = ?MODULE:mem_read(Resource, Address, Register, MemAddSize, Count, SendTimeoutMs),
     {reply, Result, TxState};
 handle_request(Resource, SendTimeoutMs, TxState, {write_bytes, Address, Data}) ->
@@ -424,7 +430,9 @@ handle_request(Resource, SendTimeoutMs, TxState, {write_bytes, Address, Register
             _N -> ok
         end,
     {reply, Result, TxState};
-handle_request(Resource, SendTimeoutMs, TxState, {write_bytes, Address, Register, Data, MemAddSize}) ->
+handle_request(
+    Resource, SendTimeoutMs, TxState, {write_bytes, Address, Register, Data, MemAddSize}
+) ->
     Result =
         case ?MODULE:mem_write(Resource, Address, Register, MemAddSize, Data, SendTimeoutMs) of
             {error, _} = Error -> Error;
@@ -439,7 +447,9 @@ handle_request(Resource, _SendTimeoutMs, undefined, {is_device_ready, Address, T
             Other -> Other
         end,
     {reply, Result, undefined};
-handle_request(_Resource, _SendTimeoutMs, {_, _} = TxState, {is_device_ready, _Address, _Trials, _TimeoutMs}) ->
+handle_request(
+    _Resource, _SendTimeoutMs, {_, _} = TxState, {is_device_ready, _Address, _Trials, _TimeoutMs}
+) ->
     {reply, {error, transaction_already_in_progress}, TxState};
 handle_request(Resource, _SendTimeoutMs, undefined, {transfer, Messages, TimeoutMs}) ->
     Result = ?MODULE:transfer_nif(Resource, Messages, TimeoutMs),

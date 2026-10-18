@@ -80,7 +80,9 @@ wait_dhcp(_TimeoutMs) ->
     ok | {error, timeout | enotsup | term()}.
 wait_dhcp(IfName, TimeoutMs) when is_binary(IfName) ->
     wait_dhcp(binary_to_list(IfName), TimeoutMs);
-wait_dhcp(IfName, TimeoutMs) when is_list(IfName) andalso is_integer(TimeoutMs) andalso TimeoutMs >= 0 ->
+wait_dhcp(IfName, TimeoutMs) when
+    is_list(IfName) andalso is_integer(TimeoutMs) andalso TimeoutMs >= 0
+->
     wait_dhcp_loop(IfName, TimeoutMs);
 wait_dhcp(_IfName, _TimeoutMs) ->
     erlang:error(badarg).
@@ -156,7 +158,8 @@ flash_erase_sector(_SectorNum) ->
     erlang:nif_error(undefined).
 
 %% @doc Erase a range of flash sectors.
--spec flash_erase_range(Offset :: non_neg_integer(), Length :: non_neg_integer()) -> ok | {error, term()}.
+-spec flash_erase_range(Offset :: non_neg_integer(), Length :: non_neg_integer()) ->
+    ok | {error, term()}.
 flash_erase_range(_Offset, _Length) ->
     erlang:nif_error(undefined).
 

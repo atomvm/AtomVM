@@ -100,10 +100,14 @@ i2c_eeprom_smoke() ->
     {error, nack} = i2c:is_device_ready(Resource, 16#76, 1, 100),
     {ok, Addresses} = i2c:scan(Resource),
     true = lists:member(16#57, Addresses),
-    {ok, [ok, ReadBytes]} = i2c:transfer(Resource, [
-        {write, 16#57, <<0:8>>},
-        {read, 16#57, 4}
-    ], 1000),
+    {ok, [ok, ReadBytes]} = i2c:transfer(
+        Resource,
+        [
+            {write, 16#57, <<0:8>>},
+            {read, 16#57, 4}
+        ],
+        1000
+    ),
     4 = byte_size(ReadBytes),
     {ok, Data} = i2c:mem_read(Resource, 16#57, 0, 8, 8, 1000),
     8 = byte_size(Data),

@@ -28,7 +28,10 @@ start() ->
     erlang:display({smp_ping_pong, ok}),
 
     % Parallel computation stress test
-    ComputePids = [spawn(fun() -> compute_work(Self, I, 500) end) || I <- lists:seq(1, NumWorkers)],
+    _ComputePids = [
+        spawn(fun() -> compute_work(Self, I, 500) end)
+     || I <- lists:seq(1, NumWorkers)
+    ],
     ok = collect_results(NumWorkers, 0),
     erlang:display({smp_parallel_compute, ok}),
 
@@ -41,7 +44,8 @@ worker_loop(Parent, Id) ->
             Parent ! {pong, Id, self()}
     end.
 
-collect_pongs(0) -> ok;
+collect_pongs(0) ->
+    ok;
 collect_pongs(N) when N > 0 ->
     receive
         {pong, _Id, _Pid} ->
@@ -54,7 +58,8 @@ compute_work(Parent, Id, Iterations) ->
     Sum = lists:foldl(fun(X, Acc) -> Acc + X end, 0, lists:seq(1, Iterations)),
     Parent ! {result, Id, Sum}.
 
-collect_results(0, _Total) -> ok;
+collect_results(0, _Total) ->
+    ok;
 collect_results(N, Total) when N > 0 ->
     receive
         {result, _Id, Sum} ->

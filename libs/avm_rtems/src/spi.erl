@@ -93,7 +93,9 @@
 -spec open(Params :: [term()] | map()) -> spi().
 open(Params) ->
     BusConfig = get_value(bus_config, Params, []),
-    Peripheral = get_value(peripheral, BusConfig, get_value(peripheral, Params, ?DEFAULT_PERIPHERAL)),
+    Peripheral = get_value(
+        peripheral, BusConfig, get_value(peripheral, Params, ?DEFAULT_PERIPHERAL)
+    ),
     FdtAlias = get_value(fdt_alias, BusConfig, get_value(fdt_alias, Params, ?DEFAULT_FDT_ALIAS)),
     InitOpts = [{peripheral, Peripheral}, {fdt_alias, FdtAlias}],
     case ?MODULE:init(InitOpts) of

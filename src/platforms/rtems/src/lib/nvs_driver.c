@@ -39,18 +39,19 @@
 #include <trace.h>
 
 #define NVS_SECTOR_MAGIC 0x41564D4EU /* "AVMN" */
-#define NVS_VERSION      1U
+#define NVS_VERSION 1U
 
-#define NVS_SECTOR_STATE_FREE   0xFFFFU
+#define NVS_SECTOR_STATE_FREE 0xFFFFU
 #define NVS_SECTOR_STATE_ACTIVE 0xFF55U
-#define NVS_SECTOR_STATE_FULL   0x0055U
+#define NVS_SECTOR_STATE_FULL 0x0055U
 #define NVS_SECTOR_STATE_EXPIRE 0x0000U
 
-#define NVS_ENTRY_STATE_FREE    0xFFU
-#define NVS_ENTRY_STATE_ACTIVE  0xAAU
-#define NVS_ENTRY_STATE_ERASED  0x00U
+#define NVS_ENTRY_STATE_FREE 0xFFU
+#define NVS_ENTRY_STATE_ACTIVE 0xAAU
+#define NVS_ENTRY_STATE_ERASED 0x00U
 
-struct __attribute__((packed)) nvs_sector_header {
+struct __attribute__((packed)) nvs_sector_header
+{
     uint32_t magic;
     uint32_t seq;
     uint16_t version;
@@ -58,7 +59,8 @@ struct __attribute__((packed)) nvs_sector_header {
     uint32_t reserved[5];
 };
 
-struct __attribute__((packed)) nvs_entry_header {
+struct __attribute__((packed)) nvs_entry_header
+{
     uint8_t state;
     uint8_t flags;
     uint16_t data_len;
@@ -288,8 +290,7 @@ nvs_result_t esp32c3_nvs_erase_key(const char *namespace, const char *key)
             uint32_t total_entry_size = sizeof(struct nvs_entry_header) + aligned_len;
 
             if (ehdr.state == NVS_ENTRY_STATE_ACTIVE) {
-                if (strncmp(ehdr.ns, namespace, sizeof(ehdr.ns)) == 0 &&
-                    strncmp(ehdr.key, key, sizeof(ehdr.key)) == 0) {
+                if (strncmp(ehdr.ns, namespace, sizeof(ehdr.ns)) == 0 && strncmp(ehdr.key, key, sizeof(ehdr.key)) == 0) {
                     // Mark as erased directly in flash
                     esp32c3_flash_write(sec_offset + cur, &erased_state, 1);
                 }
@@ -657,24 +658,19 @@ void nvs_nif_init(GlobalContext *global)
 
 const struct Nif *nvs_nif_get_nif(const char *nifname)
 {
-    if (strcmp("esp:nvs_fetch_binary/2", nifname) == 0 ||
-        strcmp("atomvm_rtems:nvs_fetch_binary/2", nifname) == 0) {
+    if (strcmp("esp:nvs_fetch_binary/2", nifname) == 0 || strcmp("atomvm_rtems:nvs_fetch_binary/2", nifname) == 0) {
         return &esp_nvs_fetch_binary_nif;
     }
-    if (strcmp("esp:nvs_put_binary/3", nifname) == 0 ||
-        strcmp("atomvm_rtems:nvs_put_binary/3", nifname) == 0) {
+    if (strcmp("esp:nvs_put_binary/3", nifname) == 0 || strcmp("atomvm_rtems:nvs_put_binary/3", nifname) == 0) {
         return &esp_nvs_put_binary_nif;
     }
-    if (strcmp("esp:nvs_erase_key/2", nifname) == 0 ||
-        strcmp("atomvm_rtems:nvs_erase_key/2", nifname) == 0) {
+    if (strcmp("esp:nvs_erase_key/2", nifname) == 0 || strcmp("atomvm_rtems:nvs_erase_key/2", nifname) == 0) {
         return &esp_nvs_erase_key_nif;
     }
-    if (strcmp("esp:nvs_erase_all/1", nifname) == 0 ||
-        strcmp("atomvm_rtems:nvs_erase_all/1", nifname) == 0) {
+    if (strcmp("esp:nvs_erase_all/1", nifname) == 0 || strcmp("atomvm_rtems:nvs_erase_all/1", nifname) == 0) {
         return &esp_nvs_erase_all_nif;
     }
-    if (strcmp("esp:nvs_reformat/0", nifname) == 0 ||
-        strcmp("atomvm_rtems:nvs_reformat/0", nifname) == 0) {
+    if (strcmp("esp:nvs_reformat/0", nifname) == 0 || strcmp("atomvm_rtems:nvs_reformat/0", nifname) == 0) {
         return &esp_nvs_reformat_nif;
     }
     return NULL;

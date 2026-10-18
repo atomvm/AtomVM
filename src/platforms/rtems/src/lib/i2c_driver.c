@@ -684,17 +684,27 @@ static term nif_i2c_transfer(Context *ctx, int argc, term argv[])
         is_read = malloc(nmsgs * sizeof(bool));
         result_terms = malloc(nmsgs * sizeof(term));
         if (IS_NULL_PTR(msgs) || IS_NULL_PTR(is_read) || IS_NULL_PTR(result_terms)) {
-            if (msgs != stack_msgs && msgs != NULL) free(msgs);
-            if (is_read != stack_is_read && is_read != NULL) free(is_read);
-            if (result_terms != stack_result_terms && result_terms != NULL) free(result_terms);
+            if (msgs != stack_msgs && msgs != NULL) {
+                free(msgs);
+            }
+            if (is_read != stack_is_read && is_read != NULL) {
+                free(is_read);
+            }
+            if (result_terms != stack_result_terms && result_terms != NULL) {
+                free(result_terms);
+            }
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
     }
 
-#define CLEANUP_TRANSFER() do { \
-        if (msgs != stack_msgs) free(msgs); \
-        if (is_read != stack_is_read) free(is_read); \
-        if (result_terms != stack_result_terms) free(result_terms); \
+#define CLEANUP_TRANSFER()                      \
+    do {                                        \
+        if (msgs != stack_msgs)                 \
+            free(msgs);                         \
+        if (is_read != stack_is_read)           \
+            free(is_read);                      \
+        if (result_terms != stack_result_terms) \
+            free(result_terms);                 \
     } while (0)
 
     size_t heap_needed = TUPLE_SIZE(2) + (nmsgs * 2);

@@ -28,7 +28,8 @@
 extern "C" {
 #endif
 
-typedef enum {
+typedef enum
+{
     RTEMS_WIFI_DISCONNECTED = 0,
     RTEMS_WIFI_SCANNING,
     RTEMS_WIFI_ASSOCIATING,
@@ -36,7 +37,8 @@ typedef enum {
     RTEMS_WIFI_GOT_IP
 } rtems_wifi_state_t;
 
-struct rtems_wifi_ip_info {
+struct rtems_wifi_ip_info
+{
     uint32_t ip;
     uint32_t netmask;
     uint32_t gateway;
@@ -55,7 +57,7 @@ int rtems_wifi_stop(void);
 
 void rtems_wifi_set_event_callback(rtems_wifi_event_cb cb, void *arg);
 void rtems_wifi_notify_dhcp_event(const char *interface, const char *reason,
-                                 uint32_t ip, uint32_t netmask, uint32_t gateway);
+    uint32_t ip, uint32_t netmask, uint32_t gateway);
 
 bool rtems_wifi_check_sd_config_and_start(void);
 

@@ -19,8 +19,8 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#include "rtems_sys.h"
 #include "rtc.h"
+#include "rtems_sys.h"
 
 #ifdef RTEMS_HAS_GPIO
 #include <bsp.h>
@@ -406,7 +406,7 @@ static void imx_gpio_isr(void *arg)
     }
     volatile uint32_t *regs = (volatile uint32_t *) gpio;
     uint32_t isr_status = regs[6]; /* 0x18: ISR */
-    uint32_t imr_mask = regs[5];   /* 0x14: IMR */
+    uint32_t imr_mask = regs[5]; /* 0x14: IMR */
     uint32_t pending = isr_status & imr_mask;
     if (pending == 0) {
         return;
@@ -500,7 +500,7 @@ static volatile uint32_t *get_iomuxc_base(void)
             int len = 0;
             const uint32_t *reg = fdt_getprop(fdt, node, "reg", &len);
             if (reg != NULL && len >= 8) {
-                base = (volatile uint32_t *)(uintptr_t) fdt32_to_cpu(reg[0]);
+                base = (volatile uint32_t *) (uintptr_t) fdt32_to_cpu(reg[0]);
                 return base;
             }
         }
@@ -511,8 +511,12 @@ static volatile uint32_t *get_iomuxc_base(void)
 
 static bool get_pin_pad_mux(Context *ctx, term pin_term, volatile uint32_t **pad_reg, volatile uint32_t **mux_reg)
 {
-    if (pad_reg) *pad_reg = NULL;
-    if (mux_reg) *mux_reg = NULL;
+    if (pad_reg) {
+        *pad_reg = NULL;
+    }
+    if (mux_reg) {
+        *mux_reg = NULL;
+    }
 
     unsigned bank, pin_num;
     if (parse_bank_pin(pin_term, &bank, &pin_num)) {
@@ -535,15 +539,20 @@ static bool get_pin_pad_mux(Context *ctx, term pin_term, volatile uint32_t **pad
             }
         } else if (bank == 3) {
             if (pin_num == 8) {
-                pad_off = 0x3B0; mux_off = 0x124;
+                pad_off = 0x3B0;
+                mux_off = 0x124;
             } else if (pin_num == 9) {
-                pad_off = 0x3B4; mux_off = 0x128;
+                pad_off = 0x3B4;
+                mux_off = 0x128;
             } else if (pin_num == 13) {
-                pad_off = 0x3C4; mux_off = 0x138;
+                pad_off = 0x3C4;
+                mux_off = 0x138;
             } else if (pin_num == 14) {
-                pad_off = 0x3C8; mux_off = 0x13C;
+                pad_off = 0x3C8;
+                mux_off = 0x13C;
             } else if (pin_num == 15) {
-                pad_off = 0x3CC; mux_off = 0x140;
+                pad_off = 0x3CC;
+                mux_off = 0x140;
             }
         } else if (bank == 4) {
             if (pin_num <= 6) {
@@ -552,8 +561,12 @@ static bool get_pin_pad_mux(Context *ctx, term pin_term, volatile uint32_t **pad
             }
         }
         if (pad_off != 0) {
-            if (pad_reg) *pad_reg = (volatile uint32_t *)(base + pad_off);
-            if (mux_reg) *mux_reg = (volatile uint32_t *)(base + mux_off);
+            if (pad_reg) {
+                *pad_reg = (volatile uint32_t *) (base + pad_off);
+            }
+            if (mux_reg) {
+                *mux_reg = (volatile uint32_t *) (base + mux_off);
+            }
             return true;
         }
         return false;
@@ -575,12 +588,16 @@ static bool get_pin_pad_mux(Context *ctx, term pin_term, volatile uint32_t **pad
             if (pnode >= 0) {
                 int len = 0;
                 const uint32_t *pins = fdt_getprop(fdt, pnode, "fsl,pins", &len);
-                if (pins != NULL && (int)((index + 1) * 24) <= len) {
+                if (pins != NULL && (int) ((index + 1) * 24) <= len) {
                     uint32_t mux_off = fdt32_to_cpu(pins[index * 6 + 0]);
                     uint32_t pad_off = fdt32_to_cpu(pins[index * 6 + 1]);
                     volatile uint8_t *base = (volatile uint8_t *) get_iomuxc_base();
-                    if (pad_reg) *pad_reg = (volatile uint32_t *)(base + pad_off);
-                    if (mux_reg) *mux_reg = (volatile uint32_t *)(base + mux_off);
+                    if (pad_reg) {
+                        *pad_reg = (volatile uint32_t *) (base + pad_off);
+                    }
+                    if (mux_reg) {
+                        *mux_reg = (volatile uint32_t *) (base + mux_off);
+                    }
                     return true;
                 }
             }
@@ -652,7 +669,7 @@ static term nif_gpio_set_pin_mode(Context *ctx, int argc, term argv[])
     unsigned pin_num;
     bool is_int;
     if (parse_esp32c3_pin(argv[0], &pin_num, &is_int)) {
-        volatile uint32_t *reg = (volatile uint32_t *)(ESP32C3_GPIO_PIN0_REG + 4 * pin_num);
+        volatile uint32_t *reg = (volatile uint32_t *) (ESP32C3_GPIO_PIN0_REG + 4 * pin_num);
         if (globalcontext_is_term_equal_to_atom_string(ctx->global, argv[1], input_atom)) {
             rtems_gpio_bsp_select_input(0, pin_num, NULL);
             *reg &= ~(1u << 2);
@@ -900,8 +917,7 @@ static term nif_gpio_set_int(Context *ctx, int argc, term argv[])
                 "atomvm_gpio",
                 RTEMS_INTERRUPT_SHARED,
                 esp32c3_gpio_isr,
-                NULL
-            );
+                NULL);
             if (sc != RTEMS_SUCCESSFUL) {
                 return error_atom(ctx, ATOM_STR("\xE", "irq_install_err"));
             }
@@ -985,8 +1001,7 @@ static term nif_gpio_set_int(Context *ctx, int argc, term argv[])
             "atomvm_gpio",
             RTEMS_INTERRUPT_SHARED,
             imx_gpio_isr,
-            (void *)(uintptr_t) bank
-        );
+            (void *) (uintptr_t) bank);
         if (sc != RTEMS_SUCCESSFUL) {
             return error_atom(ctx, ATOM_STR("\xE", "irq_install_err"));
         }

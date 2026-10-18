@@ -49,53 +49,56 @@
 #define RTC_SLOW_CRC32_MAGIC 0x55555555U
 
 #if defined(RTEMS_BOARD_ESP32C3)
-#define ESP32C3_RTC_RAM_BASE        0x50000000U
+#define ESP32C3_RTC_RAM_BASE 0x50000000U
 #define ESP32C3_RTC_TIMEKEEPER_BASE 0x50001000U
-#define ESP32C3_RTC_SLEEP_BASE      0x50001040U
-#define RTC_TIMEKEEPER_MAGIC        0x54494D45U /* "TIME" */
-#define RTC_SLEEP_MAGIC             0x534C4550U /* "SLEP" */
-#define RTC_SLOW_CLK_FREQ_DEFAULT   136000U
+#define ESP32C3_RTC_SLEEP_BASE 0x50001040U
+#define RTC_TIMEKEEPER_MAGIC 0x54494D45U /* "TIME" */
+#define RTC_SLEEP_MAGIC 0x534C4550U /* "SLEP" */
+#define RTC_SLOW_CLK_FREQ_DEFAULT 136000U
 
-#define ESP32C3_RTC_CNTL_BASE         0x60008000U
-#define ESP32C3_RTC_CNTL_OPTIONS0     (ESP32C3_RTC_CNTL_BASE + 0x00U)
-#define ESP32C3_RTC_CNTL_SLP_TIMER0   (ESP32C3_RTC_CNTL_BASE + 0x04U)
-#define ESP32C3_RTC_CNTL_SLP_TIMER1   (ESP32C3_RTC_CNTL_BASE + 0x08U)
-#define ESP32C3_RTC_CNTL_TIME_UPDATE  (ESP32C3_RTC_CNTL_BASE + 0x0CU)
-#define ESP32C3_RTC_CNTL_TIME0        (ESP32C3_RTC_CNTL_BASE + 0x10U)
-#define ESP32C3_RTC_CNTL_TIME1        (ESP32C3_RTC_CNTL_BASE + 0x14U)
-#define ESP32C3_RTC_CNTL_STATE0       (ESP32C3_RTC_CNTL_BASE + 0x18U)
-#define ESP32C3_RTC_CNTL_RESET_STATE  (ESP32C3_RTC_CNTL_BASE + 0x34U)
+#define ESP32C3_RTC_CNTL_BASE 0x60008000U
+#define ESP32C3_RTC_CNTL_OPTIONS0 (ESP32C3_RTC_CNTL_BASE + 0x00U)
+#define ESP32C3_RTC_CNTL_SLP_TIMER0 (ESP32C3_RTC_CNTL_BASE + 0x04U)
+#define ESP32C3_RTC_CNTL_SLP_TIMER1 (ESP32C3_RTC_CNTL_BASE + 0x08U)
+#define ESP32C3_RTC_CNTL_TIME_UPDATE (ESP32C3_RTC_CNTL_BASE + 0x0CU)
+#define ESP32C3_RTC_CNTL_TIME0 (ESP32C3_RTC_CNTL_BASE + 0x10U)
+#define ESP32C3_RTC_CNTL_TIME1 (ESP32C3_RTC_CNTL_BASE + 0x14U)
+#define ESP32C3_RTC_CNTL_STATE0 (ESP32C3_RTC_CNTL_BASE + 0x18U)
+#define ESP32C3_RTC_CNTL_RESET_STATE (ESP32C3_RTC_CNTL_BASE + 0x34U)
 #define ESP32C3_RTC_CNTL_WAKEUP_STATE (ESP32C3_RTC_CNTL_BASE + 0x3CU)
-#define ESP32C3_RTC_CNTL_PAD_HOLD     (ESP32C3_RTC_CNTL_BASE + 0x64U)
+#define ESP32C3_RTC_CNTL_PAD_HOLD (ESP32C3_RTC_CNTL_BASE + 0x64U)
 
-#define ESP32C3_GPIO_REG_BASE         0x60004000U
-#define ESP32C3_GPIO_PIN0_REG         (ESP32C3_GPIO_REG_BASE + 0x74U)
+#define ESP32C3_GPIO_REG_BASE 0x60004000U
+#define ESP32C3_GPIO_PIN0_REG (ESP32C3_GPIO_REG_BASE + 0x74U)
 
 extern int rtc_get_reset_reason(int cpu_no);
 extern uint32_t rtc_get_wakeup_cause(void);
 
-enum esp32c3_wakeup_cause {
+enum esp32c3_wakeup_cause
+{
     ESP32C3_WAKEUP_UNDEFINED = 0,
-    ESP32C3_WAKEUP_EXT0      = 1,
-    ESP32C3_WAKEUP_EXT1      = 2,
-    ESP32C3_WAKEUP_TIMER     = 3,
-    ESP32C3_WAKEUP_TOUCHPAD  = 4,
-    ESP32C3_WAKEUP_ULP       = 5,
-    ESP32C3_WAKEUP_GPIO      = 6,
-    ESP32C3_WAKEUP_UART      = 7,
-    ESP32C3_WAKEUP_WIFI      = 8,
-    ESP32C3_WAKEUP_COCPU     = 9,
-    ESP32C3_WAKEUP_BT        = 10,
+    ESP32C3_WAKEUP_EXT0 = 1,
+    ESP32C3_WAKEUP_EXT1 = 2,
+    ESP32C3_WAKEUP_TIMER = 3,
+    ESP32C3_WAKEUP_TOUCHPAD = 4,
+    ESP32C3_WAKEUP_ULP = 5,
+    ESP32C3_WAKEUP_GPIO = 6,
+    ESP32C3_WAKEUP_UART = 7,
+    ESP32C3_WAKEUP_WIFI = 8,
+    ESP32C3_WAKEUP_COCPU = 9,
+    ESP32C3_WAKEUP_BT = 10,
 };
 
-struct esp32c3_rtc_slow_storage {
+struct esp32c3_rtc_slow_storage
+{
     uint32_t checksum;
     uint16_t size;
     uint16_t reserved;
     uint8_t data[CONFIG_AVM_RTC_SLOW_MAX_SIZE];
 };
 
-struct __attribute__((packed)) esp32c3_rtc_timekeeper {
+struct __attribute__((packed)) esp32c3_rtc_timekeeper
+{
     uint32_t magic;
     uint32_t rtc_clk_freq;
     uint64_t sntp_sec;
@@ -104,7 +107,8 @@ struct __attribute__((packed)) esp32c3_rtc_timekeeper {
     uint32_t checksum;
 };
 
-struct __attribute__((packed)) esp32c3_rtc_sleep_state {
+struct __attribute__((packed)) esp32c3_rtc_sleep_state
+{
     uint32_t magic;
     uint32_t last_wakeup_cause;
     uint64_t timer_wakeup_ticks;
@@ -119,36 +123,62 @@ static int s_gpio_wakeup_mode = 0;
 static uint32_t s_light_sleep_wakeup_cause = ESP32C3_WAKEUP_UNDEFINED;
 #endif
 
-static const char *const esp_rst_unknown_atom   = "\xF" "esp_rst_unknown";
+static const char *const esp_rst_unknown_atom = "\xF"
+                                                "esp_rst_unknown";
 #if defined(RTEMS_BOARD_ESP32C3)
-static const char *const esp_rst_poweron_atom   = "\xF" "esp_rst_poweron";
-static const char *const esp_rst_ext_atom       = "\xB" "esp_rst_ext";
-static const char *const esp_rst_sw_atom        = "\xA" "esp_rst_sw";
-static const char *const esp_rst_panic_atom     = "\xD" "esp_rst_panic";
-static const char *const esp_rst_int_wdt_atom   = "\xF" "esp_rst_int_wdt";
-static const char *const esp_rst_task_wdt_atom  = "\x10" "esp_rst_task_wdt";
-static const char *const esp_rst_wdt_atom       = "\xB" "esp_rst_wdt";
-static const char *const esp_rst_deepsleep_atom = "\x11" "esp_rst_deepsleep";
-static const char *const esp_rst_brownout_atom  = "\x10" "esp_rst_brownout";
+static const char *const esp_rst_poweron_atom = "\xF"
+                                                "esp_rst_poweron";
+static const char *const esp_rst_ext_atom = "\xB"
+                                            "esp_rst_ext";
+static const char *const esp_rst_sw_atom = "\xA"
+                                           "esp_rst_sw";
+static const char *const esp_rst_panic_atom = "\xD"
+                                              "esp_rst_panic";
+static const char *const esp_rst_int_wdt_atom = "\xF"
+                                                "esp_rst_int_wdt";
+static const char *const esp_rst_task_wdt_atom = "\x10"
+                                                 "esp_rst_task_wdt";
+static const char *const esp_rst_wdt_atom = "\xB"
+                                            "esp_rst_wdt";
+static const char *const esp_rst_deepsleep_atom = "\x11"
+                                                  "esp_rst_deepsleep";
+static const char *const esp_rst_brownout_atom = "\x10"
+                                                 "esp_rst_brownout";
 
-static const char *const sleep_wakeup_ext0_atom     = "\x11" "sleep_wakeup_ext0";
-static const char *const sleep_wakeup_ext1_atom     = "\x11" "sleep_wakeup_ext1";
-static const char *const sleep_wakeup_timer_atom    = "\x12" "sleep_wakeup_timer";
-static const char *const sleep_wakeup_touchpad_atom = "\x15" "sleep_wakeup_touchpad";
-static const char *const sleep_wakeup_ulp_atom      = "\x10" "sleep_wakeup_ulp";
-static const char *const sleep_wakeup_gpio_atom     = "\x11" "sleep_wakeup_gpio";
-static const char *const sleep_wakeup_uart_atom     = "\x11" "sleep_wakeup_uart";
-static const char *const sleep_wakeup_wifi_atom     = "\x11" "sleep_wakeup_wifi";
-static const char *const sleep_wakeup_cocpu_atom    = "\x12" "sleep_wakeup_cocpu";
-static const char *const sleep_wakeup_bt_atom       = "\xF" "sleep_wakeup_bt";
+static const char *const sleep_wakeup_ext0_atom = "\x11"
+                                                  "sleep_wakeup_ext0";
+static const char *const sleep_wakeup_ext1_atom = "\x11"
+                                                  "sleep_wakeup_ext1";
+static const char *const sleep_wakeup_timer_atom = "\x12"
+                                                   "sleep_wakeup_timer";
+static const char *const sleep_wakeup_touchpad_atom = "\x15"
+                                                      "sleep_wakeup_touchpad";
+static const char *const sleep_wakeup_ulp_atom = "\x10"
+                                                 "sleep_wakeup_ulp";
+static const char *const sleep_wakeup_gpio_atom = "\x11"
+                                                  "sleep_wakeup_gpio";
+static const char *const sleep_wakeup_uart_atom = "\x11"
+                                                  "sleep_wakeup_uart";
+static const char *const sleep_wakeup_wifi_atom = "\x11"
+                                                  "sleep_wakeup_wifi";
+static const char *const sleep_wakeup_cocpu_atom = "\x12"
+                                                   "sleep_wakeup_cocpu";
+static const char *const sleep_wakeup_bt_atom = "\xF"
+                                                "sleep_wakeup_bt";
 
-static const char *const not_synced_atom        = "\xA" "not_synced";
-static const char *const sntp_sec_atom          = "\x8" "sntp_sec";
-static const char *const sntp_usec_atom         = "\x9" "sntp_usec";
-static const char *const rtc_counter_atom       = "\xB" "rtc_counter";
-static const char *const elapsed_sec_atom       = "\xB" "elapsed_sec";
+static const char *const not_synced_atom = "\xA"
+                                           "not_synced";
+static const char *const sntp_sec_atom = "\x8"
+                                         "sntp_sec";
+static const char *const sntp_usec_atom = "\x9"
+                                          "sntp_usec";
+static const char *const rtc_counter_atom = "\xB"
+                                            "rtc_counter";
+static const char *const elapsed_sec_atom = "\xB"
+                                            "elapsed_sec";
 #else
-static const char *const enotsup_atom           = "\x7" "enotsup";
+static const char *const enotsup_atom = "\x7"
+                                        "enotsup";
 #endif
 
 static inline term make_tuple2(Context *ctx, term t1, term t2)
@@ -213,19 +243,17 @@ void esp32c3_rtc_timekeeper_record(const struct timeval *tv)
     tk.sntp_usec = (uint64_t) tv->tv_usec;
     tk.rtc_counter = rtc_cnt;
     tk.checksum = rtc_crc32_le(RTC_SLOW_CRC32_MAGIC, (const uint8_t *) &tk,
-                               sizeof(tk) - sizeof(tk.checksum));
+        sizeof(tk) - sizeof(tk.checksum));
 
-    volatile struct esp32c3_rtc_timekeeper *storage =
-        (volatile struct esp32c3_rtc_timekeeper *) ESP32C3_RTC_TIMEKEEPER_BASE;
+    volatile struct esp32c3_rtc_timekeeper *storage = (volatile struct esp32c3_rtc_timekeeper *) ESP32C3_RTC_TIMEKEEPER_BASE;
     memcpy((void *) (uintptr_t) storage, &tk, sizeof(tk));
     fprintf(stdout, "RTC: Saved SNTP sync (%llu s, %llu us, rtc_ticks=%llu) to RTC slow memory\n",
-            (unsigned long long) tk.sntp_sec, (unsigned long long) tk.sntp_usec, (unsigned long long) tk.rtc_counter);
+        (unsigned long long) tk.sntp_sec, (unsigned long long) tk.sntp_usec, (unsigned long long) tk.rtc_counter);
 }
 
 bool esp32c3_rtc_timekeeper_restore(void)
 {
-    volatile struct esp32c3_rtc_timekeeper *storage =
-        (volatile struct esp32c3_rtc_timekeeper *) ESP32C3_RTC_TIMEKEEPER_BASE;
+    volatile struct esp32c3_rtc_timekeeper *storage = (volatile struct esp32c3_rtc_timekeeper *) ESP32C3_RTC_TIMEKEEPER_BASE;
 
     struct esp32c3_rtc_timekeeper tk;
     memcpy(&tk, (const void *) (uintptr_t) storage, sizeof(tk));
@@ -235,7 +263,7 @@ bool esp32c3_rtc_timekeeper_restore(void)
     }
     uint32_t expected_crc = tk.checksum;
     uint32_t computed_crc = rtc_crc32_le(RTC_SLOW_CRC32_MAGIC, (const uint8_t *) &tk,
-                                         sizeof(tk) - sizeof(tk.checksum));
+        sizeof(tk) - sizeof(tk.checksum));
     if (computed_crc != expected_crc) {
         return false;
     }
@@ -263,7 +291,7 @@ bool esp32c3_rtc_timekeeper_restore(void)
     clock_settime(CLOCK_REALTIME, &ts);
 
     fprintf(stdout, "RTC: Restored system time from RTC slow memory: %llu s (elapsed %llu s)\n",
-            (unsigned long long) sec, (unsigned long long) elapsed_sec);
+        (unsigned long long) sec, (unsigned long long) elapsed_sec);
     return true;
 }
 
@@ -366,10 +394,9 @@ void esp32c3_deep_sleep(uint64_t time_in_us)
     ss.gpio_wakeup_mask = s_gpio_wakeup_mask;
     ss.gpio_wakeup_mode = (uint32_t) s_gpio_wakeup_mode;
     ss.checksum = rtc_crc32_le(RTC_SLOW_CRC32_MAGIC, (const uint8_t *) &ss,
-                               sizeof(ss) - sizeof(ss.checksum));
+        sizeof(ss) - sizeof(ss.checksum));
 
-    volatile struct esp32c3_rtc_sleep_state *storage =
-        (volatile struct esp32c3_rtc_sleep_state *) ESP32C3_RTC_SLEEP_BASE;
+    volatile struct esp32c3_rtc_sleep_state *storage = (volatile struct esp32c3_rtc_sleep_state *) ESP32C3_RTC_SLEEP_BASE;
     memcpy((void *) (uintptr_t) storage, &ss, sizeof(ss));
 
     fflush(stdout);
@@ -404,13 +431,12 @@ uint32_t esp32c3_sleep_get_wakeup_cause(void)
             return ESP32C3_WAKEUP_EXT1;
         }
 
-        volatile struct esp32c3_rtc_sleep_state *storage =
-            (volatile struct esp32c3_rtc_sleep_state *) ESP32C3_RTC_SLEEP_BASE;
+        volatile struct esp32c3_rtc_sleep_state *storage = (volatile struct esp32c3_rtc_sleep_state *) ESP32C3_RTC_SLEEP_BASE;
         struct esp32c3_rtc_sleep_state ss;
         memcpy(&ss, (const void *) (uintptr_t) storage, sizeof(ss));
         if (ss.magic == RTC_SLEEP_MAGIC) {
             uint32_t crc = rtc_crc32_le(RTC_SLOW_CRC32_MAGIC, (const uint8_t *) &ss,
-                                        sizeof(ss) - sizeof(ss.checksum));
+                sizeof(ss) - sizeof(ss.checksum));
             if (crc == ss.checksum) {
                 return ss.last_wakeup_cause;
             }
@@ -432,8 +458,7 @@ static term nif_esp_rtc_slow_get_binary(Context *ctx, int argc, term argv[])
     UNUSED(argv);
 
 #if defined(RTEMS_BOARD_ESP32C3)
-    volatile struct esp32c3_rtc_slow_storage *storage =
-        (volatile struct esp32c3_rtc_slow_storage *) ESP32C3_RTC_RAM_BASE;
+    volatile struct esp32c3_rtc_slow_storage *storage = (volatile struct esp32c3_rtc_slow_storage *) ESP32C3_RTC_RAM_BASE;
 
     uint16_t size = storage->size;
     if (size > CONFIG_AVM_RTC_SLOW_MAX_SIZE) {
@@ -468,8 +493,7 @@ static term nif_esp_rtc_slow_set_binary(Context *ctx, int argc, term argv[])
     const uint8_t *data = (const uint8_t *) term_binary_data(binary);
     uint32_t checksum = rtc_crc32_le(RTC_SLOW_CRC32_MAGIC, data, size);
 
-    volatile struct esp32c3_rtc_slow_storage *storage =
-        (volatile struct esp32c3_rtc_slow_storage *) ESP32C3_RTC_RAM_BASE;
+    volatile struct esp32c3_rtc_slow_storage *storage = (volatile struct esp32c3_rtc_slow_storage *) ESP32C3_RTC_RAM_BASE;
 
     memcpy((void *) (uintptr_t) storage->data, data, size);
     storage->size = (uint16_t) size;
@@ -762,8 +786,7 @@ static term nif_rtems_rtc_timekeeper_status(Context *ctx, int argc, term argv[])
     UNUSED(argv);
 
 #if defined(RTEMS_BOARD_ESP32C3)
-    volatile struct esp32c3_rtc_timekeeper *storage =
-        (volatile struct esp32c3_rtc_timekeeper *) ESP32C3_RTC_TIMEKEEPER_BASE;
+    volatile struct esp32c3_rtc_timekeeper *storage = (volatile struct esp32c3_rtc_timekeeper *) ESP32C3_RTC_TIMEKEEPER_BASE;
 
     struct esp32c3_rtc_timekeeper tk;
     memcpy(&tk, (const void *) (uintptr_t) storage, sizeof(tk));
@@ -776,7 +799,7 @@ static term nif_rtems_rtc_timekeeper_status(Context *ctx, int argc, term argv[])
     }
     uint32_t expected_crc = tk.checksum;
     uint32_t computed_crc = rtc_crc32_le(RTC_SLOW_CRC32_MAGIC, (const uint8_t *) &tk,
-                                         sizeof(tk) - sizeof(tk.checksum));
+        sizeof(tk) - sizeof(tk.checksum));
     if (computed_crc != expected_crc) {
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -789,8 +812,7 @@ static term nif_rtems_rtc_timekeeper_status(Context *ctx, int argc, term argv[])
     uint64_t elapsed_sec = (tk.rtc_clk_freq > 0) ? (elapsed_ticks / tk.rtc_clk_freq) : 0;
 
     // Allocate memory for map and tuple
-    size_t term_size = TUPLE_SIZE(2) + term_map_size_in_terms(4) +
-                       BOXED_INT64_SIZE * 4;
+    size_t term_size = TUPLE_SIZE(2) + term_map_size_in_terms(4) + BOXED_INT64_SIZE * 4;
     if (UNLIKELY(memory_ensure_free_opt(ctx, term_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
@@ -907,74 +929,55 @@ static const struct Nif rtems_rtc_timekeeper_status_nif = {
 
 const struct Nif *rtc_slow_nif_get_nif(const char *nifname)
 {
-    if (strcmp("esp:rtc_slow_get_binary/0", nifname) == 0 ||
-        strcmp("atomvm_rtems:rtc_slow_get_binary/0", nifname) == 0) {
+    if (strcmp("esp:rtc_slow_get_binary/0", nifname) == 0 || strcmp("atomvm_rtems:rtc_slow_get_binary/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_rtc_slow_get_binary_nif;
     }
-    if (strcmp("esp:rtc_slow_set_binary/1", nifname) == 0 ||
-        strcmp("atomvm_rtems:rtc_slow_set_binary/1", nifname) == 0) {
+    if (strcmp("esp:rtc_slow_set_binary/1", nifname) == 0 || strcmp("atomvm_rtems:rtc_slow_set_binary/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_rtc_slow_set_binary_nif;
     }
-    if (strcmp("esp:timer_get_time/0", nifname) == 0 ||
-        strcmp("atomvm_rtems:timer_get_time/0", nifname) == 0) {
+    if (strcmp("esp:timer_get_time/0", nifname) == 0 || strcmp("atomvm_rtems:timer_get_time/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_timer_get_time_nif;
     }
-    if (strcmp("esp:rtc_get_time_us/0", nifname) == 0 ||
-        strcmp("atomvm_rtems:get_rtc_time/0", nifname) == 0) {
+    if (strcmp("esp:rtc_get_time_us/0", nifname) == 0 || strcmp("atomvm_rtems:get_rtc_time/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_rtc_get_time_us_nif;
     }
-    if (strcmp("esp:reset_reason/0", nifname) == 0 ||
-        strcmp("atomvm_rtems:reset_reason/0", nifname) == 0) {
+    if (strcmp("esp:reset_reason/0", nifname) == 0 || strcmp("atomvm_rtems:reset_reason/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_reset_reason_nif;
     }
-    if (strcmp("esp:sleep_get_wakeup_cause/0", nifname) == 0 ||
-        strcmp("atomvm_rtems:sleep_get_wakeup_cause/0", nifname) == 0) {
+    if (strcmp("esp:sleep_get_wakeup_cause/0", nifname) == 0 || strcmp("atomvm_rtems:sleep_get_wakeup_cause/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_sleep_get_wakeup_cause_nif;
     }
-    if (strcmp("esp:deep_sleep/0", nifname) == 0 ||
-        strcmp("esp:deep_sleep/1", nifname) == 0 ||
-        strcmp("atomvm_rtems:deep_sleep/0", nifname) == 0 ||
-        strcmp("atomvm_rtems:deep_sleep/1", nifname) == 0) {
+    if (strcmp("esp:deep_sleep/0", nifname) == 0 || strcmp("esp:deep_sleep/1", nifname) == 0 || strcmp("atomvm_rtems:deep_sleep/0", nifname) == 0 || strcmp("atomvm_rtems:deep_sleep/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_deep_sleep_nif;
     }
-    if (strcmp("esp:light_sleep/0", nifname) == 0 ||
-        strcmp("atomvm_rtems:light_sleep/0", nifname) == 0) {
+    if (strcmp("esp:light_sleep/0", nifname) == 0 || strcmp("atomvm_rtems:light_sleep/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_light_sleep_nif;
     }
-    if (strcmp("esp:sleep_enable_timer_wakeup/1", nifname) == 0 ||
-        strcmp("atomvm_rtems:sleep_enable_timer_wakeup/1", nifname) == 0) {
+    if (strcmp("esp:sleep_enable_timer_wakeup/1", nifname) == 0 || strcmp("atomvm_rtems:sleep_enable_timer_wakeup/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_sleep_enable_timer_wakeup_nif;
     }
-    if (strcmp("esp:deep_sleep_enable_gpio_wakeup/2", nifname) == 0 ||
-        strcmp("atomvm_rtems:deep_sleep_enable_gpio_wakeup/2", nifname) == 0) {
+    if (strcmp("esp:deep_sleep_enable_gpio_wakeup/2", nifname) == 0 || strcmp("atomvm_rtems:deep_sleep_enable_gpio_wakeup/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_deep_sleep_enable_gpio_wakeup_nif;
     }
-    if (strcmp("esp:sleep_enable_gpio_wakeup/0", nifname) == 0 ||
-        strcmp("atomvm_rtems:sleep_enable_gpio_wakeup/0", nifname) == 0) {
+    if (strcmp("esp:sleep_enable_gpio_wakeup/0", nifname) == 0 || strcmp("atomvm_rtems:sleep_enable_gpio_wakeup/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_sleep_enable_gpio_wakeup_nif;
     }
-    if (strcmp("esp:deep_sleep_hold_en/0", nifname) == 0 ||
-        strcmp("gpio:deep_sleep_hold_en/0", nifname) == 0 ||
-        strcmp("Elixir.GPIO:deep_sleep_hold_en/0", nifname) == 0 ||
-        strcmp("atomvm_rtems:deep_sleep_hold_en/0", nifname) == 0) {
+    if (strcmp("esp:deep_sleep_hold_en/0", nifname) == 0 || strcmp("gpio:deep_sleep_hold_en/0", nifname) == 0 || strcmp("Elixir.GPIO:deep_sleep_hold_en/0", nifname) == 0 || strcmp("atomvm_rtems:deep_sleep_hold_en/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &gpio_deep_sleep_hold_en_nif;
     }
-    if (strcmp("esp:deep_sleep_hold_dis/0", nifname) == 0 ||
-        strcmp("gpio:deep_sleep_hold_dis/0", nifname) == 0 ||
-        strcmp("Elixir.GPIO:deep_sleep_hold_dis/0", nifname) == 0 ||
-        strcmp("atomvm_rtems:deep_sleep_hold_dis/0", nifname) == 0) {
+    if (strcmp("esp:deep_sleep_hold_dis/0", nifname) == 0 || strcmp("gpio:deep_sleep_hold_dis/0", nifname) == 0 || strcmp("Elixir.GPIO:deep_sleep_hold_dis/0", nifname) == 0 || strcmp("atomvm_rtems:deep_sleep_hold_dis/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &gpio_deep_sleep_hold_dis_nif;
     }

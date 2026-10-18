@@ -39,6 +39,8 @@
 // #define ENABLE_TRACE
 #include <trace.h>
 
+#if defined(RTEMS_BOARD_ESP32)
+
 #include <esp_rom_spiflash.h>
 
 // Prototypes for ROM symbols
@@ -246,6 +248,49 @@ int esp32c3_flash_erase_range(uint32_t offset, size_t size)
     return 0;
 }
 
+#else /* !defined(RTEMS_BOARD_ESP32) */
+
+bool esp32c3_flash_init(void)
+{
+    return false;
+}
+
+uint32_t esp32c3_flash_get_size(void)
+{
+    return 0;
+}
+
+int esp32c3_flash_read(uint32_t offset, void *dest, size_t size)
+{
+    UNUSED(offset);
+    UNUSED(dest);
+    UNUSED(size);
+    return -1;
+}
+
+int esp32c3_flash_write(uint32_t offset, const void *src, size_t size)
+{
+    UNUSED(offset);
+    UNUSED(src);
+    UNUSED(size);
+    return -1;
+}
+
+int esp32c3_flash_erase_sector(uint32_t sector_num)
+{
+    UNUSED(sector_num);
+    return -1;
+}
+
+int esp32c3_flash_erase_range(uint32_t offset, size_t size)
+{
+    UNUSED(offset);
+    UNUSED(size);
+    return -1;
+}
+
+#endif /* !defined(RTEMS_BOARD_ESP32) */
+
 //
 // NIF implementations
 //
@@ -406,24 +451,19 @@ void flash_nif_init(GlobalContext *global)
 
 const struct Nif *flash_nif_get_nif(const char *nifname)
 {
-    if (strcmp("esp:flash_get_size/0", nifname) == 0 ||
-        strcmp("atomvm_rtems:flash_get_size/0", nifname) == 0) {
+    if (strcmp("esp:flash_get_size/0", nifname) == 0 || strcmp("atomvm_rtems:flash_get_size/0", nifname) == 0) {
         return &esp_flash_get_size_nif;
     }
-    if (strcmp("esp:flash_read/2", nifname) == 0 ||
-        strcmp("atomvm_rtems:flash_read/2", nifname) == 0) {
+    if (strcmp("esp:flash_read/2", nifname) == 0 || strcmp("atomvm_rtems:flash_read/2", nifname) == 0) {
         return &esp_flash_read_nif;
     }
-    if (strcmp("esp:flash_write/2", nifname) == 0 ||
-        strcmp("atomvm_rtems:flash_write/2", nifname) == 0) {
+    if (strcmp("esp:flash_write/2", nifname) == 0 || strcmp("atomvm_rtems:flash_write/2", nifname) == 0) {
         return &esp_flash_write_nif;
     }
-    if (strcmp("esp:flash_erase_sector/1", nifname) == 0 ||
-        strcmp("atomvm_rtems:flash_erase_sector/1", nifname) == 0) {
+    if (strcmp("esp:flash_erase_sector/1", nifname) == 0 || strcmp("atomvm_rtems:flash_erase_sector/1", nifname) == 0) {
         return &esp_flash_erase_sector_nif;
     }
-    if (strcmp("esp:flash_erase_range/2", nifname) == 0 ||
-        strcmp("atomvm_rtems:flash_erase_range/2", nifname) == 0) {
+    if (strcmp("esp:flash_erase_range/2", nifname) == 0 || strcmp("atomvm_rtems:flash_erase_range/2", nifname) == 0) {
         return &esp_flash_erase_range_nif;
     }
     return NULL;

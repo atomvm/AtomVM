@@ -162,12 +162,24 @@ rtc_slow_set_binary(_Bin) ->
     erlang:nif_error(undefined).
 
 %% @doc Initialize Task Watchdog Timer.
--spec task_wdt_init(Config :: #{timeout_ms := pos_integer(), idle_core_mask => non_neg_integer(), trigger_panic => boolean()} | pos_integer()) -> ok.
+-spec task_wdt_init(
+    Config ::
+        #{
+            timeout_ms := pos_integer(),
+            idle_core_mask => non_neg_integer(),
+            trigger_panic => boolean()
+        }
+        | pos_integer()
+) -> ok.
 task_wdt_init(_Config) ->
     erlang:nif_error(undefined).
 
 %% @doc Reconfigure Task Watchdog Timer parameters.
--spec task_wdt_reconfigure(Config :: #{timeout_ms := pos_integer(), idle_core_mask => non_neg_integer(), trigger_panic => boolean()}) -> ok.
+-spec task_wdt_reconfigure(
+    Config :: #{
+        timeout_ms := pos_integer(), idle_core_mask => non_neg_integer(), trigger_panic => boolean()
+    }
+) -> ok.
 task_wdt_reconfigure(_Config) ->
     erlang:nif_error(undefined).
 
@@ -234,12 +246,16 @@ nvs_set_binary(Key, Value) when is_atom(Key) andalso is_binary(Value) ->
 
 %% @doc Store binary in given namespace.
 -spec nvs_set_binary(Namespace :: atom(), Key :: atom(), Value :: binary()) -> ok.
-nvs_set_binary(Namespace, Key, Value) when is_atom(Namespace) andalso is_atom(Key) andalso is_binary(Value) ->
+nvs_set_binary(Namespace, Key, Value) when
+    is_atom(Namespace) andalso is_atom(Key) andalso is_binary(Value)
+->
     esp:nvs_put_binary(Namespace, Key, Value).
 
 %% @doc Store binary in NVS key-value storage.
 -spec nvs_put_binary(Namespace :: atom(), Key :: atom(), Value :: binary()) -> ok.
-nvs_put_binary(Namespace, Key, Value) when is_atom(Namespace) andalso is_atom(Key) andalso is_binary(Value) ->
+nvs_put_binary(Namespace, Key, Value) when
+    is_atom(Namespace) andalso is_atom(Key) andalso is_binary(Value)
+->
     erlang:nif_error(undefined).
 
 %% @doc Erase key from default namespace.
@@ -293,7 +309,8 @@ flash_erase_sector(_SectorNum) ->
     erlang:nif_error(undefined).
 
 %% @doc Erase a range of flash sectors.
--spec flash_erase_range(Offset :: non_neg_integer(), Length :: non_neg_integer()) -> ok | {error, term()}.
+-spec flash_erase_range(Offset :: non_neg_integer(), Length :: non_neg_integer()) ->
+    ok | {error, term()}.
 flash_erase_range(_Offset, _Length) ->
     erlang:nif_error(undefined).
 

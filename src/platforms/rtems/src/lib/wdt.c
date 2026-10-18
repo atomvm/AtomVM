@@ -45,59 +45,61 @@
 
 #define MAX_TWDT_USERS 16
 
-#define ESP_OK                    0
-#define ESP_ERR_NO_MEM            0x101
-#define ESP_ERR_INVALID_ARG       0x102
-#define ESP_ERR_INVALID_STATE     0x103
-#define ESP_ERR_NOT_FOUND         0x105
+#define ESP_OK 0
+#define ESP_ERR_NO_MEM 0x101
+#define ESP_ERR_INVALID_ARG 0x102
+#define ESP_ERR_INVALID_STATE 0x103
+#define ESP_ERR_NOT_FOUND 0x105
 
 #if defined(RTEMS_BOARD_ESP32)
 #define WRITE_PERI_REG(addr, val) (*((volatile uint32_t *) (addr)) = (uint32_t) (val))
-#define READ_PERI_REG(addr)       (*((volatile uint32_t *) (addr)))
+#define READ_PERI_REG(addr) (*((volatile uint32_t *) (addr)))
 
 #if defined(RTEMS_BOARD_ESP32S31)
-#define ESP32_TIMG0_BASE             0x20580000U
-#define ESP32_RTC_CNTL_BASE          0x20801000U
-#define ESP32_RTC_CNTL_OPTIONS0_REG  0x20804000U
-#define ESP32_RTC_CNTL_WDTCONFIG0    (ESP32_RTC_CNTL_BASE + 0x00U)
-#define ESP32_RTC_CNTL_WDTCONFIG1    (ESP32_RTC_CNTL_BASE + 0x04U)
-#define ESP32_RTC_CNTL_WDTFEED       (ESP32_RTC_CNTL_BASE + 0x14U)
-#define ESP32_RTC_CNTL_WDTWPROTECT   (ESP32_RTC_CNTL_BASE + 0x18U)
+#define ESP32_TIMG0_BASE 0x20580000U
+#define ESP32_RTC_CNTL_BASE 0x20801000U
+#define ESP32_RTC_CNTL_OPTIONS0_REG 0x20804000U
+#define ESP32_RTC_CNTL_WDTCONFIG0 (ESP32_RTC_CNTL_BASE + 0x00U)
+#define ESP32_RTC_CNTL_WDTCONFIG1 (ESP32_RTC_CNTL_BASE + 0x04U)
+#define ESP32_RTC_CNTL_WDTFEED (ESP32_RTC_CNTL_BASE + 0x14U)
+#define ESP32_RTC_CNTL_WDTWPROTECT (ESP32_RTC_CNTL_BASE + 0x18U)
 #elif defined(RTEMS_BOARD_ESP32C6) || defined(RTEMS_BOARD_ESP32C5)
-#define ESP32_TIMG0_BASE             0x60008000U
-#define ESP32_RTC_CNTL_BASE          0x600B1C00U
-#define ESP32_RTC_CNTL_OPTIONS0_REG  0x600B1000U
-#define ESP32_RTC_CNTL_WDTCONFIG0    (ESP32_RTC_CNTL_BASE + 0x00U)
-#define ESP32_RTC_CNTL_WDTCONFIG1    (ESP32_RTC_CNTL_BASE + 0x04U)
-#define ESP32_RTC_CNTL_WDTFEED       (ESP32_RTC_CNTL_BASE + 0x14U)
-#define ESP32_RTC_CNTL_WDTWPROTECT   (ESP32_RTC_CNTL_BASE + 0x18U)
+#define ESP32_TIMG0_BASE 0x60008000U
+#define ESP32_RTC_CNTL_BASE 0x600B1C00U
+#define ESP32_RTC_CNTL_OPTIONS0_REG 0x600B1000U
+#define ESP32_RTC_CNTL_WDTCONFIG0 (ESP32_RTC_CNTL_BASE + 0x00U)
+#define ESP32_RTC_CNTL_WDTCONFIG1 (ESP32_RTC_CNTL_BASE + 0x04U)
+#define ESP32_RTC_CNTL_WDTFEED (ESP32_RTC_CNTL_BASE + 0x14U)
+#define ESP32_RTC_CNTL_WDTWPROTECT (ESP32_RTC_CNTL_BASE + 0x18U)
 #else
-#define ESP32_TIMG0_BASE             0x6001F000U
-#define ESP32_RTC_CNTL_BASE          0x60008000U
-#define ESP32_RTC_CNTL_OPTIONS0_REG  (ESP32_RTC_CNTL_BASE + 0x00U)
-#define ESP32_RTC_CNTL_WDTCONFIG0    (ESP32_RTC_CNTL_BASE + 0x90U)
-#define ESP32_RTC_CNTL_WDTCONFIG1    (ESP32_RTC_CNTL_BASE + 0x94U)
-#define ESP32_RTC_CNTL_WDTFEED       (ESP32_RTC_CNTL_BASE + 0xA0U)
-#define ESP32_RTC_CNTL_WDTWPROTECT   (ESP32_RTC_CNTL_BASE + 0xA4U)
+#define ESP32_TIMG0_BASE 0x6001F000U
+#define ESP32_RTC_CNTL_BASE 0x60008000U
+#define ESP32_RTC_CNTL_OPTIONS0_REG (ESP32_RTC_CNTL_BASE + 0x00U)
+#define ESP32_RTC_CNTL_WDTCONFIG0 (ESP32_RTC_CNTL_BASE + 0x90U)
+#define ESP32_RTC_CNTL_WDTCONFIG1 (ESP32_RTC_CNTL_BASE + 0x94U)
+#define ESP32_RTC_CNTL_WDTFEED (ESP32_RTC_CNTL_BASE + 0xA0U)
+#define ESP32_RTC_CNTL_WDTWPROTECT (ESP32_RTC_CNTL_BASE + 0xA4U)
 #endif
 
-#define ESP32_TIMG0_WDTCONFIG0_REG   (ESP32_TIMG0_BASE + 0x48U)
-#define ESP32_TIMG0_WDTCONFIG1_REG   (ESP32_TIMG0_BASE + 0x4CU)
-#define ESP32_TIMG0_WDTCONFIG2_REG   (ESP32_TIMG0_BASE + 0x50U)
-#define ESP32_TIMG0_WDTCONFIG3_REG   (ESP32_TIMG0_BASE + 0x54U)
-#define ESP32_TIMG0_WDTFEED_REG      (ESP32_TIMG0_BASE + 0x60U)
-#define ESP32_TIMG0_WDTWPROTECT_REG  (ESP32_TIMG0_BASE + 0x64U)
+#define ESP32_TIMG0_WDTCONFIG0_REG (ESP32_TIMG0_BASE + 0x48U)
+#define ESP32_TIMG0_WDTCONFIG1_REG (ESP32_TIMG0_BASE + 0x4CU)
+#define ESP32_TIMG0_WDTCONFIG2_REG (ESP32_TIMG0_BASE + 0x50U)
+#define ESP32_TIMG0_WDTCONFIG3_REG (ESP32_TIMG0_BASE + 0x54U)
+#define ESP32_TIMG0_WDTFEED_REG (ESP32_TIMG0_BASE + 0x60U)
+#define ESP32_TIMG0_WDTWPROTECT_REG (ESP32_TIMG0_BASE + 0x64U)
 
-#define WDT_WKEY_VALUE                 0x50D83AA1U
+#define WDT_WKEY_VALUE 0x50D83AA1U
 #endif
 
-struct twdt_user {
+struct twdt_user
+{
     bool in_use;
     char *name;
     int64_t last_feed_ms;
 };
 
-struct twdt_state {
+struct twdt_state
+{
     bool initialized;
     esp_task_wdt_config_t config;
     struct twdt_user users[MAX_TWDT_USERS];
@@ -138,7 +140,7 @@ static void twdt_timer_tick(rtems_id timer_id, void *arg)
 
     int64_t now_ms = (int64_t) (rtems_clock_get_uptime_nanoseconds() / 1000000ULL);
     bool any_user_timeout = false;
-    char timed_out_name[32] = {0};
+    char timed_out_name[32] = { 0 };
 
     for (int i = 0; i < MAX_TWDT_USERS; i++) {
         if (s_twdt.users[i].in_use) {
@@ -282,7 +284,7 @@ int esp32c3_task_wdt_reconfigure(const esp_task_wdt_config_t *config)
 
 int esp32c3_task_wdt_deinit(void)
 {
-    char *names_to_free[MAX_TWDT_USERS] = {0};
+    char *names_to_free[MAX_TWDT_USERS] = { 0 };
 
     rtems_interrupt_lock_context lock_context;
     rtems_interrupt_lock_acquire(&s_twdt_lock, &lock_context);
@@ -658,32 +660,25 @@ static const struct Nif esp_wdt_feed_nif = {
 
 static const struct Nif *wdt_get_nif(const char *nifname)
 {
-    if (strcmp("esp:task_wdt_init/1", nifname) == 0 ||
-        strcmp("atomvm_rtems:task_wdt_init/1", nifname) == 0) {
+    if (strcmp("esp:task_wdt_init/1", nifname) == 0 || strcmp("atomvm_rtems:task_wdt_init/1", nifname) == 0) {
         return &esp_task_wdt_init_nif;
     }
-    if (strcmp("esp:task_wdt_reconfigure/1", nifname) == 0 ||
-        strcmp("atomvm_rtems:task_wdt_reconfigure/1", nifname) == 0) {
+    if (strcmp("esp:task_wdt_reconfigure/1", nifname) == 0 || strcmp("atomvm_rtems:task_wdt_reconfigure/1", nifname) == 0) {
         return &esp_task_wdt_reconfigure_nif;
     }
-    if (strcmp("esp:task_wdt_deinit/0", nifname) == 0 ||
-        strcmp("atomvm_rtems:task_wdt_deinit/0", nifname) == 0) {
+    if (strcmp("esp:task_wdt_deinit/0", nifname) == 0 || strcmp("atomvm_rtems:task_wdt_deinit/0", nifname) == 0) {
         return &esp_task_wdt_deinit_nif;
     }
-    if (strcmp("esp:task_wdt_add_user/1", nifname) == 0 ||
-        strcmp("atomvm_rtems:task_wdt_add_user/1", nifname) == 0) {
+    if (strcmp("esp:task_wdt_add_user/1", nifname) == 0 || strcmp("atomvm_rtems:task_wdt_add_user/1", nifname) == 0) {
         return &esp_task_wdt_add_user_nif;
     }
-    if (strcmp("esp:task_wdt_reset_user/1", nifname) == 0 ||
-        strcmp("atomvm_rtems:task_wdt_reset_user/1", nifname) == 0) {
+    if (strcmp("esp:task_wdt_reset_user/1", nifname) == 0 || strcmp("atomvm_rtems:task_wdt_reset_user/1", nifname) == 0) {
         return &esp_task_wdt_reset_user_nif;
     }
-    if (strcmp("esp:task_wdt_delete_user/1", nifname) == 0 ||
-        strcmp("atomvm_rtems:task_wdt_delete_user/1", nifname) == 0) {
+    if (strcmp("esp:task_wdt_delete_user/1", nifname) == 0 || strcmp("atomvm_rtems:task_wdt_delete_user/1", nifname) == 0) {
         return &esp_task_wdt_delete_user_nif;
     }
-    if (strcmp("esp:wdt_feed/0", nifname) == 0 ||
-        strcmp("atomvm_rtems:wdt_feed/0", nifname) == 0) {
+    if (strcmp("esp:wdt_feed/0", nifname) == 0 || strcmp("atomvm_rtems:wdt_feed/0", nifname) == 0) {
         return &esp_wdt_feed_nif;
     }
     return NULL;

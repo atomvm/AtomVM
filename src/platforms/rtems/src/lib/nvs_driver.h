@@ -36,7 +36,8 @@ extern "C" {
 #define MAX_NVS_KEY_SIZE 15
 #define MAX_NVS_NAMESPACE_SIZE 15
 
-typedef enum {
+typedef enum
+{
     NVS_OK = 0,
     NVS_NOT_FOUND,
     NVS_NAMESPACE_NOT_FOUND,

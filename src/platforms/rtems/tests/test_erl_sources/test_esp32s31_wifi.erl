@@ -116,7 +116,9 @@ udp_smoke() ->
             {ok, RecvSock} ->
                 ok = socket:bind(RecvSock, #{family => inet, addr => any, port => 9091}),
                 {ok, SendSock} = socket:open(inet, dgram, udp),
-                ok = socket:sendto(SendSock, <<"udp_echo_test">>, #{family => inet, addr => {127, 0, 0, 1}, port => 9091}),
+                ok = socket:sendto(SendSock, <<"udp_echo_test">>, #{
+                    family => inet, addr => {127, 0, 0, 1}, port => 9091
+                }),
                 case socket:recvfrom(RecvSock, 0, 5000) of
                     {ok, {_Source, <<"udp_echo_test">>}} ->
                         erlang:display({udp_echo, ok});
@@ -161,14 +163,20 @@ tcp_echo_smoke() ->
                 end),
                 case socket:open(inet, stream, tcp) of
                     {ok, ClientSock} ->
-                        case socket:connect(ClientSock, #{family => inet, addr => {127, 0, 0, 1}, port => 8081}) of
+                        case
+                            socket:connect(ClientSock, #{
+                                family => inet, addr => {127, 0, 0, 1}, port => 8081
+                            })
+                        of
                             ok ->
                                 ok = socket:send(ClientSock, <<"tcp_echo_test">>),
                                 case socket:recv(ClientSock, 0, 5000) of
                                     {ok, <<"tcp_echo_test">>} ->
                                         erlang:display({tcp_echo, ok});
                                     OtherClientRecv ->
-                                        erlang:display({tcp_client_recv_unexpected, OtherClientRecv})
+                                        erlang:display(
+                                            {tcp_client_recv_unexpected, OtherClientRecv}
+                                        )
                                 end;
                             ConnectErr ->
                                 erlang:display({tcp_connect_err, ConnectErr})
@@ -198,10 +206,15 @@ tcp_echo_smoke() ->
 gen_tcp_passive_smoke() ->
     try
         erlang:display(starting_gen_tcp_passive_test),
-        case gen_tcp:connect("192.168.4.1", 8080, [binary, {active, false}, {inet_backend, socket}]) of
+        case
+            gen_tcp:connect("192.168.4.1", 8080, [binary, {active, false}, {inet_backend, socket}])
+        of
             {ok, Sock} ->
                 erlang:display({gen_tcp_passive_connected, ok}),
-                ok = gen_tcp:send(Sock, <<"HEAD /README.md HTTP/1.0\r\nHost: 192.168.4.1\r\nConnection: close\r\n\r\n">>),
+                ok = gen_tcp:send(
+                    Sock,
+                    <<"HEAD /README.md HTTP/1.0\r\nHost: 192.168.4.1\r\nConnection: close\r\n\r\n">>
+                ),
                 case gen_tcp:recv(Sock, 0, 5000) of
                     {ok, Data} ->
                         erlang:display({gen_tcp_passive_bytes, byte_size(Data)}),
@@ -223,12 +236,17 @@ socket_select_smoke() ->
         erlang:display(starting_socket_select_test),
         case socket:open(inet, stream, tcp) of
             {ok, Sock} ->
-                case socket:connect(Sock, #{family => inet, addr => {192, 168, 4, 1}, port => 8080}) of
+                case
+                    socket:connect(Sock, #{family => inet, addr => {192, 168, 4, 1}, port => 8080})
+                of
                     ok ->
                         erlang:display({socket_select_connected, ok}),
                         Ref = erlang:make_ref(),
                         ok = socket:nif_select_read(Sock, Ref),
-                        ok = socket:send(Sock, <<"HEAD /README.md HTTP/1.0\r\nHost: 192.168.4.1\r\nConnection: close\r\n\r\n">>),
+                        ok = socket:send(
+                            Sock,
+                            <<"HEAD /README.md HTTP/1.0\r\nHost: 192.168.4.1\r\nConnection: close\r\n\r\n">>
+                        ),
                         receive
                             {'$socket', Sock, select, Ref} ->
                                 erlang:display({socket_select_event, ok}),

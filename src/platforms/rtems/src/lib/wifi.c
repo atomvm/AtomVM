@@ -42,11 +42,11 @@
 static atomic_bool wifi_enabled = ATOMIC_VAR_INIT(false);
 static atomic_int wifi_state = ATOMIC_VAR_INIT(RTEMS_WIFI_DISCONNECTED);
 static rtems_id wpa_task_id = RTEMS_ID_NONE;
-static char current_conf_path[256] = {0};
+static char current_conf_path[256] = { 0 };
 
 static rtems_wifi_event_cb event_cb = NULL;
 static void *event_cb_arg = NULL;
-static struct rtems_wifi_ip_info current_ip_info = {0};
+static struct rtems_wifi_ip_info current_ip_info = { 0 };
 
 static void set_state(rtems_wifi_state_t new_state)
 {
@@ -64,13 +64,13 @@ static bool check_file_exists(const char *path)
 
 int rtems_wifi_create_wlandev(void)
 {
-    char *ifcfg_check[] = {"ifconfig", "wlan0", NULL};
+    char *ifcfg_check[] = { "ifconfig", "wlan0", NULL };
     if (rtems_bsd_command_ifconfig(RTEMS_BSD_ARGC(ifcfg_check), ifcfg_check) == EXIT_SUCCESS) {
         return 0;
     }
 
     /* Wait for USB host stack to enumerate the Realtek RTL8188EU device (rtwn0) */
-    char *ifcfg_rtwn[] = {"ifconfig", "rtwn0", NULL};
+    char *ifcfg_rtwn[] = { "ifconfig", "rtwn0", NULL };
     bool rtwn_found = false;
     for (int attempt = 0; attempt < 10; attempt++) {
         if (rtems_bsd_command_ifconfig(RTEMS_BSD_ARGC(ifcfg_rtwn), ifcfg_rtwn) == EXIT_SUCCESS) {
@@ -85,7 +85,7 @@ int rtems_wifi_create_wlandev(void)
         return -1;
     }
 
-    char *ifcfg_create[] = {"ifconfig", "wlan0", "create", "wlandev", "rtwn0", "down", NULL};
+    char *ifcfg_create[] = { "ifconfig", "wlan0", "create", "wlandev", "rtwn0", "down", NULL };
     int rv = rtems_bsd_command_ifconfig(RTEMS_BSD_ARGC(ifcfg_create), ifcfg_create);
     if (rv != EXIT_SUCCESS) {
         fprintf(stderr, "AtomVM wifi: failed to create wlan0 clone\n");
@@ -94,7 +94,7 @@ int rtems_wifi_create_wlandev(void)
 
     rtems_task_wake_after(RTEMS_MILLISECONDS_TO_TICKS(500));
 
-    char *ifcfg_up[] = {"ifconfig", "wlan0", "up", NULL};
+    char *ifcfg_up[] = { "ifconfig", "wlan0", "up", NULL };
     rv = rtems_bsd_command_ifconfig(RTEMS_BSD_ARGC(ifcfg_up), ifcfg_up);
     if (rv != EXIT_SUCCESS) {
         fprintf(stderr, "AtomVM wifi: failed to bring wlan0 up\n");
@@ -175,8 +175,7 @@ int rtems_wifi_start_with_config_file(const char *conf_path)
         WPA_WATCHER_STACK_SIZE,
         RTEMS_DEFAULT_MODES,
         RTEMS_FLOATING_POINT,
-        &wpa_task_id
-    );
+        &wpa_task_id);
     if (sc != RTEMS_SUCCESSFUL) {
         fprintf(stderr, "AtomVM wifi: failed to create WPA task: %s\n", rtems_status_text(sc));
         atomic_store_explicit(&wifi_enabled, false, memory_order_release);
@@ -240,7 +239,7 @@ int rtems_wifi_stop(void)
         wpa_task_id = RTEMS_ID_NONE;
     }
 
-    char *ifcfg_down[] = {"ifconfig", "wlan0", "down", NULL};
+    char *ifcfg_down[] = { "ifconfig", "wlan0", "down", NULL };
     rtems_bsd_command_ifconfig(RTEMS_BSD_ARGC(ifcfg_down), ifcfg_down);
 
     set_state(RTEMS_WIFI_DISCONNECTED);
@@ -273,25 +272,18 @@ void rtems_wifi_set_event_callback(rtems_wifi_event_cb cb, void *arg)
 }
 
 void rtems_wifi_notify_dhcp_event(const char *interface, const char *reason,
-                                 uint32_t ip, uint32_t netmask, uint32_t gateway)
+    uint32_t ip, uint32_t netmask, uint32_t gateway)
 {
     if (interface == NULL || strcmp(interface, "wlan0") != 0) {
         return;
     }
 
-    if (reason != NULL && (strcmp(reason, "BOUND") == 0
-            || strcmp(reason, "RENEW") == 0
-            || strcmp(reason, "REBIND") == 0
-            || strcmp(reason, "INFORM") == 0
-            || strcmp(reason, "REBOOT") == 0)) {
+    if (reason != NULL && (strcmp(reason, "BOUND") == 0 || strcmp(reason, "RENEW") == 0 || strcmp(reason, "REBIND") == 0 || strcmp(reason, "INFORM") == 0 || strcmp(reason, "REBOOT") == 0)) {
         current_ip_info.ip = ip;
         current_ip_info.netmask = netmask;
         current_ip_info.gateway = gateway;
         set_state(RTEMS_WIFI_GOT_IP);
-    } else if (reason != NULL && (strcmp(reason, "EXPIRE") == 0
-            || strcmp(reason, "FAIL") == 0
-            || strcmp(reason, "STOP") == 0
-            || strcmp(reason, "NOCARRIER") == 0)) {
+    } else if (reason != NULL && (strcmp(reason, "EXPIRE") == 0 || strcmp(reason, "FAIL") == 0 || strcmp(reason, "STOP") == 0 || strcmp(reason, "NOCARRIER") == 0)) {
         current_ip_info.ip = 0;
         current_ip_info.netmask = 0;
         current_ip_info.gateway = 0;
@@ -310,24 +302,24 @@ bool rtems_wifi_check_sd_config_and_start(void)
 
 #elif defined(RTEMS_WIFI_BACKEND_ESP32)
 
-#include <esp_wifi.h>
 #include <esp_event.h>
-#include <rtems-esp/netif.h>
-#include <lwip/netif.h>
+#include <esp_wifi.h>
 #include <lwip/dhcp.h>
 #include <lwip/dns.h>
 #include <lwip/ip4_addr.h>
+#include <lwip/netif.h>
 #include <netstart.h>
-#include <stdatomic.h>
-#include <string.h>
-#include <stdio.h>
+#include <rtems-esp/netif.h>
 #include <rtems.h>
+#include <stdatomic.h>
+#include <stdio.h>
+#include <string.h>
 
 static atomic_bool wifi_enabled = false;
 static atomic_int wifi_state = RTEMS_WIFI_DISCONNECTED;
 static rtems_wifi_event_cb event_cb = NULL;
 static void *event_cb_arg = NULL;
-static struct rtems_wifi_ip_info current_ip_info = {0};
+static struct rtems_wifi_ip_info current_ip_info = { 0 };
 static bool wifi_initialized = false;
 static rtems_id dhcp_poll_task_id = RTEMS_ID_NONE;
 
@@ -424,8 +416,7 @@ static void on_wifi_event(void *arg, const char *base, int32_t id, void *data)
                         4096,
                         RTEMS_DEFAULT_MODES,
                         RTEMS_DEFAULT_ATTRIBUTES,
-                        &dhcp_poll_task_id
-                    );
+                        &dhcp_poll_task_id);
                     if (sc == RTEMS_SUCCESSFUL) {
                         rtems_task_start(dhcp_poll_task_id, dhcp_poll_task, 0);
                     }
@@ -499,7 +490,7 @@ int rtems_wifi_start(const char *ssid, const char *psk)
 
     esp_wifi_set_mode(WIFI_MODE_STA);
 
-    wifi_config_t sta_cfg = {0};
+    wifi_config_t sta_cfg = { 0 };
     strncpy((char *) sta_cfg.sta.ssid, ssid, sizeof(sta_cfg.sta.ssid) - 1);
     if (psk != NULL && strlen(psk) > 0) {
         strncpy((char *) sta_cfg.sta.password, psk, sizeof(sta_cfg.sta.password) - 1);
@@ -541,7 +532,7 @@ void rtems_wifi_set_event_callback(rtems_wifi_event_cb cb, void *arg)
 }
 
 void rtems_wifi_notify_dhcp_event(const char *interface, const char *reason,
-                                 uint32_t ip, uint32_t netmask, uint32_t gateway)
+    uint32_t ip, uint32_t netmask, uint32_t gateway)
 {
     (void) interface;
     if (reason != NULL && strcmp(reason, "BOUND") == 0) {
@@ -567,15 +558,36 @@ bool rtems_wifi_check_sd_config_and_start(void)
 int rtems_wifi_create_wlandev(void) { return -1; }
 bool rtems_wifi_is_available(void) { return false; }
 rtems_wifi_state_t rtems_wifi_get_state(void) { return RTEMS_WIFI_DISCONNECTED; }
-int rtems_wifi_get_ip_info(struct rtems_wifi_ip_info *info) { (void) info; return -1; }
-int rtems_wifi_start(const char *ssid, const char *psk) { (void) ssid; (void) psk; return -1; }
-int rtems_wifi_start_with_config_file(const char *conf_path) { (void) conf_path; return -1; }
-int rtems_wifi_stop(void) { return 0; }
-void rtems_wifi_set_event_callback(rtems_wifi_event_cb cb, void *arg) { (void) cb; (void) arg; }
-void rtems_wifi_notify_dhcp_event(const char *interface, const char *reason,
-                                 uint32_t ip, uint32_t netmask, uint32_t gateway)
+int rtems_wifi_get_ip_info(struct rtems_wifi_ip_info *info)
 {
-    (void) interface; (void) reason; (void) ip; (void) netmask; (void) gateway;
+    (void) info;
+    return -1;
+}
+int rtems_wifi_start(const char *ssid, const char *psk)
+{
+    (void) ssid;
+    (void) psk;
+    return -1;
+}
+int rtems_wifi_start_with_config_file(const char *conf_path)
+{
+    (void) conf_path;
+    return -1;
+}
+int rtems_wifi_stop(void) { return 0; }
+void rtems_wifi_set_event_callback(rtems_wifi_event_cb cb, void *arg)
+{
+    (void) cb;
+    (void) arg;
+}
+void rtems_wifi_notify_dhcp_event(const char *interface, const char *reason,
+    uint32_t ip, uint32_t netmask, uint32_t gateway)
+{
+    (void) interface;
+    (void) reason;
+    (void) ip;
+    (void) netmask;
+    (void) gateway;
 }
 bool rtems_wifi_check_sd_config_and_start(void) { return false; }
 

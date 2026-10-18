@@ -28,13 +28,15 @@
 extern "C" {
 #endif
 
-typedef enum {
+typedef enum
+{
     LEDC_HIGH_SPEED_MODE = 0,
     LEDC_LOW_SPEED_MODE = 1,
     LEDC_SPEED_MODE_MAX
 } ledc_mode_t;
 
-typedef enum {
+typedef enum
+{
     LEDC_TIMER_0 = 0,
     LEDC_TIMER_1,
     LEDC_TIMER_2,
@@ -42,7 +44,8 @@ typedef enum {
     LEDC_TIMER_MAX
 } ledc_timer_t;
 
-typedef enum {
+typedef enum
+{
     LEDC_CHANNEL_0 = 0,
     LEDC_CHANNEL_1,
     LEDC_CHANNEL_2,
@@ -54,14 +57,16 @@ typedef enum {
 
 #define LEDC_ERR_DUTY 0xFFFFFFFFU
 
-typedef struct {
+typedef struct
+{
     uint32_t duty_resolution;
     uint32_t freq_hz;
     ledc_mode_t speed_mode;
     ledc_timer_t timer_num;
 } ledc_timer_config_t;
 
-typedef struct {
+typedef struct
+{
     int gpio_num;
     ledc_mode_t speed_mode;
     ledc_channel_t channel;

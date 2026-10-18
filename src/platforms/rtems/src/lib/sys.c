@@ -194,7 +194,7 @@ static void sys_poll_events_wait(struct RTEMSPlatformData *platform, int timeout
         }
         pthread_mutex_unlock(&platform->poll_mutex);
         for (volatile int i = 0; i < 1000; i++) {
-            __asm__ volatile ("" : : : "memory");
+            __asm__ volatile("" : : : "memory");
         }
         sched_yield();
         pthread_mutex_lock(&platform->poll_mutex);
@@ -522,9 +522,9 @@ term sys_get_info(Context *ctx, term key)
 }
 
 #if defined(HAVE_MBEDTLS)
-#include <sys_mbedtls.h>
-#include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
+#include <mbedtls/entropy.h>
+#include <sys_mbedtls.h>
 
 #if defined(RTEMS_BOARD_ESP32)
 static int esp32_hardware_poll(void *data, unsigned char *output, size_t len, size_t *olen)
@@ -586,7 +586,7 @@ mbedtls_ctr_drbg_context *sys_mbedtls_get_ctr_drbg_context_lock(GlobalContext *g
 
         const char *seed = "AtomVM RTEMS initial entropy seed";
         int err = mbedtls_ctr_drbg_seed(&platform->random_ctx, sys_mbedtls_entropy_func, entropy,
-                                        (const unsigned char *) seed, strlen(seed));
+            (const unsigned char *) seed, strlen(seed));
         if (err != 0) {
             abort();
         }

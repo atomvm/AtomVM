@@ -49,37 +49,39 @@
 #include <bsp/pin.h>
 
 #define WRITE_PERI_REG(addr, val) (*((volatile uint32_t *) (addr)) = (uint32_t) (val))
-#define READ_PERI_REG(addr)       (*((volatile uint32_t *) (addr)))
+#define READ_PERI_REG(addr) (*((volatile uint32_t *) (addr)))
 
-#define ESP32C3_LEDC_BASE               0x60019000U
-#define ESP32C3_LEDC_CH_CONF0_REG(n)    (ESP32C3_LEDC_BASE + (n) * 0x14U + 0x00U)
-#define ESP32C3_LEDC_CH_HPOINT_REG(n)   (ESP32C3_LEDC_BASE + (n) * 0x14U + 0x04U)
-#define ESP32C3_LEDC_CH_DUTY_REG(n)     (ESP32C3_LEDC_BASE + (n) * 0x14U + 0x08U)
-#define ESP32C3_LEDC_CH_CONF1_REG(n)    (ESP32C3_LEDC_BASE + (n) * 0x14U + 0x0CU)
-#define ESP32C3_LEDC_CH_DUTY_R_REG(n)   (ESP32C3_LEDC_BASE + (n) * 0x14U + 0x10U)
+#define ESP32C3_LEDC_BASE 0x60019000U
+#define ESP32C3_LEDC_CH_CONF0_REG(n) (ESP32C3_LEDC_BASE + (n) * 0x14U + 0x00U)
+#define ESP32C3_LEDC_CH_HPOINT_REG(n) (ESP32C3_LEDC_BASE + (n) * 0x14U + 0x04U)
+#define ESP32C3_LEDC_CH_DUTY_REG(n) (ESP32C3_LEDC_BASE + (n) * 0x14U + 0x08U)
+#define ESP32C3_LEDC_CH_CONF1_REG(n) (ESP32C3_LEDC_BASE + (n) * 0x14U + 0x0CU)
+#define ESP32C3_LEDC_CH_DUTY_R_REG(n) (ESP32C3_LEDC_BASE + (n) * 0x14U + 0x10U)
 
-#define ESP32C3_LEDC_TIMER_CONF_REG(m)  (ESP32C3_LEDC_BASE + 0xA0U + (m) * 0x08U)
-#define ESP32C3_LEDC_TIMER_VAL_REG(m)   (ESP32C3_LEDC_BASE + 0xA4U + (m) * 0x08U)
-#define ESP32C3_LEDC_CONF_REG           (ESP32C3_LEDC_BASE + 0xC0U)
+#define ESP32C3_LEDC_TIMER_CONF_REG(m) (ESP32C3_LEDC_BASE + 0xA0U + (m) * 0x08U)
+#define ESP32C3_LEDC_TIMER_VAL_REG(m) (ESP32C3_LEDC_BASE + 0xA4U + (m) * 0x08U)
+#define ESP32C3_LEDC_CONF_REG (ESP32C3_LEDC_BASE + 0xC0U)
 
-#define ESP32C3_SYSREG_BASE             0x600C0000U
-#define ESP32C3_SYSREG_CLK_EN0_REG      (ESP32C3_SYSREG_BASE + 0x0010U)
-#define ESP32C3_SYSREG_RST_EN0_REG      (ESP32C3_SYSREG_BASE + 0x0018U)
+#define ESP32C3_SYSREG_BASE 0x600C0000U
+#define ESP32C3_SYSREG_CLK_EN0_REG (ESP32C3_SYSREG_BASE + 0x0010U)
+#define ESP32C3_SYSREG_RST_EN0_REG (ESP32C3_SYSREG_BASE + 0x0018U)
 
-#define ESP32C3_GPIO_OUT_SEL_REG(pin)   (0x60004554U + (pin) * 4U)
-#define ESP32C3_LEDC_SIG_OUT0_IDX       45U
+#define ESP32C3_GPIO_OUT_SEL_REG(pin) (0x60004554U + (pin) * 4U)
+#define ESP32C3_LEDC_SIG_OUT0_IDX 45U
 #endif
 
-#define LEDC_TIMERS_COUNT   4
+#define LEDC_TIMERS_COUNT 4
 #define LEDC_CHANNELS_COUNT 6
 
-struct ledc_timer_info {
+struct ledc_timer_info
+{
     bool configured;
     uint32_t duty_resolution;
     uint32_t freq_hz;
 };
 
-struct ledc_channel_info {
+struct ledc_channel_info
+{
     bool configured;
     int gpio_num;
     ledc_timer_t timer_sel;
@@ -88,21 +90,31 @@ struct ledc_channel_info {
     int hpoint;
 };
 
-static struct {
+static struct
+{
     struct ledc_timer_info timers[LEDC_TIMERS_COUNT];
     struct ledc_channel_info channels[LEDC_CHANNELS_COUNT];
     bool fade_installed;
 } s_ledc;
 
-static const char *const ledc_duty_resolution = "\xF"  "duty_resolution";
-static const char *const ledc_freq_hz         = "\x7"  "freq_hz";
-static const char *const ledc_speed_mode      = "\xA"  "speed_mode";
-static const char *const ledc_timer_num       = "\x9"  "timer_num";
-static const char *const ledc_channel         = "\x7"  "channel";
-static const char *const ledc_duty            = "\x4"  "duty";
-static const char *const ledc_gpio_num        = "\x8"  "gpio_num";
-static const char *const ledc_hpoint          = "\x6"  "hpoint";
-static const char *const ledc_timer_sel       = "\x9"  "timer_sel";
+static const char *const ledc_duty_resolution = "\xF"
+                                                "duty_resolution";
+static const char *const ledc_freq_hz = "\x7"
+                                        "freq_hz";
+static const char *const ledc_speed_mode = "\xA"
+                                           "speed_mode";
+static const char *const ledc_timer_num = "\x9"
+                                          "timer_num";
+static const char *const ledc_channel = "\x7"
+                                        "channel";
+static const char *const ledc_duty = "\x4"
+                                     "duty";
+static const char *const ledc_gpio_num = "\x8"
+                                         "gpio_num";
+static const char *const ledc_hpoint = "\x6"
+                                       "hpoint";
+static const char *const ledc_timer_sel = "\x9"
+                                          "timer_sel";
 
 int ledc_timer_config(const ledc_timer_config_t *timer_conf)
 {
@@ -141,11 +153,9 @@ int ledc_timer_config(const ledc_timer_config_t *timer_conf)
         div_scaled = 0x3FFFF;
     }
 
-    uint32_t conf = (timer_conf->duty_resolution & 0x0FU) |
-                    (((uint32_t) div_scaled & 0x3FFFFU) << 4) |
-                    (1U << 24); // tick_sel = 1 (APB)
+    uint32_t conf = (timer_conf->duty_resolution & 0x0FU) | (((uint32_t) div_scaled & 0x3FFFFU) << 4) | (1U << 24); // tick_sel = 1 (APB)
     WRITE_PERI_REG(ESP32C3_LEDC_TIMER_CONF_REG(timer_num), conf | (1U << 23)); // Reset timer
-    WRITE_PERI_REG(ESP32C3_LEDC_TIMER_CONF_REG(timer_num), conf);              // Run timer
+    WRITE_PERI_REG(ESP32C3_LEDC_TIMER_CONF_REG(timer_num), conf); // Run timer
 #endif
 
     return 0;
@@ -301,7 +311,7 @@ int ledc_update_duty(ledc_mode_t speed_mode, ledc_channel_t channel)
 #if defined(RTEMS_BOARD_ESP32C3)
     uint32_t conf0 = READ_PERI_REG(ESP32C3_LEDC_CH_CONF0_REG(channel));
     WRITE_PERI_REG(ESP32C3_LEDC_CH_CONF0_REG(channel), conf0 | (1U << 4)); // PARA_UP
-    WRITE_PERI_REG(ESP32C3_LEDC_CH_CONF1_REG(channel), 1U << 31);         // DUTY_START
+    WRITE_PERI_REG(ESP32C3_LEDC_CH_CONF1_REG(channel), 1U << 31); // DUTY_START
 #endif
     return 0;
 }
@@ -820,89 +830,55 @@ static const struct Nif ledc_stop_nif = {
 
 static const struct Nif *ledc_nif_get_nif(const char *nifname)
 {
-    if (strcmp("ledc:timer_config/1", nifname) == 0 ||
-        strcmp("Elixir.LEDC:timer_config/1", nifname) == 0 ||
-        strcmp("atomvm_rtems:ledc_timer_config/1", nifname) == 0) {
+    if (strcmp("ledc:timer_config/1", nifname) == 0 || strcmp("Elixir.LEDC:timer_config/1", nifname) == 0 || strcmp("atomvm_rtems:ledc_timer_config/1", nifname) == 0) {
         return &ledc_timer_config_nif;
     }
-    if (strcmp("ledc:channel_config/1", nifname) == 0 ||
-        strcmp("Elixir.LEDC:channel_config/1", nifname) == 0 ||
-        strcmp("atomvm_rtems:ledc_channel_config/1", nifname) == 0) {
+    if (strcmp("ledc:channel_config/1", nifname) == 0 || strcmp("Elixir.LEDC:channel_config/1", nifname) == 0 || strcmp("atomvm_rtems:ledc_channel_config/1", nifname) == 0) {
         return &ledc_channel_config_nif;
     }
-    if (strcmp("ledc:fade_func_install/1", nifname) == 0 ||
-        strcmp("Elixir.LEDC:fade_func_install/1", nifname) == 0 ||
-        strcmp("atomvm_rtems:ledc_fade_func_install/1", nifname) == 0) {
+    if (strcmp("ledc:fade_func_install/1", nifname) == 0 || strcmp("Elixir.LEDC:fade_func_install/1", nifname) == 0 || strcmp("atomvm_rtems:ledc_fade_func_install/1", nifname) == 0) {
         return &ledc_fade_func_install_nif;
     }
-    if (strcmp("ledc:fade_func_uninstall/0", nifname) == 0 ||
-        strcmp("Elixir.LEDC:fade_func_uninstall/0", nifname) == 0 ||
-        strcmp("atomvm_rtems:ledc_fade_func_uninstall/0", nifname) == 0) {
+    if (strcmp("ledc:fade_func_uninstall/0", nifname) == 0 || strcmp("Elixir.LEDC:fade_func_uninstall/0", nifname) == 0 || strcmp("atomvm_rtems:ledc_fade_func_uninstall/0", nifname) == 0) {
         return &ledc_fade_func_uninstall_nif;
     }
-    if (strcmp("ledc:set_fade_with_time/4", nifname) == 0 ||
-        strcmp("Elixir.LEDC:set_fade_with_time/4", nifname) == 0 ||
-        strcmp("atomvm_rtems:ledc_set_fade_with_time/4", nifname) == 0) {
+    if (strcmp("ledc:set_fade_with_time/4", nifname) == 0 || strcmp("Elixir.LEDC:set_fade_with_time/4", nifname) == 0 || strcmp("atomvm_rtems:ledc_set_fade_with_time/4", nifname) == 0) {
         return &ledc_set_fade_with_time_nif;
     }
-    if (strcmp("ledc:set_fade_with_step/5", nifname) == 0 ||
-        strcmp("Elixir.LEDC:set_fade_with_step/5", nifname) == 0 ||
-        strcmp("atomvm_rtems:ledc_set_fade_with_step/5", nifname) == 0) {
+    if (strcmp("ledc:set_fade_with_step/5", nifname) == 0 || strcmp("Elixir.LEDC:set_fade_with_step/5", nifname) == 0 || strcmp("atomvm_rtems:ledc_set_fade_with_step/5", nifname) == 0) {
         return &ledc_set_fade_with_step_nif;
     }
-    if (strcmp("ledc:fade_start/3", nifname) == 0 ||
-        strcmp("Elixir.LEDC:fade_start/3", nifname) == 0 ||
-        strcmp("atomvm_rtems:ledc_fade_start/3", nifname) == 0) {
+    if (strcmp("ledc:fade_start/3", nifname) == 0 || strcmp("Elixir.LEDC:fade_start/3", nifname) == 0 || strcmp("atomvm_rtems:ledc_fade_start/3", nifname) == 0) {
         return &ledc_fade_start_nif;
     }
-    if (strcmp("ledc:fade_stop/2", nifname) == 0 ||
-        strcmp("Elixir.LEDC:fade_stop/2", nifname) == 0 ||
-        strcmp("atomvm_rtems:ledc_fade_stop/2", nifname) == 0) {
+    if (strcmp("ledc:fade_stop/2", nifname) == 0 || strcmp("Elixir.LEDC:fade_stop/2", nifname) == 0 || strcmp("atomvm_rtems:ledc_fade_stop/2", nifname) == 0) {
         return &ledc_fade_stop_nif;
     }
-    if (strcmp("ledc:set_fade_time_and_start/5", nifname) == 0 ||
-        strcmp("Elixir.LEDC:set_fade_time_and_start/5", nifname) == 0 ||
-        strcmp("atomvm_rtems:ledc_set_fade_time_and_start/5", nifname) == 0) {
+    if (strcmp("ledc:set_fade_time_and_start/5", nifname) == 0 || strcmp("Elixir.LEDC:set_fade_time_and_start/5", nifname) == 0 || strcmp("atomvm_rtems:ledc_set_fade_time_and_start/5", nifname) == 0) {
         return &ledc_set_fade_time_and_start_nif;
     }
-    if (strcmp("ledc:set_fade_step_and_start/6", nifname) == 0 ||
-        strcmp("Elixir.LEDC:set_fade_step_and_start/6", nifname) == 0 ||
-        strcmp("atomvm_rtems:ledc_set_fade_step_and_start/6", nifname) == 0) {
+    if (strcmp("ledc:set_fade_step_and_start/6", nifname) == 0 || strcmp("Elixir.LEDC:set_fade_step_and_start/6", nifname) == 0 || strcmp("atomvm_rtems:ledc_set_fade_step_and_start/6", nifname) == 0) {
         return &ledc_set_fade_step_and_start_nif;
     }
-    if (strcmp("ledc:get_duty/2", nifname) == 0 ||
-        strcmp("Elixir.LEDC:get_duty/2", nifname) == 0 ||
-        strcmp("atomvm_rtems:ledc_get_duty/2", nifname) == 0) {
+    if (strcmp("ledc:get_duty/2", nifname) == 0 || strcmp("Elixir.LEDC:get_duty/2", nifname) == 0 || strcmp("atomvm_rtems:ledc_get_duty/2", nifname) == 0) {
         return &ledc_get_duty_nif;
     }
-    if (strcmp("ledc:set_duty/3", nifname) == 0 ||
-        strcmp("Elixir.LEDC:set_duty/3", nifname) == 0 ||
-        strcmp("atomvm_rtems:ledc_set_duty/3", nifname) == 0) {
+    if (strcmp("ledc:set_duty/3", nifname) == 0 || strcmp("Elixir.LEDC:set_duty/3", nifname) == 0 || strcmp("atomvm_rtems:ledc_set_duty/3", nifname) == 0) {
         return &ledc_set_duty_nif;
     }
-    if (strcmp("ledc:update_duty/2", nifname) == 0 ||
-        strcmp("Elixir.LEDC:update_duty/2", nifname) == 0 ||
-        strcmp("atomvm_rtems:ledc_update_duty/2", nifname) == 0) {
+    if (strcmp("ledc:update_duty/2", nifname) == 0 || strcmp("Elixir.LEDC:update_duty/2", nifname) == 0 || strcmp("atomvm_rtems:ledc_update_duty/2", nifname) == 0) {
         return &ledc_update_duty_nif;
     }
-    if (strcmp("ledc:set_duty_and_update/4", nifname) == 0 ||
-        strcmp("Elixir.LEDC:set_duty_and_update/4", nifname) == 0 ||
-        strcmp("atomvm_rtems:ledc_set_duty_and_update/4", nifname) == 0) {
+    if (strcmp("ledc:set_duty_and_update/4", nifname) == 0 || strcmp("Elixir.LEDC:set_duty_and_update/4", nifname) == 0 || strcmp("atomvm_rtems:ledc_set_duty_and_update/4", nifname) == 0) {
         return &ledc_set_duty_and_update_nif;
     }
-    if (strcmp("ledc:get_freq/2", nifname) == 0 ||
-        strcmp("Elixir.LEDC:get_freq/2", nifname) == 0 ||
-        strcmp("atomvm_rtems:ledc_get_freq/2", nifname) == 0) {
+    if (strcmp("ledc:get_freq/2", nifname) == 0 || strcmp("Elixir.LEDC:get_freq/2", nifname) == 0 || strcmp("atomvm_rtems:ledc_get_freq/2", nifname) == 0) {
         return &ledc_get_freq_nif;
     }
-    if (strcmp("ledc:set_freq/3", nifname) == 0 ||
-        strcmp("Elixir.LEDC:set_freq/3", nifname) == 0 ||
-        strcmp("atomvm_rtems:ledc_set_freq/3", nifname) == 0) {
+    if (strcmp("ledc:set_freq/3", nifname) == 0 || strcmp("Elixir.LEDC:set_freq/3", nifname) == 0 || strcmp("atomvm_rtems:ledc_set_freq/3", nifname) == 0) {
         return &ledc_set_freq_nif;
     }
-    if (strcmp("ledc:stop/3", nifname) == 0 ||
-        strcmp("Elixir.LEDC:stop/3", nifname) == 0 ||
-        strcmp("atomvm_rtems:ledc_stop/3", nifname) == 0) {
+    if (strcmp("ledc:stop/3", nifname) == 0 || strcmp("Elixir.LEDC:stop/3", nifname) == 0 || strcmp("atomvm_rtems:ledc_stop/3", nifname) == 0) {
         return &ledc_stop_nif;
     }
     return NULL;

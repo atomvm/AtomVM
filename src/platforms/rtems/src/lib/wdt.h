@@ -28,7 +28,8 @@
 extern "C" {
 #endif
 
-typedef struct {
+typedef struct
+{
     uint32_t timeout_ms;
     uint32_t idle_core_mask;
     bool trigger_panic;
@@ -36,7 +37,8 @@ typedef struct {
 
 typedef void *esp_task_wdt_user_handle_t;
 
-struct esp_task_wdt_user_handle_and_name {
+struct esp_task_wdt_user_handle_and_name
+{
     char *user_name;
     esp_task_wdt_user_handle_t user_handle;
 };

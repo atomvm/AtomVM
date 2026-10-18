@@ -212,7 +212,12 @@ rtc_slow_smoke() ->
 
             ok = atomvm_rtems:rtc_timekeeper_record(1700000000, 123456),
             {ok, StatusMap} = atomvm_rtems:rtc_timekeeper_status(),
-            #{sntp_sec := 1700000000, sntp_usec := 123456, rtc_counter := CntSaved, elapsed_sec := ElapsedSec} = StatusMap,
+            #{
+                sntp_sec := 1700000000,
+                sntp_usec := 123456,
+                rtc_counter := CntSaved,
+                elapsed_sec := ElapsedSec
+            } = StatusMap,
             true = is_integer(CntSaved) andalso CntSaved >= 0,
             true = is_integer(ElapsedSec) andalso ElapsedSec >= 0,
             erlang:display({rtc_timekeeper_recorded_status, ok, StatusMap}),
@@ -239,8 +244,8 @@ crypto_smoke() ->
 
             % Hash testing
             HelloHash = crypto:hash(sha256, <<"Hello">>),
-            <<24, 95, 141, 179, 34, 113, 254, 37, 245, 97, 166, 252, 147, 139, 46, 38,
-              67, 6, 236, 48, 78, 218, 81, 128, 7, 209, 118, 72, 38, 56, 25, 105>> = HelloHash,
+            <<24, 95, 141, 179, 34, 113, 254, 37, 245, 97, 166, 252, 147, 139, 46, 38, 67, 6, 236,
+                48, 78, 218, 81, 128, 7, 209, 118, 72, 38, 56, 25, 105>> = HelloHash,
             erlang:display({crypto, sha256, ok}),
 
             % AES-128-ECB one-time encrypt/decrypt
@@ -547,6 +552,3 @@ fs_smoke() ->
     erlang:display({file_not_found, ok}),
 
     erlang:display({fs, esp32c3, ok}).
-
-
-

@@ -42,46 +42,46 @@
 #include <bsp/pin.h>
 
 #define WRITE_PERI_REG(addr, val) (*((volatile uint32_t *) (addr)) = (uint32_t) (val))
-#define READ_PERI_REG(addr)       (*((volatile uint32_t *) (addr)))
+#define READ_PERI_REG(addr) (*((volatile uint32_t *) (addr)))
 
 /* Hardware Register Definitions for ESP32-C3 APB_SARADC */
-#define DR_REG_APB_SARADC_BASE           0x60040000U
+#define DR_REG_APB_SARADC_BASE 0x60040000U
 
-#define APB_SARADC_CTRL_REG              (DR_REG_APB_SARADC_BASE + 0x000U)
-#define APB_SARADC_CTRL2_REG             (DR_REG_APB_SARADC_BASE + 0x004U)
-#define APB_SARADC_FSM_WAIT_REG          (DR_REG_APB_SARADC_BASE + 0x00CU)
-#define APB_SARADC_SAR_PATT_TAB1_REG     (DR_REG_APB_SARADC_BASE + 0x018U)
-#define APB_SARADC_SAR_PATT_TAB2_REG     (DR_REG_APB_SARADC_BASE + 0x01CU)
-#define APB_SARADC_ONETIME_SAMPLE_REG    (DR_REG_APB_SARADC_BASE + 0x020U)
-#define APB_SARADC_APB_ADC_ARB_CTRL_REG  (DR_REG_APB_SARADC_BASE + 0x024U)
-#define APB_SARADC_SAR1_DATA_STATUS_REG  (DR_REG_APB_SARADC_BASE + 0x02CU)
-#define APB_SARADC_SAR2_DATA_STATUS_REG  (DR_REG_APB_SARADC_BASE + 0x030U)
-#define APB_SARADC_INT_ENA_REG           (DR_REG_APB_SARADC_BASE + 0x040U)
-#define APB_SARADC_INT_RAW_REG           (DR_REG_APB_SARADC_BASE + 0x044U)
-#define APB_SARADC_INT_CLR_REG           (DR_REG_APB_SARADC_BASE + 0x04CU)
-#define APB_SARADC_DMA_CONF_REG          (DR_REG_APB_SARADC_BASE + 0x050U)
-#define APB_SARADC_CLKM_CONF_REG         (DR_REG_APB_SARADC_BASE + 0x054U)
+#define APB_SARADC_CTRL_REG (DR_REG_APB_SARADC_BASE + 0x000U)
+#define APB_SARADC_CTRL2_REG (DR_REG_APB_SARADC_BASE + 0x004U)
+#define APB_SARADC_FSM_WAIT_REG (DR_REG_APB_SARADC_BASE + 0x00CU)
+#define APB_SARADC_SAR_PATT_TAB1_REG (DR_REG_APB_SARADC_BASE + 0x018U)
+#define APB_SARADC_SAR_PATT_TAB2_REG (DR_REG_APB_SARADC_BASE + 0x01CU)
+#define APB_SARADC_ONETIME_SAMPLE_REG (DR_REG_APB_SARADC_BASE + 0x020U)
+#define APB_SARADC_APB_ADC_ARB_CTRL_REG (DR_REG_APB_SARADC_BASE + 0x024U)
+#define APB_SARADC_SAR1_DATA_STATUS_REG (DR_REG_APB_SARADC_BASE + 0x02CU)
+#define APB_SARADC_SAR2_DATA_STATUS_REG (DR_REG_APB_SARADC_BASE + 0x030U)
+#define APB_SARADC_INT_ENA_REG (DR_REG_APB_SARADC_BASE + 0x040U)
+#define APB_SARADC_INT_RAW_REG (DR_REG_APB_SARADC_BASE + 0x044U)
+#define APB_SARADC_INT_CLR_REG (DR_REG_APB_SARADC_BASE + 0x04CU)
+#define APB_SARADC_DMA_CONF_REG (DR_REG_APB_SARADC_BASE + 0x050U)
+#define APB_SARADC_CLKM_CONF_REG (DR_REG_APB_SARADC_BASE + 0x054U)
 
 /* System register peripheral clock and reset control */
-#define SYSREG_PERIP_CLK_EN0_REG         0x600C0010U
-#define SYSREG_PERIP_RST_EN0_REG         0x600C0018U
-#define SYSTEM_APB_SARADC_CLK_EN         (1u << 28)
-#define SYSTEM_ADC2_ARB_CLK_EN           (1u << 30)
-#define SYSTEM_APB_SARADC_RST            (1u << 28)
-#define SYSTEM_ADC2_ARB_RST              (1u << 30)
+#define SYSREG_PERIP_CLK_EN0_REG 0x600C0010U
+#define SYSREG_PERIP_RST_EN0_REG 0x600C0018U
+#define SYSTEM_APB_SARADC_CLK_EN (1u << 28)
+#define SYSTEM_ADC2_ARB_CLK_EN (1u << 30)
+#define SYSTEM_APB_SARADC_RST (1u << 28)
+#define SYSTEM_ADC2_ARB_RST (1u << 30)
 
 /* RTC control registers */
-#define RTC_CNTL_ANA_CONF_REG            0x60008030U
-#define RTC_CNTL_SAR_I2C_PU              (1u << 18)
-#define RTC_CNTL_SENSOR_CTRL_REG         0x60008068U
+#define RTC_CNTL_ANA_CONF_REG 0x60008030U
+#define RTC_CNTL_SAR_I2C_PU (1u << 18)
+#define RTC_CNTL_SENSOR_CTRL_REG 0x60008068U
 
 /* GPIO and IO_MUX registers */
-#define GPIO_ENABLE_W1TC_REG             0x60004028U
-#define IO_MUX_GPIOn_REG(n)              (0x60090004U + (n) * 4U)
-#define IO_MUX_FUN_IE                    (1u << 9)
-#define IO_MUX_FUN_WPU                   (1u << 7)
-#define IO_MUX_FUN_WPD                   (1u << 8)
-#define IO_MUX_MCU_SEL_SHIFT             12
+#define GPIO_ENABLE_W1TC_REG 0x60004028U
+#define IO_MUX_GPIOn_REG(n) (0x60090004U + (n) * 4U)
+#define IO_MUX_FUN_IE (1u << 9)
+#define IO_MUX_FUN_WPU (1u << 7)
+#define IO_MUX_FUN_WPD (1u << 8)
+#define IO_MUX_MCU_SEL_SHIFT 12
 #endif
 
 #define DEFAULT_SAMPLES 64
@@ -166,6 +166,7 @@ static term create_pair(Context *ctx, term term1, term term2)
     return ret;
 }
 
+#if defined(RTEMS_BOARD_ESP32C3)
 static term error_return_tuple(Context *ctx, term term)
 {
     if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
@@ -173,6 +174,7 @@ static term error_return_tuple(Context *ctx, term term)
     }
     return create_pair(ctx, ERROR_ATOM, term);
 }
+#endif
 
 static int approximate_millivolts(int adc_reading, adc_atten_t attenuation, adc_bitwidth_t width)
 {
@@ -678,39 +680,25 @@ void adc_driver_init(GlobalContext *global)
 
 const struct Nif *adc_driver_get_nif(const char *nifname)
 {
-    if (strcmp("esp_adc:init/0", nifname) == 0 ||
-        strcmp("Elixir.Esp.ADC:init/0", nifname) == 0 ||
-        strcmp("atomvm_rtems:adc_init/0", nifname) == 0) {
+    if (strcmp("esp_adc:init/0", nifname) == 0 || strcmp("Elixir.Esp.ADC:init/0", nifname) == 0 || strcmp("atomvm_rtems:adc_init/0", nifname) == 0) {
         return &adc_init_nif;
     }
-    if (strcmp("esp_adc:deinit/1", nifname) == 0 ||
-        strcmp("Elixir.Esp.ADC:deinit/1", nifname) == 0 ||
-        strcmp("atomvm_rtems:adc_deinit/1", nifname) == 0) {
+    if (strcmp("esp_adc:deinit/1", nifname) == 0 || strcmp("Elixir.Esp.ADC:deinit/1", nifname) == 0 || strcmp("atomvm_rtems:adc_deinit/1", nifname) == 0) {
         return &adc_deinit_nif;
     }
-    if (strcmp("esp_adc:acquire/4", nifname) == 0 ||
-        strcmp("Elixir.Esp.ADC:acquire/4", nifname) == 0 ||
-        strcmp("atomvm_rtems:adc_acquire/4", nifname) == 0) {
+    if (strcmp("esp_adc:acquire/4", nifname) == 0 || strcmp("Elixir.Esp.ADC:acquire/4", nifname) == 0 || strcmp("atomvm_rtems:adc_acquire/4", nifname) == 0) {
         return &adc_acquire_nif;
     }
-    if (strcmp("esp_adc:acquire/2", nifname) == 0 ||
-        strcmp("Elixir.Esp.ADC:acquire/2", nifname) == 0 ||
-        strcmp("atomvm_rtems:adc_acquire/2", nifname) == 0) {
+    if (strcmp("esp_adc:acquire/2", nifname) == 0 || strcmp("Elixir.Esp.ADC:acquire/2", nifname) == 0 || strcmp("atomvm_rtems:adc_acquire/2", nifname) == 0) {
         return &adc_acquire_2_nif;
     }
-    if (strcmp("esp_adc:release_channel/1", nifname) == 0 ||
-        strcmp("Elixir.Esp.ADC:release_channel/1", nifname) == 0 ||
-        strcmp("atomvm_rtems:adc_release_channel/1", nifname) == 0) {
+    if (strcmp("esp_adc:release_channel/1", nifname) == 0 || strcmp("Elixir.Esp.ADC:release_channel/1", nifname) == 0 || strcmp("atomvm_rtems:adc_release_channel/1", nifname) == 0) {
         return &adc_release_channel_nif;
     }
-    if (strcmp("esp_adc:sample/3", nifname) == 0 ||
-        strcmp("Elixir.Esp.ADC:sample/3", nifname) == 0 ||
-        strcmp("atomvm_rtems:adc_sample/3", nifname) == 0) {
+    if (strcmp("esp_adc:sample/3", nifname) == 0 || strcmp("Elixir.Esp.ADC:sample/3", nifname) == 0 || strcmp("atomvm_rtems:adc_sample/3", nifname) == 0) {
         return &adc_sample_nif;
     }
-    if (strcmp("esp_adc:sample/2", nifname) == 0 ||
-        strcmp("Elixir.Esp.ADC:sample/2", nifname) == 0 ||
-        strcmp("atomvm_rtems:adc_sample/2", nifname) == 0) {
+    if (strcmp("esp_adc:sample/2", nifname) == 0 || strcmp("Elixir.Esp.ADC:sample/2", nifname) == 0 || strcmp("atomvm_rtems:adc_sample/2", nifname) == 0) {
         return &adc_sample_2_nif;
     }
     return NULL;
