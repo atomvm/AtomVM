@@ -1158,10 +1158,11 @@ jobs:
         SNTP_PID=$!
         trap 'kill "$HTTP_PID" "$SNTP_PID" 2>/dev/null || true' EXIT
         set +e
+        # C3 needs shorter emulator batches to avoid authentication timeouts.
         output=$(esp-emu --chip ${{ matrix.chip }} \
           --firmware "$BIN" \
           --wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user \
-          --batch-size 5000 --timeout 60s --exit-on "Return value: ok" 2>&1)
+          --batch-size ${{ matrix.chip == 'esp32c3' && 1000 || 5000 }} --timeout 60s --exit-on "Return value: ok" 2>&1)
         status=$?
         set -e
         printf '%s\n' "$output"
