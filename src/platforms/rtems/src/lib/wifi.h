@@ -50,8 +50,10 @@ int rtems_wifi_create_wlandev(void);
 bool rtems_wifi_is_available(void);
 rtems_wifi_state_t rtems_wifi_get_state(void);
 int rtems_wifi_get_ip_info(struct rtems_wifi_ip_info *info);
+/* Returns zero on success, or an errno value on failure. RSSI is in dBm. */
+int rtems_wifi_get_rssi(int *rssi);
 
-int rtems_wifi_start(const char *ssid, const char *psk);
+int rtems_wifi_start(const char *ssid, const char *psk, bool connect);
 int rtems_wifi_start_with_config_file(const char *conf_path);
 int rtems_wifi_stop(void);
 

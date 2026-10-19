@@ -18,6 +18,10 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#if defined(RTEMS_HAS_LIBBSD) && defined(RTEMS_HAS_WIFI)
+#include <machine/rtems-bsd-user-space.h>
+#endif
+
 #include "wifi.h"
 
 #include <errno.h>
@@ -31,8 +35,12 @@
 
 #if defined(RTEMS_HAS_LIBBSD) && defined(RTEMS_HAS_WIFI)
 #include <machine/rtems-bsd-commands.h>
+#include <net/if.h>
+#include <net80211/ieee80211_ioctl.h>
 #include <rtems.h>
 #include <rtems/bsd/bsd.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
 
 #define WPA_WATCHER_PRIO 120
 #define WPA_WATCHER_STACK_SIZE (32 * 1024)
@@ -194,8 +202,9 @@ int rtems_wifi_start_with_config_file(const char *conf_path)
     return 0;
 }
 
-int rtems_wifi_start(const char *ssid, const char *psk)
+int rtems_wifi_start(const char *ssid, const char *psk, bool connect)
 {
+    (void) connect;
     if (ssid == NULL || strlen(ssid) == 0) {
         return -1;
     }
@@ -265,6 +274,46 @@ int rtems_wifi_get_ip_info(struct rtems_wifi_ip_info *info)
     return 0;
 }
 
+int rtems_wifi_get_rssi(int *rssi)
+{
+    if (rtems_wifi_get_state() < RTEMS_WIFI_ASSOCIATED) {
+        return ENETDOWN;
+    }
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) {
+        return errno;
+    }
+
+    struct
+    {
+        struct ieee80211req_sta_req station;
+        uint8_t ies[IEEE80211_MAX_LEN];
+    } data = { 0 };
+    struct ieee80211req request = { 0 };
+    strcpy(request.i_name, "wlan0");
+    request.i_type = IEEE80211_IOC_BSSID;
+    request.i_data = data.station.is_u.macaddr;
+    request.i_len = IEEE80211_ADDR_LEN;
+    int error = 0;
+    if (ioctl(fd, SIOCG80211, &request) < 0) {
+        error = errno;
+    } else {
+        request.i_type = IEEE80211_IOC_STA_INFO;
+        request.i_data = &data;
+        request.i_len = sizeof(data) - sizeof(data.station.is_u);
+        if (ioctl(fd, SIOCG80211, &request) < 0) {
+            error = errno;
+        } else if (request.i_len < sizeof(data.station.info[0])) {
+            error = ENETDOWN;
+        } else {
+            /* net80211 reports SNR in half-dB units plus a dBm noise floor. */
+            *rssi = data.station.info[0].isi_noise + data.station.info[0].isi_rssi / 2;
+        }
+    }
+    close(fd);
+    return error;
+}
+
 void rtems_wifi_set_event_callback(rtems_wifi_event_cb cb, void *arg)
 {
     event_cb = cb;
@@ -308,6 +357,7 @@ bool rtems_wifi_check_sd_config_and_start(void)
 #include <lwip/dns.h>
 #include <lwip/ip4_addr.h>
 #include <lwip/netif.h>
+#include <lwip/tcpip.h>
 #include <netstart.h>
 #include <rtems-esp/netif.h>
 #include <rtems.h>
@@ -315,13 +365,16 @@ bool rtems_wifi_check_sd_config_and_start(void)
 #include <stdio.h>
 #include <string.h>
 
+/* The SDK archives export this IP-event hook without installing wifi.h. */
+extern esp_err_t esp_wifi_internal_set_sta_ip(void);
+
 static atomic_bool wifi_enabled = false;
 static atomic_int wifi_state = RTEMS_WIFI_DISCONNECTED;
 static rtems_wifi_event_cb event_cb = NULL;
 static void *event_cb_arg = NULL;
 static struct rtems_wifi_ip_info current_ip_info = { 0 };
 static bool wifi_initialized = false;
-static rtems_id dhcp_poll_task_id = RTEMS_ID_NONE;
+static atomic_bool wifi_started = false;
 
 int os_get_random(unsigned char *buf, size_t len)
 {
@@ -362,37 +415,44 @@ static void set_state(rtems_wifi_state_t new_state)
     }
 }
 
-static rtems_task dhcp_poll_task(rtems_task_argument arg)
+static void dhcp_status_changed(struct netif *netif)
 {
-    (void) arg;
-    while (atomic_load_explicit(&wifi_enabled, memory_order_acquire)) {
-        struct netif *netif = rtems_esp_netif_get();
-        struct dhcp *d = netif ? netif_dhcp_data(netif) : NULL;
-        if (netif != NULL && (dhcp_supplied_address(netif) || (d != NULL && ip4_addr_get_u32(&d->offered_ip_addr) != 0))) {
-            if (!dhcp_supplied_address(netif)) {
-                netif_set_addr(netif, &d->offered_ip_addr, &d->offered_sn_mask, &d->offered_gw_addr);
-                netif_set_up(netif);
-            }
-            uint32_t ip = lwip_ntohl(ip4_addr_get_u32(netif_ip4_addr(netif)));
-            uint32_t netmask = lwip_ntohl(ip4_addr_get_u32(netif_ip4_netmask(netif)));
-            uint32_t gw = lwip_ntohl(ip4_addr_get_u32(netif_ip4_gw(netif)));
-
-            if (d != NULL && ip4_addr_get_u32(&d->offered_gw_addr) != 0) {
-                ip_addr_t dns_addr;
-                ip_addr_copy_from_ip4(dns_addr, d->offered_gw_addr);
-                dns_setserver(0, &dns_addr);
-            }
-
-            rtems_wifi_notify_dhcp_event("wlan0", "BOUND", ip, netmask, gw);
-            printf("rtems-wifi: DHCP bound! IP=%u.%u.%u.%u, GW=%u.%u.%u.%u\n",
-                (ip >> 24) & 0xff, (ip >> 16) & 0xff, (ip >> 8) & 0xff, ip & 0xff,
-                (gw >> 24) & 0xff, (gw >> 16) & 0xff, (gw >> 8) & 0xff, gw & 0xff);
-            break;
-        }
-        rtems_task_wake_after(RTEMS_MILLISECONDS_TO_TICKS(500));
+    if (!atomic_load_explicit(&wifi_enabled, memory_order_acquire)
+        || !netif_is_up(netif) || !netif_is_link_up(netif) || !dhcp_supplied_address(netif)) {
+        return;
     }
-    dhcp_poll_task_id = RTEMS_ID_NONE;
-    rtems_task_exit();
+    esp_wifi_internal_set_sta_ip();
+    uint32_t ip = lwip_ntohl(ip4_addr_get_u32(netif_ip4_addr(netif)));
+    uint32_t netmask = lwip_ntohl(ip4_addr_get_u32(netif_ip4_netmask(netif)));
+    uint32_t gw = lwip_ntohl(ip4_addr_get_u32(netif_ip4_gw(netif)));
+    struct dhcp *d = netif_dhcp_data(netif);
+    if (d != NULL && ip4_addr_get_u32(&d->offered_gw_addr) != 0) {
+        ip_addr_t dns_addr;
+        ip_addr_copy_from_ip4(dns_addr, d->offered_gw_addr);
+        dns_setserver(0, &dns_addr);
+    }
+    rtems_wifi_notify_dhcp_event("wlan0", "BOUND", ip, netmask, gw);
+    printf("rtems-wifi: DHCP bound! IP=%u.%u.%u.%u, GW=%u.%u.%u.%u\n",
+        (ip >> 24) & 0xff, (ip >> 16) & 0xff, (ip >> 8) & 0xff, ip & 0xff,
+        (gw >> 24) & 0xff, (gw >> 16) & 0xff, (gw >> 8) & 0xff, gw & 0xff);
+}
+
+static void stop_dhcp(void *arg)
+{
+    struct netif *netif = arg;
+    dhcp_stop(netif);
+    netif_set_addr(netif, IP4_ADDR_ANY4, IP4_ADDR_ANY4, IP4_ADDR_ANY4);
+}
+
+static void start_dhcp(void *arg)
+{
+    struct netif *netif = arg;
+    stop_dhcp(netif);
+    netif_set_default(netif);
+    netif_set_status_callback(netif, dhcp_status_changed);
+    if (dhcp_start(netif) != ERR_OK) {
+        fprintf(stderr, "AtomVM wifi: failed to start DHCP\n");
+    }
 }
 
 static void on_wifi_event(void *arg, const char *base, int32_t id, void *data)
@@ -401,28 +461,24 @@ static void on_wifi_event(void *arg, const char *base, int32_t id, void *data)
     (void) data;
     if (base != NULL && strcmp(base, WIFI_EVENT) == 0) {
         if (id == WIFI_EVENT_STA_START) {
-            set_state(RTEMS_WIFI_ASSOCIATING);
+            atomic_store(&wifi_started, true);
+        } else if (id == WIFI_EVENT_STA_STOP) {
+            atomic_store(&wifi_started, false);
         } else if (id == WIFI_EVENT_STA_CONNECTED) {
             set_state(RTEMS_WIFI_ASSOCIATED);
             rtems_esp_netif_reattach();
             struct netif *netif = rtems_esp_netif_get();
             if (netif != NULL) {
-                netif_set_default(netif);
-                if (dhcp_poll_task_id == RTEMS_ID_NONE) {
-                    dhcp_start(netif);
-                    rtems_status_code sc = rtems_task_create(
-                        rtems_build_name('W', 'D', 'H', 'C'),
-                        120,
-                        4096,
-                        RTEMS_DEFAULT_MODES,
-                        RTEMS_DEFAULT_ATTRIBUTES,
-                        &dhcp_poll_task_id);
-                    if (sc == RTEMS_SUCCESSFUL) {
-                        rtems_task_start(dhcp_poll_task_id, dhcp_poll_task, 0);
-                    }
+                /* Queue after the adapter's link-up callback on lwIP's core. */
+                if (tcpip_callback(start_dhcp, netif) != ERR_OK) {
+                    fprintf(stderr, "AtomVM wifi: failed to start DHCP\n");
                 }
             }
         } else if (id == WIFI_EVENT_STA_DISCONNECTED) {
+            struct netif *netif = rtems_esp_netif_get();
+            if (netif != NULL && tcpip_callback(stop_dhcp, netif) != ERR_OK) {
+                fprintf(stderr, "AtomVM wifi: failed to stop DHCP\n");
+            }
             current_ip_info.ip = 0;
             current_ip_info.netmask = 0;
             current_ip_info.gateway = 0;
@@ -459,7 +515,27 @@ int rtems_wifi_get_ip_info(struct rtems_wifi_ip_info *info)
     return 0;
 }
 
-int rtems_wifi_start(const char *ssid, const char *psk)
+int rtems_wifi_get_rssi(int *rssi)
+{
+    if (rtems_wifi_get_state() < RTEMS_WIFI_ASSOCIATED) {
+        return ENETDOWN;
+    }
+    return esp_wifi_sta_get_rssi(rssi) == ESP_OK ? 0 : EIO;
+}
+
+static int wait_wifi_started(bool started)
+{
+    for (int attempt = 0; attempt < 100; attempt++) {
+        if (atomic_load(&wifi_started) == started) {
+            return 0;
+        }
+        rtems_interval ticks = RTEMS_MILLISECONDS_TO_TICKS(10);
+        rtems_task_wake_after(ticks > 0 ? ticks : 1);
+    }
+    return -1;
+}
+
+int rtems_wifi_start(const char *ssid, const char *psk, bool connect)
 {
     if (ssid == NULL) {
         return -1;
@@ -467,16 +543,15 @@ int rtems_wifi_start(const char *ssid, const char *psk)
 
     if (!wifi_initialized) {
         wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-#if defined(RTEMS_BOARD_ESP32C3) || defined(RTEMS_BOARD_ESP32C5)
-        cfg.static_rx_buf_num = 3;
-        cfg.dynamic_rx_buf_num = 8;
-        cfg.dynamic_tx_buf_num = 8;
+        /* Keep heap available for the network gen_server and scan results. */
+        cfg.static_rx_buf_num = 2;
+        cfg.dynamic_rx_buf_num = 4;
+        cfg.dynamic_tx_buf_num = 4;
         cfg.rx_mgmt_buf_num = 2;
         cfg.mgmt_sbuf_num = 6;
         cfg.ampdu_rx_enable = 0;
         cfg.ampdu_tx_enable = 0;
         cfg.nvs_enable = 0;
-#endif
         esp_err_t err = esp_wifi_init(&cfg);
         if (err != ESP_OK) {
             fprintf(stderr, "AtomVM wifi: esp_wifi_init failed: %d\n", err);
@@ -492,23 +567,44 @@ int rtems_wifi_start(const char *ssid, const char *psk)
         wifi_initialized = true;
     }
 
-    esp_wifi_set_mode(WIFI_MODE_STA);
-
-    wifi_config_t sta_cfg = { 0 };
-    strncpy((char *) sta_cfg.sta.ssid, ssid, sizeof(sta_cfg.sta.ssid) - 1);
-    if (psk != NULL && strlen(psk) > 0) {
-        strncpy((char *) sta_cfg.sta.password, psk, sizeof(sta_cfg.sta.password) - 1);
-    }
-    esp_wifi_set_config(WIFI_IF_STA, &sta_cfg);
-
-    esp_err_t err = esp_wifi_start();
-    if (err != ESP_OK) {
-        fprintf(stderr, "AtomVM wifi: esp_wifi_start failed: %d\n", err);
+    if (!atomic_load(&wifi_enabled) && esp_wifi_set_mode(WIFI_MODE_STA) != ESP_OK) {
         return -1;
     }
 
-    atomic_store_explicit(&wifi_enabled, true, memory_order_release);
-    esp_wifi_connect();
+    wifi_config_t sta_cfg = { 0 };
+    size_t ssid_len = strlen(ssid);
+    size_t psk_len = psk != NULL ? strlen(psk) : 0;
+    if (ssid_len > sizeof(sta_cfg.sta.ssid) || psk_len > sizeof(sta_cfg.sta.password)) {
+        return -1;
+    }
+    memcpy(sta_cfg.sta.ssid, ssid, ssid_len);
+    if (psk_len > 0) {
+        memcpy(sta_cfg.sta.password, psk, psk_len);
+    }
+    if (esp_wifi_set_config(WIFI_IF_STA, &sta_cfg) != ESP_OK) {
+        return -1;
+    }
+
+    if (!atomic_load_explicit(&wifi_enabled, memory_order_acquire)) {
+        esp_err_t err = esp_wifi_start();
+        if (err != ESP_OK) {
+            fprintf(stderr, "AtomVM wifi: esp_wifi_start failed: %d\n", err);
+            return -1;
+        }
+        atomic_store_explicit(&wifi_enabled, true, memory_order_release);
+    }
+    if (wait_wifi_started(true) != 0) {
+        return -1;
+    }
+    /* The RTEMS adapter does not implement modem sleep. */
+    if (esp_wifi_set_ps(WIFI_PS_NONE) != ESP_OK) {
+        return -1;
+    }
+
+    if (connect) {
+        set_state(RTEMS_WIFI_ASSOCIATING);
+        return esp_wifi_connect() == ESP_OK ? 0 : -1;
+    }
     return 0;
 }
 
@@ -522,7 +618,9 @@ int rtems_wifi_stop(void)
 {
     if (atomic_load_explicit(&wifi_enabled, memory_order_acquire)) {
         esp_wifi_disconnect();
-        esp_wifi_stop();
+        if (esp_wifi_stop() != ESP_OK || wait_wifi_started(false) != 0) {
+            return -1;
+        }
         atomic_store_explicit(&wifi_enabled, false, memory_order_release);
         set_state(RTEMS_WIFI_DISCONNECTED);
     }
@@ -567,8 +665,14 @@ int rtems_wifi_get_ip_info(struct rtems_wifi_ip_info *info)
     (void) info;
     return -1;
 }
-int rtems_wifi_start(const char *ssid, const char *psk)
+int rtems_wifi_get_rssi(int *rssi)
 {
+    (void) rssi;
+    return ENOTSUP;
+}
+int rtems_wifi_start(const char *ssid, const char *psk, bool connect)
+{
+    (void) connect;
     (void) ssid;
     (void) psk;
     return -1;

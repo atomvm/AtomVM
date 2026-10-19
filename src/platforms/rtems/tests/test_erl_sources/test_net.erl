@@ -49,6 +49,8 @@ start() ->
     end.
 
 expect_socket_unsupported() ->
+    true = register(network_port, open_port({spawn, "network"}, [])),
+    {error, enotsup} = network:sta_rssi(),
     try socket:open(inet, stream, tcp) of
         {error, Reason} ->
             erlang:display({socket, unsupported, Reason}),

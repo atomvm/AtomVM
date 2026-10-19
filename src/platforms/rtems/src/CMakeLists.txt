@@ -107,6 +107,9 @@ else()
     avm_get_system_architecture_string(AVM_SYSTEM_ARCHITECTURE_STRING PLATFORM_VENDOR rtems PLATFORM_OS rtems)
 endif()
 add_subdirectory(../../../libAtomVM libAtomVM)
+if(HAVE_PLATFORM_ATOMIC_H)
+    target_include_directories(libAtomVM PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/lib")
+endif()
 target_link_libraries(${PROJECT_EXECUTABLE} PUBLIC libAtomVM)
 
 set(

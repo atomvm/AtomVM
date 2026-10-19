@@ -32,8 +32,15 @@
 #include <term.h>
 #include <utils.h>
 
+#include <errno.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef RTEMS_WIFI_BACKEND_ESP32
+#include <esp_event.h>
+#include <esp_wifi.h>
+#endif
 
 #define PORT_REPLY_SIZE (TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_SHORT_SIZE)
 
@@ -55,7 +62,10 @@ enum network_cmd
     NetworkStartCmd,
     NetworkConnectCmd,
     NetworkHaltStaCmd,
-    NetworkRssiCmd
+    NetworkRssiCmd,
+    NetworkScanCmd,
+    NetworkCancelScanCmd,
+    NetworkStopCmd
 };
 
 static const AtomStringIntPair cmd_table[] = {
@@ -63,6 +73,9 @@ static const AtomStringIntPair cmd_table[] = {
     { ATOM_STR("\x7", "connect"), NetworkConnectCmd },
     { ATOM_STR("\x8", "halt_sta"), NetworkHaltStaCmd },
     { ATOM_STR("\x4", "rssi"), NetworkRssiCmd },
+    { ATOM_STR("\x4", "scan"), NetworkScanCmd },
+    { ATOM_STR("\xB", "cancel_scan"), NetworkCancelScanCmd },
+    { ATOM_STR("\x4", "stop"), NetworkStopCmd },
     SELECT_INT_DEFAULT(NetworkInvalidCmd)
 };
 
@@ -76,9 +89,262 @@ struct NetworkDriverData
     char *sntp_host;
     int sntp_port;
     bool sntp_enabled;
+#ifdef RTEMS_WIFI_BACKEND_ESP32
+    atomic_uint scan_port_id;
+    atomic_bool scan_done_received;
+    bool scan_handler_registered;
+#endif
 };
 
 static struct NetworkDriverData *driver_data = NULL;
+
+static void send_callback_message(GlobalContext *global, uint32_t process_id, term message)
+{
+#ifdef AVM_TASK_DRIVER_ENABLED
+    port_send_message_from_task(global, term_from_local_process_id(process_id), message);
+#else
+    globalcontext_send_message(global, process_id, message);
+#endif
+}
+
+#ifdef RTEMS_WIFI_BACKEND_ESP32
+struct ScanData
+{
+    uint32_t owner_process_id;
+    uint64_t ref_ticks;
+    uint16_t limit;
+    bool active;
+    bool canceled;
+    bool stopping;
+};
+
+/* The RTEMS event dispatcher holds its handler lock during callbacks. Notify
+ * the port and collect results there; registering/unregistering here deadlocks. */
+static void scan_done_callback(void *arg, esp_event_base_t base, int32_t id, void *event)
+{
+    UNUSED(base);
+    UNUSED(id);
+    struct NetworkDriverData *data = arg;
+    uint32_t port_id = atomic_load(&data->scan_port_id);
+    if (port_id == 0 || port_id == UINT32_MAX) {
+        return;
+    }
+    const wifi_event_sta_scan_done_t *done = event;
+    atomic_store(&data->scan_done_received, true);
+    BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(2), heap);
+    term msg = port_heap_create_tuple2(&heap,
+        globalcontext_make_atom(data->global, ATOM_STR("\xE", "wifi_scan_done")),
+        term_from_int(done != NULL ? done->status : 1));
+    send_callback_message(data->global, port_id, msg);
+    END_WITH_STACK_HEAP(heap, data->global);
+}
+
+static term scan_authmode(GlobalContext *global, wifi_auth_mode_t mode)
+{
+    static const AtomStringIntPair modes[] = {
+        { ATOM_STR("\x4", "open"), WIFI_AUTH_OPEN },
+        { ATOM_STR("\x3", "wep"), WIFI_AUTH_WEP },
+        { ATOM_STR("\x7", "wpa_psk"), WIFI_AUTH_WPA_PSK },
+        { ATOM_STR("\x8", "wpa2_psk"), WIFI_AUTH_WPA2_PSK },
+        { ATOM_STR("\xC", "wpa_wpa2_psk"), WIFI_AUTH_WPA_WPA2_PSK },
+        { ATOM_STR("\x3", "eap"), WIFI_AUTH_ENTERPRISE },
+        { ATOM_STR("\x8", "wpa3_psk"), WIFI_AUTH_WPA3_PSK },
+        { ATOM_STR("\xD", "wpa2_wpa3_psk"), WIFI_AUTH_WPA2_WPA3_PSK },
+        { ATOM_STR("\x4", "wapi"), WIFI_AUTH_WAPI_PSK },
+        { ATOM_STR("\x3", "owe"), WIFI_AUTH_OWE },
+        { ATOM_STR("\x13", "wpa3_enterprise_192"), WIFI_AUTH_WPA3_ENT_192 },
+        { ATOM_STR("\x3", "dpp"), WIFI_AUTH_DPP },
+        { ATOM_STR("\xF", "wpa3_enterprise"), WIFI_AUTH_WPA3_ENTERPRISE },
+        { ATOM_STR("\x14", "wpa2_wpa3_enterprise"), WIFI_AUTH_WPA2_WPA3_ENTERPRISE },
+        { ATOM_STR("\xE", "wpa_enterprise"), WIFI_AUTH_WPA_ENTERPRISE },
+        SELECT_INT_DEFAULT(-1)
+    };
+    term authmode = interop_atom_term_select_atom(modes, mode, global);
+    return term_is_invalid_term(authmode) ? UNDEFINED_ATOM : authmode;
+}
+
+static NativeHandlerResult finish_scan(Context *ctx, int status)
+{
+    struct ScanData *scan = ctx->platform_data;
+    if (!scan->active) {
+        return NativeContinue;
+    }
+    uint16_t found = 0;
+    uint16_t count = 0;
+    wifi_ap_record_t *records = NULL;
+    term reason = term_invalid_term();
+    if (!scan->canceled) {
+        if (status != 0 || esp_wifi_scan_get_ap_num(&found) != ESP_OK) {
+            reason = globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "eio"));
+        } else {
+            count = found < scan->limit ? found : scan->limit;
+            if (count > 0) {
+                records = calloc(count, sizeof(*records));
+                if (records == NULL) {
+                    reason = OUT_OF_MEMORY_ATOM;
+                } else if (esp_wifi_scan_get_ap_records(&count, records) != ESP_OK) {
+                    reason = globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "eio"));
+                }
+            }
+        }
+    }
+    /* Fetching AP records consumes the SDK list; clear it on other paths. */
+    if (records == NULL || !term_is_invalid_term(reason)) {
+        esp_wifi_clear_ap_list();
+    }
+    scan->active = false;
+    atomic_store(&driver_data->scan_port_id, 0);
+    if (!scan->canceled) {
+        size_t reply_size = PORT_REPLY_SIZE + TUPLE_SIZE(2) * 2;
+        size_t needed = reply_size;
+        if (term_is_invalid_term(reason)) {
+            needed += LIST_SIZE(count, TERM_MAP_SIZE(6) + TERM_BINARY_HEAP_SIZE(32) + TERM_BINARY_HEAP_SIZE(6));
+        }
+        if (memory_ensure_free_opt(ctx, needed, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK) {
+            free(records);
+            records = NULL;
+            reason = OUT_OF_MEMORY_ATOM;
+            if (memory_ensure_free_opt(ctx, reply_size, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK) {
+                return NativeContinue;
+            }
+        }
+        term result;
+        if (!term_is_invalid_term(reason)) {
+            result = port_create_error_tuple(ctx, reason);
+        } else {
+            term list = term_nil();
+            for (uint16_t i = count; i > 0; i--) {
+                wifi_ap_record_t *ap = &records[i - 1];
+                size_t ssid_len = strnlen((const char *) ap->ssid, 32);
+                term ssid = term_from_literal_binary(ap->ssid, ssid_len, &ctx->heap, ctx->global);
+                term bssid = term_from_literal_binary(ap->bssid, 6, &ctx->heap, ctx->global);
+                term map = term_alloc_map(6, &ctx->heap);
+                term_set_map_assoc(map, 0, globalcontext_make_atom(ctx->global, ATOM_STR("\x8", "authmode")), scan_authmode(ctx->global, ap->authmode));
+                term_set_map_assoc(map, 1, globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "bssid")), bssid);
+                term_set_map_assoc(map, 2, globalcontext_make_atom(ctx->global, ATOM_STR("\x7", "channel")), term_from_int(ap->primary));
+                term_set_map_assoc(map, 3, globalcontext_make_atom(ctx->global, ATOM_STR("\x6", "hidden")), ssid_len == 0 ? TRUE_ATOM : FALSE_ATOM);
+                term_set_map_assoc(map, 4, globalcontext_make_atom(ctx->global, rssi_atom), term_from_int(ap->rssi));
+                term_set_map_assoc(map, 5, globalcontext_make_atom(ctx->global, ssid_atom), ssid);
+                list = term_list_prepend(map, list, &ctx->heap);
+            }
+            result = port_create_tuple2(ctx, term_from_int(found), list);
+        }
+        term reply = port_create_tuple2(ctx, globalcontext_make_atom(ctx->global, ATOM_STR("\xC", "scan_results")), result);
+        port_send_reply(ctx, term_from_local_process_id(scan->owner_process_id), term_from_ref_ticks(scan->ref_ticks, &ctx->heap), reply);
+    }
+    free(records);
+    if (scan->stopping) {
+        rtems_wifi_stop();
+        return NativeTerminate;
+    }
+    return NativeContinue;
+}
+#endif
+
+static void send_scan_error(Context *ctx, term pid, term ref, term reason)
+{
+    term roots[] = { ref, reason };
+    if (memory_ensure_free_with_roots(ctx, PORT_REPLY_SIZE + TUPLE_SIZE(2) * 2, 2, roots, MEMORY_NO_SHRINK) != MEMORY_GC_OK) {
+        return;
+    }
+    term reply = port_create_tuple2(ctx,
+        globalcontext_make_atom(ctx->global, ATOM_STR("\xC", "scan_results")),
+        port_create_error_tuple(ctx, roots[1]));
+    port_send_reply(ctx, pid, roots[0], reply);
+}
+
+static void start_scan(Context *ctx, term pid, term ref, term options)
+{
+#ifdef RTEMS_WIFI_BACKEND_ESP32
+    if (!term_is_list(options)) {
+        send_scan_error(ctx, pid, ref, BADARG_ATOM);
+        return;
+    }
+    term limit = interop_kv_get_value_default(options, ATOM_STR("\x7", "results"), term_from_int(6), ctx->global);
+    term passive = interop_kv_get_value_default(options, ATOM_STR("\x7", "passive"), FALSE_ATOM, ctx->global);
+    term hidden = interop_kv_get_value_default(options, ATOM_STR("\xB", "show_hidden"), FALSE_ATOM, ctx->global);
+    term dwell = interop_kv_get_value_default(options, ATOM_STR("\x5", "dwell"), term_from_int(passive == FALSE_ATOM ? 120 : 360), ctx->global);
+    bool is_passive = passive == TRUE_ATOM || globalcontext_is_term_equal_to_atom_string(ctx->global, passive, ATOM_STR("\x7", "passive"));
+    bool show_hidden = hidden == TRUE_ATOM || globalcontext_is_term_equal_to_atom_string(ctx->global, hidden, ATOM_STR("\xB", "show_hidden"));
+    if (!term_is_integer(limit) || term_to_int(limit) < 1 || term_to_int(limit) > 64
+        || !term_is_integer(dwell) || term_to_int(dwell) < 1 || term_to_int(dwell) > 1500
+        || (!is_passive && passive != FALSE_ATOM) || (!show_hidden && hidden != FALSE_ATOM)) {
+        send_scan_error(ctx, pid, ref, BADARG_ATOM);
+        return;
+    }
+    struct ScanData *scan = ctx->platform_data;
+    unsigned previous = atomic_load(&driver_data->scan_port_id);
+    if (previous != 0 && previous != UINT32_MAX && atomic_load(&driver_data->scan_done_received)
+        && !globalcontext_process_exists(ctx->global, previous)
+        && atomic_compare_exchange_strong(&driver_data->scan_port_id, &previous, UINT32_MAX)) {
+        esp_wifi_clear_ap_list();
+        atomic_store(&driver_data->scan_port_id, 0);
+    }
+    unsigned expected = 0;
+    if (!atomic_compare_exchange_strong(&driver_data->scan_port_id, &expected, ctx->process_id)) {
+        send_scan_error(ctx, pid, ref, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "busy")));
+        return;
+    }
+    atomic_store(&driver_data->scan_done_received, false);
+    esp_err_t err = ESP_OK;
+    if (!driver_data->scan_handler_registered) {
+        err = esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_SCAN_DONE, scan_done_callback, driver_data);
+        driver_data->scan_handler_registered = err == ESP_OK;
+    }
+    *scan = (struct ScanData) {
+        .owner_process_id = term_to_local_process_id(pid),
+        .ref_ticks = term_to_ref_ticks(ref),
+        .limit = term_to_int(limit),
+        .active = true
+    };
+    wifi_scan_config_t config = { 0 };
+    config.show_hidden = show_hidden;
+    config.scan_type = is_passive ? WIFI_SCAN_TYPE_PASSIVE : WIFI_SCAN_TYPE_ACTIVE;
+    if (is_passive) {
+        config.scan_time.passive = term_to_int(dwell);
+    } else {
+        config.scan_time.active.min = term_to_int(dwell) > 240 ? term_to_int(dwell) / 2 : term_to_int(dwell);
+        config.scan_time.active.max = term_to_int(dwell);
+    }
+    if (err == ESP_OK) {
+        err = esp_wifi_scan_start(&config, false);
+    }
+    if (err != ESP_OK) {
+        scan->active = false;
+        atomic_store(&driver_data->scan_port_id, 0);
+        send_scan_error(ctx, pid, ref, term_from_int(err));
+    } else if (interop_kv_get_value_default(options, ATOM_STR("\x5", "reply"), FALSE_ATOM, ctx->global) == TRUE_ATOM) {
+        if (memory_ensure_free_with_roots(ctx, PORT_REPLY_SIZE, 1, &ref, MEMORY_NO_SHRINK) == MEMORY_GC_OK) {
+            port_send_reply(ctx, pid, ref, OK_ATOM);
+        }
+    }
+#else
+    UNUSED(options);
+    send_scan_error(ctx, pid, ref, globalcontext_make_atom(ctx->global, ATOM_STR("\x7", "enotsup")));
+#endif
+}
+
+static void cancel_scan(Context *ctx, term pid, term ref, term config)
+{
+    term roots[] = { ref, config };
+    if (memory_ensure_free_with_roots(ctx, PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(3), 2, roots, MEMORY_NO_SHRINK) != MEMORY_GC_OK) {
+        return;
+    }
+    term result = OK_ATOM;
+#ifdef RTEMS_WIFI_BACKEND_ESP32
+    struct ScanData *scan = ctx->platform_data;
+    if (scan->active) {
+        esp_err_t err = atomic_load(&driver_data->scan_done_received) ? ESP_OK : esp_wifi_scan_stop();
+        if (err == ESP_OK || atomic_load(&driver_data->scan_done_received)) {
+            scan->canceled = true;
+        } else {
+            result = port_create_error_tuple(ctx, term_from_int(err));
+        }
+    }
+#endif
+    term reply = port_create_tuple3(ctx, globalcontext_make_atom(ctx->global, ATOM_STR("\xD", "scan_canceled")), roots[1], result);
+    port_send_reply(ctx, pid, roots[0], reply);
+}
 
 static term make_ip_tuple(Heap *heap, uint32_t addr)
 {
@@ -107,7 +373,7 @@ static void sntp_sync_callback(const struct timeval *tv, void *arg)
         globalcontext_make_atom(glb, sntp_sync_atom),
         tv_tuple);
     term msg = port_heap_create_tuple2(&heap, ref, payload);
-    globalcontext_send_message(glb, driver_data->owner_process_id, msg);
+    send_callback_message(glb, driver_data->owner_process_id, msg);
     END_WITH_STACK_HEAP(heap, glb);
 }
 
@@ -121,14 +387,13 @@ static void wifi_event_callback(rtems_wifi_state_t state, const struct rtems_wif
     GlobalContext *glb = driver_data->global;
 
     switch (state) {
-        case RTEMS_WIFI_ASSOCIATED:
-        case RTEMS_WIFI_ASSOCIATING: {
+        case RTEMS_WIFI_ASSOCIATED: {
             BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
             term ref = term_from_ref_ticks(driver_data->ref_ticks, &heap);
             term msg = term_alloc_tuple(2, &heap);
             term_put_tuple_element(msg, 0, ref);
             term_put_tuple_element(msg, 1, globalcontext_make_atom(glb, sta_connected_atom));
-            globalcontext_send_message(glb, driver_data->owner_process_id, msg);
+            send_callback_message(glb, driver_data->owner_process_id, msg);
             END_WITH_STACK_HEAP(heap, glb);
             break;
         }
@@ -152,7 +417,7 @@ static void wifi_event_callback(rtems_wifi_state_t state, const struct rtems_wif
             term msg = term_alloc_tuple(2, &heap);
             term_put_tuple_element(msg, 0, ref);
             term_put_tuple_element(msg, 1, payload);
-            globalcontext_send_message(glb, driver_data->owner_process_id, msg);
+            send_callback_message(glb, driver_data->owner_process_id, msg);
             END_WITH_STACK_HEAP(heap, glb);
 
             if (driver_data->sntp_enabled) {
@@ -167,7 +432,7 @@ static void wifi_event_callback(rtems_wifi_state_t state, const struct rtems_wif
             term msg = term_alloc_tuple(2, &heap);
             term_put_tuple_element(msg, 0, ref);
             term_put_tuple_element(msg, 1, globalcontext_make_atom(glb, sta_disconnected_atom));
-            globalcontext_send_message(glb, driver_data->owner_process_id, msg);
+            send_callback_message(glb, driver_data->owner_process_id, msg);
             END_WITH_STACK_HEAP(heap, glb);
             break;
         }
@@ -177,15 +442,21 @@ static void wifi_event_callback(rtems_wifi_state_t state, const struct rtems_wif
     }
 }
 
-static bool extract_sta_config(term sta_config, GlobalContext *glb, char **ssid_out, char **psk_out)
+static bool extract_sta_config(term sta_config, GlobalContext *glb, char **ssid_out, char **psk_out, bool require_ssid)
 {
     term ssid_term = interop_kv_get_value_default(sta_config, ssid_atom, term_invalid_term(), glb);
-    if (term_is_invalid_term(ssid_term)) {
+    if (term_is_invalid_term(ssid_term) && require_ssid) {
         return false;
     }
 
     int ok = 0;
-    char *ssid = interop_term_to_string(ssid_term, &ok);
+    char *ssid;
+    if (term_is_invalid_term(ssid_term)) {
+        ssid = strdup("");
+        ok = ssid != NULL;
+    } else {
+        ssid = interop_term_to_string(ssid_term, &ok);
+    }
     if (!ok || ssid == NULL) {
         return false;
     }
@@ -205,7 +476,7 @@ static bool extract_sta_config(term sta_config, GlobalContext *glb, char **ssid_
     return true;
 }
 
-static void start_network(Context *ctx, term pid, term ref, term config)
+static void start_network(Context *ctx, term pid, term ref, term config, bool connect)
 {
     if (driver_data == NULL) {
         port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
@@ -217,16 +488,28 @@ static void start_network(Context *ctx, term pid, term ref, term config)
 
     term sta_config = interop_kv_get_value_default(config, sta_atom, term_invalid_term(), ctx->global);
     if (!term_is_invalid_term(sta_config)) {
-        char *ssid = NULL;
-        char *psk = NULL;
-        if (extract_sta_config(sta_config, ctx->global, &ssid, &psk)) {
-            free(driver_data->ssid);
-            free(driver_data->psk);
-            driver_data->ssid = ssid;
-            driver_data->psk = psk;
+        bool associate = true;
+#ifdef RTEMS_WIFI_BACKEND_ESP32
+        term managed = interop_kv_get_value_default(sta_config, ATOM_STR("\x7", "managed"), FALSE_ATOM, ctx->global);
+        associate = connect || !(managed == TRUE_ATOM || globalcontext_is_term_equal_to_atom_string(ctx->global, managed, ATOM_STR("\x7", "managed")));
+#else
+        UNUSED(connect);
+#endif
+        {
+            char *ssid = NULL;
+            char *psk = NULL;
+            if (extract_sta_config(sta_config, ctx->global, &ssid, &psk, associate)) {
+                free(driver_data->ssid);
+                free(driver_data->psk);
+                driver_data->ssid = ssid;
+                driver_data->psk = psk;
 
-            if (rtems_wifi_start(ssid, psk) != 0) {
-                port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, ERROR_ATOM));
+                if (rtems_wifi_start(ssid, psk, associate) != 0) {
+                    port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, ERROR_ATOM));
+                    return;
+                }
+            } else {
+                port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
                 return;
             }
         }
@@ -262,11 +545,25 @@ static void start_network(Context *ctx, term pid, term ref, term config)
 static void get_sta_rssi(Context *ctx, term pid, term ref)
 {
     size_t heap_size = PORT_REPLY_SIZE + TUPLE_SIZE(2);
-    if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, 1, &ref, MEMORY_NO_SHRINK) != MEMORY_GC_OK)) {
         return;
     }
 
-    term rssi_val = term_from_int11(-50);
+    int rssi;
+    int error = rtems_wifi_get_rssi(&rssi);
+    if (error != 0) {
+        term reason;
+        if (error == ENOTSUP) {
+            reason = globalcontext_make_atom(ctx->global, ATOM_STR("\x7", "enotsup"));
+        } else if (error == ENETDOWN) {
+            reason = globalcontext_make_atom(ctx->global, ATOM_STR("\xC", "network_down"));
+        } else {
+            reason = term_from_int(error);
+        }
+        port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, reason));
+        return;
+    }
+    term rssi_val = term_from_int(rssi);
     term reply = port_create_tuple2(ctx, globalcontext_make_atom(ctx->global, rssi_atom), rssi_val);
     port_send_reply(ctx, pid, ref, reply);
 }
@@ -275,6 +572,15 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
 {
     Message *message = mailbox_first(&ctx->mailbox);
     term msg = message->message;
+
+#ifdef RTEMS_WIFI_BACKEND_ESP32
+    if (term_is_tuple(msg) && term_get_tuple_arity(msg) == 2
+        && globalcontext_is_term_equal_to_atom_string(ctx->global, term_get_tuple_element(msg, 0), ATOM_STR("\xE", "wifi_scan_done"))) {
+        NativeHandlerResult result = finish_scan(ctx, term_to_int(term_get_tuple_element(msg, 1)));
+        mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+        return result;
+    }
+#endif
 
     if (UNLIKELY(!term_is_tuple(msg) || term_get_tuple_arity(msg) != 3)) {
         mailbox_remove_message(&ctx->mailbox, &ctx->heap);
@@ -298,11 +604,11 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
     enum network_cmd command = interop_atom_term_select_int(cmd_table, cmd_term, ctx->global);
     switch (command) {
         case NetworkStartCmd:
-            start_network(ctx, pid, ref, config);
+            start_network(ctx, pid, ref, config, false);
             break;
 
         case NetworkConnectCmd:
-            start_network(ctx, pid, ref, config);
+            start_network(ctx, pid, ref, config, true);
             break;
 
         case NetworkHaltStaCmd:
@@ -313,6 +619,31 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
         case NetworkRssiCmd:
             get_sta_rssi(ctx, pid, ref);
             break;
+
+        case NetworkScanCmd:
+            start_scan(ctx, pid, ref, config);
+            break;
+
+        case NetworkCancelScanCmd:
+            cancel_scan(ctx, pid, ref, config);
+            break;
+
+        case NetworkStopCmd:
+            rtems_sntp_stop();
+            driver_data->owner_process_id = 0;
+            driver_data->sntp_enabled = false;
+#ifdef RTEMS_WIFI_BACKEND_ESP32
+            if (((struct ScanData *) ctx->platform_data)->active) {
+                ((struct ScanData *) ctx->platform_data)->stopping = true;
+                if (!((struct ScanData *) ctx->platform_data)->canceled) {
+                    esp_wifi_scan_stop();
+                }
+                break;
+            }
+#endif
+            rtems_wifi_stop();
+            mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+            return NativeTerminate;
 
         default:
             port_send_reply(ctx, pid, ref, port_create_error_tuple(ctx, BADARG_ATOM));
@@ -328,6 +659,10 @@ void network_driver_init(GlobalContext *global)
     if (driver_data == NULL) {
         driver_data = calloc(1, sizeof(struct NetworkDriverData));
         driver_data->global = global;
+#ifdef RTEMS_WIFI_BACKEND_ESP32
+        atomic_init(&driver_data->scan_port_id, 0);
+        atomic_init(&driver_data->scan_done_received, false);
+#endif
         rtems_wifi_set_event_callback(wifi_event_callback, NULL);
     }
 }
@@ -336,6 +671,11 @@ void network_driver_destroy(GlobalContext *global)
 {
     (void) global;
     if (driver_data != NULL) {
+#ifdef RTEMS_WIFI_BACKEND_ESP32
+        if (driver_data->scan_handler_registered) {
+            esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_SCAN_DONE, scan_done_callback);
+        }
+#endif
         rtems_sntp_stop();
         rtems_wifi_stop();
         free(driver_data->ssid);
@@ -352,6 +692,13 @@ Context *network_driver_create_port(GlobalContext *global, term opts)
     Context *ctx = context_new(global);
     ctx->native_handler = consume_mailbox;
     ctx->platform_data = NULL;
+#ifdef RTEMS_WIFI_BACKEND_ESP32
+    ctx->platform_data = calloc(1, sizeof(struct ScanData));
+    if (ctx->platform_data == NULL) {
+        context_destroy(ctx);
+        return NULL;
+    }
+#endif
     return ctx;
 }
 

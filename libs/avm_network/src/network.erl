@@ -605,8 +605,9 @@ sta_status() ->
 %% The default scan options may be configured by adding `sta_scan_config()' options to the
 %% `sta_config()'.
 %%
-%% Warning: This feature is not yet supported on platforms other than ESP32, and will return
+%% Warning: This feature is supported on ESP32 and RTEMS ESP32 boards. Other platforms return
 %% `{error, unsupported_platform}'.
+%% RTEMS backends without scan support return `{error, enotsup}'.
 %%
 %% @end
 %%-----------------------------------------------------------------------------
@@ -618,6 +619,7 @@ wifi_scan(Options) ->
     Platform =
         case atomvm:platform() of
             esp32 -> ok;
+            rtems -> ok;
             Platform0 -> Platform0
         end,
     Passive = proplists:get_bool(passive, Options),
@@ -650,7 +652,7 @@ wifi_scan(Options) ->
     | {error, Reason :: term()}.
 wifi_scan() ->
     case atomvm:platform() of
-        esp32 ->
+        Platform when Platform =:= esp32; Platform =:= rtems ->
             Config =
                 try
                     NetConfig = gen_server:call(?SERVER, get_config),

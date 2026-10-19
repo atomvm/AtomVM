@@ -1,0 +1,55 @@
+Subject: [PATCH] Leave C3 heap space for the public network driver
+
+Use the C5/S31 lwIP heap and packet pool counts so scanning and WPA can
+coexist with the network gen_server on C3.
+
+--- a/rtemslwip/esp32c3/lwipbspopts.h
++++ b/rtemslwip/esp32c3/lwipbspopts.h
+@@ -47,9 +47,9 @@
+  * the netif's MTU is 1500, so 1520 is that frame rounded up to 16.  The 1600
+  * it replaces was never a frame size; it was the rtems-lwip default.
+  *
+- * Twelve of them is 18 KiB.  What has to fit at once is a full TCP receive
++ * Eight of them is 12 KiB.  What has to fit at once is a full TCP receive
+  * window -- TCP_WND below is four segments -- plus whatever is queued in the
+- * tcpip mailbox behind it, so twelve is about three times the depth a single
++ * tcpip mailbox behind it, so eight is about twice the depth a single
+  * station can put in flight.  The WiFi libraries have their own RX buffers in
+  * front of this -- CONFIG_ESP_WIFI_*_RX_BUFFER_NUM in the port's sdkconfig.h
+  * -- so this pool is the second queue, not the first.
+@@ -60,30 +60,15 @@
+  * high-water mark, and MEMP_STATS is on by default.  Check them, not the
+  * absence of a complaint, before changing this number again.
+  */
+-#define PBUF_POOL_SIZE     12
++#define PBUF_POOL_SIZE     8
+ #define PBUF_POOL_BUFSIZE  1520
+ 
+ /*
+- * The heap lwIP allocates transmit buffers and netbufs from.  16 KiB against
+- * the 2 MiB default.
+- *
+- * It holds unacknowledged transmit data and nothing else that is large: one
+- * connection's TCP_SND_BUF is four segments, so about 7 KiB of pbufs with
+- * their headers, and DHCP, DNS and the mDNS responder each hold one packet at
+- * a time.  16 KiB is roughly twice that, and lwip_stats.mem.max says on any
+- * run how much of it was ever used.
+- *
+- * MEM_LIBC_MALLOC is deliberately left off.  Turning it on would delete this
+- * buffer entirely and hand lwIP the RTEMS heap instead, which is 16 KiB more
+- * for everyone and one pool to run out of rather than two.  The reason not to
+- * is what runs out of the other one: the WiFi libraries answer ESP_ERR_NO_MEM
+- * by scanning zero networks, so a shared heap turns an lwIP burst into a radio
+- * that appears dead.  The wall between them is what makes "which heap ran out"
+- * answerable at all today.  Revisit it once lwip_stats.mem.max has been read
+- * off a real workload; note that it would not shrink the pools above, which
+- * stay static unless MEMP_MEM_MALLOC is also set.
++ * Keep the same 8 KiB lwIP heap as the C5/S31 ports. The public network
++ * gen_server and WPA handshake also need space in C3's unified RTEMS heap.
++ * This still accommodates one TCP_SND_BUF plus small DHCP/DNS packets.
+  */
+-#define MEM_SIZE           ( 16 * 1024 )
++#define MEM_SIZE           ( 8 * 1024 )
+ 
+ /*
+  * The pools, scaled to a part that will hold a handful of connections rather

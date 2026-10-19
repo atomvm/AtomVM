@@ -141,7 +141,8 @@ static term nif_rtems_ifaddrs(Context *ctx, int argc, term argv[])
     for (struct netif *netif = netif_list; netif != NULL; netif = netif->next) {
         char name_buf[8];
         if (netif->name[0] == 'w' && netif->name[1] == 'l') {
-            snprintf(name_buf, sizeof(name_buf), "wlan%u", netif->num);
+            /* Expose the station name used by wait_wifi(), independent of lwIP index. */
+            strcpy(name_buf, "wlan0");
         } else {
             snprintf(name_buf, sizeof(name_buf), "%c%c%u", netif->name[0], netif->name[1], netif->num);
         }
@@ -208,7 +209,7 @@ static term nif_rtems_wifi_start(Context *ctx, int argc, term argv[])
             return error_term(ctx, BADARG_ATOM);
         }
     }
-    int rv = rtems_wifi_start(ssid, psk);
+    int rv = rtems_wifi_start(ssid, psk, true);
     free(ssid);
     free(psk);
     return rv == 0 ? OK_ATOM : error_atom(ctx, ATOM_STR("\x5", "eio"));

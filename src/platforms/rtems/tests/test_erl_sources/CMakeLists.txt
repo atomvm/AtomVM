@@ -26,7 +26,7 @@ function(rtems_test_beam avm_name main)
     add_custom_command(
         OUTPUT ${main}.beam
         COMMAND erlc +debug_info -I ${CMAKE_SOURCE_DIR}/libs/include ${CMAKE_CURRENT_SOURCE_DIR}/${main}.erl
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${main}.erl
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${main}.erl ${CMAKE_CURRENT_SOURCE_DIR}/wifi_scan.hrl
         COMMENT "Compiling ${main}.erl"
         VERBATIM
     )

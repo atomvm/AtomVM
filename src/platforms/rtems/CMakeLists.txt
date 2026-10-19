@@ -100,7 +100,12 @@ else()
 endif()
 
 option(AVM_DISABLE_SMP "Disable SMP support." ${DEFAULT_AVM_DISABLE_SMP})
-set(AVM_DISABLE_TASK_DRIVER ON CACHE BOOL "Disable task driver support." FORCE)
+if(RTEMS_ARCH STREQUAL "riscv" AND RTEMS_BSP_NAME MATCHES "esp32")
+    set(AVM_DISABLE_TASK_DRIVER OFF CACHE BOOL "Disable task driver support." FORCE)
+    set(HAVE_PLATFORM_ATOMIC_H ON)
+else()
+    set(AVM_DISABLE_TASK_DRIVER ON CACHE BOOL "Disable task driver support." FORCE)
+endif()
 
 if(NOT AVM_DISABLE_JIT)
     message(WARNING "JIT is not supported on the RTEMS platform yet; disabling.")

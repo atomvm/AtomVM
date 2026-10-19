@@ -87,7 +87,13 @@
 #define CONFIGURE_MICROSECONDS_PER_TICK 1000
 #define CONFIGURE_TICKS_PER_TIMESLICE 10
 
+#if defined(RTEMS_BOARD_ESP32)
+/* Leave Wi-Fi timers and event tasks above the VM.
+ * SMP scheduler spinlocks cannot inherit their holder's task priority. */
+#define CONFIGURE_INIT_TASK_PRIORITY 150
+#else
 #define CONFIGURE_INIT_TASK_PRIORITY 2
+#endif
 #define CONFIGURE_INIT_TASK_INITIAL_MODES (RTEMS_PREEMPT | RTEMS_TIMESLICE)
 #define CONFIGURE_INIT_TASK_ATTRIBUTES RTEMS_FLOATING_POINT
 

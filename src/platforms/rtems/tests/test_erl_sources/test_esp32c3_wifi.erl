@@ -20,9 +20,14 @@
 
 -module(test_esp32c3_wifi).
 -export([start/0]).
+-define(TEST_WIFI_SCAN_TRAFFIC, true).
+-include("wifi_scan.hrl").
 
 start() ->
     erlang:display({atomvm_esp32c3_wifi, atomvm:platform()}),
+    wifi_scan_smoke(),
+    wifi_scan_stop(),
+    erlang:garbage_collect(),
     wifi_smoke(),
     ifaddrs_smoke(),
     socket_smoke(),
@@ -34,6 +39,7 @@ start() ->
     timer:sleep(200),
     gen_tcp_passive_smoke(),
     erlang:garbage_collect(),
+    timer:sleep(200),
     socket_select_smoke(),
     erlang:garbage_collect(),
     dns_smoke(),
@@ -58,7 +64,8 @@ wifi_smoke() ->
     end.
 
 wait_for_wifi(0) ->
-    erlang:display({wifi_status_after_wait, atomvm_rtems:wifi_status()});
+    erlang:display({wifi_status_after_wait, atomvm_rtems:wifi_status()}),
+    erlang:error(wifi_timeout);
 wait_for_wifi(Attempts) ->
     case atomvm_rtems:wifi_status() of
         {ok, Info} ->

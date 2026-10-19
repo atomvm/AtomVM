@@ -156,7 +156,8 @@ elseif(RTEMS_BOARD STREQUAL "esp32c3" OR RTEMS_BOARD STREQUAL "esp32c5" OR RTEMS
             RTEMS_HAS_WIFI
             RTEMS_WIFI_BACKEND_ESP32
         )
-        target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
+        # Use the SDK's board-specific configuration before the local C3 fallback.
+        target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} BEFORE PRIVATE
             "${RTEMS_PREFIX}/${RTEMS_TARGET}/${RTEMS_BSP_NAME}/lib/include/rtems-esp"
         )
     endif()

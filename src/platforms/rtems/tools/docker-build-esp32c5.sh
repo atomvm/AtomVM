@@ -130,9 +130,9 @@ if [ "${DO_SIMULATE}" -eq 1 ]; then
         fi
         EMU_CMD=(esp-emu --chip esp32c5 --firmware "${REPO_ROOT}/src/platforms/rtems/build-esp32c5/AtomVM-esp32c5db.bin")
         if [ "${TEST_WIFI}" -eq 1 ]; then
-            EMU_CMD+=(--wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user)
+            EMU_CMD+=(--batch-size 5000 --wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user)
         fi
-        EMU_CMD+=(--timeout 30s --exit-on "Return value: ok")
+        EMU_CMD+=(--timeout 60s --exit-on "Return value: ok")
         "${EMU_CMD[@]}" || true
         if [ -n "${HTTP_PID}" ]; then
             kill "${HTTP_PID}" 2>/dev/null || true
@@ -154,8 +154,8 @@ if [ "${DO_SIMULATE}" -eq 1 ]; then
                 trap "kill $HTTP_PID $SNTP_PID 2>/dev/null || true" EXIT
                 esp-emu --chip esp32c5 \
                     --firmware /workspace/src/platforms/rtems/build-esp32c5/AtomVM-esp32c5db.bin \
-                    --wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user \
-                    --timeout 30s --exit-on "Return value: ok"
+                    --wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user --batch-size 5000 \
+                    --timeout 60s --exit-on "Return value: ok"
             ')
         else
             SIM_CMD+=(--rm -v "${REPO_ROOT}:/workspace" "${IMAGE_NAME}" \

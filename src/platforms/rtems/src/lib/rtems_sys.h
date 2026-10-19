@@ -52,6 +52,8 @@ struct RTEMSPlatformData
 #ifndef AVM_NO_SMP
     pthread_mutex_t poll_mutex;
     pthread_cond_t poll_cv;
+#else
+    rtems_id poll_task;
 #endif
     bool ATOMIC signaled;
 

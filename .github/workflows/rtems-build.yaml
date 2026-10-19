@@ -1132,7 +1132,7 @@ jobs:
         output=$(esp-emu --chip ${{ matrix.chip }} \
           --firmware "$BIN" \
           --wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user \
-          --timeout 30s --exit-on "Return value: ok" 2>&1)
+          --batch-size 5000 --timeout 60s --exit-on "Return value: ok" 2>&1)
         status=$?
         set -e
         printf '%s\n' "$output"
@@ -1144,7 +1144,7 @@ jobs:
           echo "::error::${{ matrix.chip }} Wi-Fi test did not print {atomvm_${{ matrix.chip }}_wifi,rtems} (status ${status})"
           exit 1
         fi
-        for marker in '{wifi_start,ok}' '{wifi_status,got_ip}' '{ifaddrs_match,ok}' '{socket_open,ok}' '{socket_close,ok}' '{udp_echo,ok}' '{tcp_echo,ok}' '{gen_tcp_passive,ok}' '{socket_select,ok}' '{dns_numeric_match,ok}' '{dns_inet_getaddr,ok}' '{set_clock,ok}' '{clock_set_year_valid,ok}' '{network_sntp_start,ok}' '{sntp_smoke_done,ok}' '{wifi_test_complete,ok}'; do
+        for marker in '{wifi_scan,active_and_passive,ok}' '{wifi_scan,callback_and_cancel,ok}' '{wifi_start,ok}' '{wifi_status,got_ip}' '{ifaddrs_match,ok}' '{socket_open,ok}' '{socket_close,ok}' '{udp_echo,ok}' '{tcp_echo,ok}' '{gen_tcp_passive,ok}' '{socket_select,ok}' '{dns_numeric_match,ok}' '{dns_inet_getaddr,ok}' '{set_clock,ok}' '{clock_set_year_valid,ok}' '{network_sntp_start,ok}' '{sntp_smoke_done,ok}' '{wifi_test_complete,ok}'; do
           if ! grep -Fq "$marker" <<< "$output"; then
             echo "::error::${{ matrix.chip }} Wi-Fi test did not print ${marker}"
             exit 1

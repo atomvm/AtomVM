@@ -524,6 +524,15 @@ static inline void globalcontext_process_message_queue(GlobalContext *glb)
     if (current) {
         while (!ATOMIC_COMPARE_EXCHANGE_WEAK_PTR(&glb->message_queue, &current, NULL)) {
         };
+        // The producer stack is LIFO; enqueue messages in send order.
+        struct MessageQueueItem *ordered = NULL;
+        while (current) {
+            struct MessageQueueItem *next = current->next;
+            current->next = ordered;
+            ordered = current;
+            current = next;
+        }
+        current = ordered;
         (void) synclist_rdlock(&glb->processes_table);
         while (current) {
             Context *context = globalcontext_get_process_nolock(glb, current->process_id);

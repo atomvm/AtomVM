@@ -64,6 +64,8 @@ void sys_init_platform(GlobalContext *glb)
     pthread_condattr_setclock(&cv_attr, CLOCK_MONOTONIC);
     pthread_cond_init(&platform->poll_cv, &cv_attr);
     pthread_condattr_destroy(&cv_attr);
+#else
+    platform->poll_task = rtems_task_self();
 #endif
     platform->signaled = false;
 
@@ -196,7 +198,7 @@ static void sys_poll_events_wait(struct RTEMSPlatformData *platform, int timeout
     } else {
         ticks = timeout_ms_to_ticks(timeout_ms);
     }
-    rtems_task_wake_after(ticks);
+    (void) rtems_event_transient_receive(RTEMS_WAIT, ticks);
     platform->signaled = false;
 #endif
 }
@@ -330,6 +332,8 @@ void sys_signal(GlobalContext *glb)
     platform->signaled = true;
 #ifndef AVM_NO_SMP
     pthread_cond_signal(&platform->poll_cv);
+#else
+    rtems_event_transient_send(platform->poll_task);
 #endif
 }
 #endif

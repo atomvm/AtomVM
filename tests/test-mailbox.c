@@ -177,6 +177,32 @@ void test_mailbox_next(void)
     globalcontext_destroy(glb);
 }
 
+#ifdef AVM_TASK_DRIVER_ENABLED
+void test_task_driver_message_order(void)
+{
+    GlobalContext *glb = globalcontext_new();
+    Context *ctx = context_new(glb);
+
+    // Force the deferred path even when SMP permits direct delivery.
+    SMP_SPINLOCK_LOCK(&glb->processes_spinlock);
+    globalcontext_send_message_from_task(glb, ctx->process_id, NormalMessage, term_from_int(1));
+    globalcontext_send_message_from_task(glb, ctx->process_id, NormalMessage, term_from_int(2));
+    SMP_SPINLOCK_UNLOCK(&glb->processes_spinlock);
+    globalcontext_process_task_driver_queues(glb);
+
+    assert(mailbox_process_outer_list_native(&ctx->mailbox) == NULL);
+    term value;
+    assert(mailbox_peek(ctx, &value) && term_to_int(value) == 1);
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+    assert(mailbox_peek(ctx, &value) && term_to_int(value) == 2);
+    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+    assert(!mailbox_has_next(&ctx->mailbox));
+
+    context_destroy(ctx);
+    globalcontext_destroy(glb);
+}
+#endif
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
@@ -184,6 +210,9 @@ int main(int argc, char **argv)
 
     test_mailbox_send();
     test_mailbox_next();
+#ifdef AVM_TASK_DRIVER_ENABLED
+    test_task_driver_message_order();
+#endif
 
     return EXIT_SUCCESS;
 }

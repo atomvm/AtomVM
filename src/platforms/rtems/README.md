@@ -61,6 +61,32 @@ Supports configurable pull resistors (`up`, `down`, `floating`), open-drain mode
 notifications, and dynamic pinmuxing (`set_pin_mux/2`). GPIO on erc32 and
 RealView returns `{error, enotsup}`.
 
+ESP32-C3/C5/C6/S31 support station RSSI and active/passive scanning through
+`network:sta_rssi/0` and `network:wifi_scan/0,1`. Managed station mode permits
+scanning before selecting an access point:
+
+```erlang
+{ok, _} = network:start([{sta, [{managed, true}]}]),
+{ok, {Found, AccessPoints}} = network:wifi_scan(),
+ok = network:sta_connect([{ssid, "my-network"}, {psk, "my-password"}]),
+ok = atomvm_rtems:wait_wifi(15000),
+{ok, Dbm} = network:sta_rssi().
+```
+
+The existing `scan_done` callback option is supported. LibBSD supplies station
+RSSI; scanning on LibBSD and other RTEMS backends returns `{error, enotsup}`.
+
+The ESP lwIP configuration disables DHCP address-conflict checks because AP
+proxy ARP can otherwise cause a valid lease to be declined. Addresses are
+reported only after DHCP binds the lease.
+
+With esp-emu 0.49, C5/C6/S31 lose the virtual AP association after scanning
+while connected. Their emulator tests check scan results and cancellation,
+then restart the station before testing traffic. C3 also tests traffic
+immediately after an associated scan. Wi-Fi runs use `--batch-size 5000` to
+service radio events frequently enough during authentication. Physical Wi-Fi
+hardware still needs validation.
+
 ## Prerequisites
 
 Install RTEMS 6.2 tools and the BSP you want to run. The official release
