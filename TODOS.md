@@ -13,6 +13,13 @@ establish correct physical hardware behavior.
 
 ## Recently completed
 
+- [x] Align S31 CPLL320 calibration, modem/low-power clocks, first-enable PHY
+  calibration/wakeup/shutdown, PLL tracking and baseband watchdog settings with
+  ESP-IDF. Preserve per-hart PMA mappings and apply S31 peripheral-access setup.
+  Add recursive SMP-safe PHY/Wi-Fi/I2C critical sections in internal RAM.
+  Emulator Wi-Fi, Erlang SMP and two-core nested-lock contention tests pass;
+  physical S31 validation remains open.
+
 - [x] Align C6 direct-boot PLL calibration/flash divider, modem clock dependencies,
   low-power clock selection, DMA access filters and first-enable combined-radio
   PHY lifecycle with ESP-IDF. Free calibration scratch storage, track PLL

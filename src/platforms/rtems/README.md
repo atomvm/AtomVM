@@ -85,7 +85,7 @@ The ESP lwIP configuration disables DHCP address-conflict checks because AP
 proxy ARP can otherwise cause a valid lease to be declined. Addresses are
 reported only after DHCP binds the lease.
 
-The C3/C5/C6 glue uses ESP-IDF clock dependencies and PHY lifecycle: calibration on
+The C3/C5/C6/S31 glue uses ESP-IDF clock dependencies and PHY lifecycle: calibration on
 first enable, wakeup on later enables, periodic PLL tracking and RF shutdown on
 disable. Vendor LL helpers preserve unrelated register fields instead of enabling
 whole clock registers. RTEMS supplies locks and timer callbacks.
@@ -113,6 +113,25 @@ C6 critical callbacks preserve nested interrupt state in internal RAM. With
 modem retention disabled, C6 uses `phy_wakeup_init()` rather than C3's backup-DMA
 register restore. C6 validation is emulator-only; physical PLL, RF, DMA and
 sleep behavior still need testing.
+
+S31 direct boot switches to XTAL40, configures and calibrates CPLL320, then
+selects CPU/MEM/SYS/APB dividers of 1/2/3/2. Clock-update and calibration
+failures stop boot explicitly. S31 modem initialization uses its separate
+Wi-Fi MAC/APB/baseband/44 MHz/80X1 and PLL-source dependencies, ACTIVE clock
+maps and RC_SLOW/XTAL32K low-power selection. PHY calibration runs on first
+enable with temporary scratch storage; subsequent enables wake the PHY.
+Disable closes RF and temperature sensing before gating analog I2C. The
+baseband watchdog follows ESP-IDF's S31 workaround. S31 does not use the C3
+USB PHY workaround or backup-DMA retention path.
+
+S31 PHY, Wi-Fi and analog-I2C critical sections nest on each hart while an
+RTEMS SMP lock excludes the other hart. Their interrupt and lock operations
+execute in internal RAM. Wi-Fi initialization preserves the BSP's per-hart
+PMA mappings and applies ESP-IDF's S31 peripheral-access workaround. Modem PLL
+routing is shared between Wi-Fi and PHY; the underlying BBPLL/reference supply
+stays enabled for direct-boot flash/USB consumers outside IDF's clock manager.
+S31 validation is emulator-only; physical PLL, RF, DMA and sleep behavior
+remain unverified.
 
 RTEMS retains its own scheduler, queues and interrupt controller integration.
 Wi-Fi buffers are smaller than IDF's defaults to fit available RAM, calibration

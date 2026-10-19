@@ -1,0 +1,130 @@
+Subject: [PATCH] bsps/riscv/esp32s31: calibrate CPLL320 as ESP-IDF does
+
+Switch to XTAL40, configure the CPLL feedback/reference divisors, calibrate
+and wait for settling before selecting the CPU and bus clocks. Fail clock
+update/calibration timeouts explicitly instead of silently continuing.
+
+--- a/bsps/riscv/esp32/start/bspstart.c
++++ b/bsps/riscv/esp32/start/bspstart.c
+@@ -88,9 +88,9 @@
+  * the CPU on the crystal (20 MHz on the C3) and only throughput suffers: the
+  * tick comes from the crystal-derived systimer, so timing still looks right.
+  *
+- * Bring the CPU up to its maximum here, the way IDF would.  The C5/C6 also
+- * need BBPLL calibration for their supported crystals. Other targets
+- * retain the ROM's PLL configuration and only change muxes and dividers.
++ * Bring the CPU up to its maximum here, the way IDF would.  The C5/C6 use BBPLL
++ * calibration for their supported crystals; S31 configures and calibrates
++ * CPLL320 from XTAL40. C3 retains the ROM's PLL configuration.
+  *
+  * BSP_ESP32_CPU_FREQ_MHZ selects the target in MHz and defaults to the chip
+  * maximum; only the maximum is implemented so far.
+@@ -307,6 +307,74 @@
+ }
+ #endif
+ 
++#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++static void bsp_s31_bus_update( void )
++{
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x14, 1u );
++  uint32_t timeout = 1000000;
++  while ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x14 ) & 1u ) {
++    if ( --timeout == 0 ) {
++      rtems_panic( "ESP32-S31: clock update timed out" );
++    }
++  }
++}
++
++static void bsp_s31_cpll_init( void )
++{
++  const uintptr_t lp_clkrst = 0x20701000;
++  const uintptr_t lpcon = 0x2010f000;
++  const uintptr_t syscon = 0x20109c00;
++  uint32_t reg;
++
++  /* rtc_clk_cpu_freq_to_xtal(): switch all buses to XTAL before changing
++   * CPLL dividers. S31 supports a 40 MHz crystal.
++   */
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x4, 0u );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x8, 0u );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0xc, 0u );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x10, 0u );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x0, 0u );
++  bsp_s31_bus_update();
++  if ( ets_update_cpu_frequency != NULL ) {
++    ets_update_cpu_frequency( 40 );
++  }
++
++  /* clk_ll_cpll_enable(): power, ungate, HP clock, ACTIVE power state. */
++  reg = READ_REG( CLK_PMU_BASE, 0xf4 );
++  WRITE_REG( CLK_PMU_BASE, 0xf4, reg | ( 1u << 27 ) | ( 1u << 23 ) );
++  reg = READ_REG( CLK_PMU_BASE, 0xf4 );
++  WRITE_REG( CLK_PMU_BASE, 0xf4, reg | ( 1u << 19 ) );
++  reg = READ_REG( CLK_HP_ALIVE_SYS_BASE, 0x0 );
++  WRITE_REG( CLK_HP_ALIVE_SYS_BASE, 0x0, reg | ( 1u << 29 ) );
++  reg = READ_REG( CLK_PMU_BASE, 0x1c );
++  WRITE_REG( CLK_PMU_BASE, 0x1c, reg | ( 1u << 27 ) | ( 1u << 23 ) );
++
++  /* clk_ll_cpll_set_freq_mhz(): XTAL40 * feedback8 / reference1. */
++  reg = READ_REG( lp_clkrst, 0x4c );
++  WRITE_REG( lp_clkrst, 0x4c, ( reg & ~0xfffu ) | 0x81u );
++  uint32_t clock = READ_REG( lpcon, 0x18 );
++  uint32_t source = READ_REG( syscon, 0x04 );
++  WRITE_REG( lpcon, 0x18, clock | ( 1u << 2 ) );
++  WRITE_REG( syscon, 0x04, source | ( 1u << 12 ) );
++  /* rtc_clk_cpll_configure(): start, wait CAL_END, settle 10 us, stop. */
++  reg = READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x174 );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x174, reg & ~( 1u << 3 ) );
++  uint32_t timeout = 1000000;
++  while ( !( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x174 ) & ( 1u << 2 ) ) ) {
++    if ( --timeout == 0 ) {
++      rtems_panic( "ESP32-S31: CPLL calibration timed out" );
++    }
++  }
++  for ( volatile uint32_t delay = 0; delay < 1000; ++delay ) {
++    __asm__ volatile ( "nop" );
++  }
++  reg = READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x174 );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x174, reg | ( 1u << 3 ) );
++  WRITE_REG( syscon, 0x04, source );
++  WRITE_REG( lpcon, 0x18, clock );
++}
++#endif
++
+ static void bsp_clock_init( void )
+ {
+ #if defined( LIBBSP_ESP32_C3_CHIP_DEFINITIONS_H )
+@@ -382,17 +450,7 @@
+ 
+   uint32_t reg;
+ 
+-  /* Bring the CPLL up: power it, ungate it and enable its clock. */
+-  reg = READ_REG( CLK_PMU_BASE, 0xf4 );
+-  WRITE_REG(
+-    CLK_PMU_BASE,
+-    0xf4,
+-    reg | ( 1u << 27 ) | ( 1u << 23 ) | ( 1u << 19 )
+-  );
+-  reg = READ_REG( CLK_PMU_BASE, 0x1c );
+-  WRITE_REG( CLK_PMU_BASE, 0x1c, reg | ( 1u << 27 ) | ( 1u << 23 ) );
+-  reg = READ_REG( CLK_HP_ALIVE_SYS_BASE, 0x0 );
+-  WRITE_REG( CLK_HP_ALIVE_SYS_BASE, 0x0, reg | ( 1u << 29 ) );
++  bsp_s31_cpll_init();
+ 
+   /* CPLL 320 -> CPU /1 (320), MEM /2 (160), SYS /3 (106.67), APB /2 (53.33). */
+   WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x8, 1u );
+@@ -401,13 +459,7 @@
+   WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x4, 0u );
+   WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x0, 1u );
+ 
+-  /* Latch and wait (bounded loop for emulator environments). */
+-  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x14, 1u );
+-  for ( volatile uint32_t delay = 0; delay < 1000u; delay++ ) {
+-    if ( ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x14 ) & 0x1u ) == 0u ) {
+-      break;
+-    }
+-  }
++  bsp_s31_bus_update();
+ 
+ #endif
+ 

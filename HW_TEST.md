@@ -24,6 +24,15 @@ Results from 2026-10-19; these describe the boards tested, not every board revis
 | Timer light sleep | Returns, but expired Erlang timer delivery fails | Same failure | Not tested physically |
 | ADC accuracy, PWM waveform, deep sleep, GPIO wakeup and power consumption | Not validated | Not validated | Not validated |
 
+S31 startup and Wi-Fi have been compared with ESP-IDF, including CPLL320
+calibration, modem clock dependencies, peripheral-access setup, PHY lifecycle
+and baseband watchdog settings. The Wi-Fi emulator suite and a focused two-core
+PHY/I2C/Wi-Fi lock test pass; the latter verifies nested locking, mutual
+exclusion and restoration of both enabled and already-disabled interrupts.
+Erlang SMP ping-pong and parallel-compute checks also pass.
+S31 has only emulator coverage. A physical board is still needed to validate
+PLL settling, clock accuracy, RF, DMA permissions and sleep behavior.
+
 The C6 startup and Wi-Fi paths have been compared with ESP-IDF, including
 PLL480 calibration, the 80 MHz flash divider, modem clock dependencies, DMA
 access filters, combined-radio PHY calibration, PLL tracking and nested critical

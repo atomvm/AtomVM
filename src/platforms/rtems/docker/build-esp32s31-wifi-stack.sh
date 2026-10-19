@@ -260,23 +260,26 @@ COMMON_INC="-isystem ${BSP_INC} -I ${GLUE}/include -I ${GLUE}/include/rtems-esp 
             -I ${HAL}/esp_wifi/include -I ${HAL}/esp_wifi/include/local \
             -I ${HAL}/esp_common/include -I ${HAL}/esp_event/include \
             -I ${HAL}/log/include -I ${HAL}/esp_rom/include -I ${HAL}/soc/include \
-            -I ${HAL}/soc/esp32s31/include \
+            -I ${HAL}/soc/esp32s31/include -I ${HAL}/soc/esp32s31/include/modem \
+            -I ${HAL}/soc/esp32s31/register -I ${HAL}/hal/esp32s31/include \
+            -I ${HAL}/hal/platform_port/include \
             -I ${HAL}/esp_hw_support/include \
             -I ${HAL}/esp_timer/include -I ${HAL}/esp_phy/include \
             -I ${HAL}/esp_system/include -I ${HAL}/heap/include -I ${HAL}/hal/include \
             -I ${HAL}/esp_coex/include -I ${HAL}/esp_wifi/wifi_apps/include \
             -I ${HAL}/esp_hw_support/include/soc"
 
+# Inline the RTEMS lock/interrupt primitives used by the IRAM callbacks.
 # 1. rtems_esp_glue.c
-riscv-rtems7-gcc -march=rv32imafc -mabi=ilp32f -DRTEMS_BOARD_ESP32S31 ${COMMON_INC} \
+riscv-rtems7-gcc -march=rv32imafc -mabi=ilp32f -O2 -DRTEMS_BOARD_ESP32S31 ${COMMON_INC} \
     -Wall -Wextra -c -o "${BUILD_DIR}/glue-obj/rtems_esp_glue.o" "${GLUE}/src/rtems_esp_glue.c"
 
 # 2. rtems_wifi_os_adapter.c
-riscv-rtems7-gcc -march=rv32imafc -mabi=ilp32f -DRTEMS_BOARD_ESP32S31 ${COMMON_INC} \
+riscv-rtems7-gcc -march=rv32imafc -mabi=ilp32f -O2 -DRTEMS_BOARD_ESP32S31 ${COMMON_INC} \
     -Wall -Wextra -c -o "${BUILD_DIR}/glue-obj/rtems_wifi_os_adapter.o" "${GLUE}/src/rtems_wifi_os_adapter.c"
 
 # 3. rtems_esp_wifi_init.c
-riscv-rtems7-gcc -march=rv32imafc -mabi=ilp32f -DRTEMS_BOARD_ESP32S31 ${COMMON_INC} \
+riscv-rtems7-gcc -march=rv32imafc -mabi=ilp32f -O2 -DRTEMS_BOARD_ESP32S31 ${COMMON_INC} \
     -Wall -Wextra -c -o "${BUILD_DIR}/glue-obj/rtems_esp_wifi_init.o" "${GLUE}/src/rtems_esp_wifi_init.c"
 
 # 4. rtems_esp_event.c
