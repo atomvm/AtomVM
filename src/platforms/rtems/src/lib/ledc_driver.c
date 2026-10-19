@@ -44,34 +44,92 @@
 
 #include "rtems_sys.h"
 
-#if defined(RTEMS_BOARD_ESP32C3)
+#if defined(RTEMS_BOARD_ESP32)
 #include <bsp/gpio.h>
 #include <bsp/pin.h>
 
-#define WRITE_PERI_REG(addr, val) (*((volatile uint32_t *) (addr)) = (uint32_t) (val))
-#define READ_PERI_REG(addr) (*((volatile uint32_t *) (addr)))
+#define WRITE_PERI_REG(addr, val) (*((volatile uint32_t *) (uintptr_t) (addr)) = (uint32_t) (val))
+#define READ_PERI_REG(addr) (*((volatile uint32_t *) (uintptr_t) (addr)))
 
-#define ESP32C3_LEDC_BASE 0x60019000U
-#define ESP32C3_LEDC_CH_CONF0_REG(n) (ESP32C3_LEDC_BASE + (n) *0x14U + 0x00U)
-#define ESP32C3_LEDC_CH_HPOINT_REG(n) (ESP32C3_LEDC_BASE + (n) *0x14U + 0x04U)
-#define ESP32C3_LEDC_CH_DUTY_REG(n) (ESP32C3_LEDC_BASE + (n) *0x14U + 0x08U)
-#define ESP32C3_LEDC_CH_CONF1_REG(n) (ESP32C3_LEDC_BASE + (n) *0x14U + 0x0CU)
-#define ESP32C3_LEDC_CH_DUTY_R_REG(n) (ESP32C3_LEDC_BASE + (n) *0x14U + 0x10U)
+/* Register layout follows ESP-IDF ledc_reg.h and hal/ledc_ll.h for each chip. */
+#if defined(RTEMS_BOARD_ESP32C3)
+#define ESP_LEDC_BASE 0x60019000U
+#define ESP_LEDC_GPIO_OUT_SEL 0x60004554U
+#define ESP_LEDC_SIGNAL0 45U
+#define ESP_LEDC_IOMUX0 0x60009004U
+#define ESP_LEDC_GPIO_ENABLE_SET 0x60004024U
+#define ESP_LEDC_MAX_BITS 14U
+#define ESP_LEDC_RES_BITS 4U
+#define ESP_LEDC_CHANNELS 6
+#elif defined(RTEMS_BOARD_ESP32C5)
+#define ESP_LEDC_BASE 0x60007000U
+#define ESP_LEDC_GPIO_OUT_SEL 0x60091AD4U
+#define ESP_LEDC_SIGNAL0 0U
+#define ESP_LEDC_IOMUX0 0x60090000U
+#define ESP_LEDC_GPIO_ENABLE_SET 0x60091038U
+#define ESP_LEDC_CLOCK_REG 0x60096048U
+#define ESP_LEDC_CHANNELS 6
+#elif defined(RTEMS_BOARD_ESP32C6)
+#define ESP_LEDC_BASE 0x60007000U
+#define ESP_LEDC_GPIO_OUT_SEL 0x60091554U
+#define ESP_LEDC_SIGNAL0 0U
+#define ESP_LEDC_IOMUX0 0x60090004U
+#define ESP_LEDC_GPIO_ENABLE_SET 0x60091024U
+#define ESP_LEDC_CLOCK_REG 0x60096034U
+#define ESP_LEDC_CHANNELS 6
+#elif defined(RTEMS_BOARD_ESP32S31)
+/* Expose LEDC0; LEDC1 is a separate controller. */
+#define ESP_LEDC_BASE 0x20392000U
+#define ESP_LEDC_GPIO_OUT_SEL 0x20583AF4U
+#define ESP_LEDC_SIGNAL0 126U
+#define ESP_LEDC_IOMUX0 0x20582000U
+#define ESP_LEDC_GPIO_ENABLE_SET 0x20583038U
+#define ESP_LEDC_CLOCK_REG 0x20587148U
+#define ESP_LEDC_CHANNELS 8
+#endif
 
-#define ESP32C3_LEDC_TIMER_CONF_REG(m) (ESP32C3_LEDC_BASE + 0xA0U + (m) *0x08U)
-#define ESP32C3_LEDC_TIMER_VAL_REG(m) (ESP32C3_LEDC_BASE + 0xA4U + (m) *0x08U)
-#define ESP32C3_LEDC_CONF_REG (ESP32C3_LEDC_BASE + 0xC0U)
+#ifndef ESP_LEDC_MAX_BITS
+#define ESP_LEDC_MAX_BITS 20U
+#define ESP_LEDC_RES_BITS 5U
+#endif
+#define ESP_LEDC_CH_REG(ch, offset) (ESP_LEDC_BASE + (ch) * 0x14U + (offset))
+#define ESP_LEDC_CH_CONF0_REG(ch) ESP_LEDC_CH_REG(ch, 0U)
+#define ESP_LEDC_CH_HPOINT_REG(ch) ESP_LEDC_CH_REG(ch, 4U)
+#define ESP_LEDC_CH_DUTY_REG(ch) ESP_LEDC_CH_REG(ch, 8U)
+#define ESP_LEDC_CH_CONF1_REG(ch) ESP_LEDC_CH_REG(ch, 12U)
+#define ESP_LEDC_CH_DUTY_R_REG(ch) ESP_LEDC_CH_REG(ch, 16U)
+#define ESP_LEDC_TIMER_REG(timer) (ESP_LEDC_BASE + 0xA0U + (timer) * 8U)
+#define ESP_LEDC_HPOINT_MASK ((1U << ESP_LEDC_MAX_BITS) - 1)
+#define ESP_LEDC_DUTY_MASK ((1U << (ESP_LEDC_MAX_BITS + 1)) - 1)
+static const char ledc_pin_owner[8][16] = {
+    "AtomVM LEDC 0", "AtomVM LEDC 1", "AtomVM LEDC 2", "AtomVM LEDC 3",
+    "AtomVM LEDC 4", "AtomVM LEDC 5", "AtomVM LEDC 6", "AtomVM LEDC 7"
+};
 
-#define ESP32C3_SYSREG_BASE 0x600C0000U
-#define ESP32C3_SYSREG_CLK_EN0_REG (ESP32C3_SYSREG_BASE + 0x0010U)
-#define ESP32C3_SYSREG_RST_EN0_REG (ESP32C3_SYSREG_BASE + 0x0018U)
-
-#define ESP32C3_GPIO_OUT_SEL_REG(pin) (0x60004554U + (pin) *4U)
-#define ESP32C3_LEDC_SIG_OUT0_IDX 45U
+static void esp_ledc_enable_clock(void)
+{
+#if defined(RTEMS_BOARD_ESP32C3)
+    WRITE_PERI_REG(0x600C0010U, READ_PERI_REG(0x600C0010U) | (1U << 11));
+    WRITE_PERI_REG(0x600C0018U, READ_PERI_REG(0x600C0018U) & ~(1U << 11));
+    /* XTAL is stable across APB frequency changes. */
+    WRITE_PERI_REG(ESP_LEDC_BASE + 0xD0U, (READ_PERI_REG(ESP_LEDC_BASE + 0xD0U) & ~3U) | 3U | (1U << 31));
+#elif defined(RTEMS_BOARD_ESP32S31)
+    uint32_t clock = READ_PERI_REG(ESP_LEDC_CLOCK_REG);
+    clock = (clock & ~((3U << 3) | (1U << 1))) | (1U << 0) | (1U << 5);
+    WRITE_PERI_REG(ESP_LEDC_CLOCK_REG, clock);
+#else
+    WRITE_PERI_REG(ESP_LEDC_CLOCK_REG, (READ_PERI_REG(ESP_LEDC_CLOCK_REG) | 1U) & ~2U);
+    uint32_t clock = READ_PERI_REG(ESP_LEDC_CLOCK_REG + 4U);
+    WRITE_PERI_REG(ESP_LEDC_CLOCK_REG + 4U, (clock & ~(3U << 20)) | (1U << 22));
+#endif
+}
+#else
+#define ESP_LEDC_MAX_BITS 14U
+#define ESP_LEDC_CHANNELS 6
 #endif
 
 #define LEDC_TIMERS_COUNT 4
-#define LEDC_CHANNELS_COUNT 6
+#define LEDC_CHANNELS_COUNT ESP_LEDC_CHANNELS
 
 struct ledc_timer_info
 {
@@ -83,6 +141,7 @@ struct ledc_timer_info
 struct ledc_channel_info
 {
     bool configured;
+    bool claimed;
     int gpio_num;
     ledc_timer_t timer_sel;
     uint32_t duty;
@@ -121,42 +180,36 @@ int ledc_timer_config(const ledc_timer_config_t *timer_conf)
     if (timer_conf == NULL) {
         return -1;
     }
-    if (timer_conf->timer_num >= LEDC_TIMERS_COUNT) {
+    if ((unsigned) timer_conf->timer_num >= LEDC_TIMERS_COUNT || timer_conf->speed_mode != LEDC_LOW_SPEED_MODE) {
         return -1;
     }
-    if (timer_conf->duty_resolution < 1 || timer_conf->duty_resolution > 14) {
+    if (timer_conf->duty_resolution < 1 || timer_conf->duty_resolution > ESP_LEDC_MAX_BITS) {
         return -1;
     }
     if (timer_conf->freq_hz == 0) {
         return -1;
     }
 
+    uint64_t ticks = 1ULL << timer_conf->duty_resolution;
+    uint64_t divider = (40000000ULL * 256ULL) / ((uint64_t) timer_conf->freq_hz * ticks);
+    if (divider < 256 || divider > 0x3FFFF) {
+        return -1;
+    }
     uint32_t timer_num = timer_conf->timer_num;
+#if defined(RTEMS_BOARD_ESP32)
+    esp_ledc_enable_clock();
+    uint32_t conf = timer_conf->duty_resolution | ((uint32_t) divider << ESP_LEDC_RES_BITS);
+#if defined(RTEMS_BOARD_ESP32C3)
+    conf |= 1U << 24; /* Use the global low-speed clock. */
+#endif
+    uint32_t reset = 1U << (ESP_LEDC_RES_BITS + 19);
+    uint32_t update = 1U << (ESP_LEDC_RES_BITS + 21);
+    WRITE_PERI_REG(ESP_LEDC_TIMER_REG(timer_num), conf | reset | update);
+    WRITE_PERI_REG(ESP_LEDC_TIMER_REG(timer_num), conf | update);
+#endif
     s_ledc.timers[timer_num].configured = true;
     s_ledc.timers[timer_num].duty_resolution = timer_conf->duty_resolution;
-    s_ledc.timers[timer_num].freq_hz = timer_conf->freq_hz;
-
-#if defined(RTEMS_BOARD_ESP32C3)
-    // Enable LEDC peripheral clock in SYSREG
-    WRITE_PERI_REG(ESP32C3_SYSREG_CLK_EN0_REG, READ_PERI_REG(ESP32C3_SYSREG_CLK_EN0_REG) | (1U << 11));
-    WRITE_PERI_REG(ESP32C3_SYSREG_RST_EN0_REG, READ_PERI_REG(ESP32C3_SYSREG_RST_EN0_REG) & ~(1U << 11));
-
-    // Select APB clock (80 MHz)
-    WRITE_PERI_REG(ESP32C3_LEDC_CONF_REG, 1U);
-
-    // Calculate clock divider: 80 MHz APB clock, fixed-point with 8 fractional bits
-    uint64_t precision_ticks = 1ULL << timer_conf->duty_resolution;
-    uint64_t div_scaled = (80000000ULL * 256ULL) / ((uint64_t) timer_conf->freq_hz * precision_ticks);
-    if (div_scaled == 0) {
-        div_scaled = 256;
-    } else if (div_scaled > 0x3FFFF) {
-        div_scaled = 0x3FFFF;
-    }
-
-    uint32_t conf = (timer_conf->duty_resolution & 0x0FU) | (((uint32_t) div_scaled & 0x3FFFFU) << 4) | (1U << 24); // tick_sel = 1 (APB)
-    WRITE_PERI_REG(ESP32C3_LEDC_TIMER_CONF_REG(timer_num), conf | (1U << 23)); // Reset timer
-    WRITE_PERI_REG(ESP32C3_LEDC_TIMER_CONF_REG(timer_num), conf); // Run timer
-#endif
+    s_ledc.timers[timer_num].freq_hz = (uint32_t) ((40000000ULL * 256ULL) / (divider * ticks));
 
     return 0;
 }
@@ -166,37 +219,54 @@ int ledc_channel_config(const ledc_channel_config_t *chan_conf)
     if (chan_conf == NULL) {
         return -1;
     }
-    if (chan_conf->channel >= LEDC_CHANNELS_COUNT) {
+    if ((unsigned) chan_conf->channel >= LEDC_CHANNELS_COUNT) {
         return -1;
     }
-    if (chan_conf->timer_sel >= LEDC_TIMERS_COUNT) {
+    if ((unsigned) chan_conf->timer_sel >= LEDC_TIMERS_COUNT) {
         return -1;
     }
+    if (chan_conf->speed_mode != LEDC_LOW_SPEED_MODE || !s_ledc.timers[chan_conf->timer_sel].configured
+        || chan_conf->duty > (1U << s_ledc.timers[chan_conf->timer_sel].duty_resolution) || chan_conf->hpoint < 0) {
+        return -1;
+    }
+#if defined(RTEMS_BOARD_ESP32)
+#if defined(RTEMS_BOARD_ESP32S31)
+    if (chan_conf->gpio_num == 29 || chan_conf->gpio_num == 41) {
+        return -1;
+    }
+#endif
+    if ((unsigned) chan_conf->gpio_num >= BSP_PIN_COUNT || (uint32_t) chan_conf->hpoint > ESP_LEDC_HPOINT_MASK
+        || !bsp_pin_claim((uint32_t) chan_conf->gpio_num, ledc_pin_owner[chan_conf->channel])) {
+        return -1;
+    }
+#endif
 
     uint32_t ch = chan_conf->channel;
+#if defined(RTEMS_BOARD_ESP32)
+    if (s_ledc.channels[ch].claimed && s_ledc.channels[ch].gpio_num != chan_conf->gpio_num) {
+        uint32_t old_pin = (uint32_t) s_ledc.channels[ch].gpio_num;
+        WRITE_PERI_REG(ESP_LEDC_GPIO_ENABLE_SET + 4U + (old_pin >= 32 ? 12U : 0U), 1U << (old_pin % 32));
+        bsp_pin_release(old_pin);
+    }
+#endif
     s_ledc.channels[ch].configured = true;
+    s_ledc.channels[ch].claimed = true;
     s_ledc.channels[ch].gpio_num = chan_conf->gpio_num;
     s_ledc.channels[ch].timer_sel = chan_conf->timer_sel;
     s_ledc.channels[ch].duty = chan_conf->duty;
     s_ledc.channels[ch].target_duty = chan_conf->duty;
     s_ledc.channels[ch].hpoint = chan_conf->hpoint;
 
-#if defined(RTEMS_BOARD_ESP32C3)
-    WRITE_PERI_REG(ESP32C3_LEDC_CH_HPOINT_REG(ch), (uint32_t) chan_conf->hpoint & 0x3FFFU);
-    WRITE_PERI_REG(ESP32C3_LEDC_CH_DUTY_REG(ch), ((uint32_t) chan_conf->duty & 0x3FFFU) << 4);
+#if defined(RTEMS_BOARD_ESP32)
+    WRITE_PERI_REG(ESP_LEDC_CH_HPOINT_REG(ch), (uint32_t) chan_conf->hpoint & ESP_LEDC_HPOINT_MASK);
+    WRITE_PERI_REG(ESP_LEDC_CH_DUTY_REG(ch), ((uint32_t) chan_conf->duty & ESP_LEDC_DUTY_MASK) << 4);
     // timer_sel, sig_out_en, para_up
     uint32_t conf0 = ((uint32_t) chan_conf->timer_sel & 0x03U) | (1U << 2) | (1U << 4);
-    WRITE_PERI_REG(ESP32C3_LEDC_CH_CONF0_REG(ch), conf0);
+    WRITE_PERI_REG(ESP_LEDC_CH_CONF0_REG(ch), conf0);
 
-    // Route pin through GPIO matrix if valid
-    if (chan_conf->gpio_num >= 0 && chan_conf->gpio_num < (int) BSP_PIN_COUNT) {
-        bsp_pin_claim((uint32_t) chan_conf->gpio_num, "AtomVM LEDC");
-        rtems_gpio_bsp_select_output(0, (uint32_t) chan_conf->gpio_num, NULL);
-        WRITE_PERI_REG(ESP32C3_GPIO_OUT_SEL_REG((uint32_t) chan_conf->gpio_num), ESP32C3_LEDC_SIG_OUT0_IDX + ch);
-    }
 #endif
 
-    return 0;
+    return ledc_update_duty(chan_conf->speed_mode, chan_conf->channel);
 }
 
 int ledc_fade_func_install(int flags)
@@ -215,7 +285,7 @@ int ledc_set_fade_with_time(ledc_mode_t speed_mode, ledc_channel_t channel, uint
 {
     UNUSED(speed_mode);
     UNUSED(max_fade_time_ms);
-    if (channel >= LEDC_CHANNELS_COUNT) {
+    if ((unsigned) channel >= LEDC_CHANNELS_COUNT) {
         return -1;
     }
     s_ledc.channels[channel].target_duty = target_duty;
@@ -227,7 +297,7 @@ int ledc_set_fade_with_step(ledc_mode_t speed_mode, ledc_channel_t channel, uint
     UNUSED(speed_mode);
     UNUSED(scale);
     UNUSED(cycle_num);
-    if (channel >= LEDC_CHANNELS_COUNT) {
+    if ((unsigned) channel >= LEDC_CHANNELS_COUNT) {
         return -1;
     }
     s_ledc.channels[channel].target_duty = target_duty;
@@ -238,7 +308,7 @@ int ledc_fade_start(ledc_mode_t speed_mode, ledc_channel_t channel, int fade_mod
 {
     UNUSED(speed_mode);
     UNUSED(fade_mode);
-    if (channel >= LEDC_CHANNELS_COUNT) {
+    if ((unsigned) channel >= LEDC_CHANNELS_COUNT) {
         return -1;
     }
     return ledc_set_duty_and_update(speed_mode, channel, s_ledc.channels[channel].target_duty, s_ledc.channels[channel].hpoint);
@@ -247,11 +317,11 @@ int ledc_fade_start(ledc_mode_t speed_mode, ledc_channel_t channel, int fade_mod
 int ledc_fade_stop(ledc_mode_t speed_mode, ledc_channel_t channel)
 {
     UNUSED(speed_mode);
-    if (channel >= LEDC_CHANNELS_COUNT) {
+    if ((unsigned) channel >= LEDC_CHANNELS_COUNT) {
         return -1;
     }
-#if defined(RTEMS_BOARD_ESP32C3)
-    WRITE_PERI_REG(ESP32C3_LEDC_CH_CONF1_REG(channel), 0);
+#if defined(RTEMS_BOARD_ESP32)
+    WRITE_PERI_REG(ESP_LEDC_CH_CONF1_REG(channel), 0);
 #endif
     return 0;
 }
@@ -277,27 +347,27 @@ int ledc_set_fade_step_and_start(ledc_mode_t speed_mode, ledc_channel_t channel,
 uint32_t ledc_get_duty(ledc_mode_t speed_mode, ledc_channel_t channel)
 {
     UNUSED(speed_mode);
-    if (channel >= LEDC_CHANNELS_COUNT) {
+    if ((unsigned) channel >= LEDC_CHANNELS_COUNT) {
         return LEDC_ERR_DUTY;
     }
-#if defined(RTEMS_BOARD_ESP32C3)
-    uint32_t val = READ_PERI_REG(ESP32C3_LEDC_CH_DUTY_R_REG(channel));
-    if (val != 0) {
-        return val >> 4;
-    }
-#endif
+#if defined(RTEMS_BOARD_ESP32)
+    return READ_PERI_REG(ESP_LEDC_CH_DUTY_R_REG(channel)) >> 4;
+#else
     return s_ledc.channels[channel].duty;
+#endif
 }
 
 int ledc_set_duty(ledc_mode_t speed_mode, ledc_channel_t channel, uint32_t duty)
 {
     UNUSED(speed_mode);
-    if (channel >= LEDC_CHANNELS_COUNT) {
+    if ((unsigned) channel >= LEDC_CHANNELS_COUNT || speed_mode != LEDC_LOW_SPEED_MODE
+        || !s_ledc.channels[channel].configured
+        || duty > (1U << s_ledc.timers[s_ledc.channels[channel].timer_sel].duty_resolution)) {
         return -1;
     }
     s_ledc.channels[channel].duty = duty;
-#if defined(RTEMS_BOARD_ESP32C3)
-    WRITE_PERI_REG(ESP32C3_LEDC_CH_DUTY_REG(channel), (duty & 0x3FFFU) << 4);
+#if defined(RTEMS_BOARD_ESP32)
+    WRITE_PERI_REG(ESP_LEDC_CH_DUTY_REG(channel), (duty & ESP_LEDC_DUTY_MASK) << 4);
 #endif
     return 0;
 }
@@ -305,25 +375,35 @@ int ledc_set_duty(ledc_mode_t speed_mode, ledc_channel_t channel, uint32_t duty)
 int ledc_update_duty(ledc_mode_t speed_mode, ledc_channel_t channel)
 {
     UNUSED(speed_mode);
-    if (channel >= LEDC_CHANNELS_COUNT) {
+    if ((unsigned) channel >= LEDC_CHANNELS_COUNT) {
         return -1;
     }
-#if defined(RTEMS_BOARD_ESP32C3)
-    uint32_t conf0 = READ_PERI_REG(ESP32C3_LEDC_CH_CONF0_REG(channel));
-    WRITE_PERI_REG(ESP32C3_LEDC_CH_CONF0_REG(channel), conf0 | (1U << 4)); // PARA_UP
-    WRITE_PERI_REG(ESP32C3_LEDC_CH_CONF1_REG(channel), 1U << 31); // DUTY_START
+#if defined(RTEMS_BOARD_ESP32)
+    if (!s_ledc.channels[channel].configured
+        || !bsp_pin_claim((uint32_t) s_ledc.channels[channel].gpio_num, ledc_pin_owner[channel])) {
+        return -1;
+    }
+    s_ledc.channels[channel].claimed = true;
+    uint32_t pin = (uint32_t) s_ledc.channels[channel].gpio_num;
+    uintptr_t mux = ESP_LEDC_IOMUX0 + pin * 4U;
+    WRITE_PERI_REG(mux, (READ_PERI_REG(mux) & ~(7U << 12)) | (1U << 12));
+    WRITE_PERI_REG(ESP_LEDC_GPIO_OUT_SEL + pin * 4U, ESP_LEDC_SIGNAL0 + channel);
+    WRITE_PERI_REG(ESP_LEDC_GPIO_ENABLE_SET + (pin >= 32 ? 12U : 0U), 1U << (pin % 32));
+    uint32_t conf0 = READ_PERI_REG(ESP_LEDC_CH_CONF0_REG(channel));
+    WRITE_PERI_REG(ESP_LEDC_CH_CONF0_REG(channel), conf0 | (1U << 4) | (1U << 2)); // PARA_UP, SIG_OUT_EN
+    WRITE_PERI_REG(ESP_LEDC_CH_CONF1_REG(channel), 1U << 31); // DUTY_START
 #endif
     return 0;
 }
 
 int ledc_set_duty_and_update(ledc_mode_t speed_mode, ledc_channel_t channel, uint32_t duty, uint32_t hpoint)
 {
-    if (channel >= LEDC_CHANNELS_COUNT) {
+    if ((unsigned) channel >= LEDC_CHANNELS_COUNT) {
         return -1;
     }
     s_ledc.channels[channel].hpoint = (int) hpoint;
-#if defined(RTEMS_BOARD_ESP32C3)
-    WRITE_PERI_REG(ESP32C3_LEDC_CH_HPOINT_REG(channel), hpoint & 0x3FFFU);
+#if defined(RTEMS_BOARD_ESP32)
+    WRITE_PERI_REG(ESP_LEDC_CH_HPOINT_REG(channel), hpoint & ESP_LEDC_HPOINT_MASK);
 #endif
     int res = ledc_set_duty(speed_mode, channel, duty);
     if (res != 0) {
@@ -335,15 +415,22 @@ int ledc_set_duty_and_update(ledc_mode_t speed_mode, ledc_channel_t channel, uin
 uint32_t ledc_get_freq(ledc_mode_t speed_mode, ledc_timer_t timer_num)
 {
     UNUSED(speed_mode);
-    if (timer_num >= LEDC_TIMERS_COUNT) {
+    if ((unsigned) timer_num >= LEDC_TIMERS_COUNT) {
         return 0;
     }
+#if defined(RTEMS_BOARD_ESP32)
+    uint32_t conf = READ_PERI_REG(ESP_LEDC_TIMER_REG(timer_num));
+    uint32_t resolution = conf & ((1U << ESP_LEDC_RES_BITS) - 1);
+    uint32_t divider = (conf >> ESP_LEDC_RES_BITS) & 0x3FFFFU;
+    return divider && resolution && resolution <= ESP_LEDC_MAX_BITS ? (uint32_t) ((40000000ULL * 256ULL) / ((uint64_t) divider << resolution)) : 0;
+#else
     return s_ledc.timers[timer_num].freq_hz;
+#endif
 }
 
 int ledc_set_freq(ledc_mode_t speed_mode, ledc_timer_t timer_num, uint32_t freq_hz)
 {
-    if (timer_num >= LEDC_TIMERS_COUNT || freq_hz == 0) {
+    if ((unsigned) timer_num >= LEDC_TIMERS_COUNT || freq_hz == 0) {
         return -1;
     }
     ledc_timer_config_t conf = {
@@ -358,11 +445,11 @@ int ledc_set_freq(ledc_mode_t speed_mode, ledc_timer_t timer_num, uint32_t freq_
 int ledc_stop(ledc_mode_t speed_mode, ledc_channel_t channel, uint32_t idle_level)
 {
     UNUSED(speed_mode);
-    if (channel >= LEDC_CHANNELS_COUNT) {
+    if ((unsigned) channel >= LEDC_CHANNELS_COUNT) {
         return -1;
     }
-#if defined(RTEMS_BOARD_ESP32C3)
-    uint32_t conf0 = READ_PERI_REG(ESP32C3_LEDC_CH_CONF0_REG(channel));
+#if defined(RTEMS_BOARD_ESP32)
+    uint32_t conf0 = READ_PERI_REG(ESP_LEDC_CH_CONF0_REG(channel));
     conf0 &= ~(1U << 2); // Disable SIG_OUT_EN
     if (idle_level) {
         conf0 |= (1U << 3); // IDLE_LV = 1
@@ -370,7 +457,11 @@ int ledc_stop(ledc_mode_t speed_mode, ledc_channel_t channel, uint32_t idle_leve
         conf0 &= ~(1U << 3); // IDLE_LV = 0
     }
     conf0 |= (1U << 4); // PARA_UP
-    WRITE_PERI_REG(ESP32C3_LEDC_CH_CONF0_REG(channel), conf0);
+    WRITE_PERI_REG(ESP_LEDC_CH_CONF0_REG(channel), conf0);
+    if (s_ledc.channels[channel].claimed) {
+        bsp_pin_release((uint32_t) s_ledc.channels[channel].gpio_num);
+        s_ledc.channels[channel].claimed = false;
+    }
 #else
     UNUSED(idle_level);
 #endif

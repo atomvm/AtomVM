@@ -1190,8 +1190,10 @@ static term nif_gpio_deep_sleep_hold_en(Context *ctx, int argc, term argv[])
     UNUSED(ctx);
     UNUSED(argc);
     UNUSED(argv);
-#if defined(RTEMS_BOARD_ESP32C3)
-    esp32c3_deep_sleep_hold_en();
+#if defined(RTEMS_BOARD_ESP32)
+    if (rtems_esp_deep_sleep_hold_en() != 0) {
+        return error_atom(ctx, enotsup_atom);
+    }
 #endif
     return OK_ATOM;
 }
@@ -1201,8 +1203,10 @@ static term nif_gpio_deep_sleep_hold_dis(Context *ctx, int argc, term argv[])
     UNUSED(ctx);
     UNUSED(argc);
     UNUSED(argv);
-#if defined(RTEMS_BOARD_ESP32C3)
-    esp32c3_deep_sleep_hold_dis();
+#if defined(RTEMS_BOARD_ESP32)
+    if (rtems_esp_deep_sleep_hold_dis() != 0) {
+        return error_atom(ctx, enotsup_atom);
+    }
 #endif
     return OK_ATOM;
 }

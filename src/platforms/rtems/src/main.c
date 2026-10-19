@@ -274,8 +274,8 @@ rtems_task Init(rtems_task_argument ignored)
 
     mkdir("/dev", 0755);
 
-#if defined(RTEMS_BOARD_ESP32C3)
-    esp32c3_rtc_timekeeper_restore();
+#if defined(RTEMS_BOARD_ESP32)
+    rtems_esp_rtc_timekeeper_restore();
 #endif
 
 #ifdef RTEMS_BOARD_FDT_COMPATIBLE

@@ -92,6 +92,14 @@ elseif(RTEMS_ARCH STREQUAL "arm" AND RTEMS_BSP_NAME STREQUAL "realview_pbx_a9_qe
     )
 endif()
 
+option(RTEMS_SLEEP_TEST_FIXTURE "Replace RTC/PMU hardware for the sleep integration test only" OFF)
+if(RTEMS_SLEEP_TEST_FIXTURE)
+    if(NOT RTEMS_BOARD MATCHES "^esp32")
+        message(FATAL_ERROR "The sleep fixture requires an ESP32 BSP")
+    endif()
+    target_sources(${PROJECT_EXECUTABLE} PRIVATE ../tests/sleep_fixture.c)
+endif()
+
 target_compile_features(${PROJECT_EXECUTABLE} PUBLIC c_std_11)
 if(CMAKE_COMPILER_IS_GNUCC)
     target_compile_options(${PROJECT_EXECUTABLE} PUBLIC -Wall -pedantic -Wextra -ggdb)

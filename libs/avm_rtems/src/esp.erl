@@ -127,27 +127,27 @@ deep_sleep_enable_gpio_wakeup(_Mask, _Mode) ->
     erlang:nif_error(undefined).
 
 %% @doc Freeze GPIO pad output and pull states during deep sleep.
--spec deep_sleep_hold_en() -> ok.
+-spec deep_sleep_hold_en() -> ok | {error, enotsup}.
 deep_sleep_hold_en() ->
     erlang:nif_error(undefined).
 
 %% @doc Unfreeze GPIO pad states after deep sleep wakeup.
--spec deep_sleep_hold_dis() -> ok.
+-spec deep_sleep_hold_dis() -> ok | {error, enotsup}.
 deep_sleep_hold_dis() ->
     erlang:nif_error(undefined).
 
 %% @doc Enter deep sleep indefinitely.
--spec deep_sleep() -> no_return().
+-spec deep_sleep() -> no_return() | {error, atom()}.
 deep_sleep() ->
     erlang:nif_error(undefined).
 
-%% @doc Enter deep sleep for specified microseconds.
--spec deep_sleep(TimeInMicroseconds :: non_neg_integer()) -> no_return().
-deep_sleep(_TimeInMicroseconds) ->
+%% @doc Enter deep sleep for specified milliseconds.
+-spec deep_sleep(TimeInMilliseconds :: non_neg_integer()) -> no_return() | {error, atom()}.
+deep_sleep(_TimeInMilliseconds) ->
     erlang:nif_error(undefined).
 
 %% @doc Enter light sleep. Execution resumes after wakeup event.
--spec light_sleep() -> ok.
+-spec light_sleep() -> ok | {error, atom()}.
 light_sleep() ->
     erlang:nif_error(undefined).
 

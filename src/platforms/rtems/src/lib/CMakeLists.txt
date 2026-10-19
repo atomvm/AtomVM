@@ -57,6 +57,8 @@ set(SOURCE_FILES
     gpio_driver.c
     spi_driver.c
     rtc_slow_nif.c
+    esp_sleep.c
+    esp_sleep_hw.c
     smp.c
     ../../../../libAtomVM/portnifloader.c
 )
@@ -65,6 +67,10 @@ set(
     PLATFORM_LIB_SUFFIX
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
 )
+
+if(RTEMS_SLEEP_TEST_FIXTURE)
+    list(REMOVE_ITEM SOURCE_FILES esp_sleep_hw.c)
+endif()
 
 add_library(libAtomVM${PLATFORM_LIB_SUFFIX} ${SOURCE_FILES} ${HEADER_FILES})
 target_compile_features(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC c_std_11)

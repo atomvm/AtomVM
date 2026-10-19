@@ -1036,7 +1036,7 @@ jobs:
       run: |
         set -euo pipefail
         cmake -S . -B build-host -G Ninja -DAVM_DISABLE_JIT=ON
-        cmake --build build-host -t rtems_boot_test rtems_net_test rtems_grisp2_test rtems_smp_test atomvmlib-rtems rtems_${{ matrix.chip }}_wifi_test
+        cmake --build build-host -t rtems_boot_test rtems_net_test rtems_grisp2_test rtems_smp_test rtems_peripheral_test atomvmlib-rtems rtems_${{ matrix.chip }}_wifi_test
         mkdir -p src/platforms/rtems/build
         ./build-host/tools/packbeam/packbeam create -p -r -s test_boot \
           src/platforms/rtems/build/rtems_boot.avm \
@@ -1104,6 +1104,32 @@ jobs:
           exit 1
         fi
         echo "${{ matrix.chip }} boot test completed successfully"
+
+    - name: Test peripherals and RTEMS sleep integration
+      run: |
+        set -euo pipefail
+        ./build-host/tools/packbeam/packbeam create -p -r -s test_peripherals \
+          "$RUNNER_TEMP/rtems_peripherals.avm" \
+          build-host/src/platforms/rtems/tests/test_erl_sources/test_peripherals.beam \
+          build-host/libs/atomvmlib-rtems.avm
+        # The pinned emulator does not model the newer RTC timers or power
+        # transitions. Replace those two hardware entry points for this test;
+        # the boot test above builds and runs the normal hardware backend.
+        cmake -S src/platforms/rtems -B src/platforms/rtems/build-peripherals -G Ninja \
+          -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
+          -DRTEMS_PREFIX="${{ matrix.prefix }}" \
+          -DRTEMS_BSP="${{ matrix.bsp }}" \
+          -DRTEMS_VERSION="${{ matrix.rtems_version }}" \
+          -DRTEMS_BOARD=${{ matrix.board }} \
+          -DRTEMS_SLEEP_TEST_FIXTURE=ON \
+          -DAVM_PACK="$RUNNER_TEMP/rtems_peripherals.avm"
+        cmake --build src/platforms/rtems/build-peripherals
+        export PATH="$HOME/.local/bin:$PATH"
+        output=$(esp-emu --chip ${{ matrix.chip }} --batch-size 50000 \
+          --firmware "src/platforms/rtems/build-peripherals/AtomVM-${{ matrix.bsp_name }}.bin" \
+          --timeout 90s --exit-on "Return value: ok" 2>&1)
+        printf '%s\n' "$output"
+        grep -Fq 'Return value: ok' <<< "$output"
 
     - name: Cross-compile AtomVM Wi-Fi and HTTP test for ${{ matrix.chip }}
       run: |

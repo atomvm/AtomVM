@@ -52,6 +52,8 @@ typedef enum
     LEDC_CHANNEL_3,
     LEDC_CHANNEL_4,
     LEDC_CHANNEL_5,
+    LEDC_CHANNEL_6,
+    LEDC_CHANNEL_7,
     LEDC_CHANNEL_MAX
 } ledc_channel_t;
 

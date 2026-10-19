@@ -29,18 +29,21 @@
 extern "C" {
 #endif
 
-uint64_t esp32c3_rtc_get_counter(void);
-void esp32c3_rtc_timekeeper_record(const struct timeval *tv);
-bool esp32c3_rtc_timekeeper_restore(void);
+uint64_t rtems_esp_rtc_get_counter(void);
+void rtems_esp_rtc_timekeeper_record(const struct timeval *tv);
+bool rtems_esp_rtc_timekeeper_restore(void);
 
-void esp32c3_deep_sleep(uint64_t time_in_us);
-int esp32c3_light_sleep(void);
-int esp32c3_sleep_enable_timer_wakeup(uint64_t time_in_us);
-int esp32c3_deep_sleep_enable_gpio_wakeup(uint64_t mask, int mode);
-int esp32c3_sleep_enable_gpio_wakeup(void);
-uint32_t esp32c3_sleep_get_wakeup_cause(void);
-void esp32c3_deep_sleep_hold_en(void);
-void esp32c3_deep_sleep_hold_dis(void);
+uint32_t rtems_esp_rtc_frequency(void);
+uint32_t rtems_esp_sleep_enter(bool deep, uint32_t wakeup, uint64_t deadline);
+int rtems_esp_sleep_start(bool deep, uint64_t usecs, uint32_t gpio_mask, int mode, uint32_t *cause);
+int rtems_esp_deep_sleep(uint64_t time_in_us);
+int rtems_esp_light_sleep(void);
+int rtems_esp_sleep_enable_timer_wakeup(uint64_t time_in_us);
+int rtems_esp_deep_sleep_enable_gpio_wakeup(uint64_t mask, int mode);
+int rtems_esp_sleep_enable_gpio_wakeup(void);
+uint32_t rtems_esp_sleep_get_wakeup_cause(void);
+int rtems_esp_deep_sleep_hold_en(void);
+int rtems_esp_deep_sleep_hold_dis(void);
 
 #ifdef __cplusplus
 }

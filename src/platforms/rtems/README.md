@@ -529,6 +529,48 @@ Key characteristics of AtomVM on ESP32-C3:
 - **Direct-Boot**: Bootrom begins execution directly from flash using the 8-byte direct boot header at offset `0x0`. The flat binary (`.bin`) is produced automatically by CMake via `${RTEMS_OBJCOPY} -O binary`.
 - **Console & Peripherals**: Polled console is active over UART0 or USB-serial-JTAG (`/dev/console`). Dedicated RTEMS hardware drivers provide native support for **I2C** (`/dev/i2c-0`), general-purpose **SPI** (`/dev/spi-0`), **GPIO** (pins 0..21 with pin claiming, input/output/open-drain modes, pull-up/down resistors, and edge-triggered interrupts), and **RTC Slow/Fast Memory** (persistent binary storage across deep sleep and resets at `0x5000_0000` via `atomvm_rtems:rtc_slow_*` and `esp:rtc_slow_*`).
 
+ADC, low-speed LEDC PWM, RTC storage/counters, and timer/GPIO wakeup have per-chip
+implementations on C3, C5, C6 and S31, following ESP-IDF's register definitions:
+
+| Chip | ADC GPIOs | PWM channels / maximum resolution | Sleep wakeup GPIOs |
+| --- | --- | --- | --- |
+| C3 | 0–4 (ADC1), 5 (ADC2) | 6 / 14 bits | 0–5 |
+| C5 | 1–6 (ADC1) | 6 / 20 bits | 0–6 |
+| C6 | 0–6 (ADC1) | 6 / 20 bits | 0–7 |
+| S31 | 42–49 (ADC1), 50–57 (ADC2) | LEDC0: 8 / 20 bits | 0–7 |
+
+ADC conversions have a bounded timeout; missing hardware completion returns
+`{error, timeout}`. Readings use the existing 9–12-bit API (S31's native 17-bit
+result is reduced to 12 bits). Voltage values remain estimates without eFuse
+calibration on C3/C5/C6. S31 has no programmable attenuation or voltage
+calibration in ESP-IDF, so its voltage result is `undefined`. PWM uses the 40 MHz
+XTAL clock and rejects frequency/resolution combinations outside the divider's
+range. The existing fade API still performs immediate duty changes.
+
+Light sleep retains SRAM, flash, peripheral state, XTAL and PLL supplies while
+using the RTC/PMU to suspend the CPUs. An RTC timecounter preserves monotonic and
+wall time; missed RTEMS ticks and timer queues are advanced after wakeup. S31's
+second CPU parks through an RTEMS per-CPU job and resumes after the transition.
+Deep sleep powers down the HP domains and restarts through ROM, preserving the
+RTC binary and timekeeper (S31 RTC RAM starts at `0x2e000000`). Stop networking and
+finish peripheral transfers before explicitly suspending the whole system.
+Configure GPIO wakeup pads as inputs with appropriate pulls before sleeping.
+The BSP must reserve SRAM for `.fast_text` (`ESP32C_IRAM_REGION_SIZE`); the
+provided Wi-Fi BSP configurations already do so.
+`esp:deep_sleep/1` takes milliseconds; timer-wakeup configuration takes microseconds.
+Global deep-sleep pad hold is C3-specific; newer chips use individual pad holds
+and return `{error, enotsup}` for the global hold calls.
+
+**Validation:** `rtems_peripheral_test` builds `test_peripherals.beam` for ADC/PWM,
+RTC storage, light sleep, expired timers and scheduler resumption. The pinned
+esp-emulator does not complete hardware sleep transitions, and its newer RTC
+counters read zero. CI therefore tests scheduler/clock integration separately
+with `-DRTEMS_SLEEP_TEST_FIXTURE=ON`, which replaces only the RTC counter and PMU
+entry point. Never use that option in firmware for a board. Physical power
+transitions, analog accuracy and GPIO wakeup still need board validation. Build
+`rtems_deep_sleep_test` and pack `test_deep_sleep.beam` for a real-board test of
+timer wakeup, deep-sleep reset reason and RTC retention across the reset.
+
 ### 1. Build RTEMS 7 Tools and BSP
 
 You can build the toolchain and BSP using Docker, the automated build script, or manually via RSB.
