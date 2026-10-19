@@ -59,6 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `proc_lib:start*/5` accepting the `{monitor, _}` spawn option, which is not allowed
 - Fixed a failed `proc_lib:start_monitor/3,4,5` consuming the `DOWN` message of the monitor it
   returns, which callers waiting on that monitor never received
+- Fixed stacktraces with no line information coming back raw on ESP32, where `malloc(0)`
+  returns `NULL`
 
 ## [0.7.0-beta.0] - 2026-09-28
 

@@ -390,6 +390,14 @@ TEST_CASE("test_list_to_atom", "[test_run]")
     TEST_ASSERT(ret_value == OK_ATOM);
 }
 
+#ifdef AVM_CREATE_STACKTRACES
+TEST_CASE("test_no_line_info_stacktrace", "[test_run]")
+{
+    term ret_value = avm_test_case("test_no_line_info_stacktrace.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+#endif
+
 TEST_CASE("test_list_to_binary", "[test_run]")
 {
     term ret_value = avm_test_case("test_list_to_binary.beam");
