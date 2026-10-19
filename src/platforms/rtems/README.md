@@ -10,6 +10,8 @@ This directory contains the RTEMS port of AtomVM, supporting RTEMS 6.2 as well a
 
 Remaining work and physical validation are tracked in the
 [RTEMS TODOs](../../../TODOS.md).
+For board setup, flash backups, private Wi-Fi configuration and physical test
+procedures, see [hardware testing](../../../HW_TEST.md).
 
 Supported bring-up targets:
 
@@ -88,7 +90,8 @@ while connected. Their emulator tests check scan results and cancellation,
 then restart the station before testing traffic. C3 also tests traffic
 immediately after an associated scan. CI Wi-Fi runs use `--batch-size 1000` on C3
 and `--batch-size 5000` on C5/C6/S31 to service radio events frequently enough
-during authentication. Physical Wi-Fi hardware still needs validation.
+during authentication. Physical Wi-Fi coverage and remaining failures are
+documented in the [hardware testing guide](../../../HW_TEST.md).
 
 ## Prerequisites
 
