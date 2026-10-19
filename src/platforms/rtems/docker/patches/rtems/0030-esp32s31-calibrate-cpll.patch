@@ -94,10 +94,10 @@ update/calibration timeouts explicitly instead of silently continuing.
  static void bsp_clock_init( void )
  {
  #if defined( LIBBSP_ESP32_C3_CHIP_DEFINITIONS_H )
-@@ -382,17 +450,7 @@
+@@ -382,17 +450,5 @@
  
-   uint32_t reg;
- 
+-  uint32_t reg;
+-
 -  /* Bring the CPLL up: power it, ungate it and enable its clock. */
 -  reg = READ_REG( CLK_PMU_BASE, 0xf4 );
 -  WRITE_REG(
@@ -113,7 +113,7 @@ update/calibration timeouts explicitly instead of silently continuing.
  
    /* CPLL 320 -> CPU /1 (320), MEM /2 (160), SYS /3 (106.67), APB /2 (53.33). */
    WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x8, 1u );
-@@ -401,13 +459,7 @@
+@@ -401,13 +457,7 @@
    WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x4, 0u );
    WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x0, 1u );
  
