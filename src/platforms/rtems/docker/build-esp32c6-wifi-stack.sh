@@ -266,6 +266,9 @@ COMMON_INC="-isystem ${BSP_INC} -I ${GLUE}/include -I ${GLUE}/include/rtems-esp 
             -I ${HAL}/esp_common/include -I ${HAL}/esp_event/include \
             -I ${HAL}/log/include -I ${HAL}/esp_rom/include -I ${HAL}/soc/include \
             -I ${HAL}/soc/esp32c6/include -I ${HAL}/soc/esp32c6/include/modem \
+            -I ${HAL}/soc/esp32c6/register -I ${HAL}/hal/esp32c6/include \
+            -I ${HAL}/hal/platform_port/include \
+            -I ${HAL}/esp_hal_security/include -I ${HAL}/esp_hal_security/esp32c6/include \
             -I ${HAL}/esp_hw_support/include \
             -I ${HAL}/esp_timer/include -I ${HAL}/esp_phy/include \
             -I ${HAL}/esp_system/include -I ${HAL}/heap/include -I ${HAL}/hal/include \

@@ -1,0 +1,207 @@
+Subject: [PATCH] bsps/riscv/esp32c6: initialize PLL and flash clock like ESP-IDF
+
+Initialize modem ICG maps, calibrate PLL480 from XTAL40 and set the flash
+clock divider to 80 MHz before selecting PLL160. Share the C5/C6 analog
+master transaction helper. Bound calibration failure with an explicit panic.
+
+--- a/bsps/riscv/esp32/start/bspstart.c
++++ b/bsps/riscv/esp32/start/bspstart.c
+@@ -88,8 +88,8 @@
+  * the CPU on the crystal (20 MHz on the C3) and only throughput suffers: the
+  * tick comes from the crystal-derived systimer, so timing still looks right.
+  *
+- * Bring the CPU up to its maximum here, the way IDF would.  The C5 also
+- * needs BBPLL calibration for its 40 MHz or 48 MHz crystal.  Other targets
++ * Bring the CPU up to its maximum here, the way IDF would.  The C5/C6 also
++ * need BBPLL calibration for their supported crystals. Other targets
+  * retain the ROM's PLL configuration and only change muxes and dividers.
+  *
+  * BSP_ESP32_CPU_FREQ_MHZ selects the target in MHz and defaults to the chip
+@@ -139,36 +139,40 @@
+   __attribute__( ( weak ) );
+ 
+ 
+-#if defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H )
++#if defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H ) \
++  || defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
+ #define C5_MODEM_SYSCON_BASE (uintptr_t) 0x600a9c00
+ #define C5_MODEM_LPCON_BASE (uintptr_t) 0x600af000
+-#define C5_ANALOG_I2C_BASE (uintptr_t) 0x600af800
++#define ESP_ANALOG_I2C_BASE (uintptr_t) 0x600af800
+ #define C5_PMU_BASE (uintptr_t) 0x600b0000
+ 
+-static void bsp_c5_bbpll_i2c_write(
++static void bsp_esp_bbpll_i2c_write(
+   uint32_t address,
+   uint32_t mask,
+   uint32_t value
+ )
+ {
+-  uint32_t host = ( READ_REG( C5_ANALOG_I2C_BASE, 0x20 ) & BSP_BIT32( 9 ) )
++  uint32_t host = ( READ_REG( ESP_ANALOG_I2C_BASE, 0x20 ) & BSP_BIT32( 9 ) )
+     != 0 ? 0 : 4;
+   uint32_t command = 0x66u | ( address << 8 );
+ 
+-  WRITE_REG( C5_ANALOG_I2C_BASE, 0x1c, 0xffff7fu );
+-  while ( READ_REG( C5_ANALOG_I2C_BASE, host ) & BSP_BIT32( 25 ) ) {
+-  }
+-  WRITE_REG( C5_ANALOG_I2C_BASE, host, command );
+-  while ( READ_REG( C5_ANALOG_I2C_BASE, host ) & BSP_BIT32( 25 ) ) {
+-  }
+-  uint32_t data = ( READ_REG( C5_ANALOG_I2C_BASE, host ) >> 16 ) & 0xffu;
++  WRITE_REG( ESP_ANALOG_I2C_BASE, 0x1c, 0xffff7fu );
++  while ( READ_REG( ESP_ANALOG_I2C_BASE, host ) & BSP_BIT32( 25 ) ) {
++  }
++  WRITE_REG( ESP_ANALOG_I2C_BASE, host, command );
++  while ( READ_REG( ESP_ANALOG_I2C_BASE, host ) & BSP_BIT32( 25 ) ) {
++  }
++  uint32_t data = ( READ_REG( ESP_ANALOG_I2C_BASE, host ) >> 16 ) & 0xffu;
+   data = ( data & ~mask ) | value;
+-  WRITE_REG( C5_ANALOG_I2C_BASE, host,
++  WRITE_REG( ESP_ANALOG_I2C_BASE, host,
+     command | BSP_BIT32( 24 ) | ( data << 16 ) );
+-  while ( READ_REG( C5_ANALOG_I2C_BASE, host ) & BSP_BIT32( 25 ) ) {
+-  }
+-}
+-
++  while ( READ_REG( ESP_ANALOG_I2C_BASE, host ) & BSP_BIT32( 25 ) ) {
++  }
++}
++
++#endif
++
++#if defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H )
+ static void bsp_c5_bbpll_init( void )
+ {
+   /* Match ESP-IDF clk_ll_bbpll_set_config(): the ROM can leave 40 MHz
+@@ -180,7 +184,7 @@
+   uint32_t lp_clock = READ_REG( C5_MODEM_LPCON_BASE, 0x18 );
+   uint32_t lp_force = READ_REG( C5_MODEM_LPCON_BASE, 0x1c );
+   uint32_t i2c_clock = READ_REG( C5_MODEM_SYSCON_BASE, 0x04 );
+-  uint32_t analog_mask = READ_REG( C5_ANALOG_I2C_BASE, 0x1c );
++  uint32_t analog_mask = READ_REG( ESP_ANALOG_I2C_BASE, 0x1c );
+ 
+   if ( xtal != 40 && xtal != 48 ) {
+     rtems_panic( "ESP32-C5: unsupported crystal frequency" );
+@@ -205,17 +209,17 @@
+   WRITE_REG( C5_MODEM_LPCON_BASE, 0x18, lp_clock | BSP_BIT32( 2 ) );
+   WRITE_REG( C5_MODEM_LPCON_BASE, 0x1c, lp_force | BSP_BIT32( 2 ) );
+   WRITE_REG( C5_MODEM_SYSCON_BASE, 0x04, i2c_clock | BSP_BIT32( 12 ) );
+-  uint32_t cal = READ_REG( C5_ANALOG_I2C_BASE, 0x18 );
+-  WRITE_REG( C5_ANALOG_I2C_BASE, 0x18, ( cal & ~4u ) | 8u );
+-
+-  bsp_c5_bbpll_i2c_write( 2, 0xffu, 0x51u );
+-  bsp_c5_bbpll_i2c_write( 3, 0xffu, xtal == 48 ? 10u : 12u );
+-  bsp_c5_bbpll_i2c_write( 5, 0x77u, xtal == 48 ? 0x11u : 0u );
+-  bsp_c5_bbpll_i2c_write( 6, 0xf0u, 0x70u );
+-  bsp_c5_bbpll_i2c_write( 9, 3u, 3u );
++  uint32_t cal = READ_REG( ESP_ANALOG_I2C_BASE, 0x18 );
++  WRITE_REG( ESP_ANALOG_I2C_BASE, 0x18, ( cal & ~4u ) | 8u );
++
++  bsp_esp_bbpll_i2c_write( 2, 0xffu, 0x51u );
++  bsp_esp_bbpll_i2c_write( 3, 0xffu, xtal == 48 ? 10u : 12u );
++  bsp_esp_bbpll_i2c_write( 5, 0x77u, xtal == 48 ? 0x11u : 0u );
++  bsp_esp_bbpll_i2c_write( 6, 0xf0u, 0x70u );
++  bsp_esp_bbpll_i2c_write( 9, 3u, 3u );
+ 
+   uint32_t timeout = 1000000;
+-  while ( !( READ_REG( C5_ANALOG_I2C_BASE, 0x18 ) & BSP_BIT32( 24 ) ) ) {
++  while ( !( READ_REG( ESP_ANALOG_I2C_BASE, 0x18 ) & BSP_BIT32( 24 ) ) ) {
+     if ( --timeout == 0 ) {
+       rtems_panic( "ESP32-C5: PLL calibration timed out" );
+     }
+@@ -224,12 +228,82 @@
+   for ( volatile uint32_t delay = 0; delay < 1000; ++delay ) {
+     __asm__ volatile ( "nop" );
+   }
+-  cal = READ_REG( C5_ANALOG_I2C_BASE, 0x18 );
+-  WRITE_REG( C5_ANALOG_I2C_BASE, 0x18, ( cal & ~8u ) | 4u );
+-  WRITE_REG( C5_ANALOG_I2C_BASE, 0x1c, analog_mask );
++  cal = READ_REG( ESP_ANALOG_I2C_BASE, 0x18 );
++  WRITE_REG( ESP_ANALOG_I2C_BASE, 0x18, ( cal & ~8u ) | 4u );
++  WRITE_REG( ESP_ANALOG_I2C_BASE, 0x1c, analog_mask );
+   WRITE_REG( C5_MODEM_SYSCON_BASE, 0x04, i2c_clock );
+   WRITE_REG( C5_MODEM_LPCON_BASE, 0x18, lp_clock );
+   WRITE_REG( C5_MODEM_LPCON_BASE, 0x1c, lp_force );
++}
++#endif
++
++#if defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++static void bsp_c6_bbpll_init( void )
++{
++  const uintptr_t pmu = 0x600b0000;
++  const uintptr_t syscon = 0x600a9800;
++  const uintptr_t lpcon = 0x600af000;
++  uint32_t reg;
++
++  /* rtc_clk_init(): ACTIVE ICG code and modem APB/I2C/LP APB maps must
++   * precede PLL configuration. Preserve other domains and power states.
++   */
++  reg = READ_REG( pmu, 0x0c );
++  WRITE_REG( pmu, 0x0c, ( reg & ~( 3u << 30 ) ) | ( 2u << 30 ) );
++  reg = READ_REG( syscon, 0x0c );
++  WRITE_REG( syscon, 0x0c, ( reg & ~( 15u << 28 ) ) | ( 4u << 28 ) );
++  reg = READ_REG( lpcon, 0x20 );
++  WRITE_REG( lpcon, 0x20, ( reg & ~0xff000000u ) | 0x44000000u );
++  WRITE_REG( pmu, 0xdc, BSP_BIT32( 31 ) );
++  WRITE_REG( pmu, 0xd0, BSP_BIT32( 28 ) );
++
++  /* Select the 40 MHz crystal while configuring the 480 MHz PLL. */
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG );
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG, reg & ~0xffu );
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_SYSCLK_CONF_REG );
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_SYSCLK_CONF_REG, reg & ~( 3u << 16 ) );
++  if ( ets_update_cpu_frequency != NULL ) {
++    ets_update_cpu_frequency( 40 );
++  }
++
++  /* rtc_clk_bbpll_enable()/configure(), clk_tree_ll.h and regi2c_impl.c.
++   * The C6 PLL is fixed at 480 MHz and supports a 40 MHz crystal.
++   */
++  WRITE_REG( pmu, 0xcc, 0x70000000u );
++  WRITE_REG( pmu, 0xcc, 0x02000000u );
++  uint32_t clock = READ_REG( lpcon, 0x18 );
++  uint32_t source = READ_REG( lpcon, 0x10 );
++  uint32_t analog_mask = READ_REG( ESP_ANALOG_I2C_BASE, 0x1c );
++  WRITE_REG( lpcon, 0x18, clock | BSP_BIT32( 2 ) );
++  WRITE_REG( lpcon, 0x10, source | 1u );
++  reg = READ_REG( ESP_ANALOG_I2C_BASE, 0x18 );
++  WRITE_REG( ESP_ANALOG_I2C_BASE, 0x18, ( reg & ~4u ) | 8u );
++  bsp_esp_bbpll_i2c_write( 2, 0xffu, 0x50u );
++  bsp_esp_bbpll_i2c_write( 3, 0xffu, 8u );
++  bsp_esp_bbpll_i2c_write( 5, 0x77u, 0u );
++  bsp_esp_bbpll_i2c_write( 6, 0xffu, 0x73u );
++  bsp_esp_bbpll_i2c_write( 9, 3u, 2u );
++  uint32_t timeout = 1000000;
++  while ( !( READ_REG( ESP_ANALOG_I2C_BASE, 0x18 ) & BSP_BIT32( 24 ) ) ) {
++    if ( --timeout == 0 ) {
++      rtems_panic( "ESP32-C6: PLL calibration timed out" );
++    }
++  }
++  /* ESP-IDF waits 10 us after CAL_DONE before stopping calibration. */
++  for ( volatile uint32_t delay = 0; delay < 1000; ++delay ) {
++    __asm__ volatile ( "nop" );
++  }
++  reg = READ_REG( ESP_ANALOG_I2C_BASE, 0x18 );
++  WRITE_REG( ESP_ANALOG_I2C_BASE, 0x18, ( reg & ~8u ) | 4u );
++  WRITE_REG( ESP_ANALOG_I2C_BASE, 0x1c, analog_mask );
++  WRITE_REG( lpcon, 0x10, source );
++  WRITE_REG( lpcon, 0x18, clock );
++
++  /* rtc_clk_init(): the reset flash divider selects an uncalibrated
++   * 120 MHz clock. Divide PLL480 by 6 for 80 MHz before selecting PLL.
++   */
++  reg = READ_REG( CLK_PCR_BASE, 0x1c );
++  WRITE_REG( CLK_PCR_BASE, 0x1c, ( reg & ~0xff00u ) | ( 5u << 8 ) );
+ }
+ #endif
+ 
+@@ -287,6 +361,8 @@
+ #elif defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
+ 
+   uint32_t reg;
++
++  bsp_c6_bbpll_init();
+ 
+   /* CPU = PLL(480) with the HS divider at 3 -> 160 MHz. */
+   reg = READ_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG );

@@ -24,6 +24,16 @@ Results from 2026-10-19; these describe the boards tested, not every board revis
 | Timer light sleep | Returns, but expired Erlang timer delivery fails | Same failure | Not tested physically |
 | ADC accuracy, PWM waveform, deep sleep, GPIO wakeup and power consumption | Not validated | Not validated | Not validated |
 
+The C6 startup and Wi-Fi paths have been compared with ESP-IDF, including
+PLL480 calibration, the 80 MHz flash divider, modem clock dependencies, DMA
+access filters, combined-radio PHY calibration, PLL tracking and nested critical
+sections. The C6 emulator Wi-Fi suite passes scan/cancellation, connection,
+traffic and stop/restart checks; C3/C5/S31 emulator regressions also pass.
+C6 has only emulator coverage. On the first physical board, verify
+clock/timer accuracy, active/passive scans, WPA2/DHCP, traffic and stop/restart
+using this guide; emulator success cannot establish PLL settling, RF behavior
+or DMA permissions on silicon.
+
 The C3 revision 0.4 board with a 40 MHz crystal was retested over native USB
 Serial/JTAG after aligning its startup and PHY lifecycle with ESP-IDF. The
 checks cover RTC timing/storage, crypto, active/passive scans, WPA2/DHCP,

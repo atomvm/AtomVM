@@ -85,7 +85,7 @@ The ESP lwIP configuration disables DHCP address-conflict checks because AP
 proxy ARP can otherwise cause a valid lease to be declined. Addresses are
 reported only after DHCP binds the lease.
 
-The C3/C5 glue uses ESP-IDF clock dependencies and PHY lifecycle: calibration on
+The C3/C5/C6 glue uses ESP-IDF clock dependencies and PHY lifecycle: calibration on
 first enable, wakeup on later enables, periodic PLL tracking and RF shutdown on
 disable. Vendor LL helpers preserve unrelated register fields instead of enabling
 whole clock registers. RTEMS supplies locks and timer callbacks.
@@ -99,6 +99,20 @@ register state across disable/wakeup. Subsequent enables wake the PHY, and
 disable closes RF and temperature sensing before removing the common clock. C3 critical sections preserve nested interrupt
 levels, and PHY I2C transactions use the same nesting protection. These critical
 callbacks are placed in internal instruction RAM.
+
+C6 direct boot calibrates PLL480 from its 40 MHz crystal before selecting the
+160 MHz CPU clock, and limits the flash source clock to 80 MHz, following
+ESP-IDF's `rtc_clk_init()` and clock LL sequence. C6 modem initialization uses
+the ACTIVE clock-domain maps, the system slow-clock source (including RC32K),
+and the Wi-Fi MAC/APB/baseband/coexistence dependencies. It also applies IDF's
+DMA access-filter setup. Its combined-radio PHY calibrates on first enable,
+frees the scratch buffer, tracks PLL parameters and closes RF/temperature sensing
+before gating analog I2C. Wi-Fi clocks remain enabled while initialized; the
+common/private FE clock disable operations intentionally leave those clocks on.
+C6 critical callbacks preserve nested interrupt state in internal RAM. With
+modem retention disabled, C6 uses `phy_wakeup_init()` rather than C3's backup-DMA
+register restore. C6 validation is emulator-only; physical PLL, RF, DMA and
+sleep behavior still need testing.
 
 RTEMS retains its own scheduler, queues and interrupt controller integration.
 Wi-Fi buffers are smaller than IDF's defaults to fit available RAM, calibration

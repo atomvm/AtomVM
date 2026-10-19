@@ -13,6 +13,12 @@ establish correct physical hardware behavior.
 
 ## Recently completed
 
+- [x] Align C6 direct-boot PLL calibration/flash divider, modem clock dependencies,
+  low-power clock selection, DMA access filters and first-enable combined-radio
+  PHY lifecycle with ESP-IDF. Free calibration scratch storage, track PLL
+  parameters and preserve nested Wi-Fi/PHY/I2C critical sections in internal RAM.
+  C6 hardware validation remains open; only the emulator is available.
+
 - [x] Align C3 modem/low-power clocks, first-enable PHY calibration, PLL tracking
   and RF shutdown with ESP-IDF; release calibration scratch storage. Correct the
   CPU source mask/APB frequency record, enable combined-radio PHY mode, preserve
