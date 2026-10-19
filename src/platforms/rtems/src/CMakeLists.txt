@@ -213,9 +213,6 @@ elseif(RTEMS_BOARD STREQUAL "esp32c6")
         )
     endif()
 elseif(RTEMS_BOARD STREQUAL "esp32c5")
-    target_link_options(${PROJECT_EXECUTABLE} PRIVATE
-        -Wl,--wrap=_RISCV_Interrupt_dispatch
-    )
     if(RTEMS_HAS_ESP_WIFI)
         set(RTEMS_ESP32C5_REV_MIN 100 CACHE STRING
             "Minimum ESP32-C5 chip revision (100 for ECO2, 102 for ECO3)")
@@ -279,9 +276,6 @@ elseif(RTEMS_BOARD STREQUAL "esp32c5")
         )
     endif()
 elseif(RTEMS_BOARD STREQUAL "esp32s31")
-    target_link_options(${PROJECT_EXECUTABLE} PRIVATE
-        -Wl,--wrap=_RISCV_Interrupt_dispatch
-    )
     if(RTEMS_HAS_ESP_WIFI)
         set(RTEMS_ESP32S31_REV_MIN 0 CACHE STRING
             "Minimum ESP32-S31 chip revision")

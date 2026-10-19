@@ -1,0 +1,26 @@
+Subject: [PATCH] riscv: use fixed-width trap vectors for all CLIC channels
+
+Vectored traps enter at BASE + 4 * cause. Prevent compressed jumps from
+shrinking slots, and cover IDs 0 through 47 (16 internal plus 32 external
+CLIC interrupts). This also supports implementations that retain standard
+vectored mode when CLIC mode is requested.
+
+--- a/cpukit/score/cpu/riscv/riscv-exception-handler.S
++++ b/cpukit/score/cpu/riscv/riscv-exception-handler.S
+@@ -60,9 +60,15 @@
+  */
+ TYPE_FUNC(_RISCV_Vector_table)
+ SYM(_RISCV_Vector_table):
+-	.rept 32
++	/* Vectored traps use BASE + 4 * cause, even with the C extension.
++	 * Cover the 16 internal and 32 external CLIC interrupt IDs (0..47).
++	 */
++	.option push
++	.option norvc
++	.rept 48
+ 	j .LRISCV_Exception_handler
+ 	.endr
++	.option pop
+ 
+ .LRISCV_Exception_handler:
+ 	addi	sp, sp, -CPU_INTERRUPT_FRAME_SIZE

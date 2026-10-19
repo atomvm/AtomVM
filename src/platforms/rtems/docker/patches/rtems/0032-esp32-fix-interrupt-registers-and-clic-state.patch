@@ -1,0 +1,208 @@
+Subject: [PATCH] esp32: correct interrupt registers and preserve CLIC return state
+
+Use channel-zero priority bases on C3 and the PLIC register layout on C6.
+Software interrupt triggers belong only to the INTPRI bank, not PLIC.
+Preserve each trap's cause across nested interrupts and thread dispatch,
+and unwind CLIC to the interrupted priority instead of always level zero.
+
+--- a/bsps/riscv/esp32/irq/irq_c3.c
++++ b/bsps/riscv/esp32/irq/irq_c3.c
+@@ -309,33 +309,28 @@
+ 
+ static inline void esp32_cpu_int_enable_all( void )
+ {
+-  INTPRI_REG( 0x00 ) = 0xffffffffU;
+   INTPRI_CPU_REG( 0x00 ) = 0xffffffffU;
+ }
+ 
+ static inline void esp32_cpu_int_type_level( void )
+ {
+-  INTPRI_REG( 0x04 ) = 0x0U;
+   INTPRI_CPU_REG( 0x04 ) = 0x0U;
+ }
+ 
+ static inline void esp32_cpu_int_clear( uint8_t cpu_vector )
+ {
+-  INTPRI_REG( 0xa8 ) = 1U << cpu_vector;
+-  INTPRI_REG( 0xa8 ) = 0U;
+-  INTPRI_CPU_REG( 0xa8 ) = 1U << cpu_vector;
+-  INTPRI_CPU_REG( 0xa8 ) = 0U;
++  INTPRI_CPU_REG( 0x08 ) = 1U << cpu_vector;
++  INTPRI_CPU_REG( 0x08 ) = 0U;
+ }
+ 
+ static inline void esp32_cpu_int_set_prio( uint8_t cpu_int, uint32_t prio )
+ {
+-  INTPRI_REG( 0x0c + cpu_int * 4 ) = prio;
+-  INTPRI_CPU_REG( 0x0c + cpu_int * 4 ) = prio;
++  INTPRI_CPU_REG( 0x10 + cpu_int * 4 ) = prio;
+ }
+ 
+ static inline uint32_t esp32_cpu_int_get_prio( uint8_t cpu_int )
+ {
+-  return INTPRI_REG( 0x0c + cpu_int * 4 );
++  return INTPRI_CPU_REG( 0x10 + cpu_int * 4 );
+ }
+ #else
+ /* Bits here correspond directly to peripheral interrupt numbers */
+@@ -350,8 +345,8 @@
+ #define INTERRUPT_CORE0_CPU_INT_CLEAR_REG      0x10c
+ #define INTERRUPT_CORE0_CPU_INT_EIP_STATUS_REG 0x110
+ 
+-/* base register for interrupt priorities + N*4 for N in [1,31]*/
+-#define INTERRUPT_CORE0_CPU_INT_PRI_n_REG 0x118
++/* Priority registers are indexed from CPU channel zero. */
++#define INTERRUPT_CORE0_CPU_INT_PRI_0_REG 0x114
+ 
+ #define INTERRUPT_CORE0_CPU_INT_THRESH_REG 0x194
+ 
+@@ -373,12 +368,12 @@
+ 
+ static inline void esp32_cpu_int_set_prio( uint8_t cpu_int, uint32_t prio )
+ {
+-  MATRIX_REG( INTERRUPT_CORE0_CPU_INT_PRI_n_REG + cpu_int * sizeof( uint32_t ) ) = prio;
++  MATRIX_REG( INTERRUPT_CORE0_CPU_INT_PRI_0_REG + cpu_int * sizeof( uint32_t ) ) = prio;
+ }
+ 
+ static inline uint32_t esp32_cpu_int_get_prio( uint8_t cpu_int )
+ {
+-  return MATRIX_REG( INTERRUPT_CORE0_CPU_INT_PRI_n_REG + cpu_int * sizeof( uint32_t ) );
++  return MATRIX_REG( INTERRUPT_CORE0_CPU_INT_PRI_0_REG + cpu_int * sizeof( uint32_t ) );
+ }
+ #endif
+ 
+@@ -480,8 +475,17 @@
+ }
+ 
+ #if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
+-static inline void esp32_clic_clear_active_level( void )
+-{
++/* Unwind CLIC priority before RTEMS may switch threads and enable interrupts.
++ * Nested interrupts must use only the trap handler's final mret. */
++static inline void esp32_clic_restore_active_level(
++  uintptr_t cause,
++  const Per_CPU_Control *cpu_self
++)
++{
++  if ( cpu_self->isr_nest_level != 1 ) {
++    return;
++  }
++
+   uintptr_t tmp;
+   uintptr_t status;
+ 
+@@ -489,8 +493,7 @@
+     ".option push\n"
+     ".option arch, +zicsr\n"
+     "csrr %1, mstatus\n"
+-    "li %0, 0xb0000000\n"
+-    "csrw mcause, %0\n"
++    "csrw mcause, %2\n"
+     "li %0, ~0x88\n"
+     "and %0, %1, %0\n"
+     "li %1, 0x1800\n"
+@@ -502,7 +505,7 @@
+     "1:\n"
+     ".option pop\n"
+     : "=&r" ( tmp ), "=&r" ( status )
+-    :
++    : "r" ( cause )
+     : "memory"
+   );
+ }
+@@ -533,7 +536,7 @@
+       *( (volatile uint32_t *) 0x20586014U ) = 0U;
+     }
+     _SMP_Inter_processor_interrupt_handler( cpu_self );
+-    esp32_clic_clear_active_level();
++    esp32_clic_restore_active_level( mcause, cpu_self );
+     return;
+   }
+ #endif
+@@ -555,7 +558,7 @@
+   if ( active == NO_ACTIVE_VECTOR ) {
+     esp32_cpu_int_clear( cpu_vector );
+ #if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
+-    esp32_clic_clear_active_level();
++    esp32_clic_restore_active_level( mcause, cpu_self );
+ #endif
+     return;
+   }
+@@ -567,7 +570,7 @@
+   /* mark interrupt serviced in matrix */
+   bsp_interrupt_clear( active );
+ #if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
+-  esp32_clic_clear_active_level();
++  esp32_clic_restore_active_level( mcause, cpu_self );
+ #endif
+ }
+ 
+@@ -694,19 +697,15 @@
+   switch ( vector ) {
+     case SW_INTR_0:
+       INTPRI_REG( 0x90 ) = 1;
+-      INTPRI_CPU_REG( 0x90 ) = 1;
+       break;
+     case SW_INTR_1:
+       INTPRI_REG( 0x94 ) = 1;
+-      INTPRI_CPU_REG( 0x94 ) = 1;
+       break;
+     case SW_INTR_2:
+       INTPRI_REG( 0x98 ) = 1;
+-      INTPRI_CPU_REG( 0x98 ) = 1;
+       break;
+     case SW_INTR_3:
+       INTPRI_REG( 0x9c ) = 1;
+-      INTPRI_CPU_REG( 0x9c ) = 1;
+       break;
+     default:
+       return RTEMS_UNSATISFIED;
+@@ -757,19 +756,15 @@
+   switch ( vector ) {
+     case SW_INTR_0:
+       INTPRI_REG( 0x90 ) = 0;
+-      INTPRI_CPU_REG( 0x90 ) = 0;
+       break;
+     case SW_INTR_1:
+       INTPRI_REG( 0x94 ) = 0;
+-      INTPRI_CPU_REG( 0x94 ) = 0;
+       break;
+     case SW_INTR_2:
+       INTPRI_REG( 0x98 ) = 0;
+-      INTPRI_CPU_REG( 0x98 ) = 0;
+       break;
+     case SW_INTR_3:
+       INTPRI_REG( 0x9c ) = 0;
+-      INTPRI_CPU_REG( 0x9c ) = 0;
+       break;
+     default:
+       break;
+--- a/cpukit/score/cpu/riscv/riscv-exception-handler.S
++++ b/cpukit/score/cpu/riscv/riscv-exception-handler.S
+@@ -139,6 +139,11 @@
+ 	 */
+ 	bgez	a0, .Lsynchronous_exception
+ 
++	/* CLIC mcause also holds the interrupted priority.  A nested trap or
++	 * thread dispatch may overwrite it before the final mret. */
++	addi	sp, sp, -CPU_STACK_ALIGNMENT
++	SREG	a0, 0(sp)
++
+ 	/*
+ 	 * Interrupt exception, clear MDT bit.
+ 	 * This is only necessary if the Smdbltrp extension is implemented.
+@@ -244,6 +249,14 @@
+ 	sw	zero, PER_CPU_ISR_DISPATCH_DISABLE(s0)
+ 
+ .Lthread_dispatch_done:
++
++	LREG	a2, 0(sp)
++#ifdef RISCV_USE_S_MODE
++	csrw	scause, a2
++#else
++	csrw	mcause, a2
++#endif
++	addi	sp, sp, CPU_STACK_ALIGNMENT
+ 
+ 	/* Restore */
+ 	LREG	a0, RISCV_INTERRUPT_FRAME_STATUS(sp)

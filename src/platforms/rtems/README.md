@@ -821,6 +821,10 @@ It requires DNS resolution and an HTTP response from `example.com` through
 Wokwi's gateway, including traffic after a connected scan. Gateway or Internet
 outages therefore fail the test. The esp-emulator backend keeps its existing
 AP, fixed RSSI and local HTTP/SNTP fixtures.
+Rebuild the Docker toolchain image to include the RTEMS interrupt fixes:
+four-byte trap slots through interrupt ID 47, corrected C3/C6 register
+addressing, and preservation of CLIC interrupt priority on C5/S31.
+The S31 boot and SMP tests pass with Wokwi CLI 0.29.0 and these fixes.
 Simulator tests do not establish compatibility with physical hardware.
 
 ## SMP Multi-Core Support

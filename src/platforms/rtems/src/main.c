@@ -76,49 +76,6 @@
 extern const uint8_t embedded_avm[];
 extern const size_t embedded_avm_size;
 
-#if defined(RTEMS_BOARD_ESP32C5) || defined(RTEMS_BOARD_ESP32S31)
-#include <rtems/score/percpu.h>
-
-extern void __real__RISCV_Interrupt_dispatch(uintptr_t mcause, Per_CPU_Control *cpu_self);
-
-void __wrap__RISCV_Interrupt_dispatch(uintptr_t mcause, Per_CPU_Control *cpu_self)
-{
-    __real__RISCV_Interrupt_dispatch(mcause, cpu_self);
-
-    /*
-     * On RISC-V CLIC targets (ESP32-C5, ESP32-S31), hardware sets
-     * mintstatus.mil to the active interrupt level on entry and only restores
-     * it from mcause.mpil on mret. Because RTEMS _RISCV_Exception_handler
-     * invokes _Thread_Do_dispatch before mret, context-switching to a thread
-     * that yielded synchronously in thread mode would leave mintstatus.mil
-     * non-zero and mask all CLIC interrupts on the core. Clear mintstatus.mil
-     * via an in-place M-mode mret with MIE=0 while mstatus/mepc are already
-     * saved on the interrupt frame.
-     */
-    uintptr_t tmp;
-    uintptr_t status;
-    __asm__ volatile(
-        ".option push\n"
-        ".option arch, +zicsr\n"
-        "csrr %1, mstatus\n"
-        "li %0, 0xb0000000\n"
-        "csrw mcause, %0\n"
-        "li %0, ~0x88\n"
-        "and %0, %1, %0\n"
-        "li %1, 0x1800\n"
-        "or %0, %0, %1\n"
-        "csrw mstatus, %0\n"
-        "la %0, 1f\n"
-        "csrw mepc, %0\n"
-        "mret\n"
-        "1:\n"
-        ".option pop\n"
-        : "=&r"(tmp), "=&r"(status)
-        :
-        : "memory");
-}
-#endif
-
 #if defined(RTEMS_BSP_REALVIEW_PBX_A9_QEMU)
 #include <bsp/start.h>
 #if defined(RTEMS_SMP)
