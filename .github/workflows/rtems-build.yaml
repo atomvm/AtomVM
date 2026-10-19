@@ -895,7 +895,7 @@ jobs:
             chip: esp32c5
             board: esp32c5
             bsp_config: esp32c5-wifi-bsp.ini
-            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,unsupported,ok} {crypto,esp32c3,ok}"
+            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,esp32c3,ok} {crypto,esp32c3,ok}"
             cache_key: riscv-esp32c5db-v3
             rtems_version: "7"
             prefix: /home/runner/rtems/7
@@ -905,7 +905,7 @@ jobs:
             chip: esp32c6
             board: esp32c6
             bsp_config: esp32c6-wifi-bsp.ini
-            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,unsupported,ok} {crypto,esp32c3,ok}"
+            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,esp32c3,ok} {crypto,esp32c3,ok}"
             cache_key: riscv-esp32c6db-v3
             rtems_version: "7"
             prefix: /home/runner/rtems/7
@@ -915,7 +915,7 @@ jobs:
             chip: esp32s31
             board: esp32s31
             bsp_config: esp32s31-wifi-bsp.ini
-            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,unsupported,ok} {crypto,esp32c3,ok}"
+            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,esp32c3,ok} {crypto,esp32c3,ok}"
             cache_key: riscv-esp32s31db-smp-v3
             rtems_version: "7"
             prefix: /home/runner/rtems/7
@@ -1068,6 +1068,8 @@ jobs:
         cmake --build src/platforms/rtems/build
 
     - name: Run boot test on esp-emulator
+      env:
+        BOOT_MARKERS: ${{ matrix.boot_markers }}
       run: |
         set -euo pipefail
         BIN="src/platforms/rtems/build/AtomVM-${{ matrix.bsp_name }}.bin"
@@ -1093,7 +1095,8 @@ jobs:
           echo "::error::${{ matrix.chip }} boot test did not print {atomvm_rtems_boot,rtems} (status ${status})"
           exit 1
         fi
-        for marker in ${{ matrix.boot_markers }}; do
+        read -r -a boot_markers <<< "$BOOT_MARKERS"
+        for marker in "${boot_markers[@]}"; do
           if ! grep -Fq "$marker" <<< "$output"; then
             echo "::error::${{ matrix.chip }} boot test did not print ${marker}"
             exit 1
