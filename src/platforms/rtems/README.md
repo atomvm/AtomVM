@@ -85,6 +85,11 @@ The ESP lwIP configuration disables DHCP address-conflict checks because AP
 proxy ARP can otherwise cause a valid lease to be declined. Addresses are
 reported only after DHCP binds the lease.
 
+The C5 glue uses ESP-IDF clock dependencies and PHY lifecycle: calibration on
+first enable, wakeup on later enables, periodic PLL tracking and RF shutdown on
+disable. Vendor LL helpers preserve unrelated register fields instead of enabling
+whole clock registers. RTEMS supplies locks and timer callbacks.
+
 With esp-emu 0.49, C5/C6/S31 lose the virtual AP association after scanning
 while connected. Their emulator tests check scan results and cancellation,
 then restart the station before testing traffic. C3 also tests traffic
@@ -581,9 +586,15 @@ timer wakeup, deep-sleep reset reason and RTC retention across the reset.
 Initial physical C3/C5 testing verified direct boot with a USB console, an
 advancing RTC counter, RTC binary storage, crypto, raw ADC conversion and PWM register
 readback. C3 Wi-Fi passes active/passive scans (two APs), association, DHCP,
-measured RSSI, DNS, UDP loopback, TCP/HTTP and stop/restart. C5 Wi-Fi initializes
-but scans return no APs and association times out; a scan-only ESP-IDF image finds
-three APs on that board.
+measured RSSI, DNS, UDP loopback, TCP/HTTP and stop/restart. C5 passes scanning,
+association and traffic checks over UART with default Wi-Fi protocols and WPA2 on 2.4 GHz; its scans
+find three APs across 2.4 GHz and 5 GHz. C5 direct boot calibrates the system
+PLL for its detected crystal and follows ESP-IDF's modem clock, PHY lifecycle
+and DMA access initialization. A 5 GHz connection and physical C6/S31 testing
+remain pending. Two consecutive final-image runs also pass C5 stop/restart
+after matching ESP-IDF's calibration-buffer lifetime to recover about 1.9 KB
+of RAM. See [hardware testing](../../../HW_TEST.md) for the baseline.
+
 Timer light sleep returns on C3/C5, but recovery of an expired Erlang timer fails
 and USB console continuity is unreliable. These remain open hardware issues;
 ADC accuracy, PWM waveforms, deep sleep and GPIO wakeup are unverified.

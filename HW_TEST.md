@@ -17,15 +17,37 @@ Results from 2026-10-19; these describe the boards tested, not every board revis
 
 | Check | ESP32-C3 | ESP32-C5 | C6 / S31 |
 | --- | --- | --- | --- |
-| Direct boot, USB console, RTC counter/storage, crypto smoke checks | Pass | Pass | Not tested physically |
-| Active/passive scan, association, DHCP, RSSI, DNS, TCP/HTTP, stop/restart | Pass | Initializes, but scans find no APs and association times out | Not tested physically |
+| Direct boot, RTC counter/storage, crypto smoke checks | Pass | Pass | Not tested physically |
+| USB console | Pass before sleep | Unstable during boot; UART bridge works | Not tested physically |
+| Active/passive scan, association, DHCP, RSSI, DNS, TCP/HTTP, stop/restart | Pass | Pass over UART | Not tested physically |
 | Raw ADC and PWM register readback | Pass | Pass | Not tested physically |
 | Timer light sleep | Returns, but expired Erlang timer delivery fails | Same failure | Not tested physically |
 | ADC accuracy, PWM waveform, deep sleep, GPIO wakeup and power consumption | Not validated | Not validated | Not validated |
 
-An ESP-IDF scan-only image finds APs on the same C5 board and onboard antenna.
-Empty RTEMS scans remain a driver issue to investigate. Emulator success does
-not establish physical radio, analog or sleep behavior.
+The C5 DevKit V2.0 with a 48 MHz crystal passes active and passive scans,
+finding three APs across 2.4 GHz and 5 GHz. WPA2 association on 2.4 GHz, DHCP,
+measured RSSI, UDP loopback, DNS and TCP/HTTP pass with the default Wi-Fi
+protocols. Two consecutive runs of the final image also pass stop/restart.
+An earlier restart ran out of memory; matching ESP-IDF's temporary calibration
+buffer lifetime recovers about 1.9 KB of RAM. Extended cycling under load and
+a 5 GHz connection still need validation.
+
+Direct boot must calibrate the system PLL for the detected crystal before initializing peripherals; retaining
+the ROM's 40 MHz PLL settings overclocks this board to about 191 MHz instead
+of 160 MHz. The Wi-Fi adapter also preserves the caller's default radio
+arbitration priorities, matching ESP-IDF with coexistence disabled.
+
+The C5 Wi-Fi glue follows ESP-IDF's clock dependencies and first-enable PHY
+calibration sequence, including the modem low-power clock, periodic PLL tracking,
+baseband watchdog settings and RF shutdown on disable. These use the pinned vendor
+LL headers with RTEMS locks and timers. Direct boot also applies ESP-IDF's DMA
+access filter and master security-mode setup. Calibration scratch data is freed
+after use, as in ESP-IDF. Emulator success still requires a separate hardware
+connection and stop/restart check.
+
+UART testing also exposed a cold-boot RTC watchdog reset: the BSP cleared bit 8
+instead of the flash-boot enable at bit 12. The BSP patch now clears bit 12;
+the C5 stays running through both scans. Emulator tests do not model this reset.
 
 ## 1. Prepare the board and a private workspace
 
@@ -87,20 +109,22 @@ instructions replace the existing boot firmware. They do not change eFuses.
 ## 2. Build an SDK with the right console
 
 The committed Docker BSP configurations use UART for emulation. For the native
-USB Serial/JTAG connection used in our C3/C5 tests, build a separate SDK image
-with `ESPRESSIF_USE_USB_CONSOLE = True`. Copy the Docker context so the change
-does not affect Git or the emulator SDK:
+USB Serial/JTAG connection, use `ESPRESSIF_USE_USB_CONSOLE = True`; for the
+connector marked UART, use `False`. Copy the Docker context so the choice does
+not affect Git or the emulator SDK:
 
 ```sh
 cp -R src/platforms/rtems/docker "$HW_WORK/docker"
-"$HW_PYTHON" - "$HW_WORK/docker/${CHIP}-wifi-bsp.ini" <<'PY'
+export USE_USB_CONSOLE=True          # False for the UART connector
+"$HW_PYTHON" - "$HW_WORK/docker/${CHIP}-wifi-bsp.ini" "$USE_USB_CONSOLE" <<'PY'
 from pathlib import Path
 import sys
 p = Path(sys.argv[1])
+assert sys.argv[2] in ('True', 'False')
 text = p.read_text()
 assert 'ESPRESSIF_USE_USB_CONSOLE = False' in text
 p.write_text(text.replace('ESPRESSIF_USE_USB_CONSOLE = False',
-                          'ESPRESSIF_USE_USB_CONSOLE = True'))
+                          'ESPRESSIF_USE_USB_CONSOLE = ' + sys.argv[2]))
 PY
 docker build -t "$HW_IMAGE" \
     -f "$HW_WORK/docker/Dockerfile.rtems7-esp32c3" "$HW_WORK/docker"
@@ -110,8 +134,10 @@ Despite its name, this Dockerfile builds all four ESP BSPs and their Wi-Fi stack
 using the source pins and patches in this checkout. Docker caches the toolchain
 layers. Recopy the context and rebuild after changing SDK patches or source pins.
 
-For an external UART bridge, leave the copied configuration at `False` instead
-and use the board's UART0 console connection at 115200 baud. A native SDK is also
+For a UART bridge, use the board's UART0 console connection at 115200 baud.
+The C5 DevKit V2.0 retest used its UART-marked connector and WCH bridge
+(`/dev/cu.wchusbserial110` on this Mac); the native USB connection disappeared
+during boot. A native SDK is also
 usable; follow the [RTEMS build guide](src/platforms/rtems/README.md) and rebuild
 the BSP with the appropriate console setting. A console change requires a BSP
 rebuild, not just an AtomVM rebuild. Preserve the Wi-Fi stack's linker placement

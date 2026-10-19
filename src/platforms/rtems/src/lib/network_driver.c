@@ -306,6 +306,30 @@ static void start_scan(Context *ctx, term pid, term ref, term options)
         config.scan_time.active.min = term_to_int(dwell) > 240 ? term_to_int(dwell) / 2 : term_to_int(dwell);
         config.scan_time.active.max = term_to_int(dwell);
     }
+    /*
+     * A zero channel bitmap means "all channels" to the older blobs, and to
+     * this one in 2.4 GHz-only mode. In dual-band auto mode the same zero
+     * means "no channels": cnx_sta_scan_cmd skips scan_bitmap_to_channel_list
+     * and scan_start then fails, so the scan completes with no APs. Fill the
+     * bitmap for each band the chip can use, leaving bit 0 clear so the band
+     * is not bypassed. Country policy still drops channels that are not
+     * allowed. A 2.4 GHz-only blob ignores a 5 GHz bitmap, but the immediates
+     * would still be linked into every board, so omit them there.
+     */
+    config.channel_bitmap.ghz_2_channels = (uint16_t) (WIFI_CHANNEL_1 | WIFI_CHANNEL_2
+        | WIFI_CHANNEL_3 | WIFI_CHANNEL_4 | WIFI_CHANNEL_5 | WIFI_CHANNEL_6
+        | WIFI_CHANNEL_7 | WIFI_CHANNEL_8 | WIFI_CHANNEL_9 | WIFI_CHANNEL_10
+        | WIFI_CHANNEL_11 | WIFI_CHANNEL_12 | WIFI_CHANNEL_13 | WIFI_CHANNEL_14);
+#if defined(RTEMS_BOARD_ESP32C5)
+    config.channel_bitmap.ghz_5_channels = WIFI_CHANNEL_36 | WIFI_CHANNEL_40
+        | WIFI_CHANNEL_44 | WIFI_CHANNEL_48 | WIFI_CHANNEL_52 | WIFI_CHANNEL_56
+        | WIFI_CHANNEL_60 | WIFI_CHANNEL_64 | WIFI_CHANNEL_100 | WIFI_CHANNEL_104
+        | WIFI_CHANNEL_108 | WIFI_CHANNEL_112 | WIFI_CHANNEL_116 | WIFI_CHANNEL_120
+        | WIFI_CHANNEL_124 | WIFI_CHANNEL_128 | WIFI_CHANNEL_132 | WIFI_CHANNEL_136
+        | WIFI_CHANNEL_140 | WIFI_CHANNEL_144 | WIFI_CHANNEL_149 | WIFI_CHANNEL_153
+        | WIFI_CHANNEL_157 | WIFI_CHANNEL_161 | WIFI_CHANNEL_165 | WIFI_CHANNEL_169
+        | WIFI_CHANNEL_173 | WIFI_CHANNEL_177;
+#endif
     if (err == ESP_OK) {
         err = esp_wifi_scan_start(&config, false);
     }

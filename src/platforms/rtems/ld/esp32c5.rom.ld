@@ -2713,7 +2713,8 @@ SECTIONS {
   PROVIDE ( memcpy = 0x400384e4 ) ;
   PROVIDE ( memmove = 0x400385a2 ) ;
   PROVIDE ( memrchr = 0x400385ec ) ;
-  PROVIDE ( memset = 0x40038610 ) ;
+  /* Use the public ROM ABI entry, as esp32c5.rom.libc.ld does. */
+  PROVIDE ( memset = 0x400004b8 ) ;
   PROVIDE ( memspi_host_erase_block = 0x4002a216 ) ;
   PROVIDE ( memspi_host_erase_chip = 0x4002a1b8 ) ;
   PROVIDE ( memspi_host_erase_sector = 0x4002a1e2 ) ;

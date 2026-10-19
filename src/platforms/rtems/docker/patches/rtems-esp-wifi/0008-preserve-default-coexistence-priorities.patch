@@ -1,0 +1,29 @@
+Subject: [PATCH] rtems-esp-wifi: preserve default coexistence priorities
+
+When coexistence is disabled, ESP-IDF returns success without changing the
+priority supplied by the caller. Do not replace the C5 HAL default priority
+of one with zero.
+
+--- a/src/rtems_wifi_os_adapter.c
++++ b/src/rtems_wifi_os_adapter.c
+@@ -1670,16 +1670,11 @@
+ 
+ static int rtems_wifi_coex_pti_get( uint32_t service, uint8_t *pti )
+ {
++  /* Match ESP-IDF with coexistence disabled: retain the caller's defaults.
++   * In particular, C5 initializes its default arbitration priority to one.
++   */
+   (void) service;
+-
+-  /*
+-   * Packet traffic arbitration priority.  With no competing radio every
+-   * request wins, and zero is the value ESP-IDF's own stub returns when
+-   * coexistence is compiled out.
+-   */
+-  if ( pti != NULL ) {
+-    *pti = 0;
+-  }
++  (void) pti;
+ 
+   return 0;
+ }

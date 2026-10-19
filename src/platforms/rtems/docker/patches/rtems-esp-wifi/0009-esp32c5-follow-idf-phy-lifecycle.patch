@@ -1,0 +1,532 @@
+Subject: [PATCH] rtems-esp-wifi: follow ESP-IDF C5 PHY and clock lifecycle
+
+Use ESP-IDF LL clock operations rather than enabling all register bits.
+Calibrate on first PHY enable, wake on subsequent enables, track the PLL
+while active and close RF/temperature sensing on disable. Match the C5
+baseband watchdog settings and retain initialized Wi-Fi clocks.
+
+--- a/src/rtems_esp_wifi_init.c
++++ b/src/rtems_esp_wifi_init.c
+@@ -62,6 +62,15 @@
+ #include <rtems/bspIo.h>
+ 
+ #include <string.h>
++
++#if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++#include <pthread.h>
++#include <hal/modem_syscon_ll.h>
++#include <hal/modem_lpcon_ll.h>
++#include <soc/pmu_struct.h>
++#include <soc/lp_clkrst_reg.h>
++#include <hal/apm_ll.h>
++#endif
+ 
+ /*
+  * esp_supplicant_init() and g_wifi_default_wpa_crypto_funcs are NOT defined
+@@ -210,7 +219,9 @@
+  * PHY_RF_CAL_FULL.  It is kept rather than discarded so that a later step can
+  * write it somewhere and switch to PHY_RF_CAL_NONE.
+  */
++#if !defined(RTEMS_BOARD_ESP32C5) && !defined(CONFIG_IDF_TARGET_ESP32C5)
+ static esp_phy_calibration_data_t rtems_wifi_cal_data;
++#endif
+ 
+ /* === the modem power domain ============================================= */
+ 
+@@ -587,10 +598,278 @@
+ }
+ #endif
+ 
++static esp_err_t rtems_esp_wifi_calibrate( void )
++{
++  int phy_result;
++#if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++  /* IDF frees this buffer after calibration; the PHY keeps its own copy. */
++  esp_phy_calibration_data_t *cal_data = calloc( 1, sizeof( *cal_data ) );
++  if ( cal_data == NULL ) {
++    return ESP_ERR_NO_MEM;
++  }
++#else
++  esp_phy_calibration_data_t *cal_data = &rtems_wifi_cal_data;
++#endif
++
++  /*
++   * Full calibration, so this is the slow path by design -- see the file
++   * comment.  register_chipv7_phy() returns ESP_CAL_DATA_CHECK_FAIL when it
++   * rejects *input* calibration data, which cannot happen here, so anything
++   * non-zero is worth reporting rather than ignoring.
++   */
++  /*
++   * The MAC goes into the calibration data before calibrating, which
++   * esp_phy_load_cal_and_init() does and this port did not:
++   *
++   *     ESP_ERROR_CHECK( esp_efuse_mac_get_default( sta_mac ) );
++   *     memcpy( cal_data->mac, sta_mac, 6 );
++   *
++   * Read straight from eFuse rather than through esp_wifi_get_mac(), because
++   * this runs before the WiFi libraries are initialised and there is nothing
++   * to ask.  Byte order is the same trap as in the OS adapter's _read_mac:
++   * mac[0] is the MOST significant byte, opposite to the two eFuse words.
++   */
++  {
++    uint32_t mac0 = rtems_wifi_reg_read( RTEMS_WIFI_EFUSE_MAC0_REG );
++    uint32_t mac1 = rtems_wifi_reg_read( RTEMS_WIFI_EFUSE_MAC1_REG );
++
++    cal_data->mac[ 0 ] = (uint8_t) ( ( mac1 >> 8 ) & 0xffu );
++    cal_data->mac[ 1 ] = (uint8_t) ( mac1 & 0xffu );
++    cal_data->mac[ 2 ] = (uint8_t) ( ( mac0 >> 24 ) & 0xffu );
++    cal_data->mac[ 3 ] = (uint8_t) ( ( mac0 >> 16 ) & 0xffu );
++    cal_data->mac[ 4 ] = (uint8_t) ( ( mac0 >> 8 ) & 0xffu );
++    cal_data->mac[ 5 ] = (uint8_t) ( mac0 & 0xffu );
++
++    printk( "rtems-esp-wifi: calibrating for MAC %02x:%02x:%02x:%02x:%02x:%02x\n",
++            cal_data->mac[ 0 ], cal_data->mac[ 1 ],
++            cal_data->mac[ 2 ], cal_data->mac[ 3 ],
++            cal_data->mac[ 4 ], cal_data->mac[ 5 ] );
++  }
++
++#ifdef RTEMS_WIFI_DEBUG_NO_WDT
++  rtems_esp_wifi_watchdogs_off();
++#endif
++
++  /* Before calibration, as esp_phy_load_cal_and_init() does. */
++#if !defined(RTEMS_BOARD_ESP32C5) && !defined(CONFIG_IDF_TARGET_ESP32C5)
++  phy_bbpll_en_usb( true );
++#endif
++
++  printk( "rtems-esp-wifi: register_chipv7_phy( PHY_RF_CAL_FULL )...\n" );
++
++  phy_result = register_chipv7_phy(
++    &phy_init_data,
++    cal_data,
++    RTEMS_WIFI_CAL_MODE
++  );
++
++  /*
++   * ESP_CAL_DATA_CHECK_FAIL is not a failure, and treating it as one was a
++   * bug here rather than a problem with the radio.
++   *
++   * register_chipv7_phy() returns it when the checksum over the *input*
++   * calibration data does not match -- which is exactly what happens on a
++   * first boot, because there is no saved calibration and this port has no
++   * NVS to have saved it in.  libphy then does a full calibration anyway and
++   * reports that it had to.  ESP-IDF's own esp_phy_load_cal_and_init() logs
++   * it at INFO and carries on (esp_phy/src/phy_init.c, "Saving new
++   * calibration data due to checksum failure").
++   *
++   * Anything else is a real failure.
++   */
++#if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++  free( cal_data );
++#endif
++  if ( phy_result == ESP_CAL_DATA_CHECK_FAIL ) {
++    printk(
++      "rtems-esp-wifi: no saved calibration, so the PHY calibrated fully\n"
++    );
++  } else if ( phy_result != ESP_OK ) {
++    printk( "rtems-esp-wifi: register_chipv7_phy failed (%d)\n", phy_result );
++
++    return ESP_FAIL;
++  }
++
++  return ESP_OK;
++}
++
++#if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++/* ESP-IDF: esp_hw_support/modem/port/esp32c5/modem_clock_impl.c,
++ * hal/esp32c5/modem_clock_hal.c and esp_phy/src/phy_init.c.
++ * RTEMS supplies the lock and timer; use the vendor LL register operations.
++ */
++#define MODEM_SYSCON (*(modem_syscon_dev_t *) 0x600a9c00u)
++#define MODEM_LPCON (*(modem_lpcon_dev_t *) 0x600af000u)
++#define RTEMS_C5_PMU (*(pmu_dev_t *) 0x600b0000u)
++
++static pthread_mutex_t rtems_c5_phy_lock = PTHREAD_MUTEX_INITIALIZER;
++static bool rtems_c5_phy_calibrated;
++static bool rtems_c5_phy_enabled;
++static bool rtems_c5_wifi_clock_enabled;
++static bool rtems_c5_wifi_initialized;
++static uint64_t rtems_c5_last_track_us;
++
++extern void phy_wakeup_init( void );
++extern void phy_close_rf( void );
++extern void phy_xpd_tsens( void );
++extern void phy_wait_freq_hw_hop_done( void );
++extern void phy_param_track_tot( bool wifi, bool bluetooth );
++
++static void rtems_c5_clock_maps_init( void )
++{
++  /* rtc_clk_modem_clock_domain_active_state_icg_map_preinit(): direct
++   * boot has no IDF bootloader to select the ACTIVE modem ICG code.
++   */
++  RTEMS_C5_PMU.hp_sys[0].icg_modem.code = 2;
++  MODEM_SYSCON.clk_conf.clk_i2c_mst_sel_160m = 1;
++  /* Preserve existing maps, as modem_clock_module_icg_map_init_all() does.
++   * ACTIVE=BIT(2), MODEM=BIT(1); sleep remains gated.
++   */
++#define C5_ICG_MAP( dev, symbol, name, bits ) \
++  modem_##dev##_ll_set_##name##_icg_bitmap( &MODEM_##symbol, \
++    modem_##dev##_ll_get_##name##_icg_bitmap( &MODEM_##symbol ) | ( bits ) )
++  C5_ICG_MAP( syscon, SYSCON, modem_apb, 6 );
++  C5_ICG_MAP( syscon, SYSCON, modem_periph, 4 );
++  C5_ICG_MAP( syscon, SYSCON, wifi, 6 );
++  C5_ICG_MAP( syscon, SYSCON, bt, 4 );
++  C5_ICG_MAP( syscon, SYSCON, fe, 6 );
++  C5_ICG_MAP( syscon, SYSCON, ieee802154, 4 );
++  C5_ICG_MAP( lpcon, LPCON, lp_apb, 6 );
++  C5_ICG_MAP( lpcon, LPCON, i2c_master, 6 );
++  C5_ICG_MAP( lpcon, LPCON, coex, 6 );
++  C5_ICG_MAP( lpcon, LPCON, wifipwr, 6 );
++#undef C5_ICG_MAP
++  RTEMS_C5_PMU.imm.modem_icg.update_dig_icg_modem_en = 1;
++  RTEMS_C5_PMU.imm.sleep_sysclk.update_dig_icg_switch = 1;
++}
++
++static void rtems_c5_modem_clock_init( void )
++{
++  /* esp_system/port/soc/esp32c5/clk.c: esp_perip_clk_init(). */
++  uint32_t slow_src = rtems_wifi_reg_read( LP_CLKRST_LP_CLK_CONF_REG ) & 3u;
++  rtems_c5_clock_maps_init();
++  modem_lpcon_ll_enable_wifi_lpclk_slow_osc( &MODEM_LPCON, false );
++  modem_lpcon_ll_enable_wifi_lpclk_fast_osc( &MODEM_LPCON, false );
++  modem_lpcon_ll_enable_wifi_lpclk_main_xtal( &MODEM_LPCON, false );
++  modem_lpcon_ll_enable_wifi_lpclk_32k_xtal( &MODEM_LPCON, false );
++  if ( slow_src == 1u || slow_src == 3u ) {
++    modem_lpcon_ll_enable_wifi_lpclk_32k_xtal( &MODEM_LPCON, true );
++    modem_lpcon_ll_select_modem_32k_clock_source( &MODEM_LPCON,
++      slow_src == 1u ? MODEM_CLOCK_32K_SRC_XTAL32K : MODEM_CLOCK_32K_SRC_EXT32K );
++  } else {
++    modem_lpcon_ll_enable_wifi_lpclk_slow_osc( &MODEM_LPCON, true );
++  }
++  modem_lpcon_ll_set_wifi_lpclk_divisor_value( &MODEM_LPCON, 0 );
++  modem_lpcon_ll_enable_wifipwr_clock( &MODEM_LPCON, true );
++}
++
++void rtems_esp_wifi_c5_clock_enable( void )
++{
++  pthread_mutex_lock( &rtems_c5_phy_lock );
++  rtems_c5_clock_maps_init();
++  modem_syscon_ll_enable_wifi_mac_clock( &MODEM_SYSCON, true );
++  modem_syscon_ll_enable_wifi_apb_clock( &MODEM_SYSCON, true );
++  modem_syscon_ll_clk_wifibb_configure( &MODEM_SYSCON, true );
++  modem_syscon_ll_enable_wifibb_44m_clock( &MODEM_SYSCON, true );
++  modem_lpcon_ll_enable_coex_clock( &MODEM_LPCON, true );
++  rtems_c5_wifi_clock_enabled = true;
++  pthread_mutex_unlock( &rtems_c5_phy_lock );
++}
++
++void rtems_esp_wifi_c5_clock_disable( void )
++{
++  pthread_mutex_lock( &rtems_c5_phy_lock );
++  /* IDF keeps MAC/BB/APB clocks on while Wi-Fi is initialized. */
++  if ( !rtems_c5_wifi_initialized ) {
++    modem_syscon_ll_enable_wifi_mac_clock( &MODEM_SYSCON, false );
++    modem_syscon_ll_enable_wifi_apb_clock( &MODEM_SYSCON, false );
++    modem_syscon_ll_clk_wifibb_configure( &MODEM_SYSCON, false );
++    modem_syscon_ll_enable_wifibb_44m_clock( &MODEM_SYSCON, false );
++  }
++  modem_lpcon_ll_enable_coex_clock( &MODEM_LPCON, false );
++  rtems_c5_wifi_clock_enabled = false;
++  pthread_mutex_unlock( &rtems_c5_phy_lock );
++}
++
++static void rtems_c5_phy_track( void )
++{
++  phy_param_track_tot( true, false );
++  rtems_c5_last_track_us = rtems_clock_get_uptime_nanoseconds() / 1000;
++}
++
++void rtems_esp_wifi_c5_phy_track( void )
++{
++  pthread_mutex_lock( &rtems_c5_phy_lock );
++  if ( rtems_c5_phy_enabled ) {
++    rtems_c5_phy_track();
++  }
++  pthread_mutex_unlock( &rtems_c5_phy_lock );
++}
++
++void rtems_esp_wifi_c5_phy_enable( void )
++{
++  pthread_mutex_lock( &rtems_c5_phy_lock );
++  if ( !rtems_c5_phy_enabled ) {
++    rtems_c5_clock_maps_init();
++    /* PERIPH_PHY_MODULE: common/private FE and analog I2C. */
++    modem_syscon_ll_enable_fe_apb_clock( &MODEM_SYSCON, true );
++    modem_syscon_ll_enable_fe_80m_clock( &MODEM_SYSCON, true );
++    modem_syscon_ll_enable_fe_160m_clock( &MODEM_SYSCON, true );
++    modem_syscon_ll_enable_fe_dac_clock( &MODEM_SYSCON, true );
++    modem_syscon_ll_enable_fe_pwdet_clock( &MODEM_SYSCON, true );
++    modem_syscon_ll_enable_fe_adc_clock( &MODEM_SYSCON, true );
++    MODEM_LPCON.clk_conf.clk_i2c_mst_en = 1;
++    /* PERIPH_PHY_CALIBRATION_MODULE. Shared Wi-Fi clocks stay enabled. */
++    modem_syscon_ll_enable_wifi_apb_clock( &MODEM_SYSCON, true );
++    modem_syscon_ll_clk_wifibb_configure( &MODEM_SYSCON, true );
++    modem_syscon_ll_enable_wifibb_44m_clock( &MODEM_SYSCON, true );
++    modem_syscon_ll_enable_bt_bb_clock( &MODEM_SYSCON, true );
++    modem_syscon_ll_enable_bt_apb_clock( &MODEM_SYSCON, true );
++    modem_syscon_ll_enable_modem_sec_apb_clock( &MODEM_SYSCON, true );
++    if ( !rtems_c5_phy_calibrated ) {
++      if ( rtems_esp_wifi_calibrate() != ESP_OK ) {
++        rtems_panic( "ESP32-C5 PHY calibration failed" );
++      }
++      rtems_c5_phy_calibrated = true;
++    } else {
++      phy_wakeup_init();
++    }
++    modem_syscon_ll_enable_bt_bb_clock( &MODEM_SYSCON, false );
++    modem_syscon_ll_enable_bt_apb_clock( &MODEM_SYSCON, false );
++    modem_syscon_ll_enable_modem_sec_apb_clock( &MODEM_SYSCON, false );
++    if ( !rtems_c5_wifi_clock_enabled && !rtems_c5_wifi_initialized ) {
++      modem_syscon_ll_enable_wifi_apb_clock( &MODEM_SYSCON, false );
++      modem_syscon_ll_clk_wifibb_configure( &MODEM_SYSCON, false );
++      modem_syscon_ll_enable_wifibb_44m_clock( &MODEM_SYSCON, false );
++    }
++    rtems_c5_phy_enabled = true;
++  }
++  /* IDF tracks on enable only if more than one period has elapsed. */
++  if ( rtems_clock_get_uptime_nanoseconds() / 1000
++       - rtems_c5_last_track_us > 1000000 ) {
++    rtems_c5_phy_track();
++  }
++  pthread_mutex_unlock( &rtems_c5_phy_lock );
++}
++
++void rtems_esp_wifi_c5_phy_disable( void )
++{
++  pthread_mutex_lock( &rtems_c5_phy_lock );
++  if ( rtems_c5_phy_enabled ) {
++    rtems_c5_phy_enabled = false;
++    phy_close_rf();
++    phy_xpd_tsens();
++    phy_wait_freq_hw_hop_done();
++    MODEM_LPCON.clk_conf.clk_i2c_mst_en = 0;
++    /* IDF's C5 common/private FE disable operations intentionally do nothing. */
++  }
++  pthread_mutex_unlock( &rtems_c5_phy_lock );
++}
++#endif
++
+ esp_err_t esp_wifi_init( const wifi_init_config_t *config )
+ {
+   esp_err_t result;
+-  int phy_result;
+ 
+   if ( config == NULL ) {
+     return ESP_ERR_INVALID_ARG;
+@@ -647,18 +926,24 @@
+     ::: "memory"
+   );
+ #elif defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
+-  printk( "rtems-esp-wifi: enabling ESP32-C5 modem clocks...\n" );
+-  rtems_wifi_reg_write( 0x600A9C00u, rtems_wifi_reg_read( 0x600A9C00u ) | 1u );
+-  rtems_wifi_reg_write( 0x600A9C04u, 0xFFFFFFFFu );
+-  rtems_wifi_reg_write( 0x600A9C08u, 0xFFFFFFFFu );
+-  rtems_wifi_reg_write( 0x600A9C14u, 0xFFFFFFFFu );
+-  rtems_wifi_reg_write( 0x600AF000u, rtems_wifi_reg_read( 0x600AF000u ) | 1u );
+-  rtems_wifi_reg_write( 0x600AF018u, 0xFFFFFFFFu );
+-  rtems_wifi_reg_write( 0x600AF01Cu, 0xFFFFFFFFu );
+-  rtems_wifi_reg_write( 0x600990C4u, 0 );
+-  rtems_wifi_reg_write( 0x600998C4u, 0 );
+-  rtems_wifi_reg_write( 0x6009A0C4u, 0 );
+-  rtems_wifi_reg_write( 0x600B38C4u, 0 );
++  /* ESP-IDF has no software modem power-domain sequence on C5.
++   * Clock dependencies are enabled by the OS adapter and PHY lifecycle.
++   */
++  /* bootloader_init_mem(): permit DMA masters on the direct-boot path. */
++  apm_ll_hp_apm_enable_ctrl_filter_all( false );
++  apm_ll_lp_apm0_enable_ctrl_filter_all( false );
++  apm_ll_lp_apm_enable_ctrl_filter_all( false );
++  apm_ll_cpu_apm_enable_ctrl_filter_all( false );
++  uint32_t master_mask = APM_MASTER_MASK_ALL;
++  while ( master_mask != 0 ) {
++    uint32_t master = __builtin_ctz( master_mask );
++    master_mask &= ~( 1u << master );
++    apm_ll_hp_tee_set_master_sec_mode( master, APM_SEC_MODE_TEE );
++    if ( master == APM_MASTER_LPCORE ) {
++      apm_ll_lp_tee_set_master_sec_mode( master, APM_SEC_MODE_TEE );
++    }
++  }
++  rtems_c5_modem_clock_init();
+ #elif defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
+   printk( "rtems-esp-wifi: enabling ESP32-C6 modem clocks...\n" );
+   rtems_wifi_reg_write( 0x600A9804u, rtems_wifi_reg_read( 0x600A9804u ) | 0xFFFFFFFFu );
+@@ -739,81 +1024,14 @@
+     RTEMS_WIFI_WAIT_BROADCAST_DATA_TIME_US
+   );
+ 
+-  /*
+-   * Full calibration, so this is the slow path by design -- see the file
+-   * comment.  register_chipv7_phy() returns ESP_CAL_DATA_CHECK_FAIL when it
+-   * rejects *input* calibration data, which cannot happen here, so anything
+-   * non-zero is worth reporting rather than ignoring.
+-   */
+-  /*
+-   * The MAC goes into the calibration data before calibrating, which
+-   * esp_phy_load_cal_and_init() does and this port did not:
+-   *
+-   *     ESP_ERROR_CHECK( esp_efuse_mac_get_default( sta_mac ) );
+-   *     memcpy( cal_data->mac, sta_mac, 6 );
+-   *
+-   * Read straight from eFuse rather than through esp_wifi_get_mac(), because
+-   * this runs before the WiFi libraries are initialised and there is nothing
+-   * to ask.  Byte order is the same trap as in the OS adapter's _read_mac:
+-   * mac[0] is the MOST significant byte, opposite to the two eFuse words.
+-   */
+-  {
+-    uint32_t mac0 = rtems_wifi_reg_read( RTEMS_WIFI_EFUSE_MAC0_REG );
+-    uint32_t mac1 = rtems_wifi_reg_read( RTEMS_WIFI_EFUSE_MAC1_REG );
+-
+-    rtems_wifi_cal_data.mac[ 0 ] = (uint8_t) ( ( mac1 >> 8 ) & 0xffu );
+-    rtems_wifi_cal_data.mac[ 1 ] = (uint8_t) ( mac1 & 0xffu );
+-    rtems_wifi_cal_data.mac[ 2 ] = (uint8_t) ( ( mac0 >> 24 ) & 0xffu );
+-    rtems_wifi_cal_data.mac[ 3 ] = (uint8_t) ( ( mac0 >> 16 ) & 0xffu );
+-    rtems_wifi_cal_data.mac[ 4 ] = (uint8_t) ( ( mac0 >> 8 ) & 0xffu );
+-    rtems_wifi_cal_data.mac[ 5 ] = (uint8_t) ( mac0 & 0xffu );
+-
+-    printk( "rtems-esp-wifi: calibrating for MAC %02x:%02x:%02x:%02x:%02x:%02x\n",
+-            rtems_wifi_cal_data.mac[ 0 ], rtems_wifi_cal_data.mac[ 1 ],
+-            rtems_wifi_cal_data.mac[ 2 ], rtems_wifi_cal_data.mac[ 3 ],
+-            rtems_wifi_cal_data.mac[ 4 ], rtems_wifi_cal_data.mac[ 5 ] );
+-  }
+-
+-#ifdef RTEMS_WIFI_DEBUG_NO_WDT
+-  rtems_esp_wifi_watchdogs_off();
+-#endif
+-
+-  /* Before calibration, as esp_phy_load_cal_and_init() does. */
+-  phy_bbpll_en_usb( true );
+-
+-  printk( "rtems-esp-wifi: register_chipv7_phy( PHY_RF_CAL_FULL )...\n" );
+-
+-  phy_result = register_chipv7_phy(
+-    &phy_init_data,
+-    &rtems_wifi_cal_data,
+-    RTEMS_WIFI_CAL_MODE
+-  );
+-
+-  /*
+-   * ESP_CAL_DATA_CHECK_FAIL is not a failure, and treating it as one was a
+-   * bug here rather than a problem with the radio.
+-   *
+-   * register_chipv7_phy() returns it when the checksum over the *input*
+-   * calibration data does not match -- which is exactly what happens on a
+-   * first boot, because there is no saved calibration and this port has no
+-   * NVS to have saved it in.  libphy then does a full calibration anyway and
+-   * reports that it had to.  ESP-IDF's own esp_phy_load_cal_and_init() logs
+-   * it at INFO and carries on (esp_phy/src/phy_init.c, "Saving new
+-   * calibration data due to checksum failure").
+-   *
+-   * Anything else is a real failure.
+-   */
+-  if ( phy_result == ESP_CAL_DATA_CHECK_FAIL ) {
+-    printk(
+-      "rtems-esp-wifi: no saved calibration, so the PHY calibrated fully\n"
+-    );
+-  } else if ( phy_result != ESP_OK ) {
+-    printk( "rtems-esp-wifi: register_chipv7_phy failed (%d)\n", phy_result );
+-
+-    return ESP_FAIL;
+-  }
+-
+-  printk( "rtems-esp-wifi: PHY registered, esp_wifi_init_internal()...\n" );
++#if !defined(RTEMS_BOARD_ESP32C5) && !defined(CONFIG_IDF_TARGET_ESP32C5)
++  result = rtems_esp_wifi_calibrate();
++  if ( result != ESP_OK ) {
++    return result;
++  }
++#endif
++
++  printk( "rtems-esp-wifi: esp_wifi_init_internal()...\n" );
+ 
+   result = esp_wifi_init_internal( config );
+ 
+@@ -881,6 +1099,9 @@
+     return result;
+   }
+ 
++#if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++  rtems_c5_wifi_initialized = true;
++#endif
+   rtems_wifi_inited = true;
+ 
+   return ESP_OK;
+--- a/src/rtems_wifi_os_adapter.c
++++ b/src/rtems_wifi_os_adapter.c
+@@ -1437,10 +1437,8 @@
+     rtems_wifi_reg_read( 0x20109C14u ) | ( 1u << 9 ) | ( 1u << 10 )
+   );
+ #elif defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
+-  rtems_wifi_reg_write(
+-    0x600A9C14u,
+-    rtems_wifi_reg_read( 0x600A9C14u ) | ( 1u << 9 ) | ( 1u << 10 )
+-  );
++  extern void rtems_esp_wifi_c5_clock_enable( void );
++  rtems_esp_wifi_c5_clock_enable();
+ #elif defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
+   /* MODEM_SYSCON_CLK_CONF_REG (0x600A9804) bit 9: MODEM_SYSCON_CLK_WIFIMAC_EN */
+   rtems_wifi_reg_write(
+@@ -1471,10 +1469,8 @@
+     rtems_wifi_reg_read( 0x20109C14u ) & ~( ( 1u << 9 ) | ( 1u << 10 ) )
+   );
+ #elif defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
+-  rtems_wifi_reg_write(
+-    0x600A9C14u,
+-    rtems_wifi_reg_read( 0x600A9C14u ) & ~( ( 1u << 9 ) | ( 1u << 10 ) )
+-  );
++  extern void rtems_esp_wifi_c5_clock_disable( void );
++  rtems_esp_wifi_c5_clock_disable();
+ #elif defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
+   rtems_wifi_reg_write(
+     0x600A9804u,
+@@ -1518,6 +1514,42 @@
+ extern void phy_close_rf( void );
+ extern void phy_wifi_enable_set( uint8_t enable );
+ 
++#if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++extern void rtems_esp_wifi_c5_phy_enable( void );
++extern void rtems_esp_wifi_c5_phy_disable( void );
++extern void rtems_esp_wifi_c5_phy_track( void );
++extern void set_bb_wdg( bool, bool, uint16_t, uint16_t, bool, bool, bool );
++static rtems_wifi_ets_timer rtems_c5_phy_timer;
++static bool rtems_c5_phy_timer_active;
++
++static void rtems_c5_phy_timer_callback( void *arg )
++{
++  (void) arg;
++  rtems_esp_wifi_c5_phy_track();
++}
++
++static void rtems_wifi_phy_enable( void )
++{
++  rtems_esp_wifi_c5_phy_enable();
++  if ( !rtems_c5_phy_timer_active ) {
++    rtems_wifi_timer_setfn( &rtems_c5_phy_timer,
++      rtems_c5_phy_timer_callback, NULL );
++    rtems_wifi_timer_arm( &rtems_c5_phy_timer, 1000, true );
++    rtems_c5_phy_timer_active = true;
++  }
++  phy_wifi_enable_set( 1 );
++  /* esp32c5/esp_adapter.c: disable the BB idle check to avoid RXTXPANIC. */
++  set_bb_wdg( true, false, 0x18, 0xaa, false, false, false );
++}
++
++static void rtems_wifi_phy_disable( void )
++{
++  phy_wifi_enable_set( 0 );
++  rtems_wifi_timer_disarm( &rtems_c5_phy_timer );
++  rtems_c5_phy_timer_active = false;
++  rtems_esp_wifi_c5_phy_disable();
++}
++#else
+ static void rtems_wifi_phy_enable( void )
+ {
+   phy_wakeup_init();
+@@ -1529,6 +1561,8 @@
+   phy_wifi_enable_set( 0 );
+   phy_close_rf();
+ }
++
++#endif
+ 
+ static int rtems_wifi_read_mac( uint8_t *mac, unsigned int type )
+ {

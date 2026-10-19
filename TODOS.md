@@ -13,6 +13,14 @@ establish correct physical hardware behavior.
 
 ## Recently completed
 
+- [x] Calibrate the C5 system PLL for its detected 40/48 MHz crystal during
+  direct boot, and preserve default Wi-Fi radio arbitration priorities.
+  Physical 48 MHz C5 scanning now works on both bands.
+- [x] Align C5 modem clocks, PHY calibration/wakeup/shutdown, PLL tracking and
+  DMA access initialization with ESP-IDF. Physical C5 testing passes WPA2,
+  DHCP, RSSI, DNS, UDP/TCP traffic and stop/restart with default protocols.
+  Free C5 calibration scratch data after use, matching ESP-IDF.
+
 - [x] Measured station RSSI and active/passive Wi-Fi scanning on ESP32-C3/C5/C6/S31,
   including managed station mode, callbacks and cancellation.
 - [x] Per-chip ADC, low-speed LEDC/PWM, RTC storage/counters and timer/GPIO sleep
@@ -108,11 +116,12 @@ operations a target cannot support.
   stop/restart and network traffic on physical C3/C5/C6/S31 boards.
   C3 testing passes active/passive scanning (two APs), association, DHCP,
   measured RSSI, DNS, UDP loopback, TCP/HTTP traffic and stop/restart.
-  Initial C5 testing reaches PHY/Wi-Fi initialization, but active and passive
-  scans find no APs and association times out. A scan-only ESP-IDF image finds
-  three APs on the same board with its onboard antenna; investigate the RTEMS
-  C5 receive path. Shared MAC/power interrupt routing is fixed, but does not
-  resolve the empty scans.
+  C5 testing passes active/passive scans (three APs across 2.4 GHz and 5 GHz),
+  WPA2 association on 2.4 GHz, DHCP, measured RSSI, DNS, UDP loopback, TCP/HTTP
+  and stop/restart after aligning initialization with ESP-IDF. Two consecutive
+  final-image runs pass after freeing calibration scratch data; extend restart
+  cycling under memory pressure. C5 5 GHz association and C6/S31 remain
+  untested physically; scan cancellation also needs physical validation.
 - [ ] Measure ADC accuracy and PWM frequency/duty on each chip, including pin
   ownership, alternate channels and peripheral coexistence.
 - [ ] Validate light/deep sleep power transitions, timer and GPIO wakeup, reset

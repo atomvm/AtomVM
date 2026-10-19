@@ -344,13 +344,14 @@ cp -r "${HAL}/soc/include/"* "${BSP_INC}/" 2>/dev/null || true
 cp -r "${HAL}/soc/esp32s31/include/"* "${BSP_INC}/" 2>/dev/null || true
 cp -r "${HAL}/esp_hw_support/include/"* "${BSP_INC}/" 2>/dev/null || true
 
-# Splice esp32c3-wifi-sections.ld into the installed linkcmds if not already spliced
+# Insert before RAM load images advance the flash offset independently of rodata.
+# Otherwise Wi-Fi log strings get different mapped and load offsets.
 if ! grep -q 'wifi_iram' "${BSP_LIB}/linkcmds"; then
     echo "==> Splicing Wi-Fi IRAM/DRAM sections into ${BSP_LIB}/linkcmds..."
     awk -v base="${BSP_LIB}/linkcmds.base" -v frag="${GLUE}/ld/esp32c3-wifi-sections.ld" '
       /^[[:space:]]*INCLUDE[[:space:]]+linkcmds\.base/ {
         while ((getline line < base) > 0) {
-          if (line ~ /^[[:space:]]*\.bss[[:space:]]*:/ && !spliced) {
+          if (line ~ /^[[:space:]]*\.rwbarrier[[:space:]]*:/ && !spliced) {
             while ((getline f < frag) > 0) print f
             spliced = 1
           }
