@@ -1,0 +1,46 @@
+Subject: [PATCH] rtems-esp-wifi: preserve C5 memory attributes and detect XTAL
+
+Keep the ROM/BSP PMA entries when bringing up the modem. Clearing them can
+stall execution on physical C5 boards. Read PCR_CLK_XTAL_FREQ for the PHY
+so that C5 boards with either a 40 MHz or 48 MHz crystal use the right value.
+
+diff --git a/src/rtems_esp_glue.c b/src/rtems_esp_glue.c
+--- a/src/rtems_esp_glue.c
++++ b/src/rtems_esp_glue.c
+@@ -367,7 +367,12 @@
+ #if defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6) || defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5) || defined(RTEMS_BOARD_ESP32S31) || defined(CONFIG_IDF_TARGET_ESP32S31)
+ uint32_t rtc_clk_xtal_freq_get( void )
+ {
++#if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++  uint32_t freq = (*(volatile uint32_t *) 0x60096110u >> 24) & 0x7fu;
++  return freq == 48u ? 48u : 40u;
++#else
+   return 40u;
++#endif
+ }
+ #endif
+ 
+diff --git a/src/rtems_esp_wifi_init.c b/src/rtems_esp_wifi_init.c
+--- a/src/rtems_esp_wifi_init.c
++++ b/src/rtems_esp_wifi_init.c
+@@ -659,20 +659,6 @@
+   rtems_wifi_reg_write( 0x600998C4u, 0 );
+   rtems_wifi_reg_write( 0x6009A0C4u, 0 );
+   rtems_wifi_reg_write( 0x600B38C4u, 0 );
+-  __asm__ volatile (
+-    ".option push\n"
+-    ".option arch, +zicsr\n"
+-    "csrw 0xbcc, x0\n"
+-    "csrw 0xbcd, x0\n"
+-    "csrw 0xbce, x0\n"
+-    "csrw 0xbcf, x0\n"
+-    "csrw 0xbdc, x0\n"
+-    "csrw 0xbdd, x0\n"
+-    "csrw 0xbde, x0\n"
+-    "csrw 0xbdf, x0\n"
+-    ".option pop\n"
+-    ::: "memory"
+-  );
+ #elif defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
+   printk( "rtems-esp-wifi: enabling ESP32-C6 modem clocks...\n" );
+   rtems_wifi_reg_write( 0x600A9804u, rtems_wifi_reg_read( 0x600A9804u ) | 0xFFFFFFFFu );

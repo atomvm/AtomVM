@@ -199,6 +199,7 @@ static void program_alarm(uint64_t usecs)
     uint64_t target = rtems_esp_rtc_get_counter() + ticks;
 #if defined(RTEMS_BOARD_ESP32C3)
     REG(0x60008004U) = (uint32_t) target;
+    REG(0x6000804CU) = BIT(10); /* Clear the previous RTC timer alarm. */
     REG(0x60008008U) = ((target >> 32) & 0xFFFFU) | BIT(16);
 #else
 #if defined(RTEMS_BOARD_ESP32S31)
@@ -206,7 +207,8 @@ static void program_alarm(uint64_t usecs)
 #else
     const uintptr_t timer = 0x600B0C00U;
 #endif
-    REG(timer + 0x34U) = 1U;
+    REG(timer + 0x34U) = BIT(31); /* Clear the previous RTC timer alarm. */
+    REG(timer + 0x30U) |= BIT(31); /* Enable the SoC wakeup interrupt. */
     REG(timer) = (uint32_t) target;
     REG(timer + 4U) = ((target >> 32) & 0xFFFFU) | BIT(31);
 #endif

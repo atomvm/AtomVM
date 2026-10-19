@@ -30,7 +30,11 @@
 #define ESP_RTC_UPDATE_SHIFT 27
 #else
 #define ESP_RTC_TIMER_BASE 0x600B0C00U
+#if defined(RTEMS_BOARD_ESP32C5)
+#define ESP_RTC_UPDATE_SHIFT 27
+#else
 #define ESP_RTC_UPDATE_SHIFT 28
+#endif
 #endif
 
 RTEMS_INTERRUPT_LOCK_DEFINE(static, rtc_lock, "RTC snapshot")

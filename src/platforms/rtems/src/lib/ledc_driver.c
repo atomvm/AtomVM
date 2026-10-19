@@ -175,6 +175,17 @@ static const char *const ledc_hpoint = "\x6"
 static const char *const ledc_timer_sel = "\x9"
                                           "timer_sel";
 
+static uint32_t ledc_source_clock_hz(void)
+{
+#if defined(RTEMS_BOARD_ESP32C5)
+    /* PCR_CLK_XTAL_FREQ follows the C5's 40/48 MHz crystal selection. */
+    uint32_t mhz = (READ_PERI_REG(0x60096110U) >> 24) & 0x7FU;
+    return mhz == 48 ? 48000000U : 40000000U;
+#else
+    return 40000000U;
+#endif
+}
+
 int ledc_timer_config(const ledc_timer_config_t *timer_conf)
 {
     if (timer_conf == NULL) {
@@ -191,7 +202,8 @@ int ledc_timer_config(const ledc_timer_config_t *timer_conf)
     }
 
     uint64_t ticks = 1ULL << timer_conf->duty_resolution;
-    uint64_t divider = (40000000ULL * 256ULL) / ((uint64_t) timer_conf->freq_hz * ticks);
+    uint64_t source_clock = ledc_source_clock_hz();
+    uint64_t divider = (source_clock * 256ULL) / ((uint64_t) timer_conf->freq_hz * ticks);
     if (divider < 256 || divider > 0x3FFFF) {
         return -1;
     }
@@ -209,7 +221,7 @@ int ledc_timer_config(const ledc_timer_config_t *timer_conf)
 #endif
     s_ledc.timers[timer_num].configured = true;
     s_ledc.timers[timer_num].duty_resolution = timer_conf->duty_resolution;
-    s_ledc.timers[timer_num].freq_hz = (uint32_t) ((40000000ULL * 256ULL) / (divider * ticks));
+    s_ledc.timers[timer_num].freq_hz = (uint32_t) ((source_clock * 256ULL) / (divider * ticks));
 
     return 0;
 }
@@ -422,7 +434,7 @@ uint32_t ledc_get_freq(ledc_mode_t speed_mode, ledc_timer_t timer_num)
     uint32_t conf = READ_PERI_REG(ESP_LEDC_TIMER_REG(timer_num));
     uint32_t resolution = conf & ((1U << ESP_LEDC_RES_BITS) - 1);
     uint32_t divider = (conf >> ESP_LEDC_RES_BITS) & 0x3FFFFU;
-    return divider && resolution && resolution <= ESP_LEDC_MAX_BITS ? (uint32_t) ((40000000ULL * 256ULL) / ((uint64_t) divider << resolution)) : 0;
+    return divider && resolution && resolution <= ESP_LEDC_MAX_BITS ? (uint32_t) (((uint64_t) ledc_source_clock_hz() * 256ULL) / ((uint64_t) divider << resolution)) : 0;
 #else
     return s_ledc.timers[timer_num].freq_hz;
 #endif

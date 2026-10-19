@@ -1,0 +1,150 @@
+Subject: [PATCH] Route every Wi-Fi source sharing a CPU interrupt channel
+
+MAC and power interrupts use the same channel. Keeping only its last source
+leaves the power interrupt without a handler or a route on physical hardware.
+Track channels per source and apply ISR registration and masks to every source.
+
+--- a/src/rtems_wifi_os_adapter.c
++++ b/src/rtems_wifi_os_adapter.c
+@@ -1229,13 +1229,13 @@
+  * and the channel is the BSP's business.
+  *
+  * That leaves one thing to do here: remember which source each channel was
+- * given, so that _set_isr and _ints_on -- which only ever quote the channel --
+- * can be turned back into a vector.  Hence the table.
++ * given. Several sources can share one channel and its ISR, so keep the
++ * channel per source instead of overwriting a channel's previous source.
+  */
+ #define RTEMS_WIFI_INTR_CHANNELS 32
+ 
+-static uint32_t rtems_wifi_intr_source[ RTEMS_WIFI_INTR_CHANNELS ];
+-static bool     rtems_wifi_intr_mapped[ RTEMS_WIFI_INTR_CHANNELS ];
++static uint32_t rtems_wifi_intr_channel[ BSP_INTERRUPT_VECTOR_COUNT ];
++static bool     rtems_wifi_intr_mapped[ BSP_INTERRUPT_VECTOR_COUNT ];
+ 
+ static void rtems_wifi_set_intr(
+   int32_t  cpu_no,
+@@ -1250,15 +1250,16 @@
+    * the dual-core parts. */
+   (void) cpu_no;
+ 
+-  if ( intr_num >= RTEMS_WIFI_INTR_CHANNELS ) {
+-    printk( "wifi.osi: interrupt channel %u is out of range\n",
+-            (unsigned) intr_num );
++  if ( intr_num >= RTEMS_WIFI_INTR_CHANNELS
++       || intr_source >= BSP_INTERRUPT_VECTOR_COUNT ) {
++    printk( "wifi.osi: interrupt source %u or channel %u is out of range\n",
++            (unsigned) intr_source, (unsigned) intr_num );
+ 
+     return;
+   }
+ 
+-  rtems_wifi_intr_source[ intr_num ] = intr_source;
+-  rtems_wifi_intr_mapped[ intr_num ] = true;
++  rtems_wifi_intr_channel[ intr_source ] = intr_num;
++  rtems_wifi_intr_mapped[ intr_source ] = true;
+ 
+   /*
+    * ESP-IDF's priorities rise with urgency and so do this controller's, so
+@@ -1277,10 +1278,9 @@
+ 
+ static void rtems_wifi_clear_intr( uint32_t intr_source, uint32_t intr_num )
+ {
+-  (void) intr_source;
+-
+-  if ( intr_num < RTEMS_WIFI_INTR_CHANNELS ) {
+-    rtems_wifi_intr_mapped[ intr_num ] = false;
++  if ( intr_source < BSP_INTERRUPT_VECTOR_COUNT
++       && rtems_wifi_intr_channel[ intr_source ] == intr_num ) {
++    rtems_wifi_intr_mapped[ intr_source ] = false;
+   }
+ }
+ 
+@@ -1310,40 +1310,29 @@
+   rtems_status_code sc;
+   uint32_t          channel = (uint32_t) n;
+ 
+-  if ( channel >= RTEMS_WIFI_INTR_CHANNELS
+-       || !rtems_wifi_intr_mapped[ channel ] ) {
+-    printk( "wifi.osi: _set_isr on channel %u before _set_intr mapped it\n",
+-            (unsigned) channel );
+-
++  if ( channel >= RTEMS_WIFI_INTR_CHANNELS ) {
+     return;
+   }
+ 
+   rtems_wifi_intr_handler[ channel ] = (rtems_wifi_isr) f;
+   rtems_wifi_intr_arg[ channel ]     = arg;
+ 
+-  sc = rtems_interrupt_handler_install(
+-    (rtems_vector_number) rtems_wifi_intr_source[ channel ],
+-    "wifi",
+-    RTEMS_INTERRUPT_SHARED,
+-    rtems_wifi_intr_trampoline,
+-    (void *) (uintptr_t) channel
+-  );
+-
+-  if ( sc != RTEMS_SUCCESSFUL && sc != RTEMS_TOO_MANY ) {
+-    /*
+-     * Expected today for the WiFi MAC, and the reason is in the BSP rather
+-     * than here.  ETS_WIFI_MAC_INTR_SOURCE is 0, and the esp32c3db BSP treats
+-     * vector 0 as invalid -- bsp_interrupt_is_valid_vector() rejects it and
+-     * get_active_interrupt() returns 0 to mean "nothing found", so source 0
+-     * cannot be told apart from no interrupt at all.  The BSP's irq_mappings[]
+-     * has no WiFi entry either.
+-     *
+-     * Reported once per install rather than suppressed: until that is fixed no
+-     * MAC interrupt can be delivered, so nothing will ever be received, and a
+-     * silent failure here would look like a radio problem.
+-     */
+-    printk( "wifi.osi: cannot install the handler for source %u (%i)\n",
+-            (unsigned) rtems_wifi_intr_source[ channel ], (int) sc );
++  for ( uint32_t source = 0; source < BSP_INTERRUPT_VECTOR_COUNT; ++source ) {
++    if ( !rtems_wifi_intr_mapped[ source ]
++         || rtems_wifi_intr_channel[ source ] != channel ) {
++      continue;
++    }
++    sc = rtems_interrupt_handler_install(
++      (rtems_vector_number) source,
++      "wifi",
++      RTEMS_INTERRUPT_SHARED,
++      rtems_wifi_intr_trampoline,
++      (void *) (uintptr_t) channel
++    );
++    if ( sc != RTEMS_SUCCESSFUL && sc != RTEMS_TOO_MANY ) {
++      printk( "wifi.osi: cannot install the handler for source %u (%i)\n",
++              (unsigned) source, (int) sc );
++    }
+   }
+ }
+ 
+@@ -1356,10 +1345,11 @@
+ {
+   uint32_t i;
+ 
+-  for ( i = 0; i < RTEMS_WIFI_INTR_CHANNELS; ++i ) {
+-    if ( ( mask & ( 1u << i ) ) != 0 && rtems_wifi_intr_mapped[ i ] ) {
++  for ( i = 0; i < BSP_INTERRUPT_VECTOR_COUNT; ++i ) {
++    if ( rtems_wifi_intr_mapped[ i ]
++         && ( mask & ( 1u << rtems_wifi_intr_channel[ i ] ) ) != 0 ) {
+       (void) bsp_interrupt_vector_enable(
+-        (rtems_vector_number) rtems_wifi_intr_source[ i ] );
++        (rtems_vector_number) i );
+     }
+   }
+ }
+@@ -1368,10 +1358,11 @@
+ {
+   uint32_t i;
+ 
+-  for ( i = 0; i < RTEMS_WIFI_INTR_CHANNELS; ++i ) {
+-    if ( ( mask & ( 1u << i ) ) != 0 && rtems_wifi_intr_mapped[ i ] ) {
++  for ( i = 0; i < BSP_INTERRUPT_VECTOR_COUNT; ++i ) {
++    if ( rtems_wifi_intr_mapped[ i ]
++         && ( mask & ( 1u << rtems_wifi_intr_channel[ i ] ) ) != 0 ) {
+       (void) bsp_interrupt_vector_disable(
+-        (rtems_vector_number) rtems_wifi_intr_source[ i ] );
++        (rtems_vector_number) i );
+     }
+   }
+ }

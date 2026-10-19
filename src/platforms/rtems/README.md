@@ -8,6 +8,9 @@
 
 This directory contains the RTEMS port of AtomVM, supporting RTEMS 6.2 as well as RTEMS 7.0 (`main`).
 
+Remaining work and physical validation are tracked in the
+[RTEMS TODOs](../../../TODOS.md).
+
 Supported bring-up targets:
 
 - SPARC `erc32` on SIS (`rtems-run --rtems-bsps=erc32-sis`)
@@ -83,9 +86,9 @@ reported only after DHCP binds the lease.
 With esp-emu 0.49, C5/C6/S31 lose the virtual AP association after scanning
 while connected. Their emulator tests check scan results and cancellation,
 then restart the station before testing traffic. C3 also tests traffic
-immediately after an associated scan. Wi-Fi runs use `--batch-size 5000` to
-service radio events frequently enough during authentication. Physical Wi-Fi
-hardware still needs validation.
+immediately after an associated scan. CI Wi-Fi runs use `--batch-size 1000` on C3
+and `--batch-size 5000` on C5/C6/S31 to service radio events frequently enough
+during authentication. Physical Wi-Fi hardware still needs validation.
 
 ## Prerequisites
 
@@ -543,9 +546,10 @@ ADC conversions have a bounded timeout; missing hardware completion returns
 `{error, timeout}`. Readings use the existing 9–12-bit API (S31's native 17-bit
 result is reduced to 12 bits). Voltage values remain estimates without eFuse
 calibration on C3/C5/C6. S31 has no programmable attenuation or voltage
-calibration in ESP-IDF, so its voltage result is `undefined`. PWM uses the 40 MHz
-XTAL clock and rejects frequency/resolution combinations outside the divider's
-range. The existing fade API still performs immediate duty changes.
+calibration in ESP-IDF, so its voltage result is `undefined`. PWM uses the XTAL
+clock (40 MHz, or 48 MHz on C5 boards with that crystal) and rejects
+frequency/resolution combinations outside the divider's range. The existing
+fade API still performs immediate duty changes.
 
 Light sleep retains SRAM, flash, peripheral state, XTAL and PLL supplies while
 using the RTC/PMU to suspend the CPUs. An RTC timecounter preserves monotonic and
@@ -570,6 +574,16 @@ entry point. Never use that option in firmware for a board. Physical power
 transitions, analog accuracy and GPIO wakeup still need board validation. Build
 `rtems_deep_sleep_test` and pack `test_deep_sleep.beam` for a real-board test of
 timer wakeup, deep-sleep reset reason and RTC retention across the reset.
+
+Initial physical C3/C5 testing verified direct boot with a USB console, an
+advancing RTC counter, RTC binary storage, crypto, raw ADC conversion and PWM register
+readback. C3 Wi-Fi passes active/passive scans (two APs), association, DHCP,
+measured RSSI, DNS, UDP loopback, TCP/HTTP and stop/restart. C5 Wi-Fi initializes
+but scans return no APs and association times out; a scan-only ESP-IDF image finds
+three APs on that board.
+Timer light sleep returns on C3/C5, but recovery of an expired Erlang timer fails
+and USB console continuity is unreliable. These remain open hardware issues;
+ADC accuracy, PWM waveforms, deep sleep and GPIO wakeup are unverified.
 
 ### 1. Build RTEMS 7 Tools and BSP
 
