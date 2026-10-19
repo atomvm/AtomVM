@@ -180,6 +180,18 @@ rtems_clone_pinned https://github.com/espressif/esp-hal-3rdparty.git "${ESP_HAL_
 
 rtems_clone_pinned https://github.com/Mbed-TLS/mbedtls.git "${RTEMS_MBEDTLS_COMMIT}" mbedtls
 
+if [ ! -d "rtems-esp-wifi/.git" ]; then
+    rtems_clone_pinned https://github.com/thesamprice/rtems-esp-wifi.git "${RTEMS_ESP_WIFI_COMMIT}" rtems-esp-wifi
+    if [ -n "${PATCH_DIR}" ] && [ -d "${PATCH_DIR}/rtems-esp-wifi" ]; then
+        for p in "${PATCH_DIR}"/rtems-esp-wifi/*.patch; do
+            if [ -f "$p" ]; then
+                echo "==> Applying rtems-esp-wifi patch: $(basename "$p")..."
+                git -C rtems-esp-wifi apply "$p" || patch -d rtems-esp-wifi -p1 < "$p"
+            fi
+        done
+    fi
+fi
+
 rtems_clone_pinned https://github.com/thesamprice/rtems-esp-wifi.git "${RTEMS_ESP_WIFI_COMMIT}" rtems-esp-wifi
 
 # -----------------------------------------------------------------------------
