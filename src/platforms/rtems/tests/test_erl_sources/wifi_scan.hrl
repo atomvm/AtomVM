@@ -1,6 +1,14 @@
 % Copyright 2026 Peter M. <petermm@gmail.com>
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 
+-ifdef(TEST_WIFI_WOKWI).
+-define(WIFI_SSID, "Wokwi-GUEST").
+-define(WIFI_PSK, "").
+-else.
+-define(WIFI_SSID, "AtomVM-TestAP").
+-define(WIFI_PSK, "secretpassword").
+-endif.
+
 wifi_scan_smoke() ->
     {ok, _} = network:start([
         {sta, [
@@ -30,11 +38,11 @@ wifi_scan_smoke() ->
     erlang:garbage_collect(whereis(network)),
 
     ok = network:sta_connect([
-        {sta, [{ssid, "AtomVM-TestAP"}, {psk, "secretpassword"}, {scan_done, self()}]}
+        {sta, [{ssid, ?WIFI_SSID}, {psk, ?WIFI_PSK}, {scan_done, self()}]}
     ]),
     wait_for_wifi(30),
     {ok, Rssi} = network:sta_rssi(),
-    -30 = Rssi,
+    check_wifi_rssi(Rssi),
     erlang:display({wifi_rssi, Rssi, ok}),
 
     ok = network:wifi_scan([{dwell, 120}]),
@@ -47,6 +55,14 @@ wifi_scan_smoke() ->
     erlang:garbage_collect(whereis(network)),
     connected = network:sta_status(),
     wifi_scan_connected_traffic().
+
+-ifdef(TEST_WIFI_WOKWI).
+check_wifi_rssi(Rssi) ->
+    true = is_integer(Rssi) andalso Rssi >= -127 andalso Rssi =< 127,
+    ok.
+-else.
+check_wifi_rssi(-30) ->
+    ok.
 
 -ifdef(TEST_WIFI_SCAN_TRAFFIC).
 wifi_scan_connected_traffic() ->
@@ -62,6 +78,7 @@ wifi_scan_connected_traffic() ->
 % These targets test traffic after restarting the station instead.
 wifi_scan_connected_traffic() ->
     ok.
+-endif.
 -endif.
 
 wifi_scan_stop() ->
@@ -80,13 +97,14 @@ check_scan_result({Found, Networks}) when is_integer(Found), Found > 0 ->
     true = length(Networks) > 0,
     [AP | _] = Networks,
     #{
-        ssid := <<"AtomVM-TestAP">>,
+        ssid := Ssid,
         bssid := Bssid,
         rssi := Rssi,
         channel := Channel,
         authmode := Auth,
         hidden := false
     } = AP,
+    true = Ssid =:= list_to_binary(?WIFI_SSID),
     6 = byte_size(Bssid),
     true = is_integer(Rssi) andalso Rssi >= -127 andalso Rssi =< 127,
     true = is_integer(Channel) andalso Channel > 0,

@@ -25,7 +25,7 @@ IMAGE_NAME="atomvm-rtems7-esp32c3:latest"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 
-DO_SIMULATE=0
+DO_SIMULATE=0 # 0: build only, 1: esp-emulator, 2: Wokwi
 DOCKER_PLATFORM="${DOCKER_PLATFORM:-}"
 TEST_MODULE="test_boot"
 TEST_WIFI=0
@@ -38,6 +38,8 @@ Builds AtomVM for RTEMS 7 ESP32-S31 inside an isolated Docker container.
 
 Options:
   --simulate          Run the boot test in esp-emulator after compiling
+  --simulate-wokwi    Run the test with wokwi-cli (requires WOKWI_CLI_TOKEN)
+  --test-smp          Embed and run the SMP test
   --test-wifi         Embed and run the Wi-Fi test (test_esp32s31_wifi)
   --platform <arch>   Target Docker platform (e.g., linux/arm64, linux/amd64)
   -h, --help          Show this message
@@ -48,13 +50,19 @@ EOF
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --simulate-wokwi)
+            DO_SIMULATE=2
+            shift
+            ;;
         --simulate|--test)
             DO_SIMULATE=1
             shift
             ;;
         --test-smp)
             TEST_MODULE="test_smp"
-            DO_SIMULATE=1
+            if [ "${DO_SIMULATE}" -eq 0 ]; then
+                DO_SIMULATE=1
+            fi
             shift
             ;;
         --test-wifi)
@@ -75,6 +83,13 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [ "${DO_SIMULATE}" -eq 2 ]; then
+    if [ "${TEST_WIFI}" -eq 1 ]; then
+        TEST_MODULE="test_wokwi_wifi"
+    fi
+    "${SCRIPT_DIR}/run-wokwi.sh" --check
+fi
 
 command -v docker >/dev/null 2>&1 || { echo "Error: docker is required" >&2; exit 1; }
 
@@ -100,7 +115,7 @@ RUN_CMD+=(--rm -v "${REPO_ROOT}:/workspace" -w /workspace "${IMAGE_NAME}" bash -
     TEST_MOD="'"${TEST_MODULE}"'"
     echo "==> Building host AVM pack (${TEST_MOD})..."
     cmake -S . -B build-host -G Ninja -DAVM_DISABLE_JIT=ON
-    cmake --build build-host -t rtems_boot_test rtems_esp32s31_wifi_test rtems_smp_test atomvmlib-rtems
+    cmake --build build-host -t rtems_boot_test rtems_esp32s31_wifi_test rtems_wokwi_wifi_test rtems_smp_test atomvmlib-rtems
     mkdir -p src/platforms/rtems/build-esp32s31
     ./build-host/tools/packbeam/packbeam create -s "${TEST_MOD}" \
         src/platforms/rtems/build-esp32s31/rtems_boot.avm \
@@ -122,7 +137,9 @@ RUN_CMD+=(--rm -v "${REPO_ROOT}:/workspace" -w /workspace "${IMAGE_NAME}" bash -
 echo "==> Build successful! Direct-boot image is ready at:"
 echo "    src/platforms/rtems/build-esp32s31/AtomVM-esp32s31db.bin"
 
-if [ "${DO_SIMULATE}" -eq 1 ]; then
+if [ "${DO_SIMULATE}" -eq 2 ]; then
+    "${SCRIPT_DIR}/run-wokwi.sh" esp32s31 "${REPO_ROOT}/src/platforms/rtems/build-esp32s31"
+elif [ "${DO_SIMULATE}" -eq 1 ]; then
     BATCH_SIZE=50000
     if [ "${TEST_WIFI}" -eq 1 ]; then
         BATCH_SIZE=5000

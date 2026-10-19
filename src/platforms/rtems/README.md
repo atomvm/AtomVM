@@ -786,6 +786,43 @@ qemu-system-riscv32 -nographic -machine esp32c3 \
     -drive file=flash.bin,if=mtd,format=raw -serial mon:stdio
 ```
 
+### 5. Testing with Wokwi CLI
+
+The ESP32-C3/C5/C6/S31 Docker build scripts accept `--simulate-wokwi` to
+run the built test with Wokwi instead of esp-emulator. Install
+[`wokwi-cli`](https://docs.wokwi.com/wokwi-ci/cli-installation) on the host and
+export `WOKWI_CLI_TOKEN`, as used by `.github/workflows/esp32-simtest.yaml`.
+The runner also inherits `WOKWI_CLI_SERVER` if you use a local CI server.
+The token stays in the environment; it is not written to generated files.
+
+```sh
+./src/platforms/rtems/tools/docker-build-esp32c3.sh --simulate-wokwi
+
+# Select the S31 SMP test with the Wokwi backend:
+./src/platforms/rtems/tools/docker-build-esp32s31.sh --test-smp --simulate-wokwi
+
+# Test Wi-Fi against Wokwi-GUEST (open network, empty password):
+./src/platforms/rtems/tools/docker-build-esp32c3.sh --test-wifi --simulate-wokwi
+
+# Re-run an existing build without compiling:
+./src/platforms/rtems/tools/run-wokwi.sh esp32c3 src/platforms/rtems/build-esp32c3
+```
+
+The runner generates `wokwi.toml` and a UART-connected `diagram.json` in
+`<build-directory>/wokwi/`, loading the RTEMS direct-boot image at flash offset
+zero. It saves UART output to `wokwi/serial.log`, requires `Return value: ok`,
+and returns a failure for a fatal exception or a 60-second simulated-time
+timeout. Missing CLI/token errors are reported before starting a Docker build.
+
+`--test-wifi --simulate-wokwi` selects a shared Wokwi Wi-Fi test on all four
+chips. It uses SSID `Wokwi-GUEST` and password `""`, checking active/passive
+scanning, scan callbacks/cancellation, connection, DHCP and RSSI.
+It requires DNS resolution and an HTTP response from `example.com` through
+Wokwi's gateway, including traffic after a connected scan. Gateway or Internet
+outages therefore fail the test. The esp-emulator backend keeps its existing
+AP, fixed RSSI and local HTTP/SNTP fixtures.
+Simulator tests do not establish compatibility with physical hardware.
+
 ## SMP Multi-Core Support
 
 AtomVM on RTEMS supports symmetric multiprocessing (SMP) on targets with multi-core BSPs:

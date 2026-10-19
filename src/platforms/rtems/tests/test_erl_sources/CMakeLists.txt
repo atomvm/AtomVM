@@ -40,6 +40,7 @@ rtems_test_beam(rtems_esp32c3_wifi_test test_esp32c3_wifi)
 rtems_test_beam(rtems_esp32c5_wifi_test test_esp32c5_wifi)
 rtems_test_beam(rtems_esp32c6_wifi_test test_esp32c6_wifi)
 rtems_test_beam(rtems_esp32s31_wifi_test test_esp32s31_wifi)
+rtems_test_beam(rtems_wokwi_wifi_test test_wokwi_wifi)
 rtems_test_beam(rtems_smp_test test_smp)
 
 rtems_test_beam(rtems_peripheral_test test_peripherals)

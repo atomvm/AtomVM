@@ -26,7 +26,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 DOCKERFILE="${REPO_ROOT}/src/platforms/rtems/docker/Dockerfile.rtems7-esp32c3"
 
-DO_SIMULATE=0
+DO_SIMULATE=0 # 0: build only, 1: esp-emulator, 2: Wokwi
 FORCE_REBUILD=0
 RTEMS_SRC_DIR="${RTEMS_SRC_DIR:-}"
 DOCKER_PLATFORM="${DOCKER_PLATFORM:-}"
@@ -41,6 +41,7 @@ Builds AtomVM for RTEMS 7 ESP32-C3 inside an isolated Docker container.
 
 Options:
   --simulate          Run the boot test in esp-emulator after compiling
+  --simulate-wokwi    Run the test with wokwi-cli (requires WOKWI_CLI_TOKEN)
   --test-wifi         Embed and run the Wi-Fi test (test_esp32c3_wifi)
   --rebuild           Rebuild the Docker container image
   --rtems-src <path>  Use local RTEMS source tree (or env RTEMS_SRC_DIR)
@@ -53,6 +54,10 @@ EOF
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --simulate-wokwi)
+            DO_SIMULATE=2
+            shift
+            ;;
         --simulate|--test)
             DO_SIMULATE=1
             shift
@@ -83,6 +88,13 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [ "${DO_SIMULATE}" -eq 2 ]; then
+    if [ "${TEST_WIFI}" -eq 1 ]; then
+        TEST_MODULE="test_wokwi_wifi"
+    fi
+    "${SCRIPT_DIR}/run-wokwi.sh" --check
+fi
 
 command -v docker >/dev/null 2>&1 || { echo "Error: docker is required" >&2; exit 1; }
 
@@ -133,7 +145,7 @@ RUN_CMD+=(--rm -v "${REPO_ROOT}:/workspace" -w /workspace "${IMAGE_NAME}" bash -
     TEST_MOD="'"${TEST_MODULE}"'"
     echo "==> Building host AVM pack (${TEST_MOD})..."
     cmake -S . -B build-host -G Ninja -DAVM_DISABLE_JIT=ON
-    cmake --build build-host -t rtems_boot_test rtems_esp32c3_wifi_test atomvmlib-rtems
+    cmake --build build-host -t rtems_boot_test rtems_esp32c3_wifi_test rtems_wokwi_wifi_test atomvmlib-rtems
     mkdir -p src/platforms/rtems/build-esp32c3
     ./build-host/tools/packbeam/packbeam create -p -s "${TEST_MOD}" \
         src/platforms/rtems/build-esp32c3/rtems_boot.avm \
@@ -156,7 +168,9 @@ echo "==> Build successful! Direct-boot image is ready at:"
 echo "    src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin"
 
 # Step 3: Run simulation if requested
-if [ "${DO_SIMULATE}" -eq 1 ]; then
+if [ "${DO_SIMULATE}" -eq 2 ]; then
+    "${SCRIPT_DIR}/run-wokwi.sh" esp32c3 "${REPO_ROOT}/src/platforms/rtems/build-esp32c3"
+elif [ "${DO_SIMULATE}" -eq 1 ]; then
     echo "==> Running simulation with esp-emulator..."
     if command -v esp-emu >/dev/null 2>&1; then
         HTTP_PID=""
