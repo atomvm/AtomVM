@@ -24,6 +24,15 @@ Results from 2026-10-19; these describe the boards tested, not every board revis
 | Timer light sleep | Returns, but expired Erlang timer delivery fails | Same failure | Not tested physically |
 | ADC accuracy, PWM waveform, deep sleep, GPIO wakeup and power consumption | Not validated | Not validated | Not validated |
 
+The C3 revision 0.4 board with a 40 MHz crystal was retested over native USB
+Serial/JTAG after aligning its startup and PHY lifecycle with ESP-IDF. The
+checks cover RTC timing/storage, crypto, active/passive scans, WPA2/DHCP,
+measured RSSI, UDP loopback, DNS, TCP/HTTP and stop/restart. PHY and Wi-Fi
+critical sections retain nested interrupt state; the PHY I2C hooks and critical
+callbacks reside in internal instruction RAM. C3 also uses IDF's combined-radio
+PHY setting and digital-register backup/restore across disable/wakeup. Existing analog and sleep gaps
+listed above remain separate validation tasks.
+
 The C5 DevKit V2.0 with a 48 MHz crystal passes active and passive scans,
 finding three APs across 2.4 GHz and 5 GHz. WPA2 association on 2.4 GHz, DHCP,
 measured RSSI, UDP loopback, DNS and TCP/HTTP pass with the default Wi-Fi

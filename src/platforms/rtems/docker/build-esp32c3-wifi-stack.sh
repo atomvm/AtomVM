@@ -264,7 +264,9 @@ COMMON_INC="-isystem ${BSP_INC} -I ${GLUE}/include -I ${GLUE}/include/rtems-esp 
             -I ${HAL}/esp_wifi/include -I ${HAL}/esp_wifi/include/local \
             -I ${HAL}/esp_common/include -I ${HAL}/esp_event/include \
             -I ${HAL}/log/include -I ${HAL}/esp_rom/include -I ${HAL}/soc/include \
-            -I ${HAL}/soc/esp32c3/include -I ${HAL}/esp_hw_support/include \
+            -I ${HAL}/soc/esp32c3/include -I ${HAL}/soc/esp32c3/register \
+            -I ${HAL}/esp_hal_clock/esp32c3/include -I ${HAL}/hal/platform_port/include \
+            -I ${HAL}/esp_hal_regi2c/esp32c3/include -I ${HAL}/esp_hw_support/include \
             -I ${HAL}/esp_timer/include -I ${HAL}/esp_phy/include \
             -I ${HAL}/esp_system/include -I ${HAL}/heap/include -I ${HAL}/hal/include \
             -I ${HAL}/esp_coex/include -I ${HAL}/esp_wifi/wifi_apps/include \

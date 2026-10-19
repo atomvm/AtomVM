@@ -13,6 +13,12 @@ establish correct physical hardware behavior.
 
 ## Recently completed
 
+- [x] Align C3 modem/low-power clocks, first-enable PHY calibration, PLL tracking
+  and RF shutdown with ESP-IDF; release calibration scratch storage. Correct the
+  CPU source mask/APB frequency record, enable combined-radio PHY mode, preserve
+  digital registers across disable/wakeup and retain nested PHY/Wi-Fi/I2C critical
+  sections in internal instruction RAM. Physical C3 scan, WPA2, traffic and
+  stop/restart testing passes with the aligned image.
 - [x] Calibrate the C5 system PLL for its detected 40/48 MHz crystal during
   direct boot, and preserve default Wi-Fi radio arbitration priorities.
   Physical 48 MHz C5 scanning now works on both bands.

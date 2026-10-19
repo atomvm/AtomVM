@@ -85,10 +85,25 @@ The ESP lwIP configuration disables DHCP address-conflict checks because AP
 proxy ARP can otherwise cause a valid lease to be declined. Addresses are
 reported only after DHCP binds the lease.
 
-The C5 glue uses ESP-IDF clock dependencies and PHY lifecycle: calibration on
+The C3/C5 glue uses ESP-IDF clock dependencies and PHY lifecycle: calibration on
 first enable, wakeup on later enables, periodic PLL tracking and RF shutdown on
 disable. Vendor LL helpers preserve unrelated register fields instead of enabling
 whole clock registers. RTEMS supplies locks and timer callbacks.
+
+C3 direct boot also initializes modem clocks and the Wi-Fi low-power clock
+source using ESP-IDF's `esp_perip_clk_init()` sequence. The BSP selects the PLL
+with both source bits cleared and publishes the 80 MHz APB frequency for ROM
+clients. PHY calibration runs on first enable and releases its scratch buffer;
+C3 selects the combined-radio PHY mode and saves/restores its 84-byte digital
+register state across disable/wakeup. Subsequent enables wake the PHY, and
+disable closes RF and temperature sensing before removing the common clock. C3 critical sections preserve nested interrupt
+levels, and PHY I2C transactions use the same nesting protection. These critical
+callbacks are placed in internal instruction RAM.
+
+RTEMS retains its own scheduler, queues and interrupt controller integration.
+Wi-Fi buffers are smaller than IDF's defaults to fit available RAM, calibration
+runs fully at boot without IDF's NVS calibration cache, and station power saving
+is disabled. Physical sleep and analog validation remain tracked in the TODOs.
 
 With esp-emu 0.49, C5/C6/S31 lose the virtual AP association after scanning
 while connected. Their emulator tests check scan results and cancellation,
