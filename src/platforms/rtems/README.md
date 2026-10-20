@@ -41,6 +41,14 @@ Pack `atomvmlib-rtems.avm` (estdlib + eavmlib + `avm_network` +
 `avm_rtems`) together with the application so `init:boot/1` can start the
 entry module. JIT is currently disabled.
 
+ESP32 builds default to `MinSizeRel` (`-Os -DNDEBUG`) and use function/data
+sections with linker garbage collection. Explicit build types, such as
+`-DCMAKE_BUILD_TYPE=Debug`, are respected. Other BSP defaults are unchanged.
+`AVM_MINIMAL_OPCODES` remains off: existing BEAM files can require the excluded
+opcodes. Enable it only with a compatible application and library pack.
+The BSP's fixed flash code/data split can leave padding in the `.bin` even
+when the linked code becomes much smaller. TLS and 64-bit floats remain enabled.
+
 Sockets are provided on `arm/imx7` when `rtems-libbsd` is installed. Without
 LibBSD, and on SPARC `erc32` and ARM `realview_pbx_a9_qemu`,
 `atomvm_rtems:wait_dhcp/1` returns `{error, enotsup}`.

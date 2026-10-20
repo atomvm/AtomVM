@@ -31,6 +31,7 @@ endif()
 mark_as_advanced(CMAKE_TOOLCHAIN_FILE)
 
 option(AVM_USE_32BIT_FLOAT "Use 32 bit floats." OFF)
+option(AVM_MINIMAL_OPCODES "Exclude opcodes for optional compiler flags; requires compatible BEAM files" OFF)
 option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 option(AVM_DISABLE_JIT "Disable just in time compilation." ON)
@@ -57,6 +58,16 @@ endif()
 set(RTEMS_BOARD "${_rtems_board_default}" CACHE STRING
     "RTEMS board integration (generic, qemu, grisp2, esp32c3, esp32c5, esp32c6, or esp32s31)")
 set_property(CACHE RTEMS_BOARD PROPERTY STRINGS generic qemu grisp2 esp32c3 esp32c5 esp32c6 esp32s31)
+
+if(RTEMS_BOARD MATCHES "^esp32")
+    if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+        set(CMAKE_BUILD_TYPE MinSizeRel CACHE STRING "Build type" FORCE)
+    endif()
+    # Apply on reconfiguration too; toolchain *_FLAGS_INIT only affects new caches.
+    # ESP BSP scripts KEEP startup code, constructors and RTEMS linker sets.
+    add_compile_options(-ffunction-sections -fdata-sections)
+    add_link_options(-Wl,--gc-sections)
+endif()
 
 if(NOT RTEMS_BOARD STREQUAL "generic" AND
    NOT RTEMS_BOARD STREQUAL "qemu" AND
