@@ -25,6 +25,12 @@ RTEMS_LINUX_DTS_COMMIT=830b3c68c1fb1e9176028d02ef86f3cf76aa2476
 ESP_EMU_INSTALL_COMMIT=06102dc8a043e4f2ba6b2e3cabcf516c4ea84576
 RTEMS_ESP_EMU_VERSION=0.49.0
 
+# Erlang/OTP and rebar3 versions used by the CI workflow
+# (.github/workflows/rtems-build.yaml). Keep CI, Docker and native builds on the
+# same toolchain, so locally built AVM packs match the ones produced by CI.
+OTP_VERSION=29.1.2
+REBAR3_VERSION=3.27.3
+
 # Fetch a full commit ID directly: git clone --branch does not accept a SHA.
 # Keep patched cached sources when they match; reject stale caches rather than
 # silently building a different revision or discarding local modifications.
@@ -54,4 +60,35 @@ rtems_clone_pinned() (
         exit 1
     fi
     echo "==> Using $rtems_url @ $rtems_commit"
+)
+
+# Install the pinned Erlang/OTP and rebar3.
+# The OTP tarball is the very same prebuilt artifact that erlef/setup-beam
+# installs in CI, so BEAM files are always produced by the same compiler.
+rtems_install_otp() (
+    set -eu
+    otp_root=/opt/erlang
+    case "$(dpkg --print-architecture)" in
+        amd64) otp_arch=amd64 ;;
+        arm64) otp_arch=arm64 ;;
+        *) echo "Unsupported architecture: $(dpkg --print-architecture)" >&2; exit 1 ;;
+    esac
+    if ! command -v curl >/dev/null 2>&1; then
+        apt-get update -qq
+        apt-get install -y -qq curl
+    fi
+    mkdir -p "${otp_root}"
+    curl -fsSL --retry 3 "https://builds.hex.pm/builds/otp/${otp_arch}/ubuntu-24.04/OTP-${OTP_VERSION}.tar.gz" \
+        | tar -xz --strip-components=1 -C "${otp_root}"
+    "${otp_root}/Install" -minimal "${otp_root}"
+    rm -rf "${otp_root}"/erts-*/src "${otp_root}"/erts-*/man
+    # Expose the toolchain through /usr/local/bin, which is already in PATH.
+    for binary in "${otp_root}"/bin/*; do
+        ln -sf "${binary}" "/usr/local/bin/$(basename "${binary}")"
+    done
+    curl -fsSL --retry 3 "https://github.com/erlang/rebar3/releases/download/${REBAR3_VERSION}/rebar3" \
+        -o /usr/local/bin/rebar3
+    chmod +x /usr/local/bin/rebar3
+    erl -noshell -eval 'io:format("Erlang/OTP ~s~n", [erlang:system_info(otp_release)]), halt().'
+    rebar3 version
 )

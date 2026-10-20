@@ -161,20 +161,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gperf \
     ca-certificates \
     zlib1g-dev \
-    erlang-nox \
-    erlang-dev \
-    erlang-tools \
-    erlang-parsetools \
+    libtinfo6 \
+    libssl3t64 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install rebar3 for host packbeam target
-RUN curl -fsSL https://github.com/erlang/rebar3/releases/download/3.24.0/rebar3 -o /usr/local/bin/rebar3 \
-    && chmod +x /usr/local/bin/rebar3
+# Erlang/OTP and rebar3 are pinned to the same versions used by CI
+# (.github/workflows/rtems-build.yaml), so locally built AVM packs are
+# identical to the ones produced by the workflow.
+COPY dependencies.sh /tmp/dependencies.sh
+RUN . /tmp/dependencies.sh && rtems_install_otp
 
 # Copy prebuilt RTEMS 7 RISC-V toolchain, esp32c3db BSP, lwIP, and Wi-Fi stack
 COPY --from=wifi-builder /opt/rtems/7 /opt/rtems/7
 
-COPY dependencies.sh /tmp/dependencies.sh
 ARG ESP_EMU_VERSION
 # Install esp-emulator for direct headless simulation
 RUN . /tmp/dependencies.sh \

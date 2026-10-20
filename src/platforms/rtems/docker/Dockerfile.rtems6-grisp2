@@ -122,15 +122,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     gperf \
-    erlang-base \
-    erlang-dev \
-    erlang-parsetools \
+    curl \
+    libtinfo6 \
+    libssl3t64 \
     u-boot-tools \
     device-tree-compiler \
     zip \
     unzip \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# Erlang/OTP and rebar3 are pinned to the same versions used by CI
+# (.github/workflows/rtems-build.yaml), so locally built AVM packs are
+# identical to the ones produced by the workflow.
+COPY dependencies.sh /tmp/dependencies.sh
+RUN . /tmp/dependencies.sh && rtems_install_otp
 
 # Copy prebuilt RTEMS 6 ARM toolchain, imx7 BSP, and LibBSD
 COPY --from=libbsd /opt/rtems/6 /opt/rtems/6

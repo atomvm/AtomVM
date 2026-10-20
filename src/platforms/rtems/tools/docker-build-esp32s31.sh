@@ -103,9 +103,9 @@ RUN_CMD+=(--rm -v "${REPO_ROOT}:/workspace" -w /workspace "${IMAGE_NAME}" bash -
 
     if ! command -v rebar3 >/dev/null 2>&1; then
         echo "==> Ensuring rebar3 and Erlang dependencies are available..."
-        apt-get update -qq && apt-get install -y -qq erlang-nox zlib1g-dev >/dev/null 2>&1 || true
-        curl -fsSL https://github.com/erlang/rebar3/releases/download/3.24.0/rebar3 -o /usr/local/bin/rebar3
-        chmod +x /usr/local/bin/rebar3
+        apt-get update -qq && apt-get install -y -qq zlib1g-dev >/dev/null 2>&1 || true
+        . /workspace/src/platforms/rtems/docker/dependencies.sh
+        rtems_install_otp
     fi
 
     if [ -f build-host/CMakeCache.txt ] && (grep -q "REBAR3-NOTFOUND" build-host/CMakeCache.txt || grep -q "Darwin" build-host/CMakeCache.txt || grep -q "/usr/bin/cc" build-host/CMakeCache.txt); then

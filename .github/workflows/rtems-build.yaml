@@ -33,6 +33,10 @@ env:
   RTEMS_RELEASE: "6"
   RTEMS_PREFIX: /home/runner/rtems/6
 
+# The Erlang/OTP and rebar3 versions used by the setup-beam steps below must
+# match OTP_VERSION and REBAR3_VERSION in src/platforms/rtems/docker/dependencies.sh,
+# so the local Docker toolchain builds the same BEAM files as CI.
+
 jobs:
   rtems-sparc:
     name: rtems (erc32)
@@ -50,8 +54,8 @@ jobs:
 
     - uses: erlef/setup-beam@v1
       with:
-        otp-version: "28.5.0.8"
-        rebar3-version: "3.25.1"
+        otp-version: "29.1.2"
+        rebar3-version: "3.27.3"
         hexpm-mirrors: |
           https://builds.hex.pm
           https://repo.hex.pm
@@ -315,8 +319,8 @@ jobs:
 
     - uses: erlef/setup-beam@v1
       with:
-        otp-version: "28.5.0.8"
-        rebar3-version: "3.25.1"
+        otp-version: "29.1.2"
+        rebar3-version: "3.27.3"
         hexpm-mirrors: |
           https://builds.hex.pm
           https://repo.hex.pm
@@ -926,8 +930,8 @@ jobs:
 
     - uses: erlef/setup-beam@v1
       with:
-        otp-version: "28.5.0.8"
-        rebar3-version: "3.25.1"
+        otp-version: "29.1.2"
+        rebar3-version: "3.27.3"
         hexpm-mirrors: |
           https://builds.hex.pm
           https://repo.hex.pm
