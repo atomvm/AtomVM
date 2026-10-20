@@ -263,6 +263,51 @@ the HTTP request checks traffic through the AP.
 The existing `test_esp32*_wifi` suites assume the emulator AP, fixed RSSI and
 emulator network addresses. Use the application above on a real network.
 
+## ESP32-C3 Bluetooth/Wi-Fi coexistence
+
+Use the minimal BLE test after selecting C3 and rebuilding its hardware SDK
+from the current patches:
+
+```sh
+export TEST_MODULE=test_esp32c3_ble
+export HW_RTEMS_BT=ON
+cp "$REPO_ROOT/src/platforms/rtems/tests/test_erl_sources/$TEST_MODULE.erl" \
+    "$HW_WORK/$TEST_MODULE.erl"
+```
+
+Follow the build/flash steps below and supply Wi-Fi credentials using the same
+private JSON/UART protocol. The test starts a non-connectable `AtomVM-BLE`
+advertiser before Wi-Fi, joins the AP, runs HTTP requests, and stops/restarts
+Wi-Fi while Bluetooth remains enabled. It requires Internet access to
+`example.com`. Keep a BLE scanner running across both Wi-Fi phases and verify
+advertisements after the restart. `Return value: ok` checks the application and
+HCI responses; the receiver check is needed to establish over-the-air behavior.
+The `{bt_vm_progress,ok}` marker also verifies that another Erlang process runs
+while the native controller initializes. `bt_start/0` yields until HCI setup
+completes; `bt_start_async/0` and `bt_status/0` expose the same operation without
+waiting.
+Manufacturer data with test company ID `0xffff` contains a little-endian
+32-bit counter incremented after each controller-confirmed advertising event.
+The controller is enabled for one event at a time, with about 1.28 seconds
+between events. The three advertising-channel transmissions within one event
+share a counter; different events use different counters. Check that received
+counters continue increasing throughout the test, including after Wi-Fi restarts.
+Connections, pairing and GATT are not implemented by this controller smoke test.
+
+To compare experimental Wi-Fi modem power saving, export
+`HW_WIFI_POWER_SAVE=MIN_MODEM` or `MAX_MODEM` before building; the default is
+`NONE`. For maximum mode, `export HW_WIFI_LISTEN_INTERVAL=10` uses ten AP
+beacon intervals between wakeups instead of the default three. Compare
+received counters and HTTP traffic across the three modes.
+
+For native stack measurements, add `-DCONFIGURE_STACK_CHECKER_ENABLED` to the
+firmware's C flags and call `rtems_stack_checker_report_usage()` from a native
+task after exercising both radios. A C3 diagnostic run measured 660 bytes used
+by the 4 KiB controller task and 1584 bytes by the 4 KiB initialization/HCI task.
+These are observed high-water marks, not bounds for other controller features.
+ESP-IDF's FreeRTOS task stack argument is in bytes too; do not multiply it by
+the native FreeRTOS word size.
+
 ## 4. Build and flash
 
 Build the host libraries once:
@@ -271,7 +316,7 @@ Build the host libraries once:
 cmake -S "$REPO_ROOT" -B "$HW_WORK/host" -G Ninja -DAVM_DISABLE_JIT=ON
 cmake --build "$HW_WORK/host" -t atomvmlib-rtems
 mkdir -p "$HW_WORK/beam"
-export TEST_MODULE=hw_test
+export TEST_MODULE="${TEST_MODULE:-hw_test}"
 ```
 
 Use this block for each test module. Keep the source at
@@ -283,13 +328,17 @@ erlc +debug_info -o "$HW_WORK/beam" "$HW_WORK/$TEST_MODULE.erl"
 "$HW_WORK/host/tools/packbeam/packbeam" create -p -r -s "$TEST_MODULE" \
     "$HW_WORK/$TEST_MODULE.avm" "$HW_WORK/beam/$TEST_MODULE.beam" \
     "$HW_WORK/host/libs/atomvmlib-rtems.avm"
-docker run --rm -e CHIP -e TEST_MODULE \
+docker run --rm -e CHIP -e TEST_MODULE -e HW_RTEMS_BT -e HW_WIFI_POWER_SAVE \
+    -e HW_WIFI_LISTEN_INTERVAL \
     -v "$REPO_ROOT:/workspace:ro" -v "$HW_WORK:/hw" "$HW_IMAGE" bash -euc '
     cmake -S /workspace/src/platforms/rtems -B "/hw/$TEST_MODULE" -G Ninja \
         -DCMAKE_TOOLCHAIN_FILE=/workspace/src/platforms/rtems/cmake/rtems-toolchain.cmake \
         -DRTEMS_PREFIX=/opt/rtems/7 -DRTEMS_VERSION=7 \
         -DRTEMS_BSP="riscv/${CHIP}db" -DRTEMS_BOARD="$CHIP" \
-        -DRTEMS_SLEEP_TEST_FIXTURE=OFF -DAVM_PACK="/hw/$TEST_MODULE.avm"
+        -DRTEMS_SLEEP_TEST_FIXTURE=OFF -DRTEMS_BT="${HW_RTEMS_BT:-OFF}" \
+        -DRTEMS_WIFI_POWER_SAVE="${HW_WIFI_POWER_SAVE:-NONE}" \
+        -DRTEMS_WIFI_LISTEN_INTERVAL="${HW_WIFI_LISTEN_INTERVAL:-3}" \
+        -DAVM_PACK="/hw/$TEST_MODULE.avm"
     cmake --build "/hw/$TEST_MODULE" -j4
     '
 export HW_BIN="$HW_WORK/$TEST_MODULE/AtomVM-${CHIP}db.bin"

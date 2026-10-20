@@ -47,6 +47,9 @@
 #include <utils.h>
 
 #include "wifi.h"
+#ifdef RTEMS_HAS_BT
+#include "rtems_bt.h"
+#endif
 #include <interop.h>
 
 static term create_pair(Context *ctx, term term1, term term2)
@@ -192,36 +195,57 @@ static const struct Nif rtems_resolver_ready_nif = {
     .nif_ptr = nif_rtems_resolver_ready
 };
 
-static term nif_rtems_wifi_start(Context *ctx, int argc, term argv[])
+static term rtems_wifi_start_impl(Context *ctx, term ssid_term, term psk_term, bool connect)
 {
-    UNUSED(argc);
 #if (defined(RTEMS_HAS_LIBBSD) && defined(RTEMS_HAS_WIFI)) || defined(RTEMS_WIFI_BACKEND_ESP32)
     int ok = 0;
-    char *ssid = interop_term_to_string(argv[0], &ok);
+    char *ssid = interop_term_to_string(ssid_term, &ok);
     if (!ok || ssid == NULL) {
         return error_term(ctx, BADARG_ATOM);
     }
     char *psk = NULL;
-    if (argv[1] != NONE_ATOM && argv[1] != UNDEFINED_ATOM) {
-        psk = interop_term_to_string(argv[1], &ok);
+    if (psk_term != NONE_ATOM && psk_term != UNDEFINED_ATOM) {
+        psk = interop_term_to_string(psk_term, &ok);
         if (!ok) {
             free(ssid);
             return error_term(ctx, BADARG_ATOM);
         }
     }
-    int rv = rtems_wifi_start(ssid, psk, true);
+    int rv = rtems_wifi_start(ssid, psk, connect);
     free(ssid);
     free(psk);
     return rv == 0 ? OK_ATOM : error_atom(ctx, ATOM_STR("\x5", "eio"));
 #else
-    (void) argv;
+    (void) ssid_term;
+    (void) psk_term;
+    (void) connect;
     return error_atom(ctx, ATOM_STR("\x7", "enotsup"));
 #endif
+}
+
+static term nif_rtems_wifi_start(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    return rtems_wifi_start_impl(ctx, argv[0], argv[1], true);
 }
 
 static const struct Nif rtems_wifi_start_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_rtems_wifi_start
+};
+
+static term nif_rtems_wifi_start3(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    if (argv[2] != TRUE_ATOM && argv[2] != FALSE_ATOM) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    return rtems_wifi_start_impl(ctx, argv[0], argv[1], argv[2] == TRUE_ATOM);
+}
+
+static const struct Nif rtems_wifi_start3_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_rtems_wifi_start3
 };
 
 static term nif_rtems_wifi_stop(Context *ctx, int argc, term argv[])
@@ -310,6 +334,46 @@ static const struct Nif rtems_wifi_status_nif = {
     .nif_ptr = nif_rtems_wifi_status
 };
 
+static term nif_rtems_bt_start(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+#ifdef RTEMS_HAS_BT
+    return rtems_bt_start_async() ? OK_ATOM : error_atom(ctx, ATOM_STR("\x3", "eio"));
+#else
+    return error_atom(ctx, ATOM_STR("\x7", "enotsup"));
+#endif
+}
+
+static const struct Nif rtems_bt_start_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_rtems_bt_start
+};
+
+static term nif_rtems_bt_status(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+#ifdef RTEMS_HAS_BT
+    switch (rtems_bt_get_state()) {
+        case RTEMS_BT_STOPPED:
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x7", "stopped"));
+        case RTEMS_BT_STARTING:
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x8", "starting"));
+        case RTEMS_BT_STARTED:
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x7", "started"));
+        case RTEMS_BT_FAILED:
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x6", "failed"));
+    }
+#endif
+    return error_atom(ctx, ATOM_STR("\x7", "enotsup"));
+}
+
+static const struct Nif rtems_bt_status_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_rtems_bt_status
+};
+
 static term nif_rtems_sntp_sync(Context *ctx, int argc, term argv[])
 {
 #if defined(RTEMS_HAS_LIBBSD) || defined(RTEMS_HAS_LWIP)
@@ -394,11 +458,20 @@ static const struct Nif *network_nif_get_nif(const char *nifname)
     if (strcmp("atomvm_rtems:wifi_start/2", nifname) == 0) {
         return &rtems_wifi_start_nif;
     }
+    if (strcmp("atomvm_rtems:wifi_start/3", nifname) == 0) {
+        return &rtems_wifi_start3_nif;
+    }
     if (strcmp("atomvm_rtems:wifi_stop/0", nifname) == 0) {
         return &rtems_wifi_stop_nif;
     }
     if (strcmp("atomvm_rtems:wifi_status/0", nifname) == 0) {
         return &rtems_wifi_status_nif;
+    }
+    if (strcmp("atomvm_rtems:bt_start_async/0", nifname) == 0) {
+        return &rtems_bt_start_nif;
+    }
+    if (strcmp("atomvm_rtems:bt_status/0", nifname) == 0) {
+        return &rtems_bt_status_nif;
     }
     if (strcmp("atomvm_rtems:sntp_sync/1", nifname) == 0) {
         return &rtems_sntp_sync_nif;

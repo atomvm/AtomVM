@@ -1,0 +1,51 @@
+Subject: [PATCH] Match the Wi-Fi sleep-clock calibration ABI
+
+The Wi-Fi OS adapter expects Q12 microseconds, not the system RTC's Q19.
+On C3, follow the selected Bluetooth LP clock: XTAL is divided to 1 MHz.
+Allow the application to provide its measured RTC frequency for modem sleep
+instead of relying on a nominal oscillator frequency.
+
+--- a/src/rtems_wifi_os_adapter.c
++++ b/src/rtems_wifi_os_adapter.c
+@@ -1976,21 +1976,28 @@
+   (void) dissatisfy;
+ }
+
+-/*
+- * The RTC slow clock's measured frequency, as a period in 1/2^19 microsecond
+- * units -- the format rtc_clk_cal() returns and the WiFi libraries expect for
+- * their sleep arithmetic.
+- *
+- * Returned from the nominal 150 kHz rather than measured.  A real calibration
+- * counts slow-clock ticks against the crystal, which needs the RTC and TIMG
+- * registers this port does not otherwise touch; the error is the oscillator's
+- * own tolerance, which is several percent and matters only for sleep timing
+- * that is switched off here anyway.  Worth revisiting with #101 if sleep is
+- * ever enabled.
+- */
++/* System RTC calibration is Q19 microseconds; the Wi-Fi ABI uses Q12.
++ * Retain the nominal period for standalone SDK users until their application
++ * supplies a measured RTC frequency, as AtomVM does before enabling sleep. */
++static uint32_t rtems_wifi_rtc_cal = (uint32_t) ( ( 1000000ULL << 19 ) / 150000ULL );
++
++void rtems_esp_wifi_set_rtc_frequency( uint32_t frequency )
++{
++  if ( frequency != 0 ) {
++    rtems_wifi_rtc_cal = (uint32_t) ( ( 1000000ULL << 19 ) / frequency );
++  }
++}
++
+ static uint32_t rtems_wifi_slowclk_cal_get( void )
+ {
+-  return (uint32_t) ( ( 1000000ULL << 19 ) / 150000ULL );
++#if defined(CONFIG_IDF_TARGET_ESP32C3)
++  /* esp_coex_common_clk_slowclk_cal_get_wrapper(): BT can select the
++   * 1 MHz XTAL-derived LP clock instead of the RTC slow oscillator. */
++  if ( REG_GET_BIT( SYSTEM_BT_LPCK_DIV_FRAC_REG, SYSTEM_LPCLK_SEL_XTAL ) ) {
++    return 1u << SOC_WIFI_LIGHT_SLEEP_CLK_WIDTH;
++  }
++#endif
++  return rtems_wifi_rtc_cal >> ( 19 - SOC_WIFI_LIGHT_SLEEP_CLK_WIDTH );
+ }
+
+ static int rtems_wifi_phy_update_country_info( const char *country )

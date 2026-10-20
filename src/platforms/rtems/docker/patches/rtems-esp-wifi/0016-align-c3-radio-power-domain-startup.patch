@@ -1,0 +1,83 @@
+Subject: [PATCH] Match ESP-IDF C3 radio power-domain startup
+
+Direct boot skips rtc_init(), which clears force-up and force-no-isolation
+bits before the radio takes ownership. Do not force the Wi-Fi/BT domains
+on or repeat the BSP's extra BT clock/reset sequence. Release BT isolation
+before preparing the shared modem domain, as esp_bt_power_domain_on() does.
+
+--- a/src/rtems_esp_wifi_init.c
++++ b/src/rtems_esp_wifi_init.c
+@@ -75,6 +75,7 @@
+ #if defined(RTEMS_BOARD_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C3)
+ #include <hal/clk_gate_ll.h>
+ #include <hal/regi2c_ctrl_ll.h>
++#include <soc/rtc_cntl_reg.h>
+ #endif
+
+ #if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5) \
+@@ -475,26 +476,10 @@
+ {
+   uint32_t reg;
+
+-  /*
+-   * Powered, and forced so rather than left to the automatic control.
+-   *
+-   * ESP-IDF only clears WIFI_FORCE_PD here, because it can rely on
+-   * WIFI_FORCE_PU and WIFI_FORCE_NOISO still holding their reset value of 1.
+-   * On this boot path they do not: read back on hardware, DIG_PWC is
+-   * 0x00000800 and DIG_ISO is 0x00400080 by the time the port runs -- BT
+-   * forced down and isolated, and every FORCE_PU/FORCE_NOISO bit clear,
+-   * including WiFi's.  With neither FORCE_PU nor FORCE_PD set the domain is
+-   * under automatic control, and the whole modem digital block reads back as
+-   * zero: FE[0x174] and AGC[0x8c] are 0, writes do not stick, and
+-   * register_chipv7_phy() spins forever in ram_iq_est_enable() waiting on a
+-   * done flag in a block that is not there.
+-   *
+-   * So set the two positives as well as clearing the two negatives, and clear
+-   * WIFI_PD_EN so nothing power-gates the domain behind our back.
+-   */
++  /* Direct boot skips rtc_init(), which clears the force-up bits. Match
++   * that initial state, then esp_wifi_bt_power_domain_on()'s release of PD. */
+   reg = rtems_wifi_reg_read( RTEMS_WIFI_RTC_DIG_PWC_REG );
+-  reg &= ~( RTEMS_WIFI_RTC_WIFI_FORCE_PD | RTEMS_WIFI_RTC_WIFI_PD_EN );
+-  reg |= RTEMS_WIFI_RTC_WIFI_FORCE_PU;
++  reg &= ~( RTEMS_WIFI_RTC_WIFI_FORCE_PD | RTEMS_WIFI_RTC_WIFI_FORCE_PU );
+   rtems_wifi_reg_write( RTEMS_WIFI_RTC_DIG_PWC_REG, reg );
+
+   /*
+@@ -524,15 +509,9 @@
+   rtems_wifi_reg_write( RTEMS_WIFI_RST_EN_REG,
+                         reg & ~RTEMS_WIFI_MODEM_RESET_WHEN_PU );
+
+-  /*
+-   * Out of isolation.  Order matters: power, then reset, then this.
+-   * FORCE_NOISO for the same reason as FORCE_PU above -- clearing FORCE_ISO
+-   * alone only returns the domain to automatic isolation, which is the state
+-   * it was already in and which keeps the block dark.
+-   */
++  /* rtc_init() clears FORCE_NOISO; power-domain startup releases ISO. */
+   reg = rtems_wifi_reg_read( RTEMS_WIFI_RTC_DIG_ISO_REG );
+-  reg &= ~RTEMS_WIFI_RTC_WIFI_FORCE_ISO;
+-  reg |= RTEMS_WIFI_RTC_WIFI_FORCE_NOISO;
++  reg &= ~( RTEMS_WIFI_RTC_WIFI_FORCE_ISO | RTEMS_WIFI_RTC_WIFI_FORCE_NOISO );
+   rtems_wifi_reg_write( RTEMS_WIFI_RTC_DIG_ISO_REG, reg );
+
+   /*
+@@ -1009,6 +988,17 @@
+
+ #if defined(RTEMS_ESP_WIFI_MANAGED_PHY)
+ #if defined(RTEMS_BOARD_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C3)
++void rtems_esp_bt_power_domain_on( void )
++{
++  /* rtc_init() + esp_bt_power_domain_on(), before the shared modem domain.
++   * Do not repeat the BSP's extra clock/reset sequence here: the peripheral
++   * reset below and PHY clock ownership already implement IDF's sequence. */
++  CLEAR_PERI_REG_MASK( RTC_CNTL_DIG_PWC_REG,
++    RTC_CNTL_BT_FORCE_PD | RTC_CNTL_BT_FORCE_PU );
++  CLEAR_PERI_REG_MASK( RTC_CNTL_DIG_ISO_REG,
++    RTC_CNTL_BT_FORCE_ISO | RTC_CNTL_BT_FORCE_NOISO );
++}
++
+ void rtems_esp_bt_periph_enable( void )
+ {
+   /* esp_bt_controller_init(): periph_module_enable(), then reset(). */

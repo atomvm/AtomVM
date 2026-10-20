@@ -136,10 +136,47 @@ remain unverified.
 RTEMS retains its own scheduler, queues and interrupt controller integration.
 Wi-Fi buffers are smaller than IDF's defaults to fit available RAM, calibration
 runs fully at boot without IDF's NVS calibration cache, and station power saving
-is disabled. Physical sleep and analog validation remain tracked in the TODOs.
+is disabled by default. `-DRTEMS_WIFI_POWER_SAVE=MIN_MODEM` or `MAX_MODEM`
+selects experimental station modem sleep; `NONE` keeps it disabled.
+`-DRTEMS_WIFI_LISTEN_INTERVAL=10` sets maximum-mode wakeups to ten AP beacon
+intervals; its default is three, matching IDF. `ON`/`OFF` remain aliases for
+`MIN_MODEM`/`NONE`.
+The Wi-Fi sleep-clock callback uses IDF's Q12 period format and the selected
+C3 Bluetooth LP clock; modem sleep also supplies a measured RTC period.
+Physical sleep and analog validation remain tracked in the TODOs.
 
-Wi-Fi software coexistence follows ESP-IDF: `esp_wifi_init()` registers the
-coexistence OS adapter and runs `coex_pre_init()` before
+On ESP32-C3, `RTEMS_BT=ON` adds a minimal non-connectable legacy BLE
+advertiser named `AtomVM-BLE`. Shared modem startup supports either radio
+starting first, and PHY ownership keeps RF enabled while either radio uses it.
+Radio power follows `rtc_init()` and `esp_bt_power_domain_on()`: clear the
+force-up/force-no-isolation bits and release BT isolation before preparing
+the shared modem domain. The BSP's additional BT power/reset sequence is
+not used. The controller uses ESP-IDF's BT peripheral reset, 40 MHz XTAL
+divided to 1 MHz for LPCLK, Q19 clock conversion, external PLL tracking and
+default +9 dBm transmit power. CPU/APB clocks remain fixed at 160/80 MHz;
+controller sleep is disabled. The configured scan cache has 20 entries
+instead of IDF's default 100 to leave heap space for Wi-Fi. HCI command
+completion and status are checked before `bt_start/0`
+returns success. Initialization runs in a native task and the Erlang wrapper
+yields while waiting; `bt_start_async/0` and `bt_status/0` expose that state
+directly. This is controller bring-up; scanning, connections, GATT and
+a BLE host API remain future work. BLE scheduler errors and sparse Mac scanner
+reception are still under investigation. See [hardware testing](../../../HW_TEST.md).
+
+The smoke-test configuration intentionally differs from IDF's defaults: one
+activity instead of six, a 20-entry scan cache instead of 100, and connections,
+scanning, DTM and encryption disabled. BLE 5 controller commands enable one
+advertising event at a time, retaining legacy non-connectable packets on air.
+The manufacturer counter advances after the controller reports that event
+complete; the next event gets a new counter. These choices keep the C3 heap
+available for Wi-Fi. Task stack sizes remain in bytes, as in ESP-IDF's FreeRTOS
+port. The ROM-ready callback retains
+IDF's default minimum-connection-interval setting even though this test does
+not accept connections.
+
+Wi-Fi software coexistence follows ESP-IDF: shared C3 modem startup (and
+`esp_wifi_init()` on other chips) registers the coexistence OS adapter and
+runs `coex_pre_init()` before
 `esp_wifi_init_internal()`, because the Wi-Fi blob registers its scheme
 callback before it calls the OS table's `_coex_init()`. The OS table then
 forwards `coex_init()`, `coex_enable()` and the request/release/channel/scheme

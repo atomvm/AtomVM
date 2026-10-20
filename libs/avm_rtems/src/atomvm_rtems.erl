@@ -38,8 +38,12 @@
     ifaddrs/0,
     resolver_ready/0,
     wifi_start/2,
+    wifi_start/3,
     wifi_stop/0,
     wifi_status/0,
+    bt_start/0,
+    bt_start_async/0,
+    bt_status/0,
     rtc_slow_get_binary/0,
     rtc_slow_set_binary/1,
     flash_get_size/0,
@@ -115,6 +119,40 @@ resolver_ready() ->
     ok | {error, term()}.
 wifi_start(_SSID, _PSK) ->
     erlang:nif_error(undefined).
+
+%% @doc Start Wi-Fi, optionally leaving the station unassociated.
+-spec wifi_start(string() | binary(), string() | binary() | none, boolean()) ->
+    ok | {error, term()}.
+wifi_start(_SSID, _PSK, _Connect) ->
+    erlang:nif_error(undefined).
+
+%% @doc Start the minimal non-connectable BLE advertiser, yielding while it initializes.
+-spec bt_start() -> ok | {error, term()}.
+bt_start() ->
+    case ?MODULE:bt_start_async() of
+        ok -> bt_wait_started(2000);
+        Error -> Error
+    end.
+
+%% @doc Start BLE initialization in a native task; inspect completion with bt_status/0.
+-spec bt_start_async() -> ok | {error, term()}.
+bt_start_async() ->
+    erlang:nif_error(undefined).
+
+%% @doc Return BLE initialization state, including HCI advertising completion.
+-spec bt_status() -> stopped | starting | started | failed | {error, term()}.
+bt_status() ->
+    erlang:nif_error(undefined).
+
+bt_wait_started(0) ->
+    {error, timeout};
+bt_wait_started(Attempts) ->
+    case ?MODULE:bt_status() of
+        started -> ok;
+        starting -> timer:sleep(10), bt_wait_started(Attempts - 1);
+        failed -> {error, eio};
+        Error -> Error
+    end.
 
 %% @doc Stop Wi-Fi interface and bring down `wlan0`.
 -spec wifi_stop() -> ok | {error, term()}.

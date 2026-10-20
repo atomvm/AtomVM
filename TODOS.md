@@ -124,16 +124,23 @@ operations a target cannot support.
 - [ ] Add RTEMS JIT support, including executable memory allocation and instruction
   cache synchronization for supported architectures. JIT is currently forced off
   in [CMakeLists.txt](src/platforms/rtems/CMakeLists.txt).
-- [ ] Integrate a BLE controller and host stack with AtomVM. Existing BSP Bluetooth
-  interrupt/power support and chip capability flags do not provide a BLE stack.
-  Wi-Fi now registers ESP-IDF's software coexistence adapter and runs
-  `coex_pre_init()` from `esp_wifi_init()` (`libcoexist.a`, pinned to the HAL
-  gitlink) instead of the disabled-coexistence stubs. A controller still has to
-  register its own coexistence callbacks and share the PHY.
+- [ ] Integrate a BLE host stack with AtomVM. The ESP32-C3 controller is
+  brought up behind `RTEMS_BT` and advertises through its VHCI transport;
+  existing BSP Bluetooth interrupt/power support and chip capability flags do
+  not provide a host stack. Shared C3 modem startup registers ESP-IDF's
+  software coexistence adapter and runs `coex_pre_init()` once for either
+  radio startup order (`libcoexist.a`, pinned to the HAL gitlink). The C3
+  controller registers its coexistence callback and holds a separate PHY
+  ownership bit when built with `RTEMS_BT`.
 
-- [ ] Validate coexistence arbitration with a BLE controller. Wi-Fi alone
-  exercises the adapter; the emulator Wi-Fi suites cover it on all four ESP32
-  targets.
+- [ ] Fix and validate sustained C3 BLE advertising during Wi-Fi traffic.
+  Hardware tests pass HCI setup, Wi-Fi association/DHCP, HTTP traffic and
+  Wi-Fi stop/restart, but a Mac scanner sees sparse advertisements and the
+  controller can emit `BLE_ERR_*` scheduler traces, including without Wi-Fi.
+  Changing payload counters establish reception beyond startup in some runs.
+  The experimental minimum/maximum modem-sleep modes still need longer
+  hardware validation and an independent receiver comparison. Application
+  success alone does not establish working radio coexistence.
 
 ## Physical validation
 

@@ -16,6 +16,9 @@ ESP_HAL_COMMIT=f9f3710f964e536b4fa05d82776c09ed231268a4
 # esp-hal-3rdparty pins this as its esp_coex/lib gitlink. The adapter-header
 # (6b18c39) and Wi-Fi basic (6691b5d) MD5s match that HAL and esp32-wifi-lib.
 ESP_COEX_COMMIT=fa152b3b6b2e3c5e3a57e55fcf4b005a4e28cef9
+# ESP-IDF pins this submodule; the flash-only controller keeps its IRAM
+# section to the ESP-IDF size instead of linking ~28 KiB more code.
+ESP32C3_BT_COMMIT=0a08c4b32f3666003080b662a1a61794da24ff0f
 RTEMS_ESP_WIFI_COMMIT=95129edf3086ae48ad61ef57b371129e2823ec45
 RTEMS_MBEDTLS_COMMIT=22098d41c6620ce07cf8a0134d37302355e1e5ef
 RTEMS_LINUX_DTS_COMMIT=830b3c68c1fb1e9176028d02ef86f3cf76aa2476

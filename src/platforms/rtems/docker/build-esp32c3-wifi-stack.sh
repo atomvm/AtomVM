@@ -178,6 +178,8 @@ rtems_clone_pinned https://github.com/espressif/esp-phy-lib.git "${ESP_PHY_COMMI
 
 rtems_clone_pinned https://github.com/espressif/esp-coex-lib.git "${ESP_COEX_COMMIT}" esp-coex-lib
 
+rtems_clone_pinned https://github.com/espressif/esp32c3-bt-lib.git "${ESP32C3_BT_COMMIT}" esp32c3-bt-lib
+
 rtems_clone_pinned https://github.com/espressif/esp-hal-3rdparty.git "${ESP_HAL_COMMIT}" esp-hal-3rdparty
 
 rtems_clone_pinned https://github.com/Mbed-TLS/mbedtls.git "${RTEMS_MBEDTLS_COMMIT}" mbedtls
@@ -321,6 +323,7 @@ echo "==> Installing Wi-Fi and PHY binary blobs into ${BSP_LIB}..."
 cp "${BUILD_DIR}/esp32-wifi-lib/esp32c3/"lib*.a "${BSP_LIB}/"
 cp "${BUILD_DIR}/esp-phy-lib/esp32c3/"lib*.a "${BSP_LIB}/"
 cp "${BUILD_DIR}/esp-coex-lib/esp32c3/libcoexist.a" "${BSP_LIB}/"
+cp "${BUILD_DIR}/esp32c3-bt-lib/esp32c3/libbtdm_app_flash.a" "${BSP_LIB}/"
 
 # Copy Mask ROM linker scripts to BSP lib directory
 echo "==> Installing Mask ROM linker scripts into ${BSP_LIB}..."
@@ -373,4 +376,5 @@ echo "    - librtems_esp_wifi.a"
 echo "    - libwpa.a"
 echo "    - libmbedtls.a"
 echo "    - libnet80211.a, libpp.a, libcore.a, libphy.a, etc."
+echo "    - libbtdm_app_flash.a (C3 BLE controller)"
 echo "================================================================"

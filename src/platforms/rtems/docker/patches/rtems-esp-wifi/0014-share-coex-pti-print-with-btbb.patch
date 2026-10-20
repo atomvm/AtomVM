@@ -1,0 +1,44 @@
+From: Peter M. <petermm@gmail.com>
+Subject: [PATCH] Share coex_pti_print with libbtbb
+
+The ESP32-C3 BLE controller's libbtbb.a defines coex_pti_print(), the same
+symbol the Wi-Fi glue provides as a printf redirect. Linking both archives
+fails with a multiple-definition error when Bluetooth is enabled.
+
+Make the glue's definition weak, so libbtbb's strong definition wins when the
+controller is linked while a Wi-Fi-only image still resolves the symbol from
+the glue.
+
+diff --git a/src/rtems_esp_glue.c b/src/rtems_esp_glue.c
+--- a/src/rtems_esp_glue.c
++++ b/src/rtems_esp_glue.c
+@@ -86,8 +86,8 @@
+   return len;
+ }
+ 
+-#define RTEMS_ESP_PRINTF(name, tag)                     \
+-  int name(const char *format, ...)                     \
++#define RTEMS_ESP_PRINTF_ATTR(attr, name, tag)          \
++  attr int name(const char *format, ...)                \
+   {                                                     \
+     va_list ap;                                         \
+     int len;                                            \
+@@ -98,13 +98,17 @@
+                                                         \
+     return len;                                         \
+   }
++
++#define RTEMS_ESP_PRINTF(name, tag) \
++  RTEMS_ESP_PRINTF_ATTR(, name, tag)
+ 
+ RTEMS_ESP_PRINTF(pp_printf, "wifi.pp")
+ RTEMS_ESP_PRINTF(phy_printf, "wifi.phy")
+ RTEMS_ESP_PRINTF(net80211_printf, "wifi.net80211")
+ RTEMS_ESP_PRINTF(mesh_printf, "wifi.mesh")
+ RTEMS_ESP_PRINTF(sc_printf, "wifi.smartconfig")
+-RTEMS_ESP_PRINTF(coex_pti_print, "wifi.coex")
++/* libbtbb also exports this when the BLE controller is linked. */
++RTEMS_ESP_PRINTF_ATTR(__attribute__((weak)), coex_pti_print, "wifi.coex")
+ RTEMS_ESP_PRINTF(coexist_printf, "wifi.coex")
+ 
+ /*

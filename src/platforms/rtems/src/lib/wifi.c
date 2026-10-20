@@ -351,6 +351,11 @@ bool rtems_wifi_check_sd_config_and_start(void)
 
 #elif defined(RTEMS_WIFI_BACKEND_ESP32)
 
+#ifdef RTEMS_WIFI_POWER_SAVE
+#include "rtc.h"
+extern void rtems_esp_wifi_set_rtc_frequency(uint32_t frequency);
+#endif
+
 #include <esp_event.h>
 #include <esp_wifi.h>
 #include <lwip/dhcp.h>
@@ -542,6 +547,14 @@ int rtems_wifi_start(const char *ssid, const char *psk, bool connect)
     }
 
     if (!wifi_initialized) {
+#ifdef RTEMS_WIFI_POWER_SAVE
+        uint32_t frequency = rtems_esp_rtc_frequency();
+        if (frequency == 0) {
+            fprintf(stderr, "AtomVM wifi: RTC calibration failed\n");
+            return -1;
+        }
+        rtems_esp_wifi_set_rtc_frequency(frequency);
+#endif
         wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
         /* Keep heap available for the network gen_server and scan results. */
         cfg.static_rx_buf_num = 2;
@@ -572,6 +585,9 @@ int rtems_wifi_start(const char *ssid, const char *psk, bool connect)
     }
 
     wifi_config_t sta_cfg = { 0 };
+#ifdef RTEMS_WIFI_POWER_SAVE
+    sta_cfg.sta.listen_interval = RTEMS_WIFI_LISTEN_INTERVAL;
+#endif
     size_t ssid_len = strlen(ssid);
     size_t psk_len = psk != NULL ? strlen(psk) : 0;
     if (ssid_len > sizeof(sta_cfg.sta.ssid) || psk_len > sizeof(sta_cfg.sta.password)) {
@@ -596,8 +612,12 @@ int rtems_wifi_start(const char *ssid, const char *psk, bool connect)
     if (wait_wifi_started(true) != 0) {
         return -1;
     }
-    /* The RTEMS adapter does not implement modem sleep. */
-    if (esp_wifi_set_ps(WIFI_PS_NONE) != ESP_OK) {
+#ifdef RTEMS_WIFI_POWER_SAVE
+    const wifi_ps_type_t power_save = RTEMS_WIFI_POWER_SAVE;
+#else
+    const wifi_ps_type_t power_save = WIFI_PS_NONE;
+#endif
+    if (esp_wifi_set_ps(power_save) != ESP_OK) {
         return -1;
     }
 

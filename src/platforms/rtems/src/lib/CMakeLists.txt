@@ -72,6 +72,13 @@ if(RTEMS_SLEEP_TEST_FIXTURE)
     list(REMOVE_ITEM SOURCE_FILES esp_sleep_hw.c)
 endif()
 
+# The BLE controller reuses the Wi-Fi image copy and coexistence layer, so it is
+# only built for the C3 with the ESP Wi-Fi stack installed.
+if(RTEMS_BT AND RTEMS_BOARD STREQUAL "esp32c3" AND RTEMS_HAS_ESP_WIFI)
+    list(APPEND SOURCE_FILES rtems_bt.c)
+    list(APPEND HEADER_FILES rtems_bt.h)
+endif()
+
 add_library(libAtomVM${PLATFORM_LIB_SUFFIX} ${SOURCE_FILES} ${HEADER_FILES})
 target_compile_features(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC c_std_11)
 if(CMAKE_COMPILER_IS_GNUCC)
@@ -147,6 +154,9 @@ elseif(RTEMS_BOARD STREQUAL "esp32c3" OR RTEMS_BOARD STREQUAL "esp32c5" OR RTEMS
     )
     if(RTEMS_BOARD STREQUAL "esp32c3")
         target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE RTEMS_BOARD_ESP32C3)
+        if(RTEMS_BT)
+            target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE RTEMS_HAS_BT)
+        endif()
     elseif(RTEMS_BOARD STREQUAL "esp32c5")
         target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE RTEMS_BOARD_ESP32C5)
     elseif(RTEMS_BOARD STREQUAL "esp32c6")
@@ -162,6 +172,12 @@ elseif(RTEMS_BOARD STREQUAL "esp32c3" OR RTEMS_BOARD STREQUAL "esp32c5" OR RTEMS
             RTEMS_HAS_WIFI
             RTEMS_WIFI_BACKEND_ESP32
         )
+        if(NOT RTEMS_WIFI_POWER_SAVE_MODE STREQUAL "NONE")
+            target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
+                RTEMS_WIFI_POWER_SAVE=WIFI_PS_${RTEMS_WIFI_POWER_SAVE_MODE}
+                RTEMS_WIFI_LISTEN_INTERVAL=${RTEMS_WIFI_LISTEN_INTERVAL}
+            )
+        endif()
         # Use the SDK's board-specific configuration before the local C3 fallback.
         target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} BEFORE PRIVATE
             "${RTEMS_PREFIX}/${RTEMS_TARGET}/${RTEMS_BSP_NAME}/lib/include/rtems-esp"

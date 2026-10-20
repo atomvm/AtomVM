@@ -139,6 +139,10 @@ endif()
 
 if(RTEMS_BOARD STREQUAL "esp32c3" AND RTEMS_HAS_ESP_WIFI)
     target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_HAS_WIFI RTEMS_WIFI_BACKEND_ESP32)
+    if(RTEMS_BT)
+        target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_HAS_BT)
+        set(_esp32c3_bt_libs btdm_app_flash btbb)
+    endif()
     set(_esp32c3_lib_dir "${RTEMS_PREFIX}/${RTEMS_TARGET}/${RTEMS_BSP_NAME}/lib")
     target_link_options(${PROJECT_EXECUTABLE} PRIVATE
         -Wl,-u,esp32c3_netif_add
@@ -160,6 +164,7 @@ if(RTEMS_BOARD STREQUAL "esp32c3" AND RTEMS_HAS_ESP_WIFI)
         core
         phy
         coexist
+        ${_esp32c3_bt_libs}
         mesh
         espnow
         smartconfig

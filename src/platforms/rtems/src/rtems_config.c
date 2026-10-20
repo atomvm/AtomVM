@@ -51,9 +51,15 @@
 #define CONFIGURE_INIT_TASK_STACK_SIZE (32 * 1024)
 #define CONFIGURE_EXTRA_TASK_STACKS (64 * 1024)
 #else
+#ifdef RTEMS_HAS_BT
+#define CONFIGURE_MAXIMUM_TASKS 12
+#define CONFIGURE_MAXIMUM_SEMAPHORES 48
+#define CONFIGURE_MAXIMUM_MESSAGE_QUEUES 12
+#else
 #define CONFIGURE_MAXIMUM_TASKS 8
 #define CONFIGURE_MAXIMUM_SEMAPHORES 36
 #define CONFIGURE_MAXIMUM_MESSAGE_QUEUES 8
+#endif
 #define CONFIGURE_MAXIMUM_TIMERS 24
 #define CONFIGURE_MAXIMUM_POSIX_THREADS 4
 #define CONFIGURE_MAXIMUM_POSIX_KEYS 4
@@ -66,7 +72,13 @@
 // ENXIO. 26 KiB leaves >3 KiB of headroom over the observed peak while keeping
 // enough unified heap free for ESP32-C3 Wi-Fi + OTP gen_tcp/socket tests.
 #define CONFIGURE_INIT_TASK_STACK_SIZE (26 * 1024)
+#ifdef RTEMS_HAS_BT
+/* Extra stack above each configured task's minimum, not a fixed stack pool.
+ * CONFIGURE_UNIFIED_WORK_AREAS shares dynamic stacks with the malloc heap. */
+#define CONFIGURE_EXTRA_TASK_STACKS (12 * 1024)
+#else
 #define CONFIGURE_EXTRA_TASK_STACKS 0
+#endif
 #endif
 #else
 #ifndef AVM_NO_SMP

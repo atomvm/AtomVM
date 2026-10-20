@@ -1,0 +1,39 @@
+Subject: [PATCH] esp32c3: reserve the ROM-owned DRAM by default
+
+Match ESP-IDF's 0x3fcce710 heap ceiling. Radio buffers must not be allocated
+from the last 6384 bytes which are owned by the ROM.
+
+--- a/spec/build/bsps/riscv/esp32/optdramromreserve.yml
++++ b/spec/build/bsps/riscv/esp32/optdramromreserve.yml
+@@ -8,6 +8,8 @@
+ copyrights:
+ - Copyright (C) 2026 Samuel Price <thesamprice@gmail.com>
+ default:
++- enabled-by: riscv/esp32c3db
++  value: 0x18f0
+ - enabled-by: riscv/esp32c5db
+   value: 0x16000
+ - enabled-by: riscv/esp32c6db
+@@ -20,19 +22,13 @@
+   How many bytes at the top of the internal SRAM belong to the ROM rather than
+   to the application, in bytes, aligned to 4.
+
+-  The correct value on this part is 0x18f0, and the default here is 0 anyway.
+-  Read that as a debt, not as a judgement that the memory is free: the reserve
+-  costs 6384 bytes of work area, and measured on hardware that is enough to
+-  stop the MicroPython WiFi example associating -- it leaves 6880 bytes of C
+-  heap where 14416 works, and the WiFi libraries then fail the way they fail
+-  at 2128, which is an empty scan rather than an allocation error.  So this
+-  ships switched off until lwIP stops holding 71.5 KiB in static pools, and
+-  is set to 0x18f0 in the same change that frees it.
++  C3 reserves 0x18f0 bytes, matching ESP-IDF. The Wi-Fi adapter's smaller
++  buffers and timer stack leave space for the radio without using ROM data.
+
+   The ESP32-C3's ROM keeps its own data in the SRAM, from 0x3fcce710 to the
+   end of the block at 0x3fcd0000.  That is where ESP-IDF stops: esp_system's
+   memory.ld computes dram0_0_seg's length from the same address, and the
+-  0x18f0 default here is 0x3fcd0000 - 0x3fcce710.
++  C3 default here is 0x3fcd0000 - 0x3fcce710.
+
+   A BSP that ends its data region at 0x3fcd0000 instead does not gain 6384
+   bytes; it hands out 6384 bytes the ROM believes it owns, to whatever the
