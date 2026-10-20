@@ -183,7 +183,9 @@ elif [ "${DO_SIMULATE}" -eq 1 ]; then
         fi
         EMU_CMD=(esp-emu --chip esp32c3 --firmware "${REPO_ROOT}/src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin")
         if [ "${TEST_WIFI}" -eq 1 ]; then
-            EMU_CMD+=(--batch-size 5000 --wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user)
+            # C3 needs shorter batches to service radio events during
+            # authentication; larger batches time out.
+            EMU_CMD+=(--batch-size 1000 --wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user)
         fi
         EMU_CMD+=(--timeout 60s --exit-on "Return value: ok")
         "${EMU_CMD[@]}" || true
@@ -207,7 +209,7 @@ elif [ "${DO_SIMULATE}" -eq 1 ]; then
                 trap "kill $HTTP_PID $SNTP_PID 2>/dev/null || true" EXIT
                 esp-emu --chip esp32c3 \
                     --firmware /workspace/src/platforms/rtems/build-esp32c3/AtomVM-esp32c3db.bin \
-                    --wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user --batch-size 5000 \
+                    --wifi-ssid "AtomVM-TestAP" --wifi-password "secretpassword" --net user --batch-size 1000 \
                     --timeout 60s --exit-on "Return value: ok"
             ')
         else
