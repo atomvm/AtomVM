@@ -159,6 +159,7 @@ if(RTEMS_BOARD STREQUAL "esp32c3" AND RTEMS_HAS_ESP_WIFI)
         pp
         core
         phy
+        coexist
         mesh
         espnow
         smartconfig
@@ -195,6 +196,7 @@ elseif(RTEMS_BOARD STREQUAL "esp32c6")
             pp
             core
             phy
+            coexist
             mesh
             espnow
             smartconfig
@@ -258,6 +260,7 @@ elseif(RTEMS_BOARD STREQUAL "esp32c5")
             pp
             core
             phy
+            coexist
             mesh
             espnow
             smartconfig
@@ -314,6 +317,7 @@ elseif(RTEMS_BOARD STREQUAL "esp32s31")
             pp
             core
             phy
+            coexist
             mesh
             espnow
             smartconfig

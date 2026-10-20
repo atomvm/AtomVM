@@ -176,6 +176,8 @@ rtems_clone_pinned https://github.com/espressif/esp32-wifi-lib.git "${ESP_WIFI_C
 
 rtems_clone_pinned https://github.com/espressif/esp-phy-lib.git "${ESP_PHY_COMMIT}" esp-phy-lib
 
+rtems_clone_pinned https://github.com/espressif/esp-coex-lib.git "${ESP_COEX_COMMIT}" esp-coex-lib
+
 rtems_clone_pinned https://github.com/espressif/esp-hal-3rdparty.git "${ESP_HAL_COMMIT}" esp-hal-3rdparty
 
 rtems_clone_pinned https://github.com/Mbed-TLS/mbedtls.git "${RTEMS_MBEDTLS_COMMIT}" mbedtls
@@ -267,7 +269,8 @@ COMMON_INC="-isystem ${BSP_INC} -I ${GLUE}/include -I ${GLUE}/include/rtems-esp 
             -I ${HAL}/soc/esp32c5/register -I ${HAL}/hal/esp32c5/include \
             -I ${HAL}/hal/platform_port/include -I ${HAL}/esp_hal_security/include \
             -I ${HAL}/esp_hal_security/esp32c5/include \
-            -I ${HAL}/esp_coex/include -I ${HAL}/esp_wifi/wifi_apps/include \
+            -I ${HAL}/esp_coex/include -I ${HAL}/esp_hal_gpio/include \
+            -I ${HAL}/esp_hal_gpio/esp32c5/include -I ${HAL}/esp_wifi/wifi_apps/include \
             -I ${HAL}/esp_hw_support/include/soc"
 
 # 1. rtems_esp_glue.c
@@ -315,6 +318,7 @@ riscv-rtems7-ar rcs "${BSP_LIB}/librtems_esp_wifi.a" "${BUILD_DIR}"/glue-obj/*.o
 echo "==> Installing Wi-Fi and PHY binary blobs into ${BSP_LIB}..."
 cp "${BUILD_DIR}/esp32-wifi-lib/esp32c5/"lib*.a "${BSP_LIB}/"
 cp "${BUILD_DIR}/esp-phy-lib/esp32c5/"lib*.a "${BSP_LIB}/"
+cp "${BUILD_DIR}/esp-coex-lib/esp32c5/libcoexist.a" "${BSP_LIB}/"
 
 # Copy Mask ROM linker scripts to BSP lib directory
 echo "==> Installing Mask ROM linker scripts into ${BSP_LIB}..."

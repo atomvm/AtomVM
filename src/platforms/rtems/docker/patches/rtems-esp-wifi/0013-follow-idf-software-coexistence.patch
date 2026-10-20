@@ -1,0 +1,565 @@
+From: Peter M. <petermm@gmail.com>
+Subject: [PATCH] Follow ESP-IDF software coexistence from the Wi-Fi OS table
+
+ESP-IDF's Wi-Fi adapter calls coex_init(), coex_enable() and the request,
+release, channel, duration, priority and scheme entry points when software
+coexistence is enabled. The previous RTEMS entries matched the disabled
+wrappers and always reported that Wi-Fi owned the radio.
+
+Register the coexistence OS adapter and run coex_pre_init() before
+esp_wifi_init_internal(), which is what ESP-IDF's secondary init function does
+before esp_wifi_init(). The Wi-Fi blob registers its scheme callback before it
+calls the OS adapter's _coex_init, so doing this from _coex_init is too late:
+coex_schm_lock() reads the ROM data that coex_pre_init() fills in.
+Scheme callbacks are stored and forwarded. Flexible-period entry points stay
+at the disabled-wrapper values because CONFIG_ESP_COEX_POWER_MANAGEMENT is off.
+libcoexist.a logs through coexist_printf, the same redirect the other radio
+blobs already use.
+
+libcoexist.a marks radio-arbitration helpers .coexiram. They run while the
+flash cache may be off, same as the Wi-Fi IRAM sections, so they belong in
+the resident Wi-Fi section rather than the unexpected-section catch-all.
+
+--- a/src/rtems_esp_glue.c
++++ b/src/rtems_esp_glue.c
+@@ -104,6 +104,7 @@
+ RTEMS_ESP_PRINTF(mesh_printf, "wifi.mesh")
+ RTEMS_ESP_PRINTF(sc_printf, "wifi.smartconfig")
+ RTEMS_ESP_PRINTF(coex_pti_print, "wifi.coex")
++RTEMS_ESP_PRINTF(coexist_printf, "wifi.coex")
+ 
+ /*
+  * The PHY's critical section.
+--- a/src/rtems_wifi_os_adapter.c
++++ b/src/rtems_wifi_os_adapter.c
+@@ -262,6 +262,24 @@
+ {
+   return rtems_semaphore_release( (rtems_id) (uintptr_t) semphr )
+     == RTEMS_SUCCESSFUL ? RTEMS_WIFI_PD_TRUE : RTEMS_WIFI_PD_FALSE;
++}
++
++static int32_t rtems_wifi_semphr_take_from_isr( void *semphr, void *hptw )
++{
++  if ( hptw != NULL ) {
++    *(int *) hptw = 0;
++  }
++
++  return rtems_wifi_semphr_take( semphr, 0 );
++}
++
++static int32_t rtems_wifi_semphr_give_from_isr( void *semphr, void *hptw )
++{
++  if ( hptw != NULL ) {
++    *(int *) hptw = 0;
++  }
++
++  return rtems_wifi_semphr_give( semphr );
+ }
+ 
+ /*
+@@ -1583,69 +1601,196 @@
+   return ESP_OK;
+ }
+ 
+-/* === coexistence, which there is nothing to coexist with ================ */
++#undef ESP_OK
++#undef ESP_FAIL
++#include <private/esp_coexist_adapter.h>
++#include <private/esp_coexist_internal.h>
++
++#if !defined(CONFIG_IDF_TARGET_ESP32C3)
++uint32_t rtc_clk_xtal_freq_get( void );
++#endif
+ 
++static int rtems_coex_is_in_isr( void )
++{
++  return rtems_wifi_is_from_isr() ? 1 : 0;
++}
++
++/* === software coexistence ============================================== */
++
+ /*
+- * The ESP32-C3 has one radio shared between WiFi and Bluetooth, and these
+- * entries are how the WiFi side asks for it.  This port builds no Bluetooth,
+- * so WiFi always has the radio and the honest implementation is to say yes.
++ * ESP-IDF's esp32c3/c5/c6/s31 esp_adapter.c calls these when
++ * CONFIG_SW_COEXIST_ENABLE or CONFIG_EXTERNAL_COEX_ENABLE is set. Software
++ * coexistence is on; external wire coexistence is not. coex_pre_init() is
++ * what esp_coex's secondary init function runs after registering the OS
++ * adapter, and the Wi-Fi blob reaches coexistence before _coex_init().
+  *
+- * Deliberately not named failures.  A named failure is right where the answer
+- * is unknown; here it is known, and reporting "not implemented" every time the
+- * libraries check for a peer that cannot exist would be noise that hides the
+- * entries that do still matter.
++ * Flexible-period entry points stay at the disabled-wrapper values because
++ * CONFIG_ESP_COEX_POWER_MANAGEMENT is off. condition_set has no software
++ * coexistence implementation in that adapter either.
+  */
+-static int rtems_wifi_coex_init( void )
++static int ( *rtems_wifi_coex_start_cb )( void );
++static int ( *rtems_wifi_coex_schm_cb )( int );
++
++static int rtems_wifi_coex_start_forward( void )
+ {
++  if ( rtems_wifi_coex_start_cb == NULL ) {
++    return 0;
++  }
++
++  return rtems_wifi_coex_start_cb();
++}
++
++static int rtems_wifi_coex_schm_forward( int event )
++{
++  if ( rtems_wifi_coex_schm_cb == NULL ) {
++    return 0;
++  }
++
++  return rtems_wifi_coex_schm_cb( event );
++}
++
++static int rtems_coex_debug_matrix_init( int event, int signal, bool rev )
++{
++  (void) event;
++  (void) signal;
++  (void) rev;
++
++  /* CONFIG_ESP_COEX_GPIO_DEBUG is off, matching ESP-IDF's wrapper. */
++  return 0x106;
++}
++
++static int rtems_coex_xtal_freq_get( void )
++{
++#if defined(CONFIG_IDF_TARGET_ESP32C3)
++  return 40;
++#else
++  return (int) rtc_clk_xtal_freq_get();
++#endif
++}
++
++#if defined(CONFIG_IDF_TARGET_ESP32C6)
++static int rtems_coex_ieee802154_intr_disable( void )
++{
+   return ESP_OK;
+ }
+ 
++static int rtems_coex_ieee802154_intr_enable( void )
++{
++  return ESP_OK;
++}
++#endif
++
++/*
++ * C3's pinned esp_coex_adapter.c leaves _env_is_chip and _xtal_freq_get
++ * unset. Those fields are in the header (the library checks its MD5), so
++ * leaving them NULL shifts _magic. Fill every field the header declares.
++ */
++static coex_adapter_funcs_t rtems_coex_adapter_funcs = {
++  ._version = COEX_ADAPTER_VERSION,
++  ._task_yield_from_isr = rtems_wifi_task_yield_from_isr,
++  ._semphr_create = rtems_wifi_semphr_create,
++  ._semphr_delete = rtems_wifi_semphr_delete,
++  ._semphr_take_from_isr = rtems_wifi_semphr_take_from_isr,
++  ._semphr_give_from_isr = rtems_wifi_semphr_give_from_isr,
++  ._semphr_take = rtems_wifi_semphr_take,
++  ._semphr_give = rtems_wifi_semphr_give,
++  ._is_in_isr = rtems_coex_is_in_isr,
++  ._malloc_internal = rtems_wifi_malloc,
++  ._free = free,
++  ._esp_timer_get_time = rtems_wifi_esp_timer_get_time,
++  ._env_is_chip = rtems_wifi_env_is_chip,
++  ._timer_disarm = rtems_wifi_timer_disarm,
++  ._timer_done = rtems_wifi_timer_done,
++  ._timer_setfn = rtems_wifi_timer_setfn,
++  ._timer_arm_us = rtems_wifi_timer_arm_us,
++  ._debug_matrix_init = rtems_coex_debug_matrix_init,
++  ._xtal_freq_get = rtems_coex_xtal_freq_get,
++#if defined(CONFIG_IDF_TARGET_ESP32C6)
++  ._ieee802154_intr_disable = rtems_coex_ieee802154_intr_disable,
++  ._ieee802154_intr_enable = rtems_coex_ieee802154_intr_enable,
++#endif
++  ._magic = COEX_ADAPTER_MAGIC,
++};
++
++/*
++ * Runs from esp_wifi_init() before esp_wifi_init_internal(), which is where
++ * ESP-IDF runs it from its secondary init function. Idempotent because the
++ * OS table's _coex_init still calls it.
++ */
++int rtems_wifi_coex_prepare( void )
++{
++  static bool prepared = false;
++  esp_err_t err;
++
++  if ( prepared ) {
++    return ESP_OK;
++  }
++
++  err = esp_coex_adapter_register( &rtems_coex_adapter_funcs );
++  if ( err != ESP_OK ) {
++    return err;
++  }
++
++  err = coex_pre_init();
++  if ( err != ESP_OK ) {
++    return err;
++  }
++
++  prepared = true;
++  return ESP_OK;
++}
++
++static int rtems_wifi_coex_init( void )
++{
++  int err = rtems_wifi_coex_prepare();
++
++  if ( err != ESP_OK ) {
++    return err;
++  }
++
++  return coex_init();
++}
++
+ static void rtems_wifi_coex_deinit( void )
+ {
++  coex_deinit();
+ }
+ 
+ static int rtems_wifi_coex_enable( void )
+ {
+-  return ESP_OK;
++  return coex_enable();
+ }
+ 
+ static void rtems_wifi_coex_disable( void )
+ {
++  coex_disable();
+ }
+ 
+ static int rtems_wifi_coex_register_start_cb( int ( *cb )( void ) )
+ {
+-  (void) cb;
++  rtems_wifi_coex_start_cb = cb;
++  if ( cb == NULL ) {
++    return coex_register_start_cb( NULL );
++  }
+ 
+-  /*
+-   * The callback is how coexistence would tell WiFi it may start a slot.  With
+-   * no competing radio there is nothing to schedule around, so it is never
+-   * called and reporting success is accurate rather than a shortcut.
+-   */
+-  return ESP_OK;
++  return coex_register_start_cb( rtems_wifi_coex_start_forward );
+ }
+ 
+ static int rtems_wifi_coex_schm_register_cb( int type, int ( *cb )( int ) )
+ {
+-  (void) type;
+-  (void) cb;
++  rtems_wifi_coex_schm_cb = cb;
++  if ( cb == NULL ) {
++    return coex_schm_register_callback( type, NULL );
++  }
+ 
+-  return ESP_OK;
++  return coex_schm_register_callback( type, rtems_wifi_coex_schm_forward );
+ }
+ 
+ #if CONFIG_IDF_TARGET_ESP32S31
+-static int rtems_wifi_coex_configure_preemption_end_cb( bool is_register, int ( *cb )( uint32_t ) )
++static int rtems_wifi_coex_configure_preemption_end_cb(
++  bool is_register, int ( *cb )( uint32_t ) )
+ {
+-  (void) is_register;
+-  (void) cb;
+-
+-  /*
+-   * Preemption-end notification is a coexistence scheduling hook.  With no
+-   * competing radio there is nothing to preempt, so accepting the
+-   * registration without keeping the callback is accurate rather than a
+-   * shortcut.
+-   */
+-  return ESP_OK;
++  return esp_coex_configure_iso_end_wifi_cb( is_register, cb );
+ }
+ #endif
+ 
+@@ -1665,46 +1805,95 @@
+ {
+ }
+ 
+-/* === the last few the libraries asked for =============================== */
+-
+-/*
+- * The remaining coexistence entries esp_wifi_start() reaches.  Like the six
+- * above they answer rather than report, for the same reason: this port builds
+- * no Bluetooth, so WiFi always owns the radio and the answers are known.
+- */
+ static uint32_t rtems_wifi_coex_status_get( void )
+ {
+-  return 0;
++  return coex_status_get( COEX_STATUS_GET_WIFI_BITMAP );
+ }
+ 
+ static int rtems_wifi_coex_pti_get( uint32_t service, uint8_t *pti )
+ {
+-  /* Match ESP-IDF with coexistence disabled: retain the caller's defaults.
+-   * In particular, C5 initializes its default arbitration priority to one.
+-   */
+-  (void) service;
+-  (void) pti;
+-
+-  return 0;
++  return coex_pti_get( service, pti );
+ }
+ 
+ static int rtems_wifi_coex_schm_interval_set( uint32_t interval )
+ {
+-  (void) interval;
+-
+-  return ESP_OK;
++  return coex_schm_interval_set( interval );
+ }
+ 
+ static void rtems_wifi_coex_schm_status_bit_set( uint32_t type, uint32_t status )
+ {
+-  (void) type;
+-  (void) status;
++  coex_schm_status_bit_set( type, status );
+ }
+ 
+ static void rtems_wifi_coex_schm_status_bit_clear( uint32_t type, uint32_t status )
++{
++  coex_schm_status_bit_clear( type, status );
++}
++
++static int rtems_wifi_coex_wifi_request(
++  uint32_t event, uint32_t latency, uint32_t duration )
++{
++  return coex_wifi_request( event, latency, duration );
++}
++
++static int rtems_wifi_coex_wifi_release( uint32_t event )
++{
++  return coex_wifi_release( event );
++}
++
++static int rtems_wifi_coex_wifi_channel_set( uint8_t primary, uint8_t secondary )
++{
++  return coex_wifi_channel_set( primary, secondary );
++}
++
++static int rtems_wifi_coex_event_duration_get( uint32_t event, uint32_t *duration )
++{
++  return coex_event_duration_get( event, duration );
++}
++
++static uint32_t rtems_wifi_coex_schm_interval_get( void )
++{
++  return coex_schm_interval_get();
++}
++
++static uint8_t rtems_wifi_coex_schm_curr_period_get( void )
++{
++  return coex_schm_curr_period_get();
++}
++
++static void *rtems_wifi_coex_schm_curr_phase_get( void )
++{
++  return coex_schm_curr_phase_get();
++}
++
++static int rtems_wifi_coex_schm_process_restart( void )
++{
++  return coex_schm_process_restart();
++}
++
++static int rtems_wifi_coex_schm_flexible_period_set( uint8_t period )
++{
++  (void) period;
++
++  /* ESP-IDF returns 0 when CONFIG_ESP_COEX_POWER_MANAGEMENT is off. */
++  return 0;
++}
++
++static uint8_t rtems_wifi_coex_schm_flexible_period_get( void )
++{
++  /* ESP-IDF returns 1 when CONFIG_ESP_COEX_POWER_MANAGEMENT is off. */
++  return 1;
++}
++
++static void *rtems_wifi_coex_schm_get_phase_by_idx( int phase_idx )
++{
++  return coex_schm_get_phase_by_idx( phase_idx );
++}
++
++static void rtems_wifi_coex_condition_set( uint32_t type, bool dissatisfy )
+ {
+   (void) type;
+-  (void) status;
++  (void) dissatisfy;
+ }
+ 
+ /*
+@@ -1963,78 +2147,8 @@
+ {
+   return (uint32_t)
+     ( rtems_clock_get_uptime_nanoseconds() / 1000000u );
+-}
+-
+-/* Match ESP-IDF wrappers with software/external coexistence disabled. */
+-static void rtems_wifi_stub_coex_condition_set( uint32_t type, bool dissatisfy )
+-{
+-  (void) type;
+-  (void) dissatisfy;
+-}
+-
+-static int rtems_wifi_stub_coex_wifi_request( uint32_t event, uint32_t latency, uint32_t duration )
+-{
+-  (void) event;
+-  (void) latency;
+-  (void) duration;
+-  return ESP_OK;
+-}
+-
+-static int rtems_wifi_stub_coex_wifi_release( uint32_t event )
+-{
+-  (void) event;
+-  return ESP_OK;
+-}
+-
+-static int rtems_wifi_stub_coex_wifi_channel_set( uint8_t primary, uint8_t secondary )
+-{
+-  (void) primary;
+-  (void) secondary;
+-  return ESP_OK;
+-}
+-
+-static int rtems_wifi_stub_coex_event_duration_get( uint32_t event, uint32_t *duration )
+-{
+-  (void) event;
+-  (void) duration;
+-  return ESP_OK;
+-}
+-
+-static uint32_t rtems_wifi_stub_coex_schm_interval_get( void )
+-{
+-  return 0;
+-}
+-
+-static uint8_t rtems_wifi_stub_coex_schm_curr_period_get( void )
+-{
+-  return 0;
+-}
+-
+-static void *rtems_wifi_stub_coex_schm_curr_phase_get( void )
+-{
+-  return NULL;
+ }
+ 
+-static int rtems_wifi_stub_coex_schm_process_restart( void )
+-{
+-  return ESP_OK;
+-}
+-
+-static int rtems_wifi_stub_coex_schm_flexible_period_set( uint8_t )
+-{
+-  return ESP_OK;
+-}
+-
+-static uint8_t rtems_wifi_stub_coex_schm_flexible_period_get( void )
+-{
+-  return 1;
+-}
+-
+-static void *rtems_wifi_stub_coex_schm_get_phase_by_idx( int )
+-{
+-  return NULL;
+-}
+-
+ #if CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32C5 || CONFIG_IDF_TARGET_ESP32C61 || CONFIG_IDF_TARGET_ESP32S31
+ static void rtems_wifi_stub_regdma( void *addr, uint32_t val, uint32_t mask )
+ {
+@@ -2175,28 +2289,28 @@
+   ._coex_enable = rtems_wifi_coex_enable,
+   ._coex_disable = rtems_wifi_coex_disable,
+   ._coex_status_get = rtems_wifi_coex_status_get,
+-  ._coex_condition_set = rtems_wifi_stub_coex_condition_set,
+-  ._coex_wifi_request = rtems_wifi_stub_coex_wifi_request,
+-  ._coex_wifi_release = rtems_wifi_stub_coex_wifi_release,
+-  ._coex_wifi_channel_set = rtems_wifi_stub_coex_wifi_channel_set,
+-  ._coex_event_duration_get = rtems_wifi_stub_coex_event_duration_get,
++  ._coex_condition_set = rtems_wifi_coex_condition_set,
++  ._coex_wifi_request = rtems_wifi_coex_wifi_request,
++  ._coex_wifi_release = rtems_wifi_coex_wifi_release,
++  ._coex_wifi_channel_set = rtems_wifi_coex_wifi_channel_set,
++  ._coex_event_duration_get = rtems_wifi_coex_event_duration_get,
+   ._coex_pti_get = rtems_wifi_coex_pti_get,
+   ._coex_schm_status_bit_clear = rtems_wifi_coex_schm_status_bit_clear,
+   ._coex_schm_status_bit_set = rtems_wifi_coex_schm_status_bit_set,
+   ._coex_schm_interval_set = rtems_wifi_coex_schm_interval_set,
+-  ._coex_schm_interval_get = rtems_wifi_stub_coex_schm_interval_get,
+-  ._coex_schm_curr_period_get = rtems_wifi_stub_coex_schm_curr_period_get,
+-  ._coex_schm_curr_phase_get = rtems_wifi_stub_coex_schm_curr_phase_get,
+-  ._coex_schm_process_restart = rtems_wifi_stub_coex_schm_process_restart,
++  ._coex_schm_interval_get = rtems_wifi_coex_schm_interval_get,
++  ._coex_schm_curr_period_get = rtems_wifi_coex_schm_curr_period_get,
++  ._coex_schm_curr_phase_get = rtems_wifi_coex_schm_curr_phase_get,
++  ._coex_schm_process_restart = rtems_wifi_coex_schm_process_restart,
+   ._coex_schm_register_cb = rtems_wifi_coex_schm_register_cb,
+   ._coex_register_start_cb = rtems_wifi_coex_register_start_cb,
+ #if CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32C5 || CONFIG_IDF_TARGET_ESP32C61 || CONFIG_IDF_TARGET_ESP32S31
+   ._regdma_link_set_write_wait_content = rtems_wifi_stub_regdma,
+   ._sleep_retention_find_link_by_id = rtems_wifi_stub_sleep_retention_find,
+ #endif
+-  ._coex_schm_flexible_period_set = rtems_wifi_stub_coex_schm_flexible_period_set,
+-  ._coex_schm_flexible_period_get = rtems_wifi_stub_coex_schm_flexible_period_get,
+-  ._coex_schm_get_phase_by_idx = rtems_wifi_stub_coex_schm_get_phase_by_idx,
++  ._coex_schm_flexible_period_set = rtems_wifi_coex_schm_flexible_period_set,
++  ._coex_schm_flexible_period_get = rtems_wifi_coex_schm_flexible_period_get,
++  ._coex_schm_get_phase_by_idx = rtems_wifi_coex_schm_get_phase_by_idx,
+ #if CONFIG_IDF_TARGET_ESP32S31
+   ._coex_configure_preemption_end_cb = rtems_wifi_coex_configure_preemption_end_cb,
+ #endif
+--- a/ld/esp32c3-wifi-sections.ld
++++ b/ld/esp32c3-wifi-sections.ld
+@@ -52,6 +52,7 @@
+     *(.wifislpiram .wifislpiram.*)
+     *(.wifislprxiram .wifislprxiram.*)
+     *(.wifiorslpiram .wifiorslpiram.*)
++    *(.coexiram .coexiram.*)
+     *(.iram1 .iram1.*)
+     . = ALIGN(4);
+     rtems_esp_wifi_iram_end = .;
+--- a/src/rtems_esp_wifi_init.c
++++ b/src/rtems_esp_wifi_init.c
+@@ -101,6 +101,14 @@
+  * header chain, and this file needs two symbols from it.
+  */
+ extern int esp_supplicant_init( void );
+ 
++/*
++ * Registers the coexistence OS adapter and fills in the ROM's coexistence
++ * data. ESP-IDF does this from its secondary init before esp_wifi_init();
++ * the Wi-Fi blob registers its scheme callback before calling _coex_init,
++ * so it has to happen here first.
++ */
++extern int rtems_wifi_coex_prepare( void );
++
+ /*
+  * ESP-IDF's sleep defaults, in the units its own esp_wifi_init() converts to.
+@@ -1269,6 +1269,13 @@
+   }
+ #endif
+ 
++  result = rtems_wifi_coex_prepare();
++  if ( result != ESP_OK ) {
++    printk( "rtems-esp-wifi: coex_pre_init failed (%d)\n", result );
++
++    return result;
++  }
++
+   printk( "rtems-esp-wifi: esp_wifi_init_internal()...\n" );
+ 
+   result = esp_wifi_init_internal( config );

@@ -126,6 +126,14 @@ operations a target cannot support.
   in [CMakeLists.txt](src/platforms/rtems/CMakeLists.txt).
 - [ ] Integrate a BLE controller and host stack with AtomVM. Existing BSP Bluetooth
   interrupt/power support and chip capability flags do not provide a BLE stack.
+  Wi-Fi now registers ESP-IDF's software coexistence adapter and runs
+  `coex_pre_init()` from `esp_wifi_init()` (`libcoexist.a`, pinned to the HAL
+  gitlink) instead of the disabled-coexistence stubs. A controller still has to
+  register its own coexistence callbacks and share the PHY.
+
+- [ ] Validate coexistence arbitration with a BLE controller. Wi-Fi alone
+  exercises the adapter; the emulator Wi-Fi suites cover it on all four ESP32
+  targets.
 
 ## Physical validation
 

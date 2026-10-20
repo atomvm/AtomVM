@@ -138,6 +138,16 @@ Wi-Fi buffers are smaller than IDF's defaults to fit available RAM, calibration
 runs fully at boot without IDF's NVS calibration cache, and station power saving
 is disabled. Physical sleep and analog validation remain tracked in the TODOs.
 
+Wi-Fi software coexistence follows ESP-IDF: `esp_wifi_init()` registers the
+coexistence OS adapter and runs `coex_pre_init()` before
+`esp_wifi_init_internal()`, because the Wi-Fi blob registers its scheme
+callback before it calls the OS table's `_coex_init()`. The OS table then
+forwards `coex_init()`, `coex_enable()` and the request/release/channel/scheme
+entry points to `libcoexist.a`. External-wire coexistence and the
+flexible-period power-management hooks stay off, matching IDF with those
+options disabled. This arbitrates the shared radio once a BLE controller is
+linked; it is not a BLE stack.
+
 With esp-emu 0.49, C5/C6/S31 lose the virtual AP association after scanning
 while connected. Their emulator tests check scan results and cancellation,
 then restart the station before testing traffic. C3 also tests traffic
