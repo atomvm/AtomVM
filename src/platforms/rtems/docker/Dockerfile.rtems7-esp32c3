@@ -62,7 +62,11 @@ RUN . /tmp/dependencies.sh \
     && sed -i '/sis/d' rtems/config/7/rtems-riscv.bset \
     && sed -i '/with_rtems_gdb/d' rtems/config/tools/rtems-default-tools.bset \
     && sed -i -e '/0001-RTEMS-Add-riscv-multilibs/d' -e '/uCjG1KIhPuCR3H5G/d' rtems/config/tools/rtems-gcc-15.2-newlib-head.cfg \
+    && sed -i 's|https://gmplib.org/download/gmp|https://ftp.gnu.org/gnu/gmp|g' source-builder/config/gmp.cfg \
     && cd rtems \
+    && mkdir -p sources \
+    && curl -fSL --retry 3 --retry-all-errors https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.bz2 -o sources/gmp-6.3.0.tar.bz2 \
+    && curl -fSL --retry 3 --retry-all-errors https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.1.tar.bz2 -o sources/mpfr-4.2.1.tar.bz2 \
     && ../source-builder/sb-set-builder --prefix="${RTEMS_PREFIX}" 7/rtems-riscv \
     && rm -rf /tmp/rsb
 

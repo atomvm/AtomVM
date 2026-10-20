@@ -92,6 +92,7 @@ echo "================================================================"
 
 # Check host dependencies
 command -v git >/dev/null 2>&1 || { echo "Error: git is required" >&2; exit 1; }
+command -v curl >/dev/null 2>&1 || { echo "Error: curl is required" >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "Error: python3 is required" >&2; exit 1; }
 
 if [ "${CLEAN}" -eq 1 ] && [ -d "${BUILD_DIR}" ]; then
@@ -126,6 +127,13 @@ fi
 sed -i.bak '/sis/d' config/7/rtems-riscv.bset && rm -f config/7/rtems-riscv.bset.bak
 sed -i.bak '/with_rtems_gdb/d' config/tools/rtems-default-tools.bset && rm -f config/tools/rtems-default-tools.bset.bak
 sed -i.bak -e '/0001-RTEMS-Add-riscv-multilibs/d' -e '/uCjG1KIhPuCR3H5G/d' config/tools/rtems-gcc-15.2-newlib-head.cfg && rm -f config/tools/rtems-gcc-15.2-newlib-head.cfg.bak
+
+# gmplib.org is not reachable from every environment, and dl.rtems.org has
+# been unreliable for MPFR. CI prefetches both from GNU's mirror; do the same.
+sed -i.bak 's|https://gmplib.org/download/gmp|https://ftp.gnu.org/gnu/gmp|g' ../source-builder/config/gmp.cfg && rm -f ../source-builder/config/gmp.cfg.bak
+mkdir -p sources
+curl -fSL --retry 3 --retry-all-errors https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.bz2 -o sources/gmp-6.3.0.tar.bz2
+curl -fSL --retry 3 --retry-all-errors https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.1.tar.bz2 -o sources/mpfr-4.2.1.tar.bz2
 
 ../source-builder/sb-set-builder --prefix="${PREFIX}" ${RSB_PYTHON_ARGS} 7/rtems-riscv
 
