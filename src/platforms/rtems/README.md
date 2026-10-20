@@ -143,6 +143,7 @@ intervals; its default is three, matching IDF. `ON`/`OFF` remain aliases for
 `MIN_MODEM`/`NONE`.
 The Wi-Fi sleep-clock callback uses IDF's Q12 period format and the selected
 C3 Bluetooth LP clock; modem sleep also supplies a measured RTC period.
+Measuring that period does not install the RTC as RTEMS's system timecounter.
 Physical sleep and analog validation remain tracked in the TODOs.
 
 On ESP32-C3, `RTEMS_BT=ON` adds a minimal non-connectable legacy BLE

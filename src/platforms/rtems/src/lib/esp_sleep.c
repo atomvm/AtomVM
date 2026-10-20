@@ -37,6 +37,7 @@
 
 static pthread_mutex_t sleep_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_once_t clock_once = PTHREAD_ONCE_INIT;
+static pthread_once_t calibration_once = PTHREAD_ONCE_INIT;
 static uint32_t rtc_frequency;
 
 static uint32_t rtc_timecount(struct timecounter *tc)
@@ -51,7 +52,7 @@ static struct timecounter rtc_timecounter = {
     .tc_quality = RTEMS_TIMECOUNTER_QUALITY_CLOCK_DRIVER + 1,
 };
 
-static void install_rtc_clock(void)
+static void calibrate_rtc_clock(void)
 {
     /* Calibrate against the crystal-derived SYSTIMER, without changing the
      * selected slow clock or resetting the counter retained across deep sleep.
@@ -65,7 +66,21 @@ static void install_rtc_clock(void)
         return;
     }
     rtc_frequency = (uint32_t) ((elapsed * rtems_counter_frequency() + cpu_elapsed / 2) / cpu_elapsed);
-    rtc_timecounter.tc_frequency = rtc_frequency;
+}
+
+uint32_t rtems_esp_rtc_measure_frequency(void)
+{
+    pthread_once(&calibration_once, calibrate_rtc_clock);
+    return rtc_frequency;
+}
+
+static void install_rtc_clock(void)
+{
+    uint32_t frequency = rtems_esp_rtc_measure_frequency();
+    if (frequency == 0) {
+        return;
+    }
+    rtc_timecounter.tc_frequency = frequency;
     rtems_timecounter_install(&rtc_timecounter);
 }
 

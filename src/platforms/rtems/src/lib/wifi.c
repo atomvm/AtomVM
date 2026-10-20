@@ -548,7 +548,7 @@ int rtems_wifi_start(const char *ssid, const char *psk, bool connect)
 
     if (!wifi_initialized) {
 #ifdef RTEMS_WIFI_POWER_SAVE
-        uint32_t frequency = rtems_esp_rtc_frequency();
+        uint32_t frequency = rtems_esp_rtc_measure_frequency();
         if (frequency == 0) {
             fprintf(stderr, "AtomVM wifi: RTC calibration failed\n");
             return -1;

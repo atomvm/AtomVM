@@ -34,6 +34,8 @@ void rtems_esp_rtc_timekeeper_record(const struct timeval *tv);
 bool rtems_esp_rtc_timekeeper_restore(void);
 
 uint32_t rtems_esp_rtc_frequency(void);
+/* Measure the RTC clock without installing it as the system timecounter. */
+uint32_t rtems_esp_rtc_measure_frequency(void);
 uint32_t rtems_esp_sleep_enter(bool deep, uint32_t wakeup, uint64_t deadline);
 int rtems_esp_sleep_start(bool deep, uint64_t usecs, uint32_t gpio_mask, int mode, uint32_t *cause);
 int rtems_esp_deep_sleep(uint64_t time_in_us);

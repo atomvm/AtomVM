@@ -84,7 +84,7 @@ static term nif_rtems_ifaddrs(Context *ctx, int argc, term argv[])
 #ifdef RTEMS_HAS_LIBBSD
     struct ifaddrs *addrs = NULL;
     if (getifaddrs(&addrs) != 0) {
-        return error_atom(ctx, ATOM_STR("\x7", "eagain"));
+        return error_atom(ctx, ATOM_STR("\x6", "eagain"));
     }
 
     size_t count = 0;
@@ -214,7 +214,7 @@ static term rtems_wifi_start_impl(Context *ctx, term ssid_term, term psk_term, b
     int rv = rtems_wifi_start(ssid, psk, connect);
     free(ssid);
     free(psk);
-    return rv == 0 ? OK_ATOM : error_atom(ctx, ATOM_STR("\x5", "eio"));
+    return rv == 0 ? OK_ATOM : error_atom(ctx, ATOM_STR("\x3", "eio"));
 #else
     (void) ssid_term;
     (void) psk_term;
