@@ -21,10 +21,10 @@
 
 set -euo pipefail
 
-IMAGE_NAME="atomvm-rtems7-esp32c3:latest"
+IMAGE_NAME="atomvm-rtems7-esp32:latest"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
-DOCKERFILE="${REPO_ROOT}/src/platforms/rtems/docker/Dockerfile.rtems7-esp32c3"
+DOCKERFILE="${REPO_ROOT}/src/platforms/rtems/docker/Dockerfile.rtems7-esp32"
 
 DO_SIMULATE=0 # 0: build only, 1: esp-emulator, 2: Wokwi
 FORCE_REBUILD=0

@@ -155,7 +155,7 @@ p.write_text(text.replace('ESPRESSIF_USE_USB_CONSOLE = False',
                           'ESPRESSIF_USE_USB_CONSOLE = ' + sys.argv[2]))
 PY
 docker build -t "$HW_IMAGE" \
-    -f "$HW_WORK/docker/Dockerfile.rtems7-esp32c3" "$HW_WORK/docker"
+    -f "$HW_WORK/docker/Dockerfile.rtems7-esp32" "$HW_WORK/docker"
 ```
 
 Despite its name, this Dockerfile builds all four ESP BSPs and their Wi-Fi stacks

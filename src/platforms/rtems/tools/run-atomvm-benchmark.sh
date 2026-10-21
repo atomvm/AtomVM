@@ -31,7 +31,7 @@
 
 set -euo pipefail
 
-IMAGE_NAME="atomvm-rtems7-esp32c3:latest"
+IMAGE_NAME="atomvm-rtems7-esp32:latest"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 
