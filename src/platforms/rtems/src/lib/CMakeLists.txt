@@ -80,7 +80,7 @@ if(RTEMS_BT AND RTEMS_BOARD STREQUAL "esp32c3" AND RTEMS_HAS_ESP_WIFI)
 elseif(RTEMS_BT AND RTEMS_BOARD STREQUAL "esp32c5" AND RTEMS_HAS_ESP_WIFI)
     set(_rtems_bt_dir "${CMAKE_CURRENT_SOURCE_DIR}/../../bt")
     list(APPEND SOURCE_FILES "${_rtems_bt_dir}/rtems_bt_c5.c" "${_rtems_bt_dir}/rtems_npl.c")
-    list(APPEND HEADER_FILES rtems_bt.h)
+    list(APPEND HEADER_FILES rtems_bt.h rtems_bt_vhci.h)
 endif()
 
 add_library(libAtomVM${PLATFORM_LIB_SUFFIX} ${SOURCE_FILES} ${HEADER_FILES})

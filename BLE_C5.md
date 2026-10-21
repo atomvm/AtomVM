@@ -107,6 +107,25 @@ parsing them. The advertiser sends one non-connectable legacy advertising
 event at a time and updates its manufacturer-data counter after completion.
 Initialization runs in a native task so the Erlang VM can keep running.
 
+## Attaching a host through VHCI
+
+`src/platforms/rtems/src/lib/rtems_bt_vhci.h` provides the native
+`esp_vhci_host_*` interface. Start with `rtems_bt_vhci_start_async()` and wait
+for `rtems_bt_is_started()` before registering host callbacks. This mode is
+mutually exclusive with the advertising smoke test; repeated starts of the
+same mode remain successful unless initialization failed.
+
+Commands use `0x01 || command`, events `0x04 || event` and ACL packets
+`0x02 || ACL`. Commands lose the H4 indicator before reaching the controller;
+outbound ACL data is wrapped in an `os_mbuf`, and received chains are flattened
+before calling the host. Receive callback results propagate to the controller.
+Registration stores callbacks without proactively signaling send availability;
+send availability is gated on the controller being enabled.
+
+The BLE-only startup task can exit because PHY tracking belongs to the shared
+radio service. The native probe checks VHCI callback-result handling, but a
+complete host, pairing and ACL traffic still need validation.
+
 ## SDK versions
 
 `docker/dependencies.sh` pins `esp32c5-bt-lib` to
