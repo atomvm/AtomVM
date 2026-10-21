@@ -19,7 +19,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-export ESP32_ESPTOOL="${ESP32_ESPTOOL:-esptool.py}"
+export ESP32_ESPTOOL="${ESP32_ESPTOOL:-esptool}"
 export ESP32_CHIP="${ESP32_CHIP:-auto}"
 export ESP32_PORT="${ESP32_PORT:-/dev/ttyUSB0}"
 export ESP32_BAUD="${ESP32_BAUD:-921600}"

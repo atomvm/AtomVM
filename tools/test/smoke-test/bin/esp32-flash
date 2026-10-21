@@ -45,6 +45,6 @@ readonly flash_image="${1}"
 
 echo_run "${ESP32_ESPTOOL}" --chip "${ESP32_CHIP}" --port "${ESP32_PORT}" --baud "${ESP32_BAUD}" \
     --before default_reset --after hard_reset \
-    write_flash -u --flash_mode keep --flash_freq keep --flash_size detect \
+    write-flash -u --flash_mode keep --flash_freq keep --flash_size detect \
     "${ESP32_OFFSET}" \
     "${flash_image}"

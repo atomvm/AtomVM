@@ -117,8 +117,8 @@ For example:
 ```shell
 $ rebar3 atomvm esp32_flash --port /dev/ttyUSB0 --baud 921600
 ...
-===> esptool.py --chip auto --port /dev/ttyUSB0 --baud 921600 --before default_reset
-    --after hard_reset write_flash -u --flash_mode keep --flash_freq keep --flash_size detect
+===> esptool --chip auto --port /dev/ttyUSB0 --baud 921600 --before default_reset
+    --after hard_reset write-flash -u --flash_mode keep --flash_freq keep --flash_size detect
     0x250000 atomvm_examples/erlang/hello_world/_build/default/lib/hello_world.avm
 ```
 
