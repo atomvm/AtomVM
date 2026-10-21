@@ -1,0 +1,102 @@
+#
+#  Copyright 2026 Peter M. <petermm@gmail.com>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: RTEMS Toolchain Images
+
+# Publishes the RTEMS toolchain images used by the local RTEMS build scripts
+# and by the RTEMS CI jobs. Each image carries a cross toolchain, the RTEMS
+# kernel and BSPs, and the Erlang/OTP toolchain, so building one takes tens
+# of minutes; the weekly schedule refreshes the base image and the upstream
+# packages, while the "pins" tag changes only when the pinned upstream
+# revisions in dependencies.sh change.
+#
+# Note: GitHub runs scheduled workflows from the default branch only, so the
+# schedule starts working once this workflow is present on the default branch.
+
+on:
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+  push:
+    branches:
+      - rtems
+    paths:
+      - '.github/workflows/rtems-toolchain-image.yaml'
+      - 'src/platforms/rtems/docker/**'
+      - 'src/platforms/rtems/tools/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ${{ github.repository_owner }}
+
+jobs:
+  build:
+    name: ${{ matrix.image }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: rtems6-grisp2
+            dockerfile: src/platforms/rtems/docker/Dockerfile.rtems6-grisp2
+            toolchain: arm-rtems6-gcc
+          - image: rtems7-esp32
+            dockerfile: src/platforms/rtems/docker/Dockerfile.rtems7-esp32
+            toolchain: riscv-rtems7-gcc
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=pins-${{ hashFiles('src/platforms/rtems/docker/dependencies.sh') }}
+            type=raw,value=sha-${{ github.sha }}
+            type=ref,event=branch
+
+      # The build cache lives in the registry next to the image: the images are
+      # far larger than the GitHub Actions cache quota, and the toolchain
+      # layer is the expensive one to rebuild.
+      - name: Build and push the image
+        uses: docker/build-push-action@v6
+        with:
+          context: src/platforms/rtems/docker
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:buildcache,mode=max
+
+      - name: Smoke test the published image
+        run: |
+          set -euo pipefail
+          image="${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:${{ steps.meta.outputs.version }}"
+          docker pull "$image"
+          docker run --rm "$image" ${{ matrix.toolchain }} --version

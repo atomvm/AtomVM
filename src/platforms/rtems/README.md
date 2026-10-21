@@ -722,6 +722,17 @@ to fetch the new pins. Explicit local RTEMS trees remain available through
 `--rtems-src`; Docker's `RSB_REF` and `RTEMS_REF` overrides require full commit IDs.
 Ubuntu packages continue to come from the configured distribution repositories.
 
+#### Prebuilt Toolchain Images
+
+The `RTEMS Toolchain Images` workflow publishes both Docker images to the GitHub container registry once a week, and whenever the pins change:
+
+```sh
+docker pull ghcr.io/petermm/rtems7-esp32:latest
+docker pull ghcr.io/petermm/rtems6-grisp2:latest
+```
+
+Each image carries the cross toolchain, the RTEMS kernel and BSPs, and the Erlang/OTP toolchain, so it saves the tens of minutes a local build takes. The `pins-<hash>` tag changes only when the pins in [`docker/dependencies.sh`](docker/dependencies.sh) change, and is the tag to use for reproducible builds.
+
 #### Option A: Single-Command Docker Build & Emulation (Recommended)
 
 If you have Docker (or OrbStack/Podman) installed, build the entire firmware and run the boot test in `esp-emulator` with a single command:
@@ -730,7 +741,7 @@ If you have Docker (or OrbStack/Podman) installed, build the entire firmware and
 ./src/platforms/rtems/tools/docker-build-esp32c3.sh --simulate
 ```
 
-This uses the dedicated [`Dockerfile.rtems7-esp32c3`](docker/Dockerfile.rtems7-esp32c3) to compile the RTEMS 7 RISC-V tools, build the `riscv/esp32c3db` BSP, cross-compile AtomVM, and run `esp-emu`.
+This uses the dedicated [`Dockerfile.rtems7-esp32`](docker/Dockerfile.rtems7-esp32) to compile the RTEMS 7 RISC-V tools, build the `riscv/esp32c3db` BSP, cross-compile AtomVM, and run `esp-emu`.
 
 #### Option B: Automated Local Build Script
 

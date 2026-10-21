@@ -23,6 +23,16 @@ on:
       - 'src/platforms/rtems/**'
       - 'src/libAtomVM/**'
       - 'libs/**'
+  workflow_dispatch:
+    inputs:
+      riscv_toolchain_image:
+        description: 'RTEMS 7 RISC-V toolchain image to use instead of building the toolchain (empty builds it)'
+        type: string
+        default: ''
+      arm_toolchain_image:
+        description: 'RTEMS 6 ARM toolchain image to use instead of building the toolchain (empty builds it)'
+        type: string
+        default: ''
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
@@ -32,6 +42,13 @@ env:
   RTEMS_VERSION: "6"
   RTEMS_RELEASE: "6"
   RTEMS_PREFIX: /home/runner/rtems/6
+  # The toolchain images published by the RTEMS Toolchain Images workflow can
+  # be used instead of building the toolchains here, which keeps the CI off
+  # the RTEMS servers. Set the repository variables, or the inputs above for
+  # a single run, to an image reference to use it; leave them empty to build
+  # the toolchain from the pinned sources.
+  RTEMS_RISCV_TOOLCHAIN_IMAGE: ${{ inputs.riscv_toolchain_image || vars.RTEMS_RISCV_TOOLCHAIN_IMAGE || '' }}
+  RTEMS_ARM_TOOLCHAIN_IMAGE: ${{ inputs.arm_toolchain_image || vars.RTEMS_ARM_TOOLCHAIN_IMAGE || '' }}
 
 # The Erlang/OTP and rebar3 versions used by the setup-beam steps below must
 # match OTP_VERSION and REBAR3_VERSION in src/platforms/rtems/docker/dependencies.sh,
@@ -226,13 +243,14 @@ jobs:
 
     - name: Restore ARM RTEMS 6 toolchain
       id: toolchain-cache
+      if: env.RTEMS_ARM_TOOLCHAIN_IMAGE == ''
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/rtems/6
         key: rtems-6-arm-toolchain-${{ runner.os }}-v1-${{ hashFiles('src/platforms/rtems/docker/dependencies.sh') }}
 
     - name: Install build dependencies
-      if: steps.toolchain-cache.outputs.cache-hit != 'true'
+      if: steps.toolchain-cache.outputs.cache-hit != 'true' && env.RTEMS_ARM_TOOLCHAIN_IMAGE == ''
       run: |
         sudo apt update
         sudo apt install -y \
@@ -241,8 +259,28 @@ jobs:
           libncurses-dev zlib1g-dev ninja-build pkg-config \
           cmake gperf wget xz-utils python3-pip curl
 
+    - name: Pull the ARM RTEMS 6 toolchain image
+      if: env.RTEMS_ARM_TOOLCHAIN_IMAGE != ''
+      run: |
+        set -euo pipefail
+        echo "Using the toolchain image ${RTEMS_ARM_TOOLCHAIN_IMAGE}"
+        docker pull "${RTEMS_ARM_TOOLCHAIN_IMAGE}"
+        container="$(docker create "${RTEMS_ARM_TOOLCHAIN_IMAGE}")"
+        trap 'docker rm -f "${container}"' EXIT
+        mkdir -p /home/runner/rtems/6
+        for dir in bin include lib libexec make share; do
+          docker cp "${container}:/opt/rtems/6/${dir}" /home/runner/rtems/6/
+        done
+        # The target headers, libraries and tools live in the multiarch
+        # directory; the BSPs next to them are rebuilt by the jobs below.
+        mkdir -p /home/runner/rtems/6/arm-rtems6
+        for dir in bin include lib; do
+          docker cp "${container}:/opt/rtems/6/arm-rtems6/${dir}" /home/runner/rtems/6/arm-rtems6/
+        done
+        find /home/runner/rtems/6/bin /home/runner/rtems/6/libexec -type f -executable -exec strip {} + 2>/dev/null || true
+
     - name: Build RSB ARM toolchain
-      if: steps.toolchain-cache.outputs.cache-hit != 'true'
+      if: steps.toolchain-cache.outputs.cache-hit != 'true' && env.RTEMS_ARM_TOOLCHAIN_IMAGE == ''
       run: |
         set -euo pipefail
         mkdir -p "$HOME/rtems-src" /home/runner/rtems/6
@@ -260,7 +298,7 @@ jobs:
         rm -rf "$HOME/rtems-src"
 
     - name: Save ARM RTEMS 6 toolchain
-      if: steps.toolchain-cache.outputs.cache-hit != 'true'
+      if: steps.toolchain-cache.outputs.cache-hit != 'true' && env.RTEMS_ARM_TOOLCHAIN_IMAGE == ''
       uses: actions/cache/save@v4
       with:
         path: /home/runner/rtems/6
@@ -808,13 +846,14 @@ jobs:
 
     - name: Restore RISC-V RTEMS 7 toolchain
       id: toolchain-cache
+      if: env.RTEMS_RISCV_TOOLCHAIN_IMAGE == ''
       uses: actions/cache/restore@v4
       with:
         path: /home/runner/rtems/7
         key: rtems-7-riscv-toolchain-${{ runner.os }}-v2-${{ hashFiles('src/platforms/rtems/docker/dependencies.sh') }}
 
     - name: Install build dependencies
-      if: steps.toolchain-cache.outputs.cache-hit != 'true'
+      if: steps.toolchain-cache.outputs.cache-hit != 'true' && env.RTEMS_RISCV_TOOLCHAIN_IMAGE == ''
       run: |
         sudo apt update
         sudo apt install -y \
@@ -823,8 +862,28 @@ jobs:
           libncurses-dev zlib1g-dev ninja-build pkg-config \
           cmake gperf wget xz-utils python3-pip curl
 
+    - name: Pull the RISC-V RTEMS 7 toolchain image
+      if: env.RTEMS_RISCV_TOOLCHAIN_IMAGE != ''
+      run: |
+        set -euo pipefail
+        echo "Using the toolchain image ${RTEMS_RISCV_TOOLCHAIN_IMAGE}"
+        docker pull "${RTEMS_RISCV_TOOLCHAIN_IMAGE}"
+        container="$(docker create "${RTEMS_RISCV_TOOLCHAIN_IMAGE}")"
+        trap 'docker rm -f "${container}"' EXIT
+        mkdir -p /home/runner/rtems/7
+        for dir in bin include lib libexec make share; do
+          docker cp "${container}:/opt/rtems/7/${dir}" /home/runner/rtems/7/
+        done
+        # The target headers, libraries and tools live in the multiarch
+        # directory; the BSPs next to them are rebuilt by the jobs below.
+        mkdir -p /home/runner/rtems/7/riscv-rtems7
+        for dir in bin include lib; do
+          docker cp "${container}:/opt/rtems/7/riscv-rtems7/${dir}" /home/runner/rtems/7/riscv-rtems7/
+        done
+        find /home/runner/rtems/7/bin /home/runner/rtems/7/libexec -type f -executable -exec strip {} + 2>/dev/null || true
+
     - name: Build RSB RISC-V toolchain
-      if: steps.toolchain-cache.outputs.cache-hit != 'true'
+      if: steps.toolchain-cache.outputs.cache-hit != 'true' && env.RTEMS_RISCV_TOOLCHAIN_IMAGE == ''
       run: |
         set -euo pipefail
         mkdir -p "$HOME/rtems-src" /home/runner/rtems/7
@@ -845,7 +904,7 @@ jobs:
         rm -rf "$HOME/rtems-src"
 
     - name: Save RISC-V RTEMS 7 toolchain
-      if: steps.toolchain-cache.outputs.cache-hit != 'true'
+      if: steps.toolchain-cache.outputs.cache-hit != 'true' && env.RTEMS_RISCV_TOOLCHAIN_IMAGE == ''
       uses: actions/cache/save@v4
       with:
         path: /home/runner/rtems/7
