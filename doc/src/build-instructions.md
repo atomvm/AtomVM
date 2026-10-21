@@ -289,9 +289,9 @@ Project build complete. To flash, run:
 or
  idf.py -p PORT flash
 or
- python -m esptool --chip esp32 -b 921600 --before default_reset --after hard_reset write_flash --flash_mode dio --flash_size 4MB --flash_freq 40m 0x1000 build/bootloader/bootloader.bin 0x8000 build/partition_table/partition-table.bin 0x10000 build/atomvm-esp32.bin 0x1d0000 ../../../build/libs/esp32boot/esp32boot.avm
+ python -m esptool --chip esp32 -b 921600 --before default_reset --after hard_reset write-flash --flash_mode dio --flash_size 4MB --flash_freq 40m 0x1000 build/bootloader/bootloader.bin 0x8000 build/partition_table/partition-table.bin 0x10000 build/atomvm-esp32.bin 0x1d0000 ../../../build/libs/esp32boot/esp32boot.avm
 or from the "/home/joe/AtomVM/src/platforms/esp32/build" directory
- python -m esptool --chip esp32 -b 921600 --before default_reset --after hard_reset write_flash "@flash_args"
+ python -m esptool --chip esp32 -b 921600 --before default_reset --after hard_reset write-flash "@flash_args"
 ```
 
 ```{important}
@@ -582,13 +582,13 @@ Wrote AtomVM Virtual Machine at offset 0x10000 (65536)
 Wrote AtomVM Core BEAM Library at offset 0x1D0000 (1114112)
 ```
 
-Users can then use the `esptool.py` directly to flash the entire image to the ESP32 device, and then flash their applications to the `main.app` partition at address `0x250000`.
+Users can then use the `esptool` directly to flash the entire image to the ESP32 device, and then flash their applications to the `main.app` partition at address `0x250000`.
 
 But first, it is a good idea to erase the flash, e.g.,
 
 ```shell
-$ esptool.py --chip esp32 --port /dev/ttyUSB0 erase_flash
-esptool.py v2.1
+$ esptool --chip esp32 --port /dev/ttyUSB0 erase_flash
+esptool v2.1
 Connecting........_
 Chip is ESP32D0WDQ6 (revision 1)
 Uploading stub...
@@ -607,11 +607,11 @@ After preparing a release image you can use the `flashimage.sh`, which is genera
 $ ./build/flashimage.sh
 ```
 
-To perform this action manually you can use the `./build/flash.sh` tool (or `esptool.py` directly, if you prefer):
+To perform this action manually you can use the `./build/flash.sh` tool (or `esptool` directly, if you prefer):
 
 ```shell
 $ FLASH_OFFSET=0x1000 ./build/flash.sh ./build/atomvm-esp32-0.6.6.img
-esptool.py v2.8-dev
+esptool v2.8-dev
 Serial port /dev/tty.SLAB_USBtoUART
 Connecting........_
 Chip is ESP32D0WDQ6 (revision 1)
@@ -646,7 +646,7 @@ $ ./build/flash.sh ../../../build/examples/erlang/esp32/blink.avm
 %%
 %% Flashing examples/erlang/esp32/blink.avm (size=4k)
 %%
-esptool.py v2.8-dev
+esptool v2.8-dev
 Serial port /dev/tty.SLAB_USBtoUART
 Connecting........_
 Chip is ESP32D0WDQ6 (revision 1)
@@ -683,7 +683,7 @@ $ build/flash.sh -l ../../../build/libs/esp32boot.avm
 %%
 %% Flashing ../../../build/libs/esp32boot.avm (size=116k)
 %%
-esptool.py v4.5.1
+esptool v4.5.1
 Serial port /dev/ttyUSB0
 Connecting.....
 Detecting chip type... Unsupported detection protocol, switching and trying
