@@ -1,0 +1,27 @@
+Subject: [PATCH] esp32c5: route Bluetooth controller interrupts
+
+The C5 shares the C6 interrupt table, which has no Bluetooth routes.
+Controller interrupt installation appeared successful because the adapter
+ignored vector-enable errors. Route the C5 Bluetooth, timer and coexistence
+sources to otherwise unused CPU channels, away from Wi-Fi.
+
+--- a/bsps/riscv/esp32/irq/irq_c3.c
++++ b/bsps/riscv/esp32/irq/irq_c3.c
+@@ -96,6 +96,17 @@
+   { .peripheral_int = WIFI_MAC_INTR, .cpu_int = 1 },
+   { .peripheral_int = WIFI_PWR_INTR, .cpu_int = 1 },
+   { .peripheral_int = WIFI_BB_INTR, .cpu_int = 1 },
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H)
++  /* C5's controller uses BT_MAC and LP_TIMER; keep them off WiFi's channel.
++   * Channels 27..30 are unused by the existing C5/C6 table. */
++  { .peripheral_int = BT_MAC_INTR, .cpu_int = 27 },
++  { .peripheral_int = BT_BB_INTR, .cpu_int = 27 },
++  { .peripheral_int = BT_BB_NMI_INTR, .cpu_int = 27 },
++  { .peripheral_int = LP_TIMER_INTR, .cpu_int = 28 },
++  { .peripheral_int = COEX_INTR, .cpu_int = 29 },
++  { .peripheral_int = BLE_TIMER_INTR, .cpu_int = 28 },
++  { .peripheral_int = BLE_SEC_INTR, .cpu_int = 30 },
++#endif
+   { .peripheral_int = UHCI0_INTR, .cpu_int = 1 },
+   { .peripheral_int = SW_INTR_0, .cpu_int = 1 },
+   { .peripheral_int = SW_INTR_1, .cpu_int = 1 },

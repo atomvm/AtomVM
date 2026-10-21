@@ -1,0 +1,967 @@
+Subject: [PATCH] esp32c5: supply Bluetooth controller dependencies
+
+Add the NPL headers required by the controller's mempool allocator and place
+its fast paths in instruction RAM. Match the C5 Bluetooth clock/reset and
+RNG setup, derive the low-power divider from the crystal, and preserve
+shared coexistence clocks. Share the timer server and periodic PHY tracking
+between both radios so BLE also works before Wi-Fi and after Wi-Fi stops.
+
+diff --git a/include/nimble/nimble_npl.h b/include/nimble/nimble_npl.h
+new file mode 100644
+index 0000000..435199a
+--- /dev/null
++++ b/include/nimble/nimble_npl.h
+@@ -0,0 +1,170 @@
++/*
++ * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#ifndef _NIMBLE_NPL_H_
++#define _NIMBLE_NPL_H_
++
++#include <stdbool.h>
++#include <stddef.h>
++#include <stdint.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++struct ble_npl_event;
++typedef void ble_npl_event_fn(struct ble_npl_event *ev);
++
++enum ble_npl_error
++{
++    BLE_NPL_OK = 0,
++    BLE_NPL_ENOMEM = 1,
++    BLE_NPL_EINVAL = 2,
++    BLE_NPL_INVALID_PARAM = 3,
++    BLE_NPL_MEM_NOT_ALIGNED = 4,
++    BLE_NPL_BAD_MUTEX = 5,
++    BLE_NPL_TIMEOUT = 6,
++    BLE_NPL_ERR_IN_ISR = 7,
++    BLE_NPL_ERR_PRIV = 8,
++    BLE_NPL_OS_NOT_STARTED = 9,
++    BLE_NPL_ENOENT = 10,
++    BLE_NPL_EBUSY = 11,
++    BLE_NPL_ERROR = 12,
++};
++
++typedef enum ble_npl_error ble_npl_error_t;
++
++/* Include OS-specific definitions */
++#include "nimble/nimble_npl_os.h"
++
++/*
++ * Generic
++ */
++
++bool ble_npl_os_started(void);
++
++void *ble_npl_get_current_task_id(void);
++
++/*
++ * Event queue
++ */
++
++void ble_npl_eventq_init(struct ble_npl_eventq *evq);
++
++void ble_npl_eventq_deinit(struct ble_npl_eventq *evq);
++
++struct ble_npl_event *ble_npl_eventq_get(struct ble_npl_eventq *evq,
++    ble_npl_time_t tmo);
++
++void ble_npl_eventq_put(struct ble_npl_eventq *evq, struct ble_npl_event *ev);
++
++void ble_npl_eventq_put_to_front(struct ble_npl_eventq *evq, struct ble_npl_event *ev);
++
++void ble_npl_eventq_remove(struct ble_npl_eventq *evq,
++    struct ble_npl_event *ev);
++
++void ble_npl_event_init(struct ble_npl_event *ev, ble_npl_event_fn *fn,
++    void *arg);
++
++bool ble_npl_event_is_queued(struct ble_npl_event *ev);
++
++void *ble_npl_event_get_arg(struct ble_npl_event *ev);
++
++void ble_npl_event_set_arg(struct ble_npl_event *ev, void *arg);
++
++bool ble_npl_eventq_is_empty(struct ble_npl_eventq *evq);
++
++void ble_npl_event_run(struct ble_npl_event *ev);
++
++/*
++ * Mutexes
++ */
++
++ble_npl_error_t ble_npl_mutex_init(struct ble_npl_mutex *mu);
++
++ble_npl_error_t ble_npl_mutex_pend(struct ble_npl_mutex *mu,
++    ble_npl_time_t timeout);
++
++ble_npl_error_t ble_npl_mutex_release(struct ble_npl_mutex *mu);
++
++ble_npl_error_t ble_npl_mutex_deinit(struct ble_npl_mutex *mu);
++
++/*
++ * Semaphores
++ */
++
++ble_npl_error_t ble_npl_sem_init(struct ble_npl_sem *sem, uint16_t tokens);
++
++ble_npl_error_t ble_npl_sem_pend(struct ble_npl_sem *sem,
++    ble_npl_time_t timeout);
++
++ble_npl_error_t ble_npl_sem_release(struct ble_npl_sem *sem);
++
++ble_npl_error_t ble_npl_sem_deinit(struct ble_npl_sem *sem);
++
++uint16_t ble_npl_sem_get_count(struct ble_npl_sem *sem);
++
++/*
++ * Callouts
++ */
++
++int ble_npl_callout_init(struct ble_npl_callout *co, struct ble_npl_eventq *evq,
++    ble_npl_event_fn *ev_cb, void *ev_arg);
++
++ble_npl_error_t ble_npl_callout_reset(struct ble_npl_callout *co,
++    ble_npl_time_t ticks);
++
++void ble_npl_callout_stop(struct ble_npl_callout *co);
++
++bool ble_npl_callout_is_active(struct ble_npl_callout *co);
++
++ble_npl_time_t ble_npl_callout_get_ticks(struct ble_npl_callout *co);
++
++ble_npl_time_t ble_npl_callout_remaining_ticks(struct ble_npl_callout *co,
++    ble_npl_time_t time);
++
++void ble_npl_callout_set_arg(struct ble_npl_callout *co,
++    void *arg);
++/*
++ * Time functions
++ */
++
++ble_npl_time_t ble_npl_time_get(void);
++
++ble_npl_error_t ble_npl_time_ms_to_ticks(uint32_t ms, ble_npl_time_t *out_ticks);
++
++ble_npl_error_t ble_npl_time_ticks_to_ms(ble_npl_time_t ticks, uint32_t *out_ms);
++
++ble_npl_time_t ble_npl_time_ms_to_ticks32(uint32_t ms);
++
++uint32_t ble_npl_time_ticks_to_ms32(ble_npl_time_t ticks);
++
++void ble_npl_time_delay(ble_npl_time_t ticks);
++
++/*
++ * Hardware-specific
++ *
++ * These symbols should be most likely defined by application since they are
++ * specific to hardware, not to OS.
++ */
++
++#if NIMBLE_CFG_CONTROLLER
++
++void ble_npl_hw_set_isr(int irqn, uint32_t addr);
++
++#endif
++
++uint32_t ble_npl_hw_enter_critical(void);
++
++void ble_npl_hw_exit_critical(uint32_t ctx);
++
++bool ble_npl_hw_is_in_critical(void);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* _NIMBLE_NPL_H_ */
+diff --git a/include/nimble/nimble_npl_os.h b/include/nimble/nimble_npl_os.h
+new file mode 100644
+index 0000000..ea71428
+--- /dev/null
++++ b/include/nimble/nimble_npl_os.h
+@@ -0,0 +1,401 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *  http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ */
++
++#ifndef _NIMBLE_NPL_OS_H_
++#define _NIMBLE_NPL_OS_H_
++
++#include <assert.h>
++#include <stdbool.h>
++#include <stdint.h>
++#include <string.h>
++
++#include "esp_attr.h"
++#include "esp_bit_defs.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#ifndef ARRAY_SIZE
++#define ARRAY_SIZE(array) \
++    (sizeof(array) / sizeof((array)[0]))
++#endif
++
++extern int ets_printf(const char *fmt, ...);
++#define BLE_LL_ASSERT(con)                                           \
++    do {                                                             \
++        if (!(con)) {                                                \
++            ets_printf("assertion:%s\n", #con);                      \
++            ets_printf("line:%d,function:%s\n", __LINE__, __func__); \
++            assert(0);                                               \
++        }                                                            \
++    } while (0)
++
++#define BLE_NPL_OS_ALIGNMENT (4) /*ble_npl_get_os_alignment()*/
++
++#define BLE_NPL_TIME_FOREVER ble_npl_get_time_forever()
++
++/* This should be compatible with TickType_t */
++typedef uint32_t ble_npl_time_t;
++typedef int32_t ble_npl_stime_t;
++
++struct ble_npl_event;
++typedef void ble_npl_event_fn(struct ble_npl_event *ev);
++
++struct ble_npl_event
++{
++    void *event;
++};
++
++struct ble_npl_eventq
++{
++    void *eventq;
++};
++
++struct ble_npl_callout
++{
++    void *co;
++};
++
++struct ble_npl_mutex
++{
++    void *mutex;
++};
++
++struct ble_npl_sem
++{
++    void *sem;
++};
++
++/*
++ * Simple APIs are just defined as static inline below, but some are a bit more
++ * complex or require some global state variables and thus are defined in .c
++ * file instead and static inline wrapper just calls proper implementation.
++ * We need declarations of these functions and they are defined in header below.
++ */
++struct npl_funcs_t
++{
++    bool (*p_ble_npl_os_started)(void);
++    void *(*p_ble_npl_get_current_task_id)(void);
++    void (*p_ble_npl_eventq_init)(struct ble_npl_eventq *);
++    void (*p_ble_npl_eventq_deinit)(struct ble_npl_eventq *);
++    struct ble_npl_event *(*p_ble_npl_eventq_get)(struct ble_npl_eventq *, ble_npl_time_t);
++    void (*p_ble_npl_eventq_put)(struct ble_npl_eventq *, struct ble_npl_event *);
++    void (*p_ble_npl_eventq_remove)(struct ble_npl_eventq *, struct ble_npl_event *);
++    void (*p_ble_npl_event_run)(struct ble_npl_event *);
++    bool (*p_ble_npl_eventq_is_empty)(struct ble_npl_eventq *);
++    void (*p_ble_npl_event_init)(struct ble_npl_event *, ble_npl_event_fn *, void *);
++    void (*p_ble_npl_event_deinit)(struct ble_npl_event *);
++    void (*p_ble_npl_event_reset)(struct ble_npl_event *);
++    bool (*p_ble_npl_event_is_queued)(struct ble_npl_event *);
++    void *(*p_ble_npl_event_get_arg)(struct ble_npl_event *);
++    void (*p_ble_npl_event_set_arg)(struct ble_npl_event *, void *);
++    ble_npl_error_t (*p_ble_npl_mutex_init)(struct ble_npl_mutex *);
++    ble_npl_error_t (*p_ble_npl_mutex_deinit)(struct ble_npl_mutex *);
++    ble_npl_error_t (*p_ble_npl_mutex_pend)(struct ble_npl_mutex *, ble_npl_time_t);
++    ble_npl_error_t (*p_ble_npl_mutex_release)(struct ble_npl_mutex *);
++    ble_npl_error_t (*p_ble_npl_sem_init)(struct ble_npl_sem *, uint16_t);
++    ble_npl_error_t (*p_ble_npl_sem_deinit)(struct ble_npl_sem *);
++    ble_npl_error_t (*p_ble_npl_sem_pend)(struct ble_npl_sem *, ble_npl_time_t);
++    ble_npl_error_t (*p_ble_npl_sem_release)(struct ble_npl_sem *);
++    uint16_t (*p_ble_npl_sem_get_count)(struct ble_npl_sem *);
++    int (*p_ble_npl_callout_init)(struct ble_npl_callout *, struct ble_npl_eventq *, ble_npl_event_fn *, void *);
++    ble_npl_error_t (*p_ble_npl_callout_reset)(struct ble_npl_callout *, ble_npl_time_t);
++    void (*p_ble_npl_callout_stop)(struct ble_npl_callout *);
++    void (*p_ble_npl_callout_deinit)(struct ble_npl_callout *);
++    void (*p_ble_npl_callout_mem_reset)(struct ble_npl_callout *);
++    bool (*p_ble_npl_callout_is_active)(struct ble_npl_callout *);
++    ble_npl_time_t (*p_ble_npl_callout_get_ticks)(struct ble_npl_callout *);
++    uint32_t (*p_ble_npl_callout_remaining_ticks)(struct ble_npl_callout *, ble_npl_time_t);
++    void (*p_ble_npl_callout_set_arg)(struct ble_npl_callout *, void *);
++    uint32_t (*p_ble_npl_time_get)(void);
++    ble_npl_error_t (*p_ble_npl_time_ms_to_ticks)(uint32_t ms, ble_npl_time_t *);
++    ble_npl_error_t (*p_ble_npl_time_ticks_to_ms)(ble_npl_time_t, uint32_t *);
++    ble_npl_time_t (*p_ble_npl_time_ms_to_ticks32)(uint32_t);
++    uint32_t (*p_ble_npl_time_ticks_to_ms32)(ble_npl_time_t);
++    void (*p_ble_npl_time_delay)(ble_npl_time_t);
++    void (*p_ble_npl_hw_set_isr)(int, uint32_t);
++    uint32_t (*p_ble_npl_hw_enter_critical)(void);
++    void (*p_ble_npl_hw_exit_critical)(uint32_t);
++    uint32_t (*p_ble_npl_get_time_forever)(void);
++    uint8_t (*p_ble_npl_hw_is_in_critical)(void);
++    void (*p_ble_npl_eventq_put_to_front)(struct ble_npl_eventq *, struct ble_npl_event *);
++};
++
++extern struct npl_funcs_t *npl_funcs;
++
++static inline bool
++ble_npl_os_started(void)
++{
++    return npl_funcs->p_ble_npl_os_started();
++}
++
++static inline void *
++ble_npl_get_current_task_id(void)
++{
++    return npl_funcs->p_ble_npl_get_current_task_id();
++}
++
++static inline void
++ble_npl_eventq_init(struct ble_npl_eventq *evq)
++{
++    return npl_funcs->p_ble_npl_eventq_init(evq);
++}
++
++static inline void
++ble_npl_eventq_deinit(struct ble_npl_eventq *evq)
++{
++    return npl_funcs->p_ble_npl_eventq_deinit(evq);
++}
++
++static inline struct ble_npl_event *
++ble_npl_eventq_get(struct ble_npl_eventq *evq, ble_npl_time_t tmo)
++{
++    return npl_funcs->p_ble_npl_eventq_get(evq, tmo);
++}
++
++static inline void
++ble_npl_eventq_put(struct ble_npl_eventq *evq, struct ble_npl_event *ev)
++{
++    return npl_funcs->p_ble_npl_eventq_put(evq, ev);
++}
++
++static inline void
++ble_npl_eventq_put_to_front(struct ble_npl_eventq *evq, struct ble_npl_event *ev)
++{
++    npl_funcs->p_ble_npl_eventq_put_to_front(evq, ev);
++}
++
++static inline void
++ble_npl_eventq_remove(struct ble_npl_eventq *evq, struct ble_npl_event *ev)
++{
++    return npl_funcs->p_ble_npl_eventq_remove(evq, ev);
++}
++
++static inline void
++ble_npl_event_run(struct ble_npl_event *ev)
++{
++    return npl_funcs->p_ble_npl_event_run(ev);
++}
++
++static inline bool
++ble_npl_eventq_is_empty(struct ble_npl_eventq *evq)
++{
++    return npl_funcs->p_ble_npl_eventq_is_empty(evq);
++}
++
++static inline void
++ble_npl_event_init(struct ble_npl_event *ev, ble_npl_event_fn *fn,
++    void *arg)
++{
++    return npl_funcs->p_ble_npl_event_init(ev, fn, arg);
++}
++
++static inline bool
++ble_npl_event_is_queued(struct ble_npl_event *ev)
++{
++    return npl_funcs->p_ble_npl_event_is_queued(ev);
++}
++
++static inline void *
++ble_npl_event_get_arg(struct ble_npl_event *ev)
++{
++    return npl_funcs->p_ble_npl_event_get_arg(ev);
++}
++
++static inline void
++ble_npl_event_set_arg(struct ble_npl_event *ev, void *arg)
++{
++    return npl_funcs->p_ble_npl_event_set_arg(ev, arg);
++}
++
++static inline ble_npl_error_t
++ble_npl_mutex_init(struct ble_npl_mutex *mu)
++{
++    return npl_funcs->p_ble_npl_mutex_init(mu);
++}
++
++static inline ble_npl_error_t
++ble_npl_mutex_deinit(struct ble_npl_mutex *mu)
++{
++    return npl_funcs->p_ble_npl_mutex_deinit(mu);
++}
++
++static inline ble_npl_error_t
++ble_npl_mutex_pend(struct ble_npl_mutex *mu, ble_npl_time_t timeout)
++{
++    return npl_funcs->p_ble_npl_mutex_pend(mu, timeout);
++}
++
++static inline ble_npl_error_t
++ble_npl_mutex_release(struct ble_npl_mutex *mu)
++{
++    return npl_funcs->p_ble_npl_mutex_release(mu);
++}
++
++static inline ble_npl_error_t
++ble_npl_sem_init(struct ble_npl_sem *sem, uint16_t tokens)
++{
++    return npl_funcs->p_ble_npl_sem_init(sem, tokens);
++}
++
++static inline ble_npl_error_t
++ble_npl_sem_deinit(struct ble_npl_sem *sem)
++{
++    return npl_funcs->p_ble_npl_sem_deinit(sem);
++}
++
++static inline ble_npl_error_t
++ble_npl_sem_pend(struct ble_npl_sem *sem, ble_npl_time_t timeout)
++{
++    return npl_funcs->p_ble_npl_sem_pend(sem, timeout);
++}
++
++static inline ble_npl_error_t
++ble_npl_sem_release(struct ble_npl_sem *sem)
++{
++    return npl_funcs->p_ble_npl_sem_release(sem);
++}
++
++static inline uint16_t
++ble_npl_sem_get_count(struct ble_npl_sem *sem)
++{
++    return npl_funcs->p_ble_npl_sem_get_count(sem);
++}
++
++static inline int
++ble_npl_callout_init(struct ble_npl_callout *co, struct ble_npl_eventq *evq,
++    ble_npl_event_fn *ev_cb, void *ev_arg)
++{
++    return npl_funcs->p_ble_npl_callout_init(co, evq, ev_cb, ev_arg);
++}
++static inline void
++ble_npl_callout_deinit(struct ble_npl_callout *co)
++{
++    return npl_funcs->p_ble_npl_callout_deinit(co);
++}
++
++static inline ble_npl_error_t
++ble_npl_callout_reset(struct ble_npl_callout *co, ble_npl_time_t ticks)
++{
++    return npl_funcs->p_ble_npl_callout_reset(co, ticks);
++}
++
++static inline void
++ble_npl_callout_stop(struct ble_npl_callout *co)
++{
++    return npl_funcs->p_ble_npl_callout_stop(co);
++}
++
++static inline bool
++ble_npl_callout_is_active(struct ble_npl_callout *co)
++{
++    return npl_funcs->p_ble_npl_callout_is_active(co);
++}
++
++static inline ble_npl_time_t
++ble_npl_callout_get_ticks(struct ble_npl_callout *co)
++{
++    return npl_funcs->p_ble_npl_callout_get_ticks(co);
++}
++
++static inline ble_npl_time_t
++ble_npl_callout_remaining_ticks(struct ble_npl_callout *co,
++    ble_npl_time_t time)
++{
++    return npl_funcs->p_ble_npl_callout_remaining_ticks(co, time);
++}
++
++static inline void
++ble_npl_callout_set_arg(struct ble_npl_callout *co, void *arg)
++{
++    return npl_funcs->p_ble_npl_callout_set_arg(co, arg);
++}
++
++static inline ble_npl_time_t
++ble_npl_time_get(void)
++{
++    return npl_funcs->p_ble_npl_time_get();
++}
++
++static inline ble_npl_error_t
++ble_npl_time_ms_to_ticks(uint32_t ms, ble_npl_time_t *out_ticks)
++{
++    return npl_funcs->p_ble_npl_time_ms_to_ticks(ms, out_ticks);
++}
++
++static inline ble_npl_error_t
++ble_npl_time_ticks_to_ms(ble_npl_time_t ticks, uint32_t *out_ms)
++{
++    return npl_funcs->p_ble_npl_time_ticks_to_ms(ticks, out_ms);
++}
++
++static inline ble_npl_time_t
++ble_npl_time_ms_to_ticks32(uint32_t ms)
++{
++    return npl_funcs->p_ble_npl_time_ms_to_ticks32(ms);
++}
++
++static inline uint32_t
++ble_npl_time_ticks_to_ms32(ble_npl_time_t ticks)
++{
++    return npl_funcs->p_ble_npl_time_ticks_to_ms32(ticks);
++}
++
++static inline void
++ble_npl_time_delay(ble_npl_time_t ticks)
++{
++    return npl_funcs->p_ble_npl_time_delay(ticks);
++}
++
++#if NIMBLE_CFG_CONTROLLER
++static inline void
++ble_npl_hw_set_isr(int irqn, uint32_t addr)
++{
++    return npl_funcs->p_ble_npl_hw_set_isr(irqn, addr);
++}
++#endif
++
++static inline uint32_t
++ble_npl_hw_enter_critical(void)
++{
++    return npl_funcs->p_ble_npl_hw_enter_critical();
++}
++
++static inline void
++ble_npl_hw_exit_critical(uint32_t ctx)
++{
++    return npl_funcs->p_ble_npl_hw_exit_critical(ctx);
++}
++
++static inline bool ble_npl_hw_is_in_critical(void)
++{
++    return npl_funcs->p_ble_npl_hw_is_in_critical();
++}
++
++#define ble_npl_get_time_forever (*npl_funcs->p_ble_npl_get_time_forever)
++#define ble_npl_callout_mem_reset (*npl_funcs->p_ble_npl_callout_mem_reset)
++#define ble_npl_event_deinit (*npl_funcs->p_ble_npl_event_deinit)
++#define ble_npl_event_reset (*npl_funcs->p_ble_npl_event_reset)
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* _NPL_H_ */
+diff --git a/ld/esp32c3-wifi-sections.ld b/ld/esp32c3-wifi-sections.ld
+index 58266df..ca5b1e1 100644
+--- a/ld/esp32c3-wifi-sections.ld
++++ b/ld/esp32c3-wifi-sections.ld
+@@ -53,6 +53,13 @@
+     *(.wifislprxiram .wifislprxiram.*)
+     *(.wifiorslpiram .wifiorslpiram.*)
+     *(.coexiram .coexiram.*)
++    /*
++     * The BLE controller's fast paths (advertising and connection).  Same
++     * reason as the Wi-Fi ones: they run from the BLE interrupt with the flash
++     * cache unavailable, so they must be resident in SRAM.
++     */
++    *(.adv_fast_execute_code_iram1 .adv_fast_execute_code_iram1.*)
++    *(.high_perf_code_iram1 .high_perf_code_iram1.*)
+     *(.iram1 .iram1.*)
+     . = ALIGN(4);
+     rtems_esp_wifi_iram_end = .;
+diff --git a/src/rtems_esp_wifi_init.c b/src/rtems_esp_wifi_init.c
+index 65dde60..f9b097e 100644
+--- a/src/rtems_esp_wifi_init.c
++++ b/src/rtems_esp_wifi_init.c
+@@ -666,7 +666,8 @@ static esp_err_t rtems_esp_wifi_calibrate( void )
+ static pthread_mutex_t rtems_phy_lock = PTHREAD_MUTEX_INITIALIZER;
+ static bool rtems_phy_calibrated;
+ static uint8_t rtems_phy_modems;
+-#if defined(RTEMS_BOARD_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C3)
++#if defined(RTEMS_BOARD_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C3) \
++  || defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
+ static bool rtems_bt_periph_enabled;
+ #endif
+ static uint64_t rtems_last_track_us;
+@@ -770,7 +771,11 @@ void rtems_esp_wifi_c5_clock_disable( void )
+     modem_syscon_ll_clk_wifibb_configure( &MODEM_SYSCON, false );
+     modem_syscon_ll_enable_wifibb_44m_clock( &MODEM_SYSCON, false );
+   }
+-  modem_lpcon_ll_enable_coex_clock( &MODEM_LPCON, false );
++  /* The coexistence clock is shared with an independently running BLE
++   * controller, including while Wi-Fi is stopped or power saving. */
++  if ( !rtems_bt_periph_enabled ) {
++    modem_lpcon_ll_enable_coex_clock( &MODEM_LPCON, false );
++  }
+   rtems_c5_wifi_clock_enabled = false;
+   pthread_mutex_unlock( &rtems_phy_lock );
+ }
+@@ -998,16 +1003,105 @@ void rtems_esp_bt_power_domain_on( void )
+   CLEAR_PERI_REG_MASK( RTC_CNTL_DIG_ISO_REG,
+     RTC_CNTL_BT_FORCE_ISO | RTC_CNTL_BT_FORCE_NOISO );
+ }
++#endif
+
++#if defined(RTEMS_BOARD_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C3) \
++  || defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++#if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++#include <soc/lpperi_struct.h>
++#define LPPERI (*(lpperi_dev_t *) 0x600b2800u)
++#include <hal/rng_ll.h>
++#endif
+ void rtems_esp_bt_periph_enable( void )
+ {
++  pthread_mutex_lock( &rtems_phy_lock );
++#if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++  rng_ll_enable();
++  /* esp_bt_controller_init(): modem_clock_module_enable() then
++   * modem_clock_module_mac_reset(), plus ble_rtc_clk_init()'s low-power
++   * clock selection.  MODEM_SYSCON/LPCON and the ICG maps are named here
++   * because the BSP does not link the esp_hw_support modem clock shim. */
++  rtems_c5_clock_maps_init();
++  modem_syscon_ll_enable_bt_mac_clock( &MODEM_SYSCON, true );
++  modem_syscon_ll_enable_bt_bb_clock( &MODEM_SYSCON, true );
++  modem_syscon_ll_enable_bt_apb_clock( &MODEM_SYSCON, true );
++  modem_syscon_ll_enable_modem_sec_apb_clock( &MODEM_SYSCON, true );
++  modem_syscon_ll_enable_modem_sec_clock( &MODEM_SYSCON, true );
++  modem_syscon_ll_enable_ble_timer_clock( &MODEM_SYSCON, true );
++  modem_syscon_ll_enable_etm_clock( &MODEM_SYSCON, true );
++  modem_lpcon_ll_enable_coex_clock( &MODEM_LPCON, true );
++  modem_syscon_ll_reset_btmac( &MODEM_SYSCON );
++  modem_syscon_ll_reset_btmac_apb( &MODEM_SYSCON );
++  modem_syscon_ll_reset_ble_timer( &MODEM_SYSCON );
++  modem_syscon_ll_reset_modem_sec( &MODEM_SYSCON );
++  /* ble_rtc_clk_init(): divide the actual 40/48 MHz main XTAL to 100 kHz. */
++  extern uint32_t rtc_clk_xtal_freq_get( void );
++  modem_lpcon_ll_enable_ble_rtc_timer_slow_osc( &MODEM_LPCON, false );
++  modem_lpcon_ll_enable_ble_rtc_timer_fast_osc( &MODEM_LPCON, false );
++  modem_lpcon_ll_enable_ble_rtc_timer_32k_xtal( &MODEM_LPCON, false );
++  modem_lpcon_ll_enable_ble_rtc_timer_main_xtal( &MODEM_LPCON, false );
++  modem_lpcon_ll_enable_ble_rtc_timer_main_xtal( &MODEM_LPCON, true );
++  modem_lpcon_ll_set_ble_rtc_timer_divisor_value( &MODEM_LPCON,
++    rtc_clk_xtal_freq_get() * 10u - 1u );
++  modem_lpcon_ll_enable_ble_rtc_timer_clock( &MODEM_LPCON, true );
++#else
+   /* esp_bt_controller_init(): periph_module_enable(), then reset(). */
+   periph_ll_enable_clk_clear_rst( PERIPH_BT_MODULE );
+   periph_ll_reset( PERIPH_BT_MODULE );
++#endif
+   rtems_bt_periph_enabled = true;
++  pthread_mutex_unlock( &rtems_phy_lock );
++}
++#endif
++
++#if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++/* IDF enables the C5 independent RNG clock, sampler and asynchronous/RTC
++ * mixing during startup. Keep it available to other users after BT stops. */
++int rtems_esp_bt_random( void *buf, size_t len )
++{
++  if ( !rtems_bt_periph_enabled || !rng_ll_is_enabled() ) {
++    return -1;
++  }
++  uint8_t *out = buf;
++  while ( len != 0 ) {
++    uint32_t word = 0;
++    uint64_t start = rtems_clock_get_uptime_nanoseconds();
++    do {
++      word ^= rng_ll_read_data();
++    } while ( rtems_clock_get_uptime_nanoseconds() - start < 1000u );
++    /* At the BSP's 160 MHz CPU / 80 MHz APB, wait at least 80 APB
++     * cycles per word, exceeding IDF's minimum of 16. */
++    word ^= rng_ll_read_data();
++    size_t n = len < sizeof( word ) ? len : sizeof( word );
++    memcpy( out, &word, n );
++    out += n;
++    len -= n;
++  }
++  return 0;
++}
++
++void rtems_esp_bt_periph_disable( void )
++{
++  pthread_mutex_lock( &rtems_phy_lock );
++  modem_lpcon_ll_enable_ble_rtc_timer_clock( &MODEM_LPCON, false );
++  modem_lpcon_ll_enable_ble_rtc_timer_main_xtal( &MODEM_LPCON, false );
++  modem_syscon_ll_enable_bt_mac_clock( &MODEM_SYSCON, false );
++  modem_syscon_ll_enable_bt_bb_clock( &MODEM_SYSCON, false );
++  modem_syscon_ll_enable_bt_apb_clock( &MODEM_SYSCON, false );
++  modem_syscon_ll_enable_modem_sec_clock( &MODEM_SYSCON, false );
++  modem_syscon_ll_enable_modem_sec_apb_clock( &MODEM_SYSCON, false );
++  modem_syscon_ll_enable_ble_timer_clock( &MODEM_SYSCON, false );
++  modem_syscon_ll_enable_etm_clock( &MODEM_SYSCON, false );
++  if ( !rtems_c5_wifi_clock_enabled ) {
++    modem_lpcon_ll_enable_coex_clock( &MODEM_LPCON, false );
++  }
++  rtems_bt_periph_enabled = false;
++  pthread_mutex_unlock( &rtems_phy_lock );
+ }
+ #endif
+
++extern void rtems_esp_phy_tracking_set( bool enabled );
++
+ static void rtems_phy_track( void )
+ {
+   phy_param_track_tot(
+@@ -1118,9 +1212,11 @@ void esp_phy_enable( esp_phy_modem_t modem )
+ #endif
+     }
+ #if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
+-    modem_syscon_ll_enable_bt_bb_clock( &MODEM_SYSCON, false );
+-    modem_syscon_ll_enable_bt_apb_clock( &MODEM_SYSCON, false );
+-    modem_syscon_ll_enable_modem_sec_apb_clock( &MODEM_SYSCON, false );
++    if ( !rtems_bt_periph_enabled ) {
++      modem_syscon_ll_enable_bt_bb_clock( &MODEM_SYSCON, false );
++      modem_syscon_ll_enable_bt_apb_clock( &MODEM_SYSCON, false );
++      modem_syscon_ll_enable_modem_sec_apb_clock( &MODEM_SYSCON, false );
++    }
+     if ( !rtems_c5_wifi_clock_enabled && !rtems_c5_wifi_initialized ) {
+       modem_syscon_ll_enable_wifi_apb_clock( &MODEM_SYSCON, false );
+       modem_syscon_ll_clk_wifibb_configure( &MODEM_SYSCON, false );
+@@ -1153,6 +1249,7 @@ void esp_phy_enable( esp_phy_modem_t modem )
+   rtems_phy_modems |= modem;
+   /* IDF tracks on enable only if more than one period has elapsed. */
+   rtems_phy_track_if_due();
++  rtems_esp_phy_tracking_set( true );
+   pthread_mutex_unlock( &rtems_phy_lock );
+ }
+
+@@ -1162,6 +1259,7 @@ void esp_phy_disable( esp_phy_modem_t modem )
+   uint8_t previous = rtems_phy_modems;
+   rtems_phy_modems &= ~modem;
+   if ( previous != 0 && rtems_phy_modems == 0 ) {
++    rtems_esp_phy_tracking_set( false );
+ #if defined(RTEMS_BOARD_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C3)
+     phy_dig_reg_backup( true, rtems_c3_phy_digital_regs );
+     rtems_c3_phy_regs_stored = true;
+@@ -1198,7 +1296,8 @@ void rtems_esp_wifi_phy_disable( void )
+ }
+ #endif
+
+-#if defined(RTEMS_BOARD_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C3)
++#if defined(RTEMS_BOARD_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C3) \
++  || defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
+ /* Shared startup runs once, regardless of which radio starts first. Copying
+  * .wifi_dram or resetting the common modem again would corrupt a live user. */
+ int rtems_esp_modem_prepare( void )
+@@ -1208,6 +1307,25 @@ int rtems_esp_modem_prepare( void )
+     return ESP_OK;
+   }
+   rtems_esp_wifi_copy_sections();
++#if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++  /* IDF's C5 esp_wifi_init(): bootloader_init_mem() releases the APM
++   * filters so DMA masters can reach the modem, then esp_perip_clk_init()
++   * seeds the modem ICG maps and low-power clocks. */
++  apm_ll_hp_apm_enable_ctrl_filter_all( false );
++  apm_ll_lp_apm0_enable_ctrl_filter_all( false );
++  apm_ll_lp_apm_enable_ctrl_filter_all( false );
++  apm_ll_cpu_apm_enable_ctrl_filter_all( false );
++  uint32_t master_mask = APM_MASTER_MASK_ALL;
++  while ( master_mask != 0 ) {
++    uint32_t master = __builtin_ctz( master_mask );
++    master_mask &= ~( 1u << master );
++    apm_ll_hp_tee_set_master_sec_mode( master, APM_SEC_MODE_TEE );
++    if ( master == APM_MASTER_LPCORE ) {
++      apm_ll_lp_tee_set_master_sec_mode( master, APM_SEC_MODE_TEE );
++    }
++  }
++  rtems_c5_modem_clock_init();
++#else
+   /*
+    * Before the PHY, not after.  register_chipv7_phy() calibrates against the
+    * analog blocks, and on silicon they have to be powered and out of isolation
+@@ -1221,6 +1339,7 @@ int rtems_esp_modem_prepare( void )
+    */
+   regi2c_ctrl_ll_i2c_bbpll_enable();
+   regi2c_ctrl_ll_i2c_sar_periph_enable();
++#endif
+
+   int result = rtems_wifi_coex_prepare();
+   if ( result == ESP_OK ) {
+@@ -1259,7 +1378,8 @@ esp_err_t esp_wifi_init( const wifi_init_config_t *config )
+     return ESP_ERR_INVALID_ARG;
+   }
+
+-#if !defined(RTEMS_BOARD_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32C3)
++#if !defined(RTEMS_BOARD_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32C3) \
++  && !defined(RTEMS_BOARD_ESP32C5) && !defined(CONFIG_IDF_TARGET_ESP32C5)
+   rtems_esp_wifi_copy_sections();
+ #endif
+
+@@ -1285,24 +1405,12 @@ esp_err_t esp_wifi_init( const wifi_init_config_t *config )
+   }
+   rtems_s31_modem_clock_init();
+ #elif defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
+-  /* ESP-IDF has no software modem power-domain sequence on C5.
+-   * Clock dependencies are enabled by the OS adapter and PHY lifecycle.
+-   */
+-  /* bootloader_init_mem(): permit DMA masters on the direct-boot path. */
+-  apm_ll_hp_apm_enable_ctrl_filter_all( false );
+-  apm_ll_lp_apm0_enable_ctrl_filter_all( false );
+-  apm_ll_lp_apm_enable_ctrl_filter_all( false );
+-  apm_ll_cpu_apm_enable_ctrl_filter_all( false );
+-  uint32_t master_mask = APM_MASTER_MASK_ALL;
+-  while ( master_mask != 0 ) {
+-    uint32_t master = __builtin_ctz( master_mask );
+-    master_mask &= ~( 1u << master );
+-    apm_ll_hp_tee_set_master_sec_mode( master, APM_SEC_MODE_TEE );
+-    if ( master == APM_MASTER_LPCORE ) {
+-      apm_ll_lp_tee_set_master_sec_mode( master, APM_SEC_MODE_TEE );
+-    }
++  /* Shared with the BT pathway: releases the APM filters and seeds the
++   * modem clocks exactly once, whichever radio starts first. */
++  result = rtems_esp_modem_prepare();
++  if ( result != ESP_OK ) {
++    return result;
+   }
+-  rtems_c5_modem_clock_init();
+ #elif defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
+   /* bootloader_init_mem(): direct boot must permit DMA access. */
+   apm_ll_hp_apm_enable_ctrl_filter_all( false );
+@@ -1331,7 +1439,8 @@ esp_err_t esp_wifi_init( const wifi_init_config_t *config )
+   }
+ #endif
+
+-#if !defined(RTEMS_BOARD_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32C3)
++#if !defined(RTEMS_BOARD_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32C3) \
++  && !defined(RTEMS_BOARD_ESP32C5) && !defined(CONFIG_IDF_TARGET_ESP32C5)
+   result = rtems_wifi_coex_prepare();
+   if ( result != ESP_OK ) {
+     printk( "rtems-esp-wifi: coex_pre_init failed (%d)\n", result );
+diff --git a/src/rtems_wifi_os_adapter.c b/src/rtems_wifi_os_adapter.c
+index 838ee3b..f62e033 100644
+--- a/src/rtems_wifi_os_adapter.c
++++ b/src/rtems_wifi_os_adapter.c
+@@ -1117,6 +1117,8 @@ RTEMS_STATIC_ASSERT(
+
+ static pthread_once_t rtems_wifi_timer_server_once = PTHREAD_ONCE_INIT;
+
++static int rtems_wifi_timer_server_result = -1;
++
+ static void rtems_wifi_timer_server_start( void )
+ {
+   rtems_status_code sc = rtems_timer_initiate_server(
+@@ -1131,6 +1133,9 @@ static void rtems_wifi_timer_server_start( void )
+    * configuration problem (no task or no timer left) that would otherwise
+    * present as a WiFi stack whose timeouts never fire.
+    */
++  if ( sc == RTEMS_SUCCESSFUL || sc == RTEMS_INCORRECT_STATE ) {
++    rtems_wifi_timer_server_result = 0;
++  }
+   if ( sc != RTEMS_SUCCESSFUL && sc != RTEMS_INCORRECT_STATE ) {
+     printk(
+       "wifi.osi: the timer server would not start (%s)\n",
+@@ -1139,6 +1144,13 @@ static void rtems_wifi_timer_server_start( void )
+   }
+ }
+
++/* One task serves Wi-Fi ETS timers, NPL callouts and shared PHY tracking. */
++int rtems_esp_timer_server_ensure( void )
++{
++  pthread_once( &rtems_wifi_timer_server_once, rtems_wifi_timer_server_start );
++  return rtems_wifi_timer_server_result;
++}
++
+ /*
+  * Microseconds to ticks, rounded *up* and never to zero.  A sub-tick interval
+  * is the case that matters: rounding down gives 0, which rtems_timer_*_after
+@@ -1205,7 +1217,7 @@ static void rtems_wifi_timer_setfn(
+   if ( t->magic != RTEMS_WIFI_ETS_TIMER_MAGIC ) {
+     rtems_id id = RTEMS_INVALID_ID;
+
+-    pthread_once( &rtems_wifi_timer_server_once, rtems_wifi_timer_server_start );
++    (void) rtems_esp_timer_server_ensure();
+
+     if ( rtems_timer_create(
+            rtems_build_name( 'W', 'F', 'T', 'M' ),
+@@ -1580,15 +1592,23 @@ static void rtems_phy_timer_callback( void *arg )
+   rtems_esp_wifi_phy_track();
+ }
+
+-static void rtems_wifi_phy_enable( void )
++/* Called under the shared PHY lock when the first/last radio changes. */
++void rtems_esp_phy_tracking_set( bool enabled )
+ {
+-  rtems_esp_wifi_phy_enable();
+-  if ( !rtems_phy_timer_active ) {
++  if ( enabled && !rtems_phy_timer_active ) {
+     rtems_wifi_timer_setfn( &rtems_phy_timer,
+       rtems_phy_timer_callback, NULL );
+     rtems_wifi_timer_arm( &rtems_phy_timer, 1000, true );
+     rtems_phy_timer_active = true;
++  } else if ( !enabled && rtems_phy_timer_active ) {
++    rtems_wifi_timer_disarm( &rtems_phy_timer );
++    rtems_phy_timer_active = false;
+   }
++}
++
++static void rtems_wifi_phy_enable( void )
++{
++  rtems_esp_wifi_phy_enable();
+   phy_wifi_enable_set( 1 );
+ #if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5) \
+   || defined(RTEMS_BOARD_ESP32S31) || defined(CONFIG_IDF_TARGET_ESP32S31)
+@@ -1600,8 +1620,6 @@ static void rtems_wifi_phy_enable( void )
+ static void rtems_wifi_phy_disable( void )
+ {
+   phy_wifi_enable_set( 0 );
+-  rtems_wifi_timer_disarm( &rtems_phy_timer );
+-  rtems_phy_timer_active = false;
+   rtems_esp_wifi_phy_disable();
+ }
+ #else
+@@ -1655,7 +1673,7 @@ static int rtems_wifi_read_mac( uint8_t *mac, unsigned int type )
+    */
+   if ( type == 1 ) {
+     mac[ 5 ] += 1;
+-#if defined(CONFIG_IDF_TARGET_ESP32C3)
++#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C5)
+   } else if ( type == 2 || type == 3 ) {
+     mac[ 5 ] += type;
+ #endif
+@@ -1673,7 +1691,7 @@ static int rtems_wifi_read_mac( uint8_t *mac, unsigned int type )
+ #include <private/esp_coexist_adapter.h>
+ #include <private/esp_coexist_internal.h>
+
+-#if defined(CONFIG_IDF_TARGET_ESP32C3)
++#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C5)
+ #include <esp_mac.h>
+
+ esp_err_t esp_read_mac( uint8_t *mac, esp_mac_type_t type )

@@ -178,6 +178,8 @@ rtems_clone_pinned https://github.com/espressif/esp-phy-lib.git "${ESP_PHY_COMMI
 
 rtems_clone_pinned https://github.com/espressif/esp-coex-lib.git "${ESP_COEX_COMMIT}" esp-coex-lib
 
+rtems_clone_pinned https://github.com/espressif/esp32c5-bt-lib.git "${ESP32C5_BT_COMMIT}" esp32c5-bt-lib
+
 rtems_clone_pinned https://github.com/espressif/esp-hal-3rdparty.git "${ESP_HAL_COMMIT}" esp-hal-3rdparty
 
 rtems_clone_pinned https://github.com/Mbed-TLS/mbedtls.git "${RTEMS_MBEDTLS_COMMIT}" mbedtls
@@ -311,6 +313,21 @@ riscv-rtems7-gcc -march=rv32imac -mabi=ilp32 -DRTEMS_BOARD_ESP32C5 -DESP_PLATFOR
     -I "${WPA}/src" -I "${WPA}/src/utils" -I "${WPA}/include" -I "${WPA}/port/include" \
     -c -o "${BUILD_DIR}/glue-obj/wpa_common.o" "${WPA}/src/utils/common.c"
 
+# 10. os_mempool.c -- the only NimBLE porting source the C5 controller blob
+# needs at link time (os_mempool_init/clear/unregister/ext_init/flags_set and
+# os_memblock_get/put).  Everything else the blob references is either resolved
+# inside the blob (r_os_*, r_esp_ble_*) or provided by App (NPL via r_npl_funcs,
+# stack orchestration, OS/PHY services), so it is built here where the vendor
+# NimBLE porting headers live rather than shipping them to the app.  The NPL
+# header os/os.h pulls in comes from the glue's include/nimble/ (added by
+# patch 0018), not the vendor FreeRTOS NPL, which needs the full FreeRTOS tree.
+BT_INC="-I ${HAL}/bt/porting/include \
+        -I ${HAL}/bt/host/nimble/port/include \
+        -I ${HAL}/bt/host/nimble/nimble/porting/nimble/include"
+riscv-rtems7-gcc -march=rv32imac -mabi=ilp32 -DRTEMS_BOARD_ESP32C5 ${COMMON_INC} ${BT_INC} \
+    -Wall -Wextra -Wno-unused-parameter \
+    -c -o "${BUILD_DIR}/glue-obj/os_mempool.o" "${HAL}/bt/porting/mem/os_mempool.c"
+
 # Archive into librtems_esp_wifi.a
 riscv-rtems7-ar rcs "${BSP_LIB}/librtems_esp_wifi.a" "${BUILD_DIR}"/glue-obj/*.o
 
@@ -319,6 +336,7 @@ echo "==> Installing Wi-Fi and PHY binary blobs into ${BSP_LIB}..."
 cp "${BUILD_DIR}/esp32-wifi-lib/esp32c5/"lib*.a "${BSP_LIB}/"
 cp "${BUILD_DIR}/esp-phy-lib/esp32c5/"lib*.a "${BSP_LIB}/"
 cp "${BUILD_DIR}/esp-coex-lib/esp32c5/libcoexist.a" "${BSP_LIB}/"
+find "${BUILD_DIR}/esp32c5-bt-lib" -name 'libble_app.a' -exec cp {} "${BSP_LIB}/" \;
 
 # Copy Mask ROM linker scripts to BSP lib directory
 echo "==> Installing Mask ROM linker scripts into ${BSP_LIB}..."
@@ -351,6 +369,11 @@ cp -r "${HAL}/soc/include/"* "${BSP_INC}/" 2>/dev/null || true
 cp -r "${HAL}/soc/esp32c5/include/"* "${BSP_INC}/" 2>/dev/null || true
 cp -r "${HAL}/esp_hw_support/include/"* "${BSP_INC}/" 2>/dev/null || true
 
+# The C5 BLE controller config struct and stack orchestration are written out in
+# AtomVM's rtems_bt_c5.c instead of shipping the vendor esp_bt.h/esp_bt_cfg.h
+# tree: esp_bt.h pulls the NimBLE host NPL headers and a hal/efuse_hal.h
+# #include_next chain that cannot be flattened into one BSP include directory.
+
 # Insert before RAM load images advance the flash offset independently of rodata.
 # Otherwise Wi-Fi log strings get different mapped and load offsets.
 if ! grep -q 'wifi_iram' "${BSP_LIB}/linkcmds"; then
@@ -369,12 +392,39 @@ if ! grep -q 'wifi_iram' "${BSP_LIB}/linkcmds"; then
       { print }
     ' "${BSP_LIB}/linkcmds" > "${BSP_LIB}/linkcmds.wifi"
     mv "${BSP_LIB}/linkcmds.wifi" "${BSP_LIB}/linkcmds"
+else
+    # Existing installations already have the fragment expanded into linkcmds.
+    # Refresh the IRAM section too, so newly added BLE globs are installed.
+    python3 - "${BSP_LIB}/linkcmds" "${GLUE}/ld/esp32c3-wifi-sections.ld" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+linkcmds = Path(sys.argv[1])
+fragment = Path(sys.argv[2]).read_text()
+iram = re.compile(r"(?ms)^[ \t]*\.wifi_iram[ \t]*:.*?^[ \t]*}[ \t]*>[ \t]*RAM_CODE[^\n]*")
+section = iram.search(fragment)
+if section is None:
+    raise SystemExit("Missing Wi-Fi IRAM section in linker fragment")
+updated, count = iram.subn(lambda match: section.group(), linkcmds.read_text())
+if count != 1:
+    raise SystemExit("Expected one Wi-Fi IRAM section in installed linkcmds")
+temporary = linkcmds.with_name("linkcmds.wifi")
+temporary.write_text(updated)
+temporary.replace(linkcmds)
+PY
 fi
 
-# Match esp32c5-wifi-bsp.ini when upgrading an installed 48/96 KiB BSP.
-# The vendor ROM/library split needs about 74 KiB of executable SRAM. Reserving
-# 80 KiB leaves more workspace for Wi-Fi and lwIP than the old 96 KiB setting.
-sed -i -E 's/LENGTH = (49152|98304)/LENGTH = 81920/g; s/\+ (49152|98304)/+ 81920/g; s/- (49152|98304)/- 81920/g; s/- 90112/- 16384/g' "${BSP_LIB}/linkcmds"
+# Match esp32c5-wifi-bsp.ini when upgrading an installed BSP.
+# Wi-Fi needs about 53 KiB of executable SRAM and the BLE controller's fast
+# paths add about 25 KiB, so reserve 80 KiB (0x14000) here as the fresh BSP
+# configuration does.  Rewrite both lines whole rather than pattern-matching
+# the old size, so it is idempotent and cannot mistake the IRAM size for the
+# ROM reserve at the end of the RAM line.
+sed -i -E \
+    -e 's/^  RAM_CODE : ORIGIN = ([0-9]+), LENGTH = [0-9]+/  RAM_CODE : ORIGIN = \1, LENGTH = 81920/' \
+    -e 's/^  RAM : ORIGIN = ([0-9]+) \+ [0-9]+, LENGTH = ([0-9]+) - [0-9]+ - [0-9]+/  RAM : ORIGIN = \1 + 81920, LENGTH = \2 - 81920 - 16384/' \
+    "${BSP_LIB}/linkcmds"
 
 echo "================================================================"
 echo "RTEMS 7 ESP32-C5 Wi-Fi & lwIP stack installed successfully!"

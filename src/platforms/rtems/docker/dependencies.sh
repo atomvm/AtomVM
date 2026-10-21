@@ -19,6 +19,8 @@ ESP_COEX_COMMIT=fa152b3b6b2e3c5e3a57e55fcf4b005a4e28cef9
 # ESP-IDF pins this submodule; the flash-only controller keeps its IRAM
 # section to the ESP-IDF size instead of linking ~28 KiB more code.
 ESP32C3_BT_COMMIT=0a08c4b32f3666003080b662a1a61794da24ff0f
+# Same esp32c5-bt-lib gitlink ESP-IDF pins for its C5 controller.
+ESP32C5_BT_COMMIT=0b5cb2d7cfb4078e951da36a695bc4fb37e52391
 RTEMS_ESP_WIFI_COMMIT=95129edf3086ae48ad61ef57b371129e2823ec45
 RTEMS_MBEDTLS_COMMIT=22098d41c6620ce07cf8a0134d37302355e1e5ef
 RTEMS_LINUX_DTS_COMMIT=830b3c68c1fb1e9176028d02ef86f3cf76aa2476
