@@ -73,9 +73,13 @@ if(RTEMS_SLEEP_TEST_FIXTURE)
 endif()
 
 # The BLE controller reuses the Wi-Fi image copy and coexistence layer, so it is
-# only built for the C3 with the ESP Wi-Fi stack installed.
+# only built for C3/C5 with the ESP Wi-Fi stack installed.
 if(RTEMS_BT AND RTEMS_BOARD STREQUAL "esp32c3" AND RTEMS_HAS_ESP_WIFI)
     list(APPEND SOURCE_FILES rtems_bt.c)
+    list(APPEND HEADER_FILES rtems_bt.h)
+elseif(RTEMS_BT AND RTEMS_BOARD STREQUAL "esp32c5" AND RTEMS_HAS_ESP_WIFI)
+    set(_rtems_bt_dir "${CMAKE_CURRENT_SOURCE_DIR}/../../bt")
+    list(APPEND SOURCE_FILES "${_rtems_bt_dir}/rtems_bt_c5.c" "${_rtems_bt_dir}/rtems_npl.c")
     list(APPEND HEADER_FILES rtems_bt.h)
 endif()
 
@@ -159,6 +163,15 @@ elseif(RTEMS_BOARD STREQUAL "esp32c3" OR RTEMS_BOARD STREQUAL "esp32c5" OR RTEMS
         endif()
     elseif(RTEMS_BOARD STREQUAL "esp32c5")
         target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE RTEMS_BOARD_ESP32C5)
+        if(RTEMS_BT AND RTEMS_HAS_ESP_WIFI)
+            target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE RTEMS_HAS_BT)
+            # bt/include provides the RTEMS NPL function table and wrappers.
+            # The vendor controller headers stay in the BSP build; the
+            # app-side glue declares only what it calls.
+            target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} BEFORE PRIVATE
+                "${_rtems_bt_dir}/include"
+            )
+        endif()
     elseif(RTEMS_BOARD STREQUAL "esp32c6")
         target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE RTEMS_BOARD_ESP32C6)
     elseif(RTEMS_BOARD STREQUAL "esp32s31")

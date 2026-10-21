@@ -183,6 +183,15 @@ port. The ROM-ready callback retains
 IDF's default minimum-connection-interval setting even though this test does
 not accept connections.
 
+On ESP32-C5, `RTEMS_BT=ON` uses the same Erlang bring-up API and advertising
+counter test. Its NimBLE-derived controller needs an RTEMS NPL implementation
+and the vendor mempool allocator, without linking a BLE host. The compact
+profile retains one configured connection, smaller packet pools and disabled
+controller sleep. PHY ownership and periodic tracking are shared with Wi-Fi.
+The C5 hardware test passes advertising through Wi-Fi traffic and stop/restart.
+See [C5 port notes](../../../BLE_C5.md) for SDK patches, memory limits and
+validation coverage.
+
 Wi-Fi software coexistence follows ESP-IDF: shared C3 modem startup (and
 `esp_wifi_init()` on other chips) registers the coexistence OS adapter and
 runs `coex_pre_init()` before

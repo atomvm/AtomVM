@@ -224,6 +224,10 @@ elseif(RTEMS_BOARD STREQUAL "esp32c5")
         set(RTEMS_ESP32C5_REV_MIN 100 CACHE STRING
             "Minimum ESP32-C5 chip revision (100 for ECO2, 102 for ECO3)")
         target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_HAS_WIFI RTEMS_WIFI_BACKEND_ESP32)
+        if(RTEMS_BT)
+            target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_HAS_BT)
+            set(_esp32c5_bt_libs ble_app btbb)
+        endif()
         set(_esp32c5_lib_dir "${RTEMS_PREFIX}/${RTEMS_TARGET}/${RTEMS_BSP_NAME}/lib")
         # Installed archives and scripts can change while the application
         # sources stay unchanged during BSP and Wi-Fi bringup.
@@ -266,6 +270,7 @@ elseif(RTEMS_BOARD STREQUAL "esp32c5")
             core
             phy
             coexist
+            ${_esp32c5_bt_libs}
             mesh
             espnow
             smartconfig

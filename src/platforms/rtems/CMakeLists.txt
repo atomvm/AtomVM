@@ -92,7 +92,7 @@ if((RTEMS_BOARD STREQUAL "esp32c3" OR RTEMS_BOARD STREQUAL "esp32c5" OR RTEMS_BO
     message(FATAL_ERROR "RTEMS_BOARD=${RTEMS_BOARD} requires a RISC-V esp32 BSP (e.g. riscv/esp32c3db, riscv/esp32c5db, riscv/esp32c6db, or riscv/esp32s31db)")
 endif()
 
-option(RTEMS_BT "Build ESP32-C3 Bluetooth controller support" OFF)
+option(RTEMS_BT "Build ESP32 Bluetooth controller support (C3 or C5)" OFF)
 set(RTEMS_WIFI_POWER_SAVE "NONE" CACHE STRING "Experimental ESP Wi-Fi power saving: NONE, MIN_MODEM or MAX_MODEM")
 set_property(CACHE RTEMS_WIFI_POWER_SAVE PROPERTY TYPE STRING)
 set_property(CACHE RTEMS_WIFI_POWER_SAVE PROPERTY STRINGS NONE MIN_MODEM MAX_MODEM)
@@ -109,8 +109,8 @@ set(RTEMS_WIFI_LISTEN_INTERVAL "3" CACHE STRING "Wi-Fi MAX_MODEM listen interval
 if(NOT RTEMS_WIFI_LISTEN_INTERVAL MATCHES "^[1-9][0-9]*$" OR RTEMS_WIFI_LISTEN_INTERVAL GREATER 65535)
     message(FATAL_ERROR "RTEMS_WIFI_LISTEN_INTERVAL must be between 1 and 65535")
 endif()
-if(RTEMS_BT AND NOT RTEMS_BOARD STREQUAL "esp32c3")
-    message(FATAL_ERROR "RTEMS_BT requires RTEMS_BOARD=esp32c3")
+if(RTEMS_BT AND NOT (RTEMS_BOARD STREQUAL "esp32c3" OR RTEMS_BOARD STREQUAL "esp32c5"))
+    message(FATAL_ERROR "RTEMS_BT requires RTEMS_BOARD=esp32c3 or esp32c5")
 endif()
 
 include(CheckCSourceCompiles)

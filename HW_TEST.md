@@ -60,6 +60,18 @@ An earlier restart ran out of memory; matching ESP-IDF's temporary calibration
 buffer lifetime recovers about 1.9 KB of RAM. Extended cycling under load and
 a 5 GHz connection still need validation.
 
+On 2026-10-21, the C5 also passes BLE advertising with Wi-Fi coexistence over
+UART: BLE starts before Wi-Fi, 24 DNS/TCP/HTTP checks pass across two 60-second
+traffic phases, and Wi-Fi stops/restarts and obtains DHCP again while BLE
+remains active. The app returns `ok`; a separate BLE receiver sees increasing
+advertising counters in both traffic phases. See [BLE_C5.md](BLE_C5.md) for
+the required clock/interrupt patches and the measured SRAM/timer budget. This
+uses a compact controller profile with one connection. On 2026-10-22, the C5
+also passes four controller lifecycle cycles and injected init/enable/disable
+failures with stable heap/object counts, standalone PHY tracking and P-256
+known-answer/round-trip checks. The post-fix coexistence run also passes.
+Connections, pairing, GATT, VHCI ACL traffic and coexistence with power saving remain untested.
+
 Direct boot must calibrate the system PLL for the detected crystal before initializing peripherals; retaining
 the ROM's 40 MHz PLL settings overclocks this board to about 191 MHz instead
 of 160 MHz. The Wi-Fi adapter also preserves the caller's default radio
@@ -263,13 +275,14 @@ the HTTP request checks traffic through the AP.
 The existing `test_esp32*_wifi` suites assume the emulator AP, fixed RSSI and
 emulator network addresses. Use the application above on a real network.
 
-## ESP32-C3 Bluetooth/Wi-Fi coexistence
+## ESP32-C3/C5 Bluetooth/Wi-Fi coexistence
 
-Use the minimal BLE test after selecting C3 and rebuilding its hardware SDK
+Use the minimal BLE test after selecting C3 or C5 and rebuilding its hardware SDK
 from the current patches:
 
 ```sh
 export TEST_MODULE=test_esp32c3_ble
+# For C5, use TEST_MODULE=test_esp32c5_ble instead.
 export HW_RTEMS_BT=ON
 cp "$REPO_ROOT/src/platforms/rtems/tests/test_erl_sources/$TEST_MODULE.erl" \
     "$HW_WORK/$TEST_MODULE.erl"
@@ -293,6 +306,12 @@ between events. The three advertising-channel transmissions within one event
 share a counter; different events use different counters. Check that received
 counters continue increasing throughout the test, including after Wi-Fi restarts.
 Connections, pairing and GATT are not implemented by this controller smoke test.
+
+The C5 SDK also needs RTEMS patch `0034-esp32c5-route-bluetooth-interrupts.patch`
+and Wi-Fi glue patch `0018-rtems-esp-wifi-c5-bluetooth.patch`. Rebuild an older
+SDK: the C5's shared C6 interrupt table lacks the controller's BT_MAC and
+LP_TIMER routes, and its Bluetooth security and timer clocks need enabling.
+The C5 test runs each associated Wi-Fi phase for 60 seconds.
 
 To compare experimental Wi-Fi modem power saving, export
 `HW_WIFI_POWER_SAVE=MIN_MODEM` or `MAX_MODEM` before building; the default is
