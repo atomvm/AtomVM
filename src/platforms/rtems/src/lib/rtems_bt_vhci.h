@@ -22,6 +22,7 @@
 #define RTEMS_BT_VHCI_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -33,7 +34,8 @@ extern "C" {
  * the ESP-IDF esp_vhci_host_* API.  Packets use HCI H4 framing: the first byte
  * is the packet indicator (0x01 command, 0x02 ACL data, 0x04 event).
  *
- * Return values are ESP_OK (0) or a negative error code; esp_err_t is an int.
+ * Successful operations return ESP_OK (0); failures return a nonzero error
+ * code. esp_err_t is an int.
  */
 
 typedef struct esp_vhci_host_callback
@@ -48,6 +50,37 @@ typedef struct esp_vhci_host_callback
  * rtems_bt_start_async(); poll rtems_bt_is_started() before registering.
  */
 bool rtems_bt_vhci_start_async(void);
+
+/* Synchronous lifecycle for native host tasks. Open returns -EBUSY when the
+ * smoke test or another native host owns the controller. Close may be retried
+ * after a controller-disable failure. Serialize native lifecycle calls and
+ * wait for asynchronous startup before closing. Do not call these from a VM
+ * scheduler. */
+int rtems_bt_vhci_open(void);
+int rtems_bt_vhci_close(void);
+
+/* The C5 profile permits 517 ACL payload bytes, plus the H4/ACL headers. */
+#define RTEMS_BT_VHCI_ACL_SIZE 517u
+#define RTEMS_BT_VHCI_PACKET_SIZE (1u + 4u + RTEMS_BT_VHCI_ACL_SIZE)
+
+static inline bool rtems_bt_vhci_valid_packet(const uint8_t *data, size_t len)
+{
+    if (data == NULL || len < 4) {
+        return false;
+    }
+    if (data[0] == 0x01) {
+        return len == 4u + data[3];
+    }
+    if (data[0] == 0x02 && len >= 5) {
+        size_t payload = data[3] | ((size_t) data[4] << 8);
+        return payload <= RTEMS_BT_VHCI_ACL_SIZE && len == 5u + payload;
+    }
+    return false;
+}
+
+/* Checked variant used by the NIF: malformed packets and exhausted controller
+ * buffers must not be reported to the host as successful sends. */
+int rtems_bt_vhci_send_packet(const uint8_t *data, uint16_t len);
 
 int esp_vhci_host_register_callback(const esp_vhci_host_callback_t *callback);
 void esp_vhci_host_send_packet(uint8_t *data, uint16_t len);

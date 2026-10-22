@@ -190,9 +190,12 @@ profile retains one configured connection, smaller packet pools and disabled
 controller sleep. PHY ownership and periodic tracking are shared with Wi-Fi.
 The C5 hardware test passes advertising through Wi-Fi traffic and stop/restart.
 See [C5 port notes](../../../BLE_C5.md) for SDK patches, memory limits and
-validation coverage. C5 also provides a native `esp_vhci_host_*` interface
-through `rtems_bt_vhci_start_async()` for attaching a host instead of running
-the smoke test.
+validation coverage. With `RTEMS_BT=ON`, C5 exposes `ble_vhci:init/0`,
+`send/3` and `close/1`, compatible with the `esp32-ble-vhci` branch. The owner
+receives `{hci_event, Binary}` H4 packets. Startup/shutdown yield the VM, and
+owner exit or handle garbage collection closes the session. A native
+`esp_vhci_host_*` interface is also available through
+`rtems_bt_vhci_start_async()`. Both interfaces exclude the smoke test.
 
 Wi-Fi software coexistence follows ESP-IDF: shared C3 modem startup (and
 `esp_wifi_init()` on other chips) registers the coexistence OS adapter and

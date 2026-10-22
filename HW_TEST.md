@@ -313,6 +313,22 @@ SDK: the C5's shared C6 interrupt table lacks the controller's BT_MAC and
 LP_TIMER routes, and its Bluetooth security and timer clocks need enabling.
 The C5 test runs each associated Wi-Fi phase for 60 seconds.
 
+For the C5 Erlang VHCI interface, select `TEST_MODULE=test_esp32c5_vhci` with
+`HW_RTEMS_BT=ON`. This test needs no Wi-Fi credentials. It verifies HCI
+commands, packet validation, owner restrictions, close/reopen, owner exit and
+handle garbage collection; it does not establish a BLE connection. Include
+`ble_vhci.beam` from `libs/avm_rtems/src/ble_vhci.erl` when packing with an older
+`atomvmlib-rtems.avm`. The current RTEMS library pack includes it automatically.
+When running this test in esp-emu 0.49, omit `--elf` so its BLE interception
+does not replace the native controller transport.
+
+Select `TEST_MODULE=test_esp32c5_vhci_coex` for the VHCI coexistence test,
+using the private Wi-Fi credentials protocol. It closes/reopens the controller,
+then an Erlang process drives advertising commands and updates the counter
+while HTTP traffic and Wi-Fi stop/restart run in another process. Use separate
+firmware packs for the API and coexistence tests: retaining the full API test
+module alongside networking exhausted C5 SRAM during HTTP module loading.
+
 To compare experimental Wi-Fi modem power saving, export
 `HW_WIFI_POWER_SAVE=MIN_MODEM` or `MAX_MODEM` before building; the default is
 `NONE`. For maximum mode, `export HW_WIFI_LISTEN_INTERVAL=10` uses ten AP

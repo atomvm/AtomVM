@@ -24,6 +24,7 @@ include(BuildErlang)
 
 set(ERLANG_MODULES
     atomvm_rtems
+    ble_vhci
     uart
     i2c
     gpio

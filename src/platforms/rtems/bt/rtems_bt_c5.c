@@ -27,6 +27,7 @@
  * is the RTEMS equivalent of components/bt/controller/esp32c5/bt.c.
  */
 
+#include <errno.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -353,7 +354,6 @@ static int bt_acl_cb(struct os_mbuf *om, void *arg);
 
 static rtems_id bt_event_sem;
 static bool bt_c5_inited;
-static bool bt_bb_initialized;
 static atomic_bool bt_c5_enabled;
 static _Atomic(const esp_vhci_host_callback_t *) vhci_host_cb;
 
@@ -384,7 +384,7 @@ static int bt_task_create(
     void *task_handle,
     uint32_t core_id)
 {
-    rtems_id id = RTEMS_INVALID_ID;
+    rtems_id id = RTEMS_ID_NONE;
     bt_task_t *task = malloc(sizeof(*task));
     rtems_task_priority rtems_prio = prio >= BT_PRIORITY_MAX ? 1 : BT_PRIORITY_MAX - prio;
 
@@ -767,10 +767,9 @@ int rtems_bt_c5_enable(void)
         return 0;
     }
     esp_phy_enable(PHY_MODEM_BT);
-    if (!bt_bb_initialized) {
-        bt_bb_v2_init_cmplx(1);
-        bt_bb_initialized = true;
-    }
+    /* Like IDF's esp_btbb_enable(): reinitialize on each real enable.
+     * A prior disable/deinit may have gated or reset the baseband. */
+    bt_bb_v2_init_cmplx(1);
     int rc = coex_enable();
     if (rc == 0) {
         rc = ble_stack_enable();
@@ -815,9 +814,9 @@ int rtems_bt_c5_deinit(void)
     }
     r_ble_hci_trans_cfg_hs(NULL, NULL, NULL, NULL);
     atomic_store(&vhci_host_cb, NULL);
-    if (bt_event_sem != RTEMS_INVALID_ID) {
+    if (bt_event_sem != RTEMS_ID_NONE) {
         rtems_semaphore_delete(bt_event_sem);
-        bt_event_sem = RTEMS_INVALID_ID;
+        bt_event_sem = RTEMS_ID_NONE;
     }
     r_esp_ble_msys_deinit();
     ble_stack_deinitEnv();
@@ -841,7 +840,7 @@ static int rtems_bt_c5_hci_cmd(const uint8_t *cmd, size_t len)
 {
     uint8_t *buf;
 
-    if (cmd == NULL || len < 2) {
+    if (!rtems_bt_vhci_valid_packet(cmd, len) || cmd[0] != HCI_H4_CMD) {
         return -1;
     }
 
@@ -912,41 +911,33 @@ int esp_vhci_host_register_callback(const esp_vhci_host_callback_t *callback)
     return 0;
 }
 
-void esp_vhci_host_send_packet(uint8_t *data, uint16_t len)
+int rtems_bt_vhci_send_packet(const uint8_t *data, uint16_t len)
 {
-    if (!bt_c5_enabled || data == NULL || len < 1) {
-        return;
+    if (!rtems_bt_vhci_valid_packet(data, len)) {
+        return -EINVAL;
+    }
+    if (!bt_c5_enabled) {
+        return -EAGAIN;
+    }
+    if (data[0] == HCI_H4_CMD) {
+        return rtems_bt_c5_hci_cmd(data, len);
     }
 
-    switch (data[0]) {
-        case HCI_H4_CMD: {
-            if (len < 2) {
-                return;
-            }
-            uint8_t *buf = r_ble_hci_trans_buf_alloc(ESP_HCI_INTERNAL_BUF_CMD);
-            if (buf == NULL) {
-                return;
-            }
-            memcpy(buf, data + 1, len - 1);
-            (void) r_ble_hci_trans_hs_cmd_tx(buf);
-            break;
-        }
-        case HCI_H4_ACL: {
-            struct os_mbuf *om = r_os_msys_get_pkthdr(
-                len, ESP_HCI_INTERNAL_ACL_MBUF_LEADINGSPACE);
-            if (om == NULL) {
-                return;
-            }
-            if (r_os_mbuf_append(om, data + 1, len - 1) != 0) {
-                r_os_mbuf_free_chain(om);
-                return;
-            }
-            (void) r_ble_hci_trans_hs_acl_tx(om);
-            break;
-        }
-        default:
-            break;
+    struct os_mbuf *om = r_os_msys_get_pkthdr(
+        len, ESP_HCI_INTERNAL_ACL_MBUF_LEADINGSPACE);
+    if (om == NULL) {
+        return -ENOMEM;
     }
+    if (r_os_mbuf_append(om, data + 1, len - 1) != 0) {
+        r_os_mbuf_free_chain(om);
+        return -ENOMEM;
+    }
+    return r_ble_hci_trans_hs_acl_tx(om);
+}
+
+void esp_vhci_host_send_packet(uint8_t *data, uint16_t len)
+{
+    (void) rtems_bt_vhci_send_packet(data, len);
 }
 
 bool esp_vhci_host_check_send_available(void)
@@ -996,7 +987,7 @@ static void bt_event_push(const uint8_t *data, uint16_t len)
     }
     rtems_interrupt_local_enable(level);
 
-    if (queued && bt_event_sem != RTEMS_INVALID_ID) {
+    if (queued && bt_event_sem != RTEMS_ID_NONE) {
         rtems_semaphore_release(bt_event_sem);
     }
 }
@@ -1250,7 +1241,7 @@ static bool bt_controller_initialize(void)
         0,
         &bt_event_sem);
     if (sc != RTEMS_SUCCESSFUL) {
-        bt_event_sem = RTEMS_INVALID_ID;
+        bt_event_sem = RTEMS_ID_NONE;
         (void) rtems_bt_c5_deinit();
         return false;
     }
@@ -1288,7 +1279,7 @@ static void bt_smoke_task(rtems_task_argument arg)
     int64_t deadline = bt_get_time_us() + BT_ADV_EVENT_TIMEOUT_US;
 
     for (;;) {
-        if (bt_event_sem != RTEMS_INVALID_ID) {
+        if (bt_event_sem != RTEMS_ID_NONE) {
             (void) rtems_semaphore_obtain(
                 bt_event_sem, RTEMS_WAIT, RTEMS_MILLISECONDS_TO_TICKS(1000));
         } else {
@@ -1396,6 +1387,37 @@ bool rtems_bt_start_async(void)
 bool rtems_bt_vhci_start_async(void)
 {
     return bt_start(BT_MODE_VHCI, bt_vhci_task);
+}
+
+int rtems_bt_vhci_open(void)
+{
+    int expected = BT_MODE_NONE;
+    if (!atomic_compare_exchange_strong(&bt_mode, &expected, BT_MODE_VHCI)) {
+        return -EBUSY;
+    }
+    atomic_store(&bt_state, RTEMS_BT_STARTING);
+    if (!bt_controller_initialize()) {
+        atomic_store(&bt_state, RTEMS_BT_FAILED);
+        atomic_store(&bt_mode, BT_MODE_NONE);
+        return -EIO;
+    }
+    atomic_store(&bt_state, RTEMS_BT_STARTED);
+    return 0;
+}
+
+int rtems_bt_vhci_close(void)
+{
+    if (atomic_load(&bt_mode) != BT_MODE_VHCI) {
+        return -EBUSY;
+    }
+    int rc = rtems_bt_c5_deinit();
+    if (rc != 0) {
+        return rc;
+    }
+    bt_event_head = bt_event_tail = 0;
+    atomic_store(&bt_state, RTEMS_BT_STOPPED);
+    atomic_store(&bt_mode, BT_MODE_NONE);
+    return 0;
 }
 
 rtems_bt_state_t rtems_bt_get_state(void)

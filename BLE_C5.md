@@ -6,8 +6,9 @@
 
 # ESP32-C5 BLE controller on RTEMS
 
-`RTEMS_BT=ON` adds ESP32-C5 controller support and the `AtomVM-BLE`
-advertising smoke test. Build and hardware-test instructions are in
+`RTEMS_BT=ON` adds ESP32-C5 controller support, the `AtomVM-BLE`
+advertising smoke test and the `ble_vhci` Erlang transport. Build and hardware-test
+instructions are in
 [HW_TEST.md](HW_TEST.md#esp32-c3c5-bluetoothwi-fi-coexistence).
 The port does not link a BLE host: GAP, GATT, ATT and pairing need a host.
 
@@ -79,6 +80,9 @@ installation checks vector-enable failures.
 PHY ownership keeps RF active while either radio uses it. The first active
 radio starts periodic PLL tracking on the shared timer server; the last stops
 it. Wi-Fi stop preserves the coexistence clock while Bluetooth is enabled.
+Baseband initialization runs on every controller enable, matching IDF's
+`esp_btbb_enable()` after its reference count returns to zero. This is needed
+for RF operation after close/reopen, even when HCI commands still succeed.
 Controller shutdown and failed init/enable unwind stack stages in reverse
 order, release MSYS and unregister callbacks before releasing their services.
 
@@ -109,6 +113,46 @@ Initialization runs in a native task so the Erlang VM can keep running.
 
 ## Attaching a host through VHCI
 
+The Erlang API matches `esp32-ble-vhci` (`8e4ac9e598`), including the
+`Elixir.BleVhci` NIF aliases:
+
+```erlang
+{ok, Handle} = ble_vhci:init(),
+ok = ble_vhci:send(Handle, self(), <<1, 3, 12, 0>>), % HCI Reset
+receive {hci_event, <<4, 14, 4, _Credits, 3, 12, 0>>} -> ok end,
+ok = ble_vhci:close(Handle).
+```
+
+Only the process that opened the handle may send or close it. Incoming H4
+events and ACL packets arrive as `{hci_event, Binary}`. The owner also receives
+`{ble_vhci, ready_to_send}` on startup and on transport availability callbacks.
+The host must implement HCI command credits and ACL flow control; transport
+availability alone does not establish either. Malformed H4 frames raise
+`badarg`; controller allocation/transmit failures return `{error, send_failed}`.
+
+Initialization and close suspend the calling Erlang process until a native
+task completes the operation, allowing the VM to run other processes. Close
+is idempotent, and old handles cannot close a newer session. Owner exit or
+handle garbage collection requests asynchronous cleanup. A failed controller
+disable leaves the session reserved so close can retry safely. The owner
+monitor remains installed across failed close attempts, including when another
+process retains the handle. Cleanup requested by GC, owner exit or overflow
+retries transient disable failures without admitting a new session.
+
+Controller callbacks only copy packets into a 24-packet queue. Its maximum
+H4 frame is 522 bytes (517 ACL payload bytes plus headers), exceeding the
+reference branch's 260-byte limit. The queue has 24 descriptors and
+allocates each packet at its actual length, leaving SRAM available for Wi-Fi
+startup. Queue storage is freed on close. Queue or receive-allocation exhaustion
+closes the session and reports
+`{ble_vhci, {error, overflow}}`; the host must reopen rather than continue with
+missing HCI credits/events. One 4 KiB native worker remains until VM teardown,
+where it is joined before freeing VM state. Native-task replies and HCI messages
+use the VM's task-driver queue. This depends on the shared dead-recipient cleanup
+fix [98ffe7bbc](https://github.com/petermm/AtomVM/commit/98ffe7bbcb62c7e8852c2fd14713cb336be340dc),
+carried as a separate prerequisite commit. It releases messages and resource
+references when their recipient exits before delivery.
+
 `src/platforms/rtems/src/lib/rtems_bt_vhci.h` provides the native
 `esp_vhci_host_*` interface. Start with `rtems_bt_vhci_start_async()` and wait
 for `rtems_bt_is_started()` before registering host callbacks. This mode is
@@ -123,8 +167,8 @@ Registration stores callbacks without proactively signaling send availability;
 send availability is gated on the controller being enabled.
 
 The BLE-only startup task can exit because PHY tracking belongs to the shared
-radio service. The native probe checks VHCI callback-result handling, but a
-complete host, pairing and ACL traffic still need validation.
+radio service. A complete host, pairing and over-the-air ACL traffic still
+need validation.
 
 ## SDK versions
 
@@ -158,6 +202,33 @@ ctest --test-dir /tmp/atomvm-npl-tests --output-on-failure
 Validation on 2026-10-22:
 
 - NPL tests pass with AddressSanitizer and UndefinedBehaviorSanitizer.
+- Shared task-driver mailbox regressions pass for FIFO ordering and dead
+  recipients with normal messages and trap replies: host SMP, plus no-SMP
+  with AddressSanitizer and UndefinedBehaviorSanitizer.
+- `test_esp32c5_vhci` passes on the physical C5 and in esp-emu 0.49 without
+  `--elf` BLE interception: HCI Reset/version/address/buffer-size commands,
+  malformed frames, foreign owners, stale handles, repeated close/reopen,
+  owner exit and garbage collection. Emulator logs also confirm VM teardown.
+- A temporary controller fixture exercises the real NIF with a 522-byte ACL
+  receive frame, 25–33-byte receive frames around the inline/refc binary
+  boundary, queue overflow, init/send failures, close-failure retry and
+  owner exit after a failed close with a handle retained by another process.
+  Delayed open/close also verify that another Erlang process runs during each
+  operation. The shared task-driver delivery path passes this fixture with
+  `DEBUG_HEAP_ALLOC` bounds checks enabled. These are synthetic transport
+  checks, not a BLE connection test.
+- `test_esp32c5_vhci_coex` passes on the same C5: an Erlang owner closes/reopens
+  the controller, then drives advertising through both Wi-Fi traffic phases
+  and stop/restart. Two complete runs pass 24 DNS/TCP/HTTP checks and two
+  DHCP associations in about 148 s. A Mac scanner receives increasing counters
+  in both associated phases. Other runs fail at TCP connect with
+  `EHOSTUNREACH`; a LAN HTTP check also times out receiving a response after
+  the server receives the request. Network reliability remains unresolved.
+  Hardware coexistence has not been rerun after switching delivery to the
+  shared task-driver queue with the dead-recipient cleanup fix.
+- C5 SRAM requires packet-sized receive allocations and a 4 KiB worker stack.
+  Run the API and coexistence suites as separate applications; loading both
+  test modules alongside HTTP traffic exhausted the shared heap.
 - Both changed shared SDK translation units compile for C3 and C5 with
   `-Wall -Wextra -Werror` and the SDK's unused-parameter suppression.
 - Linker fixtures cover fresh, upgraded, partially updated and repeated

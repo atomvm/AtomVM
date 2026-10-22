@@ -79,7 +79,7 @@ if(RTEMS_BT AND RTEMS_BOARD STREQUAL "esp32c3" AND RTEMS_HAS_ESP_WIFI)
     list(APPEND HEADER_FILES rtems_bt.h)
 elseif(RTEMS_BT AND RTEMS_BOARD STREQUAL "esp32c5" AND RTEMS_HAS_ESP_WIFI)
     set(_rtems_bt_dir "${CMAKE_CURRENT_SOURCE_DIR}/../../bt")
-    list(APPEND SOURCE_FILES "${_rtems_bt_dir}/rtems_bt_c5.c" "${_rtems_bt_dir}/rtems_npl.c")
+    list(APPEND SOURCE_FILES "${_rtems_bt_dir}/rtems_bt_c5.c" "${_rtems_bt_dir}/rtems_npl.c" ble_vhci_nif.c)
     list(APPEND HEADER_FILES rtems_bt.h rtems_bt_vhci.h)
 endif()
 
@@ -93,6 +93,9 @@ target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${CMAKE_CURREN
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC libAtomVM)
 # Constructor-registered NIF collections and port drivers are otherwise dropped from the static archive.
 set(_rtems_force_nifs uart_nif i2c_nif gpio_nif spi_nif rtems_network_nif networkregister_port_driver rtc_slow_nif wdt_nif ledc_nif adc_nif flash_nif nvs_nif flash_fs_nif)
+if(RTEMS_BT AND RTEMS_BOARD STREQUAL "esp32c5" AND RTEMS_HAS_ESP_WIFI)
+    list(APPEND _rtems_force_nifs ble_vhci_nif)
+endif()
 if(RTEMS_HAS_LIBBSD OR RTEMS_HAS_LWIP)
     list(APPEND _rtems_force_nifs otp_socket_nif otp_net_nif)
 endif()
