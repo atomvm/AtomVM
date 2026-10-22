@@ -22,6 +22,7 @@
 #include <stdlib.h>
 
 #include "context.h"
+#include "erl_nif_priv.h"
 #include "globalcontext.h"
 #include "mailbox.h"
 
@@ -178,6 +179,51 @@ void test_mailbox_next(void)
 }
 
 #ifdef AVM_TASK_DRIVER_ENABLED
+static unsigned task_resource_destroyed;
+
+static void task_resource_dtor(ErlNifEnv *env, void *obj)
+{
+    UNUSED(env);
+    UNUSED(obj);
+    task_resource_destroyed++;
+}
+
+void test_task_driver_dead_recipient(enum MessageType message_type)
+{
+    GlobalContext *glb = globalcontext_new();
+    Context *ctx = context_new(glb);
+    ErlNifEnv env;
+    erl_nif_env_partial_init_from_globalcontext(&env, glb);
+    const ErlNifResourceTypeInit init = {
+        .members = 1,
+        .dtor = task_resource_dtor,
+    };
+    ErlNifResourceType *type = enif_init_resource_type(
+        &env, "task_driver_test", &init, ERL_NIF_RT_CREATE, NULL);
+    assert(type != NULL);
+    void *resource = enif_alloc_resource(type, 1);
+    assert(resource != NULL);
+    task_resource_destroyed = 0;
+
+    BEGIN_WITH_STACK_HEAP(TERM_BOXED_REFERENCE_RESOURCE_SIZE, heap);
+    term value = term_from_resource(resource, &heap);
+    enif_release_resource(resource);
+
+    // Force deferred delivery in SMP builds too.
+    SMP_SPINLOCK_LOCK(&glb->processes_spinlock);
+    globalcontext_send_message_from_task(glb, ctx->process_id, message_type, value);
+    globalcontext_send_message_from_task(glb, ctx->process_id, message_type, value);
+    SMP_SPINLOCK_UNLOCK(&glb->processes_spinlock);
+    END_WITH_STACK_HEAP(heap, glb);
+
+    context_destroy(ctx);
+    assert(task_resource_destroyed == 0);
+    globalcontext_process_task_driver_queues(glb);
+    assert(glb->message_queue == NULL);
+    assert(task_resource_destroyed == 1);
+    globalcontext_destroy(glb);
+}
+
 void test_task_driver_message_order(void)
 {
     GlobalContext *glb = globalcontext_new();
@@ -212,6 +258,8 @@ int main(int argc, char **argv)
     test_mailbox_next();
 #ifdef AVM_TASK_DRIVER_ENABLED
     test_task_driver_message_order();
+    test_task_driver_dead_recipient(NormalMessage);
+    test_task_driver_dead_recipient(TrapAnswerSignal);
 #endif
 
     return EXIT_SUCCESS;
