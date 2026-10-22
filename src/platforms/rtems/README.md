@@ -190,8 +190,9 @@ profile retains one configured connection, smaller packet pools and disabled
 controller sleep. PHY ownership and periodic tracking are shared with Wi-Fi.
 The C5 hardware test passes advertising through Wi-Fi traffic and stop/restart.
 See [C5 port notes](../../../BLE_C5.md) for SDK patches, memory limits and
-validation coverage. With `RTEMS_BT=ON`, C5 exposes `ble_vhci:init/0`,
-`send/3` and `close/1`, compatible with the `esp32-ble-vhci` branch. The owner
+validation coverage. With `RTEMS_BT=ON` and `AVM_ENABLE_BLE_VHCI_NIF=ON`, C5
+exposes `ble_vhci:init/0`, `send/3` and `close/1`, compatible with the
+`esp32-ble-vhci` branch. The VHCI NIF defaults to disabled. The owner
 receives `{hci_event, Binary}` H4 packets. Startup/shutdown yield the VM, and
 owner exit or handle garbage collection closes the session. A native
 `esp_vhci_host_*` interface is also available through
@@ -988,6 +989,8 @@ independent of host speed -- useful for comparing builds.
 | `RTEMS_BOARD` | `generic` (`qemu` for `arm/imx7`, `esp32c3` for `riscv/esp32`) | Board integration (`generic`, `qemu`, `grisp2`, or `esp32c3`) |
 | `RTEMS_VERSION` | `6` (or `7` for `riscv/esp32`) | Major toolchain version (`sparc-rtems6-gcc`, `riscv-rtems7-gcc`) |
 | `AVM_PACK` | empty | Host-built `.avm` to embed |
+| `RTEMS_BT` | `OFF` | ESP32-C3/C5 controller support and advertising smoke test |
+| `AVM_ENABLE_BLE_VHCI_NIF` | `OFF` | Erlang VHCI interface; requires `RTEMS_BT=ON` and `RTEMS_BOARD=esp32c5` |
 | `RTEMS_CREATE_ZIMAGE` | `ON` for `grisp2` | Create a GRiSP 2 bootloader-ready image |
 | `RTEMS_IMAGE_LOAD_ADDRESS` | `0x80200000` | GRiSP 2 image load and entry address |
 | `RTEMS_DTB` | bundled `boards/grisp2/imx6ul-grisp2.dtb` | Board DTB to validate and copy as `oftree` when packaging |

@@ -19,7 +19,8 @@
 %
 
 %%-----------------------------------------------------------------------------
-%% @doc Raw ESP32-C5 BLE controller transport (RTEMS_BT=ON).
+%% @doc Raw ESP32-C5 BLE controller transport.
+%% Requires RTEMS_BT=ON and AVM_ENABLE_BLE_VHCI_NIF=ON in the firmware build.
 %% A single process owns the handle. Incoming H4 packets arrive as
 %% `{hci_event, Binary}' (including ACL packets), and send availability as
 %% `{ble_vhci, ready_to_send}'. Queue overflow reports

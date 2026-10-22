@@ -6,9 +6,9 @@
 
 # ESP32-C5 BLE controller on RTEMS
 
-`RTEMS_BT=ON` adds ESP32-C5 controller support, the `AtomVM-BLE`
-advertising smoke test and the `ble_vhci` Erlang transport. Build and hardware-test
-instructions are in
+`RTEMS_BT=ON` adds ESP32-C5 controller support and the `AtomVM-BLE`
+advertising smoke test. Also set `AVM_ENABLE_BLE_VHCI_NIF=ON` to include the
+`ble_vhci` Erlang transport. Build and hardware-test instructions are in
 [HW_TEST.md](HW_TEST.md#esp32-c3c5-bluetoothwi-fi-coexistence).
 The port does not link a BLE host: GAP, GATT, ATT and pairing need a host.
 
@@ -113,6 +113,13 @@ Initialization runs in a native task so the Erlang VM can keep running.
 
 ## Attaching a host through VHCI
 
+The Erlang interface is optional and defaults to disabled. Select it with
+`-DRTEMS_BT=ON -DAVM_ENABLE_BLE_VHCI_NIF=ON` for `RTEMS_BOARD=esp32c5`.
+With the option disabled, the firmware excludes the NIF, its resource type,
+registration and worker. The `ble_vhci` Erlang stubs remain in the RTEMS library
+pack and raise `undef`, as with other disabled platform NIFs. The native
+transport and controller smoke test remain available under `RTEMS_BT=ON`.
+
 The Erlang API matches `esp32-ble-vhci` (`8e4ac9e598`), including the
 `Elixir.BleVhci` NIF aliases:
 
@@ -202,6 +209,10 @@ ctest --test-dir /tmp/atomvm-npl-tests --output-on-failure
 Validation on 2026-10-22:
 
 - NPL tests pass with AddressSanitizer and UndefinedBehaviorSanitizer.
+- The VHCI configuration checks pass: default-off builds omit its source and
+  registration symbols, all three disabled entry points raise `undef`, and
+  enabled builds pass the C5 API test in esp-emu. Enabling the NIF without
+  `RTEMS_BT` or on a board other than C5 fails configuration.
 - Shared task-driver mailbox regressions pass for FIFO ordering and dead
   recipients with normal messages and trap replies: host SMP, plus no-SMP
   with AddressSanitizer and UndefinedBehaviorSanitizer.

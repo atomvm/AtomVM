@@ -314,18 +314,21 @@ LP_TIMER routes, and its Bluetooth security and timer clocks need enabling.
 The C5 test runs each associated Wi-Fi phase for 60 seconds.
 
 For the C5 Erlang VHCI interface, select `TEST_MODULE=test_esp32c5_vhci` with
-`HW_RTEMS_BT=ON`. This test needs no Wi-Fi credentials. It verifies HCI
-commands, packet validation, owner restrictions, close/reopen, owner exit and
-handle garbage collection; it does not establish a BLE connection. Include
+`HW_RTEMS_BT=ON` and `HW_AVM_ENABLE_BLE_VHCI_NIF=ON` (both are passed to CMake
+by the build block below). The VHCI NIF is disabled by default. This test needs
+no Wi-Fi credentials. It verifies HCI commands, packet validation, owner
+restrictions, close/reopen, owner exit and handle garbage collection; it does
+not establish a BLE connection. Include
 `ble_vhci.beam` from `libs/avm_rtems/src/ble_vhci.erl` when packing with an older
 `atomvmlib-rtems.avm`. The current RTEMS library pack includes it automatically.
 When running this test in esp-emu 0.49, omit `--elf` so its BLE interception
 does not replace the native controller transport.
 
 Select `TEST_MODULE=test_esp32c5_vhci_coex` for the VHCI coexistence test,
-using the private Wi-Fi credentials protocol. It closes/reopens the controller,
-then an Erlang process drives advertising commands and updates the counter
-while HTTP traffic and Wi-Fi stop/restart run in another process. Use separate
+using the same build flags and the private Wi-Fi credentials protocol. It
+closes/reopens the controller, then an Erlang process drives advertising
+commands and updates the counter while HTTP traffic and Wi-Fi stop/restart run
+in another process. Use separate
 firmware packs for the API and coexistence tests: retaining the full API test
 module alongside networking exhausted C5 SRAM during HTTP module loading.
 
@@ -364,13 +367,14 @@ erlc +debug_info -o "$HW_WORK/beam" "$HW_WORK/$TEST_MODULE.erl"
     "$HW_WORK/$TEST_MODULE.avm" "$HW_WORK/beam/$TEST_MODULE.beam" \
     "$HW_WORK/host/libs/atomvmlib-rtems.avm"
 docker run --rm -e CHIP -e TEST_MODULE -e HW_RTEMS_BT -e HW_WIFI_POWER_SAVE \
-    -e HW_WIFI_LISTEN_INTERVAL \
+    -e HW_WIFI_LISTEN_INTERVAL -e HW_AVM_ENABLE_BLE_VHCI_NIF \
     -v "$REPO_ROOT:/workspace:ro" -v "$HW_WORK:/hw" "$HW_IMAGE" bash -euc '
     cmake -S /workspace/src/platforms/rtems -B "/hw/$TEST_MODULE" -G Ninja \
         -DCMAKE_TOOLCHAIN_FILE=/workspace/src/platforms/rtems/cmake/rtems-toolchain.cmake \
         -DRTEMS_PREFIX=/opt/rtems/7 -DRTEMS_VERSION=7 \
         -DRTEMS_BSP="riscv/${CHIP}db" -DRTEMS_BOARD="$CHIP" \
         -DRTEMS_SLEEP_TEST_FIXTURE=OFF -DRTEMS_BT="${HW_RTEMS_BT:-OFF}" \
+        -DAVM_ENABLE_BLE_VHCI_NIF="${HW_AVM_ENABLE_BLE_VHCI_NIF:-OFF}" \
         -DRTEMS_WIFI_POWER_SAVE="${HW_WIFI_POWER_SAVE:-NONE}" \
         -DRTEMS_WIFI_LISTEN_INTERVAL="${HW_WIFI_LISTEN_INTERVAL:-3}" \
         -DAVM_PACK="/hw/$TEST_MODULE.avm"
