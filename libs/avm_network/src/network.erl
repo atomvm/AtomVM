@@ -167,6 +167,7 @@
     | ghz5_160mhz_channel().
 
 -type ap_channel_cfg() :: {ap_channel, wifi_channel()}.
+-type ap_authmode_config() :: {ap_authmode, wpa_wpa2_psk | wpa2_psk | wpa2_wpa3_psk | wpa3_psk}.
 -type ap_ssid_hidden_config() :: {ap_ssid_hidden, boolean()}.
 -type ap_max_connections_config() :: {ap_max_connections, non_neg_integer()}.
 -type ap_started_config() :: {ap_started, fun(() -> term())}.
@@ -177,6 +178,7 @@
     ssid_config()
     | psk_config()
     | ap_channel_cfg()
+    | ap_authmode_config()
     | ap_ssid_hidden_config()
     | ap_max_connections_config()
     | ap_started_config()
