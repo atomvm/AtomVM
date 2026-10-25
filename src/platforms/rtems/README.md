@@ -908,6 +908,11 @@ export `WOKWI_CLI_TOKEN`, as used by `.github/workflows/esp32-simtest.yaml`.
 The runner also inherits `WOKWI_CLI_SERVER` if you use a local CI server.
 The token stays in the environment; it is not written to generated files.
 
+The RTEMS Build workflow runs the same boot test on Wokwi for every ESP32 board
+when the repository sets a `WOKWI_CLI_TOKEN` secret. A separate job checks for
+the secret, so forks and pull requests without it skip the Wokwi tests instead
+of failing.
+
 ```sh
 ./src/platforms/rtems/tools/docker-build-esp32c3.sh --simulate-wokwi
 

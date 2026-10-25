@@ -930,9 +930,30 @@ jobs:
         compression-level: 0
         overwrite: true
 
+  # Wokwi runs the boot test on a second emulator, which catches what the
+  # pinned esp-emulator does not model. The token is a repository secret, so
+  # forks and pull requests from them skip the tests instead of failing.
+  cli_token:
+    name: WOKWI_CLI_TOKEN presence
+    runs-on: ubuntu-24.04
+    outputs:
+      token_check: ${{ steps.token_check.outputs.should-run }}
+    steps:
+    - name: Check for WOKWI_CLI_TOKEN
+      id: token_check
+      env:
+        wokwi_secret: ${{ secrets.WOKWI_CLI_TOKEN }}
+      run: |
+        if [ -n "${wokwi_secret}" ]; then
+          echo "WOKWI_CLI_TOKEN is set, running the Wokwi tests"
+          echo "should-run=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "WOKWI_CLI_TOKEN is not set, skipping the Wokwi tests"
+        fi
+
   rtems-riscv:
     name: rtems (${{ matrix.bsp_name }})
-    needs: [rtems-riscv-toolchain]
+    needs: [rtems-riscv-toolchain, cli_token]
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     permissions:
@@ -954,6 +975,7 @@ jobs:
             prefix: /home/runner/rtems/7
             has_wifi: true
             has_smp: false
+            has_wokwi: true
           - arch: riscv
             bsp: riscv/esp32c5db
             bsp_name: esp32c5db
@@ -966,6 +988,7 @@ jobs:
             prefix: /home/runner/rtems/7
             has_wifi: true
             has_smp: false
+            has_wokwi: true
           - arch: riscv
             bsp: riscv/esp32c6db
             bsp_name: esp32c6db
@@ -978,6 +1001,7 @@ jobs:
             prefix: /home/runner/rtems/7
             has_wifi: true
             has_smp: false
+            has_wokwi: true
           - arch: riscv
             bsp: riscv/esp32h2db
             bsp_name: esp32h2db
@@ -990,6 +1014,7 @@ jobs:
             prefix: /home/runner/rtems/7
             has_wifi: false
             has_smp: false
+            has_wokwi: true
           - arch: riscv
             bsp: riscv/esp32s31db
             bsp_name: esp32s31db
@@ -1002,6 +1027,7 @@ jobs:
             prefix: /home/runner/rtems/7
             has_wifi: true
             has_smp: true
+            has_wokwi: true
           - arch: riscv
             bsp: riscv/esp32p4db
             bsp_name: esp32p4db
@@ -1014,6 +1040,7 @@ jobs:
             prefix: /home/runner/rtems/7
             has_wifi: false
             has_smp: true
+            has_wokwi: true
 
     steps:
     - name: Checkout repo
@@ -1209,6 +1236,26 @@ jobs:
           exit 1
         fi
         echo "${{ matrix.chip }} boot test completed successfully"
+
+    - name: Run boot test on Wokwi
+      if: needs.cli_token.outputs.token_check == 'true' && matrix.has_wokwi
+      timeout-minutes: 10
+      env:
+        WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
+      run: |
+        set -euo pipefail
+        curl -fsSL https://wokwi.com/ci/install.sh | sh
+        export PATH="$HOME/.wokwi/bin:$PATH"
+        "$GITHUB_WORKSPACE/src/platforms/rtems/tools/run-wokwi.sh" \
+          "${{ matrix.chip }}" "$GITHUB_WORKSPACE/src/platforms/rtems/build"
+
+    - name: Upload Wokwi serial log
+      if: failure() && matrix.has_wokwi
+      uses: actions/upload-artifact@v4
+      with:
+        name: wokwi-${{ matrix.bsp_name }}-serial-${{ github.run_id }}
+        path: src/platforms/rtems/build/wokwi/serial.log
+        if-no-files-found: ignore
 
     - name: Test peripherals and RTEMS sleep integration
       run: |
