@@ -18,6 +18,10 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#if defined(RTEMS_BOARD_ESP32P4)
+#include <bsp.h>
+#endif
+
 #define CONFIGURE_APPLICATION_NEEDS_CLOCK_DRIVER
 #define CONFIGURE_APPLICATION_NEEDS_CONSOLE_DRIVER
 #ifdef RTEMS_HAS_STORAGE
@@ -49,7 +53,13 @@
 #define CONFIGURE_MAXIMUM_FILE_DESCRIPTORS 16
 #define CONFIGURE_MAXIMUM_USER_EXTENSIONS 2
 #define CONFIGURE_INIT_TASK_STACK_SIZE (32 * 1024)
+#if defined(RTEMS_BOARD_ESP32P4) && BSP_ESP32P4_REVISION == 1
+/* V1 uses only the low SRAM bank. With unified work areas, extra dynamic
+ * stacks share the heap; do not require the larger BSPs' 64 KiB reserve. */
+#define CONFIGURE_EXTRA_TASK_STACKS 0
+#else
 #define CONFIGURE_EXTRA_TASK_STACKS (64 * 1024)
+#endif
 #else
 #ifdef RTEMS_HAS_BT
 #define CONFIGURE_MAXIMUM_TASKS 12

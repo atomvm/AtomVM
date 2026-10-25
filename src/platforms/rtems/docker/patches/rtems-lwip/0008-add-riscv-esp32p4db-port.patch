@@ -9,9 +9,9 @@ Mirrors the ESP32-S31 port with tuned memory footprint for internal SRAM.
 Signed-off-by: Peter M <petermm@gmail.com>
 ---
  defs/bsps/riscv/esp32p4db.json  |  8 +++
- rtemslwip/esp32p4/lwipbspopts.h | 49 +++++++++++++++++++
- rtemslwip/esp32p4/netstart.c    | 84 ++++++++++++++++++++++++++++++++
- 3 files changed, 141 insertions(+)
+ rtemslwip/esp32p4/lwipbspopts.h | 48 +++++++++++++++++++
+ rtemslwip/esp32p4/netstart.c    | 82 ++++++++++++++++++++++++++++++++
+ 3 files changed, 138 insertions(+)
  create mode 100644 defs/bsps/riscv/esp32p4db.json
  create mode 100644 rtemslwip/esp32p4/lwipbspopts.h
  create mode 100644 rtemslwip/esp32p4/netstart.c
@@ -35,7 +35,7 @@ new file mode 100644
 index 0000000..f6e40f3
 --- /dev/null
 +++ b/rtemslwip/esp32p4/lwipbspopts.h
-@@ -0,0 +1,49 @@
+@@ -0,0 +1,48 @@
 +/*
 + * lwIP sizing for riscv/esp32p4db.
 + *
@@ -89,7 +89,7 @@ new file mode 100644
 index 0000000..21d9f98
 --- /dev/null
 +++ b/rtemslwip/esp32p4/netstart.c
-@@ -0,0 +1,84 @@
+@@ -0,0 +1,82 @@
 +/*
 + * start_networking() for riscv/esp32p4db.
 + *

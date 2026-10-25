@@ -118,7 +118,7 @@ RUN . /tmp/dependencies.sh \
         done; \
     fi \
     && cat /tmp/esp32c3-wifi-bsp.ini /tmp/esp32c5-wifi-bsp.ini /tmp/esp32c6-wifi-bsp.ini /tmp/esp32s31-wifi-bsp.ini /tmp/esp32p4-wifi-bsp.ini > /tmp/esp32-all.ini \
-    && ./waf configure --prefix="${RTEMS_PREFIX}" --rtems-bsps=riscv/esp32c3db,riscv/esp32c5db,riscv/esp32c6db,riscv/esp32s31db,riscv/esp32p4db --rtems-config=/tmp/esp32-all.ini \
+    && ./waf configure --prefix="${RTEMS_PREFIX}" --rtems-bsps=riscv/esp32c3db,riscv/esp32c5db,riscv/esp32c6db,riscv/esp32s31db,riscv/esp32p4db,riscv/esp32p4v1db --rtems-config=/tmp/esp32-all.ini \
     && ./waf \
     && ./waf install \
     && rm -rf /tmp/rtems /tmp/rtems-local /tmp/patches /tmp/*.ini

@@ -348,8 +348,13 @@ elseif(RTEMS_BOARD STREQUAL "esp32s31")
         )
     endif()
 elseif(RTEMS_BOARD STREQUAL "esp32p4")
+    if(RTEMS_BSP_NAME STREQUAL "esp32p4v1db")
+        set(_esp32p4_rom "esp32p4v1.rom.ld")
+    else()
+        set(_esp32p4_rom "esp32p4.rom.ld")
+    endif()
     target_link_options(${PROJECT_EXECUTABLE} PRIVATE
-        -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/../ld/esp32p4.rom.ld
+        -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/../ld/${_esp32p4_rom}
     )
     target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
         jffs2

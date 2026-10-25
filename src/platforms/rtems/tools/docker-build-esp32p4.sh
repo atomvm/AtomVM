@@ -28,19 +28,23 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 DO_SIMULATE=0 # 0: build only, 1: esp-emulator
 DOCKER_PLATFORM="${DOCKER_PLATFORM:-}"
 TEST_MODULE="test_boot"
+BSP_NAME="esp32p4db"
 
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [options]
 
-Builds AtomVM for RTEMS 7 ESP32-P4 revision 3.x inside a Docker container.
+Builds AtomVM for RTEMS 7 ESP32-P4 inside a Docker container (v3 by default).
 Rebuild atomvm-rtems7-esp32:latest after changing the BSP patches.
 
 Options:
+  --rev1              Target revision 1.x instead of 3.x (separate BSP/image)
   --simulate          Run the boot test in esp-emulator after compiling
   --test-smp          Embed and run the SMP test
   --platform <arch>   Target Docker platform (e.g., linux/arm64, linux/amd64)
   -h, --help          Show this message
+
+Revision 1.x simulation uses Wokwi CLI and requires WOKWI_CLI_TOKEN.
 
 EOF
     exit 0
@@ -48,6 +52,10 @@ EOF
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --rev1)
+            BSP_NAME="esp32p4v1db"
+            shift
+            ;;
         --simulate|--test)
             DO_SIMULATE=1
             shift
@@ -74,14 +82,16 @@ while [[ $# -gt 0 ]]; do
 done
 
 command -v docker >/dev/null 2>&1 || { echo "Error: docker is required" >&2; exit 1; }
+BUILD_DIR="src/platforms/rtems/build-${BSP_NAME%db}"
 
 echo "==> Compiling AtomVM for ESP32-P4 under RTEMS 7 inside Docker..."
 RUN_CMD=(docker run)
 if [ -n "${DOCKER_PLATFORM}" ]; then
     RUN_CMD+=(--platform "${DOCKER_PLATFORM}")
 fi
-RUN_CMD+=(--rm -v "${REPO_ROOT}:/workspace" -w /workspace "${IMAGE_NAME}" bash -c '
+RUN_CMD+=(--rm -v "${REPO_ROOT}:/workspace" -w /workspace -e "RTEMS_P4_BSP=${BSP_NAME}" "${IMAGE_NAME}" bash -c '
     set -euo pipefail
+    BUILD_DIR="src/platforms/rtems/build-${RTEMS_P4_BSP%db}"
 
     if ! command -v rebar3 >/dev/null 2>&1; then
         echo "==> Ensuring rebar3 and Erlang dependencies are available..."
@@ -98,28 +108,35 @@ RUN_CMD+=(--rm -v "${REPO_ROOT}:/workspace" -w /workspace "${IMAGE_NAME}" bash -
     echo "==> Building host AVM pack (${TEST_MOD})..."
     cmake -S . -B build-host -G Ninja -DAVM_DISABLE_JIT=ON
     cmake --build build-host -t rtems_boot_test rtems_smp_test atomvmlib-rtems
-    mkdir -p src/platforms/rtems/build-esp32p4
+    mkdir -p "${BUILD_DIR}"
     ./build-host/tools/packbeam/packbeam create -s "${TEST_MOD}" \
-        src/platforms/rtems/build-esp32p4/rtems_boot.avm \
+        "${BUILD_DIR}/rtems_boot.avm" \
         "build-host/src/platforms/rtems/tests/test_erl_sources/${TEST_MOD}.beam" \
         build-host/libs/atomvmlib-rtems.avm
 
-    echo "==> Cross-compiling AtomVM for riscv/esp32p4db..."
-    cmake -S src/platforms/rtems -B src/platforms/rtems/build-esp32p4 -G Ninja \
+    echo "==> Cross-compiling AtomVM for riscv/${RTEMS_P4_BSP}..."
+    cmake -S src/platforms/rtems -B "${BUILD_DIR}" -G Ninja \
         -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
         -DRTEMS_PREFIX=/opt/rtems/7 \
-        -DRTEMS_BSP=riscv/esp32p4db \
+        -DRTEMS_BSP="riscv/${RTEMS_P4_BSP}" \
         -DRTEMS_BOARD=esp32p4 \
         -DRTEMS_VERSION=7 \
-        -DAVM_PACK=/workspace/src/platforms/rtems/build-esp32p4/rtems_boot.avm
-    cmake --build src/platforms/rtems/build-esp32p4
+        -DAVM_PACK="/workspace/${BUILD_DIR}/rtems_boot.avm"
+    cmake --build "${BUILD_DIR}"
 ')
 "${RUN_CMD[@]}"
 
 echo "==> Build successful! Direct-boot image is ready at:"
-echo "    src/platforms/rtems/build-esp32p4/AtomVM-esp32p4db.bin"
+echo "    ${BUILD_DIR}/AtomVM-${BSP_NAME}.bin"
 
 if [ "${DO_SIMULATE}" -eq 1 ]; then
+    if [ "${BSP_NAME}" = esp32p4v1db ]; then
+        "${SCRIPT_DIR}/run-wokwi.sh" esp32p4v1 "${REPO_ROOT}/${BUILD_DIR}"
+        if [ "${TEST_MODULE}" = test_smp ]; then
+            grep -Fq '{smp_parallel_compute,ok}' "${REPO_ROOT}/${BUILD_DIR}/wokwi/serial.log"
+        fi
+        exit 0
+    fi
     BATCH_SIZE=50000
     echo "==> Running simulation with esp-emulator..."
     if command -v esp-emu >/dev/null 2>&1; then

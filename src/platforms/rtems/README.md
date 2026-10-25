@@ -24,6 +24,7 @@ Supported bring-up targets:
 - RISC-V `esp32c6db` on ESP32-C6 (`esp-emu --chip esp32c6`)
 - RISC-V `esp32s31db` on ESP32-S31 dual-core SMP (`esp-emu --chip esp32s31`)
 - RISC-V `esp32p4db` on ESP32-P4 revision 3.x dual-core SMP (`esp-emu --chip esp32p4`; physical validation pending)
+- RISC-V `esp32p4v1db` on ESP32-P4 revision 1.x dual-core SMP (Wokwi; physical validation pending)
 
 Other RTEMS 6 and 7 BSPs can be selected at configure time once a matching toolchain
 and BSP are installed. `imx7` is the NXP i.MX 7Dual BSP; QEMU models the
@@ -32,7 +33,7 @@ The GRiSP 2 build selects the board-specific LibBSD nexus and checks that the
 bootloader supplied an FDT with the `embeddedbrains,grisp2` compatible string.
 
 SMP multi-core BEAM execution is supported on dual-core and multi-core targets
-(`esp32s31db`, `esp32p4db`, `realview_pbx_a9_qemu`, and `imx7`), dynamically scaling
+(`esp32s31db`, `esp32p4db`, `esp32p4v1db`, `realview_pbx_a9_qemu`, and `imx7`), dynamically scaling
 schedulers with `rtems_scheduler_get_processor_maximum()`. Uniprocessor targets
 (`erc32`, `esp32c3db`, `esp32c5db`, `esp32c6db`, `grisp2`) build with uniprocessor
 optimizations (`AVM_DISABLE_SMP=ON`). Applications are compiled on the host
@@ -915,6 +916,7 @@ Simulator tests do not establish compatibility with physical hardware.
 AtomVM on RTEMS supports symmetric multiprocessing (SMP) on targets with multi-core BSPs:
 - **RISC-V ESP32-S31**: Dual-core RV32IMAFC microcontroller simulated in `esp-emulator` (`--chip esp32s31`).
 - **RISC-V ESP32-P4 revision 3.x**: Dual-core, 400 MHz CPU / 200 MHz memory / 200 MHz system / 100 MHz APB (`--chip esp32p4`).
+- **RISC-V ESP32-P4 revision 1.x**: Dual-core, 360 MHz CPU / 180 MHz memory / 180 MHz system / 90 MHz APB (`--rev1`, Wokwi).
 - **ARM RealView PBX-A9**: Multi-core ARM Cortex-A9 simulated in QEMU (`-M realview-pbx-a9 -smp 2` or `-smp 4`).
 - **ARM i.MX 7Dual SABRE**: Dual-core ARM Cortex-A7 simulated in QEMU (`-M mcimx7d-sabre -smp 2`).
 
@@ -941,15 +943,27 @@ Or using the automated docker script:
 ./src/platforms/rtems/tools/docker-build-esp32s31.sh --test-smp
 ```
 
-### ESP32-P4 revision 3.x
+### ESP32-P4 revisions 1.x and 3.x
 
-`riscv/esp32p4db` / `RTEMS_BOARD=esp32p4` targets revision **3.x only**.
-Pre-v3 (0.x/1.x) silicon is incompatible and is rejected during BSP startup;
-it needs a separate BSP configuration, not a runtime clock-frequency switch.
-The ROM linker definitions use ESP-IDF's public v3 call-table ABI and v3 ROM
-data addresses, rather than implementation addresses from one ROM ELF.
+The default `riscv/esp32p4db` targets revision **3.x**. Use `--rev1` to select
+`riscv/esp32p4v1db` for revision **1.x**; both use `RTEMS_BOARD=esp32p4`.
+The BSP selects the ROM ABI/data addresses, SRAM layout, clocks and CLIC
+interface. CMake rejects stale or mismatched BSP headers. Each image checks
+the silicon revision before selecting its stack or initializing RAM; ECO0
+and other major revisions are not supported. These are ROM direct-boot
+images, not applications for the ESP-IDF second-stage bootloader.
+ROM definitions follow ESP-IDF's public call tables, not implementation
+addresses from one ROM ELF.
 The CPU uses the soft-float `rv32imac` / `ilp32` RTEMS ABI.
 P4 has no integrated Wi-Fi or Bluetooth; this target does not provide a radio driver.
+
+V1 conservatively uses only the low 256 KiB SRAM bank: 4 KiB for SRAM code,
+228 KiB for data/workspace/stacks/heap, and 24 KiB reserved for ROM. It leaves
+upper SRAM and ROM-established L2 cache sizing untouched. Static data and
+RTEMS objects reduce the space available to applications. Its unified heap
+does not require the v3 configuration's additional 64 KiB stack allowance;
+task limits are unchanged, but allocation can fail earlier on memory-heavy
+workloads. The v3 memory configuration is unchanged.
 
 Rebuild the local toolchain image when changing BSP patches, then build and test:
 
@@ -959,9 +973,13 @@ docker build -t atomvm-rtems7-esp32:latest \
     src/platforms/rtems/docker
 ./src/platforms/rtems/tools/docker-build-esp32p4.sh --simulate
 ./src/platforms/rtems/tools/docker-build-esp32p4.sh --test-smp
+# Revision 1.x: Wokwi CLI with WOKWI_CLI_TOKEN set in the environment
+./src/platforms/rtems/tools/docker-build-esp32p4.sh --rev1 --simulate
+./src/platforms/rtems/tools/docker-build-esp32p4.sh --rev1 --test-smp
 ```
 
-Both commands require the emulator's successful return marker; SMP also
+Build outputs are separate: `build-esp32p4` and `build-esp32p4v1`.
+All simulation commands require the successful return marker; SMP also
 requires the parallel-compute marker. Emulator results do not validate
 physical PLL lock, ADC accuracy, cache coherence or sleep/wakeup behavior.
 CI's peripheral sleep checks use `RTEMS_SLEEP_TEST_FIXTURE=ON`, not the real

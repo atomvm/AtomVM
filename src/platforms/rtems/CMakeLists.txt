@@ -94,6 +94,9 @@ if((RTEMS_BOARD STREQUAL "esp32c3" OR RTEMS_BOARD STREQUAL "esp32c5" OR RTEMS_BO
    (NOT RTEMS_ARCH STREQUAL "riscv" OR NOT RTEMS_BSP_NAME MATCHES "esp32"))
     message(FATAL_ERROR "RTEMS_BOARD=${RTEMS_BOARD} requires a RISC-V esp32 BSP (e.g. riscv/esp32c3db, riscv/esp32c5db, riscv/esp32c6db, riscv/esp32s31db, or riscv/esp32p4db)")
 endif()
+if(RTEMS_BOARD STREQUAL "esp32p4" AND NOT RTEMS_BSP_NAME MATCHES "^esp32p4(v1)?db$")
+    message(FATAL_ERROR "RTEMS_BOARD=esp32p4 requires riscv/esp32p4db (v3) or riscv/esp32p4v1db (v1)")
+endif()
 
 option(RTEMS_BT "Build ESP32 Bluetooth controller support (C3 or C5)" OFF)
 option(AVM_ENABLE_BLE_VHCI_NIF "Build the ESP32-C5 Erlang BLE VHCI interface" OFF)
@@ -121,6 +124,25 @@ if(RTEMS_BT AND NOT (RTEMS_BOARD STREQUAL "esp32c3" OR RTEMS_BOARD STREQUAL "esp
 endif()
 
 include(CheckCSourceCompiles)
+if(RTEMS_BOARD STREQUAL "esp32p4")
+    if(RTEMS_BSP_NAME STREQUAL "esp32p4v1db")
+        set(_esp32p4_revision 1)
+    else()
+        set(_esp32p4_revision 3)
+    endif()
+    # Recheck on reconfiguration: an installed BSP may have been replaced.
+    unset(RTEMS_ESP32P4_BSP_MATCHES_REVISION CACHE)
+    check_c_source_compiles("
+#include <bsp.h>
+#if !defined(BSP_ESP32P4_REVISION) || BSP_ESP32P4_REVISION != ${_esp32p4_revision}
+#error \"Wrong ESP32-P4 BSP revision\"
+#endif
+int main(void) { return 0; }
+" RTEMS_ESP32P4_BSP_MATCHES_REVISION)
+    if(NOT RTEMS_ESP32P4_BSP_MATCHES_REVISION)
+        message(FATAL_ERROR "Rebuild the RTEMS BSP: ${RTEMS_BSP} must export BSP_ESP32P4_REVISION=${_esp32p4_revision}")
+    endif()
+endif()
 set(_saved_req_flags "${CMAKE_REQUIRED_FLAGS}")
 set(CMAKE_REQUIRED_FLAGS "${CMAKE_C_FLAGS}")
 check_c_source_compiles("
