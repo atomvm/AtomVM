@@ -147,6 +147,10 @@ struct gpio_sleep_state
     uint32_t select;
     uint32_t mux[GPIO_COUNT];
     uint32_t pin[GPIO_COUNT];
+#if defined(RTEMS_BOARD_ESP32H2)
+    uint32_t hold;
+    uint32_t wakeup;
+#endif
 };
 
 static void prepare_gpio(uint32_t mask, int mode, struct gpio_sleep_state *saved)
@@ -161,6 +165,41 @@ static void prepare_gpio(uint32_t mask, int mode, struct gpio_sleep_state *saved
     }
     REG(0x60008064U) |= BIT(31); /* Wakeup input filter. */
     REG(0x60008110U) = wake | BIT(7); /* GPIO_PIN_CLK_GATE */
+#elif defined(RTEMS_BOARD_ESP32H2)
+    /* ESP32-H2 ext1_wakeup_prepare(): the wake pads are ordinary digital
+     * GPIOs held through sleep, and the always-on EXT1 comparator samples
+     * the levels the LP_AON selection and polarity bits name. Only GPIO7-14
+     * reach EXT1, so bit n of the mask is rtcio n, GPIO n + 7. AtomVM keeps
+     * one wake mask for both sleep modes, so light sleep uses this source
+     * too, which ESP-IDF allows.
+     */
+    if (mask) {
+        saved->select = REG(LP_AON_GPIO_MUX);
+        saved->hold = REG(LP_AON_GPIO_HOLD0);
+        saved->wakeup = REG(LP_AON_EXT_WAKEUP);
+        uint32_t hold = saved->hold;
+        REG(LPPERI_CLK_EN) |= BIT(27); /* LP IO clock samples the wake pads. */
+        for (unsigned pin = 0; pin < GPIO_COUNT; pin++) {
+            if (!(mask & BIT(pin))) {
+                continue;
+            }
+            uint32_t gpio = pin + GPIO_RTCIO_OFFSET;
+            uintptr_t iomux = SLEEP_IO_MUX_BASE + (gpio + 1U) * 4U;
+            saved->mux[pin] = REG(iomux);
+            /* Digital GPIO function with the input enabled, pulled away from
+             * the configured trigger level so a floating pad cannot wake
+             * immediately.
+             */
+            uint32_t cfg = saved->mux[pin] & ~((7U << 12) | BIT(9) | BIT(8) | BIT(7));
+            cfg |= (1U << 12) | BIT(9) | (mode ? BIT(7) : BIT(8));
+            REG(iomux) = cfg;
+            hold |= BIT(gpio);
+        }
+        REG(LP_AON_GPIO_MUX) = saved->select & ~mask; /* 0 routes the pad to digital GPIO. */
+        REG(LP_AON_GPIO_HOLD0) = hold;
+        REG(LP_AON_EXT_WAKEUP) = (saved->wakeup & ~((0xFFU << 15) | (0xFFU << 23) | BIT(31)))
+            | ((mask & 0xFFU) << 15) | ((mode ? (mask & 0xFFU) : 0U) << 23) | BIT(31) | BIT(14);
+    }
 #else
     saved->select = REG(LP_MUX_SELECT);
 #if defined(RTEMS_BOARD_ESP32S31)
@@ -199,6 +238,17 @@ static void restore_gpio(uint32_t mask, const struct gpio_sleep_state *saved)
 #if defined(RTEMS_BOARD_ESP32C3)
     (void) mask;
     REG(0x60008110U) = saved->select;
+#elif defined(RTEMS_BOARD_ESP32H2)
+    if (mask) {
+        for (unsigned pin = 0; pin < GPIO_COUNT; pin++) {
+            if (mask & BIT(pin)) {
+                REG(SLEEP_IO_MUX_BASE + (pin + GPIO_RTCIO_OFFSET + 1U) * 4U) = saved->mux[pin];
+            }
+        }
+        REG(LP_AON_GPIO_MUX) = saved->select;
+        REG(LP_AON_GPIO_HOLD0) = saved->hold;
+        REG(LP_AON_EXT_WAKEUP) = saved->wakeup;
+    }
 #else
     REG(LP_MUX_SELECT) = saved->select;
     for (unsigned pin = 0; pin < GPIO_COUNT; pin++) {
@@ -273,7 +323,7 @@ int rtems_esp_sleep_start(bool deep, uint64_t usecs, uint32_t gpio_mask, int mod
     rtems_interrupt_level level;
     rtems_interrupt_local_disable(level);
     rtems_interrupt_vector_disable(SYSTIMER_TARGET0_INTR);
-    struct gpio_sleep_state gpio_state;
+    struct gpio_sleep_state gpio_state = { 0 };
     prepare_gpio(gpio_mask, mode, &gpio_state);
     uint32_t raw_cause = 0;
     /* Wind up the 32-bit RTC timecounter at least every hour, even for an

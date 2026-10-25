@@ -22,7 +22,7 @@
 set -euo pipefail
 
 usage() {
-    echo "Usage: $(basename "$0") <esp32c3|esp32c5|esp32c6|esp32s31|esp32p4|esp32p4v1> <build-directory>"
+    echo "Usage: $(basename "$0") <esp32c3|esp32c5|esp32c6|esp32h2|esp32s31|esp32p4|esp32p4v1> <build-directory>"
     echo "       $(basename "$0") --check"
     exit "${1:-0}"
 }
@@ -52,6 +52,7 @@ case "${CHIP}" in
     esp32c3) BOARD=board-esp32-c3-devkitm-1 ;;
     esp32c5) BOARD=board-esp32-c5-devkitc-1 ;;
     esp32c6) BOARD=board-esp32-c6-devkitc-1 ;;
+    esp32h2) BOARD=board-esp32-h2-devkitm-1 ;;
     esp32s31) BOARD=board-esp32-s31-function-coreboard-1; TX=TX0; RX=RX0 ;;
     esp32p4) BOARD=board-esp32-p4-preview; CHIP_ATTRS=', "chipRevision": "3.1"' ;;
     esp32p4v1) BOARD=board-esp32-p4-preview; CHIP_ATTRS=', "chipRevision": "1.0"' ;;

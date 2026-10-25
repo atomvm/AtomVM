@@ -979,6 +979,18 @@ jobs:
             has_wifi: true
             has_smp: false
           - arch: riscv
+            bsp: riscv/esp32h2db
+            bsp_name: esp32h2db
+            chip: esp32h2
+            board: esp32h2
+            bsp_config: esp32h2-bsp.ini
+            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,esp32c3,ok}"
+            cache_key: riscv-esp32h2db-v1
+            rtems_version: "7"
+            prefix: /home/runner/rtems/7
+            has_wifi: false
+            has_smp: false
+          - arch: riscv
             bsp: riscv/esp32s31db
             bsp_name: esp32s31db
             chip: esp32s31

@@ -440,6 +440,8 @@ static term chip_model_atom(GlobalContext *glb)
     return globalcontext_make_atom(glb, ATOM_STR("\x8", "esp32_c5"));
 #elif defined(RTEMS_BOARD_ESP32C6)
     return globalcontext_make_atom(glb, ATOM_STR("\x8", "esp32_c6"));
+#elif defined(RTEMS_BOARD_ESP32H2)
+    return globalcontext_make_atom(glb, ATOM_STR("\x8", "esp32_h2"));
 #elif defined(RTEMS_BOARD_ESP32S31)
     return globalcontext_make_atom(glb, ATOM_STR("\x9", "esp32_s31"));
 #elif defined(RTEMS_BOARD_ESP32P4)
@@ -462,6 +464,10 @@ static unsigned int chip_features(void)
 {
 #if defined(RTEMS_BOARD_ESP32P4)
     return 0;
+#elif defined(RTEMS_BOARD_ESP32H2)
+    /* Bluetooth LE only: this part has no Wi-Fi, and the port has no 802.15.4
+     * driver to advertise. */
+    return RTEMS_CHIP_FEATURE_BLE;
 #else
     unsigned int features = RTEMS_CHIP_FEATURE_WIFI_BGN | RTEMS_CHIP_FEATURE_BLE;
 #if defined(RTEMS_BOARD_ESP32S31)
@@ -536,6 +542,9 @@ static int esp32_hardware_poll(void *data, unsigned char *output, size_t len, si
     uintptr_t rng_reg = 0x2081403CU; /* TRNG_SW_READ_REG */
 #elif defined(RTEMS_BOARD_ESP32C6) || defined(RTEMS_BOARD_ESP32C5)
     uintptr_t rng_reg = 0x600B2808U;
+#elif defined(RTEMS_BOARD_ESP32H2)
+    /* LPPERI_RNG_DATA_REG: this part's LPPERI date moves it one word up. */
+    uintptr_t rng_reg = 0x600B280CU;
 #else
     uintptr_t rng_reg = 0x600260B0U;
 #endif

@@ -77,6 +77,14 @@
 #define ESP_LEDC_GPIO_ENABLE_SET 0x60091024U
 #define ESP_LEDC_CLOCK_REG 0x60096034U
 #define ESP_LEDC_CHANNELS 6
+#elif defined(RTEMS_BOARD_ESP32H2)
+#define ESP_LEDC_BASE 0x60008000U
+#define ESP_LEDC_GPIO_OUT_SEL 0x60091554U
+#define ESP_LEDC_SIGNAL0 0U
+#define ESP_LEDC_IOMUX0 0x60090004U
+#define ESP_LEDC_GPIO_ENABLE_SET 0x60091024U
+#define ESP_LEDC_CLOCK_REG 0x6009603CU
+#define ESP_LEDC_CHANNELS 6
 #elif defined(RTEMS_BOARD_ESP32P4)
 #define ESP_LEDC_BASE 0x500D3000U
 #define ESP_LEDC_GPIO_OUT_SEL 0x500E0558U
@@ -192,6 +200,9 @@ static uint32_t ledc_source_clock_hz(void)
     /* PCR_CLK_XTAL_FREQ follows the C5's 40/48 MHz crystal selection. */
     uint32_t mhz = (READ_PERI_REG(0x60096110U) >> 24) & 0x7FU;
     return mhz == 48 ? 48000000U : 40000000U;
+#elif defined(RTEMS_BOARD_ESP32H2)
+    /* The H2's crystal and its reset LEDC source selection are both 32 MHz. */
+    return 32000000U;
 #else
     return 40000000U;
 #endif

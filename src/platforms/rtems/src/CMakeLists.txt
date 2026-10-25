@@ -82,6 +82,8 @@ elseif(RTEMS_BOARD STREQUAL "esp32c5")
     target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BOARD_ESP32 RTEMS_BOARD_ESP32C5)
 elseif(RTEMS_BOARD STREQUAL "esp32c6")
     target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BOARD_ESP32 RTEMS_BOARD_ESP32C6)
+elseif(RTEMS_BOARD STREQUAL "esp32h2")
+    target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BOARD_ESP32 RTEMS_BOARD_ESP32H2)
 elseif(RTEMS_BOARD STREQUAL "esp32s31")
     target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BOARD_ESP32 RTEMS_BOARD_ESP32S31)
 elseif(RTEMS_BOARD STREQUAL "esp32p4")
@@ -347,6 +349,14 @@ elseif(RTEMS_BOARD STREQUAL "esp32s31")
             z
         )
     endif()
+elseif(RTEMS_BOARD STREQUAL "esp32h2")
+    target_link_options(${PROJECT_EXECUTABLE} PRIVATE
+        -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/../ld/esp32h2.rom.ld
+    )
+    target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
+        jffs2
+        z
+    )
 elseif(RTEMS_BOARD STREQUAL "esp32p4")
     if(RTEMS_BSP_NAME STREQUAL "esp32p4v1db")
         set(_esp32p4_rom "esp32p4v1.rom.ld")

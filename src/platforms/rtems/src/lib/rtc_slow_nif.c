@@ -44,7 +44,13 @@
 #include "rtems_sys.h"
 
 #ifndef CONFIG_AVM_RTC_SLOW_MAX_SIZE
+#if defined(RTEMS_BOARD_ESP32H2)
+/* The H2 has only 4 KiB of LP RAM, so it stores less than the parts with 8 KiB
+ * or more.  3072 matches the ESP-IDF port's esp32h2 default. */
+#define CONFIG_AVM_RTC_SLOW_MAX_SIZE 3072
+#else
 #define CONFIG_AVM_RTC_SLOW_MAX_SIZE 4086
+#endif
 #endif
 
 // Ensure checksum is incorrect when memory is zeroed.
@@ -53,20 +59,32 @@
 #if defined(RTEMS_BOARD_ESP32)
 #if defined(RTEMS_BOARD_ESP32S31)
 #define ESP_RTC_RAM_BASE 0x2E000000U
+#define ESP_RTC_TIMEKEEPER_BASE (ESP_RTC_RAM_BASE + 0x1000U)
 #define ESP_TIMER_WAKE_BIT 13
 #elif defined(RTEMS_BOARD_ESP32P4)
 /* P4 retention storage lives in its 32 KiB LP RAM, not at the C3 RTC base. */
 #define ESP_RTC_RAM_BASE 0x50108000U
+#define ESP_RTC_TIMEKEEPER_BASE (ESP_RTC_RAM_BASE + 0x1000U)
+#define ESP_TIMER_WAKE_BIT 4
+#elif defined(RTEMS_BOARD_ESP32H2)
+/*
+ * The H2's LP RAM is 4 KiB and ends at 0x50001000, so a timekeeper at +0x1000
+ * would have no storage behind it.  The reduced binary store keeps the first
+ * 3 KiB and the timekeeper starts just after it, both below the part of the
+ * block the ROM reserves for itself.
+ */
+#define ESP_RTC_RAM_BASE 0x50000000U
+#define ESP_RTC_TIMEKEEPER_BASE (ESP_RTC_RAM_BASE + 0xC10U)
 #define ESP_TIMER_WAKE_BIT 4
 #else
 #define ESP_RTC_RAM_BASE 0x50000000U
+#define ESP_RTC_TIMEKEEPER_BASE (ESP_RTC_RAM_BASE + 0x1000U)
 #if defined(RTEMS_BOARD_ESP32C3)
 #define ESP_TIMER_WAKE_BIT 3
 #else
 #define ESP_TIMER_WAKE_BIT 4
 #endif
 #endif
-#define ESP_RTC_TIMEKEEPER_BASE (ESP_RTC_RAM_BASE + 0x1000U)
 #define RTC_TIMEKEEPER_MAGIC 0x54494D45U /* "TIME" */
 #define RTC_SLOW_CLK_FREQ_DEFAULT 136000U
 

@@ -59,11 +59,13 @@ system_info_smoke() ->
         ChipInfo when is_map(ChipInfo) ->
             <<"riscv32-esp-rtems">> = SystemArchitecture,
             Model = maps:get(model, ChipInfo),
-            true = lists:member(Model, [esp32_c3, esp32_c5, esp32_c6, esp32_s31, esp32_p4]),
+            true = lists:member(Model, [esp32_c3, esp32_c5, esp32_c6, esp32_h2, esp32_s31, esp32_p4]),
             Cores = maps:get(cores, ChipInfo),
             true = is_integer(Cores) andalso Cores >= 1,
             Features = maps:get(features, ChipInfo),
-            true = is_list(Features) andalso (lists:member(bgn, Features) orelse Model =:= esp32_p4),
+            % The H2 has no Wi-Fi, so it advertises Bluetooth LE only.
+            true = is_list(Features) andalso
+                (lists:member(bgn, Features) orelse Model =:= esp32_p4 orelse Model =:= esp32_h2),
             erlang:display({system_info_chip, Model, Cores, Features, ok})
     end,
 
@@ -302,9 +304,17 @@ sleep_smoke() ->
     ok = esp:sleep_enable_gpio_wakeup(),
     erlang:display({sleep_enable_wakeup, ok}),
 
-    % Light sleep test (suspends and wakes up after timer)
-    SleepResult = esp:light_sleep(),
-    true = lists:member(SleepResult, [ok, {error, enodev}, {error, timeout}, {error, enotsup}]),
+    % Light sleep test (suspends and wakes up after timer). Wokwi's ESP32-H2
+    % model stops the CPU on a sleep request and never signals a wakeup, so
+    % entering sleep there would hang this test; ESP-IDF's own light- and
+    % deep-sleep examples hang on H2 in Wokwi the same way. H2 sleep stays
+    % covered by rtems_peripheral_test on a board.
+    SleepResult =
+        case erlang:system_info(esp32_chip_info) of
+            #{model := esp32_h2} -> skipped;
+            _ -> esp:light_sleep()
+        end,
+    true = lists:member(SleepResult, [skipped, ok, {error, enodev}, {error, timeout}, {error, enotsup}]),
     erlang:display({hardware_sleep_result, SleepResult}),
     WakeupAfterLight = esp:sleep_get_wakeup_cause(),
     erlang:display({esp_light_sleep, ok, WakeupAfterLight}),

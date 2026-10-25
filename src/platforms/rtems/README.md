@@ -22,6 +22,7 @@ Supported bring-up targets:
 - RISC-V `esp32c3db` on ESP32-C3 (`esp-emu --chip esp32c3` or QEMU `qemu-system-riscv32 -M esp32c3`)
 - RISC-V `esp32c5db` on ESP32-C5 (`esp-emu --chip esp32c5`)
 - RISC-V `esp32c6db` on ESP32-C6 (`esp-emu --chip esp32c6`)
+- RISC-V `esp32h2db` on ESP32-H2 (`esp-emu --chip esp32h2` or Wokwi; no Wi-Fi stack)
 - RISC-V `esp32s31db` on ESP32-S31 dual-core SMP (`esp-emu --chip esp32s31`)
 - RISC-V `esp32p4db` on ESP32-P4 revision 3.x dual-core SMP (`esp-emu --chip esp32p4`; physical validation pending)
 - RISC-V `esp32p4v1db` on ESP32-P4 revision 1.x dual-core SMP (Wokwi; physical validation pending)
@@ -35,7 +36,7 @@ bootloader supplied an FDT with the `embeddedbrains,grisp2` compatible string.
 SMP multi-core BEAM execution is supported on dual-core and multi-core targets
 (`esp32s31db`, `esp32p4db`, `esp32p4v1db`, `realview_pbx_a9_qemu`, and `imx7`), dynamically scaling
 schedulers with `rtems_scheduler_get_processor_maximum()`. Uniprocessor targets
-(`erc32`, `esp32c3db`, `esp32c5db`, `esp32c6db`, `grisp2`) build with uniprocessor
+(`erc32`, `esp32c3db`, `esp32c5db`, `esp32c6db`, `esp32h2db`, `grisp2`) build with uniprocessor
 optimizations (`AVM_DISABLE_SMP=ON`). Applications are compiled on the host
 and embedded in the RTEMS executable. GRiSP 2 can instead load `app.avm`
 from its SD card, using the embedded application as a fallback.
@@ -123,6 +124,31 @@ C6 critical callbacks preserve nested interrupt state in internal RAM. With
 modem retention disabled, C6 uses `phy_wakeup_init()` rather than C3's backup-DMA
 register restore. C6 validation is emulator-only; physical PLL, RF, DMA and
 sleep behavior still need testing.
+
+ESP32-H2 direct boot calibrates its fixed 96 MHz BBPLL from the 32 MHz crystal
+through the analog I2C master and selects it with a 96 MHz CPU and a 32 MHz AHB,
+following ESP-IDF's `rtc_clk_init()` and `clk_ll_bbpll_*` sequences; a
+calibration that does not complete leaves the CPU on the crystal rather than
+distributing an uncalibrated clock. The console stays on the crystal, because
+the H2's UART selects its source in PCR rather than in its own clock register.
+The flash interface also stays on the crystal: ESP-IDF's bootloader pairs its
+64 MHz flash PLL with a flash-chip retiming that a direct-boot image has no
+stage to run, so the H2 trades flash bandwidth for a bus the ROM left configured.
+The H2 has no Wi-Fi, so there is no lwIP or Espressif Wi-Fi stack to link and no
+network NIF: `network:start/1` reports a failed port and `esp32_chip_info`
+advertises Bluetooth LE only. ADC, LEDC, I2C, SPI, GPIO, RTC storage and the
+watchdog follow the C6 register sequences translated to the H2's bases and bit
+positions, with ADC1 on GPIO1-GPIO5 and six 20-bit LEDC channels; the H2's 4 KiB
+LP RAM holds a 3 KiB RTC binary store with the timekeeper after it. Sleep uses
+the C6 PMU sleep group and LP timer programming with the H2's interrupt raw and
+clear offsets, and GPIO7-GPIO14 (rtcio 0-7) wake through the LP_AON EXT1
+comparator that ESP-IDF's `ext1_wakeup_prepare()` configures, since the H2 has no
+LP IOMUX. Wokwi's H2 model stops the CPU on a sleep request and never signals a
+wakeup, and ESP-IDF's own light- and deep-sleep examples hang there the same way,
+so the boot smoke test skips entering sleep on H2 and sleep stays unverified
+until a board is available. BLE and IEEE 802.15.4 controllers are not
+brought up, and no physical H2 board has been tested; Wokwi and esp-emulator
+validate boot, console, peripherals, flash, NVS and the file system.
 
 S31 direct boot switches to XTAL40, configures and calibrates CPLL320, then
 selects CPU/MEM/SYS/APB dividers of 1/2/3/2. Clock-update and calibration
@@ -872,7 +898,7 @@ qemu-system-riscv32 -nographic -machine esp32c3 \
 
 ### 5. Testing with Wokwi CLI
 
-The ESP32-C3/C5/C6/S31 Docker build scripts accept `--simulate-wokwi` to
+The ESP32-C3/C5/C6/H2/S31 Docker build scripts accept `--simulate-wokwi` to
 run the built test with Wokwi instead of esp-emulator. Install
 [`wokwi-cli`](https://docs.wokwi.com/wokwi-ci/cli-installation) on the host and
 export `WOKWI_CLI_TOKEN`, as used by `.github/workflows/esp32-simtest.yaml`.

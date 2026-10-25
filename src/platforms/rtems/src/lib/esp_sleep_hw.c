@@ -69,6 +69,82 @@ uint64_t BSP_FAST_TEXT_SECTION rtems_esp_rtc_get_counter(void)
     return rtc_ticks;
 }
 
+#if defined(RTEMS_BOARD_ESP32H2)
+struct usb_jtag_sleep_state
+{
+    uint32_t clock_enabled;
+    uint32_t pad_enabled;
+};
+
+struct cpu_clock_state
+{
+    uint32_t sysclk;
+    uint32_t cpu;
+    uint32_t ahb;
+};
+
+/* ESP-IDF rtc_clk_cpu_set_to_default_config(): run the CPU from the crystal
+ * for the sleep transition and restore the PLL dividers on wakeup.  AHB stays
+ * at 32 MHz either way: the board divides the 96 MHz PLL by three, and the
+ * crystal is 32 MHz.
+ */
+static BSP_FAST_TEXT_SECTION void cpu_clock_to_xtal(struct cpu_clock_state *state)
+{
+    state->sysclk = REG(SLEEP_PCR_SYSCLK_CONF);
+    state->cpu = REG(SLEEP_PCR_CPU_FREQ_CONF);
+    state->ahb = REG(SLEEP_PCR_AHB_FREQ_CONF);
+    REG(SLEEP_PCR_CPU_FREQ_CONF) = state->cpu & ~0xFFU;
+    REG(SLEEP_PCR_AHB_FREQ_CONF) = state->ahb & ~0xFFU;
+    REG(SLEEP_PCR_SYSCLK_CONF) = state->sysclk & ~(0x3U << 16);
+    REG(SLEEP_PCR_BUS_CLK_UPDATE) = 1U;
+    while (REG(SLEEP_PCR_BUS_CLK_UPDATE) != 0U) {
+    }
+}
+
+static BSP_FAST_TEXT_SECTION void cpu_clock_restore(const struct cpu_clock_state *state)
+{
+    REG(SLEEP_PCR_CPU_FREQ_CONF) = state->cpu;
+    REG(SLEEP_PCR_AHB_FREQ_CONF) = state->ahb;
+    REG(SLEEP_PCR_SYSCLK_CONF) = state->sysclk;
+    REG(SLEEP_PCR_BUS_CLK_UPDATE) = 1U;
+    while (REG(SLEEP_PCR_BUS_CLK_UPDATE) != 0U) {
+    }
+}
+
+/* ESP-IDF's sleep_console_usj_pad_backup_and_disable(): the USB Serial/JTAG
+ * pad cannot stay enabled through light sleep.  The pad and its bus clock are
+ * turned off before the transition and restored on wakeup, otherwise the
+ * console is dead after the first sleep.
+ */
+static void usb_jtag_suspend(struct usb_jtag_sleep_state *state)
+{
+    uint32_t pcr = REG(PCR_USB_DEVICE_CONF);
+    state->clock_enabled = (pcr & PCR_USB_DEVICE_CLK_EN) && !(pcr & PCR_USB_DEVICE_RST_EN);
+    if (state->clock_enabled) {
+        state->pad_enabled = REG(USB_JTAG_CONF0) & USB_JTAG_PAD_ENABLE;
+    } else {
+        /* Give the peripheral a defined state before turning it off. */
+        REG(PCR_USB_DEVICE_CONF) = (pcr | PCR_USB_DEVICE_CLK_EN) & ~PCR_USB_DEVICE_RST_EN;
+        REG(PCR_USB_DEVICE_CONF) = (pcr | PCR_USB_DEVICE_CLK_EN) | PCR_USB_DEVICE_RST_EN;
+        REG(PCR_USB_DEVICE_CONF) = (pcr | PCR_USB_DEVICE_CLK_EN) & ~PCR_USB_DEVICE_RST_EN;
+        state->pad_enabled = 0;
+    }
+    REG(USB_JTAG_CONF0) &= ~USB_JTAG_PAD_ENABLE;
+    REG(PCR_USB_DEVICE_CONF) &= ~PCR_USB_DEVICE_CLK_EN;
+}
+
+static void usb_jtag_resume(const struct usb_jtag_sleep_state *state)
+{
+    REG(PCR_USB_DEVICE_CONF) |= PCR_USB_DEVICE_CLK_EN;
+    if (state->pad_enabled) {
+        REG(USB_JTAG_CONF0) |= USB_JTAG_PAD_ENABLE;
+    }
+    if (!state->clock_enabled) {
+        REG(PCR_USB_DEVICE_CONF) &= ~PCR_USB_DEVICE_CLK_EN;
+    }
+}
+#endif
+
 uint32_t BSP_FAST_TEXT_SECTION rtems_esp_sleep_enter(bool deep, uint32_t wakeup, uint64_t deadline)
 {
 #if defined(RTEMS_BOARD_ESP32C3)
@@ -114,6 +190,14 @@ uint32_t BSP_FAST_TEXT_SECTION rtems_esp_sleep_enter(bool deep, uint32_t wakeup,
     /* The HP active and sleep register groups share their layout. Copy only
      * power/clock/bias/regulator fields, excluding REGDMA backup controls.
      */
+#if defined(RTEMS_BOARD_ESP32H2)
+    struct usb_jtag_sleep_state usb_jtag = { 0 };
+    struct cpu_clock_state cpu_clock;
+    cpu_clock_to_xtal(&cpu_clock);
+    if (!deep) {
+        usb_jtag_suspend(&usb_jtag);
+    }
+#endif
 #if defined(RTEMS_BOARD_ESP32S31)
     static const uint8_t offsets[] = { 0, 4, 8, 12, 16, 20, 24, 28, 32, 48, 52, 56, 60 };
     const uint32_t sys = 0x18U, sysclk = 0x30U;
@@ -125,7 +209,16 @@ uint32_t BSP_FAST_TEXT_SECTION rtems_esp_sleep_enter(bool deep, uint32_t wakeup,
         REG(PMU_BASE + PMU_SLEEP + offsets[i]) = REG(PMU_BASE + offsets[i]);
     }
     /* Pause watchdogs, stall CPUs, select the sleep system clock and gate it. */
+#if defined(RTEMS_BOARD_ESP32H2)
+    /* ESP-IDF PMU_SLEEP_DIGITAL_LSLP_CONFIG_DEFAULT: pause the watchdog and
+     * select the pad sleep configuration.  dig_cpu_stall (BIT(29)) must stay
+     * clear: the PMU records the wakeup and restores the clocks, but it does
+     * not release a stalled CPU, so the core never resumes.
+     */
+    REG(PMU_BASE + PMU_SLEEP + sys) |= BIT(27) | BIT(28);
+#else
     REG(PMU_BASE + PMU_SLEEP + sys) |= BIT(28) | BIT(29);
+#endif
     REG(PMU_BASE + PMU_SLEEP + sysclk) = BIT(28) | BIT(29);
     uint32_t forces[PMU_FORCE_COUNT];
     uint32_t memory_force = REG(PMU_BASE + PMU_MEM_FORCE);
@@ -137,8 +230,8 @@ uint32_t BSP_FAST_TEXT_SECTION rtems_esp_sleep_enter(bool deep, uint32_t wakeup,
         for (unsigned i = 0; i < PMU_FORCE_COUNT; i++) {
             uintptr_t reg = PMU_BASE + PMU_FORCE0 + i * 4U;
             forces[i] = REG(reg);
-#if defined(RTEMS_BOARD_ESP32C6)
-            if (i == 3) { /* Reserved HPPERIPH domain on C6. */
+#if defined(RTEMS_BOARD_ESP32C6) || defined(RTEMS_BOARD_ESP32H2)
+            if (i == 3) { /* Reserved HPPERIPH domain slot. */
                 continue;
             }
 #endif
@@ -176,6 +269,12 @@ uint32_t BSP_FAST_TEXT_SECTION rtems_esp_sleep_enter(bool deep, uint32_t wakeup,
     uint32_t status = REG(PMU_BASE + PMU_RAW);
     uint32_t cause = REG(PMU_BASE + PMU_CTRL + 32U);
     REG(PMU_BASE + PMU_CLEAR) = BIT(30) | BIT(31);
+#if defined(RTEMS_BOARD_ESP32H2)
+    if (!deep) {
+        usb_jtag_resume(&usb_jtag);
+    }
+    cpu_clock_restore(&cpu_clock);
+#endif
     return timed_out || (status & BIT(30)) ? 0 : cause;
 #endif
 }

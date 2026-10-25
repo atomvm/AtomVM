@@ -62,6 +62,11 @@
 #define ESP_ADC_GPIO_ENABLE_CLEAR 0x60091028U
 #define ESP_ADC_IOMUX_BASE 0x60090004U
 #define ESP_ADC_CLOCK_REG 0x60096080U
+#elif defined(RTEMS_BOARD_ESP32H2)
+#define ESP_ADC_BASE 0x6000E000U
+#define ESP_ADC_GPIO_ENABLE_CLEAR 0x60091028U
+#define ESP_ADC_IOMUX_BASE 0x60090004U
+#define ESP_ADC_CLOCK_REG 0x60096080U
 #elif defined(RTEMS_BOARD_ESP32P4)
 #define ESP_ADC_BASE 0x500DE000U
 #define ESP_LP_ADC_BASE 0x50127000U
@@ -217,6 +222,12 @@ static bool esp_pin_to_adc_channel(int pin, adc_unit_t *unit, adc_channel_t *cha
         return false;
     }
     *channel = (adc_channel_t) pin;
+#elif defined(RTEMS_BOARD_ESP32H2)
+    /* ADC1 channel n is GPIO n + 1 on this part; there is no ADC2. */
+    if (pin < 1 || pin > 5) {
+        return false;
+    }
+    *channel = (adc_channel_t) (pin - 1);
 #elif defined(RTEMS_BOARD_ESP32S31)
     if (pin < 42 || pin > 57) {
         return false;
@@ -282,6 +293,11 @@ static void esp_adc_hw_init(void)
 #if defined(RTEMS_BOARD_ESP32C5)
     const uintptr_t analog_power = 0x600B0158U;
     WRITE_PERI_REG(0x600A9C14U, READ_PERI_REG(0x600A9C14U) | (1U << 13) | (1U << 15));
+#elif defined(RTEMS_BOARD_ESP32H2)
+    /* MODEM_SYSCON_CLK_CONF1_FORCE_ON: keep the front-end and Bluetooth clock
+     * domains on so the shared analog registers stay reachable. */
+    const uintptr_t analog_power = 0x600B0154U;
+    WRITE_PERI_REG(0x600A5414U, READ_PERI_REG(0x600A5414U) | (1U << 16) | (1U << 18));
 #else
     const uintptr_t analog_power = 0x600B0154U;
     WRITE_PERI_REG(0x600A9814U, READ_PERI_REG(0x600A9814U) | (1U << 13) | (1U << 16));
