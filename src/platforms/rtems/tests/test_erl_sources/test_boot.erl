@@ -448,7 +448,7 @@ flash_smoke() ->
     case esp:flash_get_size() of
         0 ->
             erlang:display({flash, unsupported, ok});
-        FlashSize when is_integer(FlashSize) andalso FlashSize >= 4194304 ->
+        FlashSize when is_integer(FlashSize) andalso FlashSize >= 1048576 ->
             erlang:display({esp_flash_get_size, ok, FlashSize}),
 
             % Parameter validation: invalid offset / length badargs
@@ -460,8 +460,9 @@ flash_smoke() ->
             {'EXIT', {badarg, _}} = (catch esp:flash_erase_range(1, 4096)),
             erlang:display({esp_flash_badarg, ok}),
 
-            % Low-level erase and write/read at test sector 960 (0x3C0000)
-            TestOffset = 16#3C0000,
+            % Low-level erase and write/read at the start of the NVS
+            % partition, which sits in the last 256 KiB of the chip.
+            TestOffset = FlashSize - 16#40000,
             TestSector = TestOffset div 4096,
             ok = esp:flash_erase_sector(TestSector),
             erlang:display({esp_flash_erase_sector, ok}),

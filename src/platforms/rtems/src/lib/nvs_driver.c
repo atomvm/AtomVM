@@ -69,7 +69,7 @@ struct __attribute__((packed)) nvs_entry_header
     uint32_t crc32;
 };
 
-static uint32_t s_nvs_offset = DEFAULT_NVS_FLASH_OFFSET;
+static uint32_t s_nvs_offset; /* resolved from the chip size on first use */
 static uint32_t s_nvs_size = DEFAULT_NVS_FLASH_SIZE;
 static bool s_nvs_initialized = false;
 
@@ -90,9 +90,17 @@ static uint32_t get_sector_count(void)
     return s_nvs_size / FLASH_SECTOR_SIZE;
 }
 
+static uint32_t nvs_partition_offset(void)
+{
+    if (s_nvs_offset == 0) {
+        s_nvs_offset = flash_partition_nvs_offset();
+    }
+    return s_nvs_offset;
+}
+
 static uint32_t get_sector_offset(uint32_t sector_index)
 {
-    return s_nvs_offset + (sector_index * FLASH_SECTOR_SIZE);
+    return nvs_partition_offset() + (sector_index * FLASH_SECTOR_SIZE);
 }
 
 static bool read_sector_header(uint32_t sector_index, struct nvs_sector_header *hdr)
@@ -159,7 +167,7 @@ bool esp32c3_nvs_init(void)
 nvs_result_t esp32c3_nvs_reformat(void)
 {
     esp32c3_flash_init();
-    if (esp32c3_flash_erase_range(s_nvs_offset, s_nvs_size) != 0) {
+    if (esp32c3_flash_erase_range(nvs_partition_offset(), s_nvs_size) != 0) {
         return NVS_ERR;
     }
     s_nvs_initialized = false;

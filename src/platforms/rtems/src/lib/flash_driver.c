@@ -74,20 +74,60 @@ static void flash_cache_flush(uint32_t offset, uint32_t size)
 #endif
 }
 
+/*
+ * The ROM only knows its default chip size -- the 2 MiB that the boot ROM
+ * assumes -- so the size has to come from the part itself.  ESP-IDF's
+ * bootloader decodes the JEDEC capacity byte the same way; the identifier
+ * that the ROM read stays in chip.device_id even though the ROM's size field
+ * is only a default.  If the identifier cannot be decoded, keep the 4 MiB
+ * layout the platform has always used rather than trusting that default.
+ */
+#define FLASH_DEFAULT_CHIP_SIZE (4U * 1024U * 1024U)
+#define FLASH_JEDEC_CAPACITY_MIN 20U /* 1 MiB */
+#define FLASH_JEDEC_CAPACITY_MAX 25U /* 32 MiB */
+
+static uint32_t flash_detect_size(void)
+{
+    if (rom_spiflash_legacy_data != NULL) {
+        uint32_t id = rom_spiflash_legacy_data->chip.device_id;
+
+        /* The ROM keeps the identifier byte-reversed from wire order: the
+         * board's 2 MiB part reads back as 0x001540ef, with the capacity byte
+         * on top.  Keep the low byte as the alternative order for parts that
+         * store it the other way round. */
+        uint32_t capacity = (id >> 16) & 0xffU;
+
+        if (capacity < FLASH_JEDEC_CAPACITY_MIN || capacity > FLASH_JEDEC_CAPACITY_MAX) {
+            capacity = id & 0xffU;
+        }
+        if (capacity >= FLASH_JEDEC_CAPACITY_MIN && capacity <= FLASH_JEDEC_CAPACITY_MAX) {
+            return 1U << capacity;
+        }
+    }
+
+    return FLASH_DEFAULT_CHIP_SIZE;
+}
+
 bool esp32c3_flash_init(void)
 {
     if (s_flash_chip_size == 0) {
+        s_flash_chip_size = flash_detect_size();
         if (rom_spiflash_legacy_data != NULL) {
-            if (rom_spiflash_legacy_data->chip.chip_size < 4 * 1024 * 1024) {
-                rom_spiflash_legacy_data->chip.chip_size = 4 * 1024 * 1024;
-            }
-            s_flash_chip_size = rom_spiflash_legacy_data->chip.chip_size;
-        } else {
-            s_flash_chip_size = 4 * 1024 * 1024;
+            rom_spiflash_legacy_data->chip.chip_size = s_flash_chip_size;
         }
         TRACE("Flash initialized: size = %u bytes (%u MiB)\n", (unsigned) s_flash_chip_size, (unsigned) (s_flash_chip_size / (1024 * 1024)));
     }
     return true;
+}
+
+uint32_t flash_partition_nvs_offset(void)
+{
+    return esp32c3_flash_get_size() - FLASH_PARTITION_RESERVE;
+}
+
+uint32_t flash_partition_fs_offset(void)
+{
+    return esp32c3_flash_get_size() - DEFAULT_FS_FLASH_SIZE;
 }
 
 uint32_t esp32c3_flash_get_size(void)
@@ -266,6 +306,16 @@ bool esp32c3_flash_init(void)
 }
 
 uint32_t esp32c3_flash_get_size(void)
+{
+    return 0;
+}
+
+uint32_t flash_partition_nvs_offset(void)
+{
+    return 0;
+}
+
+uint32_t flash_partition_fs_offset(void)
 {
     return 0;
 }

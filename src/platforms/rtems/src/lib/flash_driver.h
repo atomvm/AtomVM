@@ -37,25 +37,24 @@ extern "C" {
 #define FLASH_PAGE_SIZE 256U
 #define FLASH_BLOCK_SIZE 65536U
 
-// Default flash partition layout on 4 MiB chip (0x400000):
-// 0x000000 - ~0x39A000: Direct-boot firmware (text + data + embedded avm)
-// 0x3C0000 -  0x3E0000: NVS partition (128 KiB = 32 sectors)
-// 0x3E0000 -  0x400000: Flash filesystem mount / storage partition (128 KiB = 32 sectors)
-#ifndef DEFAULT_NVS_FLASH_OFFSET
-#define DEFAULT_NVS_FLASH_OFFSET 0x003C0000U
-#endif
-
+/*
+ * The NVS and filesystem partitions take the last 256 KiB of the flash chip,
+ * so their offsets follow the size the part reports: 0x3C0000 and 0x3E0000 on
+ * a 4 MiB chip, 0x1C0000 and 0x1E0000 on a 2 MiB one.  The direct-boot
+ * firmware occupies everything below them.
+ */
 #ifndef DEFAULT_NVS_FLASH_SIZE
 #define DEFAULT_NVS_FLASH_SIZE 0x00020000U /* 128 KiB (32 sectors) */
-#endif
-
-#ifndef DEFAULT_FS_FLASH_OFFSET
-#define DEFAULT_FS_FLASH_OFFSET 0x003E0000U
 #endif
 
 #ifndef DEFAULT_FS_FLASH_SIZE
 #define DEFAULT_FS_FLASH_SIZE 0x00020000U /* 128 KiB (32 sectors) */
 #endif
+
+#define FLASH_PARTITION_RESERVE (DEFAULT_NVS_FLASH_SIZE + DEFAULT_FS_FLASH_SIZE)
+
+uint32_t flash_partition_nvs_offset(void);
+uint32_t flash_partition_fs_offset(void);
 
 bool esp32c3_flash_init(void);
 uint32_t esp32c3_flash_get_size(void);

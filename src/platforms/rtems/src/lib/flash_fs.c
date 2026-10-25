@@ -55,7 +55,7 @@ static int jffs2_flash_read(
     size_t size_of_buffer)
 {
     UNUSED(self);
-    if (esp32c3_flash_read(DEFAULT_FS_FLASH_OFFSET + offset, buffer, size_of_buffer) != 0) {
+    if (esp32c3_flash_read(flash_partition_fs_offset() + offset, buffer, size_of_buffer) != 0) {
         return -EIO;
     }
     return 0;
@@ -68,7 +68,7 @@ static int jffs2_flash_write(
     size_t size_of_buffer)
 {
     UNUSED(self);
-    if (esp32c3_flash_write(DEFAULT_FS_FLASH_OFFSET + offset, buffer, size_of_buffer) != 0) {
+    if (esp32c3_flash_write(flash_partition_fs_offset() + offset, buffer, size_of_buffer) != 0) {
         return -EIO;
     }
     return 0;
@@ -79,7 +79,7 @@ static int jffs2_flash_erase(
     uint32_t offset)
 {
     UNUSED(self);
-    uint32_t sector_num = (DEFAULT_FS_FLASH_OFFSET + offset) / FLASH_SECTOR_SIZE;
+    uint32_t sector_num = (flash_partition_fs_offset() + offset) / FLASH_SECTOR_SIZE;
     if (esp32c3_flash_erase_sector(sector_num) != 0) {
         return -EIO;
     }
@@ -128,7 +128,7 @@ bool esp32c3_flash_fs_mount(const char *mount_point)
     if (rv != 0) {
         // If mounting failed, erase the partition and retry cleanly
         TRACE("Initial JFFS2 mount failed (%d); formatting partition...\n", errno);
-        esp32c3_flash_erase_range(DEFAULT_FS_FLASH_OFFSET, DEFAULT_FS_FLASH_SIZE);
+        esp32c3_flash_erase_range(flash_partition_fs_offset(), DEFAULT_FS_FLASH_SIZE);
 
         rv = mount(
             NULL,
