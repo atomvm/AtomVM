@@ -145,10 +145,13 @@ clear offsets, and GPIO7-GPIO14 (rtcio 0-7) wake through the LP_AON EXT1
 comparator that ESP-IDF's `ext1_wakeup_prepare()` configures, since the H2 has no
 LP IOMUX. Wokwi's H2 model stops the CPU on a sleep request and never signals a
 wakeup, and ESP-IDF's own light- and deep-sleep examples hang there the same way,
-so the boot smoke test skips entering sleep on H2 and sleep stays unverified
-until a board is available. BLE and IEEE 802.15.4 controllers are not
-brought up, and no physical H2 board has been tested; Wokwi and esp-emulator
-validate boot, console, peripherals, flash, NVS and the file system.
+so the boot smoke test skips entering sleep on H2. BLE and IEEE 802.15.4
+controllers are not brought up. An ESP32-H2-DevKitM-1 with 2 MiB of flash passes
+the boot smoke test on hardware: console, peripherals, flash, NVS and the file
+system. Light sleep does not return on that board -- the wake path restores the
+clocks and reads flash data, but execution never returns to code in flash, so the
+part does not resume and the test does not enter sleep there. Wokwi and
+esp-emulator cover the same boot test in simulation.
 
 S31 direct boot switches to XTAL40, configures and calibrates CPLL320, then
 selects CPU/MEM/SYS/APB dividers of 1/2/3/2. Clock-update and calibration

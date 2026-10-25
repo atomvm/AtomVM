@@ -305,10 +305,9 @@ sleep_smoke() ->
     erlang:display({sleep_enable_wakeup, ok}),
 
     % Light sleep test (suspends and wakes up after timer). Wokwi's ESP32-H2
-    % model stops the CPU on a sleep request and never signals a wakeup, so
-    % entering sleep there would hang this test; ESP-IDF's own light- and
-    % deep-sleep examples hang on H2 in Wokwi the same way. H2 sleep stays
-    % covered by rtems_peripheral_test on a board.
+    % model stops the CPU on a sleep request and never signals a wakeup, and
+    % light sleep does not return on the H2 board either (see the platform
+    % README), so the smoke test does not enter sleep on this part.
     SleepResult =
         case erlang:system_info(esp32_chip_info) of
             #{model := esp32_h2} -> skipped;
