@@ -62,6 +62,11 @@
 #define ESP_ADC_GPIO_ENABLE_CLEAR 0x60091028U
 #define ESP_ADC_IOMUX_BASE 0x60090004U
 #define ESP_ADC_CLOCK_REG 0x60096080U
+#elif defined(RTEMS_BOARD_ESP32P4)
+#define ESP_ADC_BASE 0x500DE000U
+#define ESP_LP_ADC_BASE 0x50127000U
+#define ESP_ADC_GPIO_ENABLE_CLEAR 0x500E0028U
+#define ESP_ADC_IOMUX_BASE 0x500E1004U
 #elif defined(RTEMS_BOARD_ESP32S31)
 #define ESP_ADC_BASE 0x20815000U
 #define ESP_ADC_GPIO_ENABLE_CLEAR 0x2058303CU
@@ -218,6 +223,16 @@ static bool esp_pin_to_adc_channel(int pin, adc_unit_t *unit, adc_channel_t *cha
     }
     *unit = pin < 50 ? ADC_UNIT_1 : ADC_UNIT_2;
     *channel = (adc_channel_t) ((pin - 42) % 8);
+#elif defined(RTEMS_BOARD_ESP32P4)
+    if (pin >= 16 && pin <= 23) {
+        *unit = ADC_UNIT_1;
+        *channel = (adc_channel_t) (pin - 16);
+    } else if (pin >= 49 && pin <= 54) {
+        *unit = ADC_UNIT_2;
+        *channel = (adc_channel_t) (pin - 49);
+    } else {
+        return false;
+    }
 #endif
     return true;
 }
@@ -230,6 +245,32 @@ static void esp_adc_hw_init(void)
     WRITE_PERI_REG(ESP_ADC_BASE + 0x54U, (2U << 21) | (1U << 20) | 15U);
     WRITE_PERI_REG(0x6000E044U, READ_PERI_REG(0x6000E044U) & ~(1U << 18));
     WRITE_PERI_REG(0x6000E048U, READ_PERI_REG(0x6000E048U) | (1U << 16));
+#elif defined(RTEMS_BOARD_ESP32P4)
+    /* ESP-IDF 9a97f6c: esp32p4 adc_ll.h, sar_periph_ctrl.c and
+     * regi2c_ctrl_ll.h; addresses/fields from the hw_ver3 register headers.
+     * Single reads use the LP_ADC RTC controller, not APB ADC ONETIME.
+     * ADC2 still needs the HP ADC bus and functional clocks enabled.
+     */
+    WRITE_PERI_REG(0x500E601CU, READ_PERI_REG(0x500E601CU) | (1U << 5));
+    WRITE_PERI_REG(0x500E60A0U, READ_PERI_REG(0x500E60A0U) | (1U << 0));
+    /* v3 HP_RST_EN2 ADC reset is bit 10 (bit 2 resets PARLIO RX). */
+    WRITE_PERI_REG(0x500E60C8U, READ_PERI_REG(0x500E60C8U) | (1U << 10));
+    WRITE_PERI_REG(0x500E60C8U, READ_PERI_REG(0x500E60C8U) & ~(1U << 10));
+    /* Power the SAR analog register domain (PMU PERIF_I2C). */
+    WRITE_PERI_REG(0x5011515CU, READ_PERI_REG(0x5011515CU) & ~(1U << 26));
+    rtems_counter_delay_nanoseconds(1000);
+    WRITE_PERI_REG(0x5011515CU, READ_PERI_REG(0x5011515CU) | (1U << 26) | (1U << 27));
+    /* LP peripheral clock/reset, then SW-on power in both controllers. */
+    WRITE_PERI_REG(0x50120000U, READ_PERI_REG(0x50120000U) | (1U << 23));
+    WRITE_PERI_REG(0x50120008U, READ_PERI_REG(0x50120008U) | (1U << 24));
+    WRITE_PERI_REG(0x50120008U, READ_PERI_REG(0x50120008U) & ~(1U << 24));
+    WRITE_PERI_REG(ESP_ADC_BASE, READ_PERI_REG(ESP_ADC_BASE) | (1U << 5) | (3U << 26) | (3U << 28));
+    WRITE_PERI_REG(ESP_LP_ADC_BASE + 0x3CU, READ_PERI_REG(ESP_LP_ADC_BASE + 0x3CU) | 15U);
+    /* HP single-read divider = 1; non-inverted, native 12-bit output. */
+    WRITE_PERI_REG(ESP_LP_ADC_BASE, (READ_PERI_REG(ESP_LP_ADC_BASE) & ~(0xFFU | (1U << 28))) | 1U);
+    WRITE_PERI_REG(ESP_LP_ADC_BASE + 0x24U, (READ_PERI_REG(ESP_LP_ADC_BASE + 0x24U) & ~(0xFFU | (1U << 29))) | 1U);
+    WRITE_PERI_REG(ESP_LP_ADC_BASE + 0x10U, READ_PERI_REG(ESP_LP_ADC_BASE + 0x10U) & ~(1U << 31));
+    WRITE_PERI_REG(ESP_LP_ADC_BASE + 0x34U, (READ_PERI_REG(ESP_LP_ADC_BASE + 0x34U) & ~(7U << 28)) | (4U << 28) | (1U << 31));
 #elif defined(RTEMS_BOARD_ESP32S31)
     WRITE_PERI_REG(0x20704208U, READ_PERI_REG(0x20704208U) & ~(1U << 31));
     rtems_counter_delay_nanoseconds(1000);
@@ -255,7 +296,7 @@ static void esp_adc_hw_init(void)
     WRITE_PERI_REG(0x60096148U, (READ_PERI_REG(0x60096148U) & ~(0xFFU << 8)) | (1U << 8));
 #endif
 #endif
-#if !defined(RTEMS_BOARD_ESP32S31)
+#if !defined(RTEMS_BOARD_ESP32S31) && !defined(RTEMS_BOARD_ESP32P4)
     uint32_t ctrl = READ_PERI_REG(ESP_ADC_BASE);
     ctrl = (ctrl & ~((0xFFU << 7) | (3U << 27))) | (1U << 6) | (1U << 7) | (3U << 27);
     WRITE_PERI_REG(ESP_ADC_BASE, ctrl);
@@ -288,6 +329,36 @@ static void esp_adc_release_channel(struct ChannelResource *channel)
 
 static int esp_adc_read_raw(adc_unit_t unit, adc_channel_t channel, adc_atten_t atten)
 {
+#if defined(RTEMS_BOARD_ESP32P4)
+    /* adc_oneshot_ll_set_channel/set_atten: ADC2 logical channels 0..5
+     * address physical pads 2..7 in both the bitmap and attenuation table.
+     */
+    uint32_t pad = (uint32_t) channel + (unit == ADC_UNIT_2 ? 2U : 0U);
+    uintptr_t atten_reg = ESP_LP_ADC_BASE + (unit == ADC_UNIT_1 ? 0x14U : 0x38U);
+    uintptr_t ctrl_reg = ESP_LP_ADC_BASE + (unit == ADC_UNIT_1 ? 0x0CU : 0x30U);
+    uint32_t shift = pad * 2U;
+    WRITE_PERI_REG(atten_reg, (READ_PERI_REG(atten_reg) & ~(3U << shift)) | ((uint32_t) atten << shift));
+    uint32_t ctrl = (1U << 31) | (1U << 18) | (1U << (19U + pad));
+    /* adc_oneshot_ll_start: the 0 -> 1 start edge resets DONE. DONE and
+     * data are in MEASn_CTRL2, not the digital controller interrupt/result
+     * registers. IDF's LP oneshot clear_event is deliberately a no-op.
+     */
+    WRITE_PERI_REG(ctrl_reg, ctrl);
+    WRITE_PERI_REG(ctrl_reg, ctrl | (1U << 17));
+    rtems_counter_ticks start = rtems_counter_read();
+    rtems_counter_ticks timeout = rtems_counter_nanoseconds_to_ticks(1000000);
+    uint32_t raw;
+    do {
+        raw = READ_PERI_REG(ctrl_reg);
+        if (raw & (1U << 16)) {
+            /* Release start and pad selection, also on timeout below. */
+            WRITE_PERI_REG(ctrl_reg, (1U << 31) | (1U << 18));
+            return (int) (raw & 0xFFFU);
+        }
+    } while (rtems_counter_difference(rtems_counter_read(), start) < timeout);
+    WRITE_PERI_REG(ctrl_reg, (1U << 31) | (1U << 18));
+    return -1;
+#else
     uint32_t done = 1U << (unit == ADC_UNIT_1 ? 31 : 30);
 #if defined(RTEMS_BOARD_ESP32S31)
     UNUSED(atten); /* S31's fixed-range ADC has no attenuation control in ESP-IDF. */
@@ -333,6 +404,7 @@ static int esp_adc_read_raw(adc_unit_t unit, adc_channel_t channel, adc_atten_t 
     return (int) ((raw & 0x1FFFFU) >> 5); /* Preserve the API's 12-bit default. */
 #else
     return (int) (raw & 0xFFFU);
+#endif
 #endif
 }
 #endif

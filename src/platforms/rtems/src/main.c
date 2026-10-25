@@ -48,6 +48,17 @@
 #include <module.h>
 #include <utils.h>
 
+#if defined(RTEMS_BOARD_ESP32)
+/*
+ * Reserve padding in .bsp_start_data so that flash offsets 0x1000 and 0x2000
+ * (which esp-emu and ROM probe for ESP second-stage bootloader images) contain
+ * zero padding rather than arbitrary instruction code that might happen to
+ * start with the 0xE9 ESP image magic byte.
+ */
+__attribute__((section(".bsp_start_data"), used))
+static const uint8_t esp_boot_pad[0x3000];
+#endif
+
 #include <scheduler.h>
 #include <smp.h>
 

@@ -59,11 +59,11 @@ system_info_smoke() ->
         ChipInfo when is_map(ChipInfo) ->
             <<"riscv32-esp-rtems">> = SystemArchitecture,
             Model = maps:get(model, ChipInfo),
-            true = lists:member(Model, [esp32_c3, esp32_c5, esp32_c6, esp32_s31]),
+            true = lists:member(Model, [esp32_c3, esp32_c5, esp32_c6, esp32_s31, esp32_p4]),
             Cores = maps:get(cores, ChipInfo),
             true = is_integer(Cores) andalso Cores >= 1,
             Features = maps:get(features, ChipInfo),
-            true = is_list(Features) andalso lists:member(bgn, Features),
+            true = is_list(Features) andalso (lists:member(bgn, Features) orelse Model =:= esp32_p4),
             erlang:display({system_info_chip, Model, Cores, Features, ok})
     end,
 
@@ -413,6 +413,7 @@ adc_smoke() ->
         {ok, Unit} ->
             Pin = case erlang:system_info(esp32_chip_info) of
                 #{model := esp32_s31} -> 42;
+                #{model := esp32_p4} -> 16;
                 _ -> 2
             end,
             {'EXIT', {badarg, _}} = (catch esp_adc:acquire(59, Unit)),
@@ -443,7 +444,7 @@ flash_smoke() ->
 
             % Parameter validation: invalid offset / length badargs
             {'EXIT', {badarg, _}} = (catch esp:flash_read(-1, 16)),
-            {'EXIT', {badarg, _}} = (catch esp:flash_read(16#400000 + 1, 16)),
+            {'EXIT', {badarg, _}} = (catch esp:flash_read(FlashSize + 1, 16)),
             {'EXIT', {badarg, _}} = (catch esp:flash_write(-1, <<"data">>)),
             {'EXIT', {badarg, _}} = (catch esp:flash_write(0, not_a_binary)),
             {'EXIT', {badarg, _}} = (catch esp:flash_erase_sector(-1)),

@@ -45,7 +45,9 @@
 
 // Prototypes for ROM symbols
 extern uint32_t spi_flash_get_chip_size(void);
-#if defined(RTEMS_BOARD_ESP32S31)
+#if defined(RTEMS_BOARD_ESP32P4)
+extern int Cache_Invalidate_Addr(uint32_t map, uint32_t addr, uint32_t size);
+#elif defined(RTEMS_BOARD_ESP32S31)
 /* The S31 ROM exposes the generic cache invalidate rather than the I-cache
  * specific one named by the other parts. */
 extern void Cache_Invalidate_All(void);
@@ -59,9 +61,17 @@ extern esp_rom_spiflash_result_t esp_rom_spiflash_unlock(void);
 static uint32_t s_flash_chip_size = 0;
 RTEMS_INTERRUPT_LOCK_DEFINE(static, s_flash_lock, "flash_lock")
 
-static void flash_cache_flush(void)
+static void flash_cache_flush(uint32_t offset, uint32_t size)
 {
+#if defined(RTEMS_BOARD_ESP32P4)
+    /* ESP-IDF rom/cache.h CACHE_MAP_MASK: both instruction caches, D-cache
+     * and L2. Invalidate only mapped flash, preserving dirty RAM cache lines. */
+    Cache_Invalidate_Addr((1U << 0) | (1U << 1) | (1U << 4) | (1U << 5), 0x40000000U + offset, size);
+#else
+    UNUSED(offset);
+    UNUSED(size);
     Cache_Invalidate_ICache_All();
+#endif
 }
 
 bool esp32c3_flash_init(void)
@@ -187,7 +197,7 @@ int esp32c3_flash_write(uint32_t offset, const void *src, size_t size)
 
         esp_rom_spiflash_unlock();
         esp_rom_spiflash_result_t res = esp_rom_spiflash_write(aligned_offset, word_buf, (int32_t) aligned_write_len);
-        flash_cache_flush();
+        flash_cache_flush(aligned_offset, aligned_write_len);
 
         rtems_interrupt_lock_release(&s_flash_lock, &lock_context);
 
@@ -216,7 +226,7 @@ int esp32c3_flash_erase_sector(uint32_t sector_num)
 
     esp_rom_spiflash_unlock();
     esp_rom_spiflash_result_t res = esp_rom_spiflash_erase_sector(sector_num);
-    flash_cache_flush();
+    flash_cache_flush(sector_num * FLASH_SECTOR_SIZE, FLASH_SECTOR_SIZE);
 
     rtems_interrupt_lock_release(&s_flash_lock, &lock_context);
 

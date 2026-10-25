@@ -54,6 +54,10 @@
 #if defined(RTEMS_BOARD_ESP32S31)
 #define ESP_RTC_RAM_BASE 0x2E000000U
 #define ESP_TIMER_WAKE_BIT 13
+#elif defined(RTEMS_BOARD_ESP32P4)
+/* P4 retention storage lives in its 32 KiB LP RAM, not at the C3 RTC base. */
+#define ESP_RTC_RAM_BASE 0x50108000U
+#define ESP_TIMER_WAKE_BIT 4
 #else
 #define ESP_RTC_RAM_BASE 0x50000000U
 #if defined(RTEMS_BOARD_ESP32C3)

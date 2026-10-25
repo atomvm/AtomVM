@@ -442,6 +442,8 @@ static term chip_model_atom(GlobalContext *glb)
     return globalcontext_make_atom(glb, ATOM_STR("\x8", "esp32_c6"));
 #elif defined(RTEMS_BOARD_ESP32S31)
     return globalcontext_make_atom(glb, ATOM_STR("\x9", "esp32_s31"));
+#elif defined(RTEMS_BOARD_ESP32P4)
+    return globalcontext_make_atom(glb, ATOM_STR("\x8", "esp32_p4"));
 #else
 #error "Unsupported RTEMS ESP32 board"
 #endif
@@ -449,7 +451,7 @@ static term chip_model_atom(GlobalContext *glb)
 
 static int chip_cores(void)
 {
-#if defined(RTEMS_BOARD_ESP32S31)
+#if defined(RTEMS_BOARD_ESP32S31) || defined(RTEMS_BOARD_ESP32P4)
     return 2;
 #else
     return 1;
@@ -458,11 +460,15 @@ static int chip_cores(void)
 
 static unsigned int chip_features(void)
 {
+#if defined(RTEMS_BOARD_ESP32P4)
+    return 0;
+#else
     unsigned int features = RTEMS_CHIP_FEATURE_WIFI_BGN | RTEMS_CHIP_FEATURE_BLE;
 #if defined(RTEMS_BOARD_ESP32S31)
     features |= RTEMS_CHIP_FEATURE_BT;
 #endif
     return features;
+#endif
 }
 
 static term chip_features_to_term(Context *ctx)
@@ -524,7 +530,9 @@ term sys_get_info(Context *ctx, term key)
 static int esp32_hardware_poll(void *data, unsigned char *output, size_t len, size_t *olen)
 {
     (void) data;
-#if defined(RTEMS_BOARD_ESP32S31)
+#if defined(RTEMS_BOARD_ESP32P4)
+    uintptr_t rng_reg = 0x501101A4U; /* LP_SYSTEM_REG_RNG_DATA_REG */
+#elif defined(RTEMS_BOARD_ESP32S31)
     uintptr_t rng_reg = 0x2081403CU; /* TRNG_SW_READ_REG */
 #elif defined(RTEMS_BOARD_ESP32C6) || defined(RTEMS_BOARD_ESP32C5)
     uintptr_t rng_reg = 0x600B2808U;

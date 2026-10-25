@@ -51,13 +51,15 @@ elseif(RTEMS_ARCH STREQUAL "riscv" AND RTEMS_BSP_NAME MATCHES "esp32")
         set(_rtems_board_default "esp32c5")
     elseif(RTEMS_BSP_NAME MATCHES "esp32s31")
         set(_rtems_board_default "esp32s31")
+    elseif(RTEMS_BSP_NAME MATCHES "esp32p4")
+        set(_rtems_board_default "esp32p4")
     else()
         set(_rtems_board_default "esp32c3")
     endif()
 endif()
 set(RTEMS_BOARD "${_rtems_board_default}" CACHE STRING
-    "RTEMS board integration (generic, qemu, grisp2, esp32c3, esp32c5, esp32c6, or esp32s31)")
-set_property(CACHE RTEMS_BOARD PROPERTY STRINGS generic qemu grisp2 esp32c3 esp32c5 esp32c6 esp32s31)
+    "RTEMS board integration (generic, qemu, grisp2, esp32c3, esp32c5, esp32c6, esp32s31, or esp32p4)")
+set_property(CACHE RTEMS_BOARD PROPERTY STRINGS generic qemu grisp2 esp32c3 esp32c5 esp32c6 esp32s31 esp32p4)
 
 if(RTEMS_BOARD MATCHES "^esp32")
     if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -75,9 +77,10 @@ if(NOT RTEMS_BOARD STREQUAL "generic" AND
    NOT RTEMS_BOARD STREQUAL "esp32c3" AND
    NOT RTEMS_BOARD STREQUAL "esp32c5" AND
    NOT RTEMS_BOARD STREQUAL "esp32c6" AND
-   NOT RTEMS_BOARD STREQUAL "esp32s31")
+   NOT RTEMS_BOARD STREQUAL "esp32s31" AND
+   NOT RTEMS_BOARD STREQUAL "esp32p4")
     message(FATAL_ERROR
-        "Unsupported RTEMS_BOARD='${RTEMS_BOARD}' (use generic, qemu, grisp2, esp32c3, esp32c5, esp32c6, or esp32s31)")
+        "Unsupported RTEMS_BOARD='${RTEMS_BOARD}' (use generic, qemu, grisp2, esp32c3, esp32c5, esp32c6, esp32s31, or esp32p4)")
 endif()
 
 if(RTEMS_BOARD STREQUAL "grisp2" AND
@@ -87,9 +90,9 @@ endif()
 if(RTEMS_BOARD STREQUAL "grisp2" AND NOT RTEMS_VERSION STREQUAL "6")
     message(FATAL_ERROR "RTEMS_BOARD=grisp2 requires RTEMS_VERSION=6")
 endif()
-if((RTEMS_BOARD STREQUAL "esp32c3" OR RTEMS_BOARD STREQUAL "esp32c5" OR RTEMS_BOARD STREQUAL "esp32c6" OR RTEMS_BOARD STREQUAL "esp32s31") AND
+if((RTEMS_BOARD STREQUAL "esp32c3" OR RTEMS_BOARD STREQUAL "esp32c5" OR RTEMS_BOARD STREQUAL "esp32c6" OR RTEMS_BOARD STREQUAL "esp32s31" OR RTEMS_BOARD STREQUAL "esp32p4") AND
    (NOT RTEMS_ARCH STREQUAL "riscv" OR NOT RTEMS_BSP_NAME MATCHES "esp32"))
-    message(FATAL_ERROR "RTEMS_BOARD=${RTEMS_BOARD} requires a RISC-V esp32 BSP (e.g. riscv/esp32c3db, riscv/esp32c5db, riscv/esp32c6db, or riscv/esp32s31db)")
+    message(FATAL_ERROR "RTEMS_BOARD=${RTEMS_BOARD} requires a RISC-V esp32 BSP (e.g. riscv/esp32c3db, riscv/esp32c5db, riscv/esp32c6db, riscv/esp32s31db, or riscv/esp32p4db)")
 endif()
 
 option(RTEMS_BT "Build ESP32 Bluetooth controller support (C3 or C5)" OFF)

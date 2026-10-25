@@ -952,6 +952,8 @@ jobs:
             cache_key: riscv-esp32c3db-v4
             rtems_version: "7"
             prefix: /home/runner/rtems/7
+            has_wifi: true
+            has_smp: false
           - arch: riscv
             bsp: riscv/esp32c5db
             bsp_name: esp32c5db
@@ -962,6 +964,8 @@ jobs:
             cache_key: riscv-esp32c5db-v3
             rtems_version: "7"
             prefix: /home/runner/rtems/7
+            has_wifi: true
+            has_smp: false
           - arch: riscv
             bsp: riscv/esp32c6db
             bsp_name: esp32c6db
@@ -972,6 +976,8 @@ jobs:
             cache_key: riscv-esp32c6db-v3
             rtems_version: "7"
             prefix: /home/runner/rtems/7
+            has_wifi: true
+            has_smp: false
           - arch: riscv
             bsp: riscv/esp32s31db
             bsp_name: esp32s31db
@@ -982,6 +988,20 @@ jobs:
             cache_key: riscv-esp32s31db-smp-v3
             rtems_version: "7"
             prefix: /home/runner/rtems/7
+            has_wifi: true
+            has_smp: true
+          - arch: riscv
+            bsp: riscv/esp32p4db
+            bsp_name: esp32p4db
+            chip: esp32p4
+            board: esp32p4
+            bsp_config: esp32p4-wifi-bsp.ini
+            boot_markers: "{uart,read_timeout,ok} {i2c,fdt_alias,ok} {i2c,open,ok} {gpio,esp32c3,ok} {spi,fdt_alias,ok} {spi,open,ok} {rtc_slow,esp32c3,ok}"
+            cache_key: riscv-esp32p4db-smp-v1
+            rtems_version: "7"
+            prefix: /home/runner/rtems/7
+            has_wifi: false
+            has_smp: true
 
     steps:
     - name: Checkout repo
@@ -1074,6 +1094,7 @@ jobs:
         rm -rf "$HOME/rtems-src"
 
     - name: Build rtems-lwip and Wi-Fi stack for ${{ matrix.bsp }}
+      if: matrix.has_wifi != false
       run: |
         set -euo pipefail
         lwip="${{ matrix.prefix }}/${{ matrix.arch }}-rtems${{ matrix.rtems_version }}/${{ matrix.bsp_name }}/lib/liblwip.a"
@@ -1099,7 +1120,11 @@ jobs:
       run: |
         set -euo pipefail
         cmake -S . -B build-host -G Ninja -DAVM_DISABLE_JIT=ON
-        cmake --build build-host -t rtems_boot_test rtems_net_test rtems_grisp2_test rtems_smp_test rtems_peripheral_test atomvmlib-rtems rtems_${{ matrix.chip }}_wifi_test
+        targets=(rtems_boot_test rtems_net_test rtems_grisp2_test rtems_smp_test rtems_peripheral_test atomvmlib-rtems)
+        if [ "${{ matrix.has_wifi }}" != "false" ]; then
+          targets+=(rtems_${{ matrix.chip }}_wifi_test)
+        fi
+        cmake --build build-host -t "${targets[@]}"
         mkdir -p src/platforms/rtems/build
         ./build-host/tools/packbeam/packbeam create -p -r -s test_boot \
           src/platforms/rtems/build/rtems_boot.avm \
@@ -1113,10 +1138,12 @@ jobs:
           src/platforms/rtems/build/rtems_net.avm \
           build-host/src/platforms/rtems/tests/test_erl_sources/test_net.beam \
           build-host/libs/atomvmlib-rtems.avm
-        ./build-host/tools/packbeam/packbeam create -p -r -s test_${{ matrix.chip }}_wifi \
-          src/platforms/rtems/build/rtems_${{ matrix.chip }}_wifi.avm \
-          build-host/src/platforms/rtems/tests/test_erl_sources/test_${{ matrix.chip }}_wifi.beam \
-          build-host/libs/atomvmlib-rtems.avm
+        if [ "${{ matrix.has_wifi }}" != "false" ]; then
+          ./build-host/tools/packbeam/packbeam create -p -r -s test_${{ matrix.chip }}_wifi \
+            src/platforms/rtems/build/rtems_${{ matrix.chip }}_wifi.avm \
+            build-host/src/platforms/rtems/tests/test_erl_sources/test_${{ matrix.chip }}_wifi.beam \
+            build-host/libs/atomvmlib-rtems.avm
+        fi
 
     - name: Cross-compile AtomVM for ${{ matrix.bsp }}
       run: |
@@ -1143,7 +1170,7 @@ jobs:
         sh "$RUNNER_TEMP/esp-emu-install.sh" --version "${RTEMS_ESP_EMU_VERSION}"
         export PATH="$HOME/.local/bin:$PATH"
         emu_opts=(--timeout 30s)
-        if [ "${{ matrix.chip }}" = "esp32s31" ]; then
+        if [ "${{ matrix.chip }}" = "esp32s31" ] || [ "${{ matrix.chip }}" = "esp32p4" ]; then
           emu_opts=(--batch-size 50000 --timeout 90s)
         fi
         output=$(esp-emu --chip ${{ matrix.chip }} "${emu_opts[@]}" --firmware "$BIN" --exit-on "Return value: ok" 2>&1)
@@ -1198,6 +1225,7 @@ jobs:
         grep -Fq 'Return value: ok' <<< "$output"
 
     - name: Cross-compile AtomVM Wi-Fi and HTTP test for ${{ matrix.chip }}
+      if: matrix.has_wifi != false
       run: |
         set -euo pipefail
         cmake -S src/platforms/rtems -B src/platforms/rtems/build-wifi -G Ninja \
@@ -1210,6 +1238,7 @@ jobs:
         cmake --build src/platforms/rtems/build-wifi
 
     - name: Run Wi-Fi and HTTP test on esp-emulator
+      if: matrix.has_wifi != false
       run: |
         set -euo pipefail
         BIN="src/platforms/rtems/build-wifi/AtomVM-${{ matrix.bsp_name }}.bin"
@@ -1250,7 +1279,7 @@ jobs:
         echo "${{ matrix.chip }} Wi-Fi network and SNTP test suite completed successfully"
 
     - name: Run SMP multi-core test on esp-emulator
-      if: matrix.chip == 'esp32s31'
+      if: matrix.has_smp == true
       run: |
         set -euo pipefail
         cmake -S src/platforms/rtems -B src/platforms/rtems/build-smp -G Ninja \
@@ -1265,19 +1294,19 @@ jobs:
         test -f "$BIN"
         export PATH="$HOME/.local/bin:$PATH"
         set +e
-        output=$(esp-emu --chip esp32s31 --batch-size 50000 --firmware "$BIN" --timeout 90s --exit-on "Return value: ok" 2>&1)
+        output=$(esp-emu --chip ${{ matrix.chip }} --batch-size 50000 --firmware "$BIN" --timeout 90s --exit-on "Return value: ok" 2>&1)
         status=$?
         set -e
         printf '%s\n' "$output"
         if ! grep -Fq '{smp_parallel_compute,ok}' <<< "$output"; then
-          echo "::error::esp32s31 SMP test failed (status ${status})"
+          echo "::error::${{ matrix.chip }} SMP test failed (status ${status})"
           exit 1
         fi
         if ! grep -q "Return value: ok" <<< "$output"; then
-          echo "::error::esp32s31 SMP test did not return ok (status ${status})"
+          echo "::error::${{ matrix.chip }} SMP test did not return ok (status ${status})"
           exit 1
         fi
-        echo "esp32s31 SMP test completed successfully"
+        echo "${{ matrix.chip }} SMP test completed successfully"
 
     - name: Upload firmware artifact
       uses: actions/upload-artifact@v4

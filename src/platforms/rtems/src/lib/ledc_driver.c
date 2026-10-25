@@ -77,6 +77,13 @@
 #define ESP_LEDC_GPIO_ENABLE_SET 0x60091024U
 #define ESP_LEDC_CLOCK_REG 0x60096034U
 #define ESP_LEDC_CHANNELS 6
+#elif defined(RTEMS_BOARD_ESP32P4)
+#define ESP_LEDC_BASE 0x500D3000U
+#define ESP_LEDC_GPIO_OUT_SEL 0x500E0558U
+#define ESP_LEDC_SIGNAL0 126U
+#define ESP_LEDC_IOMUX0 0x500E1004U
+#define ESP_LEDC_GPIO_ENABLE_SET 0x500E0024U
+#define ESP_LEDC_CHANNELS 8
 #elif defined(RTEMS_BOARD_ESP32S31)
 /* Expose LEDC0; LEDC1 is a separate controller. */
 #define ESP_LEDC_BASE 0x20392000U
@@ -113,6 +120,10 @@ static void esp_ledc_enable_clock(void)
     WRITE_PERI_REG(0x600C0018U, READ_PERI_REG(0x600C0018U) & ~(1U << 11));
     /* XTAL is stable across APB frequency changes. */
     WRITE_PERI_REG(ESP_LEDC_BASE + 0xD0U, (READ_PERI_REG(ESP_LEDC_BASE + 0xD0U) & ~3U) | 3U | (1U << 31));
+#elif defined(RTEMS_BOARD_ESP32P4)
+    WRITE_PERI_REG(0x500E6020U, READ_PERI_REG(0x500E6020U) | 1U);
+    WRITE_PERI_REG(0x500E609CU, READ_PERI_REG(0x500E609CU) | (1U << 2));
+    WRITE_PERI_REG(0x500E60C4U, READ_PERI_REG(0x500E60C4U) & ~(1U << 29));
 #elif defined(RTEMS_BOARD_ESP32S31)
     uint32_t clock = READ_PERI_REG(ESP_LEDC_CLOCK_REG);
     clock = (clock & ~((3U << 3) | (1U << 1))) | (1U << 0) | (1U << 5);

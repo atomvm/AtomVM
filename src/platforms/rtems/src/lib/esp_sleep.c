@@ -166,6 +166,8 @@ static void prepare_gpio(uint32_t mask, int mode, struct gpio_sleep_state *saved
 #if defined(RTEMS_BOARD_ESP32S31)
     REG(0x20710034U) |= BIT(30); /* LP IOMUX clock */
     REG(0x207133F8U) |= 1U;
+#elif defined(RTEMS_BOARD_ESP32P4)
+    REG(0x5012B000U) |= 1U; /* LP IOMUX clock */
 #else
     REG(0x600B2800U) |= BIT(27); /* LP IO clock */
 #if defined(RTEMS_BOARD_ESP32C5)
@@ -219,6 +221,8 @@ static void program_alarm(uint64_t usecs)
 #else
 #if defined(RTEMS_BOARD_ESP32S31)
     const uintptr_t timer = 0x20800000U;
+#elif defined(RTEMS_BOARD_ESP32P4)
+    const uintptr_t timer = 0x50112000U;
 #else
     const uintptr_t timer = 0x600B0C00U;
 #endif

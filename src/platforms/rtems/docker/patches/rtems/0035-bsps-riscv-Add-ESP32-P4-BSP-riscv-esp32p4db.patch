@@ -1,0 +1,1074 @@
+From: Peter M <petermm@gmail.com>
+Subject: [PATCH] bsps/riscv: Add ESP32-P4 v3 BSP (riscv/esp32p4db)
+
+Support revision 3.x only, with ESP-IDF clock transition and calibration
+ordering and dual-core SMP. Reject incompatible silicon before clock setup.
+
+Signed-off-by: Peter Madsen-Mygdal <petermm@gmail.com>
+---
+ bsps/riscv/esp32/bt/bt_c3.c                        |   2 +-
+ bsps/riscv/esp32/console/uart_c3.c                 |  14 +-
+ bsps/riscv/esp32/gpio/gpio_c3.c                    |  13 +-
+ bsps/riscv/esp32/i2c/i2c_c3.c                      |  11 +-
+ bsps/riscv/esp32/include/bsp/irq.h                 |   3 +-
+ bsps/riscv/esp32/include/p4/chip_definitions.h     | 176 +++++++++++++++++++++
+ bsps/riscv/esp32/irq/irq_c3.c                      |  86 +++++++---
+ bsps/riscv/esp32/spi/spi_c3.c                      |  10 +-
+ bsps/riscv/esp32/start/bspsmp.c                    |  52 +++++-
+ bsps/riscv/esp32/start/bspstart.c                  | 119 +++++++++++++-
+ spec/build/bsps/riscv/esp32/abi.yml                |   4 +
+ spec/build/bsps/riscv/esp32/bspesp32p4db.yml       |  22 +++
+ spec/build/bsps/riscv/esp32/optchipvariant.yml     |   2 +
+ .../bsps/riscv/esp32/optcodeflashmappedbase.yml    |   4 +-
+ .../bsps/riscv/esp32/optdataflashmappedbase.yml    |   4 +-
+ spec/build/bsps/riscv/esp32/optdramromreserve.yml  |   4 +-
+ spec/build/bsps/riscv/esp32/optramcodeorigin.yml   |   2 +
+ spec/build/bsps/riscv/esp32/optramorigin.yml       |   2 +
+ spec/build/bsps/riscv/esp32/optramsize.yml         |   2 +
+ spec/build/bsps/riscv/esp32/optvariant.yml         |   2 +
+ spec/build/bsps/riscv/optbspstartcopysections.yml  |   1 +
+ spec/build/bsps/riscv/optespressifdirectboot.yml   |   1 +
+ spec/build/cpukit/optsmp.yml                       |   1 +
+ 23 files changed, 494 insertions(+), 43 deletions(-)
+
+diff --git a/bsps/riscv/esp32/bt/bt_c3.c b/bsps/riscv/esp32/bt/bt_c3.c
+index 281fe9a686..83cbd90c38 100644
+--- a/bsps/riscv/esp32/bt/bt_c3.c
++++ b/bsps/riscv/esp32/bt/bt_c3.c
+@@ -40,7 +40,7 @@
+ 
+ #include <rtems/counter.h>
+ 
+-#if defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+ 
+ void bsp_esp32_bt_get_state( bsp_esp32_bt_state *state )
+ {
+diff --git a/bsps/riscv/esp32/console/uart_c3.c b/bsps/riscv/esp32/console/uart_c3.c
+index 6487533b7d..6d92dde61c 100644
+--- a/bsps/riscv/esp32/console/uart_c3.c
++++ b/bsps/riscv/esp32/console/uart_c3.c
+@@ -72,7 +72,7 @@
+ #define UART_STATUS    0x001c
+ #define UART_CONF0     0x0020
+ #define UART_CONF1     0x0024
+-#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+ #define UART_CLK_CONF  0x0088
+ #else
+ #define UART_CLK_CONF  0x0078
+@@ -133,7 +133,13 @@
+  * manual rather than from a passing test, and is called out here so it is not
+  * mistaken for tested.
+  */
+-#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++#define GPIO_ENABLE_W1TS_REG  ( GPIO_BASE + 0x0024 )
++#define GPIO_FUNC_IN_SEL_REG( sig )  ( GPIO_BASE + 0x0158 + 4 * (sig) )
++#define GPIO_FUNC_OUT_SEL_REG( pin ) ( GPIO_BASE + 0x0558 + 4 * (pin) )
++#define IO_MUX_PIN_REG( n )   ( IO_MUX_BASE + 0x0004 + 4 * (n) )
++#define GPIO_FUNC_IN_SEL_ENA  ( 1U << 7 )
++#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
+ #define GPIO_ENABLE_W1TS_REG  ( GPIO_BASE + 0x0038 )
+ #define GPIO_FUNC_IN_SEL_REG( sig )  ( GPIO_BASE + 0x02f4 + 4 * (sig) )
+ #define GPIO_FUNC_OUT_SEL_REG( pin ) ( GPIO_BASE + 0x0af4 + 4 * (pin) )
+@@ -155,7 +161,7 @@
+ /* GPIO matrix signal numbers.  The same number names the transmit signal out
+  * and the receive signal in, which is a coincidence of the map rather than a
+  * rule, so they are spelled separately. */
+-#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+ #define UART1_SIG_TX 13
+ #define UART1_SIG_RX 13
+ #else
+@@ -289,7 +295,7 @@ static bool esp32c3_uart_set_baud( esp32c3_uart_context *ctx, uint32_t baud )
+     return false;
+   }
+ 
+-#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+   /* This part has no SCLK_SEL or SCLK_EN in the UART's own clock register: the
+    * source (REF_F80M) and divider live in HP_SYS_CLKRST and come up correct on
+    * reset, so only the transmit and receive clock gates need asserting. */
+diff --git a/bsps/riscv/esp32/gpio/gpio_c3.c b/bsps/riscv/esp32/gpio/gpio_c3.c
+index e0ba6e4462..ed5cb15d36 100644
+--- a/bsps/riscv/esp32/gpio/gpio_c3.c
++++ b/bsps/riscv/esp32/gpio/gpio_c3.c
+@@ -60,7 +60,16 @@
+ #define GPIO_OUT          0x0004
+ #define GPIO_OUT_W1TS     0x0008
+ #define GPIO_OUT_W1TC     0x000c
+-#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++#define GPIO_ENABLE       0x0020
++#define GPIO_ENABLE_W1TS  0x0024
++#define GPIO_ENABLE_W1TC  0x0028
++#define GPIO_IN           0x003c
++#define GPIO_STATUS       0x0044
++#define GPIO_STATUS_W1TC  0x004c
++#define GPIO_PIN( n )     ( 0x0074 + 4 * (n) )
++#define GPIO_FUNC_OUT_SEL_CFG( n ) ( 0x0558 + 4 * (n) )
++#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
+ #define GPIO_ENABLE       0x0034
+ #define GPIO_ENABLE_W1TS  0x0038
+ #define GPIO_ENABLE_W1TC  0x003c
+@@ -111,7 +120,7 @@
+ /* IO_MUX function number that routes a pad to the GPIO peripheral, and the
+  * GPIO matrix signal that means "driven by GPIO_OUT". */
+ #define IO_MUX_FUNC_GPIO  1
+-#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+ #define SIG_GPIO_OUT_IDX  256
+ #else
+ #define SIG_GPIO_OUT_IDX  128
+diff --git a/bsps/riscv/esp32/i2c/i2c_c3.c b/bsps/riscv/esp32/i2c/i2c_c3.c
+index a26e34ad8b..4ef6d6d509 100644
+--- a/bsps/riscv/esp32/i2c/i2c_c3.c
++++ b/bsps/riscv/esp32/i2c/i2c_c3.c
+@@ -148,7 +148,14 @@
+  * the alternative is a driver that transfers correctly into a pad that is not
+  * connected to it.
+  */
+-#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++#define GPIO_ENABLE_W1TS_REG  ( GPIO_BASE + 0x0024 )
++#define GPIO_PIN_REG( n )     ( GPIO_BASE + 0x0074 + 4 * (n) )
++#define GPIO_FUNC_IN_SEL_REG( sig )  ( GPIO_BASE + 0x0158 + 4 * (sig) )
++#define GPIO_FUNC_OUT_SEL_REG( pin ) ( GPIO_BASE + 0x0558 + 4 * (pin) )
++#define IO_MUX_PIN_REG( n )   ( IO_MUX_BASE + 0x0004 + 4 * (n) )
++#define GPIO_FUNC_IN_SEL_ENA  ( 1U << 7 )   /* take the signal from the matrix */
++#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
+ #define GPIO_ENABLE_W1TS_REG  ( GPIO_BASE + 0x0038 )
+ #define GPIO_PIN_REG( n )     ( GPIO_BASE + 0x00f4 + 4 * (n) )
+ #define GPIO_FUNC_IN_SEL_REG( sig )  ( GPIO_BASE + 0x02f4 + 4 * (sig) )
+@@ -177,7 +184,7 @@
+ #elif defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H)
+ #define I2C_SIG_SCL 45
+ #define I2C_SIG_SDA 46
+-#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+ #define I2C_SIG_SCL 68
+ #define I2C_SIG_SDA 69
+ #else
+diff --git a/bsps/riscv/esp32/include/bsp/irq.h b/bsps/riscv/esp32/include/bsp/irq.h
+index 02737b88fe..79d6d9c603 100644
+--- a/bsps/riscv/esp32/include/bsp/irq.h
++++ b/bsps/riscv/esp32/include/bsp/irq.h
+@@ -51,9 +51,10 @@ typedef void ( *gpio_output_set_t )(
+ 
+ #include RTEMS_XSTRING( ESPRESSIF_CHIP_HEADER )
+ 
+-#if defined(RTEMS_SMP) && defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(RTEMS_SMP) && (defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H))
+ /* Keep inter-processor interrupts separate from the Wi-Fi channel (1). */
+ #define BSP_ESP32S31_IPI_CHANNEL 31U
++#define BSP_ESP32P4_IPI_CHANNEL  31U
+ #endif
+ 
+ #endif /* LIBBSP_ESP32_BSP_IRQ_H */
+diff --git a/bsps/riscv/esp32/include/p4/chip_definitions.h b/bsps/riscv/esp32/include/p4/chip_definitions.h
+new file mode 100644
+index 0000000000..789ca3fabf
+--- /dev/null
++++ b/bsps/riscv/esp32/include/p4/chip_definitions.h
+@@ -0,0 +1,176 @@
++/* SPDX-License-Identifier: BSD-2-Clause */
++
++/**
++ * @file
++ *
++ * @ingroup ESP32
++ *
++ * @brief Interrupt and address definitions specific to ESP32-P4.
++ */
++
++/*
++ * Copyright (C) 2026 Peter M. <petermm@gmail.com>
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ */
++
++#ifndef LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H
++#define LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H
++
++#ifndef ASM
++
++#include <stdint.h>
++
++#endif /* ASM */
++
++/*
++ * The ESP32-P4 routes 136 peripheral interrupt sources (0-135) through the
++ * interrupt matrix onto 32 CLIC external channels (CLIC IDs 16-47).
++ */
++#define RISCV_MAXIMUM_EXTERNAL_INTERRUPTS 136
++#define BSP_INTERRUPT_VECTOR_COUNT        RISCV_MAXIMUM_EXTERNAL_INTERRUPTS
++
++#define BSP_INTERRUPT_CUSTOM_VALID_VECTOR
++
++#define BSP_GPIO_PIN_COUNT     55
++#define BSP_GPIO_PINS_PER_BANK 32
++
++/*
++ * The interrupt source numbers below are indices into the hardware source
++ * table in ESP-IDF's soc/interrupts.h for ESP32-P4.
++ */
++#define LP_RTC_INTR                  0
++#define LP_WDT_INTR                  1
++#define LP_TIMER_REG0_INTR           2
++#define LP_TIMER_REG1_INTR           3
++#define MB_HP_INTR                   4
++#define MB_LP_INTR                   5
++#define PMU_0_INTR                   6
++#define PMU_1_INTR                   7
++#define LP_ANAPERI_INTR              8
++#define LP_ADC_INTR                  9
++#define LP_GPIO_INTR                10
++#define LP_I2C_INTR                 11
++#define LP_I2S_INTR                 12
++#define LP_SPI_INTR                 13
++#define LP_TOUCH_INTR               14
++#define LP_TSENS_INTR               15
++#define LP_UART_INTR                16
++#define LP_EFUSE_INTR               17
++#define LP_SW_INTR                  18
++#define LP_SYSREG_INTR              19
++#define LP_HUK_INTR                 20
++#define SYS_ICM_INTR                21
++#define USB_SERIAL_JTAG_INTR        22
++#define SDIO_HOST_INTR              23
++#define DW_GDMA_INTR                24
++#define SPI2_INTR                   25
++#define SPI3_INTR                   26
++#define I2S0_INTR                   27
++#define I2S1_INTR                   28
++#define I2S2_INTR                   29
++#define UHCI0_INTR                  30
++#define UART0_INTR                  31
++#define UART1_INTR                  32
++#define UART2_INTR                  33
++#define UART3_INTR                  34
++#define UART4_INTR                  35
++#define LCD_CAM_INTR                36
++#define ADC_INTR                    37
++#define PWM0_INTR                   38
++#define PWM1_INTR                   39
++#define TWAI0_INTR                  40
++#define TWAI1_INTR                  41
++#define TWAI2_INTR                  42
++#define RMT_INTR                    43
++#define I2C0_INTR                   44
++#define I2C1_INTR                   45
++#define TIMERGRP0_T0_INTR           46
++#define TIMERGRP0_T1_INTR           47
++#define TIMERGRP0_WDT_INTR          48
++#define TIMERGRP1_T0_INTR           49
++#define TIMERGRP1_T1_INTR           50
++#define TIMERGRP1_WDT_INTR          51
++#define LEDC0_INTR                  52
++#define SYSTIMER_TARGET0_INTR       53
++#define SYSTIMER_TARGET1_INTR       54
++#define SYSTIMER_TARGET2_INTR       55
++#define RSA_INTR                    68
++#define AES_INTR                    69
++#define SHA_INTR                    70
++#define ECC_INTR                    71
++#define ECDSA_INTR                  72
++#define KM_INTR                     73
++#define GPIO_INTR0                  74
++#define GPIO_INTR1                  75
++#define GPIO_INTR2                  76
++#define GPIO_INTR3                  77
++#define SW_INTR_0                   79
++#define SW_INTR_1                   80
++#define SW_INTR_2                   81
++#define SW_INTR_3                   82
++#define CACHE_INTR                  83
++#define MSPI_FLASH_INTR             84
++#define ETH_MAC_INTR                92
++#define USB_OTG_INTR                93
++#define ASSIST_DEBUG_INTR          127
++
++/* Compatibility aliases used by the shared BSP sources. */
++#define I2S_INTR              I2S0_INTR
++#define UART_INTR             UART0_INTR
++#define I2C_EXT0_INTR         I2C0_INTR
++#define TG_T0_INTR            TIMERGRP0_T0_INTR
++#define TG_WDT_INTR           TIMERGRP0_WDT_INTR
++#define TG1_T0_INTR           TIMERGRP1_T0_INTR
++#define TG1_WDT_INTR          TIMERGRP1_WDT_INTR
++#define LEDC_INTR             LEDC0_INTR
++#define GPIO_PROCPU_INTR      GPIO_INTR0
++
++#define RISCV_INTERRUPT_VECTOR_SOFTWARE SW_INTR_0
++#define RISCV_INTERRUPT_VECTOR_TIMER    SYSTIMER_TARGET0_INTR
++
++/* On-chip peripheral register windows. */
++#define GPIO_BASE            ( (uintptr_t) 0x500E0000U )
++#define IO_MUX_BASE          ( (uintptr_t) 0x500E1000U )
++#define I2C_BASE             ( (uintptr_t) 0x500C4000U )
++#define UART0_BASE           ( (uintptr_t) 0x500CA000U )
++#define UART1_BASE           ( (uintptr_t) 0x500CB000U )
++#define SYSTIMER_BASE        ( (uintptr_t) 0x500E2000U )
++#define USB_SERIAL_JTAG_BASE ( (uintptr_t) 0x500D2000U )
++#define SPI2_BASE            ( (uintptr_t) 0x500D0000U )
++#define TIMG_BASE            ( (uintptr_t) 0x500C2000U )
++#define INT_MATRIX_BASE      ( (uintptr_t) 0x500D6000U )
++#define SYSREG_BASE          ( (uintptr_t) 0x500E5000U )
++
++/* Low-power watchdog */
++#define LP_WDT_BASE          ( (uintptr_t) 0x50116000U )
++#define LP_AON_BASE          ( (uintptr_t) 0x50110000U )
++
++/* CLIC base for ESP32-P4 (16 internal + 32 external interrupt IDs). */
++#define CLIC_BASE            ( (uintptr_t) 0x20800000U )
++
++/* ESP32-P4 ROM function addresses. */
++#define UART_TX_ONE_CHAR_ADDR ( (void *) (uintptr_t) 0x4fc00054 )
++#define UART_RX_ONE_CHAR_ADDR ( (void *) (uintptr_t) 0x4fc00060 )
++#define UART_TX_FLUSH_ADDR    ( (void *) (uintptr_t) 0x4fc00074 )
++
++#endif /* LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H */
+diff --git a/bsps/riscv/esp32/irq/irq_c3.c b/bsps/riscv/esp32/irq/irq_c3.c
+index afc859ac3b..1ead8714ce 100644
+--- a/bsps/riscv/esp32/irq/irq_c3.c
++++ b/bsps/riscv/esp32/irq/irq_c3.c
+@@ -47,7 +47,37 @@ typedef struct peripheral_irq_map {
+   uint8_t             cpu_int;
+ } peripheral_irq_map_t;
+ 
+-#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++static peripheral_irq_map_t irq_mappings[] = {
++  { .peripheral_int = SW_INTR_0, .cpu_int = 1 },
++  { .peripheral_int = SW_INTR_1, .cpu_int = 1 },
++  { .peripheral_int = SW_INTR_2, .cpu_int = 1 },
++  { .peripheral_int = SW_INTR_3, .cpu_int = 1 },
++  { .peripheral_int = GPIO_PROCPU_INTR, .cpu_int = 3 },
++  { .peripheral_int = SPI2_INTR, .cpu_int = 4 },
++  { .peripheral_int = I2S0_INTR, .cpu_int = 5 },
++  { .peripheral_int = UART0_INTR, .cpu_int = 6 },
++  { .peripheral_int = UART1_INTR, .cpu_int = 7 },
++  { .peripheral_int = LEDC0_INTR, .cpu_int = 8 },
++  { .peripheral_int = RMT_INTR, .cpu_int = 9 },
++  { .peripheral_int = LP_WDT_INTR, .cpu_int = 10 },
++  { .peripheral_int = I2C0_INTR, .cpu_int = 11 },
++  { .peripheral_int = I2C1_INTR, .cpu_int = 11 },
++  { .peripheral_int = USB_SERIAL_JTAG_INTR, .cpu_int = 12 },
++  { .peripheral_int = TIMERGRP0_T0_INTR, .cpu_int = 13 },
++  { .peripheral_int = TIMERGRP0_WDT_INTR, .cpu_int = 14 },
++  { .peripheral_int = TIMERGRP1_T0_INTR, .cpu_int = 15 },
++  { .peripheral_int = TIMERGRP1_WDT_INTR, .cpu_int = 14 },
++  { .peripheral_int = SYSTIMER_TARGET0_INTR, .cpu_int = 16 },
++  { .peripheral_int = SYSTIMER_TARGET1_INTR, .cpu_int = 17 },
++  { .peripheral_int = SYSTIMER_TARGET2_INTR, .cpu_int = 18 },
++  { .peripheral_int = RSA_INTR, .cpu_int = 19 },
++  { .peripheral_int = AES_INTR, .cpu_int = 20 },
++  { .peripheral_int = SHA_INTR, .cpu_int = 21 },
++  { .peripheral_int = MSPI_FLASH_INTR, .cpu_int = 22 },
++  { .peripheral_int = ASSIST_DEBUG_INTR, .cpu_int = 23 }
++};
++#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
+ /*
+  * The S31 has 169 peripheral sources and a CLIC, but only 32 usable CPU
+  * channels, so sources are grouped the same way they are on the other parts.
+@@ -232,9 +262,17 @@ static peripheral_irq_map_t irq_mappings[] = {
+ 
+ #define MATRIX_REG( reg ) *( (volatile uint32_t *) ( INT_MATRIX_BASE + reg ) )
+ 
+-#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+ /* These parts have a CLIC, with 16 internal and 32 external interrupt IDs. */
+-#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++#define BSP_CLIC_BASE 0x20800000U
++#define DR_REG_INTMTX_CORE1_BASE 0x500d6800U
++#define INTERRUPT_CORE0_INTR_STATUS_0_REG 0x200
++#define INTERRUPT_CORE0_INTR_STATUS_1_REG 0x204
++#define INTERRUPT_CORE0_INTR_STATUS_2_REG 0x208
++#define INTERRUPT_CORE0_INTR_STATUS_3_REG 0x20c
++#define INTERRUPT_CORE0_INTR_STATUS_4_REG 0x220
++#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
+ #define BSP_CLIC_BASE 0x10800000U
+ #define DR_REG_INTMTX_CORE1_BASE 0x20585800U
+ #define INTERRUPT_CORE0_INTR_STATUS_0_REG 0x2a8
+@@ -416,6 +454,8 @@ static uint8_t int_periph_to_cpu( rtems_vector_number vector )
+ 
+ #if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
+ #define BSP_INTR_STATUS_WORDS 6
++#elif defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++#define BSP_INTR_STATUS_WORDS 5
+ #elif defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H)
+ #define BSP_INTR_STATUS_WORDS 3
+ #else
+@@ -424,7 +464,7 @@ static uint8_t int_periph_to_cpu( rtems_vector_number vector )
+ 
+ static uint32_t get_int_status( size_t word )
+ {
+-#if defined(RTEMS_SMP) && defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(RTEMS_SMP) && (defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H))
+   uintptr_t matrix_base = ( _CPU_SMP_Get_current_processor() != 0 ) ? DR_REG_INTMTX_CORE1_BASE : INT_MATRIX_BASE;
+ #else
+   uintptr_t matrix_base = INT_MATRIX_BASE;
+@@ -443,6 +483,8 @@ static uint32_t get_int_status( size_t word )
+       return *( (volatile uint32_t *) ( matrix_base + INTERRUPT_CORE0_INTR_STATUS_3_REG ) );
+     case 4:
+       return *( (volatile uint32_t *) ( matrix_base + INTERRUPT_CORE0_INTR_STATUS_4_REG ) );
++#endif
++#if BSP_INTR_STATUS_WORDS > 5
+     case 5:
+       return *( (volatile uint32_t *) ( matrix_base + INTERRUPT_CORE0_INTR_STATUS_5_REG ) );
+ #endif
+@@ -485,7 +527,7 @@ static uintptr_t periph_int_to_map_reg( rtems_vector_number vector )
+   return vector * sizeof( uint32_t );
+ }
+ 
+-#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+ /* Unwind CLIC priority before RTEMS may switch threads and enable interrupts.
+  * Nested interrupts must use only the trap handler's final mret. */
+ static inline void esp32_clic_restore_active_level(
+@@ -527,7 +569,7 @@ void _RISCV_Interrupt_dispatch( uintptr_t mcause, Per_CPU_Control *cpu_self )
+   (void) cpu_self;
+ 
+   rtems_vector_number active;
+-#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+   uint32_t interrupt_id = mcause & 0xfffU;
+ 
+   if ( interrupt_id < CLIC_EXTERNAL_INTERRUPT_OFFSET || interrupt_id >= 48U ) {
+@@ -538,14 +580,22 @@ void _RISCV_Interrupt_dispatch( uintptr_t mcause, Per_CPU_Control *cpu_self )
+   uint8_t cpu_vector = mcause & 0x1f;
+ #endif
+ 
+-#if defined(RTEMS_SMP) && defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
+-  if ( cpu_vector == BSP_ESP32S31_IPI_CHANNEL ) {
++#if defined(RTEMS_SMP) && (defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H))
++  if ( cpu_vector == 31U ) {
+     uint32_t cpu_index = _Per_CPU_Get_index( cpu_self );
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
+     if ( cpu_index == 0 ) {
+       *( (volatile uint32_t *) 0x20586010U ) = 0U;
+     } else {
+       *( (volatile uint32_t *) 0x20586014U ) = 0U;
+     }
++#elif defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++    if ( cpu_index == 0 ) {
++      *( (volatile uint32_t *) 0x500E5010U ) = 0U;
++    } else {
++      *( (volatile uint32_t *) 0x500E5014U ) = 0U;
++    }
++#endif
+     _SMP_Inter_processor_interrupt_handler( cpu_self );
+     esp32_clic_restore_active_level( mcause, cpu_self );
+     return;
+@@ -568,7 +618,7 @@ void _RISCV_Interrupt_dispatch( uintptr_t mcause, Per_CPU_Control *cpu_self )
+    */
+   if ( active == NO_ACTIVE_VECTOR ) {
+     esp32_cpu_int_clear( cpu_vector );
+-#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+     esp32_clic_restore_active_level( mcause, cpu_self );
+ #endif
+     return;
+@@ -580,7 +630,7 @@ void _RISCV_Interrupt_dispatch( uintptr_t mcause, Per_CPU_Control *cpu_self )
+ 
+   /* mark interrupt serviced in matrix */
+   bsp_interrupt_clear( active );
+-#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+   esp32_clic_restore_active_level( mcause, cpu_self );
+ #endif
+ }
+@@ -602,7 +652,7 @@ void bsp_interrupt_facility_initialize( void )
+    * reserved one, and nothing here indexes channels by vector.
+    */
+   for ( uint8_t vec = 0; vec < RISCV_MAXIMUM_EXTERNAL_INTERRUPTS; vec++ ) {
+-#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+     bsp_interrupt_set_priority( vec, 6 );
+ #else
+     bsp_interrupt_set_priority( vec, 14 );
+@@ -645,7 +695,7 @@ rtems_status_code bsp_interrupt_get_attributes(
+   attributes->can_get_affinity = false;
+   attributes->can_set_affinity = false;
+   /* priorities range from 1 to 15, but this is expected to be 0-based */
+-#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+   attributes->maximum_priority = 6;
+ #else
+   attributes->maximum_priority = 14;
+@@ -678,7 +728,7 @@ rtems_status_code bsp_interrupt_is_pending(
+   return RTEMS_SUCCESSFUL;
+ }
+ 
+-#if !defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) && !defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) && !defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if !defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) && !defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) && !defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) && !defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+ #define SYSTEM_CPU_INTR_FROM_CPU_0_REG 0x28
+ #define SYSTEM_CPU_INTR_FROM_CPU_1_REG 0x2C
+ #define SYSTEM_CPU_INTR_FROM_CPU_2_REG 0x30
+@@ -687,7 +737,7 @@ rtems_status_code bsp_interrupt_is_pending(
+ #define SYSREG_REG( reg ) *( (volatile uint32_t *) ( SYSREG_BASE + reg ) )
+ #endif
+ 
+-#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+ /* Software interrupts are raised by writing the HP_SYS trigger register of
+  * the matching CPU_INTR_FROM_CPU_n source; the matrix then routes it. */
+ #define SYSREG_REG( reg ) *( (volatile uint32_t *) ( SYSREG_BASE + ( reg ) ) )
+@@ -721,7 +771,7 @@ rtems_status_code bsp_interrupt_raise( rtems_vector_number vector )
+     default:
+       return RTEMS_UNSATISFIED;
+   }
+-#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+   if ( vector >= SW_INTR_0 && vector <= SW_INTR_3 ) {
+     SYSREG_REG( HP_SYSTEM_CPU_INT_FROM_CPU_REG( vector - SW_INTR_0 ) ) = 1U;
+     return RTEMS_SUCCESSFUL;
+@@ -780,7 +830,7 @@ rtems_status_code bsp_interrupt_clear( rtems_vector_number vector )
+     default:
+       break;
+   }
+-#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+   if ( vector >= SW_INTR_0 && vector <= SW_INTR_3 ) {
+     SYSREG_REG( HP_SYSTEM_CPU_INT_FROM_CPU_REG( vector - SW_INTR_0 ) ) = 0U;
+   }
+@@ -834,7 +884,7 @@ rtems_status_code bsp_interrupt_vector_enable( rtems_vector_number vector )
+        */
+       MATRIX_REG(
+         periph_int_to_map_reg( vector )
+-#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+       ) = irq_mappings[ i ].cpu_int + CLIC_EXTERNAL_INTERRUPT_OFFSET;
+ #else
+       ) = irq_mappings[ i ].cpu_int;
+@@ -862,7 +912,7 @@ rtems_status_code bsp_interrupt_set_priority(
+ {
+   uint8_t cpu_int;
+ 
+-#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+   if ( priority > 6U ) {
+     return RTEMS_INVALID_PRIORITY;
+   }
+diff --git a/bsps/riscv/esp32/spi/spi_c3.c b/bsps/riscv/esp32/spi/spi_c3.c
+index e4529e7523..35a3cb752f 100644
+--- a/bsps/riscv/esp32/spi/spi_c3.c
++++ b/bsps/riscv/esp32/spi/spi_c3.c
+@@ -92,7 +92,13 @@
+ 
+ /* Pad routing.  As in the I2C driver, these are GPIO and IO_MUX registers
+  * rather than SPI ones: whoever configures a pin owns its muxing. */
+-#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++#define GPIO_ENABLE_W1TS_REG  ( GPIO_BASE + 0x0024 )
++#define GPIO_FUNC_IN_SEL_REG( sig )  ( GPIO_BASE + 0x0158 + 4 * (sig) )
++#define GPIO_FUNC_OUT_SEL_REG( pin ) ( GPIO_BASE + 0x0558 + 4 * (pin) )
++#define IO_MUX_PIN_REG( n )   ( IO_MUX_BASE + 0x0004 + 4 * (n) )
++#define GPIO_FUNC_IN_SEL_ENA  ( 1U << 7 )
++#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
+ #define GPIO_ENABLE_W1TS_REG  ( GPIO_BASE + 0x0038 )
+ #define GPIO_FUNC_IN_SEL_REG( sig )  ( GPIO_BASE + 0x02f4 + 4 * (sig) )
+ #define GPIO_FUNC_OUT_SEL_REG( pin ) ( GPIO_BASE + 0x0af4 + 4 * (pin) )
+@@ -112,7 +118,7 @@
+ #define IO_MUX_FUNC_GPIO      1
+ 
+ /* GPIO matrix signal numbers, from esp-idf soc/esp32c3 gpio_sig_map.h. */
+-#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+ #define FSPICLK_OUT_IDX 53
+ #define FSPID_OUT_IDX   55
+ #define FSPIQ_IN_IDX    54
+diff --git a/bsps/riscv/esp32/start/bspsmp.c b/bsps/riscv/esp32/start/bspsmp.c
+index d6b32af347..01d63ceff4 100644
+--- a/bsps/riscv/esp32/start/bspsmp.c
++++ b/bsps/riscv/esp32/start/bspsmp.c
+@@ -33,13 +33,14 @@
+ #include <rtems/score/riscv-utility.h>
+ #include <rtems/score/smpimpl.h>
+ 
+-#if defined(RTEMS_SMP) && defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(RTEMS_SMP) && (defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H))
+ 
+ #define WRITE_PERI_REG( addr, val ) \
+   ( *( (volatile uint32_t *) (uintptr_t) ( addr ) ) = (uint32_t) ( val ) )
+ #define READ_PERI_REG( addr ) \
+   ( *( (volatile uint32_t *) (uintptr_t) ( addr ) ) )
+ 
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
+ #define LP_ROM_BOOT_ADDR_CORE1   0x20700164U
+ #define HP_SYS_CLKRST_BASE       0x20587000U
+ #define HP_SYS_CORE1_CLKRST_REG  ( HP_SYS_CLKRST_BASE + 0x20U )
+@@ -52,10 +53,37 @@
+ #define HP_SYSTEM_CPU_CORESTALLED_ST_REG 0x20586064U
+ #define PMU_CPU_STALL_SW_REG             0x207041ecU
+ 
++#ifndef DR_REG_INTMTX_CORE1_BASE
+ #define DR_REG_INTMTX_CORE1_BASE 0x20585800U
++#endif
++#define CORE0_INT_MATRIX_BASE    0x20585000U
++#define CLIC_BASE_CORE1          0x10800000U
++#define ROM_SET_APPCPU_BOOT_ADDR 0x2f8000a8U
++
++#elif defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++#define LP_ROM_BOOT_ADDR_CORE1   0x50110164U
++#define HP_SYS_CLKRST_BASE       0x500E6000U
++#define HP_SYS_CORE1_CLK_CTRL_REG ( HP_SYS_CLKRST_BASE + 0x14U )
++#define HP_SYS_CORE1_RST_EN_REG   ( HP_SYS_CLKRST_BASE + 0xc0U )
++#define HP_SYS_CORE1_CLIC_CLK_EN ( 1U << 1 )
++#define HP_SYS_CORE1_CPU_CLK_EN  ( 1U << 4 )
++#define HP_SYS_CORE1_RST_EN_BIT  ( 1U << 8 )
++
++#define HP_SYSTEM_CPU_INT_FROM_CPU_0_REG 0x500E5010U
++#define HP_SYSTEM_CPU_INT_FROM_CPU_1_REG 0x500E5014U
++#define HP_SYSTEM_CPU_CORESTALLED_ST_REG 0x500E5064U
++#define PMU_CPU_STALL_SW_REG             0x50115200U
++
++#ifndef DR_REG_INTMTX_CORE1_BASE
++#define DR_REG_INTMTX_CORE1_BASE 0x500D6800U
++#endif
++#define CORE0_INT_MATRIX_BASE    0x500D6000U
++#define CLIC_BASE_CORE1          0x20800000U
++#define ROM_SET_APPCPU_BOOT_ADDR 0x4fc000a8U
++#endif
++
+ #define CORE1_MATRIX_REG( reg ) \
+   ( *( (volatile uint32_t *) ( DR_REG_INTMTX_CORE1_BASE + ( reg ) ) ) )
+-#define CLIC_BASE_CORE1          0x10800000U
+ #define CLIC_REG_CORE1( offset ) \
+   ( *( (volatile uint32_t *) ( CLIC_BASE_CORE1 + ( offset ) ) ) )
+ #define CLIC_INT_REG_CORE1( chan ) \
+@@ -87,14 +115,21 @@ bool _CPU_SMP_Start_processor( uint32_t cpu_index )
+   }
+ 
+   /* Program Core 1 entry address via ROM function and register */
+-  ( (ets_set_appcpu_boot_addr_t) 0x2f8000a8U )( (uint32_t) (uintptr_t) _start );
++  ( (ets_set_appcpu_boot_addr_t) ROM_SET_APPCPU_BOOT_ADDR )( (uint32_t) (uintptr_t) _start );
+   WRITE_PERI_REG( LP_ROM_BOOT_ADDR_CORE1, (uint32_t) (uintptr_t) _start );
+ 
+   /* Release Core 1 from reset and enable CPU + CLIC clocks */
++#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
+   uint32_t reg = READ_PERI_REG( HP_SYS_CORE1_CLKRST_REG );
+   reg |= ( HP_SYS_CORE1_CPU_CLK_EN | HP_SYS_CORE1_CLIC_CLK_EN );
+   reg &= ~HP_SYS_CORE1_RST_EN_BIT;
+   WRITE_PERI_REG( HP_SYS_CORE1_CLKRST_REG, reg );
++#elif defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++  WRITE_PERI_REG( HP_SYS_CORE1_CLK_CTRL_REG,
++                  READ_PERI_REG( HP_SYS_CORE1_CLK_CTRL_REG ) | HP_SYS_CORE1_CPU_CLK_EN | HP_SYS_CORE1_CLIC_CLK_EN );
++  WRITE_PERI_REG( HP_SYS_CORE1_RST_EN_REG,
++                  READ_PERI_REG( HP_SYS_CORE1_RST_EN_REG ) & ~HP_SYS_CORE1_RST_EN_BIT );
++#endif
+ 
+   return true;
+ }
+@@ -103,8 +138,8 @@ void _CPU_SMP_Finalize_initialization( uint32_t cpu_count )
+ {
+   (void) cpu_count;
+   /* Route SW_INTR_0 to the dedicated IPI channel on Core 0. */
+-  *( (volatile uint32_t *) ( 0x20585000U + SW_INTR_0 * 4U ) ) =
+-    BSP_ESP32S31_IPI_CHANNEL + 16U;
++  *( (volatile uint32_t *) ( CORE0_INT_MATRIX_BASE + SW_INTR_0 * 4U ) ) =
++    31U + 16U;
+   set_csr( mie, MIP_MEIP );
+ }
+ 
+@@ -123,7 +158,9 @@ void _CPU_SMP_Send_interrupt( uint32_t target_processor_index )
+ 
+ void bsp_start_on_secondary_processor( Per_CPU_Control *cpu_self )
+ {
++#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
+   bsp_esp32s31_initialize_pma();
++#endif
+ 
+   uint32_t cpu_index_self = _Per_CPU_Get_index( cpu_self );
+ 
+@@ -154,7 +191,7 @@ void bsp_start_on_secondary_processor( Per_CPU_Control *cpu_self )
+     );
+ 
+     /* Route SW_INTR_1 to the dedicated IPI channel on Core 1. */
+-    CORE1_MATRIX_REG( SW_INTR_1 * 4U ) = BSP_ESP32S31_IPI_CHANNEL + 16U;
++    CORE1_MATRIX_REG( SW_INTR_1 * 4U ) = 31U + 16U;
+ 
+     set_csr( mie, MIP_MEIP );
+ 
+@@ -164,5 +201,4 @@ void bsp_start_on_secondary_processor( Per_CPU_Control *cpu_self )
+   }
+ }
+ 
+-
+-#endif /* RTEMS_SMP && LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H */
++#endif /* RTEMS_SMP && (LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H || LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H) */
+diff --git a/bsps/riscv/esp32/start/bspstart.c b/bsps/riscv/esp32/start/bspstart.c
+index 09f4d59b16..b0809c37a2 100644
+--- a/bsps/riscv/esp32/start/bspstart.c
++++ b/bsps/riscv/esp32/start/bspstart.c
+@@ -117,6 +117,13 @@
+ #define CLK_PMU_BASE (uintptr_t) 0x20704000
+ #define CLK_HP_ALIVE_SYS_BASE (uintptr_t) 0x20589000
+ #define CLK_HP_SYS_CLKRST_BASE (uintptr_t) 0x20587000
++#elif defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++#define BSP_ESP32_CPU_FREQ_MAX_MHZ 400
++#define CLK_PMU_BASE           (uintptr_t) 0x50115000
++#define CLK_HP_SYS_CLKRST_BASE (uintptr_t) 0x500E6000
++#define CLK_LP_CLKRST_BASE     (uintptr_t) 0x50111000
++#define CLK_LP_PERI_BASE       (uintptr_t) 0x50120000
++#define CLK_LP_I2C_ANA_BASE    (uintptr_t) 0x50124000
+ #else
+ #error "unknown ESP32 chip variant"
+ #endif
+@@ -375,6 +382,100 @@ static void bsp_s31_cpll_init( void )
+ }
+ #endif
+ 
++#if defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++static void bsp_p4_bus_update( void )
++{
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x04, READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x04 ) | ( 1u << 4 ) );
++  uint32_t timeout = 1000000;
++  while ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x04 ) & ( 1u << 4 ) ) {
++    if ( --timeout == 0 ) {
++      rtems_panic( "ESP32-P4: clock update timed out" );
++    }
++  }
++}
++
++static void bsp_p4_regi2c_write( uint8_t block, uint8_t reg, uint8_t val )
++{
++  /* ESP-IDF regi2c_enable_block(): select only the CPLL on master 0. */
++  WRITE_REG( CLK_LP_I2C_ANA_BASE, 0x20, ( READ_REG( CLK_LP_I2C_ANA_BASE, 0x20 ) & ~0xffffffu ) | ( 1u << 11 ) );
++  WRITE_REG( CLK_LP_I2C_ANA_BASE, 0x1c, READ_REG( CLK_LP_I2C_ANA_BASE, 0x1c ) & ~0xffffffu );
++  uint32_t timeout = 1000000;
++  while ( READ_REG( CLK_LP_I2C_ANA_BASE, 0x00 ) & ( 1u << 25 ) ) {
++    if ( --timeout == 0 ) {
++      rtems_panic( "ESP32-P4: regi2c busy timed out" );
++    }
++  }
++  uint32_t data = ( (uint32_t) block & 0xffu ) |
++                  ( ( (uint32_t) reg & 0xffu ) << 8 ) |
++                  ( ( (uint32_t) val & 0xffu ) << 16 ) |
++                  ( 1u << 24 );
++  WRITE_REG( CLK_LP_I2C_ANA_BASE, 0x00, data );
++  timeout = 1000000;
++  while ( READ_REG( CLK_LP_I2C_ANA_BASE, 0x00 ) & ( 1u << 25 ) ) {
++    if ( --timeout == 0 ) {
++      rtems_panic( "ESP32-P4: regi2c write timed out" );
++    }
++  }
++}
++
++static void bsp_p4_cpll_init( void )
++{
++  /* ESP-IDF rtc_clk_cpu_freq_to_xtal(): switch the root first, since the
++   * hardware can silently correct illegal dividers while CPLL is selected. */
++  WRITE_REG( CLK_LP_CLKRST_BASE, 0x40, READ_REG( CLK_LP_CLKRST_BASE, 0x40 ) & ~3u );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x04, ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x04 ) & ~( 0xffffffu << 5 ) ) );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x08, ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x08 ) & ~( 0xffu | ( 0xffu << 24 ) ) ) );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x0c, ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x0c ) & ~( 0xffu << 16 ) ) );
++  bsp_p4_bus_update();
++
++  if ( ets_update_cpu_frequency != NULL ) {
++    ets_update_cpu_frequency( 40 );
++  }
++
++  /* Enable LP_I2CMST clock */
++  WRITE_REG( CLK_LP_PERI_BASE, 0x00, READ_REG( CLK_LP_PERI_BASE, 0x00 ) | ( 1u << 27 ) );
++  WRITE_REG( CLK_LP_I2C_ANA_BASE, 0x34, READ_REG( CLK_LP_I2C_ANA_BASE, 0x34 ) | 1u );
++
++  /* Power up CPLL in PMU */
++  WRITE_REG( CLK_PMU_BASE, 0xcc, READ_REG( CLK_PMU_BASE, 0xcc ) | ( 1u << 27 ) | ( 1u << 23 ) | ( 1u << 17 ) );
++
++  /* ESP-IDF rtc_clk_cpll_configure(): start calibration before programming
++   * the analog registers, then wait for completion and a timed settling period. */
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0xbc, READ_REG( CLK_HP_SYS_CLKRST_BASE, 0xbc ) & ~( 1u << 3 ) );
++
++  /* RegI2C CPLL 400 MHz configuration */
++  bsp_p4_regi2c_write( 0x67, 2, 0x50 );
++  bsp_p4_regi2c_write( 0x67, 3, 10 );
++  bsp_p4_regi2c_write( 0x67, 6, 0x73 );
++
++  uint32_t timeout = 1000000;
++  while ( !( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0xbc ) & ( 1u << 2 ) ) ) {
++    if ( --timeout == 0 ) {
++      rtems_panic( "ESP32-P4: CPLL calibration timed out" );
++    }
++  }
++  ( (void (*)( uint32_t )) (uintptr_t) 0x4fc0003cU )( 10 ); /* ets_delay_us */
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0xbc, READ_REG( CLK_HP_SYS_CLKRST_BASE, 0xbc ) | ( 1u << 3 ) );
++  WRITE_REG( CLK_LP_PERI_BASE, 0x00, READ_REG( CLK_LP_PERI_BASE, 0x00 ) & ~( 1u << 27 ) );
++
++  /* Configure Bus Dividers: APB -> SYS -> MEM -> CPU */
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x0c, ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x0c ) & ~( 0xffu << 16 ) ) | ( 1u << 16 ) );
++  bsp_p4_bus_update();
++
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x08, ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x08 ) & ~( 0xffu << 24 ) ) );
++  bsp_p4_bus_update();
++
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x08, ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x08 ) & ~0xffu ) | 1u );
++  bsp_p4_bus_update();
++
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x04, ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x04 ) & ~( 0xffffffu << 5 ) ) );
++  bsp_p4_bus_update();
++
++  /* Select CPLL root clock */
++  WRITE_REG( CLK_LP_CLKRST_BASE, 0x40, ( READ_REG( CLK_LP_CLKRST_BASE, 0x40 ) & ~3u ) | 1u );
++}
++#endif
++
+ static void bsp_clock_init( void )
+ {
+ #if defined( LIBBSP_ESP32_C3_CHIP_DEFINITIONS_H )
+@@ -459,6 +560,10 @@ static void bsp_clock_init( void )
+ 
+   bsp_s31_bus_update();
+ 
++#elif defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++
++  bsp_p4_cpll_init();
++
+ #endif
+ 
+   if ( ets_update_cpu_frequency != NULL ) {
+@@ -493,6 +598,16 @@ void bsp_esp32s31_initialize_pma( void )
+ 
+ void bsp_start( void )
+ {
++#if defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++  /* EFUSE_RD_MAC_SYS_2, as in ESP-IDF efuse_ll_get_chip_wafer_version_major().
++   * Reject incompatible silicon before using the v3 clocks or ROM data ABI. */
++  uint32_t wafer = READ_REG( (uintptr_t) 0x5012d000U, 0x4c );
++  uint32_t major = ( ( wafer >> 4 ) & 3U ) | ( ( ( wafer >> 23 ) & 1U ) << 2 );
++  if ( major != 3U ) {
++    rtems_panic( "ESP32-P4: this BSP requires revision 3.x" );
++  }
++#endif
++
+ #if defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H )
+   /* Like ESP-IDF, permit execution from SRAM. The direct-boot ROM leaves
+    * PMA entry 14 read/write only, which also constrains machine mode.
+@@ -521,7 +636,7 @@ void bsp_start( void )
+ 
+   uint32_t timg_wdtconfig0;
+ 
+-#if defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+   /* Unlock and disable LP WDT */
+   WRITE_REG( LP_WDT_BASE, 0x18, 0x50d83aa1U );
+   uint32_t lp_wdt = READ_REG( LP_WDT_BASE, 0x0 );
+@@ -620,7 +735,7 @@ BSP_START_TEXT_SECTION static inline void copy_from_flash_offset(
+ )
+ {
+   /* The RAM load sections are offset from 0x0, offset from mapped flash base */
+-#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+   uintptr_t flash_base = 0x40000000;
+ #elif defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H)
+   uintptr_t flash_base = 0x42000000;
+diff --git a/spec/build/bsps/riscv/esp32/abi.yml b/spec/build/bsps/riscv/esp32/abi.yml
+index 5dd083e91a..8ddb6c1d82 100644
+--- a/spec/build/bsps/riscv/esp32/abi.yml
++++ b/spec/build/bsps/riscv/esp32/abi.yml
+@@ -20,6 +20,10 @@ default:
+   value:
+   - -march=rv32imac
+   - -mabi=ilp32
++- enabled-by: riscv/esp32p4db
++  value:
++  - -march=rv32imac
++  - -mabi=ilp32
+ - enabled-by: riscv/esp32s31db
+   value:
+   - -march=rv32imafc
+diff --git a/spec/build/bsps/riscv/esp32/bspesp32p4db.yml b/spec/build/bsps/riscv/esp32/bspesp32p4db.yml
+new file mode 100644
+index 0000000000..10f7df23c1
+--- /dev/null
++++ b/spec/build/bsps/riscv/esp32/bspesp32p4db.yml
+@@ -0,0 +1,22 @@
++SPDX-License-Identifier: CC-BY-SA-4.0 OR BSD-2-Clause
++arch: riscv
++bsp: esp32p4db
++build-type: bsp
++cflags: []
++copyrights:
++- Copyright (C) 2026 Peter M. <petermm@gmail.com>
++cppflags: []
++enabled-by: true
++family: esp32
++includes: []
++install:
++- destination: ${BSP_INCLUDEDIR}/${ESPRESSIF_CHIP_VARIANT}
++  source:
++  - bsps/riscv/esp32/include/p4/chip_definitions.h
++links:
++- role: build-dependency
++  uid: ../../opto2
++- role: build-dependency
++  uid: grp
++source: []
++type: build
+diff --git a/spec/build/bsps/riscv/esp32/optchipvariant.yml b/spec/build/bsps/riscv/esp32/optchipvariant.yml
+index de2704cc3e..706a536a12 100644
+--- a/spec/build/bsps/riscv/esp32/optchipvariant.yml
++++ b/spec/build/bsps/riscv/esp32/optchipvariant.yml
+@@ -13,6 +13,8 @@ default:
+   value: 'c5'
+ - enabled-by: riscv/esp32c6db
+   value: 'c6'
++- enabled-by: riscv/esp32p4db
++  value: 'p4'
+ - enabled-by: riscv/esp32s31db
+   value: 's31'
+ - enabled-by: true
+diff --git a/spec/build/bsps/riscv/esp32/optcodeflashmappedbase.yml b/spec/build/bsps/riscv/esp32/optcodeflashmappedbase.yml
+index 1c924e1610..9b4366ec36 100644
+--- a/spec/build/bsps/riscv/esp32/optcodeflashmappedbase.yml
++++ b/spec/build/bsps/riscv/esp32/optcodeflashmappedbase.yml
+@@ -8,7 +8,9 @@ build-type: option
+ copyrights:
+ - Copyright (C) 2026 Peter M. <petermm@gmail.com>
+ default:
+-- enabled-by: riscv/esp32s31db
++- enabled-by:
++  - riscv/esp32p4db
++  - riscv/esp32s31db
+   value: 0x40000000
+ - enabled-by: true
+   value: 0x42000000
+diff --git a/spec/build/bsps/riscv/esp32/optdataflashmappedbase.yml b/spec/build/bsps/riscv/esp32/optdataflashmappedbase.yml
+index 0cc742d801..51d9019a58 100644
+--- a/spec/build/bsps/riscv/esp32/optdataflashmappedbase.yml
++++ b/spec/build/bsps/riscv/esp32/optdataflashmappedbase.yml
+@@ -14,7 +14,9 @@ default:
+   value: 0x42000000
+ - enabled-by: riscv/esp32c6db
+   value: 0x42000000
+-- enabled-by: riscv/esp32s31db
++- enabled-by:
++  - riscv/esp32p4db
++  - riscv/esp32s31db
+   value: 0x40000000
+ - enabled-by: true
+   value: 0x3c000000
+diff --git a/spec/build/bsps/riscv/esp32/optdramromreserve.yml b/spec/build/bsps/riscv/esp32/optdramromreserve.yml
+index 1e5de902e6..dba203e0ea 100644
+--- a/spec/build/bsps/riscv/esp32/optdramromreserve.yml
++++ b/spec/build/bsps/riscv/esp32/optdramromreserve.yml
+@@ -14,7 +14,9 @@ default:
+   value: 0x16000
+ - enabled-by: riscv/esp32c6db
+   value: 0x16000
+-- enabled-by: riscv/esp32s31db
++- enabled-by:
++  - riscv/esp32p4db
++  - riscv/esp32s31db
+   value: 0x6000
+ - enabled-by: true
+   value: 0x0
+diff --git a/spec/build/bsps/riscv/esp32/optramcodeorigin.yml b/spec/build/bsps/riscv/esp32/optramcodeorigin.yml
+index fb82c01d87..b2903a4dc8 100644
+--- a/spec/build/bsps/riscv/esp32/optramcodeorigin.yml
++++ b/spec/build/bsps/riscv/esp32/optramcodeorigin.yml
+@@ -14,6 +14,8 @@ default:
+   value: 0x40800000
+ - enabled-by: riscv/esp32c6db
+   value: 0x40800000
++- enabled-by: riscv/esp32p4db
++  value: 0x4ff00000
+ - enabled-by: riscv/esp32s31db
+   value: 0x2f000000
+ - enabled-by: true
+diff --git a/spec/build/bsps/riscv/esp32/optramorigin.yml b/spec/build/bsps/riscv/esp32/optramorigin.yml
+index 41c4152f58..dfb84a8b62 100644
+--- a/spec/build/bsps/riscv/esp32/optramorigin.yml
++++ b/spec/build/bsps/riscv/esp32/optramorigin.yml
+@@ -14,6 +14,8 @@ default:
+   value: 0x40800000
+ - enabled-by: riscv/esp32c6db
+   value: 0x40800000
++- enabled-by: riscv/esp32p4db
++  value: 0x4ff00000
+ - enabled-by: riscv/esp32s31db
+   value: 0x2f000000
+ - enabled-by: true
+diff --git a/spec/build/bsps/riscv/esp32/optramsize.yml b/spec/build/bsps/riscv/esp32/optramsize.yml
+index 61e943a5f6..f4535821c3 100644
+--- a/spec/build/bsps/riscv/esp32/optramsize.yml
++++ b/spec/build/bsps/riscv/esp32/optramsize.yml
+@@ -14,6 +14,8 @@ default:
+   value: 0x60000
+ - enabled-by: riscv/esp32c6db
+   value: 0x80000
++- enabled-by: riscv/esp32p4db
++  value: 0xc0000
+ - enabled-by: riscv/esp32s31db
+   value: 0x80000
+ - enabled-by: true
+diff --git a/spec/build/bsps/riscv/esp32/optvariant.yml b/spec/build/bsps/riscv/esp32/optvariant.yml
+index 7c628fb5fe..73d9095385 100644
+--- a/spec/build/bsps/riscv/esp32/optvariant.yml
++++ b/spec/build/bsps/riscv/esp32/optvariant.yml
+@@ -14,6 +14,8 @@ default:
+   value: 'c5/chip_definitions.h'
+ - enabled-by: riscv/esp32c6db
+   value: 'c6/chip_definitions.h'
++- enabled-by: riscv/esp32p4db
++  value: 'p4/chip_definitions.h'
+ - enabled-by: riscv/esp32s31db
+   value: 's31/chip_definitions.h'
+ - enabled-by: true
+diff --git a/spec/build/bsps/riscv/optbspstartcopysections.yml b/spec/build/bsps/riscv/optbspstartcopysections.yml
+index b9e0adb083..91a00fad39 100644
+--- a/spec/build/bsps/riscv/optbspstartcopysections.yml
++++ b/spec/build/bsps/riscv/optbspstartcopysections.yml
+@@ -11,6 +11,7 @@ default:
+   - riscv/esp32c3db
+   - riscv/esp32c5db
+   - riscv/esp32c6db
++  - riscv/esp32p4db
+   - riscv/esp32s31db
+   value: true
+ - enabled-by: true
+diff --git a/spec/build/bsps/riscv/optespressifdirectboot.yml b/spec/build/bsps/riscv/optespressifdirectboot.yml
+index d48026c7e1..8163e82d14 100644
+--- a/spec/build/bsps/riscv/optespressifdirectboot.yml
++++ b/spec/build/bsps/riscv/optespressifdirectboot.yml
+@@ -11,6 +11,7 @@ default:
+   - riscv/esp32c3db
+   - riscv/esp32c5db
+   - riscv/esp32c6db
++  - riscv/esp32p4db
+   - riscv/esp32s31db
+   value: true
+ - enabled-by: true
+diff --git a/spec/build/cpukit/optsmp.yml b/spec/build/cpukit/optsmp.yml
+index c80783d914..c198248b58 100644
+--- a/spec/build/cpukit/optsmp.yml
++++ b/spec/build/cpukit/optsmp.yml
+@@ -31,6 +31,7 @@ enabled-by:
+ - riscv/griscv
+ - riscv/grv32imac
+ - riscv/esp32s31db
++- riscv/esp32p4db
+ - riscv/grv32imafdc
+ - riscv/mpfs64imafdc
+ - riscv/noel32imafd

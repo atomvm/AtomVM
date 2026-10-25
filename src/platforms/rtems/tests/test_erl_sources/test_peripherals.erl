@@ -33,7 +33,7 @@ start() ->
     true = After > Before,
     ok = ledc:timer_config([{duty_resolution, 12}, {freq_hz, 1000}, {speed_mode, 1}, {timer_num, 3}]),
     1000 = ledc:get_freq(1, 3),
-    Channel = case Model of esp32_s31 -> 7; _ -> 5 end,
+    Channel = case Model of esp32_s31 -> 7; esp32_p4 -> 7; _ -> 5 end,
     ok = ledc:channel_config([{channel, Channel}, {duty, 4096}, {gpio_num, 3}, {speed_mode, 1}, {hpoint, 0}, {timer_sel, 3}]),
     timer:sleep(2),
     4096 = ledc:get_duty(1, Channel),
@@ -43,7 +43,8 @@ start() ->
     ok = ledc:stop(1, Channel, 0),
     erlang:display({pwm, Model, ok}),
     {ok, Unit} = esp_adc:init(),
-    Pin = case Model of esp32_s31 -> 49; esp32_c5 -> 6; esp32_c6 -> 6; _ -> 4 end,
+    % P4 boot smoke covers ADC1; exercise the last ADC2 channel here.
+    Pin = case Model of esp32_s31 -> 49; esp32_p4 -> 54; esp32_c5 -> 6; esp32_c6 -> 6; _ -> 4 end,
     {ok, ADC} = esp_adc:acquire(Pin, Unit, bit_12, db_11),
     {error, busy} = esp_adc:acquire(Pin, Unit, bit_12, db_11),
     {ok, OtherUnit} = esp_adc:init(),
@@ -53,7 +54,7 @@ start() ->
     erlang:display({adc, Model, Sample}),
     case Sample of
         {ok, {Raw, undefined}} when Raw >= 0, Raw =< 4095 -> ok;
-        {error, timeout} -> ok
+        {error, timeout} when Model =/= esp32_p4 -> ok
     end,
     ok = esp_adc:release_channel(ADC),
     {'EXIT', {badarg, _}} = (catch esp_adc:sample(ADC, Unit, [raw])),

@@ -84,6 +84,8 @@ elseif(RTEMS_BOARD STREQUAL "esp32c6")
     target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BOARD_ESP32 RTEMS_BOARD_ESP32C6)
 elseif(RTEMS_BOARD STREQUAL "esp32s31")
     target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BOARD_ESP32 RTEMS_BOARD_ESP32S31)
+elseif(RTEMS_BOARD STREQUAL "esp32p4")
+    target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BOARD_ESP32 RTEMS_BOARD_ESP32P4)
 elseif(RTEMS_ARCH STREQUAL "arm" AND RTEMS_BSP_NAME STREQUAL "realview_pbx_a9_qemu")
     target_compile_definitions(${PROJECT_EXECUTABLE} PRIVATE RTEMS_BSP_REALVIEW_PBX_A9_QEMU)
     target_link_options(${PROJECT_EXECUTABLE} PRIVATE
@@ -345,6 +347,14 @@ elseif(RTEMS_BOARD STREQUAL "esp32s31")
             z
         )
     endif()
+elseif(RTEMS_BOARD STREQUAL "esp32p4")
+    target_link_options(${PROJECT_EXECUTABLE} PRIVATE
+        -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/../ld/esp32p4.rom.ld
+    )
+    target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
+        jffs2
+        z
+    )
 elseif(RTEMS_BOARD MATCHES "esp32")
     target_link_libraries(${PROJECT_EXECUTABLE} PRIVATE
         jffs2
