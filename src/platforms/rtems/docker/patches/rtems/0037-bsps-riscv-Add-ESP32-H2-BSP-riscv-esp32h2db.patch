@@ -12,9 +12,10 @@ Add an ESP32-H2 board support package with rv32imac code and the ilp32 ABI.
   coexistence sources on channels of their own.
 - Calibrate the fixed 96 MHz BBPLL from the 32 MHz crystal through the analog
   I2C master and select it for a 96 MHz CPU, mirroring ESP-IDF's rtc_clk_init.
-  Leave the CPU on the crystal if calibration does not complete, and leave the
-  flash interface on the crystal because a direct-boot image has no second
-  stage to retime the flash chip for IDF's 64 MHz clock.
+  Leave the CPU on the crystal if calibration does not complete.  The flash
+  interface needs no setup: the ROM already selects the 64 MHz flash PLL with
+  the CS timing ESP-IDF's second stage would select for its default
+  configuration, so the BSP leaves it alone.
 - Disable the LP and timer-group watchdogs at the H2's register offsets.
 - Run the console from the crystal at 32 MHz: the H2's UART has no SCLK_SEL
   in its clock register and its source stays XTAL.
@@ -483,12 +484,12 @@ index eb24de4..c5168d1 100644
 + * whether the PLL may be used: an uncalibrated PLL is worse than a slow CPU,
 + * so a calibration that never completes leaves the crystal selected.
 + *
-+ * ESP-IDF's second-stage bootloader also moves the flash interface to the
-+ * 64 MHz flash PLL, which it pairs with esp_rom_spiflash_config_clk() to retime
-+ * the flash chip for that clock.  A direct-boot image has no second stage to
-+ * run that retiming, so MSPI stays on the crystal at the 32 MHz the ROM set it
-+ * to: half the flash bandwidth, and no chance of fetching instructions through
-+ * a bus the flash is no longer configured for.
++ * The flash interface needs no setup here: the boot ROM selects the 64 MHz
++ * flash PLL (PCR_MSPI_CONF PLL_F64M at divider 1) and programs the CS
++ * setup/hold timing, the same clock and timing ESP-IDF's second stage selects
++ * for the H2's default 64 MHz flash configuration.  Raising the CPU to 96 MHz
++ * leaves that source alone, so flash reads and writes keep running at the rate
++ * and timing the ROM established.
 + */
 +static bool bsp_h2_bbpll_init( void )
 +{

@@ -131,9 +131,10 @@ following ESP-IDF's `rtc_clk_init()` and `clk_ll_bbpll_*` sequences; a
 calibration that does not complete leaves the CPU on the crystal rather than
 distributing an uncalibrated clock. The console stays on the crystal, because
 the H2's UART selects its source in PCR rather than in its own clock register.
-The flash interface also stays on the crystal: ESP-IDF's bootloader pairs its
-64 MHz flash PLL with a flash-chip retiming that a direct-boot image has no
-stage to run, so the H2 trades flash bandwidth for a bus the ROM left configured.
+The flash interface needs no setup: the boot ROM already selects the 64 MHz
+flash PLL (PLL_F64M at divider 1) and programs the CS setup/hold timing, the same
+clock and timing ESP-IDF's second stage selects for its default 64 MHz flash
+configuration, so the BSP leaves it alone.
 The H2 has no Wi-Fi, so there is no lwIP or Espressif Wi-Fi stack to link and no
 network NIF: `network:start/1` reports a failed port and `esp32_chip_info`
 advertises Bluetooth LE only. ADC, LEDC, I2C, SPI, GPIO, RTC storage and the
