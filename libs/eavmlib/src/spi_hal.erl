@@ -95,6 +95,8 @@
 %% 0)</li>
 %% </ul>
 %%
+%% On ESP32, pin numbers also accept -1 for unused pins.
+%%
 %% <h3>Example</h3>
 %%
 %% ```

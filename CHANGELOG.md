@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed the ESP32 UART driver blocking the scheduler, until the task watchdog reset the chip,
   when a read had already taken the bytes of a pending data event, or when `uart:read/2` counted
   bytes that the other scheduler then took
+- Fixed ESP32 SPI pin typespecs to allow `-1` for unused pins.
 
 ## [0.7.0-beta.0] - 2026-09-28
 

@@ -47,17 +47,17 @@
 %% TODO remove deprecated hspi and vspi
 -type peripheral() :: hspi | vspi | string() | binary().
 -type bus_config() :: [
-    {poci, non_neg_integer()}
-    | {pico, non_neg_integer()}
-    | {miso, non_neg_integer()}
-    | {mosi, non_neg_integer()}
-    | {sclk, non_neg_integer()}
+    {poci, -1 | non_neg_integer()}
+    | {pico, -1 | non_neg_integer()}
+    | {miso, -1 | non_neg_integer()}
+    | {mosi, -1 | non_neg_integer()}
+    | {sclk, -1 | non_neg_integer()}
     | {peripheral, peripheral()}
 ].
 -type device_config() :: [
     {clock_speed_hz, non_neg_integer()}
     | {mode, 0..3}
-    | {cs, non_neg_integer()}
+    | {cs, -1 | non_neg_integer()}
     | {address_len_bits, 0..64}
     | {command_len_bits, 0..16}
 ].
@@ -102,9 +102,9 @@
 %%
 %% <table>
 %%   <tr> <th>Key</th> <th>Type</th> <th>Default</th> <th>Description</th> </tr>
-%%   <tr> <td>`miso'</td> <td>`non_neg_integer()'</td> <td>-</td> <td>MISO pin number</td></tr>
-%%   <tr> <td>`mosi'</td> <td>`non_neg_integer()'</td> <td>-</td> <td>MOSI pin number</td></tr>
-%%   <tr> <td>`sclk'</td> <td>`non_neg_integer()'</td> <td>-</td> <td>SCLK pin number</td></tr>
+%%   <tr> <td>`miso'</td> <td>`-1 | non_neg_integer()'</td> <td>-</td> <td>MISO pin number, or -1 if unused</td></tr>
+%%   <tr> <td>`mosi'</td> <td>`-1 | non_neg_integer()'</td> <td>-</td> <td>MOSI pin number, or -1 if unused</td></tr>
+%%   <tr> <td>`sclk'</td> <td>`-1 | non_neg_integer()'</td> <td>-</td> <td>SCLK pin number, or -1 if unused</td></tr>
 %%   <tr> <td>`peripheral'</td> <td>`"spi2" | "spi3"'</td> <td>`"spi2"'</td> <td>SPI Peripheral (ESP32 only)</td></tr>
 %% </table>
 %%
@@ -114,7 +114,7 @@
 %%   <tr> <th>Key</th> <th>Type</th> <th>Default</th> <th>Description</th> </tr>
 %%   <tr> <td>`clock_speed_hz'</td> <td>`non_neg_integer()'</td> <td>`1000000'</td> <td>Clock speed for the SPI device (in hz)</td></tr>
 %%   <tr> <td>`mode'</td> <td>`0..3'</td> <td>`0'</td> <td>SPI device mode</td></tr>
-%%   <tr> <td>`cs'</td> <td>`non_neg_integer()'</td> <td>-</td> <td>SPI Chip Select pin number</td></tr>
+%%   <tr> <td>`cs'</td> <td>`-1 | non_neg_integer()'</td> <td>-</td> <td>SPI Chip Select pin number, or -1 if unused</td></tr>
 %%   <tr> <td>`address_len_bits'</td> <td>`non_neg_integer()'</td> <td>8</td> <td>Number of bits in the device address</td></tr>
 %% </table>
 %%
