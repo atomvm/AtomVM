@@ -187,6 +187,20 @@ settles CPLL calibration with IDF's 10 us ROM delay. RTEMS deliberately maintain
 fixed nominal voltage profile (HP/LP bias 26) with PVT disabled on S31. Rebuild the BSP
 SDK with the patch series, not just the application, to include these changes.
 
+C6 patches 0041/0042 additionally install IDF's complete initial HP/LP PMU
+policies before releasing power-domain overrides, tune RC_FAST/RC_SLOW/RC32K,
+select RC_FAST and RC_SLOW with ROM settling delays, and publish the measured
+RC_SLOW period. Power-on o-code uses the qualified eFuse value or IDF's legacy
+calibration sequence. PLL settling uses the ROM's 10 us delay; both CPU and AHB
+low-speed dividers are initialized before selecting XTAL, and the safe MSPI
+source divider is set before PLL configuration. This matches the reference C6
+clock/PMU profile at XTAL40/CPU160 with PVT off (the reference IDF's C6 default),
+not every bootloader feature or build configuration. Calibration hardware
+failures stop RTEMS boot explicitly instead of waiting indefinitely. RTEMS
+keeps peripheral clock ownership rather than applying IDF's blanket peripheral
+clock shutdown; eFuse is explicitly kept clocked. C6 sleep preparation preserves
+the BSP's ACTIVE/MODEM policies instead of replacing them with a generic baseline.
+
 Sleep configuration is derived from ESP-IDF revision
 `9a97f6c54ec638111ce55cd36581b3c192f15207`, with explicit timer/GPIO sleep,
 no modem integration, no PVT, and no initialized PSRAM. Light sleep retains

@@ -1,0 +1,303 @@
+Subject: [PATCH] esp32c6: initialize RTC clocks and power-on calibration like IDF
+
+Match ESP-IDF 9a97f6c54ec638111ce55cd36581b3c192f15207 for XTAL40/CPU160,
+RC_SLOW/RC_FAST and the C6 default PVT-off profile. Install startup PMU
+defaults before force handoff, use ROM delays, publish RTC calibration,
+and apply power-on o-code calibration. Keep RTEMS peripheral and scheduler
+ownership; nonresponsive calibration hardware stops boot explicitly.
+
+diff --git a/bsps/riscv/esp32/start/bspc6rtc.h b/bsps/riscv/esp32/start/bspc6rtc.h
+new file mode 100644
+index 0000000..6406ac2
+--- /dev/null
++++ b/bsps/riscv/esp32/start/bspc6rtc.h
+@@ -0,0 +1,173 @@
++/*
++ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/* ESP-IDF 9a97f6c54ec638111ce55cd36581b3c192f15207, C6 rtc_clk_init.c,
++ * rtc_time.c, ocode_init.c and esp_system/port/soc/esp32c6/clk.c.
++ * Direct boot: XTAL40, CPU160, RC_SLOW/RC_FAST, PVT off (C6 IDF default).
++ * RTEMS retains timer/scheduler and peripheral-driver ownership.
++ */
++#if defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++
++#include "bspc6pmu.h"
++
++static void bsp_clock_init( void );
++
++static void bsp_c6_delay( uint32_t us )
++{
++  ( (void (*)( uint32_t )) (uintptr_t) 0x40000040U )( us );
++}
++
++static void bsp_c6_rtc_tune( void )
++{
++  const uintptr_t clkrst = 0x600b0400;
++  uint32_t reg = READ_REG( clkrst, 0x18 );
++  WRITE_REG( clkrst, 0x18, ( reg & ~0xffc00000u ) | ( 100u << 22 ) );
++  bsp_voltage_i2c_write( 0x6d, 14, 0xffu, 128u );
++  reg = READ_REG( clkrst, 0x1c );
++  WRITE_REG( clkrst, 0x1c, ( reg & ~0xffc00000u ) | ( 700u << 22 ) );
++  reg = READ_REG( (uintptr_t) 0x600b1000, 0x10 );
++  uint32_t xtal = ( reg & 0x10001u ) == 0x10001u ? 41u : 40u;
++  WRITE_REG( (uintptr_t) 0x600b1000, 0x10, xtal | ( xtal << 16 ) );
++}
++
++static void bsp_c6_rtc_sources( void )
++{
++  const uintptr_t clkrst = 0x600b0400;
++  bsp_voltage_field( 0xac, BSP_BIT32( 30 ), BSP_BIT32( 30 ) );
++  bsp_c6_delay( 50 );
++  WRITE_REG( clkrst, 0, READ_REG( clkrst, 0 ) & ~4u );
++  bsp_c6_delay( 3 );
++  WRITE_REG( clkrst, 0, READ_REG( clkrst, 0 ) & ~3u );
++  bsp_c6_delay( 300 );
++}
++
++/* The selected profile has only RC_SLOW calibration. The TIMG0 calibrator
++ * is not its counter or watchdog. Keep IDF's cycling-mode drain, threshold,
++ * initial wait and Q19 rounding. A nonresponsive calibrator stops boot,
++ * rather than publishing a guessed period or waiting forever.
++ */
++static uint32_t bsp_c6_slow_calibrate( uint32_t cycles )
++{
++  const uintptr_t timg = 0x60008000;
++  uint32_t reg = READ_REG( timg, 0x68 );
++  if ( reg & BSP_BIT32( 12 ) ) {
++    WRITE_REG( timg, 0x80,
++      ( READ_REG( timg, 0x80 ) & ~0xffffff80u ) | ( 1u << 7 ) );
++    uint32_t wait = 100000;
++    while ( !( READ_REG( timg, 0x68 ) & BSP_BIT32( 15 ) ) &&
++            !( READ_REG( timg, 0x80 ) & 1u ) ) {
++      if ( --wait == 0 ) {
++        rtems_panic( "ESP32-C6: RTC calibration drain timed out" );
++      }
++      bsp_c6_delay( 1 );
++    }
++  }
++  reg = READ_REG( timg, 0x68 );
++  reg &= ~( BSP_BIT32( 31 ) | BSP_BIT32( 12 ) | ( 3u << 13 )
++    | ( 0x7fffu << 16 ) );
++  WRITE_REG( timg, 0x68, reg | ( cycles << 16 ) );
++  WRITE_REG( timg, 0x80,
++    ( READ_REG( timg, 0x80 ) & ~0xffffff80u ) | ( cycles << 17 ) );
++  WRITE_REG( timg, 0x68, READ_REG( timg, 0x68 ) | BSP_BIT32( 31 ) );
++  bsp_c6_delay( cycles * 1000000ULL / 136000u );
++  uint32_t wait = 100000;
++  while ( !( READ_REG( timg, 0x68 ) & BSP_BIT32( 15 ) ) ) {
++    if ( ( READ_REG( timg, 0x80 ) & 1u ) || --wait == 0 ) {
++      rtems_panic( "ESP32-C6: RTC calibration timed out" );
++    }
++    bsp_c6_delay( 1 );
++  }
++  uint64_t xtal_cycles = ( READ_REG( timg, 0x6c ) >> 7 ) & 0x1ffffffu;
++  WRITE_REG( timg, 0x68, READ_REG( timg, 0x68 ) & ~BSP_BIT32( 31 ) );
++  uint64_t divisor = 40u * cycles;
++  uint32_t period = ( ( xtal_cycles << 19 ) + divisor / 2 - 1 ) / divisor;
++  if ( period == 0 ) {
++    rtems_panic( "ESP32-C6: invalid RTC calibration" );
++  }
++  return period;
++}
++
++static uint64_t bsp_c6_rtc_count( void )
++{
++  const uintptr_t timer = 0x600b0c00;
++  WRITE_REG( timer, 0x10, READ_REG( timer, 0x10 ) | BSP_BIT32( 28 ) );
++  uint32_t low = READ_REG( timer, 0x14 );
++  uint32_t high = READ_REG( timer, 0x18 ) & 0xffffu;
++  return ( (uint64_t) high << 32 ) | low;
++}
++
++static uint32_t bsp_c6_ulp_read( uint32_t address )
++{
++  const uintptr_t i2c = 0x600af800;
++  uint32_t host = ( READ_REG( i2c, 0x20 ) & BSP_BIT32( 10 ) ) ? 0 : 4;
++  WRITE_REG( i2c, 0x1c, 0xfffeffu );
++  bsp_voltage_i2c_wait( host );
++  WRITE_REG( i2c, host, 0x61u | ( address << 8 ) );
++  bsp_voltage_i2c_wait( host );
++  return ( READ_REG( i2c, host ) >> 16 ) & 0xffu;
++}
++
++static void bsp_c6_ocode_init( void )
++{
++  if ( ( (uint32_t (*)( uint32_t )) (uintptr_t) 0x40000018U )( 0 ) != 1 ) {
++    return; /* IDF only calibrates on chip power-on, never deep-sleep wake. */
++  }
++  uint32_t version = READ_REG( (uintptr_t) 0x600b0800, 0x50 );
++  uint32_t block_version = ( ( version >> 30 ) & 3u ) * 100
++    + ( ( version >> 27 ) & 7u );
++  if ( block_version >= 1 ) {
++    uint32_t code = ( READ_REG( (uintptr_t) 0x600b0800, 0x6c ) >> 9 ) & 0xffu;
++    bsp_voltage_i2c_write( 0x61, 6, 0xffu, code );
++    bsp_voltage_i2c_write( 0x61, 5, 0x40u, 0x40u );
++    return;
++  }
++
++  uint32_t period = bsp_c6_slow_calibrate( 100 );
++  uint64_t deadline = bsp_c6_rtc_count() + ( ( 10000ULL << 19 ) / period );
++  WRITE_REG( CLK_PCR_BASE, 0x11c, READ_REG( CLK_PCR_BASE, 0x11c ) & ~0xffu );
++  WRITE_REG( CLK_PCR_BASE, 0x118, READ_REG( CLK_PCR_BASE, 0x118 ) & ~0xffu );
++  WRITE_REG( CLK_PCR_BASE, 0x110, READ_REG( CLK_PCR_BASE, 0x110 ) & ~( 3u << 16 ) );
++  ( (void (*)( uint32_t )) (uintptr_t) 0x40000048U )( 40 );
++  WRITE_REG( VOLTAGE_PMU_BASE, 0xcc,
++    READ_REG( VOLTAGE_PMU_BASE, 0xcc ) | BSP_BIT32( 0 ) );
++  WRITE_REG( VOLTAGE_PMU_BASE, 0xcc,
++    READ_REG( VOLTAGE_PMU_BASE, 0xcc ) | BSP_BIT32( 4 ) | BSP_BIT32( 5 ) );
++  bsp_voltage_i2c_write( 0x61, 0, 1u, 0 );
++  bsp_voltage_i2c_write( 0x61, 0, 1u, 1u );
++  uint32_t wait = 100000;
++  while ( ( bsp_c6_ulp_read( 3 ) & 9u ) != 9u ) {
++    if ( bsp_c6_rtc_count() >= deadline ) {
++      break; /* IDF warns and continues after the 10 ms o-code deadline. */
++    }
++    if ( --wait == 0 ) {
++      rtems_panic( "ESP32-C6: RTC stopped during o-code calibration" );
++    }
++    bsp_c6_delay( 1 );
++  }
++  bsp_clock_init(); /* Restore PLL160 through its calibration sequence. */
++}
++
++static void bsp_c6_rtc_init( void )
++{
++  const uintptr_t lpcon = 0x600af000;
++  /* IDF's bootloader leaves the analog master clock configured/enabled. */
++  WRITE_REG( lpcon, 0x18, READ_REG( lpcon, 0x18 ) | BSP_BIT32( 2 ) );
++  WRITE_REG( lpcon, 0x10, READ_REG( lpcon, 0x10 ) | 1u );
++  uint32_t read_mask = READ_REG( VOLTAGE_I2C_BASE, 0x1c );
++  bsp_c6_rtc_sources();
++  bsp_c6_pmu_init();
++  bsp_c6_ocode_init();
++  bsp_c6_rtc_sources();
++  /* esp_clk_init(): disable unused RC32K and LP_ACTIVE oscillator powers. */
++  bsp_voltage_field( 0xac, BSP_BIT32( 29 ), 0 );
++  WRITE_REG( VOLTAGE_PMU_BASE, 0xac, BSP_BIT32( 30 ) );
++  uint32_t period = bsp_c6_slow_calibrate( 1024 );
++  WRITE_REG( (uintptr_t) 0x600b1000, 0x04, period );
++  /* Preserve driver-owned LP gates; eFuse must remain clocked. */
++  WRITE_REG( (uintptr_t) 0x600b2800, 0,
++    READ_REG( (uintptr_t) 0x600b2800, 0 ) | BSP_BIT32( 30 ) );
++  WRITE_REG( VOLTAGE_I2C_BASE, 0x1c, read_mask );
++}
++#endif
+diff --git a/bsps/riscv/esp32/start/bspstart.c b/bsps/riscv/esp32/start/bspstart.c
+index 33357d6..f7da86f 100644
+--- a/bsps/riscv/esp32/start/bspstart.c
++++ b/bsps/riscv/esp32/start/bspstart.c
+@@ -167,6 +167,7 @@ extern void ets_update_cpu_frequency( uint32_t cpu_mhz )
+   __attribute__( ( weak ) );
+ 
+ #include "bspvoltage.h"
++#include "bspc6rtc.h"
+ 
+ #if defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H ) \
+   || defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H ) \
+@@ -315,13 +316,17 @@ static void bsp_c6_bbpll_init( void )
+   WRITE_REG( pmu, 0xd0, BSP_BIT32( 28 ) );
+ 
+   /* Select the 40 MHz crystal while configuring the 480 MHz PLL. */
++  reg = READ_REG( CLK_PCR_BASE, 0x11c );
++  WRITE_REG( CLK_PCR_BASE, 0x11c, reg & ~0xffu );
+   reg = READ_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG );
+   WRITE_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG, reg & ~0xffu );
+   reg = READ_REG( CLK_PCR_BASE, CLK_PCR_SYSCLK_CONF_REG );
+   WRITE_REG( CLK_PCR_BASE, CLK_PCR_SYSCLK_CONF_REG, reg & ~( 3u << 16 ) );
+-  if ( ets_update_cpu_frequency != NULL ) {
+-    ets_update_cpu_frequency( 40 );
+-  }
++  ( (void (*)( uint32_t )) (uintptr_t) 0x40000048U )( 40 );
++
++  /* rtc_clk_init installs the safe MSPI divider before PLL configuration. */
++  reg = READ_REG( CLK_PCR_BASE, 0x1c );
++  WRITE_REG( CLK_PCR_BASE, 0x1c, ( reg & ~0xff00u ) | ( 5u << 8 ) );
+ 
+   /* rtc_clk_bbpll_enable()/configure(), clk_tree_ll.h and regi2c_impl.c.
+    * The C6 PLL is fixed at 480 MHz and supports a 40 MHz crystal.
+@@ -333,6 +338,7 @@ static void bsp_c6_bbpll_init( void )
+   uint32_t analog_mask = READ_REG( ESP_ANALOG_I2C_BASE, 0x1c );
+   WRITE_REG( lpcon, 0x18, clock | BSP_BIT32( 2 ) );
+   WRITE_REG( lpcon, 0x10, source | 1u );
++  bsp_c6_rtc_tune();
+   bsp_voltage_init();
+   reg = READ_REG( ESP_ANALOG_I2C_BASE, 0x18 );
+   WRITE_REG( ESP_ANALOG_I2C_BASE, 0x18, ( reg & ~4u ) | 8u );
+@@ -348,20 +354,12 @@ static void bsp_c6_bbpll_init( void )
+     }
+   }
+   /* ESP-IDF waits 10 us after CAL_DONE before stopping calibration. */
+-  for ( volatile uint32_t delay = 0; delay < 1000; ++delay ) {
+-    __asm__ volatile ( "nop" );
+-  }
++  bsp_c6_delay( 10 );
+   reg = READ_REG( ESP_ANALOG_I2C_BASE, 0x18 );
+   WRITE_REG( ESP_ANALOG_I2C_BASE, 0x18, ( reg & ~8u ) | 4u );
+   WRITE_REG( ESP_ANALOG_I2C_BASE, 0x1c, analog_mask );
+   WRITE_REG( lpcon, 0x10, source );
+   WRITE_REG( lpcon, 0x18, clock );
+-
+-  /* rtc_clk_init(): the reset flash divider selects an uncalibrated
+-   * 120 MHz clock. Divide PLL480 by 6 for 80 MHz before selecting PLL.
+-   */
+-  reg = READ_REG( CLK_PCR_BASE, 0x1c );
+-  WRITE_REG( CLK_PCR_BASE, 0x1c, ( reg & ~0xff00u ) | ( 5u << 8 ) );
+ }
+ #endif
+ 
+@@ -771,9 +769,13 @@ static void bsp_clock_init( void )
+ 
+ #endif
+ 
++#if defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++  ( (void (*)( uint32_t )) (uintptr_t) 0x40000048U )( cpu_freq_mhz );
++#else
+   if ( ets_update_cpu_frequency != NULL ) {
+     ets_update_cpu_frequency( cpu_freq_mhz );
+   }
++#endif
+ }
+ 
+ #if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
+@@ -854,6 +856,10 @@ void bsp_start( void )
+ 
+   bsp_clock_init();
+ 
++#if defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++  bsp_c6_rtc_init();
++#endif
++
+   uint32_t timg_wdtconfig0;
+ 
+ #if defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+diff --git a/bsps/riscv/esp32/start/bspvoltage.h b/bsps/riscv/esp32/start/bspvoltage.h
+index f84dd6d..300a36e 100644
+--- a/bsps/riscv/esp32/start/bspvoltage.h
++++ b/bsps/riscv/esp32/start/bspvoltage.h
+@@ -40,7 +40,7 @@ static void bsp_voltage_i2c_wait( uint32_t host )
+   }
+ }
+ 
+-/* Only DIG_REG (0x6d), and on P4 BIAS (0x6a), are used here. */
++/* C6 also accesses ULP (0x61) for power-on o-code initialization. */
+ static void bsp_voltage_i2c_write(
+   uint32_t block,
+   uint32_t address,
+@@ -74,9 +74,14 @@ static void bsp_voltage_i2c_write(
+   uint32_t read_mask = ~( bit_mask << 2 ) & 0xffffffu;
+   host = ( READ_REG( VOLTAGE_I2C_BASE, 0x20 ) & select ) != 0 ? 0 : 4;
+   WRITE_REG( VOLTAGE_I2C_BASE, 0x1c, read_mask );
++#else
++#if defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++  const uint32_t select = block == 0x61u ? 10 : 12;
++  const uint32_t read_bit = block == 0x61u ? 8 : 10;
+ #else
+   const uint32_t select = 12;
+   const uint32_t read_bit = 10;
++#endif
+   host = ( READ_REG( VOLTAGE_I2C_BASE, 0x20 ) & BSP_BIT32( select ) )
+     != 0 ? 0 : 4;
+   WRITE_REG( VOLTAGE_I2C_BASE, 0x1c, 0xffffffu & ~BSP_BIT32( read_bit ) );

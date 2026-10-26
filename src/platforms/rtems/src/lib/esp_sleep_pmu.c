@@ -427,10 +427,16 @@ static void fsm_init(struct rtems_esp_sleep_pmu_state *s, bool xtal, bool fosc,
     isolated_pll = PB(26) | PB(27);
     modem = 2U << 30;
 #endif
-    /* ACTIVE and unused MODEM are explicit too. No modem state is entered,
+    /* C6's BSP installs IDF's complete ACTIVE/MODEM defaults at boot. Other
+     * chips still establish their baseline here. No modem state is entered,
      * no backup/retention enables are installed. Preserve voltage calibration.
      */
     for (unsigned mode = 0; mode < 3; mode++) {
+#if defined(RTEMS_BOARD_ESP32C6)
+        if (mode != 2) {
+            continue;
+        }
+#endif
         uintptr_t base = HP(mode * HP_STRIDE);
         bool sleep = mode == 2;
         uint32_t digital = 0;
