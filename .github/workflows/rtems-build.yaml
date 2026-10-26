@@ -1264,9 +1264,9 @@ jobs:
           "$RUNNER_TEMP/rtems_peripherals.avm" \
           build-host/src/platforms/rtems/tests/test_erl_sources/test_peripherals.beam \
           build-host/libs/atomvmlib-rtems.avm
-        # The pinned emulator does not model the newer RTC timers or power
-        # transitions. Replace those two hardware entry points for this test;
-        # the boot test above builds and runs the normal hardware backend.
+        # RTC/power coverage varies by chip. Isolate scheduler integration
+        # with the fixture; the boot test above retains the hardware backend
+        # and exposes emulator limitations such as C6's post-wake eFuse wait.
         cmake -S src/platforms/rtems -B src/platforms/rtems/build-peripherals -G Ninja \
           -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
           -DRTEMS_PREFIX="${{ matrix.prefix }}" \

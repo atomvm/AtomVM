@@ -805,11 +805,17 @@ Global deep-sleep pad hold is C3-specific; newer chips use individual pad holds
 and return `{error, enotsup}` for the global hold calls.
 
 **Validation:** `rtems_peripheral_test` builds `test_peripherals.beam` for ADC/PWM,
-RTC storage, light sleep, expired timers and scheduler resumption. The pinned
-esp-emulator does not complete hardware sleep transitions, and its newer RTC
-counters read zero. CI therefore tests scheduler/clock integration separately
-with `-DRTEMS_SLEEP_TEST_FIXTURE=ON`, which replaces only the RTC counter and PMU
-entry point. Never use that option in firmware for a board. Physical power
+RTC storage, light sleep, expired timers and scheduler resumption. Emulator
+coverage varies by chip. With esp-emulator 0.51.0, C6's RTC advances and timer
+wake is reported, but the hardware backend stalls at the post-wake eFuse-IDLE
+barrier: the emulated controller reports state 0 instead of IDLE (1).
+A timer-only application built against the unmodified reference ESP-IDF revision
+also stalls in its `pmu_sleep_finish()` at the same register and IDLE check;
+this failure is not specific to RTEMS bring-up. C5/H2/P4/S31 RTC counters still
+read zero in boot testing. CI tests scheduler/clock integration
+separately with `-DRTEMS_SLEEP_TEST_FIXTURE=ON`, which replaces only the RTC counter
+and PMU entry point; the normal boot test retains the hardware backend and exposes
+the C6 failure. Never use the fixture in firmware for a board. Physical power
 transitions, analog accuracy and GPIO wakeup still need board validation. Build
 `rtems_deep_sleep_test` and pack `test_deep_sleep.beam` for a real-board test of
 timer wakeup, deep-sleep reset reason and RTC retention across the reset.
@@ -962,8 +968,10 @@ direct-boot `.bin` for the ESP32 boards and the `.exe` (loadable with QEMU or
 You can emulate the ESP32-C3 build locally or in CI without physical hardware using Espressif's high-performance Rust-based [`esp-emulator`](https://github.com/espressif/esp-emulator) (`esp-emu`):
 
 ```sh
-# Install esp-emulator
-curl -fsSL https://raw.githubusercontent.com/espressif/esp-emulator/main/install.sh | sh -s -- --version 0.49.0
+# Install the same esp-emulator version as CI and Docker (from the repository root)
+. src/platforms/rtems/docker/dependencies.sh
+curl -fsSL "https://raw.githubusercontent.com/espressif/esp-emulator/${ESP_EMU_INSTALL_COMMIT}/install.sh" \
+    | sh -s -- --version "${RTEMS_ESP_EMU_VERSION}"
 export PATH="$HOME/.local/bin:$PATH"
 
 # Run emulation with automatic exit on completion
