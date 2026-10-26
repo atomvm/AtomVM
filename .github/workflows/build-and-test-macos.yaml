@@ -259,6 +259,11 @@ jobs:
       run: |
         ./tests/test-term
 
+    - name: "Test: test-avmpack"
+      working-directory: build
+      run: |
+        ./tests/test-avmpack
+
     - name: "Test: test_etest.avm"
       timeout-minutes: 5
       working-directory: build

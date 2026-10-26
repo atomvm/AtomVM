@@ -21,9 +21,11 @@ Functions
 .. doxygenfunction:: atom_string_len
 .. doxygenfunction:: atom_string_to_c
 .. doxygenfunction:: atom_write_mfa
+.. doxygenfunction:: avmpack_compute_size
 .. doxygenfunction:: avmpack_find_section_by_flag
 .. doxygenfunction:: avmpack_find_section_by_name
 .. doxygenfunction:: avmpack_fold
+.. doxygenfunction:: avmpack_is_complete
 .. doxygenfunction:: avmpack_is_valid
 .. doxygenfunction:: bitstring_copy_bits
 .. doxygenfunction:: bitstring_copy_bits_incomplete_bytes

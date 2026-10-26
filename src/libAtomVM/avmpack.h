@@ -55,14 +55,17 @@ struct AVMPackData
     bool in_use;
     int name_atom_id;
     const void *data;
+    uint32_t size;
 };
 
-static inline void avmpack_data_init(struct AVMPackData *avm_pack_data, const struct AVMPackInfo *info)
+static inline void avmpack_data_init(
+    struct AVMPackData *avm_pack_data, const struct AVMPackInfo *info, uint32_t size)
 {
     avm_pack_data->obj_info = info;
     avm_pack_data->in_use = false;
     avm_pack_data->name_atom_id = 0;
     avm_pack_data->data = NULL;
+    avm_pack_data->size = size;
 }
 
 static inline void avmpack_data_destroy(struct AVMPackData *avm_pack_data, GlobalContext *global)
@@ -102,34 +105,44 @@ typedef void *(*avmpack_fold_fun)(void *accum, const void *section_ptr, uint32_t
 /**
  * @brief Finds an AVM Pack section that has certain flags set.
  *
- * @details Finds an AVM Pack section that has certain flags set and returns a pointer to it, its size and its name.
+ * @details Finds an AVM Pack section that has certain flags set and returns a pointer to it, its
+ * size and its name. The scan is bounded by \p avmpack_size.
  * @param avmpack_binary a pointer to valid AVM Pack file data.
+ * @param avmpack_size the size in bytes of the AVM Pack.
  * @param flags_mask that will be matched against file sections.
  * @param flags_value that will be matched against file sections.
- * @param ptr will point to the found file section.
- * @param size will be set to the file section size that has been found, if the section has not been found it will not be updated.
- * @param name the section name, as defined in the module header.
+ * @param[out] ptr will point to the found file section.
+ * @param[out] size the payload size at \p ptr, without the section header and the padded name; not
+ * updated if the section has not been found.
+ * @param[out] name the section name, as defined in the module header.
  * @returns 1 if the file section has been found, 0 otherwise.
  */
-int avmpack_find_section_by_flag(const void *avmpack_binary, uint32_t flags_mask, uint32_t flags_value, const void **ptr, uint32_t *size, const char **name);
+int avmpack_find_section_by_flag(const void *avmpack_binary, uint32_t avmpack_size,
+    uint32_t flags_mask, uint32_t flags_value, const void **ptr, uint32_t *size, const char **name);
 
 /**
  * @brief Finds an AVM Pack section that has certain name.
  *
  * @details Finds an AVM Pack section with a certain name and returns a pointer to it and its size.
+ * The scan is bounded by \p avmpack_size.
  * @param avmpack_binary a pointer to valid AVM Pack file data.
+ * @param avmpack_size the size in bytes of the AVM Pack.
  * @param name the file section name that will be searched.
- * @param ptr will point to the found file section, if the section has not been found it will not be updated.
- * @param size will be set to the file section size that has been found, if the section has not been found it will not be updated.
+ * @param[out] ptr will point to the found file section; not updated if the section has not been
+ * found.
+ * @param[out] size the payload size at \p ptr, without the section header and the padded name; not
+ * updated if the section has not been found.
  * @returns 1 if the file section has been found, 0 otherwise.
  */
 
-int avmpack_find_section_by_name(const void *avmpack_binary, const char *name, const void **ptr, uint32_t *size);
+int avmpack_find_section_by_name(const void *avmpack_binary, uint32_t avmpack_size,
+    const char *name, const void **ptr, uint32_t *size);
 
 /**
- * @brief Returns \c true if the pointed binary is a valid AVM Pack.
+ * @brief Returns \c true if the pointed binary starts with a valid AVM Pack header.
  *
- * @details Returns if the pointed binary is a valid AVM Pack binary or not.
+ * @details Checks the 24-byte magic header only; see \c avmpack_is_complete and
+ * \c avmpack_compute_size for truncation.
  * @param avmpack_binary a pointer to an AVM Pack binary.
  * @param size the size of AVM Pack binary.
  * @returns \c true if it is a valid AVM Pack binary, \c false otherwise.
@@ -137,15 +150,41 @@ int avmpack_find_section_by_name(const void *avmpack_binary, const char *name, c
 bool avmpack_is_valid(const void *avmpack_binary, uint32_t size);
 
 /**
+ * @brief Returns \c true if an AVM Pack of exactly known size ends with its \c end terminator.
+ *
+ * @details Reads the header and the last 16 bytes only, so a memory-mapped pack stays lazily
+ * paged. Trailing bytes after the terminator and sizes above \c UINT32_MAX are rejected.
+ * @param avmpack_binary a pointer to an AVM Pack binary.
+ * @param exact_size the exact size in bytes of the AVM Pack.
+ * @returns \c true if the pack is complete, \c false otherwise.
+ */
+bool avmpack_is_complete(const void *avmpack_binary, size_t exact_size);
+
+/**
+ * @brief Finds the end of an AVM Pack within a region and returns its real size.
+ *
+ * @details Walks the section chain, validating every header, until the \c end terminator or
+ * \p max_size is reached.
+ * @param avmpack_binary a pointer to an AVM Pack binary.
+ * @param max_size the size in bytes of the region containing the AVM Pack.
+ * @param[out] real_size set to the size in bytes of the AVM Pack on success.
+ * @returns \c true if the terminator was found within \p max_size, \c false otherwise.
+ */
+bool avmpack_compute_size(const void *avmpack_binary, uint32_t max_size, uint32_t *real_size);
+
+/**
  * @brief Fold over all the sections in an AVM Pack.
  *
  * @details This function will call the callback on each section of the AVM Pack, passing in
- * the current section of each module in the AVM binary to the supplied fold function.
+ * the current section of each module in the AVM binary to the supplied fold function. The scan
+ * is bounded by \p avmpack_size and stops on the terminator or on the first invalid section header.
  * @param accum The accumulator supplied by the application.
  * @param avmpack_binary a pointer to an AVM Pack binary.
+ * @param avmpack_size the size in bytes of the AVM Pack.
  * @param fold_fun function that will be called for each AVM section.
  */
-void *avmpack_fold(void *accum, const void *avmpack_binary, avmpack_fold_fun fold_fun);
+void *avmpack_fold(
+    void *accum, const void *avmpack_binary, uint32_t avmpack_size, avmpack_fold_fun fold_fun);
 
 #ifdef __cplusplus
 }

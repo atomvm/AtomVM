@@ -333,8 +333,11 @@ int main(void)
     port_driver_init_all(glb);
     nif_collection_init_all(glb);
 
-    if (!avmpack_is_valid(flashed_avm, size) || !avmpack_find_section_by_flag(flashed_avm, BEAM_START_FLAG, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
-        AVM_LOGE(TAG, "Invalid AVM Pack");
+    uint32_t avm_size = 0;
+    if (!avmpack_compute_size(flashed_avm, size, &avm_size)
+        || !avmpack_find_section_by_flag(flashed_avm, avm_size, BEAM_START_FLAG, BEAM_START_FLAG,
+            &startup_beam, &startup_beam_size, &startup_module_name)) {
+        AVM_LOGE(TAG, "Invalid or truncated AVM Pack");
         AVM_ABORT();
     }
     AVM_LOGI(TAG, "Booting file mapped at: %p, size: %lu", flashed_avm, startup_beam_size);
@@ -345,7 +348,7 @@ int main(void)
         AVM_LOGE(TAG, "Memory error: Cannot allocate AVMPackData.");
         AVM_ABORT();
     }
-    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
+    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info, avm_size);
     avmpack_data->base.data = flashed_avm;
     avmpack_data->base.in_use = true;
     synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);

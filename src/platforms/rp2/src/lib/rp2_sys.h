@@ -27,6 +27,7 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
 
+#include <hardware/regs/addressmap.h>
 #include <pico/cond.h>
 #include <pico/util/queue.h>
 
@@ -42,6 +43,10 @@
 // to make sure a given module nif or port are linked in.
 
 #define EVENT_QUEUE_LEN 16
+
+// 16 MiB XIP window of flash chip select 0, always mapped on RP2040 and RP2350 (a smaller chip
+// mirrors), unlike PICO_FLASH_SIZE_BYTES, which a board file can understate
+#define RP2_XIP_CS0_END (XIP_BASE + 16 * 1024 * 1024)
 
 typedef queue_t *listener_event_t;
 

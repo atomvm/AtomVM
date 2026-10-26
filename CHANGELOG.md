@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
+- `.avm` files, binaries and the pack embedded in an escript must now end exactly with the pack
+  terminator: data after the end of the pack (for example a padded partition dump passed to
+  `atomvm:add_avm_pack_binary/2`) is rejected when loaded
 
 ### Fixed
 - Fixed maps decoded by `binary_to_term/1,2` and received over distribution keeping the
@@ -28,6 +31,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bytes that the other scheduler then took
 - Fixed ESP32 SPI pin typespecs to allow `-1` for unused pins.
 - Fixed ESP32 double free crash when closing SPI ports
+- Fixed the VM crashing (`LoadProhibited` on ESP32) when `atomvm:read_priv/2` or a module load
+  looked up a name that is not in a truncated or corrupt AVM pack, such as an image larger than
+  its flash partition
+- Fixed `code:get_object_code/1` returning extra bytes after the module (the start of the next
+  pack entry) for modules loaded from an AVM pack
+- Fixed truncated AVM packs, such as an image larger than its flash partition, being accepted at
+  load and failing later in unpredictable ways; they are now rejected when loaded, with an error
+  at boot or from `atomvm:add_avm_pack_file/2` and `atomvm:add_avm_pack_binary/2`
+- Fixed `atomvm:read_priv/2` returning a binary that extends past its pack entry, reading other
+  entries or memory after the pack, when the entry's recorded size is corrupt; it now raises
+  `invalid_avm`. A resource that is genuinely absent still returns `undefined`
 
 ## [0.7.0-beta.0] - 2026-09-28
 
