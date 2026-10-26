@@ -22,6 +22,11 @@
 defmodule GenServerTest.Stack do
   use GenServer
 
+  def init(:hang) do
+    Process.sleep(5000)
+    {:ok, []}
+  end
+
   def init(args) do
     {:ok, args}
   end

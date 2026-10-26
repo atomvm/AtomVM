@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.7.0-beta.1] - Unreleased
 
+### Added
+- Added `gen:start/5,6`, used by Elixir's `GenServer`
+
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
 - `.avm` files, binaries and the pack embedded in an escript must now end exactly with the pack
@@ -42,6 +45,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `atomvm:read_priv/2` returning a binary that extends past its pack entry, reading other
   entries or memory after the pack, when the entry's recorded size is corrupt; it now raises
   `invalid_avm`. A resource that is genuinely absent still returns `undefined`
+- Fixed `gen_server` returning an error instead of `ignore` when `init/1` returns `ignore`
+- Fixed `gen_server` start when `init/1` stops, crashes or returns a bad value: like OTP, the
+  server now exits with that reason, which a linked caller receives, and the start returns
+  `{error, Reason}` with the exit reason instead of `{unexpected_reply_from_init, _}` or
+  `{bad_return_value, _}`
+- Fixed a failed named `gen_server` start leaving a stray `EXIT` or `DOWN` in the caller's mailbox
+- Fixed `proc_lib:start/5` killing a linked caller when a start passing `{spawn_opt, [link]}`
+  timed out, and `proc_lib:start_link/5,start_monitor/5` hanging when the child died before
+  acknowledging
+- Fixed `proc_lib:start*/5` accepting the `{monitor, _}` spawn option, which is not allowed
+- Fixed a failed `proc_lib:start_monitor/3,4,5` consuming the `DOWN` message of the monitor it
+  returns, which callers waiting on that monitor never received
 
 ## [0.7.0-beta.0] - 2026-09-28
 

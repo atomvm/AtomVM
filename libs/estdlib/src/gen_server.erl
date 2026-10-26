@@ -68,15 +68,17 @@
 }).
 
 -type options() :: list({atom(), term()}).
--type start_ret() :: {ok, pid()} | {error, Reason :: term()}.
--type start_mon_ret() :: {ok, {Pid :: pid(), MonRef :: reference()}} | {error, Reason :: term()}.
+-type start_ret() :: {ok, pid()} | ignore | {error, Reason :: term()}.
+-type start_mon_ret() ::
+    {ok, {Pid :: pid(), MonRef :: reference()}} | ignore | {error, Reason :: term()}.
 -type server_ref() :: atom() | pid().
 -type from() :: {pid(), reference()}.
 
 -type init_result(StateType) ::
     {ok, State :: StateType}
     | {ok, State :: StateType, timeout() | {timeout, timeout(), Msg :: any()} | {continue, term()}}
-    | {stop, Reason :: any()}.
+    | {stop, Reason :: any()}
+    | ignore.
 
 -type handle_continue_result(StateType) ::
     {noreply, NewState :: StateType}
@@ -137,60 +139,53 @@ init_it(Starter, Name, Module, Args, Options) ->
                         badarg,
                         S
                     ),
-                    proc_lib:init_ack(Starter, {error, badarg});
+                    proc_lib:init_fail(Starter, {error, badarg}, {exit, normal});
                 Pid when is_pid(Pid) ->
-                    proc_lib:init_ack(Starter, {error, {already_started, Pid}})
+                    proc_lib:init_fail(
+                        Starter, {error, {already_started, Pid}}, {exit, normal}
+                    )
             end
     end.
 
+%% Like OTP, only ignore is reported with init_fail. Any other failure makes the
+%% server exit before acknowledging, so the starter gets {error, Reason} from
+%% the DOWN message and a linked starter gets the exit signal.
 init_it(Starter, Module, Args, Options) ->
-    Outcome =
-        try Module:init(Args) of
-            {ok, ModState} ->
-                {ok, #state{
-                    name = proplists:get_value(name, Options),
-                    mod = Module,
-                    mod_state = ModState,
-                    timeout = infinity
-                }};
-            {ok, ModState, {continue, NewContinue}} ->
-                {ok, #state{
-                    name = proplists:get_value(name, Options),
-                    mod = Module,
-                    mod_state = ModState,
-                    timeout = {continue, NewContinue}
-                }};
-            {ok, ModState, InitTimeout} ->
-                {ok, #state{
-                    name = proplists:get_value(name, Options),
-                    mod = Module,
-                    mod_state = ModState,
-                    timeout = InitTimeout
-                }};
-            {stop, Reason} ->
-                {fail, {error, Reason}, {exit, Reason}};
-            Reply ->
-                {fail, {error, {unexpected_reply_from_init, Reply}},
-                    {exit, {bad_return_value, Reply}}}
-        catch
-            Class:E:S ->
-                crash_report(
-                    io_lib:format(
-                        "gen_server:init_it/4: Error initializing module ~p", [Module]
-                    ),
-                    Starter,
-                    E,
-                    S
-                ),
-                {fail, {error, {bad_return_value, E}}, {Class, E, S}}
-        end,
-    case Outcome of
-        {ok, State} ->
-            proc_lib:init_ack(Starter, {ok, self()}),
-            system_continue(Starter, [], State);
-        {fail, Return, Exception} ->
-            proc_lib:init_fail(Starter, Return, Exception)
+    case init_it(Module, Args) of
+        {ok, {ok, ModState}} ->
+            ack_and_loop(Starter, Module, ModState, infinity, Options);
+        {ok, {ok, ModState, {continue, NewContinue}}} ->
+            ack_and_loop(Starter, Module, ModState, {continue, NewContinue}, Options);
+        {ok, {ok, ModState, InitTimeout}} ->
+            ack_and_loop(Starter, Module, ModState, InitTimeout, Options);
+        {ok, {stop, Reason}} ->
+            exit(Reason);
+        {ok, ignore} ->
+            proc_lib:init_fail(Starter, ignore, {exit, normal});
+        {ok, Reply} ->
+            exit({bad_return_value, Reply});
+        {'EXIT', Class, Reason, Stacktrace} ->
+            erlang:raise(Class, Reason, Stacktrace)
     end.
+
+%% A value thrown by init/1 is its return value, as in OTP.
+init_it(Module, Args) ->
+    try
+        {ok, Module:init(Args)}
+    catch
+        throw:Reply -> {ok, Reply};
+        Class:Reason:Stacktrace -> {'EXIT', Class, Reason, Stacktrace}
+    end.
+
+ack_and_loop(Starter, Module, ModState, Timeout, Options) ->
+    State = #state{
+        name = proplists:get_value(name, Options),
+        mod = Module,
+        mod_state = ModState,
+        timeout = Timeout
+    },
+    proc_lib:init_ack(Starter, {ok, self()}),
+    system_continue(Starter, [], State).
 
 crash_report(ErrStr, Parent, E, S) ->
     io:format("=============~n"),
@@ -312,13 +307,7 @@ start_link(Module, Args, Options) ->
 -spec start_monitor(Module :: module(), Args :: term(), Options :: options()) ->
     start_mon_ret().
 start_monitor(Module, Args, Options) ->
-    {Result, Monitor} = proc_lib:start_monitor(?MODULE, init_it, [self(), Module, Args, Options]),
-    case Result of
-        {ok, Pid} ->
-            {ok, {Pid, Monitor}};
-        _ ->
-            Result
-    end.
+    gen:monitor_return(proc_lib:start_monitor(?MODULE, init_it, [self(), Module, Args, Options])).
 
 %%-----------------------------------------------------------------------------
 %% @param   ServerName the name with which to register the gen_server
@@ -345,15 +334,11 @@ start_monitor(Module, Args, Options) ->
 start_monitor({local, Name}, Module, Args, Options) when is_atom(Name) ->
     case erlang:whereis(Name) of
         undefined ->
-            {Result, Monitor} = proc_lib:start_monitor(?MODULE, init_it, [
-                self(), Name, Module, Args, [{name, Name} | Options]
-            ]),
-            case Result of
-                {ok, Pid} ->
-                    {ok, {Pid, Monitor}};
-                _ ->
-                    Result
-            end;
+            gen:monitor_return(
+                proc_lib:start_monitor(?MODULE, init_it, [
+                    self(), Name, Module, Args, [{name, Name} | Options]
+                ])
+            );
         Pid ->
             {error, {already_started, Pid}}
     end.

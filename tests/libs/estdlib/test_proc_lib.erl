@@ -21,7 +21,9 @@
 -module(test_proc_lib).
 
 -export([test/0]).
--export([init_ok/1, init_crash/1, init_initial_call_ancestors/1, spawn_func/1]).
+-export([
+    init_ok/1, init_crash/1, init_fail/1, init_hang/0, init_initial_call_ancestors/1, spawn_func/1
+]).
 
 test() ->
     ok = test_start_sync(),
@@ -31,6 +33,7 @@ test() ->
     ok = test_start_monitor_sync(),
     ok = test_start_timeout(),
     ok = test_start_crash(),
+    ok = test_start_monitor_failure_down(),
     ok = test_initial_call_and_ancestors(),
     ok = test_spawn(),
     ok.
@@ -54,6 +57,15 @@ test_start_monitor_badarg() ->
     ok =
         try
             proc_lib:start(?MODULE, init_ok, [Parent], infinity, [monitor]),
+            unexpected
+        catch
+            error:badarg ->
+                ok
+        end,
+    %% OTP rejects the tuple form too
+    ok =
+        try
+            proc_lib:start(?MODULE, init_ok, [Parent], infinity, [{monitor, []}]),
             unexpected
         catch
             error:badarg ->
@@ -150,6 +162,21 @@ test_start_crash() ->
             [] = ThrowSt
     end,
 
+    %% A child dying before acknowledging used to make trapped start_link and
+    %% start_monitor wait for a second DOWN forever.
+    {ok, {error, tested}, []} = isolated(true, fun() ->
+        proc_lib:start_link(?MODULE, init_crash, [{exit, tested, []}])
+    end),
+    {ok, {{error, tested}, MonRef1}, [{'DOWN', MonRef1, process, _, tested}]} = isolated(
+        true, fun() -> proc_lib:start_monitor(?MODULE, init_crash, [{exit, tested, []}]) end
+    ),
+    {ok, {{error, tested}, MonRef2}, [{'DOWN', MonRef2, process, _, tested}]} = isolated(
+        true,
+        fun() ->
+            proc_lib:start_monitor(?MODULE, init_crash, [{exit, tested, []}], infinity, [link])
+        end
+    ),
+
     case erlang:system_info(machine) of
         "ATOM" ->
             logger_manager:stop();
@@ -157,6 +184,52 @@ test_start_crash() ->
             ok
     end,
     ok.
+
+%% As with OTP, a failed start_monitor still delivers the DOWN for the monitor
+%% it returns, whatever the failure.
+test_start_monitor_failure_down() ->
+    {ok, {{error, failed}, Ref1}, [{'DOWN', Ref1, process, _, normal}]} = isolated(true, fun() ->
+        proc_lib:start_monitor(?MODULE, init_fail, [{error, failed}])
+    end),
+    {ok, {{error, timeout}, Ref2}, [{'DOWN', Ref2, process, _, killed}]} = isolated(true, fun() ->
+        proc_lib:start_monitor(?MODULE, init_hang, [], 100)
+    end),
+    {ok, {{error, timeout}, Ref3}, [{'DOWN', Ref3, process, _, killed}]} = isolated(false, fun() ->
+        proc_lib:start_monitor(?MODULE, init_hang, [], 100, [link])
+    end),
+    ok.
+
+%% Run Fun in a fresh process and return what it returned along with every
+%% message left in that process's mailbox, which can only come from the start.
+isolated(TrapExit, Fun) ->
+    Parent = self(),
+    {Pid, Ref} = spawn_monitor(fun() ->
+        process_flag(trap_exit, TrapExit),
+        Result = Fun(),
+        Parent ! {done, self(), Result, drain_mailbox()}
+    end),
+    receive
+        {done, Pid, Result, Leftover} ->
+            normal =
+                receive
+                    {'DOWN', Ref, process, Pid, Reason} -> Reason
+                end,
+            {ok, Result, Leftover};
+        {'DOWN', Ref, process, Pid, Reason} ->
+            {killed, Reason}
+    after 8000 ->
+        exit(Pid, kill),
+        receive
+            {'DOWN', Ref, process, Pid, _} -> ok
+        end,
+        no_reply
+    end.
+
+drain_mailbox() ->
+    receive
+        M -> [M | drain_mailbox()]
+    after 100 -> []
+    end.
 
 test_initial_call_and_ancestors() ->
     Parent = self(),
@@ -254,6 +327,14 @@ init_ok(Parent) ->
         end,
     Parent ! {self(), inited},
     proc_lib:init_ack(Parent, ok),
+    receive
+        quit -> ok
+    end.
+
+init_fail(Return) ->
+    proc_lib:init_fail(Return, {exit, normal}).
+
+init_hang() ->
     receive
         quit -> ok
     end.

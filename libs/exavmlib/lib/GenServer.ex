@@ -1042,25 +1042,10 @@ defmodule GenServer do
   defp do_start(link, module, init_arg, options) do
     case Keyword.pop(options, :name) do
       {nil, opts} ->
-        # :gen.start(:gen_server, link, module, init_arg, opts)
-        # :gen.start is not available AtomVM:
-        # so we use :gen_server.start_link and :gen_server.start
-        case link do
-          :link ->
-            :gen_server.start_link(module, init_arg, opts)
-
-          :nolink ->
-            :gen_server.start(module, init_arg, opts)
-        end
+        :gen.start(:gen_server, link, module, init_arg, opts)
 
       {atom, opts} when is_atom(atom) ->
-        case link do
-          :link ->
-            :gen_server.start_link({:local, atom}, module, init_arg, opts)
-
-          :nolink ->
-            :gen_server.start({:local, atom}, module, init_arg, opts)
-        end
+        :gen.start(:gen_server, link, {:local, atom}, module, init_arg, opts)
 
       # global and via are not supported AtomVM
       #      {{:global, _term} = tuple, opts} ->
