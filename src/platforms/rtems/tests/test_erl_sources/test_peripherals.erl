@@ -79,5 +79,10 @@ start() ->
     lists:foreach(fun(Pid) -> receive {Pid, resumed} -> ok after 1000 -> erlang:error(cpu_did_not_resume) end end, Workers),
     ok = esp:sleep_enable_timer_wakeup(50000),
     ok = esp:light_sleep(),
+    % An interval shorter than hardware entry must fail without fabricating
+    % another timer wake, and execution/timers must remain usable afterward.
+    ok = esp:sleep_enable_timer_wakeup(1),
+    {error, timeout} = esp:light_sleep(),
+    undefined = esp:sleep_get_wakeup_cause(),
     timer:sleep(20),
     ok.

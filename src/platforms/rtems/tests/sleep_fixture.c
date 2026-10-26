@@ -23,6 +23,7 @@
  * a normal firmware build and does not validate physical power transitions.
  */
 #include <assert.h>
+#include <errno.h>
 #include <rtems/counter.h>
 #include <rtems/score/cpuimpl.h>
 #include <stdbool.h>
@@ -33,13 +34,17 @@ uint64_t rtems_esp_rtc_get_counter(void)
     return ((uint64_t) rtems_counter_read() * 136000) / rtems_counter_frequency();
 }
 
-uint32_t rtems_esp_sleep_enter(bool deep, uint32_t wakeup, uint64_t deadline)
+int rtems_esp_sleep_enter(bool deep, uint32_t wakeup, uint64_t usecs, uint32_t *cause)
 {
-    (void) deadline;
     assert(!deep);
+    *cause = 0;
+    if (usecs && usecs < 450) {
+        return ETIMEDOUT;
+    }
     /* Scheduler tick interrupts are masked, and the second CPU must already
      * be parked. The application timer must expire during this interval.
      */
     rtems_counter_delay_nanoseconds(50000000);
-    return wakeup;
+    *cause = wakeup;
+    return 0;
 }

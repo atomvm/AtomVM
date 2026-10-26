@@ -596,6 +596,9 @@ static term sleep_error(Context *ctx, int error)
         case ETIMEDOUT:
             reason = ATOM_STR("\x7", "timeout");
             break;
+        case EAGAIN:
+            reason = ATOM_STR("\xC", "sleep_reject");
+            break;
         case ENODEV:
             reason = ATOM_STR("\x6", "enodev");
             break;

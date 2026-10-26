@@ -70,6 +70,8 @@ set(
 
 if(RTEMS_SLEEP_TEST_FIXTURE)
     list(REMOVE_ITEM SOURCE_FILES esp_sleep_hw.c)
+elseif(RTEMS_BOARD MATCHES "^esp32")
+    list(APPEND SOURCE_FILES esp_sleep_clock.c esp_sleep_console.c esp_sleep_pmu.c)
 endif()
 
 # The BLE controller reuses the Wi-Fi image copy and coexistence layer, so it is

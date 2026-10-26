@@ -288,31 +288,9 @@ static void restore_gpio(uint32_t mask, const struct gpio_sleep_state *saved)
 #endif
 }
 
-static void program_alarm(uint64_t usecs)
-{
-    uint64_t ticks = (usecs / 1000000ULL) * rtc_frequency + ((usecs % 1000000ULL) * rtc_frequency + 999999) / 1000000;
-    uint64_t target = rtems_esp_rtc_get_counter() + ticks;
-#if defined(RTEMS_BOARD_ESP32C3)
-    REG(0x60008004U) = (uint32_t) target;
-    REG(0x6000804CU) = BIT(10); /* Clear the previous RTC timer alarm. */
-    REG(0x60008008U) = ((target >> 32) & 0xFFFFU) | BIT(16);
-#else
-#if defined(RTEMS_BOARD_ESP32S31)
-    const uintptr_t timer = 0x20800000U;
-#elif defined(RTEMS_BOARD_ESP32P4)
-    const uintptr_t timer = 0x50112000U;
-#else
-    const uintptr_t timer = 0x600B0C00U;
-#endif
-    REG(timer + 0x34U) = BIT(31); /* Clear the previous RTC timer alarm. */
-    REG(timer + 0x30U) |= BIT(31); /* Enable the SoC wakeup interrupt. */
-    REG(timer) = (uint32_t) target;
-    REG(timer + 4U) = ((target >> 32) & 0xFFFFU) | BIT(31);
-#endif
-}
-
 int rtems_esp_sleep_start(bool deep, uint64_t usecs, uint32_t gpio_mask, int mode, uint32_t *cause)
 {
+    *cause = 0;
     if (rtems_esp_rtc_frequency() == 0) {
         return ENODEV;
     }
@@ -354,6 +332,7 @@ int rtems_esp_sleep_start(bool deep, uint64_t usecs, uint32_t gpio_mask, int mod
     struct gpio_sleep_state gpio_state = { 0 };
     prepare_gpio(gpio_mask, mode, &gpio_state);
     uint32_t raw_cause = 0;
+    int result;
     /* Wind up the 32-bit RTC timecounter at least every hour, even for an
      * indefinite GPIO wait. This also bounds wakeup watchdog processing.
      */
@@ -362,14 +341,15 @@ int rtems_esp_sleep_start(bool deep, uint64_t usecs, uint32_t gpio_mask, int mod
     do {
         uint64_t interval = (deep || (remaining && remaining < hour)) ? remaining : hour;
         uint64_t before = rtems_esp_rtc_get_counter();
-        if (interval) {
-            program_alarm(interval);
-        }
-        raw_cause = rtems_esp_sleep_enter(deep, (interval ? TIMER_WAKE : 0) | (gpio_mask ? GPIO_WAKE : 0),
-            before + ((interval / 1000000ULL + 1) * rtc_frequency) + ((interval % 1000000ULL) * rtc_frequency) / 1000000ULL);
+        /* Hardware preparation may consume the available interval. Program
+         * the absolute alarm late and reject an expired deadline BEFORE
+         * requesting sleep, never by rolling back an unresolved PMU entry.
+         */
+        result = rtems_esp_sleep_enter(deep, (interval ? TIMER_WAKE : 0) | (gpio_mask ? GPIO_WAKE : 0),
+            interval, &raw_cause);
         uint64_t elapsed = rtems_esp_rtc_get_counter() - before;
         account_sleep(elapsed);
-        if (raw_cause == 0 || (raw_cause & GPIO_WAKE) || deep || (remaining && remaining <= interval)) {
+        if (result || (raw_cause & GPIO_WAKE) || deep || (remaining && remaining <= interval)) {
             break;
         }
         if (remaining) {
@@ -392,6 +372,6 @@ int rtems_esp_sleep_start(bool deep, uint64_t usecs, uint32_t gpio_mask, int mod
 #endif
     pthread_mutex_unlock(&sleep_lock);
     *cause = (raw_cause & GPIO_WAKE) ? 6U : ((raw_cause & TIMER_WAKE) ? 3U : 0U);
-    return raw_cause ? (deep ? EIO : 0) : ETIMEDOUT;
+    return result;
 }
 #endif

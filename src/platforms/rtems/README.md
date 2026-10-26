@@ -152,8 +152,8 @@ RTC-IO0-7 internally. The H2 sleep path drains/suspends the flash cache before
 the PMU request and restores it before returning to flash code. Its PMU ACTIVE
 state enables the system clock and releases the CPU stall; SLEEP stalls the CPU,
 as in ESP-IDF's state-specific defaults. Sleep initialization releases analog
-regulator overrides, selects HP/LP sleep protection, and keeps the global clock
-enabled when retaining functional clocks. Wakeup restores the BIAS DREG_0P8
+regulator overrides, selects HP/LP sleep protection, and programs H2-specific
+clock and regulator sleep states. Wakeup restores the BIAS DREG_0P8
 workaround from SRAM before resuming the cache, matching ESP-IDF.
 USB pad control uses CONF0 at
 `0x6000f018`, not the FIFO at the peripheral base. As in ESP-IDF, native USB
@@ -163,9 +163,9 @@ a wakeup, and ESP-IDF's own light- and deep-sleep examples hang there the same w
 so the boot smoke test skips entering sleep on H2. BLE and IEEE 802.15.4
 controllers are not brought up. An ESP32-H2-DevKitM-1 with 2 MiB of flash passes
 the boot smoke test on hardware: console, peripherals, flash, NVS and the file
-system. A UART-console probe also passes two consecutive timer-wakeup light
-sleeps on hardware, including wake-cause checks, RTC data retention, expired
-Erlang timer delivery and four worker resumptions. Application and BSP ABI flags
+system. An earlier retained-power UART-console probe passed two consecutive
+timer-wakeup light sleeps on hardware, including wake-cause checks, RTC data
+retention, expired Erlang timer delivery and four worker resumptions. Application and BSP ABI flags
 must match (`rv32imac`/`ilp32`): omitting the A extension changes RTEMS's internal
 per-CPU layout and corrupts scheduler state during sleep accounting. Native USB
 recovery, deep sleep and externally stimulated GPIO wake remain unverified. Run
@@ -179,14 +179,23 @@ biases and fallbacks; S31 uses IDF's nominal PMU values. P4 performs the
 LDO-to-DCDC handoff and revision-specific settling sequence. Rebuild the BSP
 SDK with the patch series, not just the application, to include these changes.
 
-The PMU-based boards (C5/C6/H2/P4/S31) explicitly initialize ACTIVE system
-clock/stall state before preparing SLEEP, and keep the sleep global clock
-enabled when retaining functional clocks. S31 checks both functional-clock
-words. C5/C6 retain the BBPLL supplies; P4 retains the BSP's CPLL without
-enabling every other PLL, also capturing PLLs already powered by immediate
-ROM/BSP commands. S31's BSP already installs persistent CPLL state.
-The initialized LP regulator state is also retained into LP_SLEEP; S31 uses
-its distinct offsets, and reserved bits are preserved.
+Sleep configuration is derived from ESP-IDF revision
+`9a97f6c54ec638111ce55cd36581b3c192f15207`, with explicit timer/GPIO sleep,
+no modem integration, no PVT, and no initialized PSRAM. Light sleep retains
+CPU/TOP/peripheral register state and the flash supply, but not ACTIVE PLL
+or functional-clock power settings. Each chip programs its own RTC/PMU
+sleep states, regulator biases, oscillator dependencies and wait times;
+SLEEP is no longer copied from ACTIVE. Calibrated awake BSP voltages are
+preserved. This is a specified IDF-compatible profile, not every IDF default
+configuration (PVT, for example, defaults on for several IDF targets).
+
+Enabled UARTs are suspended before the CPU/bus transition to XTAL and resumed
+only after the original source/dividers and ROM timing are restored. Deep
+sleep drains UART output instead. USB Serial/JTAG pad and clock handling
+follows IDF on all supported chips; USB re-enumeration may still require a
+physical reconnect. Clock restoration follows the selected chip/source,
+including PLL calibration where required, rather than simply restoring raw
+divider registers. C3 explicitly disables BBPLL for sleep.
 P4 GPIO wakeup masks accept physical GPIO0-GPIO15, using P4's per-pad LP
 mux/input fields and wake comparator layout on both silicon revisions.
 Wake-pad inputs are enabled in both active and sleep settings;
@@ -195,19 +204,26 @@ P4 selects pad sleep settings before the PMU holds them and restores active
 settings on return. C5/C6/P4/S31 wait for the eFuse controller's idle state
 before restoring cache access and resuming callers.
 
-Light sleep drains and suspends the external-memory cache through each chip's
-ROM API, restoring saved autoload state on wakeup, rejection and timeout.
+Sleep drains and suspends the external-memory cache through each chip's
+ROM API, restoring saved autoload state on every returning path.
 P4/P4v1 suspend only L2, leaving the L1 path to internal SRAM running; S31
 suspends both instruction caches and the data cache, restoring them in reverse
 order. C5/P4/S31 preserve branch-predictor state on each participating hart.
-The secondary-core park loop and the sleep polling path execute from SRAM;
-polling uses a raw RTC snapshot rather than calling flash-resident SMP locks.
-These source sequences follow ESP-IDF, but non-H2 physical sleep transitions
-and external GPIO stimulation still require board testing; emulator sleep
-fixtures validate RTEMS scheduling, not cache or power transitions.
-This is a retained-power implementation, not identical to ESP-IDF's normal
-low-power policy: except on H2 it leaves the software CPU root mux/dividers
-unchanged, rather than switching to XTAL and recalibrating PLLs on return.
+The secondary-core park loop, hardware wait and wake clock restoration execute
+from SRAM/ROM. An expired timer deadline returns `{error, timeout}` before
+requesting sleep. Light-sleep hardware rejection returns `{error, sleep_reject}`
+without inventing a wake cause. After sleep-enable, the hardware wait has no
+software timeout, as in IDF: callers must never resume while the FSM may still
+transition. A stuck hardware transition therefore requires a reset policy,
+not software rollback. RTEMS retains its own SMP rendezvous, timecounter and
+scheduler accounting, including hourly wake/re-entry for indefinite light
+sleep. Its outer cache suspension spans clock restoration; this layering is
+not instruction-for-instruction IDF identity. Calibration waits are bounded,
+and IDF's nominal XTAL32K precision check is not implemented. Unsupported
+RTC clock selections, including H2/P4 LP_PLL as RTC_FAST, return `enotsup`.
+The low-power implementation requires new physical-board validation;
+earlier retained-power H2 results and
+emulator scheduler fixtures do not establish physical equivalence.
 
 S31 direct boot switches to XTAL40, configures and calibrates CPLL320, then
 selects CPU/MEM/SYS/APB dividers of 1/2/3/2. Clock-update and calibration
@@ -765,10 +781,11 @@ clock (40 MHz, or 48 MHz on C5 boards with that crystal) and rejects
 frequency/resolution combinations outside the divider's range. The existing
 fade API still performs immediate duty changes.
 
-Light sleep retains SRAM, flash, peripheral state, XTAL and PLL supplies while
-using the RTC/PMU to suspend the CPUs. An RTC timecounter preserves monotonic and
-wall time; missed RTEMS ticks and timer queues are advanced after wakeup. S31's
-second CPU parks through an RTEMS per-CPU job and resumes after the transition.
+Light sleep retains SRAM, flash supply and peripheral register state while
+using IDF-derived chip-specific RTC/PMU power and clock transitions. An RTC
+timecounter preserves monotonic and wall time; missed RTEMS ticks and timer
+queues are advanced after wakeup. S31's second CPU parks through an RTEMS
+per-CPU job and resumes after the transition.
 Deep sleep powers down the HP domains and restarts through ROM, preserving the
 RTC binary and timekeeper (S31 RTC RAM starts at `0x2e000000`). Stop networking and
 finish peripheral transfers before explicitly suspending the whole system.
