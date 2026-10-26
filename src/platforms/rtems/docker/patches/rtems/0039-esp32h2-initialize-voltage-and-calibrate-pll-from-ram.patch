@@ -1,0 +1,303 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] esp32h2: initialize voltage and calibrate PLL from RAM
+
+Match ESP-IDF 9a97f6c54ec's direct-boot voltage prerequisites: apply the
+low-temperature DREG_0P8 fix, release analog I2C DREG control, and install
+the calibrated HP/LP PMU biases (including eFuse version checks, fallback
+values, and the saturating frequency-switch margin) before selecting 96 MHz.
+
+Start BBPLL calibration before writing its analog configuration.  FLASH_PLL
+derives from BBPLL, so keep the complete calibration call chain in SRAM,
+prevent inlining into flash, and synchronize instruction fetch after the
+startup section copy.  This copy precedes boot_card and bsp_start's sysinit
+item; do not call the SRAM routines before it.  Wait for calibration like
+IDF rather than returning to flash with an uncalibrated flash clock.  Reserve
+4 KiB of RAM code by default for H2 so the default BSP also links.
+
+Keep peripheral sources off CLINT-owned CPU channels 3, 4 and 7.  Share
+level-triggered SPI/I2S with DMA and LEDC/eFuse with ADC; channel 6 remains
+available since its reservation in IDF is only a software convention.
+
+---
+ bsps/riscv/esp32/irq/irq_c3.c               |  11 +-
+ bsps/riscv/esp32/start/bspstart.c           | 165 ++++++++++++++++++++--------
+ spec/build/bsps/riscv/esp32/optiramsize.yml |   5 +
+ 3 files changed, 129 insertions(+), 52 deletions(-)
+
+diff --git a/bsps/riscv/esp32/irq/irq_c3.c b/bsps/riscv/esp32/irq/irq_c3.c
+index 6bf6019e..376d80fe 100644
+--- a/bsps/riscv/esp32/irq/irq_c3.c
++++ b/bsps/riscv/esp32/irq/irq_c3.c
+@@ -127,6 +127,9 @@ static peripheral_irq_map_t irq_mappings[] = {
+  * controller, the IEEE 802.15.4 MAC or the coexistence front end between them.
+  * Those get channels of their own rather than sharing the software interrupt
+  * channel, which the BLE controller would otherwise dominate.
++ * Channels 3, 4 and 7 belong to the CPU's CLINT, not the peripheral matrix.
++ * Share level-triggered GPSPI/I2S with DMA and LEDC/eFuse with ADC instead.
++ * Channel 6 is usable here: IDF reserves it only by software convention.
+  */
+ static peripheral_irq_map_t irq_mappings[] = {
+   { .peripheral_int = UHCI0_INTR, .cpu_int = 1 },
+@@ -135,12 +138,12 @@ static peripheral_irq_map_t irq_mappings[] = {
+   { .peripheral_int = SW_INTR_2, .cpu_int = 1 },
+   { .peripheral_int = SW_INTR_3, .cpu_int = 1 },
+   { .peripheral_int = GPIO_PROCPU_INTR, .cpu_int = 2 },
+-  { .peripheral_int = GPSPI2_INTR_2, .cpu_int = 3 },
+-  { .peripheral_int = I2S_INTR, .cpu_int = 4 },
++  { .peripheral_int = GPSPI2_INTR_2, .cpu_int = 20 },
++  { .peripheral_int = I2S_INTR, .cpu_int = 21 },
+   { .peripheral_int = UART0_INTR, .cpu_int = 5 },
+   { .peripheral_int = UART1_INTR, .cpu_int = 6 },
+-  { .peripheral_int = LEDC_INTR, .cpu_int = 7 },
+-  { .peripheral_int = EFUSE_INTR, .cpu_int = 7 },
++  { .peripheral_int = LEDC_INTR, .cpu_int = 19 },
++  { .peripheral_int = EFUSE_INTR, .cpu_int = 19 },
+   { .peripheral_int = TWAI0_INTR, .cpu_int = 8 },
+   { .peripheral_int = USB_SERIAL_JTAG_INTR, .cpu_int = 9 },
+   { .peripheral_int = LP_RTC_TIMER_INTR, .cpu_int = 10 },
+diff --git a/bsps/riscv/esp32/start/bspstart.c b/bsps/riscv/esp32/start/bspstart.c
+index 11e07a73..81bd51c7 100644
+--- a/bsps/riscv/esp32/start/bspstart.c
++++ b/bsps/riscv/esp32/start/bspstart.c
+@@ -187,6 +187,7 @@ extern void ets_update_cpu_frequency( uint32_t cpu_mhz )
+ #define ESP_ANALOG_I2C_BASE (uintptr_t) 0x600af800
+ #endif
+ 
++#if !defined( LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H )
+ static void bsp_esp_bbpll_i2c_write(
+   uint32_t address,
+   uint32_t mask,
+@@ -210,6 +211,7 @@ static void bsp_esp_bbpll_i2c_write(
+   while ( READ_REG( ESP_ANALOG_I2C_BASE, host ) & BSP_BIT32( 25 ) ) {
+   }
+ }
++#endif
+ 
+ #endif
+ 
+@@ -350,24 +352,91 @@ static void bsp_c6_bbpll_init( void )
+ 
+ #if defined( LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H )
+ /*
+- * ESP-IDF rtc_clk_bbpll_enable()/configure() for the H2's fixed 96 MHz PLL from
+- * its 32 MHz crystal, followed by rtc_clk_cpu_freq_to_pll_mhz( 96 ).  Returns
+- * whether the PLL may be used: an uncalibrated PLL is worse than a slow CPU,
+- * so a calibration that never completes leaves the crystal selected.
+- *
+- * The flash interface needs no setup here: the boot ROM selects the 64 MHz
+- * flash PLL (PCR_MSPI_CONF PLL_F64M at divider 1) and programs the CS
+- * setup/hold timing, the same clock and timing ESP-IDF's second stage selects
+- * for the H2's default 64 MHz flash configuration.  Raising the CPU to 96 MHz
+- * leaves that source alone, so flash reads and writes keep running at the rate
+- * and timing the ROM established.
++ * Only these three analog blocks are used at startup.  Match ESP-IDF's
++ * regi2c_enable_block(): each has its own master selector and read mask.
++ * Both this helper and the PLL routine must remain out of flash, including
++ * when optimizing: FLASH_PLL is derived from the BBPLL being calibrated.
+  */
+-static bool bsp_h2_bbpll_init( void )
++static BSP_FAST_TEXT_SECTION __attribute__((noinline)) void bsp_h2_i2c_write(
++  uint32_t block,
++  uint32_t address,
++  uint32_t mask,
++  uint32_t value
++)
++{
++  uint32_t select = block == 0x66u ? 9 : block == 0x6au ? 8 : 12;
++  uint32_t read_bit = block == 0x66u ? 7 : block == 0x6au ? 6 : 10;
++  uint32_t host = ( READ_REG( ESP_ANALOG_I2C_BASE, 0x20 ) & BSP_BIT32( select ) )
++    != 0 ? 0 : 4;
++  uint32_t command = block | ( address << 8 );
++
++  WRITE_REG( ESP_ANALOG_I2C_BASE, 0x1c, 0xffffffu & ~BSP_BIT32( read_bit ) );
++  while ( READ_REG( ESP_ANALOG_I2C_BASE, host ) & BSP_BIT32( 25 ) ) {
++  }
++  WRITE_REG( ESP_ANALOG_I2C_BASE, host, command );
++  while ( READ_REG( ESP_ANALOG_I2C_BASE, host ) & BSP_BIT32( 25 ) ) {
++  }
++  uint32_t data = ( READ_REG( ESP_ANALOG_I2C_BASE, host ) >> 16 ) & 0xffu;
++  data = ( data & ~mask ) | value;
++  WRITE_REG( ESP_ANALOG_I2C_BASE, host,
++    command | BSP_BIT32( 24 ) | ( data << 16 ) );
++  while ( READ_REG( ESP_ANALOG_I2C_BASE, host ) & BSP_BIT32( 25 ) ) {
++  }
++}
++
++static uint32_t bsp_h2_dbias( uint32_t calibrated, uint32_t fallback )
++{
++  /* get_act_{hp,lp}_dbias(): zero means unburnt; add two, saturating at 31. */
++  if ( calibrated == 0 ) {
++    return fallback;
++  }
++  return calibrated > 29 ? 31 : calibrated + 2;
++}
++
++static void bsp_h2_voltage_init( void )
++{
++  const uintptr_t efuse = 0x600b0800;
++  const uintptr_t pmu = 0x600b0000;
++  const uintptr_t lpcon = 0x600ad000;
++  uint32_t version = READ_REG( efuse, 0x6c );
++  uint32_t blk_version = ( ( version >> 5 ) & 3u ) * 100
++    + ( ( version >> 2 ) & 7u );
++  uint32_t hp = 17;
++  uint32_t lp = 18;
++  uint32_t reg;
++
++  /* Bootloader's low-temperature DREG_0P8 fix, then rtc_clk_init's handoff
++   * from analog I2C DREG control to the PMU, before raising CPU frequency. */
++  WRITE_REG( lpcon, 0x08, READ_REG( lpcon, 0x08 ) | BSP_BIT32( 2 ) );
++  bsp_h2_i2c_write( 0x6a, 0, 0xf0u, 0x80u );
++  bsp_h2_i2c_write( 0x6d, 8, 0x03u, 0 );
++  WRITE_REG( lpcon, 0x08, READ_REG( lpcon, 0x08 ) & ~BSP_BIT32( 2 ) );
++
++  if ( blk_version >= 3 ) {
++    uint32_t calibrated = READ_REG( efuse, 0x4c );
++    hp = bsp_h2_dbias( ( calibrated >> 17 ) & 31u, hp );
++    lp = bsp_h2_dbias( ( calibrated >> 22 ) & 31u, lp );
++  }
++  reg = READ_REG( pmu, 0x5c );
++  WRITE_REG( pmu, 0x5c, ( reg & ~( 31u << 27 ) ) | ( hp << 27 ) );
++  reg = READ_REG( pmu, 0x28 );
++  WRITE_REG( pmu, 0x28, ( reg & ~( 31u << 27 ) ) | ( hp << 27 ) );
++  reg = READ_REG( pmu, 0x9c );
++  WRITE_REG( pmu, 0x9c, ( reg & ~( 31u << 27 ) ) | ( lp << 27 ) );
++}
++
++/*
++ * _start copies .fast_text before boot_card runs the bsp_start sysinit item.
++ * Do not move this call earlier: SRAM has no code in it before that copy.
++ * Leave MSPI on the ROM's 64 MHz FLASH_PLL source and execute exclusively
++ * from SRAM until calibration has stopped.  Like IDF, wait for CAL_DONE:
++ * returning to flash on a timeout would use an uncalibrated flash clock.
++ */
++static BSP_FAST_TEXT_SECTION __attribute__((noinline)) void bsp_h2_bbpll_init( void )
+ {
+   const uintptr_t pmu = 0x600b0000;
+   const uintptr_t lpcon = 0x600ad000;
+   uint32_t reg;
+-  uint32_t timeout;
+ 
+   /* Power the PLL and the analog I2C master that programs it. */
+   WRITE_REG(
+@@ -379,20 +448,14 @@ static bool bsp_h2_bbpll_init( void )
+   /* ANALOG_CLOCK_ENABLE(): the regi2c bus is gated by MODEM_LPCON. */
+   WRITE_REG( lpcon, 0x08, READ_REG( lpcon, 0x08 ) | BSP_BIT32( 2 ) );
+ 
+-  /* clk_ll_bbpll_set_config(): OC_REF_DIV, OC_DIV, DHREF_SEL and DLREF_SEL. */
+-  bsp_esp_bbpll_i2c_write( 2, 0x0fu, 0x00u );
+-  bsp_esp_bbpll_i2c_write( 3, 0x3fu, 0x01u );
+-  bsp_esp_bbpll_i2c_write( 5, 0xf0u, 0x70u );
+-
+-  /* BBPLL CALIBRATION START */
++  /* Start calibration BEFORE programming the analog PLL configuration. */
+   reg = READ_REG( ESP_ANALOG_I2C_BASE, 0x18 );
+   WRITE_REG( ESP_ANALOG_I2C_BASE, 0x18, ( reg & ~BSP_BIT32( 2 ) ) | BSP_BIT32( 3 ) );
+-  timeout = 1000000;
++  /* clk_ll_bbpll_set_config(): OC_REF_DIV, OC_DIV, DHREF_SEL and DLREF_SEL. */
++  bsp_h2_i2c_write( 0x66, 2, 0x0fu, 0x00u );
++  bsp_h2_i2c_write( 0x66, 3, 0x3fu, 0x01u );
++  bsp_h2_i2c_write( 0x66, 5, 0xf0u, 0x70u );
+   while ( !( READ_REG( ESP_ANALOG_I2C_BASE, 0x18 ) & BSP_BIT32( 24 ) ) ) {
+-    if ( --timeout == 0 ) {
+-      WRITE_REG( lpcon, 0x08, READ_REG( lpcon, 0x08 ) & ~BSP_BIT32( 2 ) );
+-      return false;
+-    }
+   }
+   /* ESP-IDF waits 10 us after CAL_DONE before stopping calibration. */
+   for ( volatile uint32_t delay = 0; delay < 1000; ++delay ) {
+@@ -402,7 +465,6 @@ static bool bsp_h2_bbpll_init( void )
+   reg = READ_REG( ESP_ANALOG_I2C_BASE, 0x18 );
+   WRITE_REG( ESP_ANALOG_I2C_BASE, 0x18, ( reg & ~BSP_BIT32( 3 ) ) | BSP_BIT32( 2 ) );
+   WRITE_REG( lpcon, 0x08, READ_REG( lpcon, 0x08 ) & ~BSP_BIT32( 2 ) );
+-  return true;
+ }
+ #endif
+ 
+@@ -667,29 +729,26 @@ static void bsp_clock_init( void )
+ 
+   uint32_t reg;
+ 
+-  if ( bsp_h2_bbpll_init() ) {
+-    /* CPU = PLL(96) / 1, AHB = PLL(96) / 3 = 32 MHz, the AHB maximum. */
+-    reg = READ_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG );
+-    WRITE_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG, reg & ~0xFFu );
+-
+-    reg = READ_REG( CLK_PCR_BASE, CLK_PCR_AHB_FREQ_CONF_REG );
+-    WRITE_REG( CLK_PCR_BASE, CLK_PCR_AHB_FREQ_CONF_REG, ( reg & ~0xFFu ) | 2u );
+-
+-    /* SOC_CLK_SEL = PLL (1). */
+-    reg = READ_REG( CLK_PCR_BASE, CLK_PCR_SYSCLK_CONF_REG );
+-    WRITE_REG(
+-      CLK_PCR_BASE,
+-      CLK_PCR_SYSCLK_CONF_REG,
+-      ( reg & ~( 0x3u << 16 ) ) | ( 1u << 16 )
+-    );
+-
+-    /* Latch the dividers and the new source, then wait for the bus to settle. */
+-    WRITE_REG( CLK_PCR_BASE, CLK_PCR_BUS_CLK_UPDATE_REG, 1u );
+-    while ( READ_REG( CLK_PCR_BASE, CLK_PCR_BUS_CLK_UPDATE_REG ) != 0u ) {
+-    }
+-  } else {
+-    /* The ROM left the CPU on the 32 MHz crystal and its timing agrees. */
+-    cpu_freq_mhz = 32;
++  bsp_h2_voltage_init();
++  bsp_h2_bbpll_init();
++  /* CPU = PLL(96) / 1, AHB = PLL(96) / 3 = 32 MHz, the AHB maximum. */
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG );
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG, reg & ~0xFFu );
++
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_AHB_FREQ_CONF_REG );
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_AHB_FREQ_CONF_REG, ( reg & ~0xFFu ) | 2u );
++
++  /* SOC_CLK_SEL = PLL (1). */
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_SYSCLK_CONF_REG );
++  WRITE_REG(
++    CLK_PCR_BASE,
++    CLK_PCR_SYSCLK_CONF_REG,
++    ( reg & ~( 0x3u << 16 ) ) | ( 1u << 16 )
++  );
++
++  /* Latch the dividers and the new source, then wait for the bus to settle. */
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_BUS_CLK_UPDATE_REG, 1u );
++  while ( READ_REG( CLK_PCR_BASE, CLK_PCR_BUS_CLK_UPDATE_REG ) != 0u ) {
+   }
+ 
+ #endif
+@@ -919,4 +978,14 @@ BSP_START_TEXT_SECTION void bsp_start_copy_sections( void )
+     bsp_section_fast_data_load_begin,
+     (size_t) bsp_section_fast_data_size
+   );
++#if defined( LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H )
++  /* Publish the SRAM instructions before bsp_start calls the PLL routines. */
++  __asm__ volatile (
++    ".option push\n"
++    ".option arch, +zifencei\n"
++    "fence.i\n"
++    ".option pop\n"
++    ::: "memory"
++  );
++#endif
+ }
+diff --git a/spec/build/bsps/riscv/esp32/optiramsize.yml b/spec/build/bsps/riscv/esp32/optiramsize.yml
+index 031b6950..1bef2f33 100644
+--- a/spec/build/bsps/riscv/esp32/optiramsize.yml
++++ b/spec/build/bsps/riscv/esp32/optiramsize.yml
+@@ -10,12 +10,17 @@ copyrights:
+ default:
+ - enabled-by: riscv/esp32p4v1db
+   value: 0x1000
++- enabled-by: riscv/esp32h2db
++  value: 0x1000
+ - enabled-by: true
+   value: 0x0
+ description: |
+   How much of the internal SRAM to reserve for code that executes from RAM
+   rather than from flash, in bytes, aligned to 4.
+ 
++  ESP32-H2 requires RAM code for BBPLL calibration: the flash clock derives
++  from that PLL.  Its default reserves 4 KiB for the startup routines.
++
+   The ESP32-C3 reaches one SRAM through two windows: 0x3fc80000 on the data
+   bus and 0x40380000 on the instruction bus.  A byte reached through one is
+   the same byte reached through the other, so memory given to this region is

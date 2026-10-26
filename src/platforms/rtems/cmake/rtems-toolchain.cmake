@@ -163,7 +163,7 @@ if(NOT RTEMS_BSP_CFLAGS OR NOT RTEMS_BSP_LDFLAGS)
         # ABI (ilp32f); match the BSP so every object links into one multilib.
         set(RTEMS_BSP_CFLAGS "-B${_rtems_bsp_libdir}/ -qrtems -march=rv32imafc -mabi=ilp32f")
         set(RTEMS_BSP_LDFLAGS "-B${_rtems_bsp_libdir}/ -qrtems -march=rv32imafc -mabi=ilp32f")
-    elseif(RTEMS_ARCH STREQUAL "riscv" AND RTEMS_BSP_NAME MATCHES "esp32(c5|c6|p4)")
+    elseif(RTEMS_ARCH STREQUAL "riscv" AND RTEMS_BSP_NAME MATCHES "esp32(c5|c6|h2|p4)")
         # The A extension also changes RTEMS CPU_Per_CPU_control's layout.
         # Match the BSP, including when building a uniprocessor application.
         set(RTEMS_BSP_CFLAGS "-B${_rtems_bsp_libdir}/ -qrtems -march=rv32imac -mabi=ilp32")

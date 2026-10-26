@@ -25,8 +25,9 @@
 #define BIT(n) (1U << (n))
 
 /* ESP-IDF pmu_sleep.c, pmu_reg.h and rtc_io_ll.h. Keep analog supplies,
- * PLLs, flash and SRAM at their active settings in light sleep. Only the
- * CPU/system clock is gated; no cache or peripheral retention image is needed.
+ * PLLs, flash and SRAM at their active settings in light sleep. Stall the
+ * CPU and gate the system clock where retained functional clocks allow it;
+ * no cache or peripheral retention image is needed.
  */
 #if defined(RTEMS_BOARD_ESP32C3)
 #define TIMER_WAKE BIT(3)
@@ -60,7 +61,7 @@
 #define TIMER_WAKE BIT(4)
 #define GPIO_WAKE BIT(1) /* LP_AON EXT1 comparator, the H2's GPIO wakeup. */
 #define GPIO_COUNT 8
-#define SYSTIMER_BASE_ADDR 0x6000A000U
+#define SYSTIMER_BASE_ADDR 0x6000B000U
 #define PMU_BASE 0x600B0000U
 #define PMU_SLEEP 0x68U
 #define PMU_FORCE0 0xF4U
@@ -78,7 +79,7 @@
 #define SLEEP_IO_MUX_BASE 0x60090000U
 #define GPIO_RTCIO_OFFSET 7U
 /* USB Serial/JTAG, which cannot stay up through light sleep. */
-#define USB_JTAG_CONF0 0x6000F000U
+#define USB_JTAG_CONF0 0x6000F018U
 #define USB_JTAG_PAD_ENABLE BIT(14)
 #define PCR_USB_DEVICE_CONF 0x6009608CU
 #define PCR_USB_DEVICE_CLK_EN BIT(0)

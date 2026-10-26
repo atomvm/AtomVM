@@ -71,7 +71,9 @@ start() ->
     ok = Result,
     true = T1 - T0 >= 40,
     sleep_wakeup_timer = esp:sleep_get_wakeup_cause(),
-    receive awake -> ok after 20 -> erlang:error({timer_lost, Timer}) end,
+    % A timer can fire before the receiver is scheduled. Use the same
+    % liveness budget as the workers, not a 20 ms scheduling guarantee.
+    receive awake -> ok after 1000 -> erlang:error({timer_lost, Timer}) end,
     <<"peripheral retention">> = esp:rtc_slow_get_binary(),
     lists:foreach(fun(Pid) -> Pid ! resume end, Workers),
     lists:foreach(fun(Pid) -> receive {Pid, resumed} -> ok after 1000 -> erlang:error(cpu_did_not_resume) end end, Workers),

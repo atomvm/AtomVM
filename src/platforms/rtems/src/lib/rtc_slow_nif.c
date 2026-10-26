@@ -294,12 +294,18 @@ int rtems_esp_deep_sleep_enable_gpio_wakeup(uint64_t mask, int mode)
     const uint32_t valid_mask = 0x3FU;
 #elif defined(RTEMS_BOARD_ESP32C5)
     const uint32_t valid_mask = 0x7FU;
+#elif defined(RTEMS_BOARD_ESP32H2)
+    const uint32_t valid_mask = 0x7F80U; /* Physical GPIO7-GPIO14. */
 #else
     const uint32_t valid_mask = 0xFFU;
 #endif
     if (mask == 0 || (mask & ~((uint64_t) valid_mask)) || (mode != 0 && mode != 1)) {
         return EINVAL;
     }
+#if defined(RTEMS_BOARD_ESP32H2)
+    /* LP_AON EXT1 selects RTC-IO0-7, not physical GPIO numbers. */
+    mask >>= 7;
+#endif
     pthread_mutex_lock(&s_config_lock);
     s_gpio_wakeup_mask = (uint32_t) mask;
     s_gpio_wakeup_mode = mode;

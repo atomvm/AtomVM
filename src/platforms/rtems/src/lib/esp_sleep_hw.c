@@ -70,6 +70,38 @@ uint64_t BSP_FAST_TEXT_SECTION rtems_esp_rtc_get_counter(void)
 }
 
 #if defined(RTEMS_BOARD_ESP32H2)
+extern uint32_t Cache_Suspend_ICache(void);
+extern void Cache_Resume_ICache(uint32_t autoload);
+extern uint32_t esp_rom_get_cpu_ticks_per_us(void);
+extern void esp_rom_set_cpu_ticks_per_us(uint32_t ticks);
+
+/* H2 regi2c_ctrl_ll: the PMU (0x6d) and BIAS (0x6a) blocks have separate
+ * master selectors and read masks. Wakeup restores BIAS before flash/cache
+ * execution is safe, so this complete transaction must remain in SRAM.
+ */
+static BSP_FAST_TEXT_SECTION void sleep_analog_write(uint32_t block, uint32_t address, uint32_t mask, uint32_t value)
+{
+    const uintptr_t i2c = 0x600AF800U;
+    const uintptr_t clock = 0x600AD008U;
+    uint32_t saved_clock = REG(clock);
+    REG(clock) = saved_clock | BIT(2);
+    uint32_t select = block == 0x6DU ? 12 : 8;
+    uint32_t read_bit = block == 0x6DU ? 10 : 6;
+    uintptr_t host = i2c + ((REG(i2c + 0x20U) & BIT(select)) ? 0 : 4);
+    uint32_t command = block | (address << 8);
+    REG(i2c + 0x1CU) = 0xFFFFFFU & ~BIT(read_bit);
+    while (REG(host) & BIT(25)) {
+    }
+    REG(host) = command;
+    while (REG(host) & BIT(25)) {
+    }
+    uint32_t data = (REG(host) >> 16) & 0xFFU;
+    REG(host) = command | BIT(24) | (((data & ~mask) | value) << 16);
+    while (REG(host) & BIT(25)) {
+    }
+    REG(clock) = saved_clock;
+}
+
 struct usb_jtag_sleep_state
 {
     uint32_t clock_enabled;
@@ -81,6 +113,7 @@ struct cpu_clock_state
     uint32_t sysclk;
     uint32_t cpu;
     uint32_t ahb;
+    uint32_t ticks_per_us;
 };
 
 /* ESP-IDF rtc_clk_cpu_set_to_default_config(): run the CPU from the crystal
@@ -93,12 +126,14 @@ static BSP_FAST_TEXT_SECTION void cpu_clock_to_xtal(struct cpu_clock_state *stat
     state->sysclk = REG(SLEEP_PCR_SYSCLK_CONF);
     state->cpu = REG(SLEEP_PCR_CPU_FREQ_CONF);
     state->ahb = REG(SLEEP_PCR_AHB_FREQ_CONF);
+    state->ticks_per_us = esp_rom_get_cpu_ticks_per_us();
     REG(SLEEP_PCR_CPU_FREQ_CONF) = state->cpu & ~0xFFU;
     REG(SLEEP_PCR_AHB_FREQ_CONF) = state->ahb & ~0xFFU;
     REG(SLEEP_PCR_SYSCLK_CONF) = state->sysclk & ~(0x3U << 16);
     REG(SLEEP_PCR_BUS_CLK_UPDATE) = 1U;
     while (REG(SLEEP_PCR_BUS_CLK_UPDATE) != 0U) {
     }
+    esp_rom_set_cpu_ticks_per_us(32);
 }
 
 static BSP_FAST_TEXT_SECTION void cpu_clock_restore(const struct cpu_clock_state *state)
@@ -109,14 +144,15 @@ static BSP_FAST_TEXT_SECTION void cpu_clock_restore(const struct cpu_clock_state
     REG(SLEEP_PCR_BUS_CLK_UPDATE) = 1U;
     while (REG(SLEEP_PCR_BUS_CLK_UPDATE) != 0U) {
     }
+    esp_rom_set_cpu_ticks_per_us(state->ticks_per_us);
 }
 
 /* ESP-IDF's sleep_console_usj_pad_backup_and_disable(): the USB Serial/JTAG
- * pad cannot stay enabled through light sleep.  The pad and its bus clock are
- * turned off before the transition and restored on wakeup, otherwise the
- * console is dead after the first sleep.
+ * pad and its bus clock are disabled to avoid leakage during light sleep,
+ * then restored on wakeup. The host may still require a physical reconnect
+ * to re-enumerate the device, as documented by ESP-IDF.
  */
-static void usb_jtag_suspend(struct usb_jtag_sleep_state *state)
+static BSP_FAST_TEXT_SECTION void usb_jtag_suspend(struct usb_jtag_sleep_state *state)
 {
     uint32_t pcr = REG(PCR_USB_DEVICE_CONF);
     state->clock_enabled = (pcr & PCR_USB_DEVICE_CLK_EN) && !(pcr & PCR_USB_DEVICE_RST_EN);
@@ -133,7 +169,7 @@ static void usb_jtag_suspend(struct usb_jtag_sleep_state *state)
     REG(PCR_USB_DEVICE_CONF) &= ~PCR_USB_DEVICE_CLK_EN;
 }
 
-static void usb_jtag_resume(const struct usb_jtag_sleep_state *state)
+static BSP_FAST_TEXT_SECTION void usb_jtag_resume(const struct usb_jtag_sleep_state *state)
 {
     REG(PCR_USB_DEVICE_CONF) |= PCR_USB_DEVICE_CLK_EN;
     if (state->pad_enabled) {
@@ -193,10 +229,32 @@ uint32_t BSP_FAST_TEXT_SECTION rtems_esp_sleep_enter(bool deep, uint32_t wakeup,
 #if defined(RTEMS_BOARD_ESP32H2)
     struct usb_jtag_sleep_state usb_jtag = { 0 };
     struct cpu_clock_state cpu_clock;
+    /* Complete pmu_init()'s analog regulator ownership handoff. The BSP
+     * initializes awake biases; sleep also needs the sleep/force overrides
+     * released so the PMU can apply its ACTIVE and SLEEP configurations.
+     */
+    REG(PMU_BASE + 0x14U) = (REG(PMU_BASE + 0x14U) & ~(BIT(26) | BIT(27))) | BIT(28) | BIT(29) | BIT(30);
+    REG(PMU_BASE + 0x18U) = (REG(PMU_BASE + 0x18U) & ~(BIT(30) | BIT(31))) | BIT(24) | BIT(25);
+    REG(PMU_BASE + 0x30U) |= BIT(31);
+    /* Retain the calibrated LP regulator bias as well as the HP bias copied
+     * below. Immediate PLL power-up at boot does not set these FSM fields.
+     */
+    REG(PMU_BASE + 0xB4U) = REG(PMU_BASE + 0x9CU);
+    sleep_analog_write(0x6DU, 8, 0x0FU, 0);
+    sleep_analog_write(0x6DU, 9, 0x30U, 0);
+    sleep_analog_write(0x6DU, 15, BIT(2), 0);
     cpu_clock_to_xtal(&cpu_clock);
     if (!deep) {
         usb_jtag_suspend(&usb_jtag);
     }
+    /* IDF pmu_init() installs separate ACTIVE and SLEEP state defaults.
+     * Direct boot bypasses it: explicitly enable the active system clock
+     * and release the CPU stall when the PMU returns to ACTIVE.
+     */
+    REG(PMU_BASE + 0x10U) &= ~BIT(29);
+    REG(PMU_BASE + 0x24U) = BIT(27);
+    /* PMU_SLEEP_PROTECT_HP_LP_SLEEP; preserve minimum sleep-cycle fields. */
+    REG(PMU_BASE + PMU_CTRL + 12U) = (REG(PMU_BASE + PMU_CTRL + 12U) & ~(3U << 16)) | (2U << 16);
 #endif
 #if defined(RTEMS_BOARD_ESP32S31)
     static const uint8_t offsets[] = { 0, 4, 8, 12, 16, 20, 24, 28, 32, 48, 52, 56, 60 };
@@ -210,16 +268,22 @@ uint32_t BSP_FAST_TEXT_SECTION rtems_esp_sleep_enter(bool deep, uint32_t wakeup,
     }
     /* Pause watchdogs, stall CPUs, select the sleep system clock and gate it. */
 #if defined(RTEMS_BOARD_ESP32H2)
-    /* ESP-IDF PMU_SLEEP_DIGITAL_LSLP_CONFIG_DEFAULT: pause the watchdog and
-     * select the pad sleep configuration.  dig_cpu_stall (BIT(29)) must stay
-     * clear: the PMU records the wakeup and restores the clocks, but it does
-     * not release a stalled CPU, so the core never resumes.
+    /* IDF's HP_SLEEP defaults stall the CPU; the per-sleep configuration
+     * adds the pad sleep selection and watchdog pause. ACTIVE releases it.
      */
-    REG(PMU_BASE + PMU_SLEEP + sys) |= BIT(27) | BIT(28);
+    REG(PMU_BASE + PMU_SLEEP + sys) |= BIT(27) | BIT(28) | BIT(29);
 #else
     REG(PMU_BASE + PMU_SLEEP + sys) |= BIT(28) | BIT(29);
 #endif
     REG(PMU_BASE + PMU_SLEEP + sysclk) = BIT(28) | BIT(29);
+#if defined(RTEMS_BOARD_ESP32H2)
+    /* pmu_sleep_digital_init(): retained functional clocks require the
+     * global system-clock gate open. CPU stall still stops execution.
+     */
+    if (REG(PMU_BASE + PMU_SLEEP + 4U) != 0) {
+        REG(PMU_BASE + PMU_SLEEP + sysclk) |= BIT(27);
+    }
+#endif
     uint32_t forces[PMU_FORCE_COUNT];
     uint32_t memory_force = REG(PMU_BASE + PMU_MEM_FORCE);
     if (deep) {
@@ -250,6 +314,12 @@ uint32_t BSP_FAST_TEXT_SECTION rtems_esp_sleep_enter(bool deep, uint32_t wakeup,
     REG(PMU_BASE + PMU_CTRL + 8U) = wakeup;
     REG(PMU_BASE + PMU_CLEAR) = BIT(30) | BIT(31);
     REG(PMU_BASE + PMU_CTRL + 16U) = BIT(31);
+#if defined(RTEMS_BOARD_ESP32H2)
+    /* Drain outstanding flash accesses before gating the system clock.
+     * Everything through Cache_Resume_ICache must execute from RAM or ROM.
+     */
+    uint32_t cache_autoload = Cache_Suspend_ICache();
+#endif
     REG(PMU_BASE + PMU_CTRL) |= BIT(31);
     __asm__ volatile("fence iorw, iorw" ::: "memory");
     bool timed_out = false;
@@ -270,10 +340,13 @@ uint32_t BSP_FAST_TEXT_SECTION rtems_esp_sleep_enter(bool deep, uint32_t wakeup,
     uint32_t cause = REG(PMU_BASE + PMU_CTRL + 32U);
     REG(PMU_BASE + PMU_CLEAR) = BIT(30) | BIT(31);
 #if defined(RTEMS_BOARD_ESP32H2)
+    /* pmu_sleep_finish(): BIAS DREG_0P8 is lost during sleep. */
+    sleep_analog_write(0x6AU, 0, 0xF0U, 0x80U);
+    cpu_clock_restore(&cpu_clock);
+    Cache_Resume_ICache(cache_autoload);
     if (!deep) {
         usb_jtag_resume(&usb_jtag);
     }
-    cpu_clock_restore(&cpu_clock);
 #endif
     return timed_out || (status & BIT(30)) ? 0 : cause;
 #endif

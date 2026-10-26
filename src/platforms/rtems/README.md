@@ -125,16 +125,19 @@ modem retention disabled, C6 uses `phy_wakeup_init()` rather than C3's backup-DM
 register restore. C6 validation is emulator-only; physical PLL, RF, DMA and
 sleep behavior still need testing.
 
-ESP32-H2 direct boot calibrates its fixed 96 MHz BBPLL from the 32 MHz crystal
-through the analog I2C master and selects it with a 96 MHz CPU and a 32 MHz AHB,
-following ESP-IDF's `rtc_clk_init()` and `clk_ll_bbpll_*` sequences; a
-calibration that does not complete leaves the CPU on the crystal rather than
-distributing an uncalibrated clock. The console stays on the crystal, because
+ESP32-H2 direct boot applies ESP-IDF's low-temperature DREG workaround and
+calibrated HP/LP regulator biases before selecting 96 MHz. It calibrates its
+fixed 96 MHz BBPLL from the 32 MHz crystal through the analog I2C master,
+following ESP-IDF's calibration start/configure/wait/stop sequence, then selects
+a 96 MHz CPU and a 32 MHz AHB. The complete calibration call chain runs from
+SRAM because the flash clock also derives from BBPLL; it waits for calibration
+to complete before returning to flash. The console stays on the crystal, because
 the H2's UART selects its source in PCR rather than in its own clock register.
 The flash interface needs no setup: the boot ROM already selects the 64 MHz
 flash PLL (PLL_F64M at divider 1) and programs the CS setup/hold timing, the same
 clock and timing ESP-IDF's second stage selects for its default 64 MHz flash
 configuration, so the BSP leaves it alone.
+Peripheral interrupts avoid the H2 CPU's CLINT-reserved channels 3, 4 and 7.
 The H2 has no Wi-Fi, so there is no lwIP or Espressif Wi-Fi stack to link and no
 network NIF: `network:start/1` reports a failed port and `esp32_chip_info`
 advertises Bluetooth LE only. ADC, LEDC, I2C, SPI, GPIO, RTC storage and the
@@ -144,15 +147,31 @@ LP RAM holds a 3 KiB RTC binary store with the timekeeper after it. Sleep uses
 the C6 PMU sleep group and LP timer programming with the H2's interrupt raw and
 clear offsets, and GPIO7-GPIO14 (rtcio 0-7) wake through the LP_AON EXT1
 comparator that ESP-IDF's `ext1_wakeup_prepare()` configures, since the H2 has no
-LP IOMUX. Wokwi's H2 model stops the CPU on a sleep request and never signals a
-wakeup, and ESP-IDF's own light- and deep-sleep examples hang there the same way,
+LP IOMUX. Wakeup masks use physical GPIO numbers (bits 7-14), translated to
+RTC-IO0-7 internally. The H2 sleep path drains/suspends the flash cache before
+the PMU request and restores it before returning to flash code. Its PMU ACTIVE
+state enables the system clock and releases the CPU stall; SLEEP stalls the CPU,
+as in ESP-IDF's state-specific defaults. Sleep initialization releases analog
+regulator overrides, selects HP/LP sleep protection, and keeps the global clock
+enabled when retaining functional clocks. Wakeup restores the BIAS DREG_0P8
+workaround from SRAM before resuming the cache, matching ESP-IDF.
+USB pad control uses CONF0 at
+`0x6000f018`, not the FIFO at the peripheral base. As in ESP-IDF, native USB
+Serial/JTAG is unavailable during sleep and may require a physical reconnect
+after wakeup. Wokwi's H2 model stops the CPU on a sleep request and never signals
+a wakeup, and ESP-IDF's own light- and deep-sleep examples hang there the same way,
 so the boot smoke test skips entering sleep on H2. BLE and IEEE 802.15.4
 controllers are not brought up. An ESP32-H2-DevKitM-1 with 2 MiB of flash passes
 the boot smoke test on hardware: console, peripherals, flash, NVS and the file
-system. Light sleep does not return on that board -- the wake path restores the
-clocks and reads flash data, but execution never returns to code in flash, so the
-part does not resume and the test does not enter sleep there. Wokwi and
-esp-emulator cover the same boot test in simulation.
+system. A UART-console probe also passes two consecutive timer-wakeup light
+sleeps on hardware, including wake-cause checks, RTC data retention, expired
+Erlang timer delivery and four worker resumptions. Application and BSP ABI flags
+must match (`rv32imac`/`ilp32`): omitting the A extension changes RTEMS's internal
+per-CPU layout and corrupts scheduler state during sleep accounting. Native USB
+recovery, deep sleep and externally stimulated GPIO wake remain unverified. Run
+`test_peripherals` without `RTEMS_SLEEP_TEST_FIXTURE` to check timed wakeup,
+execution from flash, expired timers and scheduler resumption on a board.
+Wokwi and esp-emulator cover the boot test, not physical sleep transitions.
 
 S31 direct boot switches to XTAL40, configures and calibrates CPLL320, then
 selects CPU/MEM/SYS/APB dividers of 1/2/3/2. Clock-update and calibration
@@ -853,6 +872,11 @@ cmake --build src/platforms/rtems/build-esp32c3
 ```
 
 This generates `AtomVM-esp32c3db.exe` and the flash-ready direct-boot image `AtomVM-esp32c3db.bin`.
+
+Use a fresh build directory after changing BSP architecture or ABI flags.
+CMake caches the initial compiler/linker flags; reconfiguring an existing build
+does not replace them. In particular, H2 applications must use `rv32imac`/`ilp32`
+to match the BSP's RTEMS per-CPU layout.
 
 ### 3. Flashing to Physical Board
 

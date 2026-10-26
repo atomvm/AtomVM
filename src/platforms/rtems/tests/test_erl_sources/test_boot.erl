@@ -300,14 +300,23 @@ sleep_smoke() ->
 
     % Sleep wakeup source configuration
     ok = esp:sleep_enable_timer_wakeup(5000),
-    ok = esp:deep_sleep_enable_gpio_wakeup(1 bsl 2, 0),
+    case erlang:system_info(esp32_chip_info) of
+        #{model := esp32_h2} ->
+            {'EXIT', {badarg, _}} = (catch esp:deep_sleep_enable_gpio_wakeup(1 bsl 2, 0)),
+            {'EXIT', {badarg, _}} = (catch esp:deep_sleep_enable_gpio_wakeup(1 bsl 15, 0)),
+            ok = esp:deep_sleep_enable_gpio_wakeup(1 bsl 14, 1),
+            ok = esp:deep_sleep_enable_gpio_wakeup((1 bsl 7) bor (1 bsl 14), 0),
+            ok = esp:deep_sleep_enable_gpio_wakeup(1 bsl 7, 0);
+        _ ->
+            ok = esp:deep_sleep_enable_gpio_wakeup(1 bsl 2, 0)
+    end,
     ok = esp:sleep_enable_gpio_wakeup(),
     erlang:display({sleep_enable_wakeup, ok}),
 
     % Light sleep test (suspends and wakes up after timer). Wokwi's ESP32-H2
-    % model stops the CPU on a sleep request and never signals a wakeup, and
-    % light sleep does not return on the H2 board either (see the platform
-    % README), so the smoke test does not enter sleep on this part.
+    % model stops the CPU on a sleep request and never signals a wakeup.
+    % Use test_peripherals to exercise H2 timed sleep on physical hardware;
+    % the shared boot test must also run on simulators without wake support.
     SleepResult =
         case erlang:system_info(esp32_chip_info) of
             #{model := esp32_h2} -> skipped;
