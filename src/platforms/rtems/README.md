@@ -176,7 +176,15 @@ Wokwi and esp-emulator cover the boot test, not physical sleep transitions.
 BSP patch 0040 initializes C5/C6/P4/S31 regulator ownership before selecting
 high-speed clocks. C5/C6/P4 use their chip-specific, version-qualified eFuse
 biases and fallbacks; S31 uses IDF's nominal PMU values. P4 performs the
-LDO-to-DCDC handoff and revision-specific settling sequence. Rebuild the BSP
+LDO-to-DCDC handoff and revision-specific settling sequence. S31 routes regi2c
+slaves dynamically across DIG_REG, BIAS, and MPLL; installs IDF bootloader analog
+biases (MPLL IR_CAL_EXT_CAP, BIAS DREG_1P1 and DREG_1P1_PVT); initializes the
+RTC fast/slow clocks and PMU oscillator power with settling delays; and sets
+sleep protect mode. Power-domain/memory force releases and ICG updates are
+deferred to the sleep FSM initializer, after its backing policies are configured.
+BSP patch 0030
+settles CPLL calibration with IDF's 10 us ROM delay. RTEMS deliberately maintains a
+fixed nominal voltage profile (HP/LP bias 26) with PVT disabled on S31. Rebuild the BSP
 SDK with the patch series, not just the application, to include these changes.
 
 Sleep configuration is derived from ESP-IDF revision

@@ -17,10 +17,16 @@ the >=3.1 feedback-resistor/FIB workaround; decode the actual silicon
 revision including the high major-version bit.  Exclude eFuse block 1.0
 from calibration like IDF.  The v1 BSP retains its 360 MHz clock sequence.
 
-S31 uses the wider DIG_REG analog-master selector, not C5/H2 bus bits, and
-initializes shared analog-master power and the nominal PMU active biases.
-This IDF revision has no S31 get_act_*_dbias() calibration policy: do not
-invent one from another chip.  Optional PVT control is not enabled here.
+S31 dynamically routes regi2c requests across DIG_REG (bit 13), BIAS (bit 4),
+and MPLL (bit 12) on its analog master bus. It unconditionally configures
+MPLL IR_CAL_EXT_CAP=3, BIAS DREG_1P1=12, and BIAS DREG_1P1_PVT=12 before clock
+initialization, matching bootloader_esp32s31.c. It initializes the RTC clock:
+RC_SLOW tuning (SCK_DCAP=128), RC_FAST enable in PMU (xpd_fosc=1, pd_osc=0) with
+50 us settling delay, and selects RC_FAST and RC_SLOW root clock sources in
+LP_CLKRST with their settling delays (3 us and 300 us). It sets sleep protect
+mode but leaves power-domain force releases and ICG updates to the sleep FSM
+initializer, after its backing state is configured. S31 retains RTEMS's
+deliberate fixed-voltage/no-PVT profile with nominal active biases (26).
 
 Run voltage initialization with XTAL selected and the analog clock enabled,
 before PLL calibration and the higher CPU clock selection.  Preserve the
@@ -98,7 +104,7 @@ index 81bd51c71b..246bbeacda 100644
    /* rtc_clk_cpll_configure(): start, wait CAL_END, settle 10 us, stop. */
    reg = READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x174 );
    WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x174, reg & ~( 1u << 3 ) );
-@@ -533,6 +551,7 @@ static void bsp_s31_cpll_init( void )
+@@ -531,6 +549,7 @@ static void bsp_s31_cpll_init( void )
    WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x174, reg | ( 1u << 3 ) );
    WRITE_REG( syscon, 0x04, source );
    WRITE_REG( lpcon, 0x18, clock );
@@ -106,7 +112,7 @@ index 81bd51c71b..246bbeacda 100644
  }
  #endif
  
-@@ -589,6 +608,7 @@ static void bsp_p4_cpll_init( void )
+@@ -587,6 +606,7 @@ static void bsp_p4_cpll_init( void )
    /* Enable LP_I2CMST clock */
    WRITE_REG( CLK_LP_PERI_BASE, 0x00, READ_REG( CLK_LP_PERI_BASE, 0x00 ) | ( 1u << 27 ) );
    WRITE_REG( CLK_LP_I2C_ANA_BASE, 0x34, READ_REG( CLK_LP_I2C_ANA_BASE, 0x34 ) | 1u );
@@ -119,7 +125,7 @@ new file mode 100644
 index 0000000000..ee028cc200
 --- /dev/null
 +++ b/bsps/riscv/esp32/start/bspvoltage.h
-@@ -0,0 +1,215 @@
+@@ -0,0 +1,251 @@
 +/*
 + * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
 + * SPDX-License-Identifier: Apache-2.0
@@ -183,16 +189,26 @@ index 0000000000..ee028cc200
 +  host = 0;
 +#else
 +#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
-+  /* DIG_REG_BIT_MASK=BIT(13), CONF2 shift=4, CONF1 shift=2. */
-+  const uint32_t select = 17;
-+  const uint32_t read_bit = 15;
++  /* DIG_REG (0x6d) bit 13, BIAS (0x6a) bit 4, MPLL (0x0b) bit 12.
++   * CONF2 shift 4, CONF1 shift 2. */
++  uint32_t bit_mask;
++  switch ( block ) {
++    case 0x6d: bit_mask = 1u << 13; break; /* DIG_REG */
++    case 0x6a: bit_mask = 1u << 4; break;  /* BIAS */
++    case 0x0b: bit_mask = 1u << 12; break; /* MPLL */
++    default: bit_mask = 0; break;
++  }
++  uint32_t select = bit_mask << 4;
++  uint32_t read_mask = ~( bit_mask << 2 ) & 0xffffffu;
++  host = ( READ_REG( VOLTAGE_I2C_BASE, 0x20 ) & select ) != 0 ? 0 : 4;
++  WRITE_REG( VOLTAGE_I2C_BASE, 0x1c, read_mask );
 +#else
 +  const uint32_t select = 12;
 +  const uint32_t read_bit = 10;
-+#endif
 +  host = ( READ_REG( VOLTAGE_I2C_BASE, 0x20 ) & BSP_BIT32( select ) )
 +    != 0 ? 0 : 4;
 +  WRITE_REG( VOLTAGE_I2C_BASE, 0x1c, 0xffffffu & ~BSP_BIT32( read_bit ) );
++#endif
 +#endif
 +  bsp_voltage_i2c_wait( host );
 +  WRITE_REG( VOLTAGE_I2C_BASE, host, command );
@@ -295,10 +311,17 @@ index 0000000000..ee028cc200
 +  /* C6 rtc_clk_init deliberately does not clear XPD_RTC/DIG_REG. */
 +  bsp_voltage_i2c_write( 0x6d, 13, 12u, 0 );
 +#endif
++#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++  /* bootloader_esp32s31.c:61-63: unconditional analog-bias setup before clocks */
++  bsp_voltage_i2c_write( 0x0b, 1, 3u, 3u );       /* MPLL IR_CAL_EXT_CAP = 3 */
++  bsp_voltage_i2c_write( 0x6a, 0, 0xf0u, 0xc0u ); /* BIAS DREG_1P1 = 12 */
++  bsp_voltage_i2c_write( 0x6a, 1, 0x0fu, 0x0cu ); /* BIAS DREG_1P1_PVT = 12 */
++  bsp_voltage_i2c_write( 0x6d, 14, 0xffu, 0x80u ); /* DIG_REG SCK_DCAP = 128 */
++#endif
 +
 +#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
-+  /* S31 has no get_act_*_dbias() eFuse policy in this IDF revision.
-+   * Use its PMU active analog defaults, not a guessed C5 calibration. */
++  /* S31 uses a deliberate fixed-voltage/no-PVT profile with nominal biases (26).
++   * PVT is disabled in RTEMS. */
 +  bsp_voltage_field( 0x20, 0xfe000000u, BSP_BIT32( 25 ) );
 +  bsp_voltage_field( 0x34, ( 31u << 27 ) | ( 31u << 9 ) | ( 31u << 4 )
 +      | BSP_BIT32( 18 ) | BSP_BIT32( 14 ) | BSP_BIT32( 3 ),
@@ -306,6 +329,25 @@ index 0000000000..ee028cc200
 +      | BSP_BIT32( 18 ) | BSP_BIT32( 14 ) | BSP_BIT32( 3 ) );
 +  bsp_voltage_field( 0x74, 31u << 27, 26u << 27 );
 +  bsp_voltage_field( 0xc0, 0xffe00000u, ( 26u << 27 ) | BSP_BIT32( 22 ) );
++
++  /* rtc_clk_init.c / clk.c: enable RC_FAST in PMU (xpd_fosc=1, pd_osc=0) */
++  WRITE_REG( VOLTAGE_PMU_BASE, 0xd0,
++    ( READ_REG( VOLTAGE_PMU_BASE, 0xd0 ) & ~BSP_BIT32( 31 ) ) | BSP_BIT32( 30 ) );
++  ( (void (*)( uint32_t )) (uintptr_t) 0x2f80003cU )( 50 ); /* 50 us delay */
++
++  /* Select fast clock source RC_FAST (0) and slow clock source RC_SLOW (0) */
++  const uintptr_t lp_root_clk_conf = 0x20701000;
++  WRITE_REG( lp_root_clk_conf, 0x00,
++    READ_REG( lp_root_clk_conf, 0x00 ) & ~( 3u << 26 ) );
++  ( (void (*)( uint32_t )) (uintptr_t) 0x2f80003cU )( 3 );   /* 3 us delay */
++  WRITE_REG( lp_root_clk_conf, 0x00,
++    READ_REG( lp_root_clk_conf, 0x00 ) & ~( 7u << 23 ) );
++  ( (void (*)( uint32_t )) (uintptr_t) 0x2f80003cU )( 300 ); /* 300 us delay */
++
++  /* Force releases and ICG updates belong to sleep's full FSM initializer,
++   * after its ACTIVE/LP policies are installed, not this voltage-only setup.
++   */
++  bsp_voltage_field( 0x15c, 3u << 16, 2u << 16 );
 +#else
 +#if defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H )
 +  const uintptr_t efuse = 0x600b4800;

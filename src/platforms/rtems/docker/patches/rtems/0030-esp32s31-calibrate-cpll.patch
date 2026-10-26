@@ -19,7 +19,7 @@ update/calibration timeouts explicitly instead of silently continuing.
   *
   * BSP_ESP32_CPU_FREQ_MHZ selects the target in MHz and defaults to the chip
   * maximum; only the maximum is implemented so far.
-@@ -307,6 +307,74 @@
+@@ -307,6 +307,72 @@
  }
  #endif
  
@@ -81,9 +81,7 @@ update/calibration timeouts explicitly instead of silently continuing.
 +      rtems_panic( "ESP32-S31: CPLL calibration timed out" );
 +    }
 +  }
-+  for ( volatile uint32_t delay = 0; delay < 1000; ++delay ) {
-+    __asm__ volatile ( "nop" );
-+  }
++  ( (void (*)( uint32_t )) (uintptr_t) 0x2f80003cU )( 10 );
 +  reg = READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x174 );
 +  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x174, reg | ( 1u << 3 ) );
 +  WRITE_REG( syscon, 0x04, source );
@@ -94,7 +92,7 @@ update/calibration timeouts explicitly instead of silently continuing.
  static void bsp_clock_init( void )
  {
  #if defined( LIBBSP_ESP32_C3_CHIP_DEFINITIONS_H )
-@@ -382,17 +450,5 @@
+@@ -382,17 +448,5 @@
  
 -  uint32_t reg;
 -
