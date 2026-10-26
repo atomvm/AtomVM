@@ -1,0 +1,337 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] esp32: initialize chip-specific voltage before high-speed clocks
+
+Use ESP-IDF 9a97f6c54ec638111ce55cd36581b3c192f15207 as the reference for
+the direct-boot regulator prerequisites, not as a claim to implement its
+complete PMU, oscillator tuning, PVT, or sleep policy.
+
+C5 and C6 release the analog DREG interface to PMU control and install
+version-qualified eFuse biases with their own defaults and saturating
+frequency-switch margins.  C5 additionally needs its ACTIVE modem ICG maps.
+C6 deliberately does not receive C5's XPD_RTC/DIG_REG writes.
+
+P4 and P4 v1 use FORCE_DREG, release the four BIAS overrides, install the
+qualified HP/LP calibration, and switch from the temporary HP LDO to DCDC
+with max(PVT VSET, 27) and a 1 ms settling delay.  Only the v3 BSP applies
+the >=3.1 feedback-resistor/FIB workaround; decode the actual silicon
+revision including the high major-version bit.  Exclude eFuse block 1.0
+from calibration like IDF.  The v1 BSP retains its 360 MHz clock sequence.
+
+S31 uses the wider DIG_REG analog-master selector, not C5/H2 bus bits, and
+initializes shared analog-master power and the nominal PMU active biases.
+This IDF revision has no S31 get_act_*_dbias() calibration policy: do not
+invent one from another chip.  Optional PVT control is not enabled here.
+
+Run voltage initialization with XTAL selected and the analog clock enabled,
+before PLL calibration and the higher CPU clock selection.  Preserve the
+analog selector/read masks and unrelated PMU fields.  Leave patch 0039's
+H2 voltage, RAM-resident PLL calibration and IRQ mapping unchanged.
+
+References under components/ at that IDF revision:
+  esp_hw_support/port/{esp32c5,esp32c6,esp32p4,esp32s31}/rtc_clk_init.c
+  esp_hw_support/port/{esp32c5,esp32c6,esp32p4}/pmu_param.c (get_act_*_dbias)
+  esp_hw_support/port/esp32s31/{pmu_init.c,pmu_param.c}
+  esp_hw_support/port/*/private_include/pmu_param.h (fallback biases)
+  esp_hal_regi2c/{esp32c5,esp32c6,esp32p4,esp32s31}/regi2c_impl.c
+  esp_hal_pmu/esp32p4/include/hal/pmu_ll.h (DCDC handoff)
+  soc/esp32p4/register/{hw_ver1,hw_ver3}/soc/{pmu,efuse}_reg.h
+  soc/esp32s31/include/modem/i2c_ana_mst_reg.h (DIG_REG bit 13, shifts 2/4)
+
+---
+diff --git a/bsps/riscv/esp32/start/bspstart.c b/bsps/riscv/esp32/start/bspstart.c
+index 81bd51c71b..246bbeacda 100644
+--- a/bsps/riscv/esp32/start/bspstart.c
++++ b/bsps/riscv/esp32/start/bspstart.c
+@@ -166,6 +166,7 @@ _Static_assert( ESP32C_RAM_ORIGIN + ESP32C_RAM_SIZE -
+ extern void ets_update_cpu_frequency( uint32_t cpu_mhz )
+   __attribute__( ( weak ) );
+ 
++#include "bspvoltage.h"
+ 
+ #if defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H ) \
+   || defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H ) \
+@@ -233,6 +234,18 @@ static void bsp_c5_bbpll_init( void )
+     rtems_panic( "ESP32-C5: unsupported crystal frequency" );
+   }
+ 
++  /* rtc_clk_init(): preinitialize ACTIVE modem APB/I2C/LP APB ICG maps. */
++  uint32_t reg = READ_REG( C5_PMU_BASE, 0x0c );
++  WRITE_REG( C5_PMU_BASE, 0x0c, ( reg & ~( 3u << 30 ) ) | ( 2u << 30 ) );
++  reg = READ_REG( C5_MODEM_SYSCON_BASE, 0x0c );
++  WRITE_REG( C5_MODEM_SYSCON_BASE, 0x0c,
++    ( reg & ~( 15u << 28 ) ) | ( 4u << 28 ) );
++  reg = READ_REG( C5_MODEM_LPCON_BASE, 0x20 );
++  WRITE_REG( C5_MODEM_LPCON_BASE, 0x20,
++    ( reg & ~0xff000000u ) | 0x44000000u );
++  WRITE_REG( C5_PMU_BASE, 0xdc, BSP_BIT32( 31 ) );
++  WRITE_REG( C5_PMU_BASE, 0xd0, BSP_BIT32( 28 ) );
++
+   WRITE_REG( C5_PMU_BASE, 0xd0, BSP_BIT32( 31 ) );
+   WRITE_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG,
+     READ_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG ) & ~0xffu );
+@@ -252,6 +265,7 @@ static void bsp_c5_bbpll_init( void )
+   WRITE_REG( C5_MODEM_LPCON_BASE, 0x18, lp_clock | BSP_BIT32( 2 ) );
+   WRITE_REG( C5_MODEM_LPCON_BASE, 0x1c, lp_force | BSP_BIT32( 2 ) );
+   WRITE_REG( C5_MODEM_SYSCON_BASE, 0x04, i2c_clock | BSP_BIT32( 12 ) );
++  bsp_voltage_init();
+   uint32_t cal = READ_REG( ESP_ANALOG_I2C_BASE, 0x18 );
+   WRITE_REG( ESP_ANALOG_I2C_BASE, 0x18, ( cal & ~4u ) | 8u );
+ 
+@@ -319,6 +333,7 @@ static void bsp_c6_bbpll_init( void )
+   uint32_t analog_mask = READ_REG( ESP_ANALOG_I2C_BASE, 0x1c );
+   WRITE_REG( lpcon, 0x18, clock | BSP_BIT32( 2 ) );
+   WRITE_REG( lpcon, 0x10, source | 1u );
++  bsp_voltage_init();
+   reg = READ_REG( ESP_ANALOG_I2C_BASE, 0x18 );
+   WRITE_REG( ESP_ANALOG_I2C_BASE, 0x18, ( reg & ~4u ) | 8u );
+   bsp_esp_bbpll_i2c_write( 2, 0xffu, 0x50u );
+@@ -514,9 +529,12 @@ static void bsp_s31_cpll_init( void )
+   reg = READ_REG( lp_clkrst, 0x4c );
+   WRITE_REG( lp_clkrst, 0x4c, ( reg & ~0xfffu ) | 0x81u );
+   uint32_t clock = READ_REG( lpcon, 0x18 );
++  uint32_t force = READ_REG( lpcon, 0x1c );
+   uint32_t source = READ_REG( syscon, 0x04 );
+   WRITE_REG( lpcon, 0x18, clock | ( 1u << 2 ) );
++  WRITE_REG( lpcon, 0x1c, force | ( 1u << 2 ) );
+   WRITE_REG( syscon, 0x04, source | ( 1u << 12 ) );
++  bsp_voltage_init();
+   /* rtc_clk_cpll_configure(): start, wait CAL_END, settle 10 us, stop. */
+   reg = READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x174 );
+   WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x174, reg & ~( 1u << 3 ) );
+@@ -533,6 +551,7 @@ static void bsp_s31_cpll_init( void )
+   WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x174, reg | ( 1u << 3 ) );
+   WRITE_REG( syscon, 0x04, source );
+   WRITE_REG( lpcon, 0x18, clock );
++  WRITE_REG( lpcon, 0x1c, force );
+ }
+ #endif
+ 
+@@ -589,6 +608,7 @@ static void bsp_p4_cpll_init( void )
+   /* Enable LP_I2CMST clock */
+   WRITE_REG( CLK_LP_PERI_BASE, 0x00, READ_REG( CLK_LP_PERI_BASE, 0x00 ) | ( 1u << 27 ) );
+   WRITE_REG( CLK_LP_I2C_ANA_BASE, 0x34, READ_REG( CLK_LP_I2C_ANA_BASE, 0x34 ) | 1u );
++  bsp_voltage_init();
+ 
+   /* Power up CPLL in PMU */
+   WRITE_REG( CLK_PMU_BASE, 0xcc, READ_REG( CLK_PMU_BASE, 0xcc ) | ( 1u << 27 ) | ( 1u << 23 ) | ( 1u << 17 ) );
+diff --git a/bsps/riscv/esp32/start/bspvoltage.h b/bsps/riscv/esp32/start/bspvoltage.h
+new file mode 100644
+index 0000000000..ee028cc200
+--- /dev/null
++++ b/bsps/riscv/esp32/start/bspvoltage.h
+@@ -0,0 +1,215 @@
++/*
++ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/*
++ * Direct-boot voltage prerequisites, from ESP-IDF 9a97f6c54ec638111ce55cd36581b3c192f15207:
++ * esp_hw_support/port/<chip>/{rtc_clk_init.c,pmu_param.c,pmu_init.c},
++ * esp_hal_regi2c/<chip>/regi2c_impl.c and soc/<chip> register definitions.
++ * Initialize LP_ACTIVE sleep controls before building a retained LP_SLEEP
++ * template; P4 preserves XPD, matching its distinct PMU initializer.
++ * This is not the full IDF PMU/PVT or sleep policy.  The caller has selected
++ * XTAL, updated ROM timing and enabled the chip's analog master clock.
++ * C3 and H2 deliberately retain their existing startup sequences.
++ */
++#if defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H ) \
++  || defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H ) \
++  || defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H ) \
++  || defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++
++#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++#define VOLTAGE_I2C_BASE (uintptr_t) 0x2010f800
++#define VOLTAGE_PMU_BASE (uintptr_t) 0x20704000
++#elif defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++#define VOLTAGE_I2C_BASE (uintptr_t) 0x50124000
++#define VOLTAGE_PMU_BASE (uintptr_t) 0x50115000
++#else
++#define VOLTAGE_I2C_BASE (uintptr_t) 0x600af800
++#define VOLTAGE_PMU_BASE (uintptr_t) 0x600b0000
++#endif
++
++static void bsp_voltage_i2c_wait( uint32_t host )
++{
++  uint32_t timeout = 1000000;
++
++  while ( READ_REG( VOLTAGE_I2C_BASE, host ) & BSP_BIT32( 25 ) ) {
++    if ( --timeout == 0 ) {
++      rtems_panic( "ESP32: voltage regi2c timed out" );
++    }
++  }
++}
++
++/* Only DIG_REG (0x6d), and on P4 BIAS (0x6a), are used here. */
++static void bsp_voltage_i2c_write(
++  uint32_t block,
++  uint32_t address,
++  uint32_t mask,
++  uint32_t value
++)
++{
++  uint32_t host;
++  uint32_t command = block | ( address << 8 );
++
++#if defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++  /* P4 actively selects one slave on master 0, unlike C5/C6/S31. */
++  uint32_t select = block == 0x6du ? 10 : 12;
++  WRITE_REG( VOLTAGE_I2C_BASE, 0x20,
++    ( READ_REG( VOLTAGE_I2C_BASE, 0x20 ) & ~0xffffffu ) | BSP_BIT32( select ) );
++  WRITE_REG( VOLTAGE_I2C_BASE, 0x1c,
++    READ_REG( VOLTAGE_I2C_BASE, 0x1c ) & ~0xffffffu );
++  host = 0;
++#else
++#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++  /* DIG_REG_BIT_MASK=BIT(13), CONF2 shift=4, CONF1 shift=2. */
++  const uint32_t select = 17;
++  const uint32_t read_bit = 15;
++#else
++  const uint32_t select = 12;
++  const uint32_t read_bit = 10;
++#endif
++  host = ( READ_REG( VOLTAGE_I2C_BASE, 0x20 ) & BSP_BIT32( select ) )
++    != 0 ? 0 : 4;
++  WRITE_REG( VOLTAGE_I2C_BASE, 0x1c, 0xffffffu & ~BSP_BIT32( read_bit ) );
++#endif
++  bsp_voltage_i2c_wait( host );
++  WRITE_REG( VOLTAGE_I2C_BASE, host, command );
++  bsp_voltage_i2c_wait( host );
++  uint32_t data = ( READ_REG( VOLTAGE_I2C_BASE, host ) >> 16 ) & 0xffu;
++  data = ( data & ~mask ) | ( value & mask );
++  WRITE_REG( VOLTAGE_I2C_BASE, host,
++    command | BSP_BIT32( 24 ) | ( data << 16 ) );
++  bsp_voltage_i2c_wait( host );
++}
++
++static void bsp_voltage_field( uint32_t offset, uint32_t mask, uint32_t value )
++{
++  WRITE_REG( VOLTAGE_PMU_BASE, offset,
++    ( READ_REG( VOLTAGE_PMU_BASE, offset ) & ~mask ) | value );
++}
++
++#if !defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++static uint32_t bsp_voltage_dbias(
++  uint32_t calibrated,
++  uint32_t margin,
++  uint32_t fallback
++)
++{
++  if ( calibrated == 0 ) {
++    return fallback;
++  }
++  return calibrated + margin > 31 ? 31 : calibrated + margin;
++}
++#endif
++
++static void bsp_voltage_init( void )
++{
++  uint32_t mask = READ_REG( VOLTAGE_I2C_BASE, 0x1c );
++#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++  /* pmu_hp_system_init(ACTIVE): the shared analog master is not owned by
++   * any individual PLL.  Power it and release isolation/retention. */
++  bsp_voltage_field( 0x1c, 7u << 20, BSP_BIT32( 22 ) );
++  WRITE_REG( VOLTAGE_PMU_BASE, 0xf0, BSP_BIT32( 28 ) | BSP_BIT32( 2 ) );
++  WRITE_REG( VOLTAGE_PMU_BASE, 0x110, BSP_BIT32( 31 ) );
++#elif defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H ) \
++  || defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++  bsp_voltage_field( 0x14, 7u << 26, BSP_BIT32( 28 ) );
++  WRITE_REG( VOLTAGE_PMU_BASE, 0xe8, BSP_BIT32( 31 ) );
++#endif
++#if defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++  uint32_t select = READ_REG( VOLTAGE_I2C_BASE, 0x20 );
++
++  /* P4 FORCE fields are NOT the C5/C6 ENIF fields. */
++  bsp_voltage_i2c_write( 0x6d, 10, 3u, 3u );
++  bsp_voltage_i2c_write( 0x6d, 13, 12u, 0 );
++  bsp_voltage_i2c_write( 0x6a, 4, 15u, 0 );
++
++  const uintptr_t efuse = 0x5012d000;
++  uint32_t version = READ_REG( efuse, 0x4c );
++  uint32_t blk = ( ( version >> 11 ) & 3u ) * 100
++    + ( ( version >> 8 ) & 7u );
++  uint32_t calibrated = blk >= 2 && blk != 100 ? READ_REG( efuse, 0x54 ) : 0;
++  uint32_t hp = bsp_voltage_dbias( ( calibrated >> 16 ) & 15u, 16, 24 );
++  uint32_t lp = bsp_voltage_dbias( ( calibrated >> 20 ) & 15u, 20, 29 );
++
++  /* Keep HP LDO on until the DCDC has settled.  Preserve a higher PVT VSET. */
++  bsp_voltage_field( 0x28, BSP_BIT32( 18 ), BSP_BIT32( 18 ) );
++  bsp_voltage_field( 0x28, 31u << 27, hp << 27 );
++  bsp_voltage_field( 0x9c, 0xffa00000u, lp << 27 );
++  uint32_t vset = ( READ_REG( VOLTAGE_PMU_BASE, 0x28 ) >> 9 ) & 31u;
++  if ( vset < 27 ) {
++    vset = 27;
++  }
++#if BSP_ESP32P4_REVISION != 1
++  /* Only the v3 BSP uses IDF's >=3.1 feedback-resistor/FIB workaround. */
++  uint32_t major = ( ( version >> 4 ) & 3u ) | ( ( ( version >> 23 ) & 1u ) << 2 );
++  uint32_t revision = major * 100 + ( version & 15u );
++  if ( revision >= 301 ) {
++    bsp_voltage_field( 0x204, BSP_BIT32( 11 ), BSP_BIT32( 11 ) );
++  }
++#endif
++  /* pmu_ll_set_dcdc_en(true): clear DONE_FORCE, then request ON. */
++  bsp_voltage_field( 0x204, BSP_BIT32( 7 ), 0 );
++  bsp_voltage_field( 0x204, BSP_BIT32( 0 ), BSP_BIT32( 0 ) );
++  bsp_voltage_field( 0x10c, 3u, 0 ); /* release both switch force controls */
++  bsp_voltage_field( 0x18, 31u << 18, vset << 18 );
++  bsp_voltage_field( 0x28, BSP_BIT32( 14 ), BSP_BIT32( 14 ) );
++  ( (void (*)( uint32_t )) (uintptr_t) 0x4fc0003cU )( 1000 );
++#if BSP_ESP32P4_REVISION != 1
++  if ( revision >= 301 ) {
++    const uintptr_t lp_system = 0x50110000;
++    WRITE_REG( lp_system, 0x08,
++      ( READ_REG( lp_system, 0x08 ) & ~( 255u << 21 ) ) | ( 0xefu << 21 ) );
++    bsp_voltage_field( 0x204, BSP_BIT32( 11 ), 0 );
++    ( (void (*)( uint32_t )) (uintptr_t) 0x4fc0003cU )( 10 );
++  }
++#endif
++  bsp_voltage_field( 0x28, BSP_BIT32( 18 ), 0 );
++  WRITE_REG( VOLTAGE_I2C_BASE, 0x20, select );
++#else
++  bsp_voltage_i2c_write( 0x6d, 5, 0x80u, 0x80u );
++  bsp_voltage_i2c_write( 0x6d, 7, 0x80u, 0x80u );
++#if !defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++  /* C6 rtc_clk_init deliberately does not clear XPD_RTC/DIG_REG. */
++  bsp_voltage_i2c_write( 0x6d, 13, 12u, 0 );
++#endif
++
++#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++  /* S31 has no get_act_*_dbias() eFuse policy in this IDF revision.
++   * Use its PMU active analog defaults, not a guessed C5 calibration. */
++  bsp_voltage_field( 0x20, 0xfe000000u, BSP_BIT32( 25 ) );
++  bsp_voltage_field( 0x34, ( 31u << 27 ) | ( 31u << 9 ) | ( 31u << 4 )
++      | BSP_BIT32( 18 ) | BSP_BIT32( 14 ) | BSP_BIT32( 3 ),
++    ( 26u << 27 ) | ( 0x1cu << 9 ) | ( 0xdu << 4 )
++      | BSP_BIT32( 18 ) | BSP_BIT32( 14 ) | BSP_BIT32( 3 ) );
++  bsp_voltage_field( 0x74, 31u << 27, 26u << 27 );
++  bsp_voltage_field( 0xc0, 0xffe00000u, ( 26u << 27 ) | BSP_BIT32( 22 ) );
++#else
++#if defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H )
++  const uintptr_t efuse = 0x600b4800;
++  uint32_t version = READ_REG( efuse, 0x4c );
++  uint32_t chip = ( ( version >> 4 ) & 3u ) * 100 + ( version & 15u );
++  uint32_t blk = ( ( version >> 11 ) & 3u ) * 100
++    + ( ( version >> 8 ) & 7u );
++  bool valid = ( chip == 1 && blk >= 1 ) || ( chip >= 100 && blk >= 2 );
++  uint32_t calibrated = valid ? READ_REG( efuse, 0x50 ) : 0;
++  uint32_t hp = bsp_voltage_dbias( ( calibrated >> 10 ) & 15u, 19, 28 );
++  uint32_t lp = bsp_voltage_dbias( ( calibrated >> 14 ) & 15u, 19, 28 );
++#else
++  const uintptr_t efuse = 0x600b0800;
++  uint32_t version = READ_REG( efuse, 0x50 );
++  uint32_t blk = ( ( version >> 30 ) & 3u ) * 100
++    + ( ( version >> 27 ) & 7u );
++  uint32_t calibrated = blk >= 3 ? READ_REG( efuse, 0x4c ) : 0;
++  uint32_t hp = bsp_voltage_dbias( calibrated & 31u, 2, 25 );
++  uint32_t lp = bsp_voltage_dbias( ( calibrated >> 5 ) & 31u, 2, 26 );
++#endif
++  bsp_voltage_field( 0x28, BSP_BIT32( 14 ), BSP_BIT32( 14 ) );
++  bsp_voltage_field( 0x28, 31u << 27, hp << 27 );
++  bsp_voltage_field( 0x5c, 31u << 27, hp << 27 );
++  bsp_voltage_field( 0x9c, 0xffe00000u, ( lp << 27 ) | BSP_BIT32( 22 ) );
++#endif
++#endif
++  WRITE_REG( VOLTAGE_I2C_BASE, 0x1c, mask );
++}
++#endif

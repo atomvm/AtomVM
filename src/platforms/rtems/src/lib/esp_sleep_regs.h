@@ -52,6 +52,7 @@
 #define LP_PIN0 0x20713030U
 #define LP_MUX0 0x20712000U
 #define LP_MUX_SELECT 0x207001C4U
+#define SLEEP_EFUSE_STATUS 0x207151D4U
 #elif defined(RTEMS_BOARD_ESP32H2)
 /* The H2 uses the C6 PMU and LP timer layout, with its interrupt raw/clear
  * registers eight bytes higher. It has no LP IOMUX: only GPIO7-GPIO14
@@ -92,7 +93,7 @@
 #elif defined(RTEMS_BOARD_ESP32P4)
 #define TIMER_WAKE BIT(13)
 #define GPIO_WAKE BIT(9)
-#define GPIO_COUNT 8
+#define GPIO_COUNT 16
 #define SYSTIMER_BASE_ADDR 0x500E2000U
 #define PMU_BASE 0x50115000U
 #define PMU_SLEEP 0x68U
@@ -106,7 +107,7 @@
 #define SLEEP_MODE 0x50110050U
 #define LP_PIN0 0x5012A034U
 #define LP_MUX0 0x5012B008U
-#define LP_MUX_SELECT 0x5011001CU
+#define SLEEP_EFUSE_STATUS 0x5012D1D0U
 #else
 #define TIMER_WAKE BIT(4)
 #define GPIO_WAKE BIT(2)
@@ -130,6 +131,7 @@
 #define SLEEP_MODE 0x600B1020U
 #define LP_PIN0 0x600B4430U
 #define LP_MUX0 0x600B4000U
+#define SLEEP_EFUSE_STATUS 0x600B49D4U
 #else
 #define PMU_FORCE0 0xF4U
 #define PMU_MEM_FORCE 0x10CU
@@ -141,6 +143,7 @@
 #define SLEEP_MODE 0x600B1024U
 #define LP_PIN0 0x600B2028U
 #define LP_MUX0 0x600B2048U
+#define SLEEP_EFUSE_STATUS 0x600B09D0U
 #endif
 #endif
 

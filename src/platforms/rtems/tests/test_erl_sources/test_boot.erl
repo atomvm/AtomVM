@@ -307,6 +307,12 @@ sleep_smoke() ->
             ok = esp:deep_sleep_enable_gpio_wakeup(1 bsl 14, 1),
             ok = esp:deep_sleep_enable_gpio_wakeup((1 bsl 7) bor (1 bsl 14), 0),
             ok = esp:deep_sleep_enable_gpio_wakeup(1 bsl 7, 0);
+        #{model := esp32_p4} ->
+            {'EXIT', {badarg, _}} = (catch esp:deep_sleep_enable_gpio_wakeup(1 bsl 16, 0)),
+            {'EXIT', {badarg, _}} = (catch esp:deep_sleep_enable_gpio_wakeup((1 bsl 15) bor (1 bsl 16), 1)),
+            ok = esp:deep_sleep_enable_gpio_wakeup(1 bsl 15, 1),
+            ok = esp:deep_sleep_enable_gpio_wakeup((1 bsl 0) bor (1 bsl 15), 0),
+            ok = esp:deep_sleep_enable_gpio_wakeup(1 bsl 2, 0);
         _ ->
             ok = esp:deep_sleep_enable_gpio_wakeup(1 bsl 2, 0)
     end,

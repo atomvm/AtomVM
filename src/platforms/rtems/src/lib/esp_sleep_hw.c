@@ -21,6 +21,7 @@
 #include "rtc.h"
 
 #if defined(RTEMS_BOARD_ESP32)
+#include "esp_sleep_cache.h"
 #include "esp_sleep_regs.h"
 #include <bsp/linker-symbols.h>
 #include <rtems.h>
@@ -42,10 +43,11 @@
 
 RTEMS_INTERRUPT_LOCK_DEFINE(static, rtc_lock, "RTC snapshot")
 
-uint64_t BSP_FAST_TEXT_SECTION rtems_esp_rtc_get_counter(void)
+/* The cache-off caller already has local interrupts disabled and the other
+ * CPU parked. It must not enter RTEMS's flash-resident SMP locking code.
+ */
+static inline __attribute__((always_inline)) uint64_t rtc_counter_snapshot(void)
 {
-    rtems_interrupt_lock_context lock;
-    rtems_interrupt_lock_acquire(&rtc_lock, &lock);
 #if defined(RTEMS_BOARD_ESP32C3)
     volatile uint32_t *time_upd = (volatile uint32_t *) 0x6000800CU;
     *time_upd = (1U << 31);
@@ -63,15 +65,80 @@ uint64_t BSP_FAST_TEXT_SECTION rtems_esp_rtc_get_counter(void)
     uint32_t low = *(volatile uint32_t *) (ESP_RTC_TIMER_BASE + 0x14U);
     uint32_t high = *(volatile uint32_t *) (ESP_RTC_TIMER_BASE + 0x18U);
 #endif
-    uint64_t rtc_ticks = ((uint64_t) (high & 0xFFFFU) << 32) | low;
+    return ((uint64_t) (high & 0xFFFFU) << 32) | low;
+}
 
+uint64_t BSP_FAST_TEXT_SECTION rtems_esp_rtc_get_counter(void)
+{
+    rtems_interrupt_lock_context lock;
+    rtems_interrupt_lock_acquire(&rtc_lock, &lock);
+    uint64_t rtc_ticks = rtc_counter_snapshot();
     rtems_interrupt_lock_release(&rtc_lock, &lock);
     return rtc_ticks;
 }
 
-#if defined(RTEMS_BOARD_ESP32H2)
+#if defined(RTEMS_BOARD_ESP32S31)
+extern uint32_t Cache_Suspend_L1_CORE0_ICache(void);
+extern uint32_t Cache_Suspend_L1_CORE1_ICache(void);
+extern uint32_t Cache_Suspend_L1_DCache(void);
+extern void Cache_Resume_L1_CORE0_ICache(uint32_t autoload);
+extern void Cache_Resume_L1_CORE1_ICache(uint32_t autoload);
+extern void Cache_Resume_L1_DCache(uint32_t autoload);
+#elif defined(RTEMS_BOARD_ESP32P4)
+extern uint32_t Cache_Suspend_L2_Cache(void);
+extern void Cache_Resume_L2_Cache(uint32_t autoload);
+#elif defined(RTEMS_BOARD_ESP32C5)
+extern uint32_t Cache_Suspend_Cache(void);
+extern void Cache_Resume_Cache(uint32_t autoload);
+#else
 extern uint32_t Cache_Suspend_ICache(void);
 extern void Cache_Resume_ICache(uint32_t autoload);
+#endif
+
+struct sleep_cache_state
+{
+    uint32_t prediction;
+    uint32_t autoload;
+#if defined(RTEMS_BOARD_ESP32S31)
+    uint32_t instruction0;
+    uint32_t instruction1;
+#endif
+};
+
+static inline __attribute__((always_inline)) void sleep_cache_suspend(struct sleep_cache_state *state)
+{
+    state->prediction = sleep_disable_branch_prediction();
+#if defined(RTEMS_BOARD_ESP32S31)
+    state->instruction0 = Cache_Suspend_L1_CORE0_ICache();
+    state->instruction1 = Cache_Suspend_L1_CORE1_ICache();
+    state->autoload = Cache_Suspend_L1_DCache();
+#elif defined(RTEMS_BOARD_ESP32P4)
+    /* Internal SRAM uses L1 on P4. Only suspend the external-memory L2. */
+    state->autoload = Cache_Suspend_L2_Cache();
+#elif defined(RTEMS_BOARD_ESP32C5)
+    state->autoload = Cache_Suspend_Cache();
+#else
+    state->autoload = Cache_Suspend_ICache();
+#endif
+}
+
+static inline __attribute__((always_inline)) void sleep_cache_resume(const struct sleep_cache_state *state)
+{
+#if defined(RTEMS_BOARD_ESP32S31)
+    Cache_Resume_L1_DCache(state->autoload);
+    Cache_Resume_L1_CORE1_ICache(state->instruction1);
+    Cache_Resume_L1_CORE0_ICache(state->instruction0);
+#elif defined(RTEMS_BOARD_ESP32P4)
+    Cache_Resume_L2_Cache(state->autoload);
+#elif defined(RTEMS_BOARD_ESP32C5)
+    Cache_Resume_Cache(state->autoload);
+#else
+    Cache_Resume_ICache(state->autoload);
+#endif
+    sleep_restore_branch_prediction(state->prediction);
+}
+
+#if defined(RTEMS_BOARD_ESP32H2)
 extern uint32_t esp_rom_get_cpu_ticks_per_us(void);
 extern void esp_rom_set_cpu_ticks_per_us(uint32_t ticks);
 
@@ -183,6 +250,7 @@ static BSP_FAST_TEXT_SECTION void usb_jtag_resume(const struct usb_jtag_sleep_st
 
 uint32_t BSP_FAST_TEXT_SECTION rtems_esp_sleep_enter(bool deep, uint32_t wakeup, uint64_t deadline)
 {
+    struct sleep_cache_state cache;
 #if defined(RTEMS_BOARD_ESP32C3)
     /* RTC memory, the slow clock and analog regulators remain powered. Deep
      * sleep powers down the digital wrapper and restarts through the ROM.
@@ -202,16 +270,17 @@ uint32_t BSP_FAST_TEXT_SECTION rtems_esp_sleep_enter(bool deep, uint32_t wakeup,
     REG(0x60008068U) &= ~(0x1FFFFU << 12); /* No sleep rejection sources. */
     REG(0x6000804CU) = 3U;
     REG(0x60008018U) |= BIT(1); /* Clear prior reject cause. */
+    if (!deep) {
+        sleep_cache_suspend(&cache);
+    }
     REG(0x60008018U) |= BIT(31);
     __asm__ volatile("fence iorw, iorw" ::: "memory");
+    bool timed_out = false;
     while ((REG(0x60008044U) & 3U) == 0) {
-        if (rtems_esp_rtc_get_counter() >= deadline) {
+        if (rtc_counter_snapshot() >= deadline) {
             REG(0x60008018U) &= ~BIT(31);
-            REG(0x60008088U) = power;
-            REG(0x6000808CU) = iso;
-            REG(0x60008000U) = options;
-            REG(0x60008070U) = clock;
-            return 0;
+            timed_out = true;
+            break;
         }
     }
     uint32_t status = REG(0x60008044U);
@@ -221,7 +290,10 @@ uint32_t BSP_FAST_TEXT_SECTION rtems_esp_sleep_enter(bool deep, uint32_t wakeup,
     REG(0x6000808CU) = iso;
     REG(0x60008000U) = options;
     REG(0x60008070U) = clock;
-    return (status & BIT(1)) ? 0 : cause;
+    if (!deep) {
+        sleep_cache_resume(&cache);
+    }
+    return timed_out || (status & BIT(1)) ? 0 : cause;
 #else
     /* The HP active and sleep register groups share their layout. Copy only
      * power/clock/bias/regulator fields, excluding REGDMA backup controls.
@@ -236,10 +308,6 @@ uint32_t BSP_FAST_TEXT_SECTION rtems_esp_sleep_enter(bool deep, uint32_t wakeup,
     REG(PMU_BASE + 0x14U) = (REG(PMU_BASE + 0x14U) & ~(BIT(26) | BIT(27))) | BIT(28) | BIT(29) | BIT(30);
     REG(PMU_BASE + 0x18U) = (REG(PMU_BASE + 0x18U) & ~(BIT(30) | BIT(31))) | BIT(24) | BIT(25);
     REG(PMU_BASE + 0x30U) |= BIT(31);
-    /* Retain the calibrated LP regulator bias as well as the HP bias copied
-     * below. Immediate PLL power-up at boot does not set these FSM fields.
-     */
-    REG(PMU_BASE + 0xB4U) = REG(PMU_BASE + 0x9CU);
     sleep_analog_write(0x6DU, 8, 0x0FU, 0);
     sleep_analog_write(0x6DU, 9, 0x30U, 0);
     sleep_analog_write(0x6DU, 15, BIT(2), 0);
@@ -247,21 +315,41 @@ uint32_t BSP_FAST_TEXT_SECTION rtems_esp_sleep_enter(bool deep, uint32_t wakeup,
     if (!deep) {
         usb_jtag_suspend(&usb_jtag);
     }
-    /* IDF pmu_init() installs separate ACTIVE and SLEEP state defaults.
-     * Direct boot bypasses it: explicitly enable the active system clock
-     * and release the CPU stall when the PMU returns to ACTIVE.
-     */
-    REG(PMU_BASE + 0x10U) &= ~BIT(29);
-    REG(PMU_BASE + 0x24U) = BIT(27);
     /* PMU_SLEEP_PROTECT_HP_LP_SLEEP; preserve minimum sleep-cycle fields. */
     REG(PMU_BASE + PMU_CTRL + 12U) = (REG(PMU_BASE + PMU_CTRL + 12U) & ~(3U << 16)) | (2U << 16);
 #endif
 #if defined(RTEMS_BOARD_ESP32S31)
     static const uint8_t offsets[] = { 0, 4, 8, 12, 16, 20, 24, 28, 32, 48, 52, 56, 60 };
     const uint32_t sys = 0x18U, sysclk = 0x30U;
+    const uint32_t lp_active = 0xC0U, lp_sleep = 0xD8U;
 #else
     static const uint8_t offsets[] = { 0, 4, 8, 12, 16, 20, 24, 36, 40, 44, 48 };
     const uint32_t sys = 0x10U, sysclk = 0x24U;
+    const uint32_t lp_active = 0x9CU, lp_sleep = 0xB4U;
+#endif
+    /* LP_SLEEP is a separate regulator state, outside the HP template.
+     * Retain its awake supply settings too, without copying reserved bits.
+     */
+    const uint32_t lp_regulator_mask = 0xFFE00000U;
+    REG(PMU_BASE + lp_sleep) = (REG(PMU_BASE + lp_sleep) & ~lp_regulator_mask)
+        | (REG(PMU_BASE + lp_active) & lp_regulator_mask);
+    /* Direct boot bypasses pmu_init(): install the ACTIVE clock/stall
+     * defaults before using this state as the retained SLEEP template.
+     */
+    REG(PMU_BASE + sys) &= ~BIT(29);
+    REG(PMU_BASE + sysclk) = BIT(27);
+#if defined(RTEMS_BOARD_ESP32C5) || defined(RTEMS_BOARD_ESP32C6)
+    /* Immediate boot-time PLL commands do not populate the FSM states. */
+    REG(PMU_BASE + 0x14U) = (REG(PMU_BASE + 0x14U) & ~(BIT(26) | BIT(27))) | BIT(28) | BIT(29) | BIT(30);
+#elif defined(RTEMS_BOARD_ESP32P4)
+    /* Capture PLLs powered by immediate ROM/BSP commands as well as the
+     * persistent configuration. CLK_STATE0 reports PLL power at 27-30 and
+     * CPLL/SPLL/APLL I2C power at 4-6; ACTIVE places the latter at 23-25.
+     * Keep the BSP's CPLL, without powering every unused P4 PLL.
+     */
+    uint32_t pll_state = REG(PMU_BASE + 0x1ACU);
+    REG(PMU_BASE + 0x14U) = (REG(PMU_BASE + 0x14U) & ~(BIT(21) | BIT(22)))
+        | (pll_state & (0xFU << 27)) | ((pll_state & (7U << 4)) << 19) | BIT(23) | BIT(27);
 #endif
     for (unsigned i = 0; i < sizeof(offsets); i++) {
         REG(PMU_BASE + PMU_SLEEP + offsets[i]) = REG(PMU_BASE + offsets[i]);
@@ -276,14 +364,16 @@ uint32_t BSP_FAST_TEXT_SECTION rtems_esp_sleep_enter(bool deep, uint32_t wakeup,
     REG(PMU_BASE + PMU_SLEEP + sys) |= BIT(28) | BIT(29);
 #endif
     REG(PMU_BASE + PMU_SLEEP + sysclk) = BIT(28) | BIT(29);
-#if defined(RTEMS_BOARD_ESP32H2)
     /* pmu_sleep_digital_init(): retained functional clocks require the
      * global system-clock gate open. CPU stall still stops execution.
      */
-    if (REG(PMU_BASE + PMU_SLEEP + 4U) != 0) {
+    uint32_t functional_clocks = REG(PMU_BASE + PMU_SLEEP + 4U);
+#if defined(RTEMS_BOARD_ESP32S31)
+    functional_clocks |= REG(PMU_BASE + PMU_SLEEP + 12U);
+#endif
+    if (functional_clocks != 0) {
         REG(PMU_BASE + PMU_SLEEP + sysclk) |= BIT(27);
     }
-#endif
     uint32_t forces[PMU_FORCE_COUNT];
     uint32_t memory_force = REG(PMU_BASE + PMU_MEM_FORCE);
     if (deep) {
@@ -314,17 +404,23 @@ uint32_t BSP_FAST_TEXT_SECTION rtems_esp_sleep_enter(bool deep, uint32_t wakeup,
     REG(PMU_BASE + PMU_CTRL + 8U) = wakeup;
     REG(PMU_BASE + PMU_CLEAR) = BIT(30) | BIT(31);
     REG(PMU_BASE + PMU_CTRL + 16U) = BIT(31);
-#if defined(RTEMS_BOARD_ESP32H2)
     /* Drain outstanding flash accesses before gating the system clock.
-     * Everything through Cache_Resume_ICache must execute from RAM or ROM.
+     * Everything through cache resume must execute from SRAM or ROM.
      */
-    uint32_t cache_autoload = Cache_Suspend_ICache();
+    if (!deep) {
+        sleep_cache_suspend(&cache);
+    }
+#if defined(RTEMS_BOARD_ESP32P4)
+    /* Switch pad settings before the FSM holds them, as in pmu_sleep_start().
+     * Switching and holding at the same stage can latch indeterminate levels.
+     */
+    REG(PMU_BASE + 0xE4U) = BIT(26); /* Immediate PAD_SLP_SEL high. */
 #endif
     REG(PMU_BASE + PMU_CTRL) |= BIT(31);
     __asm__ volatile("fence iorw, iorw" ::: "memory");
     bool timed_out = false;
     while ((REG(PMU_BASE + PMU_RAW) & (BIT(30) | BIT(31))) == 0) {
-        if (rtems_esp_rtc_get_counter() >= deadline) {
+        if (rtc_counter_snapshot() >= deadline) {
             timed_out = true;
             break;
         }
@@ -339,11 +435,25 @@ uint32_t BSP_FAST_TEXT_SECTION rtems_esp_sleep_enter(bool deep, uint32_t wakeup,
     uint32_t status = REG(PMU_BASE + PMU_RAW);
     uint32_t cause = REG(PMU_BASE + PMU_CTRL + 32U);
     REG(PMU_BASE + PMU_CLEAR) = BIT(30) | BIT(31);
+#if defined(RTEMS_BOARD_ESP32P4)
+    REG(PMU_BASE + 0xE4U) = BIT(27); /* Immediate PAD_SLP_SEL low. */
+#endif
+#ifdef SLEEP_EFUSE_STATUS
+    /* pmu_sleep_finish(): do not resume callers/cache before the eFuse
+     * shadow-memory update is complete. IDLE is state 1, not state 0.
+     */
+    while ((REG(SLEEP_EFUSE_STATUS) & 0xFU) != 1U) {
+    }
+#endif
 #if defined(RTEMS_BOARD_ESP32H2)
     /* pmu_sleep_finish(): BIAS DREG_0P8 is lost during sleep. */
     sleep_analog_write(0x6AU, 0, 0xF0U, 0x80U);
     cpu_clock_restore(&cpu_clock);
-    Cache_Resume_ICache(cache_autoload);
+#endif
+    if (!deep) {
+        sleep_cache_resume(&cache);
+    }
+#if defined(RTEMS_BOARD_ESP32H2)
     if (!deep) {
         usb_jtag_resume(&usb_jtag);
     }

@@ -173,6 +173,42 @@ recovery, deep sleep and externally stimulated GPIO wake remain unverified. Run
 execution from flash, expired timers and scheduler resumption on a board.
 Wokwi and esp-emulator cover the boot test, not physical sleep transitions.
 
+BSP patch 0040 initializes C5/C6/P4/S31 regulator ownership before selecting
+high-speed clocks. C5/C6/P4 use their chip-specific, version-qualified eFuse
+biases and fallbacks; S31 uses IDF's nominal PMU values. P4 performs the
+LDO-to-DCDC handoff and revision-specific settling sequence. Rebuild the BSP
+SDK with the patch series, not just the application, to include these changes.
+
+The PMU-based boards (C5/C6/H2/P4/S31) explicitly initialize ACTIVE system
+clock/stall state before preparing SLEEP, and keep the sleep global clock
+enabled when retaining functional clocks. S31 checks both functional-clock
+words. C5/C6 retain the BBPLL supplies; P4 retains the BSP's CPLL without
+enabling every other PLL, also capturing PLLs already powered by immediate
+ROM/BSP commands. S31's BSP already installs persistent CPLL state.
+The initialized LP regulator state is also retained into LP_SLEEP; S31 uses
+its distinct offsets, and reserved bits are preserved.
+P4 GPIO wakeup masks accept physical GPIO0-GPIO15, using P4's per-pad LP
+mux/input fields and wake comparator layout on both silicon revisions.
+Wake-pad inputs are enabled in both active and sleep settings;
+their original configuration is restored after a returning sleep attempt.
+P4 selects pad sleep settings before the PMU holds them and restores active
+settings on return. C5/C6/P4/S31 wait for the eFuse controller's idle state
+before restoring cache access and resuming callers.
+
+Light sleep drains and suspends the external-memory cache through each chip's
+ROM API, restoring saved autoload state on wakeup, rejection and timeout.
+P4/P4v1 suspend only L2, leaving the L1 path to internal SRAM running; S31
+suspends both instruction caches and the data cache, restoring them in reverse
+order. C5/P4/S31 preserve branch-predictor state on each participating hart.
+The secondary-core park loop and the sleep polling path execute from SRAM;
+polling uses a raw RTC snapshot rather than calling flash-resident SMP locks.
+These source sequences follow ESP-IDF, but non-H2 physical sleep transitions
+and external GPIO stimulation still require board testing; emulator sleep
+fixtures validate RTEMS scheduling, not cache or power transitions.
+This is a retained-power implementation, not identical to ESP-IDF's normal
+low-power policy: except on H2 it leaves the software CPU root mux/dividers
+unchanged, rather than switching to XTAL and recalibrating PLLs on return.
+
 S31 direct boot switches to XTAL40, configures and calibrates CPLL320, then
 selects CPU/MEM/SYS/APB dividers of 1/2/3/2. Clock-update and calibration
 failures stop boot explicitly. S31 modem initialization uses its separate

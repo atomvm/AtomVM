@@ -22,6 +22,7 @@
 
 #if defined(RTEMS_BOARD_ESP32)
 #include <bsp/irq.h>
+#include <bsp/linker-symbols.h>
 #include <errno.h>
 #include <pthread.h>
 #include <rtems.h>
@@ -33,6 +34,7 @@
 #include <sched.h>
 #include <stdatomic.h>
 
+#include "esp_sleep_cache.h"
 #include "esp_sleep_regs.h"
 
 static pthread_mutex_t sleep_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -100,17 +102,19 @@ struct sleep_rendezvous
     Per_CPU_Control *cpu;
 };
 
-static void park_cpu(void *arg)
+static BSP_FAST_TEXT_SECTION void park_cpu(void *arg)
 {
     struct sleep_rendezvous *state = arg;
     /* Executed by an RTEMS per-CPU job at interrupt level, after the other
      * processor has left interrupt locks. No scheduler or device locks are
      * acquired between this acknowledgement and the release.
      */
+    uint32_t prediction = sleep_disable_branch_prediction();
     atomic_store_explicit(&state->ready, true, memory_order_release);
     while (!atomic_load_explicit(&state->release, memory_order_acquire)) {
         __asm__ volatile("nop");
     }
+    sleep_restore_branch_prediction(prediction);
 }
 #endif
 
@@ -201,12 +205,17 @@ static void prepare_gpio(uint32_t mask, int mode, struct gpio_sleep_state *saved
             | ((mask & 0xFFU) << 15) | ((mode ? (mask & 0xFFU) : 0U) << 23) | BIT(31) | BIT(14);
     }
 #else
+#if !defined(RTEMS_BOARD_ESP32P4)
     saved->select = REG(LP_MUX_SELECT);
+#endif
 #if defined(RTEMS_BOARD_ESP32S31)
     REG(0x20710034U) |= BIT(30); /* LP IOMUX clock */
     REG(0x207133F8U) |= 1U;
 #elif defined(RTEMS_BOARD_ESP32P4)
     REG(0x5012B000U) |= 1U; /* LP IOMUX clock */
+    REG(0x5012A000U) |= 1U; /* Independent LP GPIO clock. */
+    while (!(REG(0x5012A000U) & 1U)) {
+    }
 #else
     REG(0x600B2800U) |= BIT(27); /* LP IO clock */
 #if defined(RTEMS_BOARD_ESP32C5)
@@ -218,6 +227,20 @@ static void prepare_gpio(uint32_t mask, int mode, struct gpio_sleep_state *saved
     for (unsigned pin = 0; pin < GPIO_COUNT; pin++) {
         saved->mux[pin] = REG(LP_MUX0 + pin * 4U);
         saved->pin[pin] = REG(LP_PIN0 + pin * 4U);
+#if defined(RTEMS_BOARD_ESP32P4)
+        /* P4 puts wake enable/type at 0/1, and mux/function/input in
+         * each LP IOMUX PAD word at 4/5/10, on both chip revisions.
+         */
+        uint32_t cfg = saved->pin[pin] & ~(BIT(0) | (7U << 1));
+        if (mask & BIT(pin)) {
+            uint32_t mux = saved->mux[pin] & ~((3U << 5) | BIT(9));
+            /* Input-only in sleep too, regardless of the previous PAD
+             * sleep settings: SLP_SEL/SLP_IE/SLP_OE are at 7/8/9.
+             */
+            REG(LP_MUX0 + pin * 4U) = mux | BIT(4) | (1U << 5) | BIT(7) | BIT(8) | BIT(10);
+            cfg |= BIT(0) | ((uint32_t) (mode ? 5 : 4) << 1);
+        }
+#else
         uint32_t cfg = saved->pin[pin] & ~(BIT(10) | (7U << 7));
         if (mask & BIT(pin)) {
             uint32_t mux = saved->mux[pin] & ~(7U << 12);
@@ -227,9 +250,12 @@ static void prepare_gpio(uint32_t mask, int mode, struct gpio_sleep_state *saved
             REG(LP_MUX0 + pin * 4U) = mux | BIT(9);
             cfg |= BIT(10) | ((uint32_t) (mode ? 5 : 4) << 7);
         }
+#endif
         REG(LP_PIN0 + pin * 4U) = cfg;
     }
+#if !defined(RTEMS_BOARD_ESP32P4)
     REG(LP_MUX_SELECT) |= mask;
+#endif
 #endif
 }
 
@@ -250,7 +276,9 @@ static void restore_gpio(uint32_t mask, const struct gpio_sleep_state *saved)
         REG(LP_AON_EXT_WAKEUP) = saved->wakeup;
     }
 #else
+#if !defined(RTEMS_BOARD_ESP32P4)
     REG(LP_MUX_SELECT) = saved->select;
+#endif
     for (unsigned pin = 0; pin < GPIO_COUNT; pin++) {
         REG(LP_PIN0 + pin * 4U) = saved->pin[pin];
         if (mask & BIT(pin)) {

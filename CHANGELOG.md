@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0-beta.1] - Unreleased
 
 ### Fixed
+- Fixed RTEMS ESP32 startup regulator initialization, sleep clock/PLL/bias retention
+  and chip-specific cache transitions, including SRAM-safe SMP parking and timeout
+  polling; corrected P4 GPIO wake configuration and enabled GPIO0-GPIO15 wakeup
 - Fixed RTEMS ESP32-H2 startup voltage/PLL initialization and light-sleep recovery,
   including an application/BSP ABI mismatch that corrupted scheduler state
 - Fixed RTEMS ESP32-H2 GPIO wakeup masks to use physical GPIO7-GPIO14

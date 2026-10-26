@@ -296,6 +296,8 @@ int rtems_esp_deep_sleep_enable_gpio_wakeup(uint64_t mask, int mode)
     const uint32_t valid_mask = 0x7FU;
 #elif defined(RTEMS_BOARD_ESP32H2)
     const uint32_t valid_mask = 0x7F80U; /* Physical GPIO7-GPIO14. */
+#elif defined(RTEMS_BOARD_ESP32P4)
+    const uint32_t valid_mask = 0xFFFFU; /* Physical GPIO0-GPIO15. */
 #else
     const uint32_t valid_mask = 0xFFU;
 #endif
