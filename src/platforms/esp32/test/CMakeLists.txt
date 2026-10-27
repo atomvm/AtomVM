@@ -29,6 +29,10 @@ set(EXTRA_COMPONENT_DIRS "../components")
 #
 set(TEST_COMPONENTS "testable" CACHE STRING "List of components to test")
 
+# As in the firmware build (../CMakeLists.txt), so that tests see the same
+# stacktraces a device does.
+option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../../CMakeModules")
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)

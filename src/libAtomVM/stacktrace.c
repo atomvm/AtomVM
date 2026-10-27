@@ -402,10 +402,13 @@ term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
         }
     }
 
-    struct ModulePathPair *module_paths = malloc(num_mods * sizeof(struct ModulePathPair));
-    if (IS_NULL_PTR(module_paths)) {
-        fprintf(stderr, "Unable to allocate space for module paths.  Returning raw stacktrace.\n");
-        return *stack_info;
+    struct ModulePathPair *module_paths = NULL;
+    if (num_mods > 0) {
+        module_paths = malloc(num_mods * sizeof(struct ModulePathPair));
+        if (IS_NULL_PTR(module_paths)) {
+            fprintf(stderr, "Unable to allocate space for module paths.  Returning raw stacktrace.\n");
+            return *stack_info;
+        }
     }
 
     //
