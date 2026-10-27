@@ -260,6 +260,12 @@ TEST_CASE("test_esp_timer_get_time", "[test_run]")
     TEST_ASSERT(ret_value == OK_ATOM);
 }
 
+TEST_CASE("test_nvs", "[test_run]")
+{
+    term ret_value = avm_test_case("test_nvs.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+
 // User SPI peripherals are not emulated on all QEMU targets. Run on Wokwi.
 #if CONFIG_AVM_ENABLE_SPI_PORT_DRIVER && !CONFIG_ETH_USE_OPENETH
 TEST_CASE("test_spi", "[test_run]")

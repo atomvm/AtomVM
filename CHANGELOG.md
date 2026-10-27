@@ -61,6 +61,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   returns, which callers waiting on that monitor never received
 - Fixed stacktraces with no line information coming back raw on ESP32, where `malloc(0)`
   returns `NULL`
+- Fixed `esp:nvs_get_binary/1,2` leaking an NVS handle on every read of a missing key, which
+  slowly ran the ESP32 out of memory
 
 ## [0.7.0-beta.0] - 2026-09-28
 
