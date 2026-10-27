@@ -117,7 +117,7 @@ if(HAVE_SOC_CPU_CORES_NUM)
 endif()
 
 check_c_source_compiles("
-    #include <mbedtls/version.h>
+    #include <mbedtls/build_info.h>
     #ifndef MBEDTLS_PSA_CRYPTO_C
     #error PSA Crypto not available
     #endif
