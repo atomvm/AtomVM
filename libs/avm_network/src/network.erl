@@ -50,6 +50,7 @@
 -define(DEFAULT_PASSIVE_DWELL, 360).
 -define(DEFAULT_ACTIVE_DWELL, 120).
 -define(GEN_RESPONSE_MS, 5000).
+-define(STA_RSSI_TIMEOUT, 5000).
 
 -type ipv4_info() :: {
     IPAddress :: inet:ip4_address(), NetMask :: inet:ip4_address(), Gateway :: inet:ip4_address()
@@ -485,6 +486,12 @@ stop() ->
 %% @returns {ok, Rssi} in dBm, or {error, Reason}.
 %%
 %% @doc     Get the rssi information of AP to which the device is associated with.
+%%
+%%          Returns `{error, timeout}' if the driver does not answer within
+%%          5000 ms. Only the reply to this request is received, so other
+%%          messages in the caller's mailbox are left alone. A timeout does
+%%          not cancel the request: a late reply may still arrive in the
+%%          caller's mailbox.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec sta_rssi() -> {ok, Rssi :: dbm()} | {error, Reason :: term()}.
@@ -497,8 +504,9 @@ sta_rssi() ->
             Port ! {self(), Ref, rssi},
             receive
                 {Ref, {error, Reason}} -> {error, Reason};
-                {Ref, {rssi, Rssi}} -> {ok, Rssi};
-                Other -> {error, Other}
+                {Ref, {rssi, Rssi}} -> {ok, Rssi}
+            after ?STA_RSSI_TIMEOUT ->
+                {error, timeout}
             end
     end.
 

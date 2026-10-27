@@ -61,6 +61,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   returns, which callers waiting on that monitor never received
 - Fixed stacktraces with no line information coming back raw on ESP32, where `malloc(0)`
   returns `NULL`
+- Fixed `network:sta_rssi/0` waiting forever when the driver does not answer, and consuming any
+  other message in the caller's mailbox as `{error, Message}`: it now takes only its own reply,
+  and returns `{error, timeout}` after 5 s
 
 ## [0.7.0-beta.0] - 2026-09-28
 
