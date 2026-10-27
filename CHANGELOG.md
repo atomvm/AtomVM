@@ -72,6 +72,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed integer segments wider than 64 bits being written at the end of the binary under
   construction instead of in their own field when other segments followed them, and raising
   `badarg` instead of being truncated when the field was narrower than the value
+- Fixed the `bs_add` instruction (binaries built with the `no_bs_create_bin` compiler option)
+  scaling the number of bits it is given, which allocated binaries of the wrong size
+- Fixed modules compiled with the `no_bs_create_bin` compiler option failing to load when
+  `bs_init_bits` or `bs_append` were followed by the creation of funs, and `bs_append` not
+  reserving the extra heap words it is given
 
 ## [0.7.0-beta.0] - 2026-09-28
 

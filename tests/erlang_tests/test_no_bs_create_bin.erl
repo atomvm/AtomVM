@@ -177,7 +177,10 @@ test_bitstring_source() ->
 
     badarg = expect_error(fun() -> put_binary_after(id(5), id(<<1:1>>)) end),
     badarg = expect_error(fun() -> put_binary_after_bits(id(<<5:3>>), id(<<1:1>>)) end),
+    <<5, 1, 2>> = put_binary_after(id(5), id(<<1, 2>>)),
     <<5:3, 1:1>> = put_bitstring_after_bits(id(<<5:3>>), id(<<1:1>>)),
+
+    <<5:3, 1:1, (1 bsl 70):101>> = put_wide_int_after(id(<<5:3, 1:1>>), id(1 bsl 70)),
     ok.
 
 put_binary_after(Byte, Bin) ->

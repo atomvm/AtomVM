@@ -3423,14 +3423,35 @@ schedule_in:
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
-                VERIFY_IS_INTEGER(src1, "bs_add", 0);
-                VERIFY_IS_INTEGER(src2, "bs_add", 0);
+                VERIFY_IS_INTEGER(src1, "bs_add", fail);
+                VERIFY_IS_INTEGER(src2, "bs_add", fail);
                 avm_int_t src1_val = term_to_int(src1);
                 avm_int_t src2_val = term_to_int(src2);
 
                 TRACE("bs_add/5, fail=%i src1=" AVM_INT_FMT " src2=" AVM_INT_FMT " unit=%u dreg=%c%i\n", fail, src1_val, src2_val, (unsigned) unit, T_DEST_REG(dreg));
 
-                WRITE_REGISTER(dreg, term_from_int((src1_val + src2_val) * unit));
+                if (UNLIKELY(src1_val < 0 || src2_val < 0)) {
+                    if (fail == 0) {
+                        RAISE_ERROR(BADARG_ATOM);
+                    } else {
+                        JUMP_TO_LABEL(mod, fail);
+                    }
+                }
+                size_t bs_add_total = (size_t) src1_val;
+                if (LIKELY(unit == 0 || (size_t) src2_val <= (size_t) MAX_NOT_BOXED_INT / unit)) {
+                    bs_add_total += (size_t) src2_val * unit;
+                } else {
+                    bs_add_total = (size_t) MAX_NOT_BOXED_INT + 1;
+                }
+                if (UNLIKELY(bs_add_total > (size_t) MAX_NOT_BOXED_INT)) {
+                    if (fail == 0) {
+                        RAISE_ERROR(SYSTEM_LIMIT_ATOM);
+                    } else {
+                        JUMP_TO_LABEL(mod, fail);
+                    }
+                }
+
+                WRITE_REGISTER(dreg, term_from_int((avm_int_t) bs_add_total));
                 break;
             }
 
@@ -3440,7 +3461,7 @@ schedule_in:
                 term size;
                 DECODE_COMPACT_TERM(size, pc)
                 uint32_t words;
-                DECODE_LITERAL(words, pc)
+                DECODE_ALLOCATOR_LIST(words, pc);
                 uint32_t live;
                 DECODE_LITERAL(live, pc)
                 uint32_t flags_value;
@@ -3493,9 +3514,8 @@ schedule_in:
                 DECODE_LABEL(fail, pc)
                 term size;
                 DECODE_COMPACT_TERM(size, pc)
-                term extra;
-                UNUSED(extra);
-                DECODE_COMPACT_TERM(extra, pc)
+                uint32_t extra;
+                DECODE_ALLOCATOR_LIST(extra, pc);
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
                 uint32_t unit;
@@ -3536,7 +3556,7 @@ schedule_in:
                     RAISE_ERROR(SYSTEM_LIMIT_ATOM);
                 }
                 size_t bs_trailing_bits = bs_total_bits % 8;
-                size_t bs_heap_size = term_binary_heap_size(bs_total_bytes);
+                size_t bs_heap_size = extra + term_binary_heap_size(bs_total_bytes);
                 if (bs_trailing_bits != 0) {
                     bs_heap_size += TERM_BOXED_SUB_BINARY_SIZE;
                 }

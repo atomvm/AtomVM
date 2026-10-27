@@ -584,6 +584,7 @@ compile_erlang(test_has_map_fields)
 compile_erlang(test_bs_create_bin_accum)
 compile_assembler(test_bs_create_bin_accum_asm)
 compile_erlang(test_no_bs_create_bin)
+compile_erlang(test_no_bs_unaligned DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/test_bs_bigint_common.hrl)
 compile_erlang(bs_context_to_binary_with_offset)
 compile_erlang(bs_restore2_start_offset)
 compile_erlang(test_refc_binaries)
@@ -1158,6 +1159,7 @@ set(erlang_test_beams
     test_has_map_fields.beam
     test_bs_create_bin_accum.beam
     test_no_bs_create_bin.beam
+    test_no_bs_unaligned.beam
     bs_context_to_binary_with_offset.beam
     bs_restore2_start_offset.beam
     bs_append_extra_words.beam
