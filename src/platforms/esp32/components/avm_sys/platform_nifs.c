@@ -628,8 +628,13 @@ static term nif_esp_deep_sleep_enable_gpio_wakeup(Context *ctx, int argc, term a
     VALIDATE_VALUE(argv[0], term_is_any_integer);
     VALIDATE_VALUE(argv[1], term_is_integer);
     avm_int64_t mask = term_maybe_unbox_int64(argv[0]);
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
+    esp_sleep_gpio_wake_up_mode_t mode = term_to_int(argv[1]);
+    esp_err_t err = esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown(mask, mode);
+#else
     esp_deepsleep_gpio_wake_up_mode_t mode = term_to_int(argv[1]);
     esp_err_t err = esp_deep_sleep_enable_gpio_wakeup(mask, mode);
+#endif
     if (UNLIKELY(err == ESP_ERR_INVALID_ARG)) {
         RAISE_ERROR(BADARG_ATOM);
     }
