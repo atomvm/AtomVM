@@ -69,6 +69,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed float segments at a bit offset that is not a multiple of 8, which raised `badarg` on
   construction and did not match
 - Fixed the x86_64 JIT failing to compile a float segment of variable size
+- Fixed integer segments wider than 64 bits being written at the end of the binary under
+  construction instead of in their own field when other segments followed them, and raising
+  `badarg` instead of being truncated when the field was narrower than the value
 
 ## [0.7.0-beta.0] - 2026-09-28
 

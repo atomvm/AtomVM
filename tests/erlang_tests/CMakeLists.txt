@@ -461,6 +461,7 @@ compile_erlang(test_bs_int_any_flags)
 compile_erlang(test_bs_int_unaligned)
 compile_erlang(test_bs_size_limits)
 compile_erlang(test_bs_unaligned_segments)
+compile_erlang(test_bs_bigint_unaligned DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/test_bs_bigint_common.hrl)
 compile_erlang(test_bs_start_match_live)
 compile_erlang(test_bs_utf)
 compile_erlang(test_catch)
@@ -1030,6 +1031,7 @@ set(erlang_test_beams
     test_bs_int_unaligned.beam
     test_bs_size_limits.beam
     test_bs_unaligned_segments.beam
+    test_bs_bigint_unaligned.beam
     test_bs_start_match_live.beam
     test_bs_utf.beam
     test_catch.beam

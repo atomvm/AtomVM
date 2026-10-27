@@ -3658,6 +3658,11 @@ schedule_in:
                 VERIFY_IS_INTEGER(size, "bs_put_integer", 0);
 
                 avm_int_t size_value = term_to_int(size);
+                if (UNLIKELY(size_value < 0 || (unit != 0 && (size_t) size_value > SIZE_MAX / unit))) {
+                    TRACE("bs_put_integer: invalid size\n");
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+                size_t field_bits = (size_t) size_value * (size_t) unit;
 
                 if (term_is_int(src)
                     || term_boxed_size(src) <= BOXED_TERMS_REQUIRED_FOR_INT64) {
@@ -3669,57 +3674,26 @@ schedule_in:
                         (unsigned int) src_value);
 
                     bool result = bitstring_insert_integer(
-                        ctx->bs, ctx->bs_offset, src_value, size_value * unit, flags_value);
+                        ctx->bs, ctx->bs_offset, src_value, field_bits, flags_value);
                     if (UNLIKELY(!result)) {
                         TRACE("bs_put_integer: Failed to insert integer into binary\n");
                         RAISE_ERROR(BADARG_ATOM);
                     }
                 } else {
-                    if (size_value < 0 || (unit != 0 && (size_t) size_value > SIZE_MAX / unit)) {
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-                    size_t field_bits = (size_t) size_value * (size_t) unit;
-
                     const intn_digit_t *big_src_value = NULL;
                     size_t big_len = 0;
                     intn_integer_sign_t big_sign;
 
                     term_to_bigint(src, &big_src_value, &big_len, &big_sign);
 
-                    // intn_to_integer_bytes writes whole bytes only, so a bignum
-                    // at a bit offset is only written when it fits 64 bits.
-                    if ((ctx->bs_offset % 8) != 0 || (field_bits % 8) != 0) {
-                        avm_int64_t field_value;
-                        if (UNLIKELY(!bitstring_bigint_to_field64(
-                                big_src_value, big_len, big_sign, field_bits, &field_value))) {
-                            TRACE("bs_put_integer: non-byte-aligned big integer segment unsupported\n");
-                            RAISE_ERROR(UNSUPPORTED_ATOM);
-                        }
-                        if (UNLIKELY(!bitstring_insert_integer(
-                                ctx->bs, ctx->bs_offset, field_value, field_bits, flags_value))) {
-                            TRACE("bs_put_integer: Failed to insert integer into binary\n");
-                            RAISE_ERROR(BADARG_ATOM);
-                        }
-                        ctx->bs_offset += field_bits;
-                        break;
-                    }
-
-                    intn_from_integer_options_t intn_flags
-                        = bitstring_flags_to_intn_opts(flags_value);
-                    int byte_offset = ctx->bs_offset / 8;
-                    uint8_t *dst = (uint8_t *) term_binary_data(ctx->bs) + byte_offset;
-                    size_t t_capacity = term_binary_size(ctx->bs);
-                    size_t avail = t_capacity - byte_offset;
-
-                    int written = intn_to_integer_bytes(
-                        big_src_value, big_len, big_sign, intn_flags, dst, avail);
-                    if (UNLIKELY(written < 0)) {
+                    if (UNLIKELY(!bitstring_insert_bigint(ctx->bs, ctx->bs_offset,
+                            big_src_value, big_len, big_sign, field_bits, flags_value))) {
                         TRACE("bs_put_integer: Failed to insert big integer into binary\n");
                         RAISE_ERROR(BADARG_ATOM);
                     }
                 }
 
-                ctx->bs_offset += size_value * unit;
+                ctx->bs_offset += field_bits;
                 break;
             }
 
@@ -4509,23 +4483,20 @@ schedule_in:
                             HANDLE_ERROR();
                         }
                     }
-                } else if ((bs_offset % 8 == 0) && (increment % 8 == 0) && (increment <= INTN_MAX_UNSIGNED_BITS_SIZE)) {
-                    unsigned long capacity_bits = term_bit_size(bs_bin);
-                    if (capacity_bits - bs_offset < (unsigned long) increment) {
-                        JUMP_TO_ADDRESS(mod->labels[fail]);
-                    }
-                    size_t byte_offset = bs_offset / 8;
-                    const uint8_t *int_bytes = (const uint8_t *) term_binary_data(bs_bin);
+                } else if (increment <= INTN_MAX_UNSIGNED_BITS_SIZE) {
+                    uint8_t int_bytes[INTN_MAX_UNSIGNED_BITS_SIZE / 8];
+                    size_t int_bytes_size;
+                    bool status = bitstring_extract_bigint_bytes(bs_bin, bs_offset, increment, flags_value, int_bytes, &int_bytes_size);
+                    assert(status);
+                    UNUSED(status);
 
-                    t = extract_nbits_integer(ctx, int_bytes + byte_offset, increment / 8,
+                    t = extract_nbits_integer(ctx, int_bytes, int_bytes_size,
                         bitstring_flags_to_intn_opts(flags_value));
                     term_set_match_state_offset(src, bs_offset + increment);
                     if (term_is_invalid_term(t)) {
                         HANDLE_ERROR();
                     }
                 } else {
-                    // As the bs_match integer command and the JIT do: a >64-bit
-                    // field that is not byte-aligned is unsupported, not a nomatch.
                     RAISE_ERROR(UNSUPPORTED_ATOM);
                 }
 
@@ -5993,34 +5964,10 @@ schedule_in:
                                           "binary\n");
                                     RAISE_ERROR(BADARG_ATOM);
                                 }
-                            } else if ((offset % 8 != 0) || ((size_value * segment_unit) % 8 != 0)) {
-                                // intn_to_integer_bytes writes whole bytes only, so a bignum
-                                // at a bit offset is only written when it fits 64 bits.
-                                avm_int64_t field_value;
-                                if (UNLIKELY(!bitstring_bigint_to_field64(big_src_value, big_len,
-                                        big_sign, size_value * segment_unit, &field_value))) {
-                                    TRACE("bs_create_bin/6: non-byte-aligned big integer segment unsupported\n");
-                                    RAISE_ERROR(UNSUPPORTED_ATOM);
-                                }
-                                bool result = bitstring_insert_integer(t, offset, field_value,
-                                    size_value * segment_unit, flags_value);
-                                if (UNLIKELY(!result)) {
-                                    TRACE("bs_create_bin/6: Failed to insert integer into "
-                                          "binary\n");
-                                    RAISE_ERROR(BADARG_ATOM);
-                                }
                             } else {
-                                // when building a binary, `signed` flag is implicit
-                                intn_from_integer_options_t intn_flags
-                                    = bitstring_flags_to_intn_opts(flags_value);
-                                int byte_offset = offset / 8;
-                                uint8_t *dst = (uint8_t *) term_binary_data(t) + byte_offset;
-                                size_t t_capacity = term_binary_size(t);
-                                size_t avail = t_capacity - byte_offset;
-
-                                int written = intn_to_integer_bytes(
-                                    big_src_value, big_len, big_sign, intn_flags, dst, avail);
-                                if (UNLIKELY(written < 0)) {
+                                bool result = bitstring_insert_bigint(t, offset, big_src_value,
+                                    big_len, big_sign, size_value * segment_unit, flags_value);
+                                if (UNLIKELY(!result)) {
                                     TRACE("bs_create_bin/6: Failed to insert integer into "
                                           "binary\n");
                                     RAISE_ERROR(BADARG_ATOM);
@@ -6310,17 +6257,16 @@ schedule_in:
                                 if (UNLIKELY(term_is_invalid_term(t))) {
                                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                                 }
-                            } else if ((bs_offset % 8 == 0) && (increment % 8 == 0) && (increment <= INTN_MAX_UNSIGNED_BITS_SIZE)) {
-                                unsigned long capacity = term_binary_size(bs_bin);
-                                if (8 * capacity - bs_offset < (unsigned long) increment) {
+                            } else if (increment <= INTN_MAX_UNSIGNED_BITS_SIZE) {
+                                uint8_t int_bytes[INTN_MAX_UNSIGNED_BITS_SIZE / 8];
+                                size_t int_bytes_size;
+                                if (!bitstring_extract_bigint_bytes(bs_bin, bs_offset, increment,
+                                        flags_value, int_bytes, &int_bytes_size)) {
                                     goto bs_match_jump_to_fail;
                                 }
-                                size_t byte_offset = bs_offset / 8;
-                                const uint8_t *int_bytes
-                                    = (const uint8_t *) term_binary_data(bs_bin);
 
-                                t = extract_nbits_integer(ctx, int_bytes + byte_offset,
-                                    increment / 8, bitstring_flags_to_intn_opts(flags_value));
+                                t = extract_nbits_integer(ctx, int_bytes, int_bytes_size,
+                                    bitstring_flags_to_intn_opts(flags_value));
                                 if (term_is_invalid_term(t)) {
                                     HANDLE_ERROR();
                                 }

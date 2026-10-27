@@ -1521,10 +1521,13 @@ static term jit_bitstring_extract_integer(
         if (offset > capacity_bits || capacity_bits - offset < (size_t) n) {
             return FALSE_ATOM;
         }
-        if ((offset % 8 == 0) && (n % 8 == 0) && (n <= INTN_MAX_UNSIGNED_BITS_SIZE)) {
-            size_t byte_offset = offset / 8;
-            const uint8_t *int_bytes = (const uint8_t *) term_binary_data(bs_bin);
-            return extract_bigint(ctx, jit_state, int_bytes + byte_offset, n / 8,
+        if (n <= INTN_MAX_UNSIGNED_BITS_SIZE) {
+            uint8_t int_bytes[INTN_MAX_UNSIGNED_BITS_SIZE / 8];
+            size_t int_bytes_size;
+            bool status = bitstring_extract_bigint_bytes(bs_bin, offset, n, bs_flags, int_bytes, &int_bytes_size);
+            assert(status);
+            UNUSED(status);
+            return extract_bigint(ctx, jit_state, int_bytes, int_bytes_size,
                 bitstring_flags_to_intn_opts(bs_flags));
         }
         set_error(ctx, jit_state, 0, UNSUPPORTED_ATOM);
@@ -1694,13 +1697,11 @@ static int jit_bitstring_insert_utf16(term bin, size_t offset, int c, enum Bitst
     return byte_size;
 }
 
-// Returns 1 on success, 0 for badarg and -1 for a bignum at a bit offset that
-// does not fit 64 bits, raised as unsupported like the interpreter does
-static int jit_bitstring_insert_integer(term bin, size_t offset, term value, size_t n, enum BitstringFlags flags)
+static bool jit_bitstring_insert_integer(term bin, size_t offset, term value, size_t n, enum BitstringFlags flags)
 {
     if (term_is_int(value) || term_boxed_size(value) <= BOXED_TERMS_REQUIRED_FOR_INT64) {
         avm_uint64_t int_value = term_maybe_unbox_int64(value);
-        return bitstring_insert_integer(bin, offset, int_value, n, flags) ? 1 : 0;
+        return bitstring_insert_integer(bin, offset, int_value, n, flags);
     }
 
     const intn_digit_t *big_src_value = NULL;
@@ -1709,26 +1710,7 @@ static int jit_bitstring_insert_integer(term bin, size_t offset, term value, siz
 
     term_to_bigint(value, &big_src_value, &big_len, &big_sign);
 
-    if ((offset % 8 != 0) || (n % 8 != 0)) {
-        // intn_to_integer_bytes writes whole bytes only, so a bignum at a bit
-        // offset is only written when it fits 64 bits.
-        avm_int64_t field_value;
-        if (UNLIKELY(!bitstring_bigint_to_field64(big_src_value, big_len, big_sign, n, &field_value))) {
-            return -1;
-        }
-        return bitstring_insert_integer(bin, offset, field_value, n, flags) ? 1 : 0;
-    }
-
-    // when building a binary, `signed` flag is implicit
-    intn_from_integer_options_t intn_flags = bitstring_flags_to_intn_opts(flags);
-    size_t byte_offset = offset / 8;
-    uint8_t *dst = (uint8_t *) term_binary_data(bin) + byte_offset;
-    size_t t_capacity = term_binary_size(bin);
-    size_t avail = t_capacity - byte_offset;
-
-    int written
-        = intn_to_integer_bytes(big_src_value, big_len, big_sign, intn_flags, dst, avail);
-    return written > 0 ? 1 : 0;
+    return bitstring_insert_bigint(bin, offset, big_src_value, big_len, big_sign, n, flags);
 }
 
 static bool jit_bitstring_insert_float(term bin, size_t offset, term value, size_t n, enum BitstringFlags flags)

@@ -2852,23 +2852,16 @@ first_pass_bs_create_bin_insert_value(
     {MSt2, SrcReg} = MMod:move_to_native_register(MSt1, Src),
     {MSt3, FlagsValue} = decode_flags_list(Flags, MMod, MSt2),
     MSt4 = MMod:mul(MSt3, SizeValue, SegmentUnit),
-    {MSt5, Result} = MMod:call_primitive(MSt4, ?PRIM_BITSTRING_INSERT_INTEGER, [
+    {MSt5, BoolResult} = MMod:call_primitive(MSt4, ?PRIM_BITSTRING_INSERT_INTEGER, [
         CreatedBin, Offset, {free, SrcReg}, SizeValue, {free, FlagsValue}
     ]),
-    % -1 is a bignum at a bit offset that does not fit 64 bits, raised as
-    % unsupported like the interpreter does
-    MSt6 = MMod:if_block(MSt5, {'(int)', Result, '==', -1}, fun(BSt) ->
-        MMod:call_primitive_last(BSt, ?PRIM_RAISE_ERROR, [
-            ctx, jit_state, offset, ?UNSUPPORTED_ATOM
-        ])
-    end),
-    MSt7 = cond_raise_badarg_or_jump_to_fail_label(
-        {'(int)', {free, Result}, '==', 0}, Fail, MMod, MSt6
+    MSt6 = cond_raise_badarg_or_jump_to_fail_label(
+        {'(bool)', {free, BoolResult}, '==', false}, Fail, MMod, MSt5
     ),
-    {MSt8, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
-        MMod, MSt7, Offset, SizeValue, 1
+    {MSt7, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
+        MMod, MSt6, Offset, SizeValue, 1
     ),
-    {MSt8, NewOffset, CreatedBin};
+    {MSt7, NewOffset, CreatedBin};
 first_pass_bs_create_bin_insert_value(
     float, Flags, Src, Size, _SegmentUnit, Fail, CreatedBin, Offset, MMod, MSt0
 ) ->

@@ -46,7 +46,7 @@ start() ->
     ok = test_dynamic_size_extraction(),
     ok = test_signed_int_unaligned(),
     ok = test_signed_int_zero_width(),
-    ok = test_big_int_unaligned_unsupported(),
+    ok = test_big_int_unaligned(),
     ok = test_non_pow2_unit(),
     ok = test_create_with_int_little_endian(),
     ok = test_create_with_int_signed(),
@@ -406,18 +406,19 @@ sig_at_little(B, N) ->
     <<X:N/little-signed-integer, _/bitstring>> = B,
     X.
 
-% A >64-bit integer field at a non-byte-aligned offset is not supported yet
-% (BEAM matches it); AtomVM raises unsupported, as the construction side does.
-test_big_int_unaligned_unsupported() ->
-    ok = atom_unsupported(fun() -> big72_at1(id(<<0:1, 42:72, 0:7>>)) end),
-    % a runtime size takes the legacy bs_get_integer2 path, which must raise
-    % unsupported too rather than failing the match
-    ok = atom_unsupported(fun() -> bigdyn_at1(id(<<0:1, 42:72, 0:7>>), id(72)) end),
-    % byte-aligned offset and size are supported at any width up to 256 bits.
-    % The value must not fit in 64 bits: a >64-bit field yields an unnormalized
-    % bignum, so a small value would not compare equal to a small integer.
+test_big_int_unaligned() ->
+    42 = big72_at1(id(<<0:1, 42:72, 0:7>>)),
+    42 = bigdyn_at1(id(<<0:1, 42:72, 0:7>>), id(72)),
+    (1 bsl 70) = big72_at1(id(<<0:1, (1 bsl 70):72, 0:7>>)),
+    (1 bsl 70) = bigdyn_at1(id(<<0:1, (1 bsl 70):72, 0:7>>), id(72)),
     (1 bsl 70) = big72_at0(id(<<(1 bsl 70):72, 0:8>>)),
+    ok = atom_unsupported(fun() -> big300_at1(id(<<0:1, 0:300, 0:7>>)) end),
+    ok = atom_unsupported(fun() -> bigdyn_at1(id(<<0:1, 0:300, 0:7>>), id(300)) end),
     ok.
+
+big300_at1(B) ->
+    <<_:1, X:300, _:7>> = B,
+    X.
 
 big72_at1(B) ->
     <<_:1, X:72, _:7>> = B,

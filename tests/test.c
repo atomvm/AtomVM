@@ -423,6 +423,7 @@ struct Test tests[] = {
     TEST_CASE(test_bs_int_unaligned),
     TEST_CASE_ATOMVM_ONLY(test_bs_size_limits, 0),
     TEST_CASE(test_bs_unaligned_segments),
+    TEST_CASE(test_bs_bigint_unaligned),
     TEST_CASE(test_bs_start_match_live),
     TEST_CASE(test_bs_utf),
     TEST_CASE_EXPECTED(bs_append_extra_words, 1),

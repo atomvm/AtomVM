@@ -197,8 +197,8 @@ static inline bool bitstring_extract_integer(term src_bin, size_t offset, avm_in
 
 static inline bool bitstring_insert_integer(term dst_bin, size_t offset, avm_int64_t value, size_t n, enum BitstringFlags bs_flags)
 {
-    unsigned long capacity = term_binary_size(dst_bin);
-    if (8 * capacity - offset < (unsigned long) n) {
+    size_t capacity_bits = term_binary_size(dst_bin) * 8;
+    if (offset > capacity_bits || capacity_bits - offset < n) {
         return false;
     }
 
@@ -284,30 +284,36 @@ static inline bool bitstring_insert_integer(term dst_bin, size_t offset, avm_int
 }
 
 /**
- * @brief Get what a bignum writes to an integer field of at most 64 bits.
+ * @brief Extract an integer field of up to 256 bits as whole bytes for
+ * intn_from_integer_bytes, sign-extended if signed.
  *
- * @details A positive bignum below 2^64 (at least 2^63, as smaller values are
- * not bignums) writes its low 64 bits, which bitstring_insert_integer can
- * handle at any bit offset. Wider fields are left out, as they would need a
- * sign fill that assumes a signed value.
- *
- * @param big_value digits of the bignum
- * @param big_len number of digits
- * @param big_sign sign of the bignum
+ * @param src_bin binary to extract from
+ * @param offset offset, in bits, to where the field starts
  * @param n size of the field, in bits
- * @param value the bits to write, on output
- * @return \c true if the bignum fits in a field of n bits written as a 64-bit
- * integer, \c false otherwise
+ * @param bs_flags flags to decode the integer (little/big/native, signed)
+ * @param out the bytes of the integer, on output
+ * @param out_size the number of bytes written to out, on output
+ * @return \c true if the field was extracted, \c false if it is too large or
+ * out of bounds
  */
-static inline bool bitstring_bigint_to_field64(const intn_digit_t big_value[], size_t big_len,
-    intn_integer_sign_t big_sign, size_t n, avm_int64_t *value)
-{
-    if (big_sign != IntNPositiveInteger || n > 64 || !intn_is_uint64(big_value, big_len)) {
-        return false;
-    }
-    *value = (avm_int64_t) intn_to_uint64(big_value);
-    return true;
-}
+bool bitstring_extract_bigint_bytes(term src_bin, size_t offset, size_t n,
+    enum BitstringFlags bs_flags, uint8_t out[INTN_MAX_UNSIGNED_BITS_SIZE / 8], size_t *out_size);
+
+/**
+ * @brief Insert a big integer, truncated or sign-extended to n bits.
+ *
+ * @param dst_bin binary to insert to
+ * @param offset offset, in bits, to where to insert the integer
+ * @param big_value digits of the big integer
+ * @param big_len number of digits
+ * @param big_sign sign of the big integer
+ * @param n size of the field, in bits
+ * @param bs_flags flags to encode the integer (little/big/native)
+ * @return \c true if the field was written, \c false if it does not fit in
+ * dst_bin
+ */
+bool bitstring_insert_bigint(term dst_bin, size_t offset, const intn_digit_t big_value[],
+    size_t big_len, intn_integer_sign_t big_sign, size_t n, enum BitstringFlags bs_flags);
 
 /**
  * @brief Encode a character to UTF-8.

@@ -178,18 +178,6 @@ test_bitstring_source() ->
     badarg = expect_error(fun() -> put_binary_after(id(5), id(<<1:1>>)) end),
     badarg = expect_error(fun() -> put_binary_after_bits(id(<<5:3>>), id(<<1:1>>)) end),
     <<5:3, 1:1>> = put_bitstring_after_bits(id(<<5:3>>), id(<<1:1>>)),
-
-    %% a big integer that does not fit 64 bits, written at a non-byte-aligned
-    %% offset (by bs_put_integer here, or bs_create_bin with OTP 28+), is not
-    %% supported: the whole-byte bignum writer cannot place it, so AtomVM
-    %% rejects it rather than misplacing the bits, with the interpreter and the
-    %% JIT alike. BEAM builds it, so check only on AtomVM.
-    case erlang:system_info(machine) of
-        "ATOM" ->
-            unsupported = expect_error(fun() -> put_wide_int_after(Bits1, id(1 bsl 100)) end);
-        _ ->
-            ok
-    end,
     ok.
 
 put_binary_after(Byte, Bin) ->

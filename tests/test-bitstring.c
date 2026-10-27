@@ -320,6 +320,138 @@ void test_slice_shares_byte_aligned_bitstrings(void)
     globalcontext_destroy(glb);
 }
 
+static int le_value_bit(const uint8_t *value, size_t nbytes, size_t k)
+{
+    if (k >= nbytes * 8) {
+        return (value[nbytes - 1] >> 7) & 1;
+    }
+    return (value[k / 8] >> (k % 8)) & 1;
+}
+
+static int field_bit(const uint8_t *value, size_t nbytes, size_t n, size_t pos, bool little)
+{
+    if (!little) {
+        return le_value_bit(value, nbytes, n - 1 - pos);
+    }
+    size_t whole = n / 8;
+    size_t rem = n % 8;
+    if (pos < whole * 8) {
+        return le_value_bit(value, nbytes, (pos / 8) * 8 + (7 - pos % 8));
+    }
+    return le_value_bit(value, nbytes, whole * 8 + (rem - 1 - (pos - whole * 8)));
+}
+
+static void check_bigint(const uint8_t *value, size_t nbytes, size_t offset, size_t n, bool little)
+{
+    GlobalContext *glb = globalcontext_new();
+    Context *ctx = context_new(glb);
+
+    size_t size = (offset + n + 7) / 8;
+    assert(memory_ensure_free(ctx, term_binary_heap_size(size)) == MEMORY_GC_OK);
+    term bin = term_create_empty_binary(size, &ctx->heap, glb);
+    assert(!term_is_invalid_term(bin));
+    const uint8_t *data = (const uint8_t *) term_binary_data(bin);
+
+    intn_digit_t digits[INTN_MAX_RES_LEN];
+    intn_integer_sign_t sign;
+    int count = intn_from_integer_bytes(value, nbytes, IntnLittleEndian | IntnSigned, digits, &sign);
+    assert(count >= 0);
+
+    enum BitstringFlags flags = little ? LittleEndianInteger : 0;
+    assert(bitstring_insert_bigint(bin, offset, digits, (size_t) count, sign, n, flags));
+
+    for (size_t bit = 0; bit < size * 8; bit++) {
+        int expected = 0;
+        if (bit >= offset && bit < offset + n) {
+            expected = field_bit(value, nbytes, n, bit - offset, little);
+        }
+        assert(((data[bit / 8] >> (7 - bit % 8)) & 1) == expected);
+    }
+
+    if (n != 0) {
+        assert(!bitstring_insert_bigint(bin, offset + 1, digits, (size_t) count, sign, size * 8 - offset, flags));
+    }
+
+    if (n <= INTN_MAX_UNSIGNED_BITS_SIZE) {
+        for (int is_signed = 0; is_signed < 2; is_signed++) {
+            uint8_t bytes[INTN_MAX_UNSIGNED_BITS_SIZE / 8];
+            size_t bytes_size;
+            enum BitstringFlags xflags = (enum BitstringFlags)(flags | (is_signed ? SignedInteger : 0));
+            assert(bitstring_extract_bigint_bytes(bin, offset, n, xflags, bytes, &bytes_size));
+            assert(bytes_size == (n + 7) / 8);
+
+            intn_digit_t out[INTN_MAX_RES_LEN];
+            intn_integer_sign_t out_sign;
+            int out_count = intn_from_integer_bytes(bytes, bytes_size, bitstring_flags_to_intn_opts(xflags), out, &out_sign);
+            assert(out_count >= 0);
+
+            uint8_t expected[INTN_MAX_UNSIGNED_BITS_SIZE / 8 + 1] = { 0 };
+            size_t expected_bytes = n / 8 + 1;
+            for (size_t k = 0; k < n; k++) {
+                if (le_value_bit(value, nbytes, k)) {
+                    expected[k / 8] |= (uint8_t) (1 << (k % 8));
+                }
+            }
+            if (is_signed && n != 0 && le_value_bit(value, nbytes, n - 1)) {
+                for (size_t k = n; k < expected_bytes * 8; k++) {
+                    expected[k / 8] |= (uint8_t) (1 << (k % 8));
+                }
+            }
+            intn_digit_t expected_digits[INTN_MAX_RES_LEN];
+            intn_integer_sign_t expected_sign;
+            int expected_count = intn_from_integer_bytes(expected, expected_bytes,
+                is_signed ? (IntnLittleEndian | IntnSigned) : IntnLittleEndian, expected_digits, &expected_sign);
+            assert(expected_count >= 0);
+            size_t c1 = intn_count_digits(out, (size_t) out_count);
+            size_t c2 = intn_count_digits(expected_digits, (size_t) expected_count);
+            assert(c1 == c2);
+            if (c1 != 0) {
+                assert(out_sign == expected_sign);
+            }
+            assert(memcmp(out, expected_digits, c1 * sizeof(intn_digit_t)) == 0);
+        }
+    } else {
+        uint8_t bytes[INTN_MAX_UNSIGNED_BITS_SIZE / 8];
+        size_t bytes_size;
+        assert(!bitstring_extract_bigint_bytes(bin, offset, n, flags, bytes, &bytes_size));
+    }
+
+    context_destroy(ctx);
+    globalcontext_destroy(glb);
+}
+
+void test_bigint_fields(void)
+{
+    static const struct
+    {
+        size_t len;
+        uint8_t bytes[12];
+    } patterns[] = {
+        { 1, { 0x00 } },
+        { 1, { 0x01 } },
+        { 1, { 0xFF } }, // -1
+        { 2, { 0xFF, 0x00 } }, // 255
+        { 9, { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF } }, // -1
+        { 10, { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00 } }, // 2^72 - 1
+        { 10, { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00 } }, // 2^70
+        { 10, { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0xFF } }, // -2^70
+        { 12, { 0x39, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00 } },
+        { 9, { 0x15, 0x7C, 0x4A, 0x7F, 0xB9, 0x79, 0x37, 0x9E, 0x00 } }, // 2^63 .. 2^64
+        { 12, { 0x15, 0x7C, 0x4A, 0x7F, 0xB9, 0x79, 0x37, 0x9E, 0xA5, 0x5A, 0xC3, 0xBC } },
+    };
+    static const size_t sizes[] = { 1, 7, 8, 9, 15, 16, 17, 63, 64, 65, 66, 71, 72, 73, 100, 127, 128, 129,
+        200, 255, 256, 257, 300 };
+    for (size_t p = 0; p < sizeof(patterns) / sizeof(patterns[0]); p++) {
+        size_t nbytes = patterns[p].len;
+        for (size_t offset = 0; offset < 10; offset++) {
+            for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
+                check_bigint(patterns[p].bytes, nbytes, offset, sizes[i], false);
+                check_bigint(patterns[p].bytes, nbytes, offset, sizes[i], true);
+            }
+        }
+    }
+}
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
@@ -330,6 +462,7 @@ int main(int argc, char **argv)
     test_copy_bits_exact_allocation();
     test_print_bitstring();
     test_slice_shares_byte_aligned_bitstrings();
+    test_bigint_fields();
 
     return EXIT_SUCCESS;
 }

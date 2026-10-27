@@ -141,6 +141,89 @@ bool bitstring_insert_any_integer(uint8_t *dst, avm_int_t offset, avm_int64_t va
     return true;
 }
 
+bool bitstring_insert_bigint(term dst_bin, size_t offset, const intn_digit_t big_value[],
+    size_t big_len, intn_integer_sign_t big_sign, size_t n, enum BitstringFlags bs_flags)
+{
+    size_t capacity_bits = term_binary_size(dst_bin) * 8;
+    if (offset > capacity_bits || capacity_bits - offset < n) {
+        return false;
+    }
+    uint8_t *dst = (uint8_t *) term_binary_data(dst_bin);
+
+    uint8_t le[INTN_MAX_RES_LEN * sizeof(intn_digit_t)];
+    if (UNLIKELY(intn_to_integer_bytes(big_value, big_len, big_sign, IntnLittleEndian, le, sizeof(le)) < 0)) {
+        return false;
+    }
+    bool negative = big_sign == IntNNegativeInteger;
+
+    if (bs_flags & LittleEndianIntegerMask) {
+        size_t whole_bytes = n >> 3;
+        unsigned int rem = (unsigned int) (n & 0x7);
+        size_t from_buf = whole_bytes < sizeof(le) ? whole_bytes : sizeof(le);
+        bitstring_copy_bits(dst, offset, le, from_buf * 8);
+        if (whole_bytes > from_buf) {
+            insert_sign_bits(dst, offset + from_buf * 8, (whole_bytes - from_buf) * 8, negative);
+        }
+        if (rem != 0) {
+            uint8_t byte = whole_bytes < sizeof(le) ? le[whole_bytes] : (negative ? 0xFF : 0x00);
+            byte = (uint8_t) (byte << (8 - rem));
+            bitstring_copy_bits(dst, offset + whole_bytes * 8, &byte, rem);
+        }
+    } else {
+        size_t buf_bits = n < sizeof(le) * 8 ? n : sizeof(le) * 8;
+        insert_sign_bits(dst, offset, n - buf_bits, negative);
+        size_t buf_bytes = (buf_bits + 7) / 8;
+        uint8_t be[sizeof(le)];
+        for (size_t i = 0; i < buf_bytes; i++) {
+            be[i] = le[buf_bytes - 1 - i];
+        }
+        uint8_t field[sizeof(le)] = { 0 };
+        bitstring_copy_bits_from(field, be, buf_bytes * 8 - buf_bits, buf_bits);
+        bitstring_copy_bits(dst, offset + (n - buf_bits), field, buf_bits);
+    }
+    return true;
+}
+
+bool bitstring_extract_bigint_bytes(term src_bin, size_t offset, size_t n,
+    enum BitstringFlags bs_flags, uint8_t out[INTN_MAX_UNSIGNED_BITS_SIZE / 8], size_t *out_size)
+{
+    size_t capacity_bits = term_bit_size(src_bin);
+    if (n > INTN_MAX_UNSIGNED_BITS_SIZE || offset > capacity_bits || capacity_bits - offset < n) {
+        return false;
+    }
+    size_t nbytes = (n + 7) / 8;
+    unsigned int rem = (unsigned int) (n & 0x7);
+
+    uint8_t field[INTN_MAX_UNSIGNED_BITS_SIZE / 8] = { 0 };
+    bitstring_copy_bits_from(field, (const uint8_t *) term_binary_data(src_bin), offset, n);
+
+    memset(out, 0, nbytes);
+    bool negative = false;
+    if (bs_flags & LittleEndianIntegerMask) {
+        memcpy(out, field, n >> 3);
+        if (rem != 0) {
+            out[n >> 3] = (uint8_t) (field[n >> 3] >> (8 - rem));
+        }
+        if (n != 0) {
+            negative = (out[nbytes - 1] >> ((rem != 0 ? rem : 8) - 1)) & 1;
+        }
+        if (negative && (bs_flags & SignedInteger) && rem != 0) {
+            out[nbytes - 1] |= (uint8_t) (0xFF << rem);
+        }
+    } else {
+        unsigned int pad = (unsigned int) (nbytes * 8 - n);
+        bitstring_copy_bits(out, pad, field, n);
+        if (n != 0) {
+            negative = (out[0] >> (7 - pad)) & 1;
+        }
+        if (negative && (bs_flags & SignedInteger) && pad != 0) {
+            out[0] |= (uint8_t) (0xFF << (8 - pad));
+        }
+    }
+    *out_size = nbytes;
+    return true;
+}
+
 static bool is_invalid_codepoint(int32_t v)
 {
     return (v < 0) || (v > 0x10FFFF) || (v >= 0xD800 && v <= 0xDFFF);

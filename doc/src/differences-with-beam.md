@@ -151,22 +151,15 @@ whose size in bits is not a multiple of 8:
 
     <<X:3>> = <<1:3>>
 
-There is one limitation, which follows from the 256-bit integer limit described above: a segment
-holding an integer that does not fit in 64 bits is only supported when it is byte-aligned, meaning
-both its offset in the bitstring and its size in bits are multiples of 8. Otherwise AtomVM raises
-`unsupported`, where BEAM would construct or match the segment.
+There is one limitation, which follows from the 256-bit integer limit described above: an integer
+segment that is more than 256 bits wide cannot be matched, and AtomVM raises `unsupported` where
+BEAM would match it, even when the value is small.
 
-The following is supported, as the segment starts at offset 0 and is 72 bits long:
+    <<X:300>> = <<0:300>>
 
-    <<X:72>> = <<(1 bsl 70):72>>
-
-The following is not, as the 72-bit segment starts at bit offset 1:
-
-    <<_:1, X:72, _:7>> = Bin
-
-Integers from -2^63 to 2^63 - 1 have no such restriction and may be used at any offset and size.
-Integers from 2^63 to 2^64 - 1 may be used at any offset in segments of up to 64 bits, such as
-`<<Flag:1, Hash:64>>`.
+Integer segments of up to 256 bits can be constructed and matched at any offset, in either byte
+order, including those that are wider than 64 bits and whose size is not a multiple of 8, such as
+`<<Flag:1, Hash:64>>` or `<<_:1, X:72, _:7>> = Bin`.
 
 ### Code reloading
 
