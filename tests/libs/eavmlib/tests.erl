@@ -32,5 +32,6 @@ start() ->
         test_port,
         test_subprocess,
         test_timer_manager,
-        test_ahttp_client
+        test_ahttp_client,
+        test_avm_pubsub
     ]).

@@ -66,6 +66,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and returns `{error, timeout}` after 5 s
 - Fixed `esp:nvs_get_binary/1,2` leaking an NVS handle on every read of a missing key, which
   slowly ran the ESP32 out of memory
+- Fixed `avm_pubsub` keeping subscribers after they exit, and `avm_pubsub:unsub/2,3` on a
+  topic with no subscribers subscribing the caller instead
 
 ## [0.7.0-beta.0] - 2026-09-28
 
