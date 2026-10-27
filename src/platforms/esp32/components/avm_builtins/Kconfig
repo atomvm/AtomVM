@@ -67,10 +67,12 @@ config AVM_ENABLE_NVS_NIFS
 
 config AVM_ENABLE_RTC_SLOW_NIFS
     bool "Enable RTC SLOW NIFs"
+    depends on SOC_RTC_FAST_MEM_SUPPORTED || SOC_RTC_SLOW_MEM_SUPPORTED
     default y
 
 config AVM_RTC_SLOW_MAX_SIZE
     int "RTC SLOW maximum binary size (maximum varies by soc and idf versions)"
+    depends on AVM_ENABLE_RTC_SLOW_NIFS
     # ESP32-H2 has no RTC SLOW, only RTC FAST and both are mapped at the same
     # space, and based on other usage of RTC FAST we can use up to 3.5kb
     # sdkconfig.defaults.esp32h2 sets value to 3KB

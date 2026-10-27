@@ -42,11 +42,17 @@
 #include <esp_system.h>
 #include <esp_task_wdt.h>
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 #include <mbedtls/cipher.h>
 #include <mbedtls/md5.h>
 #include <mbedtls/sha1.h>
 #include <mbedtls/sha256.h>
 #include <mbedtls/sha512.h>
+#endif
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
+#include <psa/crypto.h>
+#endif
+
 #include <soc/soc.h>
 
 #include <stdlib.h>
@@ -622,8 +628,13 @@ static term nif_esp_deep_sleep_enable_gpio_wakeup(Context *ctx, int argc, term a
     VALIDATE_VALUE(argv[0], term_is_any_integer);
     VALIDATE_VALUE(argv[1], term_is_integer);
     avm_int64_t mask = term_maybe_unbox_int64(argv[0]);
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
+    esp_sleep_gpio_wake_up_mode_t mode = term_to_int(argv[1]);
+    esp_err_t err = esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown(mask, mode);
+#else
     esp_deepsleep_gpio_wake_up_mode_t mode = term_to_int(argv[1]);
     esp_err_t err = esp_deep_sleep_enable_gpio_wakeup(mask, mode);
+#endif
     if (UNLIKELY(err == ESP_ERR_INVALID_ARG)) {
         RAISE_ERROR(BADARG_ATOM);
     }

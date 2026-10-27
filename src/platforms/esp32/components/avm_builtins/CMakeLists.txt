@@ -39,7 +39,7 @@ set(AVM_BUILTIN_COMPONENT_SRCS
 )
 
 if (IDF_VERSION_MAJOR GREATER_EQUAL 5)
-    set(ADDITIONAL_PRIV_REQUIRES "esp_hw_support" "efuse" "esp_adc")
+    set(ADDITIONAL_PRIV_REQUIRES "esp_hw_support" "efuse" "esp_adc" "esp_ringbuf")
     set(AVM_BUILTIN_COMPONENT_SRCS "adc_driver.c" ${AVM_BUILTIN_COMPONENT_SRCS})
 else()
     set(ADDITIONAL_PRIV_REQUIRES "")
@@ -71,6 +71,12 @@ endif()
 if(CONFIG_AVM_ENABLE_USB_CDC_PORT_DRIVER)
     if(IDF_VERSION_MAJOR GREATER_EQUAL 6 OR (IDF_VERSION_MAJOR EQUAL 5 AND IDF_VERSION_MINOR GREATER_EQUAL 3))
         target_link_libraries(${COMPONENT_LIB} PRIVATE idf::espressif__esp_tinyusb)
+    endif()
+endif()
+
+if(CONFIG_SOC_USB_SERIAL_JTAG_SUPPORTED)
+    if(IDF_VERSION_MAJOR GREATER_EQUAL 6 OR (IDF_VERSION_MAJOR EQUAL 5 AND IDF_VERSION_MINOR GREATER_EQUAL 3))
+        target_link_libraries(${COMPONENT_LIB} PRIVATE idf::esp_driver_usb_serial_jtag)
     endif()
 endif()
 
