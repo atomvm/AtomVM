@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added the `espnow` module on ESP32 (opt-in with `CONFIG_AVM_ENABLE_ESPNOW=y`): ESP-NOW frames to
   a peer or broadcast, on the WiFi radio owned by the `network` driver, so ESP-NOW keeps working
   across `network:start/1` and `network:stop/0`
+- Added `AVM_DISABLE_MLKEM` (CMake) and `CONFIG_AVM_DISABLE_MLKEM` (ESP32) to leave ML-KEM-768 out of
+  `crypto` in a build with libsodium, saving about 52 KB of flash on ESP32
 
 ### Changed
 - With BSD sockets (generic_unix, ESP32), `socket:connect/2` returns the reason a connect failed,
