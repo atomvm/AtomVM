@@ -848,9 +848,11 @@ reproduces this too. Both C3 firmware stacks pass timer sleep on Wokwi, and
 RTEMS C3 also passes peripheral/scheduler resumption with the real sleep backend.
 Physical C3 revision v0.4 passes boot and peripheral tests, including repeated
 light sleep, timer wake, pending Erlang timers and worker resumption.
-C5/H2/P4/S31 RTC counters still read zero in boot testing. CI tests scheduler/clock
-integration separately with `-DRTEMS_SLEEP_TEST_FIXTURE=ON`, which replaces only
-the RTC counter and PMU entry point; the normal boot test retains the hardware
+P4 revisions 1.0 and 3.1 pass Wokwi boot and peripheral tests with the real sleep
+backend, including repeated timer sleep, RTC retention and worker resumption.
+C5/H2/S31 RTC counters still read zero in esp-emulator boot testing. CI tests
+scheduler/clock integration separately with `-DRTEMS_SLEEP_TEST_FIXTURE=ON`,
+which replaces only the RTC counter and PMU entry point; the normal boot test retains the hardware
 backend and exposes the C3/C6 failures. Never use the fixture in firmware for a
 board. Physical C3 also passes deep-sleep timer wake, RTC counter continuity
 and retained binary storage across reset. Its wake-cause read uses the RTC wake
@@ -1123,6 +1125,10 @@ ROM definitions follow ESP-IDF's public call tables, not implementation
 addresses from one ROM ELF.
 The CPU uses the soft-float `rv32imac` / `ilp32` RTEMS ABI.
 P4 has no integrated Wi-Fi or Bluetooth; this target does not provide a radio driver.
+The BSP initializes ACTIVE regulator sleep controls to IDF defaults. Sleep entry
+polls raw PMU wake/reject status and hands DCDC force controls back to the FSM.
+MPLL ownership follows the configured frequency, not the PHY power gate;
+the rev3 PMU setup can power that gate without configuring or using MPLL.
 
 V1 conservatively uses only the low 256 KiB SRAM bank: 4 KiB for SRAM code,
 228 KiB for data/workspace/stacks/heap, and 24 KiB reserved for ROM. It leaves

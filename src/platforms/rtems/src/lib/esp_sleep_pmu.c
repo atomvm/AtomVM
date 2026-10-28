@@ -385,7 +385,7 @@ static void force_handoff(void)
     pfield(HP(0xF4), 0x3F, 0);
     pfield(HP(0xF8), 0x3F, 0);
     pfield(HP(0xFC), 0x3F, 0);
-    pfield(HP(0x10C), PB(2) | PB(5), 0); /* DCDC switch FSM ownership */
+    pfield(HP(0x10C), PB(0) | PB(1), 0); /* DCDC switch FSM ownership */
     pfield(HP(0x110), 0x3F, 0);
 #if BSP_ESP32P4_REVISION == 3
     pfield(HP(0x218), 0x3F, 0);
@@ -832,7 +832,7 @@ void SRAM_TEXT rtems_esp_sleep_pmu_finish(struct rtems_esp_sleep_pmu_state *s,
 #if defined(RTEMS_BOARD_ESP32P4)
     if (s->deep && s->entry_prepared) {
         pfield(HP(HP_BIAS), 31U << 18, 27U << 18);
-        pfield(HP(0x10C), PB(2) | PB(5), 0);
+        pfield(HP(0x10C), PB(0) | PB(1), 0);
         pfield(HP(0x204), PB(7), 0);
         PREG(HP(0x204)) |= PB(0);
         /* Pre-entry abort also bypassed the hardware DCDC-on sequence. */

@@ -477,19 +477,27 @@ bool rtems_esp_sleep_clock_prepare(struct esp_sleep_clock_state *state)
         state->mpll_freq_mhz = xtal * ((config >> 3) + 1) / 2;
     }
 #elif defined(RTEMS_BOARD_ESP32P4)
-    if (CLOCK_REG(0x5011515CU) & CLOCK_BIT(24)) {
-        uint32_t gate = CLOCK_REG(CLOCK_ANALOG_GATE);
-        CLOCK_REG(CLOCK_ANALOG_GATE) = gate | CLOCK_BIT(27);
-        uint32_t config = clock_analog_read_from(0x63, 2);
-        CLOCK_REG(CLOCK_ANALOG_GATE) = gate;
-        state->mpll_freq_mhz = xtal * ((config >> 3) + 1) / ((config & 7) + 1);
-        /* The IDF configuration path assumes a 20 MHz reference (ref=1).
-         * Reject an unrepresentable setting before changing either clock.
-         */
-        if ((config & 7) != 1 || !state->mpll_freq_mhz || state->mpll_freq_mhz % 20) {
-            return false;
+    /* Discover the BSP's configured frequency once, then retain software
+     * ownership like IDF rtc_clk_mpll_get_freq(). Rev3 PMU initialization
+     * powers MSPI_PHY_XPD without configuring MPLL, so that gate is not an
+     * ownership predicate on later attempts. No live MPLL users are allowed.
+     */
+    static uint32_t mpll_freq_mhz = UINT32_MAX;
+    if (mpll_freq_mhz == UINT32_MAX) {
+        if (CLOCK_REG(0x5011515CU) & CLOCK_BIT(24)) {
+            uint32_t gate = CLOCK_REG(CLOCK_ANALOG_GATE);
+            CLOCK_REG(CLOCK_ANALOG_GATE) = gate | CLOCK_BIT(27);
+            uint32_t config = clock_analog_read_from(0x63, 2);
+            CLOCK_REG(CLOCK_ANALOG_GATE) = gate;
+            state->mpll_freq_mhz = xtal * ((config >> 3) + 1) / ((config & 7) + 1);
+            /* IDF's configuration path assumes a 20 MHz reference. */
+            if ((config & 7) != 1 || !state->mpll_freq_mhz || state->mpll_freq_mhz % 20) {
+                return false;
+            }
         }
+        mpll_freq_mhz = state->mpll_freq_mhz;
     }
+    state->mpll_freq_mhz = mpll_freq_mhz;
 #endif
     clock_to_xtal(xtal);
     return true;

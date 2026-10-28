@@ -39,7 +39,9 @@ struct esp_sleep_clock_state
  * P4 finish enables a saved MPLL, settles its rev3 cap, then calls the PMU's
  * p4_wait_ready eFuse barrier BEFORE MPLL configuration and CPU restoration.
  * P4 before_entry disables a saved MPLL for light sleep: no PSRAM or live
- * MPLL peripheral users are permitted (P4 flash never uses MPLL).
+ * MPLL peripheral users are permitted (P4 flash never uses MPLL). Its BSP
+ * frequency is adopted on the first prepare and must not be changed by
+ * other code afterward; a powered PHY gate alone does not configure MPLL.
  *
  * Contract: the current RTEMS BSP's flash-only external-memory setup; no
  * initialized PSRAM. IDF's MSPI speed synchronization is a no-op for this
