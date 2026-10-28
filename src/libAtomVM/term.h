@@ -1058,6 +1058,24 @@ static inline bool term_is_external_fun(term t)
 }
 
 /**
+ * @brief Checks if a term is an unresolved local fun
+ *
+ * @details An unresolved local fun decoded from the external term format stores
+ * the module atom in the slot normally occupied by a Module pointer.
+ * @param t the term that will be checked.
+ * @return true if the term is an unresolved local fun, false otherwise.
+ */
+static inline bool term_is_unresolved_fun(term t)
+{
+    if (term_is_fun(t) && !term_is_external_fun(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        return term_is_atom(boxed_value[1]);
+    }
+
+    return false;
+}
+
+/**
  * @brief Checks if a term is a saved CP
  *
  * @details Returns \c true if a term is a saved continuation pointer, otherwise \c false.
@@ -3025,6 +3043,15 @@ static inline void term_set_map_value(term map, avm_uint_t pos, term value)
 {
     term *boxed_value = term_to_term_ptr(map);
     boxed_value[term_get_map_value_offset() + pos] = value;
+}
+
+static inline void term_set_map_assoc_maybe_shared(term map, avm_uint_t pos, bool is_shared, term key, term value)
+{
+    if (is_shared) {
+        term_set_map_value(map, pos, value);
+    } else {
+        term_set_map_assoc(map, pos, key, value);
+    }
 }
 
 static inline int term_find_map_pos(term map, term key, GlobalContext *global)

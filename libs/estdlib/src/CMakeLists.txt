@@ -62,6 +62,7 @@ set(ERLANG_MODULES
     math
     net
     os
+    persistent_term
     proc_lib
     sys
     logger
