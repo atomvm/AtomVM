@@ -30,8 +30,10 @@ struct rtems_esp_sleep_pmu_state
  * other CPU parked. Call with cache ON, AFTER the clock helper selects XTAL.
  * xtal_mhz is the clock helper's validated crystal frequency. Both selected
  * RTC_SLOW and RC_FAST (PMU work clock) are calibrated here on every attempt.
- * Baseline: no modem/PVT/PSRAM, TOP/CPU/peripherals/flash retained in light sleep,
- * no register retention DMA, selected RTC sources unchanged. Returns errno.
+ * P4 caller must hand PVT regulation to PMU after switching to XTAL, and
+ * reenable it after restoring clocks/cache on every returning path.
+ * Baseline: no modem/PSRAM or other chips' PVT; TOP/CPU/peripherals/flash are
+ * retained in light sleep, no retention DMA, RTC sources unchanged. Returns errno.
  * On error no finish is needed. The state must live in internal SRAM.
  */
 int rtems_esp_sleep_pmu_prepare(struct rtems_esp_sleep_pmu_state *state,

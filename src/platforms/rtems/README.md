@@ -187,6 +187,13 @@ settles CPLL calibration with IDF's 10 us ROM delay. RTEMS deliberately maintain
 fixed nominal voltage profile (HP/LP bias 26) with PVT disabled on S31. Rebuild the BSP
 SDK with the patch series, not just the application, to include these changes.
 
+P4 patch 0046 enables ESP-IDF's eFuse-qualified PVT voltage control for both
+silicon revisions, including revision-specific thresholds, calibrated HP/LP
+gaps, the PLL160 reference clock and startup settling. Sleep hands voltage
+control to PMU after switching the CPU to XTAL; wake or a rejected sleep
+restores PVT after restoring clocks and cache. Unqualified eFuse versions
+retain the calibrated PMU voltage profile, as in ESP-IDF.
+
 C6 patches 0041/0042 additionally install IDF's complete initial HP/LP PMU
 policies before releasing power-domain overrides, tune RC_FAST/RC_SLOW/RC32K,
 select RC_FAST and RC_SLOW with ROM settling delays, and publish the measured
@@ -215,13 +222,14 @@ or an identical register-write trace. Rebuild the BSP SDK to apply these patches
 
 Sleep configuration is derived from ESP-IDF revision
 `9a97f6c54ec638111ce55cd36581b3c192f15207`, with explicit timer/GPIO sleep,
-no modem integration, no PVT, and no initialized PSRAM. Light sleep retains
+no modem integration, PVT on P4 only, and no initialized PSRAM. Light sleep retains
 CPU/TOP/peripheral register state and the flash supply, but not ACTIVE PLL
 or functional-clock power settings. Each chip programs its own RTC/PMU
 sleep states, regulator biases, oscillator dependencies and wait times;
 SLEEP is no longer copied from ACTIVE. Calibrated awake BSP voltages are
 preserved. This is a specified IDF-compatible profile, not every IDF default
-configuration (PVT, for example, defaults on for several IDF targets).
+configuration; other targets with PVT enabled by default in IDF remain outside
+this profile.
 
 Wake-cause reporting reads each chip's RTC/PMU status directly and shares
 ESP-IDF's source masks and priority across deep and light sleep. H2's

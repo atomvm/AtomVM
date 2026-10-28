@@ -17,7 +17,8 @@
  * pmu_{init,param,sleep}.c, rtc_{sleep,time}.c and the corresponding LLs.
  * These are FSM configurations, NOT snapshots of the current ACTIVE state.
  * Only calibrated awake voltage fields are inherited from BSP startup.
- * Modem, PVT, CPU/TOP retention DMA and PSRAM are deliberately not supported.
+ * P4 PVT ownership is handed to PMU by the caller before preparation.
+ * Modem, other chips' PVT, CPU/TOP retention DMA and PSRAM are not supported.
  */
 #define PREG(a) (*(volatile uint32_t *) (uintptr_t) (a))
 #define PB(n) (UINT32_C(1) << (n))

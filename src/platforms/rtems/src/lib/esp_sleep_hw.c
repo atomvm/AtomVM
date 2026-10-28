@@ -26,6 +26,7 @@
 #include "esp_sleep_console.h"
 #include "esp_sleep_pmu.h"
 #include "esp_sleep_regs.h"
+#include <bsp.h>
 #include <bsp/linker-symbols.h>
 #include <errno.h>
 #include <rtems.h>
@@ -254,6 +255,13 @@ int rtems_esp_sleep_enter(bool deep, uint32_t wakeup, uint64_t usecs, uint32_t *
         rtems_esp_sleep_console_resume(deep, &console);
         return ENOTSUP;
     }
+#if defined(RTEMS_BOARD_ESP32P4)
+    /* IDF misc_modules_sleep_prepare(): CPU is on XTAL, but PLL160 is
+     * still available. Sample PVT voltages and hand regulation to PMU
+     * before installing sleep states or letting the FSM power off PLLs.
+     */
+    bsp_esp32p4_pvt_enable(false);
+#endif
     int result = rtems_esp_sleep_pmu_prepare(&pmu, deep, wakeup, clock.xtal_freq_mhz);
     if (result) {
         rtems_esp_sleep_clock_finish(&clock);
@@ -274,6 +282,13 @@ int rtems_esp_sleep_enter(bool deep, uint32_t wakeup, uint64_t usecs, uint32_t *
             result = sleep_transition(deep, wakeup, start, ticks, minimum_ticks, cause, &pmu, &clock);
         }
     }
+#if defined(RTEMS_BOARD_ESP32P4)
+    /* IDF misc_modules_wake_prepare(): clocks and cache are restored.
+     * CPU/TOP remained powered, so the monitor configuration was retained.
+     * Restore on rejection and pre-entry aborts too, before releasing CPUs.
+     */
+    bsp_esp32p4_pvt_enable(true);
+#endif
     rtems_esp_sleep_console_resume(deep, &console);
     return result;
 }
