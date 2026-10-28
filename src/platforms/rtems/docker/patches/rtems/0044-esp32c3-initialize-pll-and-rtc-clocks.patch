@@ -1,0 +1,273 @@
+Subject: [PATCH] esp32c3: initialize PLL and RTC clocks like IDF
+
+Match ESP-IDF 9a97f6c54ec638111ce55cd36581b3c192f15207 for direct boot
+with XTAL40, PLL480/CPU160 and RC_SLOW/RC_FAST. Install calibrated voltage
+and RTC power defaults before selecting PLL, publish measured slow-clock
+calibration, and perform reset-qualified power-on o-code calibration.
+Keep RTEMS scheduler/peripheral ownership and bounded calibration failures.
+
+diff --git a/bsps/riscv/esp32/start/bspc3rtc.h b/bsps/riscv/esp32/start/bspc3rtc.h
+new file mode 100644
+--- /dev/null
++++ b/bsps/riscv/esp32/start/bspc3rtc.h
+@@ -0,0 +1,209 @@
++/*
++ * SPDX-FileCopyrightText: 2020-2026 Espressif Systems (Shanghai) CO LTD
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/* ESP-IDF 9a97f6c54ec638111ce55cd36581b3c192f15207, C3 rtc_clk_init.c,
++ * rtc_clk.c, rtc_init.c, rtc_time.c and esp_system/port/soc/esp32c3/clk.c.
++ * Direct boot: XTAL40, PLL480/CPU160, RC_SLOW/RC_FAST, no modem retention.
++ * Keep RTEMS timer/scheduler and peripheral-driver clock ownership.
++ */
++#if defined( LIBBSP_ESP32_C3_CHIP_DEFINITIONS_H )
++
++static void bsp_c3_field( uint32_t offset, uint32_t mask, uint32_t value )
++{
++  const uintptr_t rtc = 0x60008000;
++  WRITE_REG( rtc, offset, ( READ_REG( rtc, offset ) & ~mask ) | value );
++}
++
++static void bsp_c3_delay( uint32_t us )
++{
++  ( (void (*)( uint32_t )) (uintptr_t) 0x40000050U )( us );
++}
++
++/* Use the public regi2c HAL table, not the lower-level chip accessor ABI. */
++static uint32_t bsp_c3_analog_read( uint32_t block, uint32_t address )
++{
++  return ( (uint8_t (*)( uint8_t, uint8_t, uint8_t ))
++    (uintptr_t) 0x40001954U )( block, 0, address );
++}
++
++static void bsp_c3_analog_write(
++  uint32_t block,
++  uint32_t address,
++  uint32_t mask,
++  uint32_t value
++)
++{
++  uint32_t data = mask == 0xffu ? value
++    : ( bsp_c3_analog_read( block, address ) & ~mask ) | value;
++  ( (void (*)( uint8_t, uint8_t, uint8_t, uint8_t ))
++    (uintptr_t) 0x4000195cU )( block, 0, address, data );
++}
++
++#include "bspc3power.h"
++
++static void bsp_c3_cpu_xtal( void )
++{
++  /* IDF's safe predivider sequence, including ROM delay/APB accounting. */
++  ( (void (*)( uint32_t )) (uintptr_t) 0x40000588U )( 40 );
++  uint32_t reg = READ_REG( CLK_SYSTEM_BASE, CLK_SYSCLK_CONF_REG );
++  WRITE_REG( CLK_SYSTEM_BASE, CLK_SYSCLK_CONF_REG, reg & ~0x3ffu );
++  WRITE_REG( CLK_SYSTEM_BASE, CLK_SYSCLK_CONF_REG, reg & ~0x3ffu );
++  WRITE_REG( CLK_SYSTEM_BASE, CLK_SYSCLK_CONF_REG, reg & ~0xfffu );
++  uint32_t apb = 40000000u >> 12;
++  WRITE_REG( (uintptr_t) 0x60008000, 0xbc, apb | ( apb << 16 ) );
++}
++
++static void bsp_c3_cpu_pll( void )
++{
++  const uintptr_t analog = 0x6000e000;
++  bsp_c3_field( 0, BSP_BIT32( 10 ) | BSP_BIT32( 8 ) | BSP_BIT32( 6 ), 0 );
++  uint32_t reg = READ_REG( CLK_SYSTEM_BASE, CLK_CPU_PER_CONF_REG );
++  WRITE_REG( CLK_SYSTEM_BASE, CLK_CPU_PER_CONF_REG, reg | BSP_BIT32( 2 ) );
++  reg = READ_REG( analog, 0x40 );
++  WRITE_REG( analog, 0x40, ( reg & ~4u ) | 8u );
++  bsp_c3_analog_write( 0x66, 4, 0xff, 0x6b );
++  bsp_c3_analog_write( 0x66, 2, 0xff, 0x50 );
++  bsp_c3_analog_write( 0x66, 3, 0xff, 8 );
++  bsp_c3_analog_write( 0x66, 5, 0x77, 0 );
++  bsp_c3_analog_write( 0x66, 6, 0xff, 0x93 );
++  bsp_c3_analog_write( 0x66, 9, 3, 2 );
++  bsp_c3_analog_write( 0x66, 6, 0x30, 0x20 );
++  bsp_c3_analog_write( 0x66, 6, 0xc0, 0x40 );
++  /* Unlike newer chips, IDF's C3 calibration has no DONE poll/STOP write. */
++  reg = READ_REG( CLK_SYSTEM_BASE, CLK_CPU_PER_CONF_REG );
++  WRITE_REG( CLK_SYSTEM_BASE, CLK_CPU_PER_CONF_REG, ( reg & ~3u ) | 1u );
++  reg = READ_REG( CLK_SYSTEM_BASE, CLK_SYSCLK_CONF_REG );
++  WRITE_REG( CLK_SYSTEM_BASE, CLK_SYSCLK_CONF_REG, reg & ~0x3ffu );
++  WRITE_REG( CLK_SYSTEM_BASE, CLK_SYSCLK_CONF_REG,
++    ( reg & ~0xfffu ) | BSP_BIT32( 10 ) );
++  uint32_t apb = 80000000u >> 12;
++  WRITE_REG( (uintptr_t) 0x60008000, 0xbc, apb | ( apb << 16 ) );
++  ( (void (*)( uint32_t )) (uintptr_t) 0x40000588U )( 160 );
++}
++
++static void bsp_c3_clock_init( void )
++{
++  bsp_c3_cpu_xtal();
++  const uintptr_t analog = 0x6000e000;
++  uint32_t reg = READ_REG( analog, 0x44 );
++  WRITE_REG( analog, 0x44, reg | 0x3ff00u );
++  WRITE_REG( analog, 0x44, ( reg | 0x3ff00u ) & ~BSP_BIT32( 17 ) );
++  bsp_c3_power_init();
++  bsp_c3_field( 0x80, 0xffu << 14, 255u << 14 );
++  bsp_c3_field( 0x70, 0xffu << 17, 100u << 17 );
++  bsp_c3_field( 0x74, BSP_BIT32( 22 ), 0 );
++  bsp_c3_field( 0x74, 0xffu << 23, 0 );
++  bsp_c3_field( 0x74, BSP_BIT32( 22 ), BSP_BIT32( 22 ) );
++  bsp_c3_field( 0x70, BSP_BIT32( 3 ), 0 );
++  bsp_c3_field( 0x70, 7u << 12, 0 );
++  bsp_c3_field( 0x70, BSP_BIT32( 3 ), BSP_BIT32( 3 ) );
++  reg = READ_REG( (uintptr_t) 0x60008000, 0xb8 );
++  uint32_t xtal = ( reg & 0x10001u ) == 0x10001u ? 41u : 40u;
++  WRITE_REG( (uintptr_t) 0x60008000, 0xb8, xtal | ( xtal << 16 ) );
++  bsp_c3_cpu_pll();
++}
++
++static uint32_t bsp_c3_slow_calibrate( uint32_t cycles )
++{
++  const uintptr_t timg = 0x6001f000;
++  uint32_t reg = READ_REG( timg, 0x68 );
++  if ( reg & BSP_BIT32( 12 ) ) {
++    WRITE_REG( timg, 0x80,
++      ( READ_REG( timg, 0x80 ) & ~0xffffff80u ) | ( 1u << 7 ) );
++    uint32_t wait = 100000;
++    while ( !( READ_REG( timg, 0x68 ) & BSP_BIT32( 15 ) ) &&
++            !( READ_REG( timg, 0x80 ) & 1u ) ) {
++      if ( --wait == 0 ) {
++        rtems_panic( "ESP32-C3: RTC calibration drain timed out" );
++      }
++      bsp_c3_delay( 1 );
++    }
++  }
++  reg = READ_REG( timg, 0x68 );
++  reg &= ~( BSP_BIT32( 31 ) | BSP_BIT32( 12 ) | ( 3u << 13 )
++    | ( 0x7fffu << 16 ) );
++  WRITE_REG( timg, 0x68, reg | ( cycles << 16 ) );
++  WRITE_REG( timg, 0x80,
++    ( READ_REG( timg, 0x80 ) & ~0xffffff80u ) | ( cycles << 17 ) );
++  WRITE_REG( timg, 0x68, READ_REG( timg, 0x68 ) | BSP_BIT32( 31 ) );
++  bsp_c3_delay( cycles * 1000000ULL / 136000u );
++  uint32_t wait = 100000;
++  while ( !( READ_REG( timg, 0x68 ) & BSP_BIT32( 15 ) ) ) {
++    if ( ( READ_REG( timg, 0x80 ) & 1u ) || --wait == 0 ) {
++      rtems_panic( "ESP32-C3: RTC calibration timed out" );
++    }
++    bsp_c3_delay( 1 );
++  }
++  uint64_t xtal_cycles = ( READ_REG( timg, 0x6c ) >> 7 ) & 0x1ffffffu;
++  WRITE_REG( timg, 0x68, READ_REG( timg, 0x68 ) & ~BSP_BIT32( 31 ) );
++  uint64_t divisor = 40u * cycles;
++  uint32_t period = ( ( xtal_cycles << 19 ) + divisor / 2 - 1 ) / divisor;
++  if ( period == 0 ) {
++    rtems_panic( "ESP32-C3: invalid RTC calibration" );
++  }
++  return period;
++}
++
++static uint64_t bsp_c3_rtc_count( void )
++{
++  const uintptr_t rtc = 0x60008000;
++  WRITE_REG( rtc, 0x0c, READ_REG( rtc, 0x0c ) | BSP_BIT32( 31 ) );
++  uint32_t low = READ_REG( rtc, 0x10 );
++  uint32_t high = READ_REG( rtc, 0x14 ) & 0xffffu;
++  return ( (uint64_t) high << 32 ) | low;
++}
++
++static void bsp_c3_ocode_init( void )
++{
++  uint32_t reset = ( (uint32_t (*)( uint32_t )) (uintptr_t) 0x40000018U )( 0 );
++  if ( reset != 1 && reset != 0x14 ) {
++    return; /* IDF calibrates on chip power-on or the C3 eFuse CRC reset. */
++  }
++  uint32_t efuse = READ_REG( (uintptr_t) 0x60008800, 0x6c );
++  if ( ( efuse & 3u ) == 1 ) {
++    bsp_c3_analog_write( 0x61, 6, 0xff, ( efuse >> 12 ) & 0xffu );
++    bsp_c3_analog_write( 0x61, 5, 0x40, 0x40 );
++    return;
++  }
++  uint32_t period = bsp_c3_slow_calibrate( 100 );
++  uint64_t deadline = bsp_c3_rtc_count() + ( ( 10000ULL << 19 ) / period );
++  bsp_c3_cpu_xtal();
++  bsp_c3_field( 0, BSP_BIT32( 10 ) | BSP_BIT32( 8 ) | BSP_BIT32( 6 ),
++    BSP_BIT32( 10 ) | BSP_BIT32( 8 ) | BSP_BIT32( 6 ) );
++  bsp_c3_analog_write( 0x61, 0, 1, 0 );
++  bsp_c3_analog_write( 0x61, 0, 1, 1 );
++  uint32_t wait = 100000;
++  while ( ( bsp_c3_analog_read( 0x61, 3 ) & 9u ) != 9u ) {
++    if ( bsp_c3_rtc_count() >= deadline ) {
++      break; /* IDF warns and continues after the 10 ms o-code deadline. */
++    }
++    if ( --wait == 0 ) {
++      rtems_panic( "ESP32-C3: RTC stopped during o-code calibration" );
++    }
++    bsp_c3_delay( 1 );
++  }
++  bsp_c3_cpu_pll();
++}
++
++static void bsp_c3_rtc_init( void )
++{
++  /* Acquire the calibration clock without resetting RTEMS's timer state. */
++  WRITE_REG( CLK_SYSTEM_BASE, 0x10,
++    READ_REG( CLK_SYSTEM_BASE, 0x10 ) | BSP_BIT32( 13 ) );
++  WRITE_REG( CLK_SYSTEM_BASE, 0x18,
++    READ_REG( CLK_SYSTEM_BASE, 0x18 ) & ~BSP_BIT32( 13 ) );
++  /* Bootloader/app final profile: RC_FAST on, /256 off, RC_SLOW selected. */
++  bsp_c3_field( 0x70, BSP_BIT32( 6 ), 0 );
++  bsp_c3_field( 0x1c, 0xffu << 6, 5u << 6 );
++  bsp_c3_delay( 50 );
++  bsp_c3_field( 0x70, BSP_BIT32( 7 ), BSP_BIT32( 7 ) );
++  bsp_c3_field( 0x70, BSP_BIT32( 29 ), BSP_BIT32( 29 ) );
++  bsp_c3_delay( 3 );
++  bsp_c3_field( 0x70, ( 3u << 30 ) | BSP_BIT32( 8 ), 0 );
++  bsp_c3_delay( 300 );
++  bsp_c3_ocode_init();
++  WRITE_REG( (uintptr_t) 0x60008000, 0x54, bsp_c3_slow_calibrate( 1024 ) );
++}
++#endif
+diff --git a/bsps/riscv/esp32/start/bspstart.c b/bsps/riscv/esp32/start/bspstart.c
+--- a/bsps/riscv/esp32/start/bspstart.c
++++ b/bsps/riscv/esp32/start/bspstart.c
+@@ -166,6 +166,7 @@
+ extern void ets_update_cpu_frequency( uint32_t cpu_mhz )
+   __attribute__( ( weak ) );
+ 
++#include "bspc3rtc.h"
+ #include "bspvoltage.h"
+ #include "bspc6rtc.h"
+ 
+@@ -656,27 +657,8 @@
+   uint32_t cpu_freq_mhz = BSP_ESP32_CPU_FREQ_MHZ;
+ 
+ #if defined( LIBBSP_ESP32_C3_CHIP_DEFINITIONS_H )
+-
+-  uint32_t reg;
+ 
+-  /* CPUPERIOD_SEL 1 is 480/3 = 160 MHz on the 480 MHz BBPLL.  The period is
+-   * chosen before the source that makes it apply, as IDF does. */
+-  reg = READ_REG( CLK_SYSTEM_BASE, CLK_CPU_PER_CONF_REG );
+-  WRITE_REG( CLK_SYSTEM_BASE, CLK_CPU_PER_CONF_REG, ( reg & ~0x3u ) | 1u );
+-
+-  /* PRE_DIV_CNT back to divide-by-one and the CPU mux to the PLL. */
+-  reg = READ_REG( CLK_SYSTEM_BASE, CLK_SYSCLK_CONF_REG );
+-  WRITE_REG(
+-    CLK_SYSTEM_BASE,
+-    CLK_SYSCLK_CONF_REG,
+-    ( reg & ~0xFFFu ) | ( 1u << 10 )
+-  );
+-
+-  /* ESP-IDF rtc_clk_cpu_freq_to_pll_mhz(): ROM clients read APB frequency
+-   * from two copies of (frequency in Hz >> 12) in RTC_CNTL_STORE5.
+-   */
+-  uint32_t apb = 80000000u >> 12;
+-  WRITE_REG( (uintptr_t) 0x60008000, 0xbc, apb | ( apb << 16 ) );
++  bsp_c3_clock_init();
+ 
+ #elif defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H )
+ 
+@@ -856,7 +838,9 @@
+ 
+   bsp_clock_init();
+ 
+-#if defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++#if defined( LIBBSP_ESP32_C3_CHIP_DEFINITIONS_H )
++  bsp_c3_rtc_init();
++#elif defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
+   bsp_c6_rtc_init();
+ #endif
+ 

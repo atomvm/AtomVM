@@ -201,6 +201,18 @@ keeps peripheral clock ownership rather than applying IDF's blanket peripheral
 clock shutdown; eFuse is explicitly kept clocked. C6 sleep preparation preserves
 the BSP's ACTIVE/MODEM policies instead of replacing them with a generic baseline.
 
+C3 patches 0043/0044 establish the same reference IDF's XTAL40, PLL480/CPU160,
+RC_SLOW/RC_FAST startup profile instead of relying on ROM clock/voltage state.
+They install RTC power/FSM defaults and revision-qualified eFuse awake biases,
+tune both RC oscillators and initialize their dividers, configure PLL480 before
+selecting CPU160, and publish XTAL/APB frequencies and measured RC_SLOW period.
+O-code calibration runs only on power-on or eFuse-CRC reset, using the qualified
+eFuse code or the legacy XTAL/PLL-off sequence with IDF's 10 ms RTC deadline.
+RTC settling uses ROM microsecond delays; nonresponsive RTC calibration stops
+boot explicitly. RTEMS retains peripheral/SAR driver and scheduler ownership.
+This is the fixed clock/power profile, not every IDF bootloader configuration
+or an identical register-write trace. Rebuild the BSP SDK to apply these patches.
+
 Sleep configuration is derived from ESP-IDF revision
 `9a97f6c54ec638111ce55cd36581b3c192f15207`, with explicit timer/GPIO sleep,
 no modem integration, no PVT, and no initialized PSRAM. Light sleep retains
@@ -825,12 +837,20 @@ wake is reported, but the hardware backend stalls at the post-wake eFuse-IDLE
 barrier: the emulated controller reports state 0 instead of IDLE (1).
 A timer-only application built against the unmodified reference ESP-IDF revision
 also stalls in its `pmu_sleep_finish()` at the same register and IDLE check;
-this failure is not specific to RTEMS bring-up. C5/H2/P4/S31 RTC counters still
-read zero in boot testing. CI tests scheduler/clock integration
-separately with `-DRTEMS_SLEEP_TEST_FIXTURE=ON`, which replaces only the RTC counter
-and PMU entry point; the normal boot test retains the hardware backend and exposes
-the C6 failure. Never use the fixture in firmware for a board. Physical power
-transitions, analog accuracy and GPIO wakeup still need board validation. Build
+this failure is not specific to RTEMS bring-up. C3 stalls earlier, waiting for
+RTC sleep wake/reject flags that remain zero; the reference IDF timer-only app
+reproduces this too. Both C3 firmware stacks pass timer sleep on Wokwi, and
+RTEMS C3 also passes peripheral/scheduler resumption with the real sleep backend.
+Physical C3 revision v0.4 passes boot and peripheral tests, including repeated
+light sleep, timer wake, pending Erlang timers and worker resumption.
+C5/H2/P4/S31 RTC counters still read zero in boot testing. CI tests scheduler/clock
+integration separately with `-DRTEMS_SLEEP_TEST_FIXTURE=ON`, which replaces only
+the RTC counter and PMU entry point; the normal boot test retains the hardware
+backend and exposes the C3/C6 failures. Never use the fixture in firmware for a
+board. Physical C3 also passes deep-sleep timer wake, RTC counter continuity
+and retained binary storage across reset. Its wake-cause read uses the RTC wake
+status register directly, matching ESP-IDF. Power consumption, analog accuracy
+and GPIO wakeup still need board validation. Build
 `rtems_deep_sleep_test` and pack `test_deep_sleep.beam` for a real-board test of
 timer wakeup, deep-sleep reset reason and RTC retention across the reset.
 

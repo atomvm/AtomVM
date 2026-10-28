@@ -382,17 +382,25 @@ uint32_t rtems_esp_sleep_get_wakeup_cause(void)
 {
     int reset_reason = rtc_get_reset_reason(0);
     if (reset_reason == 0x05) { // RESET_REASON_CORE_DEEP_SLEEP
-        uint32_t rom_cause = rtc_get_wakeup_cause();
-        if (rom_cause & (1U << ESP_TIMER_WAKE_BIT)) {
+#if defined(RTEMS_BOARD_ESP32C3)
+        /* ESP-IDF rtc_cntl_ll_get_wakeup_cause(): RTC_CNTL_SLP_WAKEUP_CAUSE_REG,
+         * RTC_CNTL_WAKEUP_CAUSE[16:0]. The C3 ROM getter reads RESET_STATE. */
+        uint32_t wakeup_cause = *(volatile uint32_t *) 0x600080F8U & 0x1FFFFU;
+        const uint32_t gpio_wakeup_mask = 1U << 2; /* RTC_GPIO_TRIG_EN */
+#else
+        uint32_t wakeup_cause = rtc_get_wakeup_cause();
+        const uint32_t gpio_wakeup_mask = (1U << 2) | (1U << 9);
+#endif
+        if (wakeup_cause & (1U << ESP_TIMER_WAKE_BIT)) {
             return ESP_WAKEUP_TIMER;
         }
-        if (rom_cause & ((1U << 2) | (1U << 9))) {
+        if (wakeup_cause & gpio_wakeup_mask) {
             return ESP_WAKEUP_GPIO;
         }
-        if (rom_cause & (1u << 0)) {
+        if (wakeup_cause & (1u << 0)) {
             return ESP_WAKEUP_EXT0;
         }
-        if (rom_cause & (1u << 1)) {
+        if (wakeup_cause & (1u << 1)) {
             return ESP_WAKEUP_EXT1;
         }
 

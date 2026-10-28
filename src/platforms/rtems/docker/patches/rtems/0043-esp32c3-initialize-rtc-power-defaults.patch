@@ -1,0 +1,148 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] esp32c3: initialize RTC power and calibrated voltage defaults
+
+Match ESP-IDF 9a97f6c54ec638111ce55cd36581b3c192f15207 rtc_init with
+RTC_CONFIG_DEFAULT, including revision-qualified sign-magnitude eFuse
+voltage calibration, memory/domain force handoffs and RTC interrupts.
+Keep SAR and peripheral clock ownership with RTEMS. O-code and RTC clock
+setup are separate phases owned by the caller.
+
+This patch only adds the header. Startup integration is a separate patch.
+
+---
+diff --git a/bsps/riscv/esp32/start/bspc3power.h b/bsps/riscv/esp32/start/bspc3power.h
+new file mode 100644
+--- /dev/null
++++ b/bsps/riscv/esp32/start/bspc3power.h
+@@ -0,0 +1,131 @@
++/*
++ * SPDX-FileCopyrightText: 2020-2026 Espressif Systems (Shanghai) CO LTD
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/*
++ * ESP32-C3 RTC_CONFIG_DEFAULT() power/voltage policy, derived from ESP-IDF
++ * 9a97f6c54ec638111ce55cd36581b3c192f15207:
++ * components/esp_hw_support/port/esp32c3/{rtc_init.c,rtc_sleep.c,
++ * include/soc/rtc.h}, components/hal/{efuse_hal.c,esp32c3/include/hal/efuse_ll.h}
++ * and components/soc/esp32c3/{include,register}/soc register definitions.
++ *
++ * Include after the C3 analog helpers. analog_read(block,address) returns
++ * the complete byte; analog_write(block,address,mask,value) preserves bits
++ * outside mask and uses an already shifted value. The caller owns analog
++ * bus clock/host setup. This routine must precede PLL/CPU clock setup.
++ *
++ * Deliberate exclusions: o-code is performed by the caller (and is disabled
++ * by RTC_CONFIG_DEFAULT itself); RTC sources, tuning and calibration belong
++ * to the clock initializer. sar_periph_ctrl_init and blanket peripheral
++ * clock shutdown are NOT imported: SAR/peripheral gates remain owned by
++ * RTEMS drivers. Cache/MMU/SPI-memory clock force handoffs below are the
++ * specific clkctl_init policy, not a peripheral clock shutdown. No sleep
++ * entry configuration or driver interrupt ownership is introduced here.
++ */
++#if defined( LIBBSP_ESP32_C3_CHIP_DEFINITIONS_H )
++
++static void bsp_c3_power_field(
++  uintptr_t base, uint32_t offset, uint32_t mask, uint32_t value
++)
++{
++  WRITE_REG( base, offset, ( READ_REG( base, offset ) & ~mask ) | value );
++}
++
++static int bsp_c3_power_signed( uint32_t value, uint32_t sign )
++{
++  /* eFuse uses sign-magnitude, including negative zero, NOT two's complement. */
++  return ( value & sign ) != 0 ? -(int) ( value & ( sign - 1 ) ) : (int) value;
++}
++
++static void bsp_c3_power_init( void )
++{
++  const uintptr_t rtc = 0x60008000u;
++  const uintptr_t efuse = 0x60008800u;
++  const uintptr_t system = 0x600c0000u;
++  uint32_t rtc_bias = 28;
++  uint32_t dig_bias = 28;
++  uint32_t sys3 = READ_REG( efuse, 0x50 );
++  uint32_t sys5 = READ_REG( efuse, 0x58 );
++  /* efuse_hal_chip_revision(): major * 100 + the complete 4-bit minor. */
++  uint32_t revision = ( ( sys5 >> 24 ) & 3u ) * 100u +
++    ( ( ( sys5 >> 23 ) & 1u ) << 3 ) + ( ( sys3 >> 18 ) & 7u );
++  uint32_t hvt = ( sys5 >> 5 ) & 31u;
++
++  /* Release modem PD/isolation BEFORE accessing BB/NRX memory controls. */
++  bsp_c3_power_field( rtc, 0x88, BSP_BIT32( 17 ), 0 );
++  bsp_c3_power_field( rtc, 0x8c, BSP_BIT32( 28 ), 0 );
++  bsp_c3_analog_write( 0x6d, 13, 0x08u, 0 ); /* XPD_DIG_REG */
++  bsp_c3_analog_write( 0x6d, 13, 0x04u, 0 ); /* XPD_RTC_REG */
++  bsp_c3_power_field( rtc, 0x34, BSP_BIT32( 26 ), 0 ); /* PVTMON */
++  /* PLL_BUF_WAIT=20, CK8M_WAIT=20. Preserve XTL_BUF_WAIT and CPU_STALL_EN. */
++  bsp_c3_power_field( rtc, 0x1c, 0xff003fc0u, ( 20u << 24 ) | ( 20u << 6 ) );
++  bsp_c3_power_field( rtc, 0x2c, 0xff00u, 2u << 8 );
++  /* RTC_INIT_CONFIG_DEFAULT: each power-up and wait counter is one. */
++  WRITE_REG( rtc, 0x24, 0x02010201u ); /* BT / WIFI */
++  WRITE_REG( rtc, 0x28, 0x02010201u ); /* DG_WRAP / CPU_TOP */
++  bsp_c3_power_field( rtc, 0x30, 0xffff0000u, 0x02010000u ); /* DG_PERI */
++
++  if ( revision >= 3 && hvt != 0 ) {
++    uint32_t sys4 = READ_REG( efuse, 0x54 );
++    int k_rtc = bsp_c3_power_signed( ( sys4 >> 7 ) & 0x7fu, 0x40u );
++    int k_dig = bsp_c3_power_signed( ( sys4 >> 14 ) & 0x7fu, 0x40u );
++    int v_rtc = bsp_c3_power_signed( ( sys4 >> 21 ) & 0xffu, 0x80u );
++    int v_dig = bsp_c3_power_signed(
++      ( ( sys5 & 31u ) << 3 ) | ( sys4 >> 29 ), 0x80u );
++    dig_bias = hvt + 4 > 31 ? 31 : hvt + 4;
++    /* Keep IDF's unsigned arithmetic (including dbias-20 wrap), rounding,
++     * >= comparison, 250 margin and saturation at 31 exactly. */
++    uint32_t target = 10860 + v_dig * 10000 / 500 +
++      ( 213 + k_dig ) * ( dig_bias - 20 );
++    for ( rtc_bias = 15; rtc_bias < 31; ++rtc_bias ) {
++      uint32_t voltage = 10800 + v_rtc * 10000 / 500 +
++        ( 215 + k_rtc ) * ( rtc_bias - 20 );
++      if ( voltage >= target - 250 ) {
++        break;
++      }
++    }
++  }
++  bsp_c3_analog_write( 0x6d, 4, 0x1fu, rtc_bias );
++  bsp_c3_analog_write( 0x6d, 6, 0x1fu, dig_bias );
++
++  /* cfg.clkctl_init: release cache/MMU and SPI-memory clock forces. */
++  bsp_c3_power_field( 0x600c4000u, 0xac, 1u, 0 );
++  bsp_c3_power_field( 0x600c4000u, 0x08, 1u, 0 );
++  bsp_c3_power_field( 0x60003000u, 0xdc, 1u, 0 );
++  bsp_c3_power_field( 0x60002000u, 0xdc, 1u, 0 );
++
++  /* cfg.pwrctl_init, xtal_fpu=bbpll_fpu=0, rtc_dboost_fpd=1. */
++  bsp_c3_power_field( rtc, 0x70, BSP_BIT32( 26 ), 0 );
++  bsp_c3_power_field( rtc, 0x00, BSP_BIT32( 13 ), 0 );
++  bsp_c3_power_field( rtc, 0x34, BSP_BIT32( 24 ), 0 );
++  bsp_c3_power_field( rtc, 0x34, BSP_BIT32( 23 ), BSP_BIT32( 23 ) );
++  bsp_c3_power_field( rtc, 0x34, BSP_BIT32( 18 ), 0 ); /* SAR I2C POR protect */
++  bsp_c3_power_field( rtc, 0x00, 0xa80u, 0 ); /* BBPLL / PLL I2C / BB I2C */
++  bsp_c3_power_field( rtc, 0x80, 0xb0000000u, BSP_BIT32( 28 ) );
++  bsp_c3_power_field( system, 0x0c, 1u, 0 ); /* LSLP_MEM_PD_MASK */
++
++  /* rtc_sleep_pu(RTC_SLEEP_PU_CONFIG_ALL(0)): only LL force-PU fields. */
++  bsp_c3_power_field( rtc, 0x88, 0x10010u, 0 );
++  bsp_c3_power_field( 0x60026000u, 0x9c, 0x15u, 0 ); /* FE DC/PBUS/AGC */
++  bsp_c3_power_field( 0x6001d000u, 0x54, 0x0au, 0 ); /* BB FFT/DC_EST */
++  bsp_c3_power_field( 0x6001cc00u, 0xd4, 0x2au, 0 ); /* NRX ROT/VIT/DEMAP */
++  bsp_c3_power_field( 0x60006000u, 0x90, BSP_BIT32( 5 ), 0 );
++  bsp_c3_power_field( 0x60005000u, 0xf0, BSP_BIT32( 10 ), 0 );
++  bsp_c3_power_field( 0x60026000u, 0xac, 0x3fu, 0 ); /* SRAM / ROM */
++
++  bsp_c3_power_field( rtc, 0x88, 0x545000u, 0 ); /* domain force PU */
++  bsp_c3_power_field( rtc, 0x8c, 0xaa800000u, 0 ); /* domain force NOISO */
++  bsp_c3_power_field( system, 0x08, BSP_BIT32( 3 ), 0 ); /* WAITI clock gate */
++  bsp_c3_power_field( rtc, 0x8c, 0x5000u, 0 ); /* PAD UNHOLD / NOISO */
++  /* IDF parks unused modem domains after their memory-force handoff. */
++  bsp_c3_power_field( rtc, 0x8c, BSP_BIT32( 28 ), BSP_BIT32( 28 ) );
++  bsp_c3_power_field( rtc, 0x88, BSP_BIT32( 17 ), BSP_BIT32( 17 ) );
++  bsp_c3_power_field( rtc, 0x8c, BSP_BIT32( 22 ), BSP_BIT32( 22 ) );
++  bsp_c3_power_field( rtc, 0x88, BSP_BIT32( 11 ), BSP_BIT32( 11 ) );
++  WRITE_REG( rtc, 0x40, 0 );
++  WRITE_REG( rtc, 0x4c, 0xffffffffu );
++  bsp_c3_analog_write( 0x61, 0, 0x04u, 0x04u ); /* IR_FORCE_XPD_CK */
++}
++
++#endif /* LIBBSP_ESP32_C3_CHIP_DEFINITIONS_H */
