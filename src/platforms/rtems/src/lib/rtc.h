@@ -33,6 +33,28 @@ uint64_t rtems_esp_rtc_get_counter(void);
 void rtems_esp_rtc_timekeeper_record(const struct timeval *tv);
 bool rtems_esp_rtc_timekeeper_restore(void);
 
+enum rtems_esp_wakeup_cause
+{
+    ESP_WAKEUP_UNDEFINED = 0,
+    ESP_WAKEUP_EXT0 = 1,
+    ESP_WAKEUP_EXT1 = 2,
+    ESP_WAKEUP_TIMER = 3,
+    ESP_WAKEUP_TOUCHPAD = 4,
+    ESP_WAKEUP_ULP = 5,
+    ESP_WAKEUP_GPIO = 6,
+    ESP_WAKEUP_UART = 7,
+    ESP_WAKEUP_WIFI = 8,
+    ESP_WAKEUP_COCPU = 9,
+    ESP_WAKEUP_BT = 10,
+    ESP_WAKEUP_COCPU_TRAP = 11,
+    ESP_WAKEUP_VAD = 12,
+    ESP_WAKEUP_VBAT_UNDER_VOLT = 13,
+};
+
+/* Raw RTC/PMU status and IDF-priority decoding, shared by both sleep paths. */
+uint32_t rtems_esp_sleep_read_wakeup_cause(void);
+uint32_t rtems_esp_sleep_decode_wakeup_cause(uint32_t raw_cause);
+
 uint32_t rtems_esp_rtc_frequency(void);
 /* Measure the RTC clock without installing it as the system timecounter. */
 uint32_t rtems_esp_rtc_measure_frequency(void);

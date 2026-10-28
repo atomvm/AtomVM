@@ -60,12 +60,10 @@
 #if defined(RTEMS_BOARD_ESP32S31)
 #define ESP_RTC_RAM_BASE 0x2E000000U
 #define ESP_RTC_TIMEKEEPER_BASE (ESP_RTC_RAM_BASE + 0x1000U)
-#define ESP_TIMER_WAKE_BIT 13
 #elif defined(RTEMS_BOARD_ESP32P4)
 /* P4 retention storage lives in its 32 KiB LP RAM, not at the C3 RTC base. */
 #define ESP_RTC_RAM_BASE 0x50108000U
 #define ESP_RTC_TIMEKEEPER_BASE (ESP_RTC_RAM_BASE + 0x1000U)
-#define ESP_TIMER_WAKE_BIT 4
 #elif defined(RTEMS_BOARD_ESP32H2)
 /*
  * The H2's LP RAM is 4 KiB and ends at 0x50001000, so a timekeeper at +0x1000
@@ -75,36 +73,14 @@
  */
 #define ESP_RTC_RAM_BASE 0x50000000U
 #define ESP_RTC_TIMEKEEPER_BASE (ESP_RTC_RAM_BASE + 0xC10U)
-#define ESP_TIMER_WAKE_BIT 4
 #else
 #define ESP_RTC_RAM_BASE 0x50000000U
 #define ESP_RTC_TIMEKEEPER_BASE (ESP_RTC_RAM_BASE + 0x1000U)
-#if defined(RTEMS_BOARD_ESP32C3)
-#define ESP_TIMER_WAKE_BIT 3
-#else
-#define ESP_TIMER_WAKE_BIT 4
-#endif
 #endif
 #define RTC_TIMEKEEPER_MAGIC 0x54494D45U /* "TIME" */
 #define RTC_SLOW_CLK_FREQ_DEFAULT 136000U
 
 extern int rtc_get_reset_reason(int cpu_no);
-extern uint32_t rtc_get_wakeup_cause(void);
-
-enum rtems_esp_wakeup_cause
-{
-    ESP_WAKEUP_UNDEFINED = 0,
-    ESP_WAKEUP_EXT0 = 1,
-    ESP_WAKEUP_EXT1 = 2,
-    ESP_WAKEUP_TIMER = 3,
-    ESP_WAKEUP_TOUCHPAD = 4,
-    ESP_WAKEUP_ULP = 5,
-    ESP_WAKEUP_GPIO = 6,
-    ESP_WAKEUP_UART = 7,
-    ESP_WAKEUP_WIFI = 8,
-    ESP_WAKEUP_COCPU = 9,
-    ESP_WAKEUP_BT = 10,
-};
 
 struct rtems_esp_rtc_slow_storage
 {
@@ -382,29 +358,7 @@ uint32_t rtems_esp_sleep_get_wakeup_cause(void)
 {
     int reset_reason = rtc_get_reset_reason(0);
     if (reset_reason == 0x05) { // RESET_REASON_CORE_DEEP_SLEEP
-#if defined(RTEMS_BOARD_ESP32C3)
-        /* ESP-IDF rtc_cntl_ll_get_wakeup_cause(): RTC_CNTL_SLP_WAKEUP_CAUSE_REG,
-         * RTC_CNTL_WAKEUP_CAUSE[16:0]. The C3 ROM getter reads RESET_STATE. */
-        uint32_t wakeup_cause = *(volatile uint32_t *) 0x600080F8U & 0x1FFFFU;
-        const uint32_t gpio_wakeup_mask = 1U << 2; /* RTC_GPIO_TRIG_EN */
-#else
-        uint32_t wakeup_cause = rtc_get_wakeup_cause();
-        const uint32_t gpio_wakeup_mask = (1U << 2) | (1U << 9);
-#endif
-        if (wakeup_cause & (1U << ESP_TIMER_WAKE_BIT)) {
-            return ESP_WAKEUP_TIMER;
-        }
-        if (wakeup_cause & gpio_wakeup_mask) {
-            return ESP_WAKEUP_GPIO;
-        }
-        if (wakeup_cause & (1u << 0)) {
-            return ESP_WAKEUP_EXT0;
-        }
-        if (wakeup_cause & (1u << 1)) {
-            return ESP_WAKEUP_EXT1;
-        }
-
-        return ESP_WAKEUP_UNDEFINED;
+        return rtems_esp_sleep_decode_wakeup_cause(rtems_esp_sleep_read_wakeup_cause());
     }
 
     if (s_light_sleep_wakeup_cause != ESP_WAKEUP_UNDEFINED) {
@@ -578,6 +532,12 @@ static term nif_esp_sleep_get_wakeup_cause(Context *ctx, int argc, term argv[])
             return globalcontext_make_atom(ctx->global, sleep_wakeup_cocpu_atom);
         case ESP_WAKEUP_BT:
             return globalcontext_make_atom(ctx->global, sleep_wakeup_bt_atom);
+        case ESP_WAKEUP_COCPU_TRAP:
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x1C", "sleep_wakeup_cocpu_trap_trig"));
+        case ESP_WAKEUP_VAD:
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x10", "sleep_wakeup_vad"));
+        case ESP_WAKEUP_VBAT_UNDER_VOLT:
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x1C", "sleep_wakeup_vbat_under_volt"));
         case ESP_WAKEUP_UNDEFINED:
         default:
             return UNDEFINED_ATOM;

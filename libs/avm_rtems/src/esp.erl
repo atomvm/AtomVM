@@ -107,7 +107,11 @@ rtc_get_time_us() ->
     | sleep_wakeup_gpio
     | sleep_wakeup_uart
     | sleep_wakeup_wifi
-    | sleep_wakeup_cocpu.
+    | sleep_wakeup_cocpu
+    | sleep_wakeup_cocpu_trap_trig
+    | sleep_wakeup_bt
+    | sleep_wakeup_vad
+    | sleep_wakeup_vbat_under_volt.
 sleep_get_wakeup_cause() ->
     erlang:nif_error(undefined).
 

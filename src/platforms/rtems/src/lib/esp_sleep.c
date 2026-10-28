@@ -371,7 +371,7 @@ int rtems_esp_sleep_start(bool deep, uint64_t usecs, uint32_t gpio_mask, int mod
     rtems_task_set_affinity(RTEMS_SELF, sizeof(saved), &saved);
 #endif
     pthread_mutex_unlock(&sleep_lock);
-    *cause = (raw_cause & GPIO_WAKE) ? 6U : ((raw_cause & TIMER_WAKE) ? 3U : 0U);
+    *cause = rtems_esp_sleep_decode_wakeup_cause(raw_cause);
     return result;
 }
 #endif

@@ -59,6 +59,7 @@ set(SOURCE_FILES
     rtc_slow_nif.c
     esp_sleep.c
     esp_sleep_hw.c
+    esp_sleep_wakeup.c
     smp.c
     ../../../../libAtomVM/portnifloader.c
 )

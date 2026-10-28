@@ -223,6 +223,11 @@ SLEEP is no longer copied from ACTIVE. Calibrated awake BSP voltages are
 preserved. This is a specified IDF-compatible profile, not every IDF default
 configuration (PVT, for example, defaults on for several IDF targets).
 
+Wake-cause reporting reads each chip's RTC/PMU status directly and shares
+ESP-IDF's source masks and priority across deep and light sleep. H2's
+GPIO7-GPIO14 comparator uses EXT1 and reports `sleep_wakeup_ext1`, not GPIO.
+Decoding a source does not enable it; sleep configuration remains timer/GPIO.
+
 Enabled UARTs are suspended before the CPU/bus transition to XTAL and resumed
 only after the original source/dividers and ROM timing are restored. Deep
 sleep drains UART output instead. USB Serial/JTAG pad and clock handling
