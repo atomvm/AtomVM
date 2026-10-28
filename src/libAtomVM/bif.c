@@ -1443,21 +1443,22 @@ static term rem_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
 
 static term rem_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, term arg1, term arg2)
 {
-    int size = 0;
+    size_t arg1_size = 0;
     if (term_is_boxed_integer(arg1)) {
-        size = term_boxed_size(arg1);
+        arg1_size = term_boxed_size(arg1);
     } else if (UNLIKELY(!term_is_integer(arg1))) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
     }
+    size_t arg2_size = 0;
     if (term_is_boxed_integer(arg2)) {
-        size |= term_boxed_size(arg2);
+        arg2_size = term_boxed_size(arg2);
     } else if (UNLIKELY(!term_is_integer(arg2))) {
         TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
         RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
     }
 
-    switch (size) {
+    switch (MAX(arg1_size, arg2_size)) {
         case 0: {
             // BUG
             AVM_ABORT();
@@ -1474,8 +1475,7 @@ static term rem_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
         }
 
 #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-        case 2:
-        case 3: {
+        case 2: {
             avm_int64_t val1 = term_maybe_unbox_int64(arg1);
             avm_int64_t val2 = term_maybe_unbox_int64(arg2);
             if (UNLIKELY(val2 == 0)) {

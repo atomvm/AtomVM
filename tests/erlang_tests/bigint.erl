@@ -259,6 +259,12 @@ test_rem() ->
     ),
     <<"E3AE0EA63AE33EA79B071316BC9A7F1B">> = erlang:integer_to_binary(Int8 rem Int9, 16),
 
+    -1 = (-(1 bsl 63) - ?MODULE:id(1)) rem ?MODULE:id(4),
+    -3 = Int3 rem ?MODULE:id(4),
+    -16#FFFFFFFFFF = Int3 rem ?MODULE:id(1 bsl 40),
+    7 = ?MODULE:id(7) rem Int3,
+    16#FFFFFFFFFF = ?MODULE:id(16#FFFFFFFFFF) rem Int3,
+
     ok = expect_error(badarith, fun() -> Int0 rem ?MODULE:id(0) end),
     ok = expect_error(badarith, fun() -> Int1 rem ?MODULE:id(0) end),
 

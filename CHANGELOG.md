@@ -79,6 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed modules compiled with the `no_bs_create_bin` compiler option failing to load when
   `bs_init_bits` or `bs_append` were followed by the creation of funs, and `bs_append` not
   reserving the extra heap words it is given
+- Fixed `rem` returning wrong results on 32-bit platforms when one operand is an integer
+  just above 64 bits
 
 ## [0.7.0-beta.0] - 2026-09-28
 
