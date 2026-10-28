@@ -1,0 +1,512 @@
+From 181bbdf4b33b856c50176408b3b5e029f0ec71de Mon Sep 17 00:00:00 2001
+From: Peter M <petermm@gmail.com>
+Date: Tue, 20 Oct 2026 04:45:28 +0200
+Subject: [PATCH 7/8] rtems-esp-wifi: share C3 modem startup and PHY with
+ Bluetooth
+
+Consolidated from the following downstream patches. Original rationale
+and provenance are retained below; source licensing is unchanged.
+
+Original-patch: 0015-share-phy-ownership-with-bluetooth.patch
+Original-author: Peter M <petermm@gmail.com>
+Original-date: 2026-10-20T04:45:28+02:00
+AtomVM-origin-commit: 732a5c70afb40868cc6835fdeddd852b3a0e27e0
+
+Share modem startup and PHY ownership with Bluetooth
+
+Follow ESP-IDF's per-modem PHY ownership and PLL tracking. Prepare common
+radio memory, clocks and coexistence once so either radio can start first.
+Keep the BT peripheral enabled across PHY calibration, and expose IDF's
+complete BT peripheral reset including its low-power clock block.
+
+Original-patch: 0016-align-c3-radio-power-domain-startup.patch
+Original-author: Peter M <petermm@gmail.com>
+Original-date: 2026-10-20T04:45:28+02:00
+AtomVM-origin-commit: 732a5c70afb40868cc6835fdeddd852b3a0e27e0
+
+Match ESP-IDF C3 radio power-domain startup
+
+Direct boot skips rtc_init(), which clears force-up and force-no-isolation
+bits before the radio takes ownership. Do not force the Wi-Fi/BT domains
+on or repeat the BSP's extra BT clock/reset sequence. Release BT isolation
+before preparing the shared modem domain, as esp_bt_power_domain_on() does.
+
+Original-patch: 0017-match-wifi-sleep-clock-calibration-abi.patch
+Original-author: Peter M <petermm@gmail.com>
+Original-date: 2026-10-20T04:45:28+02:00
+AtomVM-origin-commit: 732a5c70afb40868cc6835fdeddd852b3a0e27e0
+
+Match the Wi-Fi sleep-clock calibration ABI
+
+The Wi-Fi OS adapter expects Q12 microseconds, not the system RTC's Q19.
+On C3, follow the selected Bluetooth LP clock: XTAL is divided to 1 MHz.
+Allow the application to provide its measured RTC frequency for modem sleep
+instead of relying on a nominal oscillator frequency.
+---
+ src/rtems_esp_wifi_init.c   | 173 ++++++++++++++++++++++++------------
+ src/rtems_wifi_os_adapter.c |  92 ++++++++++++-------
+ 2 files changed, 175 insertions(+), 90 deletions(-)
+
+diff --git a/src/rtems_esp_wifi_init.c b/src/rtems_esp_wifi_init.c
+index 63c097f9d6fe9ff7c15451871070c754eabbffc2..65dde60eea580be15c59d7a99ca6e0a17f578858 100644
+--- a/src/rtems_esp_wifi_init.c
++++ b/src/rtems_esp_wifi_init.c
+@@ -75,6 +75,7 @@
+ #if defined(RTEMS_BOARD_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C3)
+ #include <hal/clk_gate_ll.h>
+ #include <hal/regi2c_ctrl_ll.h>
++#include <soc/rtc_cntl_reg.h>
+ #endif
+ 
+ #if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5) \
+@@ -475,26 +476,10 @@ static void rtems_esp_wifi_power_domain_on( void )
+ {
+   uint32_t reg;
+ 
+-  /*
+-   * Powered, and forced so rather than left to the automatic control.
+-   *
+-   * ESP-IDF only clears WIFI_FORCE_PD here, because it can rely on
+-   * WIFI_FORCE_PU and WIFI_FORCE_NOISO still holding their reset value of 1.
+-   * On this boot path they do not: read back on hardware, DIG_PWC is
+-   * 0x00000800 and DIG_ISO is 0x00400080 by the time the port runs -- BT
+-   * forced down and isolated, and every FORCE_PU/FORCE_NOISO bit clear,
+-   * including WiFi's.  With neither FORCE_PU nor FORCE_PD set the domain is
+-   * under automatic control, and the whole modem digital block reads back as
+-   * zero: FE[0x174] and AGC[0x8c] are 0, writes do not stick, and
+-   * register_chipv7_phy() spins forever in ram_iq_est_enable() waiting on a
+-   * done flag in a block that is not there.
+-   *
+-   * So set the two positives as well as clearing the two negatives, and clear
+-   * WIFI_PD_EN so nothing power-gates the domain behind our back.
+-   */
++  /* Direct boot skips rtc_init(), which clears the force-up bits. Match
++   * that initial state, then esp_wifi_bt_power_domain_on()'s release of PD. */
+   reg = rtems_wifi_reg_read( RTEMS_WIFI_RTC_DIG_PWC_REG );
+-  reg &= ~( RTEMS_WIFI_RTC_WIFI_FORCE_PD | RTEMS_WIFI_RTC_WIFI_PD_EN );
+-  reg |= RTEMS_WIFI_RTC_WIFI_FORCE_PU;
++  reg &= ~( RTEMS_WIFI_RTC_WIFI_FORCE_PD | RTEMS_WIFI_RTC_WIFI_FORCE_PU );
+   rtems_wifi_reg_write( RTEMS_WIFI_RTC_DIG_PWC_REG, reg );
+ 
+   /*
+@@ -524,15 +509,9 @@ static void rtems_esp_wifi_power_domain_on( void )
+   rtems_wifi_reg_write( RTEMS_WIFI_RST_EN_REG,
+                         reg & ~RTEMS_WIFI_MODEM_RESET_WHEN_PU );
+ 
+-  /*
+-   * Out of isolation.  Order matters: power, then reset, then this.
+-   * FORCE_NOISO for the same reason as FORCE_PU above -- clearing FORCE_ISO
+-   * alone only returns the domain to automatic isolation, which is the state
+-   * it was already in and which keeps the block dark.
+-   */
++  /* rtc_init() clears FORCE_NOISO; power-domain startup releases ISO. */
+   reg = rtems_wifi_reg_read( RTEMS_WIFI_RTC_DIG_ISO_REG );
+-  reg &= ~RTEMS_WIFI_RTC_WIFI_FORCE_ISO;
+-  reg |= RTEMS_WIFI_RTC_WIFI_FORCE_NOISO;
++  reg &= ~( RTEMS_WIFI_RTC_WIFI_FORCE_ISO | RTEMS_WIFI_RTC_WIFI_FORCE_NOISO );
+   rtems_wifi_reg_write( RTEMS_WIFI_RTC_DIG_ISO_REG, reg );
+ 
+   /*
+@@ -686,8 +665,12 @@ static esp_err_t rtems_esp_wifi_calibrate( void )
+ #if defined(RTEMS_ESP_WIFI_MANAGED_PHY)
+ static pthread_mutex_t rtems_phy_lock = PTHREAD_MUTEX_INITIALIZER;
+ static bool rtems_phy_calibrated;
+-static bool rtems_phy_enabled;
++static uint8_t rtems_phy_modems;
++#if defined(RTEMS_BOARD_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C3)
++static bool rtems_bt_periph_enabled;
++#endif
+ static uint64_t rtems_last_track_us;
++static uint64_t rtems_bt_last_track_us;
+ #if defined(RTEMS_BOARD_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C3)
+ /* esp_phy_modem_init()/phy_digital_regs_store()/phy_digital_regs_load().
+  * The C3 backup DMA needs internal, word-aligned memory; BSS provides it.
+@@ -1004,25 +987,64 @@ void rtems_esp_wifi_s31_clock_disable( void )
+ #endif
+ 
+ #if defined(RTEMS_ESP_WIFI_MANAGED_PHY)
++#if defined(RTEMS_BOARD_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C3)
++void rtems_esp_bt_power_domain_on( void )
++{
++  /* rtc_init() + esp_bt_power_domain_on(), before the shared modem domain.
++   * Do not repeat the BSP's extra clock/reset sequence here: the peripheral
++   * reset below and PHY clock ownership already implement IDF's sequence. */
++  CLEAR_PERI_REG_MASK( RTC_CNTL_DIG_PWC_REG,
++    RTC_CNTL_BT_FORCE_PD | RTC_CNTL_BT_FORCE_PU );
++  CLEAR_PERI_REG_MASK( RTC_CNTL_DIG_ISO_REG,
++    RTC_CNTL_BT_FORCE_ISO | RTC_CNTL_BT_FORCE_NOISO );
++}
++
++void rtems_esp_bt_periph_enable( void )
++{
++  /* esp_bt_controller_init(): periph_module_enable(), then reset(). */
++  periph_ll_enable_clk_clear_rst( PERIPH_BT_MODULE );
++  periph_ll_reset( PERIPH_BT_MODULE );
++  rtems_bt_periph_enabled = true;
++}
++#endif
++
+ static void rtems_phy_track( void )
+ {
+-  phy_param_track_tot( true, false );
+-  rtems_last_track_us = rtems_clock_get_uptime_nanoseconds() / 1000;
++  phy_param_track_tot(
++    ( rtems_phy_modems & PHY_MODEM_WIFI ) != 0,
++    ( rtems_phy_modems & PHY_MODEM_BT ) != 0
++  );
++  uint64_t now = rtems_clock_get_uptime_nanoseconds() / 1000;
++  if ( rtems_phy_modems & PHY_MODEM_WIFI ) {
++    rtems_last_track_us = now;
++  }
++  if ( rtems_phy_modems & PHY_MODEM_BT ) {
++    rtems_bt_last_track_us = now;
++  }
+ }
+ 
+-void rtems_esp_wifi_phy_track( void )
++static void rtems_phy_track_if_due( void )
+ {
+-  pthread_mutex_lock( &rtems_phy_lock );
+-  if ( rtems_phy_enabled ) {
++  uint64_t now = rtems_clock_get_uptime_nanoseconds() / 1000;
++  if ( ( ( rtems_phy_modems & PHY_MODEM_WIFI )
++         && now - rtems_last_track_us > 1000000 )
++       || ( ( rtems_phy_modems & PHY_MODEM_BT )
++            && now - rtems_bt_last_track_us > 1000000 ) ) {
+     rtems_phy_track();
+   }
++}
++
++void rtems_esp_wifi_phy_track( void )
++{
++  pthread_mutex_lock( &rtems_phy_lock );
++  rtems_phy_track_if_due();
+   pthread_mutex_unlock( &rtems_phy_lock );
+ }
+ 
+-void rtems_esp_wifi_phy_enable( void )
++void esp_phy_enable( esp_phy_modem_t modem )
+ {
+   pthread_mutex_lock( &rtems_phy_lock );
+-  if ( !rtems_phy_enabled ) {
++  if ( rtems_phy_modems == 0 ) {
+ #if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
+     rtems_c5_clock_maps_init();
+     /* PERIPH_PHY_MODULE: common/private FE and analog I2C. */
+@@ -1121,25 +1143,25 @@ void rtems_esp_wifi_phy_enable( void )
+       modem_syscon_ll_enable_wifibb_44m_clock( &MODEM_SYSCON, false );
+     }
+ #else
+-    periph_ll_disable_clk_set_rst( PERIPH_BT_MODULE );
++    if ( !rtems_bt_periph_enabled ) {
++      periph_ll_disable_clk_set_rst( PERIPH_BT_MODULE );
++    }
+     periph_ll_wifi_module_disable_clk_set_rst();
+     /* Like IDF, retain the PHY and RNG clocks after calibration. */
+ #endif
+-    rtems_phy_enabled = true;
+   }
++  rtems_phy_modems |= modem;
+   /* IDF tracks on enable only if more than one period has elapsed. */
+-  if ( rtems_clock_get_uptime_nanoseconds() / 1000
+-       - rtems_last_track_us > 1000000 ) {
+-    rtems_phy_track();
+-  }
++  rtems_phy_track_if_due();
+   pthread_mutex_unlock( &rtems_phy_lock );
+ }
+ 
+-void rtems_esp_wifi_phy_disable( void )
++void esp_phy_disable( esp_phy_modem_t modem )
+ {
+   pthread_mutex_lock( &rtems_phy_lock );
+-  if ( rtems_phy_enabled ) {
+-    rtems_phy_enabled = false;
++  uint8_t previous = rtems_phy_modems;
++  rtems_phy_modems &= ~modem;
++  if ( previous != 0 && rtems_phy_modems == 0 ) {
+ #if defined(RTEMS_BOARD_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C3)
+     phy_dig_reg_backup( true, rtems_c3_phy_digital_regs );
+     rtems_c3_phy_regs_stored = true;
+@@ -1164,6 +1186,48 @@ void rtems_esp_wifi_phy_disable( void )
+   }
+   pthread_mutex_unlock( &rtems_phy_lock );
+ }
++
++void rtems_esp_wifi_phy_enable( void )
++{
++  esp_phy_enable( PHY_MODEM_WIFI );
++}
++
++void rtems_esp_wifi_phy_disable( void )
++{
++  esp_phy_disable( PHY_MODEM_WIFI );
++}
++#endif
++
++#if defined(RTEMS_BOARD_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C3)
++/* Shared startup runs once, regardless of which radio starts first. Copying
++ * .wifi_dram or resetting the common modem again would corrupt a live user. */
++int rtems_esp_modem_prepare( void )
++{
++  static bool prepared;
++  if ( prepared ) {
++    return ESP_OK;
++  }
++  rtems_esp_wifi_copy_sections();
++  /*
++   * Before the PHY, not after.  register_chipv7_phy() calibrates against the
++   * analog blocks, and on silicon they have to be powered and out of isolation
++   * first or the calibration loops never converge.
++   */
++  printk( "rtems-esp-wifi: powering the modem domain...\n" );
++  rtems_esp_wifi_power_domain_on();
++  rtems_esp_wifi_clocks_on();
++  /* IDF opens the BBPLL and SAR/TSENS targets rather than unmasking
++   * every analog device. The BSP already set the CPU and ROM delay clock.
++   */
++  regi2c_ctrl_ll_i2c_bbpll_enable();
++  regi2c_ctrl_ll_i2c_sar_periph_enable();
++
++  int result = rtems_wifi_coex_prepare();
++  if ( result == ESP_OK ) {
++    prepared = true;
++  }
++  return result;
++}
+ #endif
+ 
+ esp_err_t esp_wifi_init( const wifi_init_config_t *config )
+@@ -1195,7 +1259,9 @@ esp_err_t esp_wifi_init( const wifi_init_config_t *config )
+     return ESP_ERR_INVALID_ARG;
+   }
+ 
++#if !defined(RTEMS_BOARD_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32C3)
+   rtems_esp_wifi_copy_sections();
++#endif
+ 
+ #if defined(RTEMS_BOARD_ESP32S31) || defined(CONFIG_IDF_TARGET_ESP32S31)
+   /* bootloader_init_mem(): filters off and the S31 peripheral-access
+@@ -1245,19 +1311,10 @@ esp_err_t esp_wifi_init( const wifi_init_config_t *config )
+   /* C6 has no software modem power-domain sequence or USB PHY workaround. */
+   rtems_c6_modem_clock_init();
+ #else
+-  /*
+-   * Before the PHY, not after.  register_chipv7_phy() calibrates against the
+-   * analog blocks, and on silicon they have to be powered and out of isolation
+-   * first or the calibration loops never converge.
+-   */
+-  printk( "rtems-esp-wifi: powering the modem domain...\n" );
+-  rtems_esp_wifi_power_domain_on();
+-  rtems_esp_wifi_clocks_on();
+-  /* IDF opens the BBPLL and SAR/TSENS targets rather than unmasking
+-   * every analog device. The BSP already set the CPU and ROM delay clock.
+-   */
+-  regi2c_ctrl_ll_i2c_bbpll_enable();
+-  regi2c_ctrl_ll_i2c_sar_periph_enable();
++  result = rtems_esp_modem_prepare();
++  if ( result != ESP_OK ) {
++    return result;
++  }
+ 
+ #endif
+ 
+@@ -1274,12 +1331,14 @@ esp_err_t esp_wifi_init( const wifi_init_config_t *config )
+   }
+ #endif
+ 
++#if !defined(RTEMS_BOARD_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32C3)
+   result = rtems_wifi_coex_prepare();
+   if ( result != ESP_OK ) {
+     printk( "rtems-esp-wifi: coex_pre_init failed (%d)\n", result );
+ 
+     return result;
+   }
++#endif
+ 
+   printk( "rtems-esp-wifi: esp_wifi_init_internal()...\n" );
+ 
+diff --git a/src/rtems_wifi_os_adapter.c b/src/rtems_wifi_os_adapter.c
+index 16bf689d0e14571848d58f21e0653291bbe365c5..838ee3b01ffe624542172412035567602e500e05 100644
+--- a/src/rtems_wifi_os_adapter.c
++++ b/src/rtems_wifi_os_adapter.c
+@@ -1107,13 +1107,21 @@ RTEMS_STATIC_ASSERT(
+  */
+ #define RTEMS_WIFI_ETS_TIMER_PRIORITY ( RTEMS_WIFI_PRIORITY_MAX - 22 )
+ 
++/* IDF's esp_timer task defaults to 3584 bytes. C3 uses 8 KiB including
++ * RTEMS overhead; reserve the ROM-owned SRAM instead of borrowing it. */
++#if defined(CONFIG_IDF_TARGET_ESP32C3)
++#define RTEMS_WIFI_TIMER_STACK_SIZE ( RTEMS_MINIMUM_STACK_SIZE * 2 )
++#else
++#define RTEMS_WIFI_TIMER_STACK_SIZE ( RTEMS_MINIMUM_STACK_SIZE * 4 )
++#endif
++
+ static pthread_once_t rtems_wifi_timer_server_once = PTHREAD_ONCE_INIT;
+ 
+ static void rtems_wifi_timer_server_start( void )
+ {
+   rtems_status_code sc = rtems_timer_initiate_server(
+     RTEMS_WIFI_ETS_TIMER_PRIORITY,
+-    RTEMS_MINIMUM_STACK_SIZE * 4,
++    RTEMS_WIFI_TIMER_STACK_SIZE,
+     RTEMS_DEFAULT_ATTRIBUTES
+   );
+ 
+@@ -1322,9 +1330,9 @@ static void rtems_wifi_set_intr(
+   (void) cpu_no;
+ 
+   if ( intr_num >= RTEMS_WIFI_INTR_CHANNELS
+-       || intr_source >= BSP_INTERRUPT_VECTOR_COUNT ) {
+-    printk( "wifi.osi: interrupt source %u or channel %u is out of range\n",
+-            (unsigned) intr_source, (unsigned) intr_num );
++       || intr_source >= BSP_INTERRUPT_VECTOR_COUNT || intr_prio < 1 ) {
++    printk( "wifi.osi: invalid interrupt source %u, channel %u or priority %i\n",
++            (unsigned) intr_source, (unsigned) intr_num, (int) intr_prio );
+ 
+     return;
+   }
+@@ -1333,13 +1341,11 @@ static void rtems_wifi_set_intr(
+   rtems_wifi_intr_mapped[ intr_source ] = true;
+ 
+   /*
+-   * ESP-IDF's priorities rise with urgency and so do this controller's, so
+-   * unlike task priorities these pass through unchanged.  Said explicitly
+-   * because the inversion two hundred lines up makes the opposite look like
+-   * the house rule.
++   * IDF supplies hardware levels starting at 1. The BSP accepts zero-based
++   * priorities and adds 1 when writing the interrupt controller.
+    */
+   sc = bsp_interrupt_set_priority( (rtems_vector_number) intr_source,
+-                                   (uint32_t) intr_prio );
++                                   (uint32_t) ( intr_prio - 1 ) );
+ 
+   if ( sc != RTEMS_SUCCESSFUL ) {
+     printk( "wifi.osi: cannot set priority on source %u (%i)\n",
+@@ -1644,12 +1650,17 @@ static int rtems_wifi_read_mac( uint8_t *mac, unsigned int type )
+   /*
+    * Type 0 is the station address, 1 the soft-AP's.  ESP-IDF derives the AP
+    * address from the base rather than storing a second one; the universe
+-   * offset is 1.  Anything else is a radio this port does not have.
++   * offset is 1. C3 follows IDF's default four-address allocation: Bluetooth
++   * uses base+2 and an external Ethernet MAC uses base+3.
+    */
+   if ( type == 1 ) {
+     mac[ 5 ] += 1;
++#if defined(CONFIG_IDF_TARGET_ESP32C3)
++  } else if ( type == 2 || type == 3 ) {
++    mac[ 5 ] += type;
++#endif
+   } else if ( type != 0 ) {
+-    RTEMS_WIFI_UNIMPLEMENTED( "a MAC type other than station or soft-AP" );
++    RTEMS_WIFI_UNIMPLEMENTED( "unsupported MAC type" );
+ 
+     return ESP_FAIL;
+   }
+@@ -1662,6 +1673,15 @@ static int rtems_wifi_read_mac( uint8_t *mac, unsigned int type )
+ #include <private/esp_coexist_adapter.h>
+ #include <private/esp_coexist_internal.h>
+ 
++#if defined(CONFIG_IDF_TARGET_ESP32C3)
++#include <esp_mac.h>
++
++esp_err_t esp_read_mac( uint8_t *mac, esp_mac_type_t type )
++{
++  return rtems_wifi_read_mac( mac, type );
++}
++#endif
++
+ #if !defined(CONFIG_IDF_TARGET_ESP32C3)
+ uint32_t rtc_clk_xtal_freq_get( void );
+ #endif
+@@ -1715,14 +1735,12 @@ static int rtems_coex_debug_matrix_init( int event, int signal, bool rev )
+   return 0x106;
+ }
+ 
++#if !defined(CONFIG_IDF_TARGET_ESP32C3)
+ static int rtems_coex_xtal_freq_get( void )
+ {
+-#if defined(CONFIG_IDF_TARGET_ESP32C3)
+-  return 40;
+-#else
+   return (int) rtc_clk_xtal_freq_get();
+-#endif
+ }
++#endif
+ 
+ #if defined(CONFIG_IDF_TARGET_ESP32C6)
+ static int rtems_coex_ieee802154_intr_disable( void )
+@@ -1736,11 +1754,8 @@ static int rtems_coex_ieee802154_intr_enable( void )
+ }
+ #endif
+ 
+-/*
+- * C3's pinned esp_coex_adapter.c leaves _env_is_chip and _xtal_freq_get
+- * unset. Those fields are in the header (the library checks its MD5), so
+- * leaving them NULL shifts _magic. Fill every field the header declares.
+- */
++/* Preserve IDF's NULL C3 environment/crystal hooks. The other chips expose
++ * them through their chip-specific coexistence adapters. */
+ static coex_adapter_funcs_t rtems_coex_adapter_funcs = {
+   ._version = COEX_ADAPTER_VERSION,
+   ._task_yield_from_isr = rtems_wifi_task_yield_from_isr,
+@@ -1754,13 +1769,17 @@ static coex_adapter_funcs_t rtems_coex_adapter_funcs = {
+   ._malloc_internal = rtems_wifi_malloc,
+   ._free = free,
+   ._esp_timer_get_time = rtems_wifi_esp_timer_get_time,
++#if !defined(CONFIG_IDF_TARGET_ESP32C3)
+   ._env_is_chip = rtems_wifi_env_is_chip,
++#endif
+   ._timer_disarm = rtems_wifi_timer_disarm,
+   ._timer_done = rtems_wifi_timer_done,
+   ._timer_setfn = rtems_wifi_timer_setfn,
+   ._timer_arm_us = rtems_wifi_timer_arm_us,
+   ._debug_matrix_init = rtems_coex_debug_matrix_init,
++#if !defined(CONFIG_IDF_TARGET_ESP32C3)
+   ._xtal_freq_get = rtems_coex_xtal_freq_get,
++#endif
+ #if defined(CONFIG_IDF_TARGET_ESP32C6)
+   ._ieee802154_intr_disable = rtems_coex_ieee802154_intr_disable,
+   ._ieee802154_intr_enable = rtems_coex_ieee802154_intr_enable,
+@@ -1957,21 +1976,28 @@ static void rtems_wifi_coex_condition_set( uint32_t type, bool dissatisfy )
+   (void) dissatisfy;
+ }
+ 
+-/*
+- * The RTC slow clock's measured frequency, as a period in 1/2^19 microsecond
+- * units -- the format rtc_clk_cal() returns and the WiFi libraries expect for
+- * their sleep arithmetic.
+- *
+- * Returned from the nominal 150 kHz rather than measured.  A real calibration
+- * counts slow-clock ticks against the crystal, which needs the RTC and TIMG
+- * registers this port does not otherwise touch; the error is the oscillator's
+- * own tolerance, which is several percent and matters only for sleep timing
+- * that is switched off here anyway.  Worth revisiting with #101 if sleep is
+- * ever enabled.
+- */
++/* System RTC calibration is Q19 microseconds; the Wi-Fi ABI uses Q12.
++ * Retain the nominal period for standalone SDK users until their application
++ * supplies a measured RTC frequency, as AtomVM does before enabling sleep. */
++static uint32_t rtems_wifi_rtc_cal = (uint32_t) ( ( 1000000ULL << 19 ) / 150000ULL );
++
++void rtems_esp_wifi_set_rtc_frequency( uint32_t frequency )
++{
++  if ( frequency != 0 ) {
++    rtems_wifi_rtc_cal = (uint32_t) ( ( 1000000ULL << 19 ) / frequency );
++  }
++}
++
+ static uint32_t rtems_wifi_slowclk_cal_get( void )
+ {
+-  return (uint32_t) ( ( 1000000ULL << 19 ) / 150000ULL );
++#if defined(CONFIG_IDF_TARGET_ESP32C3)
++  /* esp_coex_common_clk_slowclk_cal_get_wrapper(): BT can select the
++   * 1 MHz XTAL-derived LP clock instead of the RTC slow oscillator. */
++  if ( REG_GET_BIT( SYSTEM_BT_LPCK_DIV_FRAC_REG, SYSTEM_LPCLK_SEL_XTAL ) ) {
++    return 1u << SOC_WIFI_LIGHT_SLEEP_CLK_WIDTH;
++  }
++#endif
++  return rtems_wifi_rtc_cal >> ( 19 - SOC_WIFI_LIGHT_SLEEP_CLK_WIDTH );
+ }
+ 
+ static int rtems_wifi_phy_update_country_info( const char *country )

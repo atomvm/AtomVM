@@ -1,0 +1,315 @@
+From 69fa19f66f0fac0ca394e2b5e44a963e6ba80293 Mon Sep 17 00:00:00 2001
+From: Peter M <petermm@gmail.com>
+Date: Thu, 15 Oct 2026 16:41:19 +0200
+Subject: [PATCH 2/8] rtems-esp-wifi: add ESP32-C5 target support
+
+Consolidated from the following downstream patches. Original rationale
+and provenance are retained below; source licensing is unchanged.
+
+Original-patch: 0002-rtems-esp-wifi-add-esp32c5-support.patch
+Original-author: Peter M <petermm@gmail.com>
+Original-date: 2026-10-15T16:41:19+02:00
+AtomVM-origin-commit: 2ba930284aabe2240ddc9f37b8801509e0b6f4e5
+
+rtems-esp-wifi: add ESP32-C5 target and register layouts
+
+Select the C5 PHY configuration, eFuse base and modem clock/reset registers.
+Configure direct-boot memory access and keep the RFPLL shim confined to C6.
+Match ESP-IDF coexistence-disabled callbacks instead of reporting failures.
+
+Original-patch: 0006-esp32c5-preserve-pma-and-detect-xtal.patch
+Original-author: Peter M <petermm@gmail.com>
+Original-date: 2026-10-19T12:50:26+02:00
+AtomVM-origin-commit: c83b8dbcbf3925c090f8e88299ac5fcdcf1e4480
+
+rtems-esp-wifi: preserve C5 memory attributes and detect XTAL
+
+Keep the ROM/BSP PMA entries when bringing up the modem. Clearing them can
+stall execution on physical C5 boards. Read PCR_CLK_XTAL_FREQ for the PHY
+so that C5 boards with either a 40 MHz or 48 MHz crystal use the right value.
+---
+ include/rtems-esp/sdkconfig.h |  9 +++++-
+ src/rtems_esp_glue.c          |  9 +++++-
+ src/rtems_esp_netif.c         |  8 ++++++
+ src/rtems_esp_wifi_init.c     | 23 ++++++++++++---
+ src/rtems_wifi_os_adapter.c   | 53 ++++++++++++++++++++---------------
+ 5 files changed, 73 insertions(+), 29 deletions(-)
+
+diff --git a/include/rtems-esp/sdkconfig.h b/include/rtems-esp/sdkconfig.h
+index 884583a3df649c84b47d311b338420f088dbef41..55286dd8899e570699cc20cb8df05b7c8d864f55 100644
+--- a/include/rtems-esp/sdkconfig.h
++++ b/include/rtems-esp/sdkconfig.h
+@@ -39,7 +39,12 @@
+ #ifndef RTEMS_ESP_SDKCONFIG_H
+ #define RTEMS_ESP_SDKCONFIG_H
+ 
+-#if defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
++#if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++#define CONFIG_IDF_TARGET_ESP32C5 1
++#define CONFIG_IDF_TARGET "esp32c5"
++#define CONFIG_SOC_WIFI_HE_SUPPORT 1
++#define CONFIG_SOC_WIFI_SUPPORT_5G 1
++#elif defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
+ #define CONFIG_IDF_TARGET_ESP32C6 1
+ #define CONFIG_IDF_TARGET "esp32c6"
+ #define CONFIG_SOC_WIFI_HE_SUPPORT 1
+@@ -61,7 +66,9 @@
+ #define CONFIG_ESP_WIFI_FTM_ENABLE 1
+ 
+ /* The C3 is 2.4 GHz only. */
++#if !defined(CONFIG_SOC_WIFI_SUPPORT_5G)
+ #define CONFIG_SOC_WIFI_SUPPORT_5G 0
++#endif
+ 
+ /*
+  * Maximum transmit power, in dBm, asked for by esp_phy/esp32c3/phy_init_data.c
+diff --git a/src/rtems_esp_glue.c b/src/rtems_esp_glue.c
+index cf4c310f815eec93827ad8b66f18be0d349ff027..211fbf157f431221ac1eb703f9cbbe07450f7f60 100644
+--- a/src/rtems_esp_glue.c
++++ b/src/rtems_esp_glue.c
+@@ -368,12 +368,19 @@ void *memcpy( void *dst, const void *src, size_t n )
+   return dst;
+ }
+ 
+-#if defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
++#if defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6) || defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
+ uint32_t rtc_clk_xtal_freq_get( void )
+ {
++#if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++  uint32_t freq = (*(volatile uint32_t *) 0x60096110u >> 24) & 0x7fu;
++  return freq == 48u ? 48u : 40u;
++#else
+   return 40u;
++#endif
+ }
++#endif
+ 
++#if defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
+ void phy_rfpll_cap_track_new( uint8_t cap );
+ void rfpll_cap_track( uint8_t cap )
+ {
+diff --git a/src/rtems_esp_netif.c b/src/rtems_esp_netif.c
+index 4f4e3006c5f69bef36816189f6b20cb3e8ebbf65..d92b9e50391ba84adfcc104caa5b8ed758600c5a 100644
+--- a/src/rtems_esp_netif.c
++++ b/src/rtems_esp_netif.c
+@@ -890,6 +890,14 @@ int esp32_netif_add(
+   unsigned char *mac_address
+ ) __attribute__((alias("esp32c3_netif_add")));
+ 
++int esp32c5_netif_add(
++  struct netif  *net_interface,
++  ip_addr_t     *ipaddr,
++  ip_addr_t     *netmask,
++  ip_addr_t     *gateway,
++  unsigned char *mac_address
++) __attribute__((alias("esp32c3_netif_add")));
++
+ int esp32c6_netif_add(
+   struct netif  *net_interface,
+   ip_addr_t     *ipaddr,
+diff --git a/src/rtems_esp_wifi_init.c b/src/rtems_esp_wifi_init.c
+index 467a3ae2d5851f605189a3774bddcb8d5fd0b424..a0f660af5512605856448e2f8c37faebec65e8b9 100644
+--- a/src/rtems_esp_wifi_init.c
++++ b/src/rtems_esp_wifi_init.c
+@@ -156,7 +156,7 @@ extern char esp32c_iram_to_dram_delta[];
+  * .data and .fast_text; the constant is repeated here rather than shared
+  * because the BSP does not export it.
+  */
+-#if defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
++#if defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6) || defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
+ #define RTEMS_ESP_FLASH_MAPPED_BASE 0x42000000
+ #else
+ #define RTEMS_ESP_FLASH_MAPPED_BASE 0x3c000000
+@@ -336,7 +336,9 @@ static inline void rtems_wifi_reg_write( uint32_t addr, uint32_t value )
+ #define RTEMS_WIFI_CAL_MODE PHY_RF_CAL_FULL
+ #endif
+ 
+-#if defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
++#if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++#define RTEMS_WIFI_EFUSE_BASE         0x600B4800u
++#elif defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
+ #define RTEMS_WIFI_EFUSE_BASE         0x600B0800u
+ #else
+ #define RTEMS_WIFI_EFUSE_BASE         0x60008800u
+@@ -454,7 +456,7 @@ static void rtems_esp_wifi_probe_window(
+  * The BBPLL itself is already running -- the USB-Serial-JTAG that carries this
+  * console is fed from it -- so only the CPU mux and the divider move here.
+  */
+-#if !defined(RTEMS_BOARD_ESP32C6) && !defined(CONFIG_IDF_TARGET_ESP32C6)
++#if !defined(RTEMS_BOARD_ESP32C6) && !defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(RTEMS_BOARD_ESP32C5) && !defined(CONFIG_IDF_TARGET_ESP32C5)
+ static void rtems_esp_wifi_cpu_clock_to_pll( void )
+ {
+   uint32_t reg;
+@@ -608,7 +610,20 @@ esp_err_t esp_wifi_init( const wifi_init_config_t *config )
+ 
+   rtems_esp_wifi_copy_sections();
+ 
+-#if defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
++#if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++  printk( "rtems-esp-wifi: enabling ESP32-C5 modem clocks...\n" );
++  rtems_wifi_reg_write( 0x600A9C00u, rtems_wifi_reg_read( 0x600A9C00u ) | 1u );
++  rtems_wifi_reg_write( 0x600A9C04u, 0xFFFFFFFFu );
++  rtems_wifi_reg_write( 0x600A9C08u, 0xFFFFFFFFu );
++  rtems_wifi_reg_write( 0x600A9C14u, 0xFFFFFFFFu );
++  rtems_wifi_reg_write( 0x600AF000u, rtems_wifi_reg_read( 0x600AF000u ) | 1u );
++  rtems_wifi_reg_write( 0x600AF018u, 0xFFFFFFFFu );
++  rtems_wifi_reg_write( 0x600AF01Cu, 0xFFFFFFFFu );
++  rtems_wifi_reg_write( 0x600990C4u, 0 );
++  rtems_wifi_reg_write( 0x600998C4u, 0 );
++  rtems_wifi_reg_write( 0x6009A0C4u, 0 );
++  rtems_wifi_reg_write( 0x600B38C4u, 0 );
++#elif defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
+   printk( "rtems-esp-wifi: enabling ESP32-C6 modem clocks...\n" );
+   rtems_wifi_reg_write( 0x600A9804u, rtems_wifi_reg_read( 0x600A9804u ) | 0xFFFFFFFFu );
+   rtems_wifi_reg_write( 0x600AF004u, rtems_wifi_reg_read( 0x600AF004u ) | 0xFFFFFFFFu );
+diff --git a/src/rtems_wifi_os_adapter.c b/src/rtems_wifi_os_adapter.c
+index 9a1b3c5756da7ea7f2f82375d1a91657a5e2de1c..f4868d388b0f1da94814ca9d823fa986d2cb5bd5 100644
+--- a/src/rtems_wifi_os_adapter.c
++++ b/src/rtems_wifi_os_adapter.c
+@@ -1400,7 +1400,11 @@ static void rtems_wifi_ints_off( uint32_t mask )
+  * esp-hal-3rdparty rather than from memory; each is named below.
+  */
+ 
+-#if defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
++#if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++#define RTEMS_WIFI_EFUSE_BASE         0x600B4800u
++#define RTEMS_WIFI_EFUSE_MAC0_REG     ( RTEMS_WIFI_EFUSE_BASE + 0x44u )
++#define RTEMS_WIFI_EFUSE_MAC1_REG     ( RTEMS_WIFI_EFUSE_BASE + 0x48u )
++#elif defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
+ #define RTEMS_WIFI_EFUSE_BASE         0x600B0800u
+ #define RTEMS_WIFI_EFUSE_MAC0_REG     ( RTEMS_WIFI_EFUSE_BASE + 0x44u )
+ #define RTEMS_WIFI_EFUSE_MAC1_REG     ( RTEMS_WIFI_EFUSE_BASE + 0x48u )
+@@ -1441,7 +1445,12 @@ static bool rtems_wifi_env_is_chip( void )
+ 
+ static void rtems_wifi_clock_enable( void )
+ {
+-#if defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
++#if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++  rtems_wifi_reg_write(
++    0x600A9C14u,
++    rtems_wifi_reg_read( 0x600A9C14u ) | ( 1u << 9 ) | ( 1u << 10 )
++  );
++#elif defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
+   /* MODEM_SYSCON_CLK_CONF_REG (0x600A9804) bit 9: MODEM_SYSCON_CLK_WIFIMAC_EN */
+   rtems_wifi_reg_write(
+     0x600A9804u,
+@@ -1465,7 +1474,12 @@ static void rtems_wifi_clock_enable( void )
+ 
+ static void rtems_wifi_clock_disable( void )
+ {
+-#if defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
++#if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++  rtems_wifi_reg_write(
++    0x600A9C14u,
++    rtems_wifi_reg_read( 0x600A9C14u ) & ~( ( 1u << 9 ) | ( 1u << 10 ) )
++  );
++#elif defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
+   rtems_wifi_reg_write(
+     0x600A9804u,
+     rtems_wifi_reg_read( 0x600A9804u ) & ~( 1u << 9 )
+@@ -1480,7 +1494,11 @@ static void rtems_wifi_clock_disable( void )
+ 
+ static void rtems_wifi_reset_mac( void )
+ {
+-#if defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
++#if defined(RTEMS_BOARD_ESP32C5) || defined(CONFIG_IDF_TARGET_ESP32C5)
++  uint32_t reg = rtems_wifi_reg_read( 0x600A9C10u );
++  rtems_wifi_reg_write( 0x600A9C10u, reg | ( 1u << 9 ) );
++  rtems_wifi_reg_write( 0x600A9C10u, reg & ~( 1u << 9 ) );
++#elif defined(RTEMS_BOARD_ESP32C6) || defined(CONFIG_IDF_TARGET_ESP32C6)
+   /* MODEM_SYSCON_MODEM_RST_CONF_REG (0x600A9814) bit 10: MODEM_SYSCON_RST_WIFIMAC */
+   uint32_t reg = rtems_wifi_reg_read( 0x600A9814u );
+   rtems_wifi_reg_write( 0x600A9814u, reg | ( 1u << 10 ) );
+@@ -1921,11 +1939,11 @@ static uint32_t rtems_wifi_log_timestamp( void )
+     ( rtems_clock_get_uptime_nanoseconds() / 1000000u );
+ }
+ 
++/* Match ESP-IDF wrappers with software/external coexistence disabled. */
+ static void rtems_wifi_stub_coex_condition_set( uint32_t type, bool dissatisfy )
+ {
+   (void) type;
+   (void) dissatisfy;
+-  RTEMS_WIFI_UNIMPLEMENTED( "esp_coex" );
+ }
+ 
+ static int rtems_wifi_stub_coex_wifi_request( uint32_t event, uint32_t latency, uint32_t duration )
+@@ -1933,72 +1951,61 @@ static int rtems_wifi_stub_coex_wifi_request( uint32_t event, uint32_t latency,
+   (void) event;
+   (void) latency;
+   (void) duration;
+-  RTEMS_WIFI_UNIMPLEMENTED( "esp_coex" );
+-  return ESP_FAIL;
++  return ESP_OK;
+ }
+ 
+ static int rtems_wifi_stub_coex_wifi_release( uint32_t event )
+ {
+   (void) event;
+-  RTEMS_WIFI_UNIMPLEMENTED( "esp_coex" );
+-  return ESP_FAIL;
++  return ESP_OK;
+ }
+ 
+ static int rtems_wifi_stub_coex_wifi_channel_set( uint8_t primary, uint8_t secondary )
+ {
+   (void) primary;
+   (void) secondary;
+-  RTEMS_WIFI_UNIMPLEMENTED( "esp_coex" );
+-  return ESP_FAIL;
++  return ESP_OK;
+ }
+ 
+ static int rtems_wifi_stub_coex_event_duration_get( uint32_t event, uint32_t *duration )
+ {
+   (void) event;
+   (void) duration;
+-  RTEMS_WIFI_UNIMPLEMENTED( "esp_coex" );
+-  return ESP_FAIL;
++  return ESP_OK;
+ }
+ 
+ static uint32_t rtems_wifi_stub_coex_schm_interval_get( void )
+ {
+-  RTEMS_WIFI_UNIMPLEMENTED( "esp_coex" );
+   return 0;
+ }
+ 
+ static uint8_t rtems_wifi_stub_coex_schm_curr_period_get( void )
+ {
+-  RTEMS_WIFI_UNIMPLEMENTED( "esp_coex" );
+   return 0;
+ }
+ 
+ static void *rtems_wifi_stub_coex_schm_curr_phase_get( void )
+ {
+-  RTEMS_WIFI_UNIMPLEMENTED( "esp_coex" );
+   return NULL;
+ }
+ 
+ static int rtems_wifi_stub_coex_schm_process_restart( void )
+ {
+-  RTEMS_WIFI_UNIMPLEMENTED( "esp_coex" );
+-  return ESP_FAIL;
++  return ESP_OK;
+ }
+ 
+ static int rtems_wifi_stub_coex_schm_flexible_period_set( uint8_t )
+ {
+-  RTEMS_WIFI_UNIMPLEMENTED( "esp_coex" );
+-  return ESP_FAIL;
++  return ESP_OK;
+ }
+ 
+ static uint8_t rtems_wifi_stub_coex_schm_flexible_period_get( void )
+ {
+-  RTEMS_WIFI_UNIMPLEMENTED( "esp_coex" );
+-  return 0;
++  return 1;
+ }
+ 
+ static void *rtems_wifi_stub_coex_schm_get_phase_by_idx( int )
+ {
+-  RTEMS_WIFI_UNIMPLEMENTED( "esp_coex" );
+   return NULL;
+ }
+ 

@@ -1,0 +1,960 @@
+From 954545b3a152132c917b6859864742957e06e5da Mon Sep 17 00:00:00 2001
+From: Peter Madsen-Mygdal <petermm@gmail.com>
+Date: Wed, 28 Oct 2026 17:54:13 +0100
+Subject: [PATCH 8/9] Fix ESP32 interrupt routing and clock ticks
+
+Install chip-specific interrupt matrices, CLIC/PLIC state and CPU gates.
+Keep Wi-Fi/Bluetooth routes, dedicated SMP IPIs and the emulator fallback
+together with the corrected systimer frequency and boot-CPU tick policy.
+
+Consolidates legacy kernel patches: 0002, 0009, 0012, 0013, 0014, 0015,
+0016, 0017, 0019, 0021, 0032, 0034, 0035, 0036, 0037, 0038, 0039.
+
+Co-authored-by: Samuel Price <thesamprice@gmail.com>
+Assisted-by: Claude Opus 5 (1M context) <noreply@anthropic.com>
+Signed-off-by: Peter Madsen-Mygdal <petermm@gmail.com>
+---
+ bsps/riscv/esp32/clock/clockdrv_systimer.c |   6 +-
+ bsps/riscv/esp32/include/bsp/irq.h         |   6 +
+ bsps/riscv/esp32/irq/irq_c3.c              | 709 +++++++++++++++++++--
+ 3 files changed, 677 insertions(+), 44 deletions(-)
+
+diff --git a/bsps/riscv/esp32/clock/clockdrv_systimer.c b/bsps/riscv/esp32/clock/clockdrv_systimer.c
+index 6a54bbb4c87bb71b9d942e7322d50335be0fcfa1..9456ed3a03d8b2d89f0ab85607dd9f4c98543cfd 100644
+--- a/bsps/riscv/esp32/clock/clockdrv_systimer.c
++++ b/bsps/riscv/esp32/clock/clockdrv_systimer.c
+@@ -115,7 +115,7 @@ static void systimer_clock_handler_install( rtems_interrupt_handler handler )
+ #define SYSTIMER_REG( reg ) *( (volatile uint32_t *) ( SYSTIMER_BASE + reg ) )
+ 
+ /* The SYSTIMER always operates at 16MHz */
+-#define SYSTIMER_FREQUENCY ( 16ULL * 1024 * 1024 )
++#define SYSTIMER_FREQUENCY ( 16000000ULL )
+ 
+ static uint32_t systimer_get_timecount( struct timecounter *arg )
+ {
+@@ -208,4 +208,8 @@ static void systimer_clock_at_tick( void )
+ 
+ #define Clock_driver_support_at_tick( arg ) systimer_clock_at_tick()
+ 
++#if defined(RTEMS_SMP)
++#define CLOCK_DRIVER_USE_ONLY_BOOT_PROCESSOR
++#endif
++
+ #include "../../../shared/dev/clock/clockimpl.h"
+diff --git a/bsps/riscv/esp32/include/bsp/irq.h b/bsps/riscv/esp32/include/bsp/irq.h
+index 7952b610ee5e6c0eea26ee87b56697ccdebe32a2..79d6d9c6031a3946963bc110a73e07b37d883fca 100644
+--- a/bsps/riscv/esp32/include/bsp/irq.h
++++ b/bsps/riscv/esp32/include/bsp/irq.h
+@@ -51,4 +51,10 @@ typedef void ( *gpio_output_set_t )(
+ 
+ #include RTEMS_XSTRING( ESPRESSIF_CHIP_HEADER )
+ 
++#if defined(RTEMS_SMP) && (defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H))
++/* Keep inter-processor interrupts separate from the Wi-Fi channel (1). */
++#define BSP_ESP32S31_IPI_CHANNEL 31U
++#define BSP_ESP32P4_IPI_CHANNEL  31U
++#endif
++
+ #endif /* LIBBSP_ESP32_BSP_IRQ_H */
+diff --git a/bsps/riscv/esp32/irq/irq_c3.c b/bsps/riscv/esp32/irq/irq_c3.c
+index 8cf25ff92a262d23773c406bef59431b667aad45..376d80fef264a11222067bfb44f5da87963d3bdc 100644
+--- a/bsps/riscv/esp32/irq/irq_c3.c
++++ b/bsps/riscv/esp32/irq/irq_c3.c
+@@ -40,14 +40,236 @@
+ #include <rtems/score/percpu.h>
+ #include <rtems/score/riscv-utility.h>
+ #include <rtems/score/scheduler.h>
++#include <rtems/score/smpimpl.h>
+ 
+ typedef struct peripheral_irq_map {
+   rtems_vector_number peripheral_int;
+   uint8_t             cpu_int;
+ } peripheral_irq_map_t;
+ 
++#if defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+ static peripheral_irq_map_t irq_mappings[] = {
++  { .peripheral_int = SW_INTR_0, .cpu_int = 1 },
++  { .peripheral_int = SW_INTR_1, .cpu_int = 1 },
++  { .peripheral_int = SW_INTR_2, .cpu_int = 1 },
++  { .peripheral_int = SW_INTR_3, .cpu_int = 1 },
++  { .peripheral_int = GPIO_PROCPU_INTR, .cpu_int = 3 },
++  { .peripheral_int = SPI2_INTR, .cpu_int = 4 },
++  { .peripheral_int = I2S0_INTR, .cpu_int = 5 },
++  { .peripheral_int = UART0_INTR, .cpu_int = 6 },
++  { .peripheral_int = UART1_INTR, .cpu_int = 7 },
++  { .peripheral_int = LEDC0_INTR, .cpu_int = 8 },
++  { .peripheral_int = RMT_INTR, .cpu_int = 9 },
++  { .peripheral_int = LP_WDT_INTR, .cpu_int = 10 },
++  { .peripheral_int = I2C0_INTR, .cpu_int = 11 },
++  { .peripheral_int = I2C1_INTR, .cpu_int = 11 },
++  { .peripheral_int = USB_SERIAL_JTAG_INTR, .cpu_int = 12 },
++  { .peripheral_int = TIMERGRP0_T0_INTR, .cpu_int = 13 },
++  { .peripheral_int = TIMERGRP0_WDT_INTR, .cpu_int = 14 },
++  { .peripheral_int = TIMERGRP1_T0_INTR, .cpu_int = 15 },
++  { .peripheral_int = TIMERGRP1_WDT_INTR, .cpu_int = 14 },
++  { .peripheral_int = SYSTIMER_TARGET0_INTR, .cpu_int = 16 },
++  { .peripheral_int = SYSTIMER_TARGET1_INTR, .cpu_int = 17 },
++  { .peripheral_int = SYSTIMER_TARGET2_INTR, .cpu_int = 18 },
++  { .peripheral_int = RSA_INTR, .cpu_int = 19 },
++  { .peripheral_int = AES_INTR, .cpu_int = 20 },
++  { .peripheral_int = SHA_INTR, .cpu_int = 21 },
++  { .peripheral_int = MSPI_FLASH_INTR, .cpu_int = 22 },
++  { .peripheral_int = ASSIST_DEBUG_INTR, .cpu_int = 23 }
++};
++#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++/*
++ * The S31 has 169 peripheral sources and a CLIC, but only 32 usable CPU
++ * channels, so sources are grouped the same way they are on the other parts.
++ * Software interrupts are grouped on channel 1 with WiFi, matching what the
++ * WiFi libraries ask the OS adapter for.
++ */
++static peripheral_irq_map_t irq_mappings[] = {
++  { .peripheral_int = WIFI_MAC_INTR, .cpu_int = 1 },
++  { .peripheral_int = WIFI_MAC_NMI_INTR, .cpu_int = 1 },
++  { .peripheral_int = WIFI_PWR_INTR, .cpu_int = 1 },
++  { .peripheral_int = WIFI_BB_INTR, .cpu_int = 1 },
++  { .peripheral_int = UHCI0_INTR, .cpu_int = 1 },
++  { .peripheral_int = BT_MAC_INTR, .cpu_int = 2 },
++  { .peripheral_int = BT_BB_INTR, .cpu_int = 2 },
++  { .peripheral_int = BT_BB_NMI_INTR, .cpu_int = 2 },
++  { .peripheral_int = SW_INTR_0, .cpu_int = 1 },
++  { .peripheral_int = SW_INTR_1, .cpu_int = 1 },
++  { .peripheral_int = SW_INTR_2, .cpu_int = 1 },
++  { .peripheral_int = SW_INTR_3, .cpu_int = 1 },
++  { .peripheral_int = GPIO_PROCPU_INTR, .cpu_int = 3 },
++  { .peripheral_int = SPI2_INTR, .cpu_int = 4 },
++  { .peripheral_int = I2S0_INTR, .cpu_int = 5 },
++  { .peripheral_int = UART0_INTR, .cpu_int = 6 },
++  { .peripheral_int = UART1_INTR, .cpu_int = 7 },
++  { .peripheral_int = LEDC0_INTR, .cpu_int = 8 },
++  { .peripheral_int = RMT_INTR, .cpu_int = 9 },
++  { .peripheral_int = LP_WDT_INTR, .cpu_int = 10 },
++  { .peripheral_int = I2C0_INTR, .cpu_int = 11 },
++  { .peripheral_int = I2C1_INTR, .cpu_int = 11 },
++  { .peripheral_int = USB_SERIAL_JTAG_INTR, .cpu_int = 12 },
++  { .peripheral_int = TIMERGRP0_T0_INTR, .cpu_int = 13 },
++  { .peripheral_int = TIMERGRP0_WDT_INTR, .cpu_int = 14 },
++  { .peripheral_int = TIMERGRP1_T0_INTR, .cpu_int = 15 },
++  { .peripheral_int = TIMERGRP1_WDT_INTR, .cpu_int = 14 },
++  { .peripheral_int = SYSTIMER_TARGET0_INTR, .cpu_int = 16 },
++  { .peripheral_int = SYSTIMER_TARGET1_INTR, .cpu_int = 17 },
++  { .peripheral_int = SYSTIMER_TARGET2_INTR, .cpu_int = 18 },
++  { .peripheral_int = RSA_INTR, .cpu_int = 19 },
++  { .peripheral_int = AES_INTR, .cpu_int = 20 },
++  { .peripheral_int = SHA_INTR, .cpu_int = 21 },
++  { .peripheral_int = MSPI_FLASH_INTR, .cpu_int = 22 },
++  { .peripheral_int = ASSIST_DEBUG_INTR, .cpu_int = 23 }
++};
++#elif defined(LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H)
++/*
++ * The H2 has no Wi-Fi, so every radio source belongs to the Bluetooth
++ * controller, the IEEE 802.15.4 MAC or the coexistence front end between them.
++ * Those get channels of their own rather than sharing the software interrupt
++ * channel, which the BLE controller would otherwise dominate.
++ * Channels 3, 4 and 7 belong to the CPU's CLINT, not the peripheral matrix.
++ * Share level-triggered GPSPI/I2S with DMA and LEDC/eFuse with ADC instead.
++ * Channel 6 is usable here: IDF reserves it only by software convention.
++ */
++static peripheral_irq_map_t irq_mappings[] = {
++  { .peripheral_int = UHCI0_INTR, .cpu_int = 1 },
++  { .peripheral_int = SW_INTR_0, .cpu_int = 1 },
++  { .peripheral_int = SW_INTR_1, .cpu_int = 1 },
++  { .peripheral_int = SW_INTR_2, .cpu_int = 1 },
++  { .peripheral_int = SW_INTR_3, .cpu_int = 1 },
++  { .peripheral_int = GPIO_PROCPU_INTR, .cpu_int = 2 },
++  { .peripheral_int = GPSPI2_INTR_2, .cpu_int = 20 },
++  { .peripheral_int = I2S_INTR, .cpu_int = 21 },
++  { .peripheral_int = UART0_INTR, .cpu_int = 5 },
++  { .peripheral_int = UART1_INTR, .cpu_int = 6 },
++  { .peripheral_int = LEDC_INTR, .cpu_int = 19 },
++  { .peripheral_int = EFUSE_INTR, .cpu_int = 19 },
++  { .peripheral_int = TWAI0_INTR, .cpu_int = 8 },
++  { .peripheral_int = USB_SERIAL_JTAG_INTR, .cpu_int = 9 },
++  { .peripheral_int = LP_RTC_TIMER_INTR, .cpu_int = 10 },
++  { .peripheral_int = LP_WDT_INTR, .cpu_int = 10 },
++  { .peripheral_int = RMT_INTR, .cpu_int = 11 },
++  { .peripheral_int = I2C_EXT0_INTR, .cpu_int = 12 },
++  { .peripheral_int = I2C_EXT1_INTR, .cpu_int = 12 },
++  { .peripheral_int = TG_T0_INTR, .cpu_int = 13 },
++  { .peripheral_int = TG_WDT_INTR, .cpu_int = 14 },
++  { .peripheral_int = TG1_T0_INTR, .cpu_int = 15 },
++  { .peripheral_int = TG1_WDT_INTR, .cpu_int = 14 },
++  { .peripheral_int = SYSTIMER_TARGET0_INTR, .cpu_int = 16 },
++  { .peripheral_int = SYSTIMER_TARGET1_INTR, .cpu_int = 17 },
++  { .peripheral_int = SYSTIMER_TARGET2_INTR, .cpu_int = 18 },
++  { .peripheral_int = APB_ADC_INTR, .cpu_int = 19 },
++  { .peripheral_int = GDMA_CH0_INTR, .cpu_int = 20 },
++  { .peripheral_int = GDMA_CH1_INTR, .cpu_int = 21 },
++  { .peripheral_int = GDMA_CH2_INTR, .cpu_int = 22 },
++  { .peripheral_int = RSA_INTR, .cpu_int = 23 },
++  { .peripheral_int = AES_INTR, .cpu_int = 24 },
++  { .peripheral_int = SHA_INTR, .cpu_int = 25 },
++  { .peripheral_int = ASSIST_DEBUG_INTR, .cpu_int = 26 },
++  { .peripheral_int = BT_MAC_INTR, .cpu_int = 27 },
++  { .peripheral_int = BT_BB_INTR, .cpu_int = 27 },
++  { .peripheral_int = BT_BB_NMI_INTR, .cpu_int = 27 },
++  { .peripheral_int = LP_BLE_TIMER_INTR, .cpu_int = 28 },
++  { .peripheral_int = BLE_TIMER_INTR, .cpu_int = 28 },
++  { .peripheral_int = COEX_INTR, .cpu_int = 29 },
++  { .peripheral_int = BLE_SEC_INTR, .cpu_int = 30 },
++  { .peripheral_int = ZB_MAC_INTR, .cpu_int = 31 }
++};
++#elif defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H)
++static peripheral_irq_map_t irq_mappings[] = {
++  { .peripheral_int = WIFI_MAC_INTR, .cpu_int = 1 },
++  { .peripheral_int = WIFI_PWR_INTR, .cpu_int = 1 },
++  { .peripheral_int = WIFI_BB_INTR, .cpu_int = 1 },
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H)
++  /* C5's controller uses BT_MAC and LP_TIMER; keep them off WiFi's channel.
++   * Channels 27..30 are unused by the existing C5/C6 table. */
++  { .peripheral_int = BT_MAC_INTR, .cpu_int = 27 },
++  { .peripheral_int = BT_BB_INTR, .cpu_int = 27 },
++  { .peripheral_int = BT_BB_NMI_INTR, .cpu_int = 27 },
++  { .peripheral_int = LP_TIMER_INTR, .cpu_int = 28 },
++  { .peripheral_int = COEX_INTR, .cpu_int = 29 },
++  { .peripheral_int = BLE_TIMER_INTR, .cpu_int = 28 },
++  { .peripheral_int = BLE_SEC_INTR, .cpu_int = 30 },
++#endif
+   { .peripheral_int = UHCI0_INTR, .cpu_int = 1 },
++  { .peripheral_int = SW_INTR_0, .cpu_int = 1 },
++  { .peripheral_int = SW_INTR_1, .cpu_int = 1 },
++  { .peripheral_int = SW_INTR_2, .cpu_int = 1 },
++  { .peripheral_int = SW_INTR_3, .cpu_int = 1 },
++  { .peripheral_int = GPIO_PROCPU_INTR, .cpu_int = 2 },
++  { .peripheral_int = GPSPI2_INTR_2, .cpu_int = 3 },
++  { .peripheral_int = I2S_INTR, .cpu_int = 4 },
++  { .peripheral_int = UART_INTR, .cpu_int = 5 },
++  { .peripheral_int = UART1_INTR, .cpu_int = 6 },
++  { .peripheral_int = LEDC_INTR, .cpu_int = 7 },
++  { .peripheral_int = EFUSE_INTR, .cpu_int = 7 },
++  { .peripheral_int = TWAI0_INTR, .cpu_int = 8 },
++  { .peripheral_int = TWAI1_INTR, .cpu_int = 8 },
++  { .peripheral_int = USB_SERIAL_JTAG_INTR, .cpu_int = 9 },
++  { .peripheral_int = LP_RTC_TIMER_INTR, .cpu_int = 10 },
++  { .peripheral_int = LP_WDT_INTR, .cpu_int = 10 },
++  { .peripheral_int = RMT_INTR, .cpu_int = 11 },
++  { .peripheral_int = I2C_EXT0_INTR, .cpu_int = 12 },
++  { .peripheral_int = I2C_MASTER_INTR, .cpu_int = 12 },
++  { .peripheral_int = TG_T0_INTR, .cpu_int = 13 },
++  { .peripheral_int = TG_WDT_INTR, .cpu_int = 14 },
++  { .peripheral_int = TG1_T0_INTR, .cpu_int = 15 },
++  { .peripheral_int = TG1_WDT_INTR, .cpu_int = 14 },
++  { .peripheral_int = SYSTIMER_TARGET0_INTR, .cpu_int = 16 },
++  { .peripheral_int = SYSTIMER_TARGET1_INTR, .cpu_int = 17 },
++  { .peripheral_int = SYSTIMER_TARGET2_INTR, .cpu_int = 18 },
++  { .peripheral_int = APB_ADC_INTR, .cpu_int = 19 },
++  { .peripheral_int = GDMA_CH0_INTR, .cpu_int = 20 },
++  { .peripheral_int = GDMA_CH1_INTR, .cpu_int = 21 },
++  { .peripheral_int = GDMA_CH2_INTR, .cpu_int = 22 },
++  { .peripheral_int = RSA_INTR, .cpu_int = 23 },
++  { .peripheral_int = AES_INTR, .cpu_int = 24 },
++  { .peripheral_int = SHA_INTR, .cpu_int = 25 },
++  { .peripheral_int = ASSIST_DEBUG_INTR, .cpu_int = 26 }
++};
++#else
++static peripheral_irq_map_t irq_mappings[] = {
++  /*
++   * WiFi, grouped onto channel 1 with the software interrupts.
++   *
++   * All 31 usable CPU channels were already assigned, and giving WiFi one of
++   * its own would mean taking it from a peripheral another application uses.
++   * Grouping is this table's established idiom -- four software interrupts
++   * already share channel 1, EFUSE shares 7 with LEDC, both watchdogs share 14
++   * -- and _RISCV_Interrupt_dispatch() resolves which source actually fired.
++   *
++   * Channel 1 is also what the WiFi libraries themselves ask for: they call
++   * the OS adapter's _set_intr with intr_num 1 for both the MAC and PWR
++   * sources.
++   *
++   * The cost is that a WiFi interrupt shares a priority with the software
++   * interrupts, and that dispatch scans the status word to identify the
++   * source.  Worth revisiting if WiFi receive latency ever matters; a dynamic
++   * mapping rather than this static table would be the real answer.
++   */
++  { .peripheral_int = WIFI_MAC_INTR, .cpu_int = 1 },
++  { .peripheral_int = WIFI_PWR_INTR, .cpu_int = 1 },
++  { .peripheral_int = WIFI_BB_INTR, .cpu_int = 1 },
++  { .peripheral_int = UHCI0_INTR, .cpu_int = 1 },
++  /*
++   * Bluetooth.  The link layer sources get a channel of their own and the
++   * baseband and MAC share a second, rather than all of them joining WiFi on
++   * channel 1.  RWBT and RWBLE are the pair a controller services to meet a
++   * connection event, so putting them behind the software interrupts would add
++   * a scan of the status word to the one path where latency is the point.
++   *
++   * Channels 6 and 22 come from UART1 and GDMA_CH2, which now share with UART0
++   * and GDMA_CH1.  All 31 usable channels were assigned before Bluetooth
++   * existed here, so a new source has to come from somewhere; grouping is what
++   * this table already does in four other places.
++   */
++  { .peripheral_int = RWBT_INTR, .cpu_int = 6 },
++  { .peripheral_int = RWBLE_INTR, .cpu_int = 6 },
++  { .peripheral_int = RWBT_NMI_INTR, .cpu_int = 6 },
++  { .peripheral_int = RWBLE_NMI_INTR, .cpu_int = 6 },
++  { .peripheral_int = BT_MAC_INTR, .cpu_int = 22 },
++  { .peripheral_int = BT_BB_INTR, .cpu_int = 22 },
++  { .peripheral_int = BT_BB_NMI_INTR, .cpu_int = 22 },
+   /* Group software interrupts on interrupt 1 */
+   { .peripheral_int = SW_INTR_0, .cpu_int = 1 },
+   { .peripheral_int = SW_INTR_1, .cpu_int = 1 },
+@@ -88,9 +310,158 @@ static peripheral_irq_map_t irq_mappings[] = {
+   { .peripheral_int = PMS_PERI_VIO_INTR, .cpu_int = 30 },
+   { .peripheral_int = PMS_PERI_VIO_SIZE_INTR, .cpu_int = 31 }
+ };
++#endif
+ 
+ /* mapping registers are indexed directly from the base address */
+ 
++#define MATRIX_REG( reg ) *( (volatile uint32_t *) ( INT_MATRIX_BASE + reg ) )
++
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++/* These parts have a CLIC, with 16 internal and 32 external interrupt IDs. */
++#if defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++#define BSP_CLIC_BASE 0x20800000U
++#define DR_REG_INTMTX_CORE1_BASE 0x500d6800U
++#define INTERRUPT_CORE0_INTR_STATUS_0_REG 0x200
++#define INTERRUPT_CORE0_INTR_STATUS_1_REG 0x204
++#define INTERRUPT_CORE0_INTR_STATUS_2_REG 0x208
++#define INTERRUPT_CORE0_INTR_STATUS_3_REG 0x20c
++#define INTERRUPT_CORE0_INTR_STATUS_4_REG 0x220
++#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#define BSP_CLIC_BASE 0x10800000U
++#define DR_REG_INTMTX_CORE1_BASE 0x20585800U
++#define INTERRUPT_CORE0_INTR_STATUS_0_REG 0x2a8
++#define INTERRUPT_CORE0_INTR_STATUS_1_REG 0x2ac
++#define INTERRUPT_CORE0_INTR_STATUS_2_REG 0x2b0
++#define INTERRUPT_CORE0_INTR_STATUS_3_REG 0x2b4
++#define INTERRUPT_CORE0_INTR_STATUS_4_REG 0x2b8
++#define INTERRUPT_CORE0_INTR_STATUS_5_REG 0x2bc
++#else
++#define BSP_CLIC_BASE 0x20800000U
++#define INTERRUPT_CORE0_INTR_STATUS_0_REG 0x150
++#define INTERRUPT_CORE0_INTR_STATUS_1_REG 0x154
++#define INTERRUPT_CORE0_INTR_STATUS_2_REG 0x158
++#endif
++#define INTPRI_REG( reg ) *( (volatile uint32_t *) ( INTPRI_BASE + ( reg ) ) )
++#define CLIC_EXTERNAL_INTERRUPT_OFFSET 16U
++#define CLIC_REG( offset ) \
++  *( (volatile uint32_t *) ( BSP_CLIC_BASE + ( offset ) ) )
++#define CLIC_INTERRUPT_REG( cpu_int ) \
++  CLIC_REG( 0x1000U + ( ( cpu_int ) + CLIC_EXTERNAL_INTERRUPT_OFFSET ) * 4U )
++
++static inline void esp32_cpu_int_enable_all( void )
++{
++  uintptr_t mtvec;
++
++  /* Three level bits; machine-mode, level-triggered, non-vectored sources. */
++#if BSP_ESP32P4_REVISION == 1
++  CLIC_REG( 0x00 ) = 3U << 1;
++#else
++  CLIC_REG( 0x00 ) = 3U;
++#endif
++  for ( uint32_t id = 0; id < 48U; ++id ) {
++    CLIC_REG( 0x1000U + id * 4U ) = 0x1fc00000U;
++  }
++  for ( uint32_t channel = 0; channel < 32U; ++channel ) {
++    CLIC_INTERRUPT_REG( channel ) = 0x3fc00100U;
++  }
++
++  /* Non-vectored CLIC interrupts enter RTEMS' existing common trap handler. */
++  __asm__ volatile (
++    ".option push\n"
++    ".option arch, +zicsr\n"
++    "csrr %0, mtvec\n"
++    ".option pop\n" : "=r" ( mtvec )
++  );
++  mtvec = ( mtvec & ~(uintptr_t) 3U ) | 3U;
++#if BSP_ESP32P4_REVISION == 1
++  /* Legacy CLIC threshold takes effect after a subsequent memory load. */
++  CLIC_REG( 0x08 ) = 0;
++  (void) CLIC_REG( 0x08 );
++#endif
++  __asm__ volatile (
++    ".option push\n"
++    ".option arch, +zicsr\n"
++#if BSP_ESP32P4_REVISION != 1
++    "csrw 0x347, zero\n"
++#endif
++    "csrw mtvec, %0\n"
++    ".option pop\n" : : "r" ( mtvec ) : "memory"
++  );
++}
++
++static inline void esp32_cpu_int_type_level( void )
++{
++  /* Configured together with each CLIC source above. */
++}
++
++static inline void esp32_cpu_int_clear( uint8_t cpu_vector )
++{
++  /* Level interrupts deassert when the peripheral handler clears its source. */
++  (void) cpu_vector;
++}
++
++static inline void esp32_cpu_int_set_prio( uint8_t cpu_int, uint32_t prio )
++{
++  uint32_t reg = CLIC_INTERRUPT_REG( cpu_int );
++
++  CLIC_INTERRUPT_REG( cpu_int ) =
++    ( reg & 0x00ffffffU ) | ( ( ( prio << 5 ) | 0x1fU ) << 24 );
++}
++
++static inline uint32_t esp32_cpu_int_get_prio( uint8_t cpu_int )
++{
++  return CLIC_INTERRUPT_REG( cpu_int ) >> 29;
++}
++#elif defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H)
++/* ESP32-C6 Interrupt Matrix status registers */
++#define INTERRUPT_CORE0_INTR_STATUS_0_REG 0x134
++#define INTERRUPT_CORE0_INTR_STATUS_1_REG 0x138
++#define INTERRUPT_CORE0_INTR_STATUS_2_REG 0x13c
++#else
++/* ESP32-H2 Interrupt Matrix status registers, after its 65 mapping registers */
++#define INTERRUPT_CORE0_INTR_STATUS_0_REG 0x104
++#define INTERRUPT_CORE0_INTR_STATUS_1_REG 0x108
++#define INTERRUPT_CORE0_INTR_STATUS_2_REG 0x10c
++#endif
++
++#define INTPRI_REG( reg ) *( (volatile uint32_t *) ( INTPRI_BASE + ( reg ) ) )
++#define INTPRI_CPU_REG( reg ) *( (volatile uint32_t *) ( 0x20001000U + ( reg ) ) )
++
++static inline void esp32_cpu_int_enable_all( void )
++{
++  INTPRI_CPU_REG( 0x00 ) = 0xffffffffU;
++  /*
++   * The CPU side of the PLIC is the machine interrupt enable CSR: bit n
++   * gates channel n.  ESP-IDF's ROM esprv_intc_int_enable() raises the
++   * matching mie bits alongside the PLIC enable; programming only the PLIC
++   * leaves every channel asserted in EIP status and never delivered to the
++   * core, so no interrupt handler ever runs.
++   */
++  set_csr( mie, 0xffffffffU );
++}
++
++static inline void esp32_cpu_int_type_level( void )
++{
++  INTPRI_CPU_REG( 0x04 ) = 0x0U;
++}
++
++static inline void esp32_cpu_int_clear( uint8_t cpu_vector )
++{
++  INTPRI_CPU_REG( 0x08 ) = 1U << cpu_vector;
++  INTPRI_CPU_REG( 0x08 ) = 0U;
++}
++
++static inline void esp32_cpu_int_set_prio( uint8_t cpu_int, uint32_t prio )
++{
++  INTPRI_CPU_REG( 0x10 + cpu_int * 4 ) = prio;
++}
++
++static inline uint32_t esp32_cpu_int_get_prio( uint8_t cpu_int )
++{
++  return INTPRI_CPU_REG( 0x10 + cpu_int * 4 );
++}
++#else
+ /* Bits here correspond directly to peripheral interrupt numbers */
+ /* low 32 bits */
+ #define INTERRUPT_CORE0_INTR_STATUS_0_REG 0xf8
+@@ -103,23 +474,51 @@ static peripheral_irq_map_t irq_mappings[] = {
+ #define INTERRUPT_CORE0_CPU_INT_CLEAR_REG      0x10c
+ #define INTERRUPT_CORE0_CPU_INT_EIP_STATUS_REG 0x110
+ 
+-/* base register for interrupt priorities + N*4 for N in [1,31]*/
+-#define INTERRUPT_CORE0_CPU_INT_PRI_n_REG 0x118
++/* Priority registers are indexed from CPU channel zero. */
++#define INTERRUPT_CORE0_CPU_INT_PRI_0_REG 0x114
+ 
+ #define INTERRUPT_CORE0_CPU_INT_THRESH_REG 0x194
+ 
+-#define MATRIX_REG( reg ) *( (volatile uint32_t *) ( INT_MATRIX_BASE + reg ) )
++static inline void esp32_cpu_int_enable_all( void )
++{
++  MATRIX_REG( INTERRUPT_CORE0_CPU_INT_ENABLE_REG ) = 0xffffffffU;
++}
+ 
+-static uint64_t get_int_status( void )
++static inline void esp32_cpu_int_type_level( void )
+ {
+-  uint64_t total_set = MATRIX_REG( INTERRUPT_CORE0_INTR_STATUS_1_REG );
++  MATRIX_REG( INTERRUPT_CORE0_CPU_INT_TYPE_REG ) = 0x0U;
++}
+ 
+-  total_set <<= 32;
+-  total_set |= MATRIX_REG( INTERRUPT_CORE0_INTR_STATUS_0_REG );
++static inline void esp32_cpu_int_clear( uint8_t cpu_vector )
++{
++  MATRIX_REG( INTERRUPT_CORE0_CPU_INT_CLEAR_REG ) = 1U << cpu_vector;
++  MATRIX_REG( INTERRUPT_CORE0_CPU_INT_CLEAR_REG ) = 0U;
++}
+ 
+-  return total_set;
++static inline void esp32_cpu_int_set_prio( uint8_t cpu_int, uint32_t prio )
++{
++  MATRIX_REG( INTERRUPT_CORE0_CPU_INT_PRI_0_REG + cpu_int * sizeof( uint32_t ) ) = prio;
+ }
+ 
++static inline uint32_t esp32_cpu_int_get_prio( uint8_t cpu_int )
++{
++  return MATRIX_REG( INTERRUPT_CORE0_CPU_INT_PRI_0_REG + cpu_int * sizeof( uint32_t ) );
++}
++#endif
++
++/*
++ * Returned by get_active_interrupt() when no mapped source is asserting.
++ *
++ * It cannot be 0.  ETS_WIFI_MAC_INTR_SOURCE is peripheral source 0 on this
++ * part, so 0 is a legitimate vector here and using it as "none" makes the
++ * WiFi MAC interrupt indistinguishable from no interrupt at all -- which is
++ * exactly what it did, and why the radio could never receive.
++ *
++ * RISCV_MAXIMUM_EXTERNAL_INTERRUPTS is one past the last valid vector, so it
++ * can never collide with a real one.
++ */
++#define NO_ACTIVE_VECTOR ( (rtems_vector_number) RISCV_MAXIMUM_EXTERNAL_INTERRUPTS )
++
+ static uint8_t int_periph_to_cpu( rtems_vector_number vector )
+ {
+   size_t map_count = RTEMS_ARRAY_SIZE( irq_mappings );
+@@ -133,18 +532,80 @@ static uint8_t int_periph_to_cpu( rtems_vector_number vector )
+   return 0;
+ }
+ 
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#define BSP_INTR_STATUS_WORDS 6
++#elif defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++#if BSP_ESP32P4_REVISION == 1
++#define BSP_INTR_STATUS_WORDS 4
++#else
++#define BSP_INTR_STATUS_WORDS 5
++#endif
++#elif defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H)
++#define BSP_INTR_STATUS_WORDS 3
++#else
++#define BSP_INTR_STATUS_WORDS 2
++#endif
++
++static uint32_t get_int_status( size_t word )
++{
++#if defined(RTEMS_SMP) && (defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H))
++  uintptr_t matrix_base = ( _CPU_SMP_Get_current_processor() != 0 ) ? DR_REG_INTMTX_CORE1_BASE : INT_MATRIX_BASE;
++#else
++  uintptr_t matrix_base = INT_MATRIX_BASE;
++#endif
++  switch ( word ) {
++    case 0:
++      return *( (volatile uint32_t *) ( matrix_base + INTERRUPT_CORE0_INTR_STATUS_0_REG ) );
++    case 1:
++      return *( (volatile uint32_t *) ( matrix_base + INTERRUPT_CORE0_INTR_STATUS_1_REG ) );
++#if BSP_INTR_STATUS_WORDS > 2
++    case 2:
++      return *( (volatile uint32_t *) ( matrix_base + INTERRUPT_CORE0_INTR_STATUS_2_REG ) );
++#endif
++#if BSP_INTR_STATUS_WORDS > 3
++    case 3:
++      return *( (volatile uint32_t *) ( matrix_base + INTERRUPT_CORE0_INTR_STATUS_3_REG ) );
++#endif
++#if BSP_INTR_STATUS_WORDS > 4
++    case 4:
++      return *( (volatile uint32_t *) ( matrix_base + INTERRUPT_CORE0_INTR_STATUS_4_REG ) );
++#endif
++#if BSP_INTR_STATUS_WORDS > 5
++    case 5:
++      return *( (volatile uint32_t *) ( matrix_base + INTERRUPT_CORE0_INTR_STATUS_5_REG ) );
++#endif
++    default:
++      return 0;
++  }
++}
++
+ static rtems_vector_number get_active_interrupt( uint8_t cpu_vector )
+ {
+-  uint64_t total_set = get_int_status();
++  for ( size_t i = 0; i < RTEMS_ARRAY_SIZE( irq_mappings ); i++ ) {
++    if ( irq_mappings[ i ].cpu_int == cpu_vector ) {
++      rtems_vector_number vec = irq_mappings[ i ].peripheral_int;
++      size_t word = (size_t) ( vec / 32U );
++
++      if ( word < BSP_INTR_STATUS_WORDS ) {
++        if ( ( get_int_status( word ) & ( 1U << ( vec % 32U ) ) ) != 0 ) {
++          return vec;
++        }
++      }
++    }
++  }
+ 
+-  for ( rtems_vector_number i = 0; i < sizeof( uint64_t ) * 8; i++ ) {
+-    if ( ( total_set & 0x1 ) != 0 && int_periph_to_cpu( i ) == cpu_vector ) {
+-      return i;
++  /*
++   * Fallback for emulators (e.g. esp-emulator) that assert CPU interrupt lines
++   * without populating the optional INTR_STATUS_0/1 hardware registers:
++   * map directly from the asserted CPU vector to the configured peripheral source.
++   */
++  for ( size_t i = 0; i < RTEMS_ARRAY_SIZE( irq_mappings ); i++ ) {
++    if ( irq_mappings[ i ].cpu_int == cpu_vector ) {
++      return irq_mappings[ i ].peripheral_int;
+     }
+-    total_set >>= 1;
+   }
+ 
+-  return 0;
++  return NO_ACTIVE_VECTOR;
+ }
+ 
+ static uintptr_t periph_int_to_map_reg( rtems_vector_number vector )
+@@ -152,17 +613,80 @@ static uintptr_t periph_int_to_map_reg( rtems_vector_number vector )
+   return vector * sizeof( uint32_t );
+ }
+ 
+-static uintptr_t cpu_int_to_prio_reg( uint8_t cpu_int )
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++/* Unwind CLIC priority before RTEMS may switch threads and enable interrupts.
++ * Nested interrupts must use only the trap handler's final mret. */
++static inline void esp32_clic_restore_active_level(
++  uintptr_t cause,
++  const Per_CPU_Control *cpu_self
++)
+ {
+-  return INTERRUPT_CORE0_CPU_INT_PRI_n_REG + cpu_int * sizeof( uint32_t );
++  if ( cpu_self->isr_nest_level != 1 ) {
++    return;
++  }
++
++  uintptr_t tmp;
++  uintptr_t status;
++
++  __asm__ volatile (
++    ".option push\n"
++    ".option arch, +zicsr\n"
++    "csrr %1, mstatus\n"
++    "csrw mcause, %2\n"
++    "li %0, ~0x88\n"
++    "and %0, %1, %0\n"
++    "li %1, 0x1800\n"
++    "or %0, %0, %1\n"
++    "csrw mstatus, %0\n"
++    "la %0, 1f\n"
++    "csrw mepc, %0\n"
++    "mret\n"
++    "1:\n"
++    ".option pop\n"
++    : "=&r" ( tmp ), "=&r" ( status )
++    : "r" ( cause )
++    : "memory"
++  );
+ }
++#endif
+ 
+ void _RISCV_Interrupt_dispatch( uintptr_t mcause, Per_CPU_Control *cpu_self )
+ {
+   (void) cpu_self;
+ 
+   rtems_vector_number active;
+-  uint8_t             cpu_vector = mcause & 0x1f;
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++  uint32_t interrupt_id = mcause & 0xfffU;
++
++  if ( interrupt_id < CLIC_EXTERNAL_INTERRUPT_OFFSET || interrupt_id >= 48U ) {
++    return;
++  }
++  uint8_t cpu_vector = interrupt_id - CLIC_EXTERNAL_INTERRUPT_OFFSET;
++#else
++  uint8_t cpu_vector = mcause & 0x1f;
++#endif
++
++#if defined(RTEMS_SMP) && (defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H))
++  if ( cpu_vector == 31U ) {
++    uint32_t cpu_index = _Per_CPU_Get_index( cpu_self );
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++    if ( cpu_index == 0 ) {
++      *( (volatile uint32_t *) 0x20586010U ) = 0U;
++    } else {
++      *( (volatile uint32_t *) 0x20586014U ) = 0U;
++    }
++#elif defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++    if ( cpu_index == 0 ) {
++      *( (volatile uint32_t *) 0x500E5010U ) = 0U;
++    } else {
++      *( (volatile uint32_t *) 0x500E5014U ) = 0U;
++    }
++#endif
++    _SMP_Inter_processor_interrupt_handler( cpu_self );
++    esp32_clic_restore_active_level( mcause, cpu_self );
++    return;
++  }
++#endif
+ 
+   /*
+    * All interrupts on the ESP32-C3 are external except for exceptions which
+@@ -172,12 +696,29 @@ void _RISCV_Interrupt_dispatch( uintptr_t mcause, Per_CPU_Control *cpu_self )
+   /* Check this CPU vector to see which peripheral has an active interrupt */
+   active = get_active_interrupt( cpu_vector );
+ 
++  /*
++   * A spurious interrupt on this channel, or one whose source has been
++   * unmapped between asserting and being dispatched.  Returning is the only
++   * safe response: dispatching NO_ACTIVE_VECTOR would index off the end of the
++   * handler table.
++   */
++  if ( active == NO_ACTIVE_VECTOR ) {
++    esp32_cpu_int_clear( cpu_vector );
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++    esp32_clic_restore_active_level( mcause, cpu_self );
++#endif
++    return;
++  }
++
+   bsp_interrupt_assert( bsp_interrupt_is_valid_vector( active ) );
+ 
+   bsp_interrupt_handler_dispatch_unchecked( active );
+ 
+   /* mark interrupt serviced in matrix */
+   bsp_interrupt_clear( active );
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++  esp32_clic_restore_active_level( mcause, cpu_self );
++#endif
+ }
+ 
+ void bsp_interrupt_facility_initialize( void )
+@@ -189,35 +730,37 @@ void bsp_interrupt_facility_initialize( void )
+   uint32_t cookie = riscv_interrupt_disable();
+ 
+   /* Enable all cpu-side interrupts */
+-  MATRIX_REG( INTERRUPT_CORE0_CPU_INT_ENABLE_REG ) = 0xffffffffU;
++  esp32_cpu_int_enable_all();
+   /* Set everything to level interrupts */
+-  MATRIX_REG( INTERRUPT_CORE0_CPU_INT_TYPE_REG ) = 0x0U;
++  esp32_cpu_int_type_level();
+   /*
+-   * Start at interrupt 1, interrupt 0 is invalid but included in the external
+-   * interrupt count
++   * From 0, because source 0 is the WiFi MAC.  The CPU-side channel 0 is the
++   * reserved one, and nothing here indexes channels by vector.
+    */
+-  for ( uint8_t vec = 1; vec < RISCV_MAXIMUM_EXTERNAL_INTERRUPTS; vec++ ) {
++  for ( uint8_t vec = 0; vec < RISCV_MAXIMUM_EXTERNAL_INTERRUPTS; vec++ ) {
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++    bsp_interrupt_set_priority( vec, 6 );
++#else
+     bsp_interrupt_set_priority( vec, 14 );
++#endif
+   }
+ 
+   _RISCV_MMIO_store_release_fence();
+   riscv_interrupt_enable( cookie );
+ 
+-  /*
+-   * Clear all mappings. Start at interrupt 1, interrupt 0 is invalid but
+-   * included in the external interrupt count
+-   */
+-  for ( uint8_t vec = 1; vec < RISCV_MAXIMUM_EXTERNAL_INTERRUPTS; vec++ ) {
++  /* Clear all mappings, source 0 included. */
++  for ( uint8_t vec = 0; vec < RISCV_MAXIMUM_EXTERNAL_INTERRUPTS; vec++ ) {
+     bsp_interrupt_vector_disable( vec );
+   }
+ }
+ 
+ bool bsp_interrupt_is_valid_vector( rtems_vector_number vector )
+ {
+-  if ( vector == 0 ) {
+-    return false;
+-  }
+-
++  /*
++   * Vector 0 IS valid.  A vector here is a peripheral interrupt source, not a
++   * CPU interrupt channel, and while channel 0 is reserved by the hardware,
++   * source 0 is the WiFi MAC.  Rejecting it made that interrupt unusable.
++   */
+   return vector < (rtems_vector_number) RISCV_MAXIMUM_EXTERNAL_INTERRUPTS;
+ }
+ 
+@@ -238,7 +781,11 @@ rtems_status_code bsp_interrupt_get_attributes(
+   attributes->can_get_affinity = false;
+   attributes->can_set_affinity = false;
+   /* priorities range from 1 to 15, but this is expected to be 0-based */
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++  attributes->maximum_priority = 6;
++#else
+   attributes->maximum_priority = 14;
++#endif
+   attributes->can_get_priority = true;
+   attributes->can_set_priority = true;
+ 
+@@ -250,31 +797,73 @@ rtems_status_code bsp_interrupt_is_pending(
+   bool               *pending
+ )
+ {
+-  uint64_t total_set;
+-  uint64_t bit = 1;
+-
+   bsp_interrupt_assert( bsp_interrupt_is_valid_vector( vector ) );
+   bsp_interrupt_assert( pending != NULL );
+ 
+-  total_set = get_int_status();
+-  bit <<= vector;
++  {
++    size_t word = (size_t) ( vector / 32U );
+ 
+-  *pending = ( total_set & bit ) != 0;
++    if ( word < BSP_INTR_STATUS_WORDS ) {
++      *pending =
++        ( get_int_status( word ) & ( 1U << ( vector % 32U ) ) ) != 0;
++    } else {
++      *pending = false;
++    }
++  }
+ 
+   return RTEMS_SUCCESSFUL;
+ }
+ 
++#if !defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) && !defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) && !defined(LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H) && !defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) && !defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
+ #define SYSTEM_CPU_INTR_FROM_CPU_0_REG 0x28
+ #define SYSTEM_CPU_INTR_FROM_CPU_1_REG 0x2C
+ #define SYSTEM_CPU_INTR_FROM_CPU_2_REG 0x30
+ #define SYSTEM_CPU_INTR_FROM_CPU_3_REG 0x34
+ 
+ #define SYSREG_REG( reg ) *( (volatile uint32_t *) ( SYSREG_BASE + reg ) )
++#endif
++
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++/* Software interrupts are raised by writing the HP_SYS trigger register of
++ * the matching CPU_INTR_FROM_CPU_n source; the matrix then routes it. */
++#define SYSREG_REG( reg ) *( (volatile uint32_t *) ( SYSREG_BASE + ( reg ) ) )
++#define HP_SYSTEM_CPU_INT_FROM_CPU_REG( n ) ( 0x10U + ( n ) * 4U )
++#endif
+ 
+ rtems_status_code bsp_interrupt_raise( rtems_vector_number vector )
+ {
+   bsp_interrupt_assert( bsp_interrupt_is_valid_vector( vector ) );
+ 
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H)
++  if ( vector >= SW_INTR_0 && vector <= SW_INTR_3 ) {
++    INTPRI_REG( 0x90U + ( vector - SW_INTR_0 ) * 4U ) = 1U;
++    return RTEMS_SUCCESSFUL;
++  }
++  return RTEMS_UNSATISFIED;
++#elif defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H)
++  switch ( vector ) {
++    case SW_INTR_0:
++      INTPRI_REG( 0x90 ) = 1;
++      break;
++    case SW_INTR_1:
++      INTPRI_REG( 0x94 ) = 1;
++      break;
++    case SW_INTR_2:
++      INTPRI_REG( 0x98 ) = 1;
++      break;
++    case SW_INTR_3:
++      INTPRI_REG( 0x9c ) = 1;
++      break;
++    default:
++      return RTEMS_UNSATISFIED;
++  }
++#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++  if ( vector >= SW_INTR_0 && vector <= SW_INTR_3 ) {
++    SYSREG_REG( HP_SYSTEM_CPU_INT_FROM_CPU_REG( vector - SW_INTR_0 ) ) = 1U;
++    return RTEMS_SUCCESSFUL;
++  }
++  return RTEMS_UNSATISFIED;
++#else
+   switch ( vector ) {
+     case SW_INTR_0:
+       SYSREG_REG( SYSTEM_CPU_INTR_FROM_CPU_0_REG ) = 1;
+@@ -291,6 +880,7 @@ rtems_status_code bsp_interrupt_raise( rtems_vector_number vector )
+     default:
+       return RTEMS_UNSATISFIED;
+   }
++#endif
+ 
+   return RTEMS_SUCCESSFUL;
+ }
+@@ -302,11 +892,35 @@ rtems_status_code bsp_interrupt_clear( rtems_vector_number vector )
+   bsp_interrupt_assert( bsp_interrupt_is_valid_vector( vector ) );
+ 
+   cpu_int = int_periph_to_cpu( vector );
+-
+-  MATRIX_REG( INTERRUPT_CORE0_CPU_INT_CLEAR_REG ) = 1U << cpu_int;
+-  MATRIX_REG( INTERRUPT_CORE0_CPU_INT_CLEAR_REG ) = 0U;
++  esp32_cpu_int_clear( cpu_int );
+ 
+   /* If this is a software interrupt, clear it. */
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H)
++  if ( vector >= SW_INTR_0 && vector <= SW_INTR_3 ) {
++    INTPRI_REG( 0x90U + ( vector - SW_INTR_0 ) * 4U ) = 0U;
++  }
++#elif defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H)
++  switch ( vector ) {
++    case SW_INTR_0:
++      INTPRI_REG( 0x90 ) = 0;
++      break;
++    case SW_INTR_1:
++      INTPRI_REG( 0x94 ) = 0;
++      break;
++    case SW_INTR_2:
++      INTPRI_REG( 0x98 ) = 0;
++      break;
++    case SW_INTR_3:
++      INTPRI_REG( 0x9c ) = 0;
++      break;
++    default:
++      break;
++  }
++#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++  if ( vector >= SW_INTR_0 && vector <= SW_INTR_3 ) {
++    SYSREG_REG( HP_SYSTEM_CPU_INT_FROM_CPU_REG( vector - SW_INTR_0 ) ) = 0U;
++  }
++#else
+   switch ( vector ) {
+     case SW_INTR_0:
+       SYSREG_REG( SYSTEM_CPU_INTR_FROM_CPU_0_REG ) = 0;
+@@ -323,6 +937,7 @@ rtems_status_code bsp_interrupt_clear( rtems_vector_number vector )
+     default:
+       break;
+   }
++#endif
+ 
+   return RTEMS_SUCCESSFUL;
+ }
+@@ -355,7 +970,11 @@ rtems_status_code bsp_interrupt_vector_enable( rtems_vector_number vector )
+        */
+       MATRIX_REG(
+         periph_int_to_map_reg( vector )
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++      ) = irq_mappings[ i ].cpu_int + CLIC_EXTERNAL_INTERRUPT_OFFSET;
++#else
+       ) = irq_mappings[ i ].cpu_int;
++#endif
+       return RTEMS_SUCCESSFUL;
+     }
+   }
+@@ -379,14 +998,18 @@ rtems_status_code bsp_interrupt_set_priority(
+ {
+   uint8_t cpu_int;
+ 
++#if defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++  if ( priority > 6U ) {
++    return RTEMS_INVALID_PRIORITY;
++  }
++#endif
+   /* adjust priority to the range the matrix uses */
+   priority += 1;
+ 
+   bsp_interrupt_assert( bsp_interrupt_is_valid_vector( vector ) );
+ 
+   cpu_int = int_periph_to_cpu( vector );
+-
+-  MATRIX_REG( cpu_int_to_prio_reg( cpu_int ) ) = priority;
++  esp32_cpu_int_set_prio( cpu_int, priority );
+ 
+   return RTEMS_SUCCESSFUL;
+ }
+@@ -402,7 +1025,7 @@ rtems_status_code bsp_interrupt_get_priority(
+   bsp_interrupt_assert( priority != NULL );
+ 
+   cpu_int = int_periph_to_cpu( vector );
+-  *priority = MATRIX_REG( cpu_int_to_prio_reg( cpu_int ) );
++  *priority = esp32_cpu_int_get_prio( cpu_int );
+ 
+   /* adjust priority to the range RTEMS uses */
+   *priority -= 1;

@@ -1,0 +1,719 @@
+From 976a249a71cd02a832e215cffb09055b2f92a885 Mon Sep 17 00:00:00 2001
+From: Samuel Price <thesamprice@gmail.com>
+Date: Wed, 28 Oct 2026 17:54:11 +0100
+Subject: [PATCH 5/9] Add the ESP32 UART driver
+
+Provide the UART driver with shared pad ownership and chip-specific
+clock, reset and signal routing.
+
+Consolidates legacy kernel patches: 0005, 0006, 0017, 0035, 0037.
+
+Co-authored-by: Peter Madsen-Mygdal <petermm@gmail.com>
+Signed-off-by: Samuel Price <thesamprice@gmail.com>
+Assisted-by: Claude Opus 5 (1M context) <noreply@anthropic.com>
+Signed-off-by: Peter Madsen-Mygdal <petermm@gmail.com>
+---
+ bsps/riscv/esp32/console/uart_c3.c  | 591 ++++++++++++++++++++++++++++
+ bsps/riscv/esp32/include/bsp/uart.h |  95 +++++
+ 2 files changed, 686 insertions(+)
+ create mode 100644 bsps/riscv/esp32/console/uart_c3.c
+ create mode 100644 bsps/riscv/esp32/include/bsp/uart.h
+
+diff --git a/bsps/riscv/esp32/console/uart_c3.c b/bsps/riscv/esp32/console/uart_c3.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..1760fa598a5b1abc293e7be453d2893020faf022
+--- /dev/null
++++ b/bsps/riscv/esp32/console/uart_c3.c
+@@ -0,0 +1,591 @@
++/* SPDX-License-Identifier: BSD-2-Clause */
++
++/**
++ * @file
++ *
++ * @ingroup RTEMSBSPsRISCVESP32
++ *
++ * @brief ESP32-C3 UART driver.
++ */
++
++/*
++ * Copyright (C) 2026 Samuel Price <thesamprice@gmail.com>
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ */
++
++/*
++ * A termios device for the general-purpose UARTs, which is a different thing
++ * from the console in console-config.c.  That one drives UART0 through the
++ * boot ROM's routines and exists so that printk() works before anything is
++ * initialised; it is not a device an application can open and configure.
++ *
++ * This one is: it registers /dev/ttyS<n>, so a program reaches a serial port
++ * with open(), read(), write() and tcsetattr() and nothing else.
++ *
++ * Interrupt driven, and it has to be.  A polled termios driver only reaches
++ * the hardware from inside read(), so nothing fills termios' input buffer in
++ * the background and FIONREAD always answers zero.  That is fine for a program
++ * that just calls read(), and useless to one that asks "is there anything?"
++ * first -- which is what every serial protocol implementation does, ESPHome's
++ * included.  Written polled first and changed after watching exactly that
++ * happen.
++ */
++
++#include <bsp.h>
++#include <bsp/irq.h>
++#include <bsp/pin.h>
++#include <bsp/uart.h>
++
++#include <rtems/termiostypes.h>
++#include <rtems/bspIo.h>
++
++#define UART_REG( ctx, off ) \
++  ( *( (volatile uint32_t *) ( (ctx)->regs + (off) ) ) )
++
++#define UART_FIFO      0x0000
++#define UART_INT_RAW   0x0004
++#define UART_INT_ST    0x0008
++#define UART_INT_ENA   0x000c
++#define UART_INT_CLR   0x0010
++#define UART_MEM_CONF  0x0060
++#define UART_CLKDIV    0x0014
++#define UART_STATUS    0x001c
++#define UART_CONF0     0x0020
++#define UART_CONF1     0x0024
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H)
++#define UART_CLK_CONF  0x0088
++#else
++#define UART_CLK_CONF  0x0078
++#endif
++
++#define UART_STATUS_RXFIFO_CNT_SHIFT 0
++#define UART_STATUS_RXFIFO_CNT_MASK  ( 0x3ffU << UART_STATUS_RXFIFO_CNT_SHIFT )
++#define UART_STATUS_TXFIFO_CNT_SHIFT 16
++#define UART_STATUS_TXFIFO_CNT_MASK  ( 0x3ffU << UART_STATUS_TXFIFO_CNT_SHIFT )
++
++#define UART_CONF0_PARITY      ( 1U << 0 )
++#define UART_CONF0_PARITY_EN   ( 1U << 1 )
++#define UART_CONF0_BIT_NUM_SHIFT 2
++#define UART_CONF0_BIT_NUM_MASK  ( 0x3U << UART_CONF0_BIT_NUM_SHIFT )
++#define UART_CONF0_STOP_BIT_NUM_SHIFT 4
++#define UART_CONF0_STOP_BIT_NUM_MASK  ( 0x3U << UART_CONF0_STOP_BIT_NUM_SHIFT )
++#define UART_CONF0_RXFIFO_RST  ( 1U << 17 )
++#define UART_CONF0_TXFIFO_RST  ( 1U << 18 )
++
++/* Interrupt bits, shared by INT_RAW, INT_ST, INT_ENA and INT_CLR. */
++#define UART_INT_RXFIFO_FULL   ( 1U << 0 )
++#define UART_INT_TXFIFO_EMPTY  ( 1U << 1 )
++#define UART_INT_RXFIFO_OVF    ( 1U << 4 )
++#define UART_INT_RXFIFO_TOUT   ( 1U << 8 )
++#define UART_INT_ALL           0xffffffffU
++
++/* CONF1 */
++#define UART_CONF1_RXFIFO_FULL_THRHD_SHIFT  0
++#define UART_CONF1_TXFIFO_EMPTY_THRHD_SHIFT 9
++#define UART_CONF1_RX_TOUT_EN               ( 1U << 21 )
++
++/* MEM_CONF */
++#define UART_MEM_CONF_RX_TOUT_THRHD_SHIFT 16
++
++#define UART_CLKDIV_MASK       0x000fffffU
++#define UART_CLKDIV_FRAG_SHIFT 20
++
++#define UART_CLK_CONF_SCLK_DIV_NUM_SHIFT 12
++#define UART_CLK_CONF_SCLK_SEL_SHIFT     20
++#define UART_CLK_CONF_SCLK_EN            ( 1U << 22 )
++#define UART_CLK_CONF_RST_CORE           ( 1U << 23 )
++#define UART_CLK_CONF_TX_SCLK_EN         ( 1U << 24 )
++#define UART_CLK_CONF_RX_SCLK_EN         ( 1U << 25 )
++
++/* SCLK_SEL = 1 is APB_CLK, which on this part is 80 MHz.  The newer UART
++ * (H2, S31, P4) selects its source in PCR instead; the H2's reset selection is
++ * the 32 MHz crystal, which is what the boot ROM programs the console for. */
++#define UART_SCLK_SEL_APB   1
++#if defined(LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H)
++#define UART_SCLK_HZ        32000000U
++#else
++#define UART_SCLK_HZ        80000000U
++#endif
++
++/* The hardware FIFO is 128 bytes in each direction. */
++#define UART_FIFO_LENGTH 128
++
++/*
++ * Pad routing.  UART0 needs none -- the boot ROM puts it on its IO_MUX default
++ * pads, GPIO20 and GPIO21, which is how the console works before any of this
++ * runs.  UART1 has no IO_MUX default at all, so without the routing below it
++ * transmits into nothing on a real board.  Under QEMU it works either way,
++ * because the model has no pads; this is written from the technical reference
++ * manual rather than from a passing test, and is called out here so it is not
++ * mistaken for tested.
++ */
++#if defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++#define GPIO_ENABLE_W1TS_REG  ( GPIO_BASE + 0x0024 )
++#define GPIO_FUNC_IN_SEL_REG( sig )  ( GPIO_BASE + 0x0158 + 4 * (sig) )
++#define GPIO_FUNC_OUT_SEL_REG( pin ) ( GPIO_BASE + 0x0558 + 4 * (pin) )
++#define IO_MUX_PIN_REG( n )   ( IO_MUX_BASE + 0x0004 + 4 * (n) )
++#define GPIO_FUNC_IN_SEL_ENA  ( 1U << 7 )
++#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#define GPIO_ENABLE_W1TS_REG  ( GPIO_BASE + 0x0038 )
++#define GPIO_FUNC_IN_SEL_REG( sig )  ( GPIO_BASE + 0x02f4 + 4 * (sig) )
++#define GPIO_FUNC_OUT_SEL_REG( pin ) ( GPIO_BASE + 0x0af4 + 4 * (pin) )
++#define IO_MUX_PIN_REG( n )   ( IO_MUX_BASE + 4 * (n) )
++#define GPIO_FUNC_IN_SEL_ENA  ( 1U << 9 )
++#else
++#define GPIO_ENABLE_W1TS_REG  ( GPIO_BASE + 0x0024 )
++#define GPIO_FUNC_IN_SEL_REG( sig )  ( GPIO_BASE + 0x0154 + 4 * (sig) )
++#define GPIO_FUNC_OUT_SEL_REG( pin ) ( GPIO_BASE + 0x0554 + 4 * (pin) )
++#define IO_MUX_PIN_REG( n )   ( IO_MUX_BASE + 0x0004 + 4 * (n) )
++#define GPIO_FUNC_IN_SEL_ENA  ( 1U << 6 )
++#endif
++#define IO_MUX_FUN_PU         ( 1U << 8 )
++#define IO_MUX_FUN_IE         ( 1U << 9 )
++#define IO_MUX_MCU_SEL_SHIFT  12
++#define IO_MUX_MCU_SEL_MASK   ( 0x7U << IO_MUX_MCU_SEL_SHIFT )
++#define IO_MUX_FUNC_GPIO      1
++
++/* GPIO matrix signal numbers.  The same number names the transmit signal out
++ * and the receive signal in, which is a coincidence of the map rather than a
++ * rule, so they are spelled separately. */
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++#define UART1_SIG_TX 13
++#define UART1_SIG_RX 13
++#else
++#define UART1_SIG_TX 9
++#define UART1_SIG_RX 9
++#endif
++
++/*
++ * Where UART1 goes.  There is no right answer from the chip -- UART1 has no
++ * IO_MUX default -- so these are a board decision, which is why they are here
++ * and not in a parameter: a BSP describes one board.
++ *
++ * Not much is actually free on this part.  GPIO2, 8 and 9 are strapping, 12 to
++ * 17 are the SPI flash on every module, 18 and 19 are USB, 20 and 21 are
++ * UART0, 5 and 6 are this BSP's I2C, and GPIO11 is VDD_SPI -- it powers the
++ * flash on a module and is not a general-purpose pin however much the pin
++ * count suggests otherwise.
++ */
++#define UART1_TX_PIN 7
++#define UART1_RX_PIN 10
++
++typedef struct {
++  rtems_termios_device_context base;
++  uintptr_t regs;
++  rtems_vector_number vector;
++  uint32_t baud;
++  /* How many characters the last write() handed to the hardware, which is
++   * what has to be given back to termios when the FIFO drains. */
++  size_t in_transmission;
++} esp32c3_uart_context;
++
++static esp32c3_uart_context esp32c3_uart_instances[ ESP32C3_UART_COUNT ] = {
++  {
++    .base = RTEMS_TERMIOS_DEVICE_CONTEXT_INITIALIZER( "UART 0" ),
++    .regs = UART0_BASE,
++    .vector = UART_INTR
++  },
++  {
++    .base = RTEMS_TERMIOS_DEVICE_CONTEXT_INITIALIZER( "UART 1" ),
++    .regs = UART1_BASE,
++    .vector = UART1_INTR
++  }
++};
++
++/*
++ * The divider is 20 integer bits plus 4 fractional ones in sixteenths, which
++ * is why the arithmetic is in sixteenths throughout rather than rounding the
++ * integer part and losing the remainder.  At 115200 from an 80 MHz clock the
++ * exact divider is 694.44, and dropping the fraction is a 0.06 % error -- fine
++ * on its own, and not fine once it is added to whatever the other end has.
++ */
++static void esp32c3_uart_interrupt( void *arg );
++
++static void esp32c3_uart_pad_to_gpio_function( uint32_t pin, bool input )
++{
++  volatile uint32_t *mux = (volatile uint32_t *) IO_MUX_PIN_REG( pin );
++  uint32_t value = *mux;
++
++  value &= ~IO_MUX_MCU_SEL_MASK;
++  value |= (uint32_t) IO_MUX_FUNC_GPIO << IO_MUX_MCU_SEL_SHIFT;
++  value |= IO_MUX_FUN_IE;
++
++  /* Pull the receive line up so that a disconnected input idles high, which
++   * is the line's resting state.  Left floating it picks up noise and the
++   * receiver sees framing errors rather than silence. */
++  if ( input ) {
++    value |= IO_MUX_FUN_PU;
++  }
++
++  *mux = value;
++}
++
++static const char esp32c3_uart_owner[] = "esp32c3 uart1";
++
++static bool esp32c3_uart_route_pins( unsigned port )
++{
++  /* UART0 is already on its IO_MUX default pads, put there by the boot ROM
++   * before any of this runs -- which is how the console works.  Rerouting it
++   * would cut the console off mid-line.  It is not claimed either: the ROM
++   * took those pads before this table existed, and a claim that no code can
++   * fail against would only be decoration. */
++  if ( port != 1 ) {
++    return true;
++  }
++
++  if ( !bsp_pin_claim( UART1_TX_PIN, esp32c3_uart_owner ) ) {
++    printk(
++      "esp32c3 uart1: GPIO%u belongs to %s\n",
++      UART1_TX_PIN,
++      bsp_pin_owner( UART1_TX_PIN )
++    );
++    return false;
++  }
++
++  if ( !bsp_pin_claim( UART1_RX_PIN, esp32c3_uart_owner ) ) {
++    printk(
++      "esp32c3 uart1: GPIO%u belongs to %s\n",
++      UART1_RX_PIN,
++      bsp_pin_owner( UART1_RX_PIN )
++    );
++    bsp_pin_release( UART1_TX_PIN );
++    return false;
++  }
++
++  esp32c3_uart_pad_to_gpio_function( UART1_TX_PIN, false );
++  *(volatile uint32_t *) GPIO_ENABLE_W1TS_REG = 1U << UART1_TX_PIN;
++  *(volatile uint32_t *) GPIO_FUNC_OUT_SEL_REG( UART1_TX_PIN ) = UART1_SIG_TX;
++
++  esp32c3_uart_pad_to_gpio_function( UART1_RX_PIN, true );
++  *(volatile uint32_t *) GPIO_FUNC_IN_SEL_REG( UART1_SIG_RX ) =
++    UART1_RX_PIN | GPIO_FUNC_IN_SEL_ENA;
++
++  return true;
++}
++
++static bool esp32c3_uart_set_baud( esp32c3_uart_context *ctx, uint32_t baud )
++{
++  uint32_t sixteenths;
++  uint32_t integer;
++  uint32_t frag;
++
++  if ( baud == 0 ) {
++    return false;
++  }
++
++  sixteenths = ( UART_SCLK_HZ * 16U + baud / 2U ) / baud;
++  integer = sixteenths / 16U;
++  frag = sixteenths % 16U;
++
++  if ( integer == 0 || integer > UART_CLKDIV_MASK ) {
++    return false;
++  }
++
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H)
++  /* This part has no SCLK_SEL or SCLK_EN in the UART's own clock register: the
++   * source (REF_F80M, or XTAL for the H2) and divider live in HP_SYS_CLKRST and
++   * PCR and come up correct on reset, so only the transmit and receive clock
++   * gates need asserting. */
++  UART_REG( ctx, UART_CLK_CONF ) =
++      UART_CLK_CONF_TX_SCLK_EN
++    | UART_CLK_CONF_RX_SCLK_EN;
++#else
++  UART_REG( ctx, UART_CLK_CONF ) =
++      ( (uint32_t) UART_SCLK_SEL_APB << UART_CLK_CONF_SCLK_SEL_SHIFT )
++    | ( 1U << UART_CLK_CONF_SCLK_DIV_NUM_SHIFT )
++    | UART_CLK_CONF_SCLK_EN
++    | UART_CLK_CONF_TX_SCLK_EN
++    | UART_CLK_CONF_RX_SCLK_EN;
++#endif
++
++  UART_REG( ctx, UART_CLKDIV ) =
++    integer | ( frag << UART_CLKDIV_FRAG_SHIFT );
++
++  ctx->baud = baud;
++
++  return true;
++}
++
++static bool esp32c3_uart_set_attributes(
++  rtems_termios_device_context *base,
++  const struct termios         *term
++)
++{
++  esp32c3_uart_context *ctx = (esp32c3_uart_context *) base;
++  uint32_t conf0 = UART_REG( ctx, UART_CONF0 );
++  uint32_t bits;
++  speed_t speed;
++
++  speed = cfgetospeed( term );
++
++  if ( speed != 0 && !esp32c3_uart_set_baud( ctx, (uint32_t) speed ) ) {
++    return false;
++  }
++
++  conf0 &= ~( UART_CONF0_BIT_NUM_MASK | UART_CONF0_STOP_BIT_NUM_MASK
++    | UART_CONF0_PARITY_EN | UART_CONF0_PARITY );
++
++  /* BIT_NUM counts from five, so 5, 6, 7 and 8 data bits are 0 to 3. */
++  switch ( term->c_cflag & CSIZE ) {
++    case CS5: bits = 0; break;
++    case CS6: bits = 1; break;
++    case CS7: bits = 2; break;
++    default:  bits = 3; break;
++  }
++  conf0 |= bits << UART_CONF0_BIT_NUM_SHIFT;
++
++  /* 1 stop bit is 1 and 2 stop bits are 3; 2 is one and a half. */
++  conf0 |= ( ( term->c_cflag & CSTOPB ) != 0 ? 3U : 1U )
++    << UART_CONF0_STOP_BIT_NUM_SHIFT;
++
++  if ( ( term->c_cflag & PARENB ) != 0 ) {
++    conf0 |= UART_CONF0_PARITY_EN;
++    if ( ( term->c_cflag & PARODD ) != 0 ) {
++      conf0 |= UART_CONF0_PARITY;
++    }
++  }
++
++  UART_REG( ctx, UART_CONF0 ) = conf0;
++
++  return true;
++}
++
++static bool esp32c3_uart_first_open(
++  struct rtems_termios_tty           *tty,
++  rtems_termios_device_context       *base,
++  struct termios                     *term,
++  struct rtems_libio_open_close_args *args
++)
++{
++  esp32c3_uart_context *ctx = (esp32c3_uart_context *) base;
++
++  rtems_status_code sc;
++
++  (void) args;
++
++  /* Tell termios what the port is actually set to, rather than letting the
++   * default in *term silently disagree with the divider. */
++  rtems_termios_set_initial_baud( tty, ctx->baud );
++
++  if ( !esp32c3_uart_set_attributes( base, term ) ) {
++    return false;
++  }
++
++  /*
++   * One character is enough to interrupt, and the timeout catches anything
++   * that arrives without reaching even that.  A larger threshold would trade
++   * interrupts for latency, which is the wrong trade for a port carrying a
++   * request-response protocol: the reply is short and nothing else is coming
++   * to push it over the line.
++   */
++  UART_REG( ctx, UART_CONF1 ) =
++      ( 1U << UART_CONF1_RXFIFO_FULL_THRHD_SHIFT )
++    | ( 1U << UART_CONF1_TXFIFO_EMPTY_THRHD_SHIFT )
++    | UART_CONF1_RX_TOUT_EN;
++  UART_REG( ctx, UART_MEM_CONF ) =
++    ( UART_REG( ctx, UART_MEM_CONF ) & ~( 0x3ffU << UART_MEM_CONF_RX_TOUT_THRHD_SHIFT ) )
++    | ( 10U << UART_MEM_CONF_RX_TOUT_THRHD_SHIFT );
++
++  ctx->in_transmission = 0;
++
++  sc = rtems_interrupt_handler_install(
++    ctx->vector,
++    "UART",
++    RTEMS_INTERRUPT_UNIQUE,
++    esp32c3_uart_interrupt,
++    tty
++  );
++
++  if ( sc != RTEMS_SUCCESSFUL ) {
++    return false;
++  }
++
++  UART_REG( ctx, UART_INT_CLR ) = UART_INT_ALL;
++  UART_REG( ctx, UART_INT_ENA ) =
++    UART_INT_RXFIFO_FULL | UART_INT_RXFIFO_TOUT | UART_INT_RXFIFO_OVF;
++
++  return true;
++}
++
++static uint32_t esp32c3_uart_rx_level( const esp32c3_uart_context *ctx )
++{
++  return ( UART_REG( ctx, UART_STATUS ) & UART_STATUS_RXFIFO_CNT_MASK )
++    >> UART_STATUS_RXFIFO_CNT_SHIFT;
++}
++
++static uint32_t esp32c3_uart_tx_level( const esp32c3_uart_context *ctx )
++{
++  return ( UART_REG( ctx, UART_STATUS ) & UART_STATUS_TXFIFO_CNT_MASK )
++    >> UART_STATUS_TXFIFO_CNT_SHIFT;
++}
++
++static void esp32c3_uart_interrupt( void *arg )
++{
++  rtems_termios_tty *tty = arg;
++  esp32c3_uart_context *ctx =
++    (esp32c3_uart_context *) rtems_termios_get_device_context( tty );
++  uint32_t status = UART_REG( ctx, UART_INT_ST );
++
++  /*
++   * Two reasons to have received something: the FIFO reached its threshold,
++   * or it stopped filling and the timeout expired.  The second is what
++   * delivers the tail of a message shorter than the threshold, so a driver
++   * that enables only the first stalls on every short reply.
++   */
++  if ( ( status & ( UART_INT_RXFIFO_FULL | UART_INT_RXFIFO_TOUT
++    | UART_INT_RXFIFO_OVF ) ) != 0 ) {
++    char buf[ UART_FIFO_LENGTH ];
++    unsigned n = 0;
++
++    while ( n < sizeof( buf ) && esp32c3_uart_rx_level( ctx ) > 0 ) {
++      buf[ n ] = (char) ( UART_REG( ctx, UART_FIFO ) & 0xff );
++      ++n;
++    }
++
++    UART_REG( ctx, UART_INT_CLR ) =
++      UART_INT_RXFIFO_FULL | UART_INT_RXFIFO_TOUT | UART_INT_RXFIFO_OVF;
++
++    if ( n > 0 ) {
++      rtems_termios_enqueue_raw_characters( tty, buf, (int) n );
++    }
++  }
++
++  if ( ( status & UART_INT_TXFIFO_EMPTY ) != 0 ) {
++    size_t sent = ctx->in_transmission;
++
++    /* Disable before telling termios.  dequeue_characters() calls write()
++     * again from here, and that is what turns the interrupt back on if there
++     * is more to send; leaving it enabled would re-enter for a FIFO that is
++     * legitimately empty and has nothing waiting. */
++    UART_REG( ctx, UART_INT_ENA ) &= ~UART_INT_TXFIFO_EMPTY;
++    UART_REG( ctx, UART_INT_CLR ) = UART_INT_TXFIFO_EMPTY;
++    ctx->in_transmission = 0;
++
++    if ( sent > 0 ) {
++      rtems_termios_dequeue_characters( tty, (int) sent );
++    }
++  }
++}
++
++/*
++ * Start transmitting, in the interrupt-driven sense: hand the hardware as much
++ * as it will take now and let the interrupt ask for the rest.  A length of
++ * zero means termios has nothing further, which is the signal to stop.
++ */
++static void esp32c3_uart_write_support(
++  rtems_termios_device_context *base,
++  const char                   *buf,
++  size_t                        len
++)
++{
++  esp32c3_uart_context *ctx = (esp32c3_uart_context *) base;
++  uint32_t free_space;
++  size_t out;
++
++  if ( len == 0 ) {
++    UART_REG( ctx, UART_INT_ENA ) &= ~UART_INT_TXFIFO_EMPTY;
++    ctx->in_transmission = 0;
++    return;
++  }
++
++  free_space = UART_FIFO_LENGTH - esp32c3_uart_tx_level( ctx );
++  out = len < free_space ? len : (size_t) free_space;
++
++  for ( size_t i = 0; i < out; ++i ) {
++    UART_REG( ctx, UART_FIFO ) = (uint8_t) buf[ i ];
++  }
++
++  ctx->in_transmission = out;
++
++  UART_REG( ctx, UART_INT_CLR ) = UART_INT_TXFIFO_EMPTY;
++  UART_REG( ctx, UART_INT_ENA ) |= UART_INT_TXFIFO_EMPTY;
++}
++
++static void esp32c3_uart_last_close(
++  struct rtems_termios_tty           *tty,
++  rtems_termios_device_context       *base,
++  struct rtems_libio_open_close_args *args
++)
++{
++  esp32c3_uart_context *ctx = (esp32c3_uart_context *) base;
++
++  (void) args;
++
++  UART_REG( ctx, UART_INT_ENA ) = 0;
++  UART_REG( ctx, UART_INT_CLR ) = UART_INT_ALL;
++
++  rtems_interrupt_handler_remove( ctx->vector, esp32c3_uart_interrupt, tty );
++}
++
++static const rtems_termios_device_handler esp32c3_uart_handler = {
++  .first_open = esp32c3_uart_first_open,
++  .last_close = esp32c3_uart_last_close,
++  .set_attributes = esp32c3_uart_set_attributes,
++  .write = esp32c3_uart_write_support,
++  .mode = TERMIOS_IRQ_DRIVEN
++};
++
++rtems_status_code esp32c3_uart_register(
++  const char *device_path,
++  unsigned    port,
++  uint32_t    baud
++)
++{
++  esp32c3_uart_context *ctx;
++
++  if ( port >= ESP32C3_UART_COUNT ) {
++    return RTEMS_INVALID_NUMBER;
++  }
++
++  ctx = &esp32c3_uart_instances[ port ];
++
++  /* Do not disturb the console.  UART0 is driven by console-config.c through
++   * the ROM routines, and resetting its FIFOs or reprogramming its divider
++   * from here would cut off printk() mid-line. */
++  if ( port != 0 ) {
++    if ( !esp32c3_uart_route_pins( port ) ) {
++      return RTEMS_RESOURCE_IN_USE;
++    }
++
++    UART_REG( ctx, UART_INT_ENA ) = 0;
++    UART_REG( ctx, UART_INT_CLR ) = 0xffffffffU;
++
++    UART_REG( ctx, UART_CONF0 ) |=
++      UART_CONF0_RXFIFO_RST | UART_CONF0_TXFIFO_RST;
++    UART_REG( ctx, UART_CONF0 ) &=
++      ~( UART_CONF0_RXFIFO_RST | UART_CONF0_TXFIFO_RST );
++
++    if ( !esp32c3_uart_set_baud( ctx, baud ) ) {
++      return RTEMS_INVALID_NUMBER;
++    }
++  } else {
++    ctx->baud = baud;
++  }
++
++  return rtems_termios_device_install(
++    device_path,
++    &esp32c3_uart_handler,
++    NULL,
++    &ctx->base
++  );
++}
+diff --git a/bsps/riscv/esp32/include/bsp/uart.h b/bsps/riscv/esp32/include/bsp/uart.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..b3c78fa7613c35dba3e7fecc215716df9d709cf9
+--- /dev/null
++++ b/bsps/riscv/esp32/include/bsp/uart.h
+@@ -0,0 +1,95 @@
++/* SPDX-License-Identifier: BSD-2-Clause */
++
++/**
++ * @file
++ *
++ * @ingroup RTEMSBSPsRISCVESP32
++ *
++ * @brief ESP32 UART driver interface.
++ */
++
++/*
++ * Copyright (C) 2026 Samuel Price <thesamprice@gmail.com>
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ */
++
++#ifndef LIBBSP_ESP32_BSP_UART_H
++#define LIBBSP_ESP32_BSP_UART_H
++
++#include <rtems.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/**
++ * @brief Number of general-purpose UARTs on this chip.
++ */
++#define ESP32C3_UART_COUNT 2
++
++/**
++ * @brief Registers a UART as a termios device.
++ *
++ * The port appears at @a device_path and is used with the ordinary open(),
++ * read(), write() and tcsetattr(); nothing above it needs to know what chip
++ * it is on.
++ *
++ * This is not the console.  console-config.c drives UART0 through the boot
++ * ROM's routines so that printk() works before anything is initialised, and
++ * that path is not an openable device.  Registering port 0 here is allowed and
++ * deliberately does not reprogram the port, so a console on it keeps working;
++ * @a baud is then taken as a statement of what it is already set to rather
++ * than a request to change it.
++ *
++ * @param device_path Path of the device file, for example "/dev/ttyS1".
++ * @param port UART number, 0 or 1.
++ * @param baud Bit rate.
++ *
++ * @retval RTEMS_SUCCESSFUL Successful operation.
++ * @retval RTEMS_INVALID_NUMBER @a port does not exist, or @a baud cannot be
++ *   produced from the peripheral clock.
++ * @retval RTEMS_UNSATISFIED The device file could not be created.
++ */
++rtems_status_code esp32c3_uart_register(
++  const char *device_path,
++  unsigned    port,
++  uint32_t    baud
++);
++
++/**
++ * @brief BSP-neutral names for this BSP's UART registration and how many
++ *        ports it has.
++ *
++ * RTEMS has no convention for registering a serial port that is not the
++ * console, so every BSP names the call after its own chip.  These let a
++ * portable consumer test for <bsp/uart.h> and use BSP_UART_REGISTER without
++ * naming one.  The same reasoning as <bsp/i2c.h>'s BSP_I2C_REGISTER.
++ */
++#define BSP_UART_REGISTER esp32c3_uart_register
++#define BSP_UART_PORT_COUNT ESP32C3_UART_COUNT
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* LIBBSP_ESP32_BSP_UART_H */

@@ -38,8 +38,8 @@ callbacks, six coexistence callbacks and 45 NPL callbacks. The latter includes
 The vendor configuration headers depend on FreeRTOS and an IDF include tree
 that cannot be flattened into the BSP include directory. The configuration
 structure is therefore declared in `bt/rtems_bt_c5.c`. The NPL headers in
-`bt/include/nimble/` are also installed by SDK patch 0018; keep both copies
-in sync when changing that interface.
+`bt/include/nimble/` are also installed by the SDK's C5 Bluetooth patch; keep
+both copies in sync when changing that interface.
 
 ## Resource profile
 
@@ -72,10 +72,10 @@ reduces the shared heap.
 
 The SDK prepares shared modem state once, regardless of which radio starts
 first. Bluetooth enables the MAC, BB, APB, security, BLE timer, ETM and
-coexistence clocks and the four IDF peripheral resets. RTEMS patch 0034 routes
-C5 Bluetooth, low-power timer, BLE timer/security and coexistence interrupts;
-the shared C6 interrupt table otherwise has no Bluetooth routes. Interrupt
-installation checks vector-enable failures.
+coexistence clocks and the four IDF peripheral resets. The kernel's interrupt
+routing patch routes C5 Bluetooth, low-power timer, BLE timer/security and
+coexistence interrupts; the shared C6 interrupt table otherwise has no Bluetooth
+routes. Interrupt installation checks vector-enable failures.
 
 PHY ownership keeps RF active while either radio uses it. The first active
 radio starts periodic PLL tracking on the shared timer server; the last stops

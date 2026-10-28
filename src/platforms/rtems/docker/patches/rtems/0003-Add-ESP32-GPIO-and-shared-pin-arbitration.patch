@@ -1,0 +1,666 @@
+From 3d9cc106baec06234adcb046203d652c7b68fcbc Mon Sep 17 00:00:00 2001
+From: Samuel Price <thesamprice@gmail.com>
+Date: Wed, 28 Oct 2026 17:54:10 +0100
+Subject: [PATCH 3/9] Add ESP32 GPIO and shared pin arbitration
+
+Keep pad ownership shared between BSP drivers, with chip-specific GPIO
+register layouts and pin validation.
+
+Consolidates legacy kernel patches: 0003, 0006, 0014, 0017, 0035.
+
+Co-authored-by: Peter Madsen-Mygdal <petermm@gmail.com>
+Signed-off-by: Samuel Price <thesamprice@gmail.com>
+Assisted-by: Claude Opus 5 (1M context) <noreply@anthropic.com>
+Signed-off-by: Peter Madsen-Mygdal <petermm@gmail.com>
+---
+ bsps/riscv/esp32/gpio/gpio_c3.c    | 399 +++++++++++++++++++++++++++++
+ bsps/riscv/esp32/include/bsp/pin.h | 108 ++++++++
+ bsps/riscv/esp32/pin/pin.c         | 118 +++++++++
+ 3 files changed, 625 insertions(+)
+ create mode 100644 bsps/riscv/esp32/gpio/gpio_c3.c
+ create mode 100644 bsps/riscv/esp32/include/bsp/pin.h
+ create mode 100644 bsps/riscv/esp32/pin/pin.c
+
+diff --git a/bsps/riscv/esp32/gpio/gpio_c3.c b/bsps/riscv/esp32/gpio/gpio_c3.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..ed5cb15d369704c819a607544327d67fb066f5ee
+--- /dev/null
++++ b/bsps/riscv/esp32/gpio/gpio_c3.c
+@@ -0,0 +1,399 @@
++/* SPDX-License-Identifier: BSD-2-Clause */
++
++/**
++ * @file
++ *
++ * @ingroup RTEMSBSPsRISCVESP32
++ *
++ * @brief ESP32-C3 GPIO driver.
++ */
++
++/*
++ * Copyright (C) 2026 Samuel Price <thesamprice@gmail.com>
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ */
++
++/*
++ * A pad on this part is driven through two peripherals rather than one.
++ * IO_MUX picks which of the pad's functions reaches the pin and holds the
++ * pull resistors and the input buffer enable; the GPIO peripheral holds the
++ * data, direction and interrupt registers.  Configuring a pin therefore
++ * always touches both, and selecting the plain GPIO function means setting
++ * IO_MUX's MCU_SEL to PIN_FUNC_GPIO *and* pointing the GPIO matrix output
++ * for that pad at SIG_GPIO_OUT_IDX, which is what makes GPIO_OUT drive it.
++ */
++
++#include <bsp.h>
++#include <bsp/gpio.h>
++#include <bsp/irq.h>
++#include <bsp/pin.h>
++
++#include <rtems/bspIo.h>
++
++#include <inttypes.h>
++
++#define GPIO_REG( off ) \
++  ( *( (volatile uint32_t *) ( GPIO_BASE + (off) ) ) )
++#define IO_MUX_REG( off ) \
++  ( *( (volatile uint32_t *) ( IO_MUX_BASE + (off) ) ) )
++
++#define GPIO_OUT          0x0004
++#define GPIO_OUT_W1TS     0x0008
++#define GPIO_OUT_W1TC     0x000c
++#if defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++#define GPIO_ENABLE       0x0020
++#define GPIO_ENABLE_W1TS  0x0024
++#define GPIO_ENABLE_W1TC  0x0028
++#define GPIO_IN           0x003c
++#define GPIO_STATUS       0x0044
++#define GPIO_STATUS_W1TC  0x004c
++#define GPIO_PIN( n )     ( 0x0074 + 4 * (n) )
++#define GPIO_FUNC_OUT_SEL_CFG( n ) ( 0x0558 + 4 * (n) )
++#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#define GPIO_ENABLE       0x0034
++#define GPIO_ENABLE_W1TS  0x0038
++#define GPIO_ENABLE_W1TC  0x003c
++#define GPIO_IN           0x0064
++#define GPIO_STATUS       0x0074
++#define GPIO_STATUS_W1TC  0x007c
++#define GPIO_PIN( n )     ( 0x00f4 + 4 * (n) )
++#define GPIO_FUNC_OUT_SEL_CFG( n ) ( 0x0af4 + 4 * (n) )
++#else
++#define GPIO_ENABLE       0x0020
++#define GPIO_ENABLE_W1TS  0x0024
++#define GPIO_ENABLE_W1TC  0x0028
++#define GPIO_IN           0x003c
++#define GPIO_STATUS       0x0044
++#define GPIO_STATUS_W1TC  0x004c
++#define GPIO_PIN( n )     ( 0x0074 + 4 * (n) )
++#define GPIO_FUNC_OUT_SEL_CFG( n ) ( 0x0554 + 4 * (n) )
++#endif
++
++#define GPIO_PIN_INT_TYPE_SHIFT  7
++#define GPIO_PIN_INT_TYPE_MASK   ( 0x7U << GPIO_PIN_INT_TYPE_SHIFT )
++#define GPIO_PIN_INT_ENA_SHIFT   13
++#define GPIO_PIN_INT_ENA_MASK    ( 0x1fU << GPIO_PIN_INT_ENA_SHIFT )
++#define GPIO_PIN_INT_ENA_CPU     ( 0x1U << GPIO_PIN_INT_ENA_SHIFT )
++
++/* INT_TYPE encoding, from the chip's technical reference manual. */
++#define GPIO_INT_TYPE_DISABLE     0
++#define GPIO_INT_TYPE_POSEDGE     1
++#define GPIO_INT_TYPE_NEGEDGE     2
++#define GPIO_INT_TYPE_ANYEDGE     3
++#define GPIO_INT_TYPE_LOW_LEVEL   4
++#define GPIO_INT_TYPE_HIGH_LEVEL  5
++
++/* IO_MUX pad configuration register for GPIOn, and its fields. The S31 gives
++ * each pad a named register laid out one per word from the IO_MUX base; the
++ * older parts leave a reserved word at the base, hence the differing bias. */
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#define IO_MUX_PIN( n )   ( 4 * (n) )
++#else
++#define IO_MUX_PIN( n )   ( 0x0004 + 4 * (n) )
++#endif
++#define IO_MUX_FUN_PD     ( 1U << 7 )
++#define IO_MUX_FUN_PU     ( 1U << 8 )
++#define IO_MUX_FUN_IE     ( 1U << 9 )
++#define IO_MUX_MCU_SEL_SHIFT 12
++#define IO_MUX_MCU_SEL_MASK  ( 0x7U << IO_MUX_MCU_SEL_SHIFT )
++
++/* IO_MUX function number that routes a pad to the GPIO peripheral, and the
++ * GPIO matrix signal that means "driven by GPIO_OUT". */
++#define IO_MUX_FUNC_GPIO  1
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++#define SIG_GPIO_OUT_IDX  256
++#else
++#define SIG_GPIO_OUT_IDX  128
++#endif
++
++static const char esp32c3_gpio_owner[] = "esp32c3 gpio";
++
++static bool esp32c3_gpio_select_gpio_function( uint32_t pin )
++{
++  uint32_t mux;
++
++  /* The shared layer's rtems_gpio_request_pin() already stops two GPIO users
++   * colliding.  What it cannot see is a pad taken by I2C or UART1, which
++   * never go through it -- so the claim is taken here as well, and this is
++   * the only place that catches a cross-driver collision.
++   *
++   * It is never given back.  rtems_gpio_release_pin() does its bookkeeping
++   * in the shared layer and there is no rtems_gpio_bsp_release() for it to
++   * call, so a pad the GPIO driver has configured stays claimed for the life
++   * of the application.  Re-requesting it as GPIO still works, because a
++   * re-claim by the same owner succeeds; what is refused is I2C or UART1
++   * taking a pad that GPIO used earlier and has since released.  That is a
++   * false refusal, and it is the safe direction to be wrong in -- the other
++   * way round is the silent collision this exists to stop. */
++  if ( !bsp_pin_claim( pin, esp32c3_gpio_owner ) ) {
++    printk(
++      "esp32c3 gpio: GPIO%" PRIu32 " belongs to %s\n",
++      pin,
++      bsp_pin_owner( pin )
++    );
++    return false;
++  }
++
++  mux = IO_MUX_REG( IO_MUX_PIN( pin ) );
++
++  mux &= ~IO_MUX_MCU_SEL_MASK;
++  mux |= (uint32_t) IO_MUX_FUNC_GPIO << IO_MUX_MCU_SEL_SHIFT;
++
++  /* Leave the input buffer on for outputs too.  It costs nothing and it is
++   * what lets a driver read back the level it is driving, which is the only
++   * way an output can be tested without external wiring. */
++  mux |= IO_MUX_FUN_IE;
++
++  IO_MUX_REG( IO_MUX_PIN( pin ) ) = mux;
++  GPIO_REG( GPIO_FUNC_OUT_SEL_CFG( pin ) ) = SIG_GPIO_OUT_IDX;
++
++  return true;
++}
++
++rtems_status_code rtems_gpio_bsp_multi_set(
++  RTEMS_UNUSED uint32_t bank,
++  uint32_t bitmask
++)
++{
++  GPIO_REG( GPIO_OUT_W1TS ) = bitmask;
++
++  return RTEMS_SUCCESSFUL;
++}
++
++rtems_status_code rtems_gpio_bsp_multi_clear(
++  RTEMS_UNUSED uint32_t bank,
++  uint32_t bitmask
++)
++{
++  GPIO_REG( GPIO_OUT_W1TC ) = bitmask;
++
++  return RTEMS_SUCCESSFUL;
++}
++
++uint32_t rtems_gpio_bsp_multi_read(
++  RTEMS_UNUSED uint32_t bank,
++  uint32_t bitmask
++)
++{
++  return GPIO_REG( GPIO_IN ) & bitmask;
++}
++
++rtems_status_code rtems_gpio_bsp_multi_select(
++  RTEMS_UNUSED rtems_gpio_multiple_pin_select *pins,
++  RTEMS_UNUSED uint32_t pin_count,
++  RTEMS_UNUSED uint32_t select_bank
++)
++{
++  return RTEMS_NOT_DEFINED;
++}
++
++rtems_status_code rtems_gpio_bsp_specific_group_operation(
++  RTEMS_UNUSED uint32_t bank,
++  RTEMS_UNUSED uint32_t *pins,
++  RTEMS_UNUSED uint32_t pin_count,
++  RTEMS_UNUSED void *arg
++)
++{
++  return RTEMS_NOT_DEFINED;
++}
++
++rtems_status_code rtems_gpio_bsp_set( RTEMS_UNUSED uint32_t bank, uint32_t pin )
++{
++  GPIO_REG( GPIO_OUT_W1TS ) = 1U << pin;
++
++  return RTEMS_SUCCESSFUL;
++}
++
++rtems_status_code rtems_gpio_bsp_clear( RTEMS_UNUSED uint32_t bank, uint32_t pin )
++{
++  GPIO_REG( GPIO_OUT_W1TC ) = 1U << pin;
++
++  return RTEMS_SUCCESSFUL;
++}
++
++uint32_t rtems_gpio_bsp_get_value( RTEMS_UNUSED uint32_t bank, uint32_t pin )
++{
++  return GPIO_REG( GPIO_IN ) & ( 1U << pin );
++}
++
++rtems_status_code rtems_gpio_bsp_select_input(
++  RTEMS_UNUSED uint32_t bank,
++  uint32_t pin,
++  RTEMS_UNUSED void *bsp_specific
++)
++{
++  if ( !esp32c3_gpio_select_gpio_function( pin ) ) {
++    return RTEMS_RESOURCE_IN_USE;
++  }
++
++  GPIO_REG( GPIO_ENABLE_W1TC ) = 1U << pin;
++
++  return RTEMS_SUCCESSFUL;
++}
++
++rtems_status_code rtems_gpio_bsp_select_output(
++  RTEMS_UNUSED uint32_t bank,
++  uint32_t pin,
++  RTEMS_UNUSED void *bsp_specific
++)
++{
++  if ( !esp32c3_gpio_select_gpio_function( pin ) ) {
++    return RTEMS_RESOURCE_IN_USE;
++  }
++
++  GPIO_REG( GPIO_ENABLE_W1TS ) = 1U << pin;
++
++  return RTEMS_SUCCESSFUL;
++}
++
++/*
++ * The BSP specific function is an IO_MUX function number, so this is how a
++ * pad is handed to UART, SPI or any other peripheral that can reach it.
++ */
++rtems_status_code rtems_gpio_bsp_select_specific_io(
++  RTEMS_UNUSED uint32_t bank,
++  uint32_t pin,
++  uint32_t function,
++  RTEMS_UNUSED void *pin_data
++)
++{
++  uint32_t mux;
++
++  if ( function > ( IO_MUX_MCU_SEL_MASK >> IO_MUX_MCU_SEL_SHIFT ) ) {
++    return RTEMS_UNSATISFIED;
++  }
++
++  mux = IO_MUX_REG( IO_MUX_PIN( pin ) );
++  mux &= ~IO_MUX_MCU_SEL_MASK;
++  mux |= function << IO_MUX_MCU_SEL_SHIFT;
++  IO_MUX_REG( IO_MUX_PIN( pin ) ) = mux;
++
++  return RTEMS_SUCCESSFUL;
++}
++
++rtems_status_code rtems_gpio_bsp_set_resistor_mode(
++  RTEMS_UNUSED uint32_t bank,
++  uint32_t pin,
++  rtems_gpio_pull_mode mode
++)
++{
++  uint32_t mux = IO_MUX_REG( IO_MUX_PIN( pin ) );
++
++  mux &= ~( IO_MUX_FUN_PU | IO_MUX_FUN_PD );
++
++  switch ( mode ) {
++    case PULL_UP:
++      mux |= IO_MUX_FUN_PU;
++      break;
++    case PULL_DOWN:
++      mux |= IO_MUX_FUN_PD;
++      break;
++    case NO_PULL_RESISTOR:
++      break;
++    default:
++      return RTEMS_UNSATISFIED;
++  }
++
++  IO_MUX_REG( IO_MUX_PIN( pin ) ) = mux;
++
++  return RTEMS_SUCCESSFUL;
++}
++
++/*
++ * All 22 pads share one interrupt, so the whole status register is the event
++ * line.  Clearing it here rather than leaving it to the caller matches what
++ * the shared layer expects and is required for the edge-triggered types: an
++ * unacknowledged status bit keeps the interrupt asserted.
++ */
++uint32_t rtems_gpio_bsp_interrupt_line( RTEMS_UNUSED rtems_vector_number vector )
++{
++  uint32_t event = GPIO_REG( GPIO_STATUS );
++
++  GPIO_REG( GPIO_STATUS_W1TC ) = event;
++
++  return event;
++}
++
++rtems_vector_number rtems_gpio_bsp_get_vector( RTEMS_UNUSED uint32_t bank )
++{
++  return GPIO_PROCPU_INTR;
++}
++
++rtems_status_code rtems_gpio_bsp_enable_interrupt(
++  RTEMS_UNUSED uint32_t bank,
++  uint32_t pin,
++  rtems_gpio_interrupt interrupt
++)
++{
++  uint32_t type;
++  uint32_t reg;
++
++  switch ( interrupt ) {
++    case FALLING_EDGE:
++      type = GPIO_INT_TYPE_NEGEDGE;
++      break;
++    case RISING_EDGE:
++      type = GPIO_INT_TYPE_POSEDGE;
++      break;
++    case BOTH_EDGES:
++      type = GPIO_INT_TYPE_ANYEDGE;
++      break;
++    case LOW_LEVEL:
++      type = GPIO_INT_TYPE_LOW_LEVEL;
++      break;
++    case HIGH_LEVEL:
++      type = GPIO_INT_TYPE_HIGH_LEVEL;
++      break;
++    default:
++      /* BOTH_LEVELS has no encoding here: the pin selects one level, not
++       * both, and a pin that interrupts on either level would never stop. */
++      return RTEMS_UNSATISFIED;
++  }
++
++  reg = GPIO_REG( GPIO_PIN( pin ) );
++  reg &= ~( GPIO_PIN_INT_TYPE_MASK | GPIO_PIN_INT_ENA_MASK );
++  reg |= type << GPIO_PIN_INT_TYPE_SHIFT;
++  reg |= GPIO_PIN_INT_ENA_CPU;
++  GPIO_REG( GPIO_PIN( pin ) ) = reg;
++
++  return RTEMS_SUCCESSFUL;
++}
++
++rtems_status_code rtems_gpio_bsp_disable_interrupt(
++  RTEMS_UNUSED uint32_t bank,
++  uint32_t pin,
++  RTEMS_UNUSED rtems_gpio_interrupt active_interrupt
++)
++{
++  uint32_t reg = GPIO_REG( GPIO_PIN( pin ) );
++
++  reg &= ~( GPIO_PIN_INT_TYPE_MASK | GPIO_PIN_INT_ENA_MASK );
++  GPIO_REG( GPIO_PIN( pin ) ) = reg;
++
++  /* A level-triggered pin that is still at its trigger level re-asserts its
++   * status bit until the type is cleared, which has just happened; drop what
++   * it left behind so the next enable starts from no pending event. */
++  GPIO_REG( GPIO_STATUS_W1TC ) = 1U << pin;
++
++  return RTEMS_SUCCESSFUL;
++}
+diff --git a/bsps/riscv/esp32/include/bsp/pin.h b/bsps/riscv/esp32/include/bsp/pin.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..5d222101af0bd34735f257efed6f4da672c38fc1
+--- /dev/null
++++ b/bsps/riscv/esp32/include/bsp/pin.h
+@@ -0,0 +1,108 @@
++/* SPDX-License-Identifier: BSD-2-Clause */
++
++/**
++ * @file
++ *
++ * @ingroup RTEMSBSPsRISCVESP32
++ *
++ * @brief Pin ownership for the ESP32-C3.
++ */
++
++/*
++ * Copyright (C) 2026 Samuel Price <thesamprice@gmail.com>
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ */
++
++#ifndef LIBBSP_RISCV_ESP32_BSP_PIN_H
++#define LIBBSP_RISCV_ESP32_BSP_PIN_H
++
++#include <bsp.h>
++#include <stdbool.h>
++#include <stdint.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/**
++ * @brief The number of pads this part has, GPIO0 through GPIO21.
++ */
++#ifndef BSP_PIN_COUNT
++#if defined(BSP_GPIO_PIN_COUNT)
++#define BSP_PIN_COUNT BSP_GPIO_PIN_COUNT
++#else
++#define BSP_PIN_COUNT 22
++#endif
++#endif
++
++/**
++ * @brief Claims @a pin for @a owner.
++ *
++ * Every driver in this BSP that points a pad at its peripheral -- I2C, UART1
++ * and the GPIO driver all do -- claims the pad first, so that the second
++ * driver to want it is told rather than silently winning.  Two of them
++ * writing IO_MUX and the GPIO matrix for the same pad leaves whichever ran
++ * last in control, and on a board with no pads attached, which is every QEMU
++ * run, the collision produces no symptom at all.
++ *
++ * This deliberately does not go through rtems_gpio_request_pin(), which does
++ * the same bookkeeping and more.  Reaching it means linking gpio-support.c,
++ * a little over 2000 lines with a mutex per bank and an optional interrupt
++ * server task, into every application that merely has an I2C bus, on a part
++ * with 320 KiB of RAM.  This table is a bitmask and an array of pointers.
++ *
++ * @param pin The pad, 0 to BSP_PIN_COUNT - 1.
++ * @param owner A string naming the claimant, used only for diagnostics.  It
++ *   must have static storage duration; nothing copies it.
++ *
++ * @retval true The pad is now @a owner's.  Claiming a pad that @a owner
++ *   already holds succeeds and changes nothing, so a driver that configures
++ *   a pad in more than one step need not track whether it has claimed yet.
++ * @retval false @a pin is out of range, or another owner holds it.  The
++ *   caller should fail rather than carry on: the pad is not its to configure.
++ */
++bool bsp_pin_claim( uint32_t pin, const char *owner );
++
++/**
++ * @brief Releases @a pin.
++ *
++ * Does not restore the pad's configuration -- that is the caller's, since
++ * only it knows what the pad should become.  Releasing a pad nobody holds is
++ * allowed and does nothing.
++ */
++void bsp_pin_release( uint32_t pin );
++
++/**
++ * @brief The owner of @a pin, or NULL if it is free or out of range.
++ *
++ * For diagnostics.  A driver that has just been refused a pad can say who
++ * has it, which is the difference between a usable error message and
++ * "failed".
++ */
++const char *bsp_pin_owner( uint32_t pin );
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* LIBBSP_RISCV_ESP32_BSP_PIN_H */
+diff --git a/bsps/riscv/esp32/pin/pin.c b/bsps/riscv/esp32/pin/pin.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..5246144b833d25dd1d2f218c5b20ddcdd2ad6ee8
+--- /dev/null
++++ b/bsps/riscv/esp32/pin/pin.c
+@@ -0,0 +1,118 @@
++/* SPDX-License-Identifier: BSD-2-Clause */
++
++/**
++ * @file
++ *
++ * @ingroup RTEMSBSPsRISCVESP32
++ *
++ * @brief Pin ownership for the ESP32-C3.
++ */
++
++/*
++ * Copyright (C) 2026 Samuel Price <thesamprice@gmail.com>
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ */
++
++/*
++ * Two drivers configuring the same pad is not a theoretical problem here: it
++ * has happened twice.  The I2C driver routes SDA and SCL to GPIO5 and GPIO6
++ * while a GPIO test was using GPIO4 and GPIO5, and UART1 takes GPIO7 and
++ * GPIO10, which a note listing the free pads still described as free.  In
++ * both cases each driver wrote its own registers, the last writer won, and
++ * nothing reported anything.
++ *
++ * The whole table is a bitmask plus one pointer per pad, and the claim is
++ * taken under an interrupt lock rather than a mutex so that it is callable
++ * from driver initialisation, before any thread that could block exists.
++ */
++
++#include <bsp/pin.h>
++
++#include <rtems.h>
++
++RTEMS_INTERRUPT_LOCK_DEFINE( static, esp32c3_pin_lock, "ESP32C3 pin" )
++
++static uint64_t esp32c3_pin_claimed;
++
++static const char *esp32c3_pin_owners[ BSP_PIN_COUNT ];
++
++bool bsp_pin_claim( uint32_t pin, const char *owner )
++{
++  rtems_interrupt_lock_context lock_context;
++  bool claimed;
++
++  if ( pin >= BSP_PIN_COUNT ) {
++    return false;
++  }
++
++  rtems_interrupt_lock_acquire( &esp32c3_pin_lock, &lock_context );
++
++  if ( ( esp32c3_pin_claimed & ( 1ULL << pin ) ) != 0 ) {
++    /*
++     * Re-claiming a pad already held is how a driver that configures one in
++     * several steps -- select the function, then set a direction -- avoids
++     * having to remember whether it has claimed yet.  Only the same owner
++     * may do it; a different one is the collision this exists to catch.
++     */
++    claimed = esp32c3_pin_owners[ pin ] == owner;
++  } else {
++    esp32c3_pin_claimed |= 1ULL << pin;
++    esp32c3_pin_owners[ pin ] = owner;
++    claimed = true;
++  }
++
++  rtems_interrupt_lock_release( &esp32c3_pin_lock, &lock_context );
++
++  return claimed;
++}
++
++void bsp_pin_release( uint32_t pin )
++{
++  rtems_interrupt_lock_context lock_context;
++
++  if ( pin >= BSP_PIN_COUNT ) {
++    return;
++  }
++
++  rtems_interrupt_lock_acquire( &esp32c3_pin_lock, &lock_context );
++  esp32c3_pin_claimed &= ~( 1ULL << pin );
++  esp32c3_pin_owners[ pin ] = NULL;
++  rtems_interrupt_lock_release( &esp32c3_pin_lock, &lock_context );
++}
++
++const char *bsp_pin_owner( uint32_t pin )
++{
++  rtems_interrupt_lock_context lock_context;
++  const char *owner;
++
++  if ( pin >= BSP_PIN_COUNT ) {
++    return NULL;
++  }
++
++  rtems_interrupt_lock_acquire( &esp32c3_pin_lock, &lock_context );
++  owner = ( esp32c3_pin_claimed & ( 1ULL << pin ) ) != 0 ?
++    esp32c3_pin_owners[ pin ] : NULL;
++  rtems_interrupt_lock_release( &esp32c3_pin_lock, &lock_context );
++
++  return owner;
++}

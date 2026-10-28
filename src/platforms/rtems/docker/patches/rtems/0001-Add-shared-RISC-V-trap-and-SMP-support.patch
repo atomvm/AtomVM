@@ -1,0 +1,207 @@
+From 01916c65a8753d8146504d2922e3959290a7533d Mon Sep 17 00:00:00 2001
+From: Peter Madsen-Mygdal <petermm@gmail.com>
+Date: Wed, 28 Oct 2026 17:54:09 +0100
+Subject: [PATCH 1/9] Add shared RISC-V trap and SMP support
+
+Keep CLIC vector slots fixed-width and preserve nested trap state.
+Provide the shared reset and atomic prerequisites for ESP32 SMP.
+
+Consolidates legacy kernel patches: 0019, 0031, 0032, 0035, 0036.
+Signed-off-by: Peter Madsen-Mygdal <petermm@gmail.com>
+---
+ bsps/riscv/shared/start/start.S               | 57 +++++++++++++++++--
+ bsps/shared/atomics/__atomic_test_and_set.c   |  2 +
+ .../score/cpu/riscv/riscv-exception-handler.S | 21 ++++++-
+ spec/build/cpukit/optsmp.yml                  |  3 +
+ 4 files changed, 78 insertions(+), 5 deletions(-)
+
+diff --git a/bsps/riscv/shared/start/start.S b/bsps/riscv/shared/start/start.S
+index 368f7e2ab2f8e259eb96a6fc7d4014748c0c1207..ad1b1e6c68eeadf85a580d95349edd74a9c6c125 100644
+--- a/bsps/riscv/shared/start/start.S
++++ b/bsps/riscv/shared/start/start.S
+@@ -35,6 +35,10 @@
+ #include <bsp/linker-symbols.h>
+ #include <bspopts.h>
+ 
++#ifdef ESPRESSIF_CHIP_HEADER
++#include RTEMS_XSTRING( ESPRESSIF_CHIP_HEADER )
++#endif
++
+ PUBLIC(_start)
+ 
+ 	.section	.bsp_start_text, "wax", @progbits
+@@ -55,6 +59,43 @@ PUBLIC(_start)
+ TYPE_FUNC(_start)
+ SYM(_start):
+ 
++#if defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++	/* Reject the wrong ROM/SRAM ABI before selecting a stack or writing RAM. */
++	li	t0, 0x5012d04c
++	lw	t1, 0(t0)
++	srli	t2, t1, 4
++	andi	t2, t2, 3
++	srli	t1, t1, 21
++	andi	t1, t1, 4
++	or	t1, t1, t2
++	li	t2, BSP_ESP32P4_REVISION
++	beq	t1, t2, .Lp4_revision_ok
++	LADDR	t0, .Lp4_revision_error
++	li	t1, 0x500ca000
++.Lp4_revision_print:
++	lbu	t2, 0(t0)
++	beqz	t2, .Lp4_revision_halt
++.Lp4_revision_fifo:
++	lw	t3, 0x1c(t1)
++	srli	t3, t3, 16
++	andi	t3, t3, 0x3ff
++	li	t4, 128
++	bgeu	t3, t4, .Lp4_revision_fifo
++	sw	t2, 0(t1)
++	addi	t0, t0, 1
++	j	.Lp4_revision_print
++.Lp4_revision_halt:
++	j	.Lp4_revision_halt
++.Lp4_revision_error:
++#if BSP_ESP32P4_REVISION == 1
++	.asciz "ESP32-P4: this BSP requires revision 1.x\r\n"
++#else
++	.asciz "ESP32-P4: this BSP requires revision 3.x\r\n"
++#endif
++	.align	2
++.Lp4_revision_ok:
++#endif
++
+ #ifndef RISCV_USE_S_MODE
+ 	csrr	a0, mhartid
+ #endif
+@@ -118,6 +159,10 @@ SYM(_start):
+ 	call riscv_mmu_setup
+ #endif
+ 
++#ifdef BSP_START_COPY_SECTIONS
++	call	bsp_start_copy_sections
++#endif
++
+ #if defined(RTEMS_SMP)
+ 	/* Give go to secondary processors */
+ 	LADDR	t0, .Lsecondary_processor_go
+@@ -125,10 +170,6 @@ SYM(_start):
+ 	amoswap.w	zero, zero, 0(t0)
+ #endif
+ 
+-#ifdef BSP_START_COPY_SECTIONS
+-	call	bsp_start_copy_sections
+-#endif
+-
+ 	li	a0, 0
+ 	tail	boot_card
+ 
+@@ -182,6 +223,8 @@ RISCV_Start_on_processor:
+ 	li	t3, RISCV_BOOT_HARTID
+ 	sub	a0, a0, t3
+ 
++	beqz	a0, .Lboot_processor
++
+ 	/*
+ 	 * Check that this is a configured processor.  If not, then there is
+ 	 * not much that can be done since we do not have a stack available for
+@@ -190,6 +233,8 @@ RISCV_Start_on_processor:
+ 	lw	t3, _SMP_Processor_configured_maximum
+ 	bgeu	a0, t3, .Lwfi
+ 
++.Lboot_processor:
++
+ 	/* Adjust stack pointer */
+ #ifdef __riscv_mul
+ 	addi	t0, a0, 1
+@@ -240,7 +285,11 @@ RISCV_Start_on_processor:
+ 	mv	a0, t3
+ 	call	bsp_start_on_secondary_processor
+ 
++#if defined(BSP_START_COPY_SECTIONS)
++	.section	.data, "aw"
++#else
+ 	.section	.bsp_start_data, "aw"
++#endif
+ 
+ 	.type	.Lsecondary_processor_go, @object
+ 
+diff --git a/bsps/shared/atomics/__atomic_test_and_set.c b/bsps/shared/atomics/__atomic_test_and_set.c
+index 6117b4fdd2bfe8a93178429ce6b27ab01bb7f778..a55f8bde9a64a6e92c11ee1fe2e942f93ab802f6 100644
+--- a/bsps/shared/atomics/__atomic_test_and_set.c
++++ b/bsps/shared/atomics/__atomic_test_and_set.c
+@@ -45,6 +45,7 @@
+ 
+ #include <rtems.h>
+ 
++#if !defined(RTEMS_SMP)
+ bool __atomic_test_and_set( volatile void *mem, int access )
+ {
+   (void) access;
+@@ -62,3 +63,4 @@ bool __atomic_test_and_set( volatile void *mem, int access )
+ 
+   return value;
+ }
++#endif
+diff --git a/cpukit/score/cpu/riscv/riscv-exception-handler.S b/cpukit/score/cpu/riscv/riscv-exception-handler.S
+index a1fb760291543b1a187a4dd7c471efd0c40ad473..f5a253cf146dee152c2605fae0d53b239fdb7f38 100644
+--- a/cpukit/score/cpu/riscv/riscv-exception-handler.S
++++ b/cpukit/score/cpu/riscv/riscv-exception-handler.S
+@@ -60,9 +60,15 @@ PUBLIC(_RISCV_Vector_table)
+  */
+ TYPE_FUNC(_RISCV_Vector_table)
+ SYM(_RISCV_Vector_table):
+-	.rept 32
++	/* Vectored traps use BASE + 4 * cause, even with the C extension.
++	 * Cover the 16 internal and 32 external CLIC interrupt IDs (0..47).
++	 */
++	.option push
++	.option norvc
++	.rept 48
+ 	j .LRISCV_Exception_handler
+ 	.endr
++	.option pop
+ 
+ .LRISCV_Exception_handler:
+ 	addi	sp, sp, -CPU_INTERRUPT_FRAME_SIZE
+@@ -133,6 +139,11 @@ SYM(_RISCV_Vector_table):
+ 	 */
+ 	bgez	a0, .Lsynchronous_exception
+ 
++	/* CLIC mcause also holds the interrupted priority.  A nested trap or
++	 * thread dispatch may overwrite it before the final mret. */
++	addi	sp, sp, -CPU_STACK_ALIGNMENT
++	SREG	a0, 0(sp)
++
+ 	/*
+ 	 * Interrupt exception, clear MDT bit.
+ 	 * This is only necessary if the Smdbltrp extension is implemented.
+@@ -239,6 +250,14 @@ SYM(_RISCV_Vector_table):
+ 
+ .Lthread_dispatch_done:
+ 
++	LREG	a2, 0(sp)
++#ifdef RISCV_USE_S_MODE
++	csrw	scause, a2
++#else
++	csrw	mcause, a2
++#endif
++	addi	sp, sp, CPU_STACK_ALIGNMENT
++
+ 	/* Restore */
+ 	LREG	a0, RISCV_INTERRUPT_FRAME_STATUS(sp)
+ 	LREG	a1, RISCV_INTERRUPT_FRAME_EPC(sp)
+diff --git a/spec/build/cpukit/optsmp.yml b/spec/build/cpukit/optsmp.yml
+index 06714cbab86c16f9cd00eb3a8766cc90851df0aa..8505a869fa5d0eee6c2b60da9bbb2e2f3c7e3cde 100644
+--- a/spec/build/cpukit/optsmp.yml
++++ b/spec/build/cpukit/optsmp.yml
+@@ -30,6 +30,9 @@ enabled-by:
+ - riscv/beaglevfire
+ - riscv/griscv
+ - riscv/grv32imac
++- riscv/esp32s31db
++- riscv/esp32p4db
++- riscv/esp32p4v1db
+ - riscv/grv32imafdc
+ - riscv/mpfs64imafdc
+ - riscv/noel32imafd

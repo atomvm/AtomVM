@@ -173,7 +173,7 @@ recovery, deep sleep and externally stimulated GPIO wake remain unverified. Run
 execution from flash, expired timers and scheduler resumption on a board.
 Wokwi and esp-emulator cover the boot test, not physical sleep transitions.
 
-BSP patch 0040 initializes C5/C6/P4/S31 regulator ownership before selecting
+BSP startup initializes C5/C6/P4/S31 regulator ownership before selecting
 high-speed clocks. C5/C6/P4 use their chip-specific, version-qualified eFuse
 biases and fallbacks; S31 uses IDF's nominal PMU values. P4 performs the
 LDO-to-DCDC handoff and revision-specific settling sequence. S31 routes regi2c
@@ -182,21 +182,21 @@ biases (MPLL IR_CAL_EXT_CAP, BIAS DREG_1P1 and DREG_1P1_PVT); initializes the
 RTC fast/slow clocks and PMU oscillator power with settling delays; and sets
 sleep protect mode. Power-domain/memory force releases and ICG updates are
 deferred to the sleep FSM initializer, after its backing policies are configured.
-BSP patch 0030
-settles CPLL calibration with IDF's 10 us ROM delay. RTEMS deliberately maintains a
-fixed nominal voltage profile (HP/LP bias 26) with PVT disabled on S31. Rebuild the BSP
-SDK with the patch series, not just the application, to include these changes.
+S31 startup settles CPLL calibration with IDF's 10 us ROM delay. RTEMS deliberately
+maintains a fixed nominal voltage profile (HP/LP bias 26) with PVT disabled on S31.
+Rebuild the BSP SDK with the patch series, not just the application, to include
+these changes.
 
-P4 patch 0046 enables ESP-IDF's eFuse-qualified PVT voltage control for both
+P4 startup enables ESP-IDF's eFuse-qualified PVT voltage control for both
 silicon revisions, including revision-specific thresholds, calibrated HP/LP
 gaps, the PLL160 reference clock and startup settling. Sleep hands voltage
 control to PMU after switching the CPU to XTAL; wake or a rejected sleep
 restores PVT after restoring clocks and cache. Unqualified eFuse versions
 retain the calibrated PMU voltage profile, as in ESP-IDF.
 
-C6 patches 0041/0042 additionally install IDF's complete initial HP/LP PMU
-policies before releasing power-domain overrides, tune RC_FAST/RC_SLOW/RC32K,
-select RC_FAST and RC_SLOW with ROM settling delays, and publish the measured
+C6 startup additionally installs IDF's complete initial HP/LP PMU
+policies before releasing power-domain overrides, tunes RC_FAST/RC_SLOW/RC32K,
+selects RC_FAST and RC_SLOW with ROM settling delays, and publishes the measured
 RC_SLOW period. Power-on o-code uses the qualified eFuse value or IDF's legacy
 calibration sequence. PLL settling uses the ROM's 10 us delay; both CPU and AHB
 low-speed dividers are initialized before selecting XTAL, and the safe MSPI
@@ -208,11 +208,11 @@ keeps peripheral clock ownership rather than applying IDF's blanket peripheral
 clock shutdown; eFuse is explicitly kept clocked. C6 sleep preparation preserves
 the BSP's ACTIVE/MODEM policies instead of replacing them with a generic baseline.
 
-C3 patches 0043/0044 establish the same reference IDF's XTAL40, PLL480/CPU160,
+C3 startup establishes the same reference IDF's XTAL40, PLL480/CPU160,
 RC_SLOW/RC_FAST startup profile instead of relying on ROM clock/voltage state.
-They install RTC power/FSM defaults and revision-qualified eFuse awake biases,
-tune both RC oscillators and initialize their dividers, configure PLL480 before
-selecting CPU160, and publish XTAL/APB frequencies and measured RC_SLOW period.
+It installs RTC power/FSM defaults and revision-qualified eFuse awake biases,
+tunes both RC oscillators and initializes their dividers, configures PLL480 before
+selecting CPU160, and publishes XTAL/APB frequencies and measured RC_SLOW period.
 O-code calibration runs only on power-on or eFuse-CRC reset, using the qualified
 eFuse code or the legacy XTAL/PLL-off sequence with IDF's 10 ms RTC deadline.
 RTC settling uses ROM microsecond delays; nonresponsive RTC calibration stops

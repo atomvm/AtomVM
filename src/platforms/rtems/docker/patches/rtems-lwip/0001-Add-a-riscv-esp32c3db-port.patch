@@ -1,0 +1,376 @@
+From 55a5996343f5c77b36725b79ac4ba5b4a3d04dc3 Mon Sep 17 00:00:00 2001
+From: Samuel Price <thesamprice@gmail.com>
+Date: Sun, 13 Sep 2026 15:46:11 -0400
+Subject: [PATCH 1/6] Add a riscv/esp32c3db port
+
+Include the final pbuf pool and heap sizing in the initial port.
+The original descriptions below retain their historical measurements
+and validation limits; the final configuration is eight 1520-byte
+pbufs and an 8 KiB heap, as supplied by the last sizing fix.
+The last fix has no author/date headers; those are inferred from
+AtomVM commit 57de16db46a63b82c7880199ddc875870338b680.
+
+Original-patch: 0001-add-riscv-esp32c3db-port.patch
+Original-author: Samuel Price <thesamprice@gmail.com>
+Original-date: Sun, 13 Sep 2026 15:46:11 -0400
+
+Add a riscv/esp32c3db port
+
+lwIP now builds and runs on the ESP32-C3.  A test application reaches the
+tcpip thread and gets a descriptor back from socket():
+
+  *** ESP32C3 LWIP TEST ***
+  esp32c3: the stack is up but there is no interface. ...
+  start_networking returned 1 (1 expected: no driver linked)
+  socket() = 3
+
+Three files, and two of them are shaped by things this part does not have.
+
+The sizing is not tuning.  Every default in rtemslwip/include/lwipopts.h is
+#ifndef-guarded and they were chosen for parts with external DRAM: MEM_SIZE is
+2 MiB and the pbuf pool is 512 buffers of 1600 bytes, 800 KiB.  That is 2848
+KiB against a 320 KiB RAM region -- it cannot link, let alone run, and the
+ESP32-C3 has no external RAM interface to fix it with, SOC_SPIRAM_SUPPORTED
+being undefined for this part.  The values here total 70 KiB of the 218 KiB
+free once RTEMS and the WiFi libraries have taken theirs, and the linked image
+shows them: ram_heap 0x800c, memp_memory_PBUF_POOL_base 0x9780.
+
+TCP_SND_QUEUELEN has to be set alongside TCP_SND_BUF rather than left alone.
+lwIP derives it as 16 * TCP_SND_BUF / TCP_MSS, which came to 64 segments
+against MEMP_NUM_TCP_SEG of 24, and lwIP's own sanity check in core/init.c
+refuses to build rather than let the queue outrun the pool.  It is right to:
+the failure would otherwise be a transmit stall under load rather than an
+error.  That check caught a real inconsistency in the first version of this
+file.
+
+netstart.c is unlike every other BSP's because the ESP32-C3 has no Ethernet
+controller.  Its only interface is the WiFi radio, driven by Espressif's binary
+libraries -- eight closed archives and a 120-entry OS shim, which are not part
+of rtems-lwip and should not become part of it.  So start_networking() brings
+the stack up and leaves the interface to a weak esp32c3_netif_add() that the
+WiFi driver overrides.  The dependency then points the right way: rtems-lwip
+knows nothing about the WiFi port and the WiFi port knows about lwIP.  An
+application that links no driver still gets loopback, the socket API and the
+tcpip thread, plus a message saying why it has no interface -- rather than a
+link error naming a symbol it has never heard of.
+
+LWIP_NETIF_STATUS_CALLBACK is on, which rtems-lwip leaves off by default.
+esp_wifi_internal_set_sta_ip() needs it to tell the WiFi libraries the
+station's address so they can answer ARP while the CPU sleeps, and on this part
+the only interface is the one that wants it.
+
+Not proposed upstream: this is on a branch of the fork, and the numbers should
+be revisited against measured traffic rather than derived from the part, as
+they are here.
+
+Signed-off-by: Samuel Price <thesamprice@gmail.com>
+Assisted-by: Claude Opus 5 (1M context) <noreply@anthropic.com>
+
+Original-patch: 0002-esp32c3-tune-pbuf-pool-and-heap-size.patch
+Original-author: Samuel Price <thesamprice@gmail.com>
+Original-date: Wed, 16 Sep 2026 23:58:30 -0400
+
+esp32c3: Halve the pbuf pool and the lwIP heap
+
+The ESP32-C3 has no PSRAM, so the whole writable world is 272 KiB of SRAM,
+and lwIP was holding 71.5 KiB of it in two static arrays where ESP-IDF
+allocates from the heap.  That is most of the reason this port spends 88.5 KiB
+more static SRAM than a stock ESP-IDF build and has 85 KiB less heap, and the
+margin it leaves is what makes the radio fail: with 2128 bytes free the WiFi
+libraries answer ESP_ERR_NO_MEM, which surfaces as a scan that finds zero
+networks rather than as an allocation error.
+
+  PBUF_POOL_SIZE     24 -> 12     one TCP_WND is 4 segments, and the tcpip
+                                  mailbox backlog is small; 12 is about three
+                                  times what a single station needs
+  PBUF_POOL_BUFSIZE  1600 -> 1520 RTEMS_ESP_NETIF_FRAME_MAX is 1518 and the
+                                  MTU is 1500; 1600 was the generic default
+  MEM_SIZE           32K -> 16K   the only large tenant is one TCP_SND_BUF of
+                                  unacked pbufs, plus one packet each for
+                                  DHCP, DNS and mDNS
+
+MEM_LIBC_MALLOC was considered and rejected.  It would remove ram_heap
+entirely, but the thing that runs out of the *other* pool reports an empty
+scan, and merging them turns an lwIP burst into a radio that looks dead.  The
+wall between the two is what makes "which heap ran out" answerable.
+
+Measured, not predicted: memp_memory_PBUF_POOL_base 38784 -> 18432 and
+ram_heap 32780 -> 16396, and the work area of examples/wifi-net grows 135248
+-> 171984.  36736 bytes, exactly the arithmetic.
+
+WHAT IS AND IS NOT PROVEN
+
+The saving is proven.  The sizes are not proven under load, and that needs
+saying because a pool that is too small does not fail as an error -- it fails
+as a radio that goes quiet.
+
+examples/wifi-net now prints lwip_stats for the pool and the heap and asserts
+that neither ever refused an allocation.  That check is shown to have teeth:
+holding all 12 entries gives "pbuf pool 12 of 12 used, max 12, refused 136",
+rx_dropped_no_pbuf 136, and the assertion FAILs.
+
+But the run that is supposed to establish the size could not be performed
+here.  It needs a host that can flood the station, and this access point does
+not pass client-to-client traffic: 1.88 million sendto() calls to the
+station's own leased address returned EHOSTUNREACH while it held that lease.
+Against background traffic alone -- 1917 frames over 40 seconds -- the pool
+never needed more than one entry, so holding 10 of 12 also passed.  A soak on
+a network that allows it is still owed.
+
+Signed-off-by: Samuel Price <thesamprice@gmail.com>
+Assisted-by: Claude Opus 5 (1M context) <noreply@anthropic.com>
+
+Original-patch: 0006-esp32c3-leave-heap-for-network-driver.patch
+Original-author: Peter M <petermm@gmail.com>
+Original-date: Mon, 19 Oct 2026 08:14:52 +0200
+
+Leave C3 heap space for the public network driver
+
+Use the C5/S31 lwIP heap and packet pool counts so scanning and WPA can
+coexist with the network gen_server on C3.
+
+Co-authored-by: Peter M <petermm@gmail.com>
+---
+ defs/bsps/riscv/esp32c3db.json  |   8 +++
+ rtemslwip/esp32c3/lwipbspopts.h | 116 ++++++++++++++++++++++++++++++++
+ rtemslwip/esp32c3/netstart.c    |  93 +++++++++++++++++++++++++
+ 3 files changed, 217 insertions(+)
+ create mode 100644 defs/bsps/riscv/esp32c3db.json
+ create mode 100644 rtemslwip/esp32c3/lwipbspopts.h
+ create mode 100644 rtemslwip/esp32c3/netstart.c
+
+diff --git a/defs/bsps/riscv/esp32c3db.json b/defs/bsps/riscv/esp32c3db.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..a9860ece0853bb24ce735307fb332d9f23ec013f
+--- /dev/null
++++ b/defs/bsps/riscv/esp32c3db.json
+@@ -0,0 +1,8 @@
++{
++	"header-paths-to-import": [
++		"rtemslwip/esp32c3"
++	],
++	"source-files-to-import": [
++		"rtemslwip/esp32c3/netstart.c"
++	]
++}
+diff --git a/rtemslwip/esp32c3/lwipbspopts.h b/rtemslwip/esp32c3/lwipbspopts.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..b883f4c9c638ff6e76cb61ba762003fe68293e8b
+--- /dev/null
++++ b/rtemslwip/esp32c3/lwipbspopts.h
+@@ -0,0 +1,116 @@
++/*
++ * lwIP sizing for riscv/esp32c3db.
++ *
++ * Copyright (C) 2026 Samuel Price <thesamprice@gmail.com>
++ *
++ * Every default in rtemslwip/include/lwipopts.h is #ifndef-guarded, and the
++ * defaults were chosen for parts with external DRAM.  Left alone they ask for
++ * more memory than this chip has:
++ *
++ *   MEM_SIZE          2 MiB
++ *   PBUF_POOL_SIZE    512, of PBUF_POOL_BUFSIZE 1600  =  800 KiB
++ *
++ * against 384 KiB of internal SRAM, of which the BSP's RAM region is 320 KiB
++ * and about 218 KiB is free once RTEMS and the WiFi libraries have taken
++ * theirs.  That is not a tuning difference; the defaults cannot link here.
++ *
++ * The ESP32-C3 has no external RAM interface -- SOC_SPIRAM_SUPPORTED is not
++ * defined for it -- so there is no configuration in which the defaults fit.
++ * The 4 MiB of SPI flash does not help: these are all live buffers.
++ *
++ * The two largest items are sized against what they cost in .bss rather than
++ * against a guess, because on this part the whole margin is 14 KiB and a
++ * static buffer is taken from the same 272 KiB the WiFi libraries allocate
++ * from.  rtems-esphome#121 has the measurement.  Two identities are worth
++ * having in front of you before changing a number here, both confirmed
++ * against riscv-rtems7-nm on the built liblwip.a:
++ *
++ *   memp_memory_PBUF_POOL_base = PBUF_POOL_SIZE * ( sizeof( struct pbuf )
++ *                                                   + PBUF_POOL_BUFSIZE )
++ *   ram_heap                   = MEM_SIZE + 2 * sizeof( struct mem )
++ *
++ * sizeof( struct pbuf ) is 16 and sizeof( struct mem ) is 6 here; MEM_ALIGNMENT
++ * is lwIP's default of 1, so neither expression carries any rounding.
++ */
++
++#ifndef RTEMSLWIP_ESP32C3_LWIPBSPOPTS_H
++#define RTEMSLWIP_ESP32C3_LWIPBSPOPTS_H
++
++/*
++ * The receive pool.  This is the largest single item and the one that decides
++ * how many frames can be in flight before the driver starts dropping.
++ *
++ * A buffer has to hold one whole frame, because rtems_esp_netif_input() asks
++ * for pbuf_alloc( PBUF_RAW, len, PBUF_POOL ) and a len larger than this is
++ * answered with a chain rather than a refusal -- which works, and quietly
++ * costs two pool entries per frame.  RTEMS_ESP_NETIF_FRAME_MAX is 1518 and
++ * the netif's MTU is 1500, so 1520 is that frame rounded up to 16.  The 1600
++ * it replaces was never a frame size; it was the rtems-lwip default.
++ *
++ * Eight of them is 12 KiB.  What has to fit at once is a full TCP receive
++ * window -- TCP_WND below is four segments -- plus whatever is queued in the
++ * tcpip mailbox behind it, so eight is about twice the depth a single
++ * station can put in flight.  The WiFi libraries have their own RX buffers in
++ * front of this -- CONFIG_ESP_WIFI_*_RX_BUFFER_NUM in the port's sdkconfig.h
++ * -- so this pool is the second queue, not the first.
++ *
++ * A pool that is too small does not report an error.  It drops frames, and
++ * the radio goes quiet under load.  lwIP counts both ends of that for us:
++ * lwip_stats.memp[ MEMP_PBUF_POOL ]->err is the refusal count and ->max the
++ * high-water mark, and MEMP_STATS is on by default.  Check them, not the
++ * absence of a complaint, before changing this number again.
++ */
++#define PBUF_POOL_SIZE     8
++#define PBUF_POOL_BUFSIZE  1520
++
++/*
++ * Keep the same 8 KiB lwIP heap as the C5/S31 ports. The public network
++ * gen_server and WPA handshake also need space in C3's unified RTEMS heap.
++ * This still accommodates one TCP_SND_BUF plus small DHCP/DNS packets.
++ */
++#define MEM_SIZE           ( 8 * 1024 )
++
++/*
++ * The pools, scaled to a part that will hold a handful of connections rather
++ * than hundreds.  An ESPHome node is one API client, mDNS, and perhaps a
++ * couple of sensors reporting; MicroPython is whatever the script opens.
++ */
++#define MEMP_NUM_PBUF             16
++#define MEMP_NUM_FRAG_PBUF         8
++#define MEMP_NUM_NETCONN           8
++#define MEMP_NUM_TCP_PCB           8
++#define MEMP_NUM_TCP_PCB_LISTEN    4
++#define MEMP_NUM_TCP_SEG          24
++#define MEMP_NUM_UDP_PCB           6
++
++/*
++ * Four segments rather than eight in each direction: 8 * TCP_MSS is 11.6 KiB
++ * per socket per direction, which is more than this part should commit to one
++ * connection.  It costs throughput on a long fat link, which a 2.4 GHz station
++ * talking to a local access point is not.
++ */
++#define TCP_SND_BUF        ( 4 * TCP_MSS )
++#define TCP_WND            ( 4 * TCP_MSS )
++
++/*
++ * The send queue has to be set with TCP_SND_BUF, not left at its default.
++ *
++ * lwIP derives it as 16 * TCP_SND_BUF / TCP_MSS, which with the buffer above
++ * is 64 segments -- more than MEMP_NUM_TCP_SEG, and lwIP's own sanity check in
++ * core/init.c refuses to build rather than let the queue outrun the pool.  It
++ * is right to: the failure would otherwise be a transmit stall under load.
++ *
++ * 4 * TCP_SND_BUF / TCP_MSS is 16, comfortably inside the 24 segments above
++ * and still four times the two lwIP documents as the floor.
++ */
++#define TCP_SND_QUEUELEN   ( ( 4 * TCP_SND_BUF ) / TCP_MSS )
++
++/*
++ * Needed by esp_wifi_internal_set_sta_ip(), which tells the WiFi libraries the
++ * station's address so they can answer ARP while the CPU sleeps.  rtems-lwip
++ * leaves it off by default; the ESP32-C3's only interface is the one that
++ * wants it.
++ */
++#define LWIP_NETIF_STATUS_CALLBACK  1
++
++#endif /* RTEMSLWIP_ESP32C3_LWIPBSPOPTS_H */
+diff --git a/rtemslwip/esp32c3/netstart.c b/rtemslwip/esp32c3/netstart.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..9df0a73fd359e9d420dc7322ba05ed876aac3c49
+--- /dev/null
++++ b/rtemslwip/esp32c3/netstart.c
+@@ -0,0 +1,93 @@
++/*
++ * start_networking() for riscv/esp32c3db.
++ *
++ * Copyright (C) 2026 Samuel Price <thesamprice@gmail.com>
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials publish with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++ * AND ANY EXPRESS OR IMPLIED WARRANTIES ARE DISCLAIMED.
++ */
++
++/*
++ * Unlike every other BSP with a port here, the ESP32-C3 has no Ethernet
++ * controller.  Its only network interface is the WiFi radio, and that is
++ * driven by Espressif's binary libraries, which are not part of rtems-lwip and
++ * should not become part of it -- they are 8 closed archives and a 120-entry
++ * OS shim.
++ *
++ * So this file starts the stack and stops.  Adding the interface is left to a
++ * weak hook that the WiFi driver overrides, which keeps the dependency
++ * pointing the right way: rtems-lwip knows nothing about the WiFi port, and
++ * the WiFi port knows about lwIP.
++ *
++ * An application that links no driver still gets a working stack -- loopback,
++ * the socket API, the tcpip thread -- and a message saying why it has no
++ * interface, rather than a link error naming a symbol it has never heard of.
++ */
++
++#include <netstart.h>
++
++#include <lwip/netif.h>
++#include <lwip/tcpip.h>
++
++#include <rtems/bspIo.h>
++
++/*
++ * Overridden by the WiFi driver.  Returns 0 on success.
++ *
++ * Weak rather than a registration call because it has to run after
++ * start_networking_shared() and before start_networking() returns, and a
++ * registration API would mean either an ordering rule for the application to
++ * get wrong or a second entry point for it to forget.
++ */
++int __attribute__((weak)) esp32c3_netif_add(
++  struct netif  *net_interface,
++  ip_addr_t     *ipaddr,
++  ip_addr_t     *netmask,
++  ip_addr_t     *gateway,
++  unsigned char *mac_address
++)
++{
++  (void) net_interface;
++  (void) ipaddr;
++  (void) netmask;
++  (void) gateway;
++  (void) mac_address;
++
++  printk(
++    "esp32c3: the stack is up but there is no interface.  This part has no\n"
++    "esp32c3: Ethernet controller; link a WiFi driver providing\n"
++    "esp32c3: esp32c3_netif_add() to get one.\n"
++  );
++
++  return 1;
++}
++
++int start_networking(
++  struct netif  *net_interface,
++  ip_addr_t     *ipaddr,
++  ip_addr_t     *netmask,
++  ip_addr_t     *gateway,
++  unsigned char *mac_ethernet_address
++)
++{
++  if ( start_networking_shared() != RTEMS_SUCCESSFUL ) {
++    return 1;
++  }
++
++  return esp32c3_netif_add(
++    net_interface,
++    ipaddr,
++    netmask,
++    gateway,
++    mac_ethernet_address
++  );
++}

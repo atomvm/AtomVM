@@ -1,0 +1,326 @@
+From a9c8610f2b6f4962a782f15a0c34ca473507b262 Mon Sep 17 00:00:00 2001
+From: Peter M <petermm@gmail.com>
+Date: Sat, 17 Oct 2026 15:13:32 +0200
+Subject: [PATCH 4/8] rtems-esp-wifi: preserve SMP interrupt contexts and
+ shared sources
+
+Consolidated from the following downstream patches. Original rationale
+and provenance are retained below; source licensing is unchanged.
+
+Original-patch: 0004-smp-interrupt-lock-and-isr-fix.patch
+Original-author: Peter M <petermm@gmail.com>
+Original-date: 2026-10-17T15:13:32+02:00
+AtomVM-origin-commit: a1f5e64f56d00cf888870a2bc852180bdae669dc
+
+smp-interrupt-lock-and-isr-fix
+
+Original-patch: 0005-preserve-interrupt-levels-across-smp-locks.patch
+Original-author: Peter M <petermm@gmail.com>
+Original-date: 2026-10-19T08:14:52+02:00
+AtomVM-origin-commit: 57de16db46a63b82c7880199ddc875870338b680
+
+Preserve owner interrupt contexts across SMP lock contention
+
+Acquire using a local context, then save it only while owning the lock.
+Copy it back before release so the next owner cannot change the interrupt
+state being restored. Keep the opaque ESP callback return value unchanged.
+
+Original-patch: 0007-handle-shared-interrupt-sources.patch
+Original-author: Peter M <petermm@gmail.com>
+Original-date: 2026-10-19T12:50:26+02:00
+AtomVM-origin-commit: c83b8dbcbf3925c090f8e88299ac5fcdcf1e4480
+
+Route every Wi-Fi source sharing a CPU interrupt channel
+
+MAC and power interrupts use the same channel. Keeping only its last source
+leaves the power interrupt without a handler or a route on physical hardware.
+Track channels per source and apply ISR registration and masks to every source.
+---
+ src/rtems_esp_glue.c        |  18 ++---
+ src/rtems_wifi_os_adapter.c | 140 ++++++++++++++++--------------------
+ 2 files changed, 67 insertions(+), 91 deletions(-)
+
+diff --git a/src/rtems_esp_glue.c b/src/rtems_esp_glue.c
+index 42aa8d7253687c4a2ce1f864783cea747fabf97c..a58a2561a11a4f420023410c234e17a192e8bfd6 100644
+--- a/src/rtems_esp_glue.c
++++ b/src/rtems_esp_glue.c
+@@ -116,9 +116,8 @@ RTEMS_ESP_PRINTF(coex_pti_print, "wifi.coex")
+  *
+  * RTEMS' interrupt lock returns the previous level through a context object
+  * rather than as a value, and ESP-IDF's signature returns a uint32_t.  The
+- * context is kept here rather than handed out, which is sound because the
+- * calls nest rather than interleave -- libphy always exits the section it
+- * entered last, and the level it passes back is the one it was given.
++ * owner's context is kept here rather than handed out. Acquire and release
++ * through local copies so a competing CPU cannot overwrite its saved level.
+  */
+ RTEMS_INTERRUPT_LOCK_DEFINE( static, rtems_esp_phy_lock, "ESP PHY" )
+ 
+@@ -126,10 +125,9 @@ static rtems_interrupt_lock_context rtems_esp_phy_lock_context;
+ 
+ uint32_t phy_enter_critical(void)
+ {
+-  rtems_interrupt_lock_acquire(
+-    &rtems_esp_phy_lock,
+-    &rtems_esp_phy_lock_context
+-  );
++  rtems_interrupt_lock_context context;
++  rtems_interrupt_lock_acquire( &rtems_esp_phy_lock, &context );
++  rtems_esp_phy_lock_context = context;
+ 
+   /*
+    * The value is opaque to the caller: libphy passes back whatever it was
+@@ -143,10 +141,8 @@ void phy_exit_critical(uint32_t level)
+ {
+   (void) level;
+ 
+-  rtems_interrupt_lock_release(
+-    &rtems_esp_phy_lock,
+-    &rtems_esp_phy_lock_context
+-  );
++  rtems_interrupt_lock_context context = rtems_esp_phy_lock_context;
++  rtems_interrupt_lock_release( &rtems_esp_phy_lock, &context );
+ }
+ 
+ /*
+diff --git a/src/rtems_wifi_os_adapter.c b/src/rtems_wifi_os_adapter.c
+index a43a36e6f2f02a2fed4ccac9bcfdd949b5e958ee..834af526362ce577eca796776d5006d6a388e78e 100644
+--- a/src/rtems_wifi_os_adapter.c
++++ b/src/rtems_wifi_os_adapter.c
+@@ -118,17 +118,24 @@
+ /* === interrupts and spin locks ======================================== */
+ 
+ /*
+- * A "spin lock" here is an interrupt lock.  The single-core C3 has no other
+- * CPU to spin against, and what the callers actually need is mutual exclusion
+- * against their own ISR.  Allocated rather than static because the libraries
+- * create several and keep them.
++ * The ESP callbacks return an opaque uint32_t. Keep the owner's context
++ * with the lock, but acquire and release through local copies so a waiting
++ * CPU cannot overwrite the interrupt state of the current owner.
++ */
++typedef struct {
++  rtems_interrupt_lock          lock;
++  rtems_interrupt_lock_context  context;
++} rtems_wifi_int_lock;
++
++/*
++ * A "spin lock" here is an interrupt lock.
+  */
+ static void *rtems_wifi_spin_lock_create( void )
+ {
+-  rtems_interrupt_lock *lock = malloc( sizeof( *lock ) );
++  rtems_wifi_int_lock *lock = malloc( sizeof( *lock ) );
+ 
+   if ( lock != NULL ) {
+-    rtems_interrupt_lock_initialize( lock, "ESP WiFi" );
++    rtems_interrupt_lock_initialize( &lock->lock, "ESP WiFi" );
+   }
+ 
+   return lock;
+@@ -137,32 +144,21 @@ static void *rtems_wifi_spin_lock_create( void )
+ static void rtems_wifi_spin_lock_delete( void *lock )
+ {
+   if ( lock != NULL ) {
+-    rtems_interrupt_lock_destroy( (rtems_interrupt_lock *) lock );
++    rtems_interrupt_lock_destroy( &( (rtems_wifi_int_lock *) lock )->lock );
+     free( lock );
+   }
+ }
+ 
+-/*
+- * The context has to live with the lock rather than be returned, because the
+- * signature returns a uint32_t and RTEMS hands back a structure.  One context
+- * per lock is enough for the same reason it is in the PHY glue: these nest,
+- * they do not interleave.
+- */
+-typedef struct {
+-  rtems_interrupt_lock          lock;
+-  rtems_interrupt_lock_context  context;
+-} rtems_wifi_int_lock;
+-
+ static uint32_t rtems_wifi_int_disable( void *mux )
+ {
+   if ( mux == NULL ) {
+     return 0;
+   }
+ 
+-  rtems_interrupt_lock_acquire(
+-    (rtems_interrupt_lock *) mux,
+-    &( (rtems_wifi_int_lock *) mux )->context
+-  );
++  rtems_wifi_int_lock *lock = mux;
++  rtems_interrupt_lock_context context;
++  rtems_interrupt_lock_acquire( &lock->lock, &context );
++  lock->context = context;
+ 
+   return 0;
+ }
+@@ -175,21 +171,14 @@ static void rtems_wifi_int_restore( void *mux, uint32_t tmp )
+     return;
+   }
+ 
+-  rtems_interrupt_lock_release(
+-    (rtems_interrupt_lock *) mux,
+-    &( (rtems_wifi_int_lock *) mux )->context
+-  );
++  rtems_wifi_int_lock *lock = mux;
++  rtems_interrupt_lock_context context = lock->context;
++  rtems_interrupt_lock_release( &lock->lock, &context );
+ }
+ 
+ static bool rtems_wifi_is_from_isr( void )
+ {
+-  /*
+-   * The per-CPU ISR nest level, which is non-zero for the whole of an
+-   * interrupt including nested ones.  Same test components/rtems/helpers.cpp
+-   * uses in the ESPHome port, and for the same reason: it needs no argument
+-   * and is correct inside a nested handler.
+-   */
+-  return _ISR_Nest_level != 0;
++  return rtems_interrupt_is_in_progress();
+ }
+ 
+ static void rtems_wifi_task_yield_from_isr( void )
+@@ -1240,13 +1229,13 @@ static void rtems_wifi_timer_done( void *ptimer )
+  * and the channel is the BSP's business.
+  *
+  * That leaves one thing to do here: remember which source each channel was
+- * given, so that _set_isr and _ints_on -- which only ever quote the channel --
+- * can be turned back into a vector.  Hence the table.
++ * given. Several sources can share one channel and its ISR, so keep the
++ * channel per source instead of overwriting a channel's previous source.
+  */
+ #define RTEMS_WIFI_INTR_CHANNELS 32
+ 
+-static uint32_t rtems_wifi_intr_source[ RTEMS_WIFI_INTR_CHANNELS ];
+-static bool     rtems_wifi_intr_mapped[ RTEMS_WIFI_INTR_CHANNELS ];
++static uint32_t rtems_wifi_intr_channel[ BSP_INTERRUPT_VECTOR_COUNT ];
++static bool     rtems_wifi_intr_mapped[ BSP_INTERRUPT_VECTOR_COUNT ];
+ 
+ static void rtems_wifi_set_intr(
+   int32_t  cpu_no,
+@@ -1261,15 +1250,16 @@ static void rtems_wifi_set_intr(
+    * the dual-core parts. */
+   (void) cpu_no;
+ 
+-  if ( intr_num >= RTEMS_WIFI_INTR_CHANNELS ) {
+-    printk( "wifi.osi: interrupt channel %u is out of range\n",
+-            (unsigned) intr_num );
++  if ( intr_num >= RTEMS_WIFI_INTR_CHANNELS
++       || intr_source >= BSP_INTERRUPT_VECTOR_COUNT ) {
++    printk( "wifi.osi: interrupt source %u or channel %u is out of range\n",
++            (unsigned) intr_source, (unsigned) intr_num );
+ 
+     return;
+   }
+ 
+-  rtems_wifi_intr_source[ intr_num ] = intr_source;
+-  rtems_wifi_intr_mapped[ intr_num ] = true;
++  rtems_wifi_intr_channel[ intr_source ] = intr_num;
++  rtems_wifi_intr_mapped[ intr_source ] = true;
+ 
+   /*
+    * ESP-IDF's priorities rise with urgency and so do this controller's, so
+@@ -1288,10 +1278,9 @@ static void rtems_wifi_set_intr(
+ 
+ static void rtems_wifi_clear_intr( uint32_t intr_source, uint32_t intr_num )
+ {
+-  (void) intr_source;
+-
+-  if ( intr_num < RTEMS_WIFI_INTR_CHANNELS ) {
+-    rtems_wifi_intr_mapped[ intr_num ] = false;
++  if ( intr_source < BSP_INTERRUPT_VECTOR_COUNT
++       && rtems_wifi_intr_channel[ intr_source ] == intr_num ) {
++    rtems_wifi_intr_mapped[ intr_source ] = false;
+   }
+ }
+ 
+@@ -1321,40 +1310,29 @@ static void rtems_wifi_set_isr( int32_t n, void *f, void *arg )
+   rtems_status_code sc;
+   uint32_t          channel = (uint32_t) n;
+ 
+-  if ( channel >= RTEMS_WIFI_INTR_CHANNELS
+-       || !rtems_wifi_intr_mapped[ channel ] ) {
+-    printk( "wifi.osi: _set_isr on channel %u before _set_intr mapped it\n",
+-            (unsigned) channel );
+-
++  if ( channel >= RTEMS_WIFI_INTR_CHANNELS ) {
+     return;
+   }
+ 
+   rtems_wifi_intr_handler[ channel ] = (rtems_wifi_isr) f;
+   rtems_wifi_intr_arg[ channel ]     = arg;
+ 
+-  sc = rtems_interrupt_handler_install(
+-    (rtems_vector_number) rtems_wifi_intr_source[ channel ],
+-    "wifi",
+-    RTEMS_INTERRUPT_SHARED,
+-    rtems_wifi_intr_trampoline,
+-    (void *) (uintptr_t) channel
+-  );
+-
+-  if ( sc != RTEMS_SUCCESSFUL && sc != RTEMS_TOO_MANY ) {
+-    /*
+-     * Expected today for the WiFi MAC, and the reason is in the BSP rather
+-     * than here.  ETS_WIFI_MAC_INTR_SOURCE is 0, and the esp32c3db BSP treats
+-     * vector 0 as invalid -- bsp_interrupt_is_valid_vector() rejects it and
+-     * get_active_interrupt() returns 0 to mean "nothing found", so source 0
+-     * cannot be told apart from no interrupt at all.  The BSP's irq_mappings[]
+-     * has no WiFi entry either.
+-     *
+-     * Reported once per install rather than suppressed: until that is fixed no
+-     * MAC interrupt can be delivered, so nothing will ever be received, and a
+-     * silent failure here would look like a radio problem.
+-     */
+-    printk( "wifi.osi: cannot install the handler for source %u (%i)\n",
+-            (unsigned) rtems_wifi_intr_source[ channel ], (int) sc );
++  for ( uint32_t source = 0; source < BSP_INTERRUPT_VECTOR_COUNT; ++source ) {
++    if ( !rtems_wifi_intr_mapped[ source ]
++         || rtems_wifi_intr_channel[ source ] != channel ) {
++      continue;
++    }
++    sc = rtems_interrupt_handler_install(
++      (rtems_vector_number) source,
++      "wifi",
++      RTEMS_INTERRUPT_SHARED,
++      rtems_wifi_intr_trampoline,
++      (void *) (uintptr_t) channel
++    );
++    if ( sc != RTEMS_SUCCESSFUL && sc != RTEMS_TOO_MANY ) {
++      printk( "wifi.osi: cannot install the handler for source %u (%i)\n",
++              (unsigned) source, (int) sc );
++    }
+   }
+ }
+ 
+@@ -1367,10 +1345,11 @@ static void rtems_wifi_ints_on( uint32_t mask )
+ {
+   uint32_t i;
+ 
+-  for ( i = 0; i < RTEMS_WIFI_INTR_CHANNELS; ++i ) {
+-    if ( ( mask & ( 1u << i ) ) != 0 && rtems_wifi_intr_mapped[ i ] ) {
++  for ( i = 0; i < BSP_INTERRUPT_VECTOR_COUNT; ++i ) {
++    if ( rtems_wifi_intr_mapped[ i ]
++         && ( mask & ( 1u << rtems_wifi_intr_channel[ i ] ) ) != 0 ) {
+       (void) bsp_interrupt_vector_enable(
+-        (rtems_vector_number) rtems_wifi_intr_source[ i ] );
++        (rtems_vector_number) i );
+     }
+   }
+ }
+@@ -1379,10 +1358,11 @@ static void rtems_wifi_ints_off( uint32_t mask )
+ {
+   uint32_t i;
+ 
+-  for ( i = 0; i < RTEMS_WIFI_INTR_CHANNELS; ++i ) {
+-    if ( ( mask & ( 1u << i ) ) != 0 && rtems_wifi_intr_mapped[ i ] ) {
++  for ( i = 0; i < BSP_INTERRUPT_VECTOR_COUNT; ++i ) {
++    if ( rtems_wifi_intr_mapped[ i ]
++         && ( mask & ( 1u << rtems_wifi_intr_channel[ i ] ) ) != 0 ) {
+       (void) bsp_interrupt_vector_disable(
+-        (rtems_vector_number) rtems_wifi_intr_source[ i ] );
++        (rtems_vector_number) i );
+     }
+   }
+ }

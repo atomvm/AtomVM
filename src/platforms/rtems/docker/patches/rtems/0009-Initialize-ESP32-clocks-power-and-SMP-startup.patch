@@ -1,0 +1,2317 @@
+From 2b7a015a29ab193b77a64d04e4901ec25ebf3dcb Mon Sep 17 00:00:00 2001
+From: Peter Madsen-Mygdal <petermm@gmail.com>
+Date: Wed, 28 Oct 2026 17:54:13 +0100
+Subject: [PATCH 9/9] Initialize ESP32 clocks, power and SMP startup
+
+Establish direct-boot watchdog, SRAM/PMA, PLL and regulator prerequisites
+before enabling high-speed clocks or secondary CPUs. Initialize C3/C6
+RTC calibration and both P4 revisions' eFuse-qualified PVT control.
+
+The clock, voltage, RTC and PVT routines follow ESP-IDF revision
+9a97f6c54ec638111ce55cd36581b3c192f15207 for the documented RTEMS
+profile. Preserve calibration failure policy and retained-power sleep
+ownership. Register the completed driver/startup objects in the BSP.
+
+Consolidates legacy kernel patches: 0003, 0004, 0005, 0006, 0007, 0008,
+0010, 0012, 0014, 0015, 0017, 0018, 0019, 0020, 0021, 0025, 0026, 0027,
+0028, 0029, 0030, 0035, 0036, 0037, 0039, 0040, 0041, 0042, 0043, 0044,
+0045, 0046.
+
+Co-authored-by: Samuel Price <thesamprice@gmail.com>
+Assisted-by: Claude Opus 5 (1M context) <noreply@anthropic.com>
+Signed-off-by: Peter Madsen-Mygdal <petermm@gmail.com>
+---
+ bsps/riscv/esp32/start/bspc3power.h | 131 ++++
+ bsps/riscv/esp32/start/bspc3rtc.h   | 209 +++++++
+ bsps/riscv/esp32/start/bspc6pmu.h   |  99 ++++
+ bsps/riscv/esp32/start/bspc6rtc.h   | 173 ++++++
+ bsps/riscv/esp32/start/bspp4pvt.h   | 146 +++++
+ bsps/riscv/esp32/start/bspsmp.c     | 214 +++++++
+ bsps/riscv/esp32/start/bspstart.c   | 887 +++++++++++++++++++++++++++-
+ bsps/riscv/esp32/start/bspvoltage.h | 260 ++++++++
+ spec/build/bsps/riscv/esp32/obj.yml |  13 +
+ 9 files changed, 2126 insertions(+), 6 deletions(-)
+ create mode 100644 bsps/riscv/esp32/start/bspc3power.h
+ create mode 100644 bsps/riscv/esp32/start/bspc3rtc.h
+ create mode 100644 bsps/riscv/esp32/start/bspc6pmu.h
+ create mode 100644 bsps/riscv/esp32/start/bspc6rtc.h
+ create mode 100644 bsps/riscv/esp32/start/bspp4pvt.h
+ create mode 100644 bsps/riscv/esp32/start/bspsmp.c
+ create mode 100644 bsps/riscv/esp32/start/bspvoltage.h
+
+diff --git a/bsps/riscv/esp32/start/bspc3power.h b/bsps/riscv/esp32/start/bspc3power.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..4120bf51fc6759ba0a939daeb6ffff73680ddb2e
+--- /dev/null
++++ b/bsps/riscv/esp32/start/bspc3power.h
+@@ -0,0 +1,131 @@
++/*
++ * SPDX-FileCopyrightText: 2020-2026 Espressif Systems (Shanghai) CO LTD
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/*
++ * ESP32-C3 RTC_CONFIG_DEFAULT() power/voltage policy, derived from ESP-IDF
++ * 9a97f6c54ec638111ce55cd36581b3c192f15207:
++ * components/esp_hw_support/port/esp32c3/{rtc_init.c,rtc_sleep.c,
++ * include/soc/rtc.h}, components/hal/{efuse_hal.c,esp32c3/include/hal/efuse_ll.h}
++ * and components/soc/esp32c3/{include,register}/soc register definitions.
++ *
++ * Include after the C3 analog helpers. analog_read(block,address) returns
++ * the complete byte; analog_write(block,address,mask,value) preserves bits
++ * outside mask and uses an already shifted value. The caller owns analog
++ * bus clock/host setup. This routine must precede PLL/CPU clock setup.
++ *
++ * Deliberate exclusions: o-code is performed by the caller (and is disabled
++ * by RTC_CONFIG_DEFAULT itself); RTC sources, tuning and calibration belong
++ * to the clock initializer. sar_periph_ctrl_init and blanket peripheral
++ * clock shutdown are NOT imported: SAR/peripheral gates remain owned by
++ * RTEMS drivers. Cache/MMU/SPI-memory clock force handoffs below are the
++ * specific clkctl_init policy, not a peripheral clock shutdown. No sleep
++ * entry configuration or driver interrupt ownership is introduced here.
++ */
++#if defined( LIBBSP_ESP32_C3_CHIP_DEFINITIONS_H )
++
++static void bsp_c3_power_field(
++  uintptr_t base, uint32_t offset, uint32_t mask, uint32_t value
++)
++{
++  WRITE_REG( base, offset, ( READ_REG( base, offset ) & ~mask ) | value );
++}
++
++static int bsp_c3_power_signed( uint32_t value, uint32_t sign )
++{
++  /* eFuse uses sign-magnitude, including negative zero, NOT two's complement. */
++  return ( value & sign ) != 0 ? -(int) ( value & ( sign - 1 ) ) : (int) value;
++}
++
++static void bsp_c3_power_init( void )
++{
++  const uintptr_t rtc = 0x60008000u;
++  const uintptr_t efuse = 0x60008800u;
++  const uintptr_t system = 0x600c0000u;
++  uint32_t rtc_bias = 28;
++  uint32_t dig_bias = 28;
++  uint32_t sys3 = READ_REG( efuse, 0x50 );
++  uint32_t sys5 = READ_REG( efuse, 0x58 );
++  /* efuse_hal_chip_revision(): major * 100 + the complete 4-bit minor. */
++  uint32_t revision = ( ( sys5 >> 24 ) & 3u ) * 100u +
++    ( ( ( sys5 >> 23 ) & 1u ) << 3 ) + ( ( sys3 >> 18 ) & 7u );
++  uint32_t hvt = ( sys5 >> 5 ) & 31u;
++
++  /* Release modem PD/isolation BEFORE accessing BB/NRX memory controls. */
++  bsp_c3_power_field( rtc, 0x88, BSP_BIT32( 17 ), 0 );
++  bsp_c3_power_field( rtc, 0x8c, BSP_BIT32( 28 ), 0 );
++  bsp_c3_analog_write( 0x6d, 13, 0x08u, 0 ); /* XPD_DIG_REG */
++  bsp_c3_analog_write( 0x6d, 13, 0x04u, 0 ); /* XPD_RTC_REG */
++  bsp_c3_power_field( rtc, 0x34, BSP_BIT32( 26 ), 0 ); /* PVTMON */
++  /* PLL_BUF_WAIT=20, CK8M_WAIT=20. Preserve XTL_BUF_WAIT and CPU_STALL_EN. */
++  bsp_c3_power_field( rtc, 0x1c, 0xff003fc0u, ( 20u << 24 ) | ( 20u << 6 ) );
++  bsp_c3_power_field( rtc, 0x2c, 0xff00u, 2u << 8 );
++  /* RTC_INIT_CONFIG_DEFAULT: each power-up and wait counter is one. */
++  WRITE_REG( rtc, 0x24, 0x02010201u ); /* BT / WIFI */
++  WRITE_REG( rtc, 0x28, 0x02010201u ); /* DG_WRAP / CPU_TOP */
++  bsp_c3_power_field( rtc, 0x30, 0xffff0000u, 0x02010000u ); /* DG_PERI */
++
++  if ( revision >= 3 && hvt != 0 ) {
++    uint32_t sys4 = READ_REG( efuse, 0x54 );
++    int k_rtc = bsp_c3_power_signed( ( sys4 >> 7 ) & 0x7fu, 0x40u );
++    int k_dig = bsp_c3_power_signed( ( sys4 >> 14 ) & 0x7fu, 0x40u );
++    int v_rtc = bsp_c3_power_signed( ( sys4 >> 21 ) & 0xffu, 0x80u );
++    int v_dig = bsp_c3_power_signed(
++      ( ( sys5 & 31u ) << 3 ) | ( sys4 >> 29 ), 0x80u );
++    dig_bias = hvt + 4 > 31 ? 31 : hvt + 4;
++    /* Keep IDF's unsigned arithmetic (including dbias-20 wrap), rounding,
++     * >= comparison, 250 margin and saturation at 31 exactly. */
++    uint32_t target = 10860 + v_dig * 10000 / 500 +
++      ( 213 + k_dig ) * ( dig_bias - 20 );
++    for ( rtc_bias = 15; rtc_bias < 31; ++rtc_bias ) {
++      uint32_t voltage = 10800 + v_rtc * 10000 / 500 +
++        ( 215 + k_rtc ) * ( rtc_bias - 20 );
++      if ( voltage >= target - 250 ) {
++        break;
++      }
++    }
++  }
++  bsp_c3_analog_write( 0x6d, 4, 0x1fu, rtc_bias );
++  bsp_c3_analog_write( 0x6d, 6, 0x1fu, dig_bias );
++
++  /* cfg.clkctl_init: release cache/MMU and SPI-memory clock forces. */
++  bsp_c3_power_field( 0x600c4000u, 0xac, 1u, 0 );
++  bsp_c3_power_field( 0x600c4000u, 0x08, 1u, 0 );
++  bsp_c3_power_field( 0x60003000u, 0xdc, 1u, 0 );
++  bsp_c3_power_field( 0x60002000u, 0xdc, 1u, 0 );
++
++  /* cfg.pwrctl_init, xtal_fpu=bbpll_fpu=0, rtc_dboost_fpd=1. */
++  bsp_c3_power_field( rtc, 0x70, BSP_BIT32( 26 ), 0 );
++  bsp_c3_power_field( rtc, 0x00, BSP_BIT32( 13 ), 0 );
++  bsp_c3_power_field( rtc, 0x34, BSP_BIT32( 24 ), 0 );
++  bsp_c3_power_field( rtc, 0x34, BSP_BIT32( 23 ), BSP_BIT32( 23 ) );
++  bsp_c3_power_field( rtc, 0x34, BSP_BIT32( 18 ), 0 ); /* SAR I2C POR protect */
++  bsp_c3_power_field( rtc, 0x00, 0xa80u, 0 ); /* BBPLL / PLL I2C / BB I2C */
++  bsp_c3_power_field( rtc, 0x80, 0xb0000000u, BSP_BIT32( 28 ) );
++  bsp_c3_power_field( system, 0x0c, 1u, 0 ); /* LSLP_MEM_PD_MASK */
++
++  /* rtc_sleep_pu(RTC_SLEEP_PU_CONFIG_ALL(0)): only LL force-PU fields. */
++  bsp_c3_power_field( rtc, 0x88, 0x10010u, 0 );
++  bsp_c3_power_field( 0x60026000u, 0x9c, 0x15u, 0 ); /* FE DC/PBUS/AGC */
++  bsp_c3_power_field( 0x6001d000u, 0x54, 0x0au, 0 ); /* BB FFT/DC_EST */
++  bsp_c3_power_field( 0x6001cc00u, 0xd4, 0x2au, 0 ); /* NRX ROT/VIT/DEMAP */
++  bsp_c3_power_field( 0x60006000u, 0x90, BSP_BIT32( 5 ), 0 );
++  bsp_c3_power_field( 0x60005000u, 0xf0, BSP_BIT32( 10 ), 0 );
++  bsp_c3_power_field( 0x60026000u, 0xac, 0x3fu, 0 ); /* SRAM / ROM */
++
++  bsp_c3_power_field( rtc, 0x88, 0x545000u, 0 ); /* domain force PU */
++  bsp_c3_power_field( rtc, 0x8c, 0xaa800000u, 0 ); /* domain force NOISO */
++  bsp_c3_power_field( system, 0x08, BSP_BIT32( 3 ), 0 ); /* WAITI clock gate */
++  bsp_c3_power_field( rtc, 0x8c, 0x5000u, 0 ); /* PAD UNHOLD / NOISO */
++  /* IDF parks unused modem domains after their memory-force handoff. */
++  bsp_c3_power_field( rtc, 0x8c, BSP_BIT32( 28 ), BSP_BIT32( 28 ) );
++  bsp_c3_power_field( rtc, 0x88, BSP_BIT32( 17 ), BSP_BIT32( 17 ) );
++  bsp_c3_power_field( rtc, 0x8c, BSP_BIT32( 22 ), BSP_BIT32( 22 ) );
++  bsp_c3_power_field( rtc, 0x88, BSP_BIT32( 11 ), BSP_BIT32( 11 ) );
++  WRITE_REG( rtc, 0x40, 0 );
++  WRITE_REG( rtc, 0x4c, 0xffffffffu );
++  bsp_c3_analog_write( 0x61, 0, 0x04u, 0x04u ); /* IR_FORCE_XPD_CK */
++}
++
++#endif /* LIBBSP_ESP32_C3_CHIP_DEFINITIONS_H */
+diff --git a/bsps/riscv/esp32/start/bspc3rtc.h b/bsps/riscv/esp32/start/bspc3rtc.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..bceb1f6d02aa63ad64535953ae4711f20f25bbf3
+--- /dev/null
++++ b/bsps/riscv/esp32/start/bspc3rtc.h
+@@ -0,0 +1,209 @@
++/*
++ * SPDX-FileCopyrightText: 2020-2026 Espressif Systems (Shanghai) CO LTD
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/* ESP-IDF 9a97f6c54ec638111ce55cd36581b3c192f15207, C3 rtc_clk_init.c,
++ * rtc_clk.c, rtc_init.c, rtc_time.c and esp_system/port/soc/esp32c3/clk.c.
++ * Direct boot: XTAL40, PLL480/CPU160, RC_SLOW/RC_FAST, no modem retention.
++ * Keep RTEMS timer/scheduler and peripheral-driver clock ownership.
++ */
++#if defined( LIBBSP_ESP32_C3_CHIP_DEFINITIONS_H )
++
++static void bsp_c3_field( uint32_t offset, uint32_t mask, uint32_t value )
++{
++  const uintptr_t rtc = 0x60008000;
++  WRITE_REG( rtc, offset, ( READ_REG( rtc, offset ) & ~mask ) | value );
++}
++
++static void bsp_c3_delay( uint32_t us )
++{
++  ( (void (*)( uint32_t )) (uintptr_t) 0x40000050U )( us );
++}
++
++/* Use the public regi2c HAL table, not the lower-level chip accessor ABI. */
++static uint32_t bsp_c3_analog_read( uint32_t block, uint32_t address )
++{
++  return ( (uint8_t (*)( uint8_t, uint8_t, uint8_t ))
++    (uintptr_t) 0x40001954U )( block, 0, address );
++}
++
++static void bsp_c3_analog_write(
++  uint32_t block,
++  uint32_t address,
++  uint32_t mask,
++  uint32_t value
++)
++{
++  uint32_t data = mask == 0xffu ? value
++    : ( bsp_c3_analog_read( block, address ) & ~mask ) | value;
++  ( (void (*)( uint8_t, uint8_t, uint8_t, uint8_t ))
++    (uintptr_t) 0x4000195cU )( block, 0, address, data );
++}
++
++#include "bspc3power.h"
++
++static void bsp_c3_cpu_xtal( void )
++{
++  /* IDF's safe predivider sequence, including ROM delay/APB accounting. */
++  ( (void (*)( uint32_t )) (uintptr_t) 0x40000588U )( 40 );
++  uint32_t reg = READ_REG( CLK_SYSTEM_BASE, CLK_SYSCLK_CONF_REG );
++  WRITE_REG( CLK_SYSTEM_BASE, CLK_SYSCLK_CONF_REG, reg & ~0x3ffu );
++  WRITE_REG( CLK_SYSTEM_BASE, CLK_SYSCLK_CONF_REG, reg & ~0x3ffu );
++  WRITE_REG( CLK_SYSTEM_BASE, CLK_SYSCLK_CONF_REG, reg & ~0xfffu );
++  uint32_t apb = 40000000u >> 12;
++  WRITE_REG( (uintptr_t) 0x60008000, 0xbc, apb | ( apb << 16 ) );
++}
++
++static void bsp_c3_cpu_pll( void )
++{
++  const uintptr_t analog = 0x6000e000;
++  bsp_c3_field( 0, BSP_BIT32( 10 ) | BSP_BIT32( 8 ) | BSP_BIT32( 6 ), 0 );
++  uint32_t reg = READ_REG( CLK_SYSTEM_BASE, CLK_CPU_PER_CONF_REG );
++  WRITE_REG( CLK_SYSTEM_BASE, CLK_CPU_PER_CONF_REG, reg | BSP_BIT32( 2 ) );
++  reg = READ_REG( analog, 0x40 );
++  WRITE_REG( analog, 0x40, ( reg & ~4u ) | 8u );
++  bsp_c3_analog_write( 0x66, 4, 0xff, 0x6b );
++  bsp_c3_analog_write( 0x66, 2, 0xff, 0x50 );
++  bsp_c3_analog_write( 0x66, 3, 0xff, 8 );
++  bsp_c3_analog_write( 0x66, 5, 0x77, 0 );
++  bsp_c3_analog_write( 0x66, 6, 0xff, 0x93 );
++  bsp_c3_analog_write( 0x66, 9, 3, 2 );
++  bsp_c3_analog_write( 0x66, 6, 0x30, 0x20 );
++  bsp_c3_analog_write( 0x66, 6, 0xc0, 0x40 );
++  /* Unlike newer chips, IDF's C3 calibration has no DONE poll/STOP write. */
++  reg = READ_REG( CLK_SYSTEM_BASE, CLK_CPU_PER_CONF_REG );
++  WRITE_REG( CLK_SYSTEM_BASE, CLK_CPU_PER_CONF_REG, ( reg & ~3u ) | 1u );
++  reg = READ_REG( CLK_SYSTEM_BASE, CLK_SYSCLK_CONF_REG );
++  WRITE_REG( CLK_SYSTEM_BASE, CLK_SYSCLK_CONF_REG, reg & ~0x3ffu );
++  WRITE_REG( CLK_SYSTEM_BASE, CLK_SYSCLK_CONF_REG,
++    ( reg & ~0xfffu ) | BSP_BIT32( 10 ) );
++  uint32_t apb = 80000000u >> 12;
++  WRITE_REG( (uintptr_t) 0x60008000, 0xbc, apb | ( apb << 16 ) );
++  ( (void (*)( uint32_t )) (uintptr_t) 0x40000588U )( 160 );
++}
++
++static void bsp_c3_clock_init( void )
++{
++  bsp_c3_cpu_xtal();
++  const uintptr_t analog = 0x6000e000;
++  uint32_t reg = READ_REG( analog, 0x44 );
++  WRITE_REG( analog, 0x44, reg | 0x3ff00u );
++  WRITE_REG( analog, 0x44, ( reg | 0x3ff00u ) & ~BSP_BIT32( 17 ) );
++  bsp_c3_power_init();
++  bsp_c3_field( 0x80, 0xffu << 14, 255u << 14 );
++  bsp_c3_field( 0x70, 0xffu << 17, 100u << 17 );
++  bsp_c3_field( 0x74, BSP_BIT32( 22 ), 0 );
++  bsp_c3_field( 0x74, 0xffu << 23, 0 );
++  bsp_c3_field( 0x74, BSP_BIT32( 22 ), BSP_BIT32( 22 ) );
++  bsp_c3_field( 0x70, BSP_BIT32( 3 ), 0 );
++  bsp_c3_field( 0x70, 7u << 12, 0 );
++  bsp_c3_field( 0x70, BSP_BIT32( 3 ), BSP_BIT32( 3 ) );
++  reg = READ_REG( (uintptr_t) 0x60008000, 0xb8 );
++  uint32_t xtal = ( reg & 0x10001u ) == 0x10001u ? 41u : 40u;
++  WRITE_REG( (uintptr_t) 0x60008000, 0xb8, xtal | ( xtal << 16 ) );
++  bsp_c3_cpu_pll();
++}
++
++static uint32_t bsp_c3_slow_calibrate( uint32_t cycles )
++{
++  const uintptr_t timg = 0x6001f000;
++  uint32_t reg = READ_REG( timg, 0x68 );
++  if ( reg & BSP_BIT32( 12 ) ) {
++    WRITE_REG( timg, 0x80,
++      ( READ_REG( timg, 0x80 ) & ~0xffffff80u ) | ( 1u << 7 ) );
++    uint32_t wait = 100000;
++    while ( !( READ_REG( timg, 0x68 ) & BSP_BIT32( 15 ) ) &&
++            !( READ_REG( timg, 0x80 ) & 1u ) ) {
++      if ( --wait == 0 ) {
++        rtems_panic( "ESP32-C3: RTC calibration drain timed out" );
++      }
++      bsp_c3_delay( 1 );
++    }
++  }
++  reg = READ_REG( timg, 0x68 );
++  reg &= ~( BSP_BIT32( 31 ) | BSP_BIT32( 12 ) | ( 3u << 13 )
++    | ( 0x7fffu << 16 ) );
++  WRITE_REG( timg, 0x68, reg | ( cycles << 16 ) );
++  WRITE_REG( timg, 0x80,
++    ( READ_REG( timg, 0x80 ) & ~0xffffff80u ) | ( cycles << 17 ) );
++  WRITE_REG( timg, 0x68, READ_REG( timg, 0x68 ) | BSP_BIT32( 31 ) );
++  bsp_c3_delay( cycles * 1000000ULL / 136000u );
++  uint32_t wait = 100000;
++  while ( !( READ_REG( timg, 0x68 ) & BSP_BIT32( 15 ) ) ) {
++    if ( ( READ_REG( timg, 0x80 ) & 1u ) || --wait == 0 ) {
++      rtems_panic( "ESP32-C3: RTC calibration timed out" );
++    }
++    bsp_c3_delay( 1 );
++  }
++  uint64_t xtal_cycles = ( READ_REG( timg, 0x6c ) >> 7 ) & 0x1ffffffu;
++  WRITE_REG( timg, 0x68, READ_REG( timg, 0x68 ) & ~BSP_BIT32( 31 ) );
++  uint64_t divisor = 40u * cycles;
++  uint32_t period = ( ( xtal_cycles << 19 ) + divisor / 2 - 1 ) / divisor;
++  if ( period == 0 ) {
++    rtems_panic( "ESP32-C3: invalid RTC calibration" );
++  }
++  return period;
++}
++
++static uint64_t bsp_c3_rtc_count( void )
++{
++  const uintptr_t rtc = 0x60008000;
++  WRITE_REG( rtc, 0x0c, READ_REG( rtc, 0x0c ) | BSP_BIT32( 31 ) );
++  uint32_t low = READ_REG( rtc, 0x10 );
++  uint32_t high = READ_REG( rtc, 0x14 ) & 0xffffu;
++  return ( (uint64_t) high << 32 ) | low;
++}
++
++static void bsp_c3_ocode_init( void )
++{
++  uint32_t reset = ( (uint32_t (*)( uint32_t )) (uintptr_t) 0x40000018U )( 0 );
++  if ( reset != 1 && reset != 0x14 ) {
++    return; /* IDF calibrates on chip power-on or the C3 eFuse CRC reset. */
++  }
++  uint32_t efuse = READ_REG( (uintptr_t) 0x60008800, 0x6c );
++  if ( ( efuse & 3u ) == 1 ) {
++    bsp_c3_analog_write( 0x61, 6, 0xff, ( efuse >> 12 ) & 0xffu );
++    bsp_c3_analog_write( 0x61, 5, 0x40, 0x40 );
++    return;
++  }
++  uint32_t period = bsp_c3_slow_calibrate( 100 );
++  uint64_t deadline = bsp_c3_rtc_count() + ( ( 10000ULL << 19 ) / period );
++  bsp_c3_cpu_xtal();
++  bsp_c3_field( 0, BSP_BIT32( 10 ) | BSP_BIT32( 8 ) | BSP_BIT32( 6 ),
++    BSP_BIT32( 10 ) | BSP_BIT32( 8 ) | BSP_BIT32( 6 ) );
++  bsp_c3_analog_write( 0x61, 0, 1, 0 );
++  bsp_c3_analog_write( 0x61, 0, 1, 1 );
++  uint32_t wait = 100000;
++  while ( ( bsp_c3_analog_read( 0x61, 3 ) & 9u ) != 9u ) {
++    if ( bsp_c3_rtc_count() >= deadline ) {
++      break; /* IDF warns and continues after the 10 ms o-code deadline. */
++    }
++    if ( --wait == 0 ) {
++      rtems_panic( "ESP32-C3: RTC stopped during o-code calibration" );
++    }
++    bsp_c3_delay( 1 );
++  }
++  bsp_c3_cpu_pll();
++}
++
++static void bsp_c3_rtc_init( void )
++{
++  /* Acquire the calibration clock without resetting RTEMS's timer state. */
++  WRITE_REG( CLK_SYSTEM_BASE, 0x10,
++    READ_REG( CLK_SYSTEM_BASE, 0x10 ) | BSP_BIT32( 13 ) );
++  WRITE_REG( CLK_SYSTEM_BASE, 0x18,
++    READ_REG( CLK_SYSTEM_BASE, 0x18 ) & ~BSP_BIT32( 13 ) );
++  /* Bootloader/app final profile: RC_FAST on, /256 off, RC_SLOW selected. */
++  bsp_c3_field( 0x70, BSP_BIT32( 6 ), 0 );
++  bsp_c3_field( 0x1c, 0xffu << 6, 5u << 6 );
++  bsp_c3_delay( 50 );
++  bsp_c3_field( 0x70, BSP_BIT32( 7 ), BSP_BIT32( 7 ) );
++  bsp_c3_field( 0x70, BSP_BIT32( 29 ), BSP_BIT32( 29 ) );
++  bsp_c3_delay( 3 );
++  bsp_c3_field( 0x70, ( 3u << 30 ) | BSP_BIT32( 8 ), 0 );
++  bsp_c3_delay( 300 );
++  bsp_c3_ocode_init();
++  WRITE_REG( (uintptr_t) 0x60008000, 0x54, bsp_c3_slow_calibrate( 1024 ) );
++}
++#endif
+diff --git a/bsps/riscv/esp32/start/bspc6pmu.h b/bsps/riscv/esp32/start/bspc6pmu.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..8dfa6c1c958e9e943047a744736a15d803e4d9ba
+--- /dev/null
++++ b/bsps/riscv/esp32/start/bspc6pmu.h
+@@ -0,0 +1,99 @@
++/*
++ * SPDX-FileCopyrightText: 2023-2026 Espressif Systems (Shanghai) CO LTD
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/*
++ * ESP32-C6 fixed-voltage PMU defaults, derived from ESP-IDF
++ * 9a97f6c54ec638111ce55cd36581b3c192f15207:
++ * components/esp_hw_support/port/esp32c6/{pmu_init.c,pmu_param.c} and
++ * components/esp_hal_pmu/esp32c6/include/hal/pmu_ll.h.
++ *
++ * Include after bspvoltage.h. The caller has established calibrated HP/LP
++ * biases, enabled the analog master clock, and selected its clock source.
++ * This is the PVT-OFF PMU policy phase, not o-code or RTC clock setup. In
++ * particular, LP clock power below is pmu_init's default, not a choice of
++ * RTC source. Sleep entry may subsequently replace the sleep templates.
++ */
++#if defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++static void bsp_c6_pmu_init( void )
++{
++  uint32_t hp_bias = READ_REG( VOLTAGE_PMU_BASE, 0x28 ) >> 27;
++  uint32_t lp_bias = READ_REG( VOLTAGE_PMU_BASE, 0x9c ) >> 27;
++  uint32_t analog_mask = READ_REG( VOLTAGE_I2C_BASE, 0x1c );
++
++  /* pmu_init(), unlike the earlier rtc_clk_init(), clears both XPD bits. */
++  bsp_voltage_i2c_write( 0x6d, 5, 0x80u, 0x80u );
++  bsp_voltage_i2c_write( 0x6d, 7, 0x80u, 0x80u );
++  bsp_voltage_i2c_write( 0x6d, 13, 0x0cu, 0 );
++  WRITE_REG( VOLTAGE_I2C_BASE, 0x1c, analog_mask );
++
++  /* pmu_hp_system_init_default(): ACTIVE, MODEM, SLEEP, in that order. */
++  for ( uint32_t mode = 0; mode < 3; ++mode ) {
++    uint32_t offset = mode * 0x34u;
++    bool active = mode == 0;
++    bool sleep = mode == 2;
++
++    /* Power, then clock, then digital, analog and retention policies. */
++    WRITE_REG( VOLTAGE_PMU_BASE, offset,
++      active ? 0 : sleep ? 0x08200000u : 0x20000000u );
++    WRITE_REG( VOLTAGE_PMU_BASE, offset + 0x14,
++      sleep ? 0x1c000000u : 0x70000000u );
++    bsp_voltage_field( offset + 0x30, BSP_BIT32( 31 ),
++      sleep ? 0 : BSP_BIT32( 31 ) );
++
++    WRITE_REG( VOLTAGE_PMU_BASE, offset + 0x04,
++      active ? 0xffffffffu : sleep ? 0 : BSP_BIT32( 20 ) );
++    WRITE_REG( VOLTAGE_PMU_BASE, offset + 0x08,
++      active ? 0xffffffffu : sleep ? 0 : BSP_BIT32( 9 ) );
++    bsp_voltage_field( offset + 0x0c, 3u << 30,
++      active ? 2u << 30 : sleep ? 0 : 1u << 30 );
++    bsp_voltage_field( offset + 0x24, 0xfc000000u,
++      active ? 0x08000000u : sleep ? 0x30000000u : 0x78000000u );
++    bsp_voltage_field( offset + 0x10, 0x3f000000u,
++      active ? 0 : sleep ? 0x39000000u : 0x31000000u );
++
++    bsp_voltage_field( offset + 0x18, 0xfe000000u,
++      active ? BSP_BIT32( 25 ) : 0 );
++    /* The LL only writes regulator bits 31:16. Preserve DBIAS_SEL,
++     * DBIAS_INIT and the PVT status fields in ACTIVE's low half. */
++    bsp_voltage_field( offset + 0x28, 0xffff0000u,
++      ( ( sleep ? 1u : hp_bias ) << 27 ) | BSP_BIT32( 18 ) );
++    bsp_voltage_field( offset + 0x2c, 0xffffff00u, 0 );
++
++    WRITE_REG( VOLTAGE_PMU_BASE, offset + 0x1c,
++      active ? 0x010100a0u : sleep ? 0x12800200u : 0x00100010u );
++    WRITE_REG( VOLTAGE_PMU_BASE, offset + 0x20, 0xffffffffu );
++
++    /* Match the per-mode update/protect ordering in pmu_hp_system_init. */
++    bsp_voltage_field( 0xdc, BSP_BIT32( 31 ), BSP_BIT32( 31 ) );
++    bsp_voltage_field( 0xd0, BSP_BIT32( 28 ), BSP_BIT32( 28 ) );
++    bsp_voltage_field( 0x12c, 3u << 16, 2u << 16 );
++  }
++
++  /* pmu_lp_system_init_default(): LP_ACTIVE then LP_SLEEP. The XTAL
++   * and bias LL setters target LP_SLEEP in BOTH iterations. */
++  for ( uint32_t mode = 0; mode < 2; ++mode ) {
++    uint32_t offset = 0x9cu + mode * 0x18u;
++    WRITE_REG( VOLTAGE_PMU_BASE, offset + 0x0c, 0 );
++    WRITE_REG( VOLTAGE_PMU_BASE, offset + 0x10,
++      mode == 0 ? 0x70000000u : 0 );
++    bsp_voltage_field( 0xbc, BSP_BIT32( 31 ), 0 );
++    bsp_voltage_field( 0xc8, 0xfe000000u,
++      mode == 0 ? 0 : 0xc0000000u );
++    bsp_voltage_field( offset, 0xffe00000u,
++      ( ( mode == 0 ? lp_bias : 12u ) << 27 ) | BSP_BIT32( 22 ) );
++    bsp_voltage_field( offset + 0x04, 0xf0000000u, 0 );
++  }
++
++  /* Only hand control to the FSM after all backing policies are installed.
++   * Bypass the reserved HP peripheral domain, just like the IDF initializer.
++   * Keep PD masks and all memory force bits other than NO_ISO unchanged. */
++  bsp_voltage_field( 0xf4, 0x3fu, 0 ); /* TOP */
++  bsp_voltage_field( 0xf8, 0x3fu, 0 ); /* HP_AON */
++  bsp_voltage_field( 0xfc, 0x3fu, 0 ); /* CPU */
++  bsp_voltage_field( 0x104, 0x3fu, 0 ); /* WIFI */
++  bsp_voltage_field( 0x10c, 15u << 24, 0 ); /* force_hp_mem_no_iso only */
++  bsp_voltage_field( 0x108, 0x3fu, 0 ); /* LP peripheral */
++}
++#endif
+diff --git a/bsps/riscv/esp32/start/bspc6rtc.h b/bsps/riscv/esp32/start/bspc6rtc.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..6406ac2d52a91ef6c39372cd6424d4171f017ef4
+--- /dev/null
++++ b/bsps/riscv/esp32/start/bspc6rtc.h
+@@ -0,0 +1,173 @@
++/*
++ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/* ESP-IDF 9a97f6c54ec638111ce55cd36581b3c192f15207, C6 rtc_clk_init.c,
++ * rtc_time.c, ocode_init.c and esp_system/port/soc/esp32c6/clk.c.
++ * Direct boot: XTAL40, CPU160, RC_SLOW/RC_FAST, PVT off (C6 IDF default).
++ * RTEMS retains timer/scheduler and peripheral-driver ownership.
++ */
++#if defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++
++#include "bspc6pmu.h"
++
++static void bsp_clock_init( void );
++
++static void bsp_c6_delay( uint32_t us )
++{
++  ( (void (*)( uint32_t )) (uintptr_t) 0x40000040U )( us );
++}
++
++static void bsp_c6_rtc_tune( void )
++{
++  const uintptr_t clkrst = 0x600b0400;
++  uint32_t reg = READ_REG( clkrst, 0x18 );
++  WRITE_REG( clkrst, 0x18, ( reg & ~0xffc00000u ) | ( 100u << 22 ) );
++  bsp_voltage_i2c_write( 0x6d, 14, 0xffu, 128u );
++  reg = READ_REG( clkrst, 0x1c );
++  WRITE_REG( clkrst, 0x1c, ( reg & ~0xffc00000u ) | ( 700u << 22 ) );
++  reg = READ_REG( (uintptr_t) 0x600b1000, 0x10 );
++  uint32_t xtal = ( reg & 0x10001u ) == 0x10001u ? 41u : 40u;
++  WRITE_REG( (uintptr_t) 0x600b1000, 0x10, xtal | ( xtal << 16 ) );
++}
++
++static void bsp_c6_rtc_sources( void )
++{
++  const uintptr_t clkrst = 0x600b0400;
++  bsp_voltage_field( 0xac, BSP_BIT32( 30 ), BSP_BIT32( 30 ) );
++  bsp_c6_delay( 50 );
++  WRITE_REG( clkrst, 0, READ_REG( clkrst, 0 ) & ~4u );
++  bsp_c6_delay( 3 );
++  WRITE_REG( clkrst, 0, READ_REG( clkrst, 0 ) & ~3u );
++  bsp_c6_delay( 300 );
++}
++
++/* The selected profile has only RC_SLOW calibration. The TIMG0 calibrator
++ * is not its counter or watchdog. Keep IDF's cycling-mode drain, threshold,
++ * initial wait and Q19 rounding. A nonresponsive calibrator stops boot,
++ * rather than publishing a guessed period or waiting forever.
++ */
++static uint32_t bsp_c6_slow_calibrate( uint32_t cycles )
++{
++  const uintptr_t timg = 0x60008000;
++  uint32_t reg = READ_REG( timg, 0x68 );
++  if ( reg & BSP_BIT32( 12 ) ) {
++    WRITE_REG( timg, 0x80,
++      ( READ_REG( timg, 0x80 ) & ~0xffffff80u ) | ( 1u << 7 ) );
++    uint32_t wait = 100000;
++    while ( !( READ_REG( timg, 0x68 ) & BSP_BIT32( 15 ) ) &&
++            !( READ_REG( timg, 0x80 ) & 1u ) ) {
++      if ( --wait == 0 ) {
++        rtems_panic( "ESP32-C6: RTC calibration drain timed out" );
++      }
++      bsp_c6_delay( 1 );
++    }
++  }
++  reg = READ_REG( timg, 0x68 );
++  reg &= ~( BSP_BIT32( 31 ) | BSP_BIT32( 12 ) | ( 3u << 13 )
++    | ( 0x7fffu << 16 ) );
++  WRITE_REG( timg, 0x68, reg | ( cycles << 16 ) );
++  WRITE_REG( timg, 0x80,
++    ( READ_REG( timg, 0x80 ) & ~0xffffff80u ) | ( cycles << 17 ) );
++  WRITE_REG( timg, 0x68, READ_REG( timg, 0x68 ) | BSP_BIT32( 31 ) );
++  bsp_c6_delay( cycles * 1000000ULL / 136000u );
++  uint32_t wait = 100000;
++  while ( !( READ_REG( timg, 0x68 ) & BSP_BIT32( 15 ) ) ) {
++    if ( ( READ_REG( timg, 0x80 ) & 1u ) || --wait == 0 ) {
++      rtems_panic( "ESP32-C6: RTC calibration timed out" );
++    }
++    bsp_c6_delay( 1 );
++  }
++  uint64_t xtal_cycles = ( READ_REG( timg, 0x6c ) >> 7 ) & 0x1ffffffu;
++  WRITE_REG( timg, 0x68, READ_REG( timg, 0x68 ) & ~BSP_BIT32( 31 ) );
++  uint64_t divisor = 40u * cycles;
++  uint32_t period = ( ( xtal_cycles << 19 ) + divisor / 2 - 1 ) / divisor;
++  if ( period == 0 ) {
++    rtems_panic( "ESP32-C6: invalid RTC calibration" );
++  }
++  return period;
++}
++
++static uint64_t bsp_c6_rtc_count( void )
++{
++  const uintptr_t timer = 0x600b0c00;
++  WRITE_REG( timer, 0x10, READ_REG( timer, 0x10 ) | BSP_BIT32( 28 ) );
++  uint32_t low = READ_REG( timer, 0x14 );
++  uint32_t high = READ_REG( timer, 0x18 ) & 0xffffu;
++  return ( (uint64_t) high << 32 ) | low;
++}
++
++static uint32_t bsp_c6_ulp_read( uint32_t address )
++{
++  const uintptr_t i2c = 0x600af800;
++  uint32_t host = ( READ_REG( i2c, 0x20 ) & BSP_BIT32( 10 ) ) ? 0 : 4;
++  WRITE_REG( i2c, 0x1c, 0xfffeffu );
++  bsp_voltage_i2c_wait( host );
++  WRITE_REG( i2c, host, 0x61u | ( address << 8 ) );
++  bsp_voltage_i2c_wait( host );
++  return ( READ_REG( i2c, host ) >> 16 ) & 0xffu;
++}
++
++static void bsp_c6_ocode_init( void )
++{
++  if ( ( (uint32_t (*)( uint32_t )) (uintptr_t) 0x40000018U )( 0 ) != 1 ) {
++    return; /* IDF only calibrates on chip power-on, never deep-sleep wake. */
++  }
++  uint32_t version = READ_REG( (uintptr_t) 0x600b0800, 0x50 );
++  uint32_t block_version = ( ( version >> 30 ) & 3u ) * 100
++    + ( ( version >> 27 ) & 7u );
++  if ( block_version >= 1 ) {
++    uint32_t code = ( READ_REG( (uintptr_t) 0x600b0800, 0x6c ) >> 9 ) & 0xffu;
++    bsp_voltage_i2c_write( 0x61, 6, 0xffu, code );
++    bsp_voltage_i2c_write( 0x61, 5, 0x40u, 0x40u );
++    return;
++  }
++
++  uint32_t period = bsp_c6_slow_calibrate( 100 );
++  uint64_t deadline = bsp_c6_rtc_count() + ( ( 10000ULL << 19 ) / period );
++  WRITE_REG( CLK_PCR_BASE, 0x11c, READ_REG( CLK_PCR_BASE, 0x11c ) & ~0xffu );
++  WRITE_REG( CLK_PCR_BASE, 0x118, READ_REG( CLK_PCR_BASE, 0x118 ) & ~0xffu );
++  WRITE_REG( CLK_PCR_BASE, 0x110, READ_REG( CLK_PCR_BASE, 0x110 ) & ~( 3u << 16 ) );
++  ( (void (*)( uint32_t )) (uintptr_t) 0x40000048U )( 40 );
++  WRITE_REG( VOLTAGE_PMU_BASE, 0xcc,
++    READ_REG( VOLTAGE_PMU_BASE, 0xcc ) | BSP_BIT32( 0 ) );
++  WRITE_REG( VOLTAGE_PMU_BASE, 0xcc,
++    READ_REG( VOLTAGE_PMU_BASE, 0xcc ) | BSP_BIT32( 4 ) | BSP_BIT32( 5 ) );
++  bsp_voltage_i2c_write( 0x61, 0, 1u, 0 );
++  bsp_voltage_i2c_write( 0x61, 0, 1u, 1u );
++  uint32_t wait = 100000;
++  while ( ( bsp_c6_ulp_read( 3 ) & 9u ) != 9u ) {
++    if ( bsp_c6_rtc_count() >= deadline ) {
++      break; /* IDF warns and continues after the 10 ms o-code deadline. */
++    }
++    if ( --wait == 0 ) {
++      rtems_panic( "ESP32-C6: RTC stopped during o-code calibration" );
++    }
++    bsp_c6_delay( 1 );
++  }
++  bsp_clock_init(); /* Restore PLL160 through its calibration sequence. */
++}
++
++static void bsp_c6_rtc_init( void )
++{
++  const uintptr_t lpcon = 0x600af000;
++  /* IDF's bootloader leaves the analog master clock configured/enabled. */
++  WRITE_REG( lpcon, 0x18, READ_REG( lpcon, 0x18 ) | BSP_BIT32( 2 ) );
++  WRITE_REG( lpcon, 0x10, READ_REG( lpcon, 0x10 ) | 1u );
++  uint32_t read_mask = READ_REG( VOLTAGE_I2C_BASE, 0x1c );
++  bsp_c6_rtc_sources();
++  bsp_c6_pmu_init();
++  bsp_c6_ocode_init();
++  bsp_c6_rtc_sources();
++  /* esp_clk_init(): disable unused RC32K and LP_ACTIVE oscillator powers. */
++  bsp_voltage_field( 0xac, BSP_BIT32( 29 ), 0 );
++  WRITE_REG( VOLTAGE_PMU_BASE, 0xac, BSP_BIT32( 30 ) );
++  uint32_t period = bsp_c6_slow_calibrate( 1024 );
++  WRITE_REG( (uintptr_t) 0x600b1000, 0x04, period );
++  /* Preserve driver-owned LP gates; eFuse must remain clocked. */
++  WRITE_REG( (uintptr_t) 0x600b2800, 0,
++    READ_REG( (uintptr_t) 0x600b2800, 0 ) | BSP_BIT32( 30 ) );
++  WRITE_REG( VOLTAGE_I2C_BASE, 0x1c, read_mask );
++}
++#endif
+diff --git a/bsps/riscv/esp32/start/bspp4pvt.h b/bsps/riscv/esp32/start/bspp4pvt.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..05726b705fffadacccd83868add6b66bfd4de5fc
+--- /dev/null
++++ b/bsps/riscv/esp32/start/bspp4pvt.h
+@@ -0,0 +1,146 @@
++/*
++ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO LTD
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/* ESP-IDF 9a97f6c54ec638111ce55cd36581b3c192f15207: esp32p4/pmu_pvt.c,
++ * soc/rtc.h and hw_ver1/hw_ver3 register definitions.  Both layouts share
++ * these PVT, clock, PMU and eFuse offsets; only the delay thresholds differ.
++ * Called after bsp_clock_init(), with ROM delay timing updated and SPLL's
++ * PLL_F160M available.  Keep the preceding voltage prerequisites unchanged.
++ */
++#if defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++
++#include <assert.h>
++
++#define P4_PVT_BASE     (uintptr_t) 0x5009e000U
++#define P4_PVT_EFUSE    (uintptr_t) 0x5012d000U
++
++static void bsp_p4_pvt_field(
++  uintptr_t base,
++  uintptr_t offset,
++  uint32_t mask,
++  uint32_t value
++)
++{
++  WRITE_REG( base, offset, ( READ_REG( base, offset ) & ~mask ) | value );
++}
++
++static void bsp_p4_pvt_delay( uint32_t us )
++{
++  ( (void (*)( uint32_t )) (uintptr_t) 0x4fc0003cU )( us );
++}
++
++static bool bsp_p4_pvt_supported( void )
++{
++  /* BLK1 bits 72..74 (minor), 75..76 (major), not the wafer revision. */
++  uint32_t version = READ_REG( P4_PVT_EFUSE, 0x4c );
++  uint32_t block_version = ( ( version >> 11 ) & 3u ) * 100
++    + ( ( version >> 8 ) & 7u );
++
++  return block_version >= 2 && block_version != 100;
++}
++
++void bsp_esp32p4_pvt_enable( bool enable )
++{
++  if ( !bsp_p4_pvt_supported() ) {
++    return;
++  }
++
++  if ( enable ) {
++    bsp_p4_pvt_field( CLK_HP_SYS_CLKRST_BASE, 0xa4,
++      BSP_BIT32( 24 ), BSP_BIT32( 24 ) );
++    /* Start calibration, then enable the monitor clock (never close it). */
++    bsp_p4_pvt_field( CLK_PMU_BASE, 0x28,
++      BSP_BIT32( 15 ), BSP_BIT32( 15 ) );
++    bsp_p4_pvt_field( P4_PVT_BASE, 0x30, BSP_BIT32( 8 ), BSP_BIT32( 8 ) );
++    bsp_p4_pvt_field( P4_PVT_BASE, 0x108, 1u, 1u );
++    bsp_p4_pvt_delay( 10 );
++    /* Hand DBIAS control to PVT before clearing DBIAS_INIT. */
++    bsp_p4_pvt_field( CLK_PMU_BASE, 0x28, BSP_BIT32( 14 ), 0 );
++    bsp_p4_pvt_field( CLK_PMU_BASE, 0x28, BSP_BIT32( 15 ), 0 );
++    bsp_p4_pvt_field( P4_PVT_BASE, 0x64, BSP_BIT32( 31 ), BSP_BIT32( 31 ) );
++    bsp_p4_pvt_delay( 50 );
++  } else {
++    uint32_t hp = ( READ_REG( CLK_PMU_BASE, 0x28 ) >> 9 ) & 31u;
++    uint32_t lp = ( READ_REG( CLK_PMU_BASE, 0x28 ) >> 4 ) & 31u;
++
++    /* Preserve PVT's outputs before handing control back to the PMU. */
++    bsp_p4_pvt_field( CLK_PMU_BASE, 0x18, 31u << 18, hp << 18 );
++    bsp_p4_pvt_field( CLK_PMU_BASE, 0x9c, 31u << 27, lp << 27 );
++    bsp_p4_pvt_field( CLK_PMU_BASE, 0x28,
++      BSP_BIT32( 14 ), BSP_BIT32( 14 ) );
++    bsp_p4_pvt_field( CLK_HP_SYS_CLKRST_BASE, 0xa4, BSP_BIT32( 24 ), 0 );
++  }
++}
++
++static void bsp_p4_pvt_init( void )
++{
++  if ( bsp_p4_pvt_supported() ) {
++    /* PVT must be reset after CPU power-down, before configuring it. */
++    bsp_p4_pvt_field( CLK_HP_SYS_CLKRST_BASE, 0xc0,
++      BSP_BIT32( 5 ), BSP_BIT32( 5 ) );
++    bsp_p4_pvt_field( CLK_HP_SYS_CLKRST_BASE, 0xc0, BSP_BIT32( 5 ), 0 );
++    bsp_p4_pvt_field( CLK_HP_SYS_CLKRST_BASE, 0x2c, 1u, 1u );
++    bsp_p4_pvt_field( CLK_HP_SYS_CLKRST_BASE, 0x18,
++      BSP_BIT32( 25 ), BSP_BIT32( 25 ) );
++    bsp_p4_pvt_field( P4_PVT_BASE, 0x64, BSP_BIT32( 31 ), 0 );
++    bsp_p4_pvt_delay( 1 );
++
++    bsp_p4_pvt_field( P4_PVT_BASE, 0x34, 0x7fu << 25, 49u << 25 );
++    bsp_p4_pvt_field( P4_PVT_BASE, 0x34, 0x7fu << 18, 53u << 18 );
++    bsp_p4_pvt_field( P4_PVT_BASE, 0x3c, 0x1ffffu, 0x11fffu );
++    bsp_p4_pvt_field( P4_PVT_BASE, 0x40, 0x1ffffu, 0x17fffu );
++    bsp_p4_pvt_field( P4_PVT_BASE, 0x44, 0x1ffffu, 0x10000u );
++    bsp_p4_pvt_field( P4_PVT_BASE, 0x50, 0x7ffu, 0x24u );
++    bsp_p4_pvt_field( P4_PVT_BASE, 0x54, 0x7ffu, 0x05u );
++    bsp_p4_pvt_field( P4_PVT_BASE, 0x58, 0x7ffu, 0x427u );
++    bsp_p4_pvt_field( P4_PVT_BASE, 0x64, 0xffffu << 15, 0xffffu << 15 );
++
++    bsp_p4_pvt_field( CLK_HP_SYS_CLKRST_BASE, 0xa4, 0xffu << 16, 1u << 16 );
++    bsp_p4_pvt_field( CLK_HP_SYS_CLKRST_BASE, 0xa8, 0xffu, 1u );
++    bsp_p4_pvt_field( CLK_HP_SYS_CLKRST_BASE, 0xa4,
++      BSP_BIT32( 24 ), BSP_BIT32( 24 ) );
++    bsp_p4_pvt_field( CLK_HP_SYS_CLKRST_BASE, 0xa8,
++      BSP_BIT32( 8 ), BSP_BIT32( 8 ) );
++    bsp_p4_pvt_field( CLK_HP_SYS_CLKRST_BASE, 0xa8,
++      BSP_BIT32( 9 ), BSP_BIT32( 9 ) );
++    bsp_p4_pvt_field( CLK_HP_SYS_CLKRST_BASE, 0xa8,
++      BSP_BIT32( 10 ), BSP_BIT32( 10 ) );
++    bsp_p4_pvt_field( CLK_HP_SYS_CLKRST_BASE, 0xa8,
++      BSP_BIT32( 11 ), BSP_BIT32( 11 ) );
++
++    bsp_p4_pvt_field( P4_PVT_BASE, 0x1c8, 3u, 1u );
++#if BSP_ESP32P4_REVISION == 1
++    bsp_p4_pvt_field( P4_PVT_BASE, 0x108, 0xffu << 2, 164u << 2 );
++    bsp_p4_pvt_field( P4_PVT_BASE, 0x10c, 0xffu << 2, 157u << 2 );
++#else
++    bsp_p4_pvt_field( P4_PVT_BASE, 0x108, 0xffu << 2, 160u << 2 );
++    bsp_p4_pvt_field( P4_PVT_BASE, 0x10c, 0xffu << 2, 153u << 2 );
++#endif
++
++    /* Both layouts: BLK1 bit 165, length 5 = RD_MAC_SYS_5 bits 9:5.
++     * eFuse and PVT use sign/magnitude, NOT two's complement.  The -8
++     * adjustment and range assertion are get_lp_hp_gap()'s exact policy.
++     */
++    uint32_t raw = ( READ_REG( P4_PVT_EFUSE, 0x58 ) >> 5 ) & 31u;
++    int32_t gap = ( raw & 16u ) != 0 ? -(int32_t) ( raw & 15u )
++      : (int32_t) ( raw & 15u );
++    gap -= 8;
++    assert( gap >= -15 && gap <= 7 );
++    uint32_t encoded = gap < 0 ? (uint32_t) ( 16 - gap ) : (uint32_t) gap;
++    uint32_t flag = ( encoded >> 4 ) != 0 ? BSP_BIT32( 16 ) : 0;
++    uint32_t magnitude = ( encoded & 15u ) << 11;
++
++    for ( uintptr_t offset = 0x50; offset <= 0x58; offset += 4 ) {
++      bsp_p4_pvt_field( P4_PVT_BASE, offset, BSP_BIT32( 16 ), flag );
++      bsp_p4_pvt_field( P4_PVT_BASE, offset, 31u << 11, magnitude );
++    }
++  }
++
++  bsp_esp32p4_pvt_enable( true );
++  /* pmu_init(): allow PVT to take effect before continuing startup. */
++  bsp_p4_pvt_delay( 1000 );
++}
++
++#endif
+diff --git a/bsps/riscv/esp32/start/bspsmp.c b/bsps/riscv/esp32/start/bspsmp.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..dc19e9d015e7beb656de53c048fae165d6a5048f
+--- /dev/null
++++ b/bsps/riscv/esp32/start/bspsmp.c
+@@ -0,0 +1,214 @@
++/* SPDX-License-Identifier: BSD-2-Clause */
++
++/*
++ * Copyright (C) 2026 Peter M. <petermm@gmail.com>
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ */
++
++#include <bsp.h>
++#include <bsp/bootcard.h>
++#include <bsp/irq.h>
++
++#include <rtems/score/percpu.h>
++#include <rtems/score/riscv-utility.h>
++#include <rtems/score/smpimpl.h>
++
++#if defined(RTEMS_SMP) && (defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H))
++
++#define WRITE_PERI_REG( addr, val ) \
++  ( *( (volatile uint32_t *) (uintptr_t) ( addr ) ) = (uint32_t) ( val ) )
++#define READ_PERI_REG( addr ) \
++  ( *( (volatile uint32_t *) (uintptr_t) ( addr ) ) )
++
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++#define LP_ROM_BOOT_ADDR_CORE1   0x20700164U
++#define HP_SYS_CLKRST_BASE       0x20587000U
++#define HP_SYS_CORE1_CLKRST_REG  ( HP_SYS_CLKRST_BASE + 0x20U )
++#define HP_SYS_CORE1_CLIC_CLK_EN ( 1U << 0 )
++#define HP_SYS_CORE1_CPU_CLK_EN  ( 1U << 1 )
++#define HP_SYS_CORE1_RST_EN_BIT  ( 1U << 2 )
++
++#define HP_SYSTEM_CPU_INT_FROM_CPU_0_REG 0x20586010U
++#define HP_SYSTEM_CPU_INT_FROM_CPU_1_REG 0x20586014U
++#define HP_SYSTEM_CPU_CORESTALLED_ST_REG 0x20586064U
++#define PMU_CPU_STALL_SW_REG             0x207041ecU
++
++#ifndef DR_REG_INTMTX_CORE1_BASE
++#define DR_REG_INTMTX_CORE1_BASE 0x20585800U
++#endif
++#define CORE0_INT_MATRIX_BASE    0x20585000U
++#define CLIC_BASE_CORE1          0x10800000U
++#define ROM_SET_APPCPU_BOOT_ADDR 0x2f8000a8U
++
++#elif defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++#define LP_ROM_BOOT_ADDR_CORE1   0x50110164U
++#define HP_SYS_CLKRST_BASE       0x500E6000U
++#define HP_SYS_CORE1_CLK_CTRL_REG ( HP_SYS_CLKRST_BASE + 0x14U )
++#define HP_SYS_CORE1_RST_EN_REG   ( HP_SYS_CLKRST_BASE + 0xc0U )
++#define HP_SYS_CORE1_CLIC_CLK_EN ( 1U << 1 )
++#define HP_SYS_CORE1_CPU_CLK_EN  ( 1U << 4 )
++#define HP_SYS_CORE1_RST_EN_BIT  ( 1U << 8 )
++
++#define HP_SYSTEM_CPU_INT_FROM_CPU_0_REG 0x500E5010U
++#define HP_SYSTEM_CPU_INT_FROM_CPU_1_REG 0x500E5014U
++#define HP_SYSTEM_CPU_CORESTALLED_ST_REG 0x500E5064U
++#define PMU_CPU_STALL_SW_REG             0x50115200U
++
++#ifndef DR_REG_INTMTX_CORE1_BASE
++#define DR_REG_INTMTX_CORE1_BASE 0x500D6800U
++#endif
++#define CORE0_INT_MATRIX_BASE    0x500D6000U
++#define CLIC_BASE_CORE1          0x20800000U
++#define ROM_SET_APPCPU_BOOT_ADDR 0x4fc000a8U
++#endif
++
++#define CORE1_MATRIX_REG( reg ) \
++  ( *( (volatile uint32_t *) ( DR_REG_INTMTX_CORE1_BASE + ( reg ) ) ) )
++#define CLIC_REG_CORE1( offset ) \
++  ( *( (volatile uint32_t *) ( CLIC_BASE_CORE1 + ( offset ) ) ) )
++#define CLIC_INT_REG_CORE1( chan ) \
++  ( *( (volatile uint32_t *) ( CLIC_BASE_CORE1 + 0x1000U + ( ( chan ) + 16U ) * 4U ) ) )
++
++extern void _start( void );
++
++typedef void (*ets_set_appcpu_boot_addr_t)(uint32_t start);
++
++uint32_t _CPU_SMP_Initialize( void )
++{
++  return rtems_configuration_get_maximum_processors() > 1 ? 2 : 1;
++}
++
++bool _CPU_SMP_Start_processor( uint32_t cpu_index )
++{
++  if ( cpu_index != 1 ) {
++    return false;
++  }
++
++  /* Unstall Core 1 */
++  uint32_t stall_reg = READ_PERI_REG( PMU_CPU_STALL_SW_REG );
++  stall_reg = ( stall_reg & ~0x00FF0000U ) | ( 0xFFU << 16 );
++  WRITE_PERI_REG( PMU_CPU_STALL_SW_REG, stall_reg );
++  for ( volatile uint32_t delay = 0; delay < 1000u; delay++ ) {
++    if ( ( READ_PERI_REG( HP_SYSTEM_CPU_CORESTALLED_ST_REG ) & ( 1U << 1 ) ) == 0U ) {
++      break;
++    }
++  }
++
++  /* Program Core 1 entry address via ROM function and register */
++  ( (ets_set_appcpu_boot_addr_t) ROM_SET_APPCPU_BOOT_ADDR )( (uint32_t) (uintptr_t) _start );
++  WRITE_PERI_REG( LP_ROM_BOOT_ADDR_CORE1, (uint32_t) (uintptr_t) _start );
++
++  /* Release Core 1 from reset and enable CPU + CLIC clocks */
++#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++  uint32_t reg = READ_PERI_REG( HP_SYS_CORE1_CLKRST_REG );
++  reg |= ( HP_SYS_CORE1_CPU_CLK_EN | HP_SYS_CORE1_CLIC_CLK_EN );
++  reg &= ~HP_SYS_CORE1_RST_EN_BIT;
++  WRITE_PERI_REG( HP_SYS_CORE1_CLKRST_REG, reg );
++#elif defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++  WRITE_PERI_REG( HP_SYS_CORE1_CLK_CTRL_REG,
++                  READ_PERI_REG( HP_SYS_CORE1_CLK_CTRL_REG ) | HP_SYS_CORE1_CPU_CLK_EN | HP_SYS_CORE1_CLIC_CLK_EN );
++  WRITE_PERI_REG( HP_SYS_CORE1_RST_EN_REG,
++                  READ_PERI_REG( HP_SYS_CORE1_RST_EN_REG ) & ~HP_SYS_CORE1_RST_EN_BIT );
++#endif
++
++  return true;
++}
++
++void _CPU_SMP_Finalize_initialization( uint32_t cpu_count )
++{
++  (void) cpu_count;
++  /* Route SW_INTR_0 to the dedicated IPI channel on Core 0. */
++  *( (volatile uint32_t *) ( CORE0_INT_MATRIX_BASE + SW_INTR_0 * 4U ) ) =
++    31U + 16U;
++  set_csr( mie, MIP_MEIP );
++}
++
++void _CPU_SMP_Prepare_start_multitasking( void )
++{
++}
++
++void _CPU_SMP_Send_interrupt( uint32_t target_processor_index )
++{
++  if ( target_processor_index == 0 ) {
++    WRITE_PERI_REG( HP_SYSTEM_CPU_INT_FROM_CPU_0_REG, 1U );
++  } else if ( target_processor_index == 1 ) {
++    WRITE_PERI_REG( HP_SYSTEM_CPU_INT_FROM_CPU_1_REG, 1U );
++  }
++}
++
++void bsp_start_on_secondary_processor( Per_CPU_Control *cpu_self )
++{
++#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++  bsp_esp32s31_initialize_pma();
++#endif
++
++  uint32_t cpu_index_self = _Per_CPU_Get_index( cpu_self );
++
++  if ( _SMP_Should_start_processor( cpu_index_self ) ) {
++    /* Core 1 CLIC initialization */
++#if BSP_ESP32P4_REVISION == 1
++    CLIC_REG_CORE1( 0x00 ) = 3U << 1;
++#else
++    CLIC_REG_CORE1( 0x00 ) = 3U;
++#endif
++    for ( uint32_t id = 0; id < 48U; ++id ) {
++      CLIC_REG_CORE1( 0x1000U + id * 4U ) = 0x1fc00000U;
++    }
++    for ( uint32_t channel = 0; channel < 32U; ++channel ) {
++      CLIC_INT_REG_CORE1( channel ) = 0x3fc00100U;
++    }
++
++    uintptr_t mtvec;
++    __asm__ volatile (
++      ".option push\n"
++      ".option arch, +zicsr\n"
++      "csrr %0, mtvec\n"
++      ".option pop\n" : "=r" ( mtvec )
++    );
++    mtvec = ( mtvec & ~(uintptr_t) 3U ) | 3U;
++#if BSP_ESP32P4_REVISION == 1
++    CLIC_REG_CORE1( 0x08 ) = 0;
++    (void) CLIC_REG_CORE1( 0x08 );
++#endif
++    __asm__ volatile (
++      ".option push\n"
++      ".option arch, +zicsr\n"
++#if BSP_ESP32P4_REVISION != 1
++      "csrw 0x347, zero\n"
++#endif
++      "csrw mtvec, %0\n"
++      ".option pop\n" : : "r" ( mtvec ) : "memory"
++    );
++
++    /* Route SW_INTR_1 to the dedicated IPI channel on Core 1. */
++    CORE1_MATRIX_REG( SW_INTR_1 * 4U ) = 31U + 16U;
++
++    set_csr( mie, MIP_MEIP );
++
++    _SMP_Start_multitasking_on_secondary_processor( cpu_self );
++  } else {
++    _CPU_Thread_Idle_body( 0 );
++  }
++}
++
++#endif /* RTEMS_SMP && (LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H || LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H) */
+diff --git a/bsps/riscv/esp32/start/bspstart.c b/bsps/riscv/esp32/start/bspstart.c
+index eb4a997aa7538c07191f4d23e08e6784b007614b..1c1314ceb79bde0703643a705cb6e780eefd93c5 100644
+--- a/bsps/riscv/esp32/start/bspstart.c
++++ b/bsps/riscv/esp32/start/bspstart.c
+@@ -23,10 +23,13 @@
+  * SUCH DAMAGE.
+  */
+ 
++#include <bsp.h>
+ #include <bsp/bootcard.h>
+ #include <bsp/fatal.h>
+ #include <bsp/irq-generic.h>
+ #include <bsp/linker-symbols.h>
++
++#include <stdint.h>
+ #include <bsp/start.h>
+ #include <bsp/utility.h>
+ 
+@@ -36,6 +39,14 @@
+ #define RTC_CNTL_WDTCONFIG0_REG (uintptr_t) 0x90
+ #define RTC_CNTL_WDTCONFIG0_EN  BSP_BIT32( 31 )
+ 
++/*
++ * "Enable WDT in flash boot", default 1, and independent of the enable bit
++ * above: the watchdog still bites with it set and RTC_CNTL_WDTCONFIG0_EN
++ * clear.  ESP-IDF's second-stage bootloader clears it, which is why an
++ * ESP-IDF application never sees it and a direct-boot image always does.
++ */
++#define RTC_CNTL_WDT_FLASHBOOT_MOD_EN BSP_BIT32( 12 )
++
+ #define RTC_CNTL_SWD_CONF_REG          (uintptr_t) 0xac
+ #define RTC_CNTL_SWD_CONF_AUTO_FEED_EN BSP_BIT32( 31 )
+ 
+@@ -50,6 +61,17 @@
+ #define TIMG_WDTCONFIG0_REG (uintptr_t) 0x48
+ #define TIMG_WDTCONFIG0_EN  BSP_BIT32( 31 )
+ 
++/*
++ * Timergroup 0's watchdog has its own write protection, with the same key as
++ * the RTC one but a separate register.  Without unlocking it the write below
++ * is silently dropped.
++ */
++#define TIMG_WDTWPROTECT_REG (uintptr_t) 0x64
++#define TIMG_WDTWPROTECT_KEY 0x50d83aa1U
++
++/* The same flash-boot mode as the RTC watchdog has, at a different bit. */
++#define TIMG_WDT_FLASHBOOT_MOD_EN BSP_BIT32( 14 )
++
+ #define TIMG_READ( reg )         READ_REG( TIMG_BASE, reg )
+ #define TIMG_WRITE( reg, value ) WRITE_REG( TIMG_BASE, reg, value )
+ 
+@@ -57,18 +79,813 @@
+ #define WRITE_REG( base, reg, value ) \
+   *(volatile uint32_t *) ( base + reg ) = value
+ 
++/*
++ * ---------------------------------------------------------------------------
++ * CPU clock
++ * ---------------------------------------------------------------------------
++ * ESP-IDF's second-stage bootloader programs the clock tree in
++ * rtc_clk_init().  A direct-boot image has no second stage, so the ROM leaves
++ * the CPU on the crystal (20 MHz on the C3) and only throughput suffers: the
++ * tick comes from the crystal-derived systimer, so timing still looks right.
++ *
++ * Bring the CPU up to its maximum here, the way IDF would.  The C5/C6 use BBPLL
++ * calibration for their supported crystals; S31 configures and calibrates
++ * CPLL320 from XTAL40. C3 retains the ROM's PLL configuration.
++ *
++ * BSP_ESP32_CPU_FREQ_MHZ selects the target in MHz and defaults to the chip
++ * maximum; only the maximum is implemented so far.
++ */
++#if defined( LIBBSP_ESP32_C3_CHIP_DEFINITIONS_H )
++#define BSP_ESP32_CPU_FREQ_MAX_MHZ 160
++#define CLK_SYSTEM_BASE (uintptr_t) 0x600c0000
++#define CLK_CPU_PER_CONF_REG (uintptr_t) 0x08
++#define CLK_SYSCLK_CONF_REG (uintptr_t) 0x58
++#elif defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H )
++#define BSP_ESP32_CPU_FREQ_MAX_MHZ 160
++#define CLK_PCR_BASE (uintptr_t) 0x60096000
++#define CLK_PCR_SYSCLK_CONF_REG (uintptr_t) 0x110
++#define CLK_PCR_CPU_FREQ_CONF_REG (uintptr_t) 0x118
++#define CLK_PCR_AHB_FREQ_CONF_REG (uintptr_t) 0x11c
++#define CLK_PCR_BUS_CLK_UPDATE_REG (uintptr_t) 0x144
++#elif defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++#define BSP_ESP32_CPU_FREQ_MAX_MHZ 160
++#define CLK_PCR_BASE (uintptr_t) 0x60096000
++#define CLK_PCR_SYSCLK_CONF_REG (uintptr_t) 0x110
++#define CLK_PCR_CPU_FREQ_CONF_REG (uintptr_t) 0x118
++#elif defined( LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H )
++#define BSP_ESP32_CPU_FREQ_MAX_MHZ 96
++#define CLK_PCR_BASE (uintptr_t) 0x60096000
++#define CLK_PCR_SYSCLK_CONF_REG (uintptr_t) 0x10c
++#define CLK_PCR_CPU_FREQ_CONF_REG (uintptr_t) 0x114
++#define CLK_PCR_AHB_FREQ_CONF_REG (uintptr_t) 0x118
++#define CLK_PCR_BUS_CLK_UPDATE_REG (uintptr_t) 0x148
++#elif defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++#define BSP_ESP32_CPU_FREQ_MAX_MHZ 320
++#define CLK_PMU_BASE (uintptr_t) 0x20704000
++#define CLK_HP_ALIVE_SYS_BASE (uintptr_t) 0x20589000
++#define CLK_HP_SYS_CLKRST_BASE (uintptr_t) 0x20587000
++#elif defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++#if BSP_ESP32P4_REVISION == 1
++#define BSP_ESP32_CPU_FREQ_MAX_MHZ 360
++/* Keep overrides from handing the pre-v3 ROM stack/globals or upper cache
++ * partition to the allocator. The direct-boot image needs only low SRAM. */
++_Static_assert( ESP32C_RAM_ORIGIN == 0x4ff00000U,
++  "P4 v1 requires lower-bank RAM" );
++_Static_assert( ESP32C_RAM_CODE_ORIGIN == 0x4ff00000U &&
++  ESP32C_IRAM_REGION_SIZE <= 0x1000U,
++  "P4 v1 SRAM code must fit in the lower 4 KiB" );
++_Static_assert( ESP32C_RAM_ORIGIN + ESP32C_RAM_SIZE -
++  ESP32C_DRAM_ROM_RESERVE_SIZE <= 0x4ff3a000U,
++  "P4 v1 RAM overlaps the ROM reservation" );
++#else
++#define BSP_ESP32_CPU_FREQ_MAX_MHZ 400
++#endif
++#define CLK_PMU_BASE           (uintptr_t) 0x50115000
++#define CLK_HP_SYS_CLKRST_BASE (uintptr_t) 0x500E6000
++#define CLK_LP_CLKRST_BASE     (uintptr_t) 0x50111000
++#define CLK_LP_PERI_BASE       (uintptr_t) 0x50120000
++#define CLK_LP_I2C_ANA_BASE    (uintptr_t) 0x50124000
++#else
++#error "unknown ESP32 chip variant"
++#endif
++
++#ifndef BSP_ESP32_CPU_FREQ_MHZ
++#define BSP_ESP32_CPU_FREQ_MHZ BSP_ESP32_CPU_FREQ_MAX_MHZ
++#endif
++
++#if BSP_ESP32_CPU_FREQ_MHZ != BSP_ESP32_CPU_FREQ_MAX_MHZ
++#error "only the chip maximum CPU frequency is implemented; add the sequence for a lower value"
++#endif
++
++/*
++ * From the ROM, so ets_delay_us() and friends agree with the new clock.  It is
++ * referenced weakly: the ROM symbols live in the application's linker script,
++ * which a bare BSP testsuite does not pull in.  When it is absent the clock is
++ * still programmed and only the ROM's delay loop stays stale.
++ */
++extern void ets_update_cpu_frequency( uint32_t cpu_mhz )
++  __attribute__( ( weak ) );
++
++#include "bspc3rtc.h"
++#include "bspvoltage.h"
++#include "bspc6rtc.h"
++#include "bspp4pvt.h"
++
++#if defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H ) \
++  || defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H ) \
++  || defined( LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H )
++#if defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H )
++#define C5_MODEM_SYSCON_BASE (uintptr_t) 0x600a9c00
++#define C5_MODEM_LPCON_BASE (uintptr_t) 0x600af000
++#define C5_PMU_BASE (uintptr_t) 0x600b0000
++#endif
++
++/*
++ * The analog I2C master that reaches the BBPLL and bias registers.  It is a
++ * separate block from the MODEM_LPCON gate that clocks it and from the PMU
++ * that powers the PLL.
++ */
++#if defined( LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H )
++#define ESP_ANALOG_I2C_BASE (uintptr_t) 0x600ad800
++#else
++#define ESP_ANALOG_I2C_BASE (uintptr_t) 0x600af800
++#endif
++
++#if !defined( LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H )
++static void bsp_esp_bbpll_i2c_write(
++  uint32_t address,
++  uint32_t mask,
++  uint32_t value
++)
++{
++  uint32_t host = ( READ_REG( ESP_ANALOG_I2C_BASE, 0x20 ) & BSP_BIT32( 9 ) )
++    != 0 ? 0 : 4;
++  uint32_t command = 0x66u | ( address << 8 );
++
++  WRITE_REG( ESP_ANALOG_I2C_BASE, 0x1c, 0xffff7fu );
++  while ( READ_REG( ESP_ANALOG_I2C_BASE, host ) & BSP_BIT32( 25 ) ) {
++  }
++  WRITE_REG( ESP_ANALOG_I2C_BASE, host, command );
++  while ( READ_REG( ESP_ANALOG_I2C_BASE, host ) & BSP_BIT32( 25 ) ) {
++  }
++  uint32_t data = ( READ_REG( ESP_ANALOG_I2C_BASE, host ) >> 16 ) & 0xffu;
++  data = ( data & ~mask ) | value;
++  WRITE_REG( ESP_ANALOG_I2C_BASE, host,
++    command | BSP_BIT32( 24 ) | ( data << 16 ) );
++  while ( READ_REG( ESP_ANALOG_I2C_BASE, host ) & BSP_BIT32( 25 ) ) {
++  }
++}
++#endif
++
++#endif
++
++#if defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H )
++static void bsp_c5_bbpll_init( void )
++{
++  /* Match ESP-IDF clk_ll_bbpll_set_config(): the ROM can leave 40 MHz
++   * PLL settings on a board with a 48 MHz crystal. Select XTAL while
++   * recalibrating the PLL, before selecting its nominal 160 MHz output.
++   */
++  uint32_t sysclk = READ_REG( CLK_PCR_BASE, CLK_PCR_SYSCLK_CONF_REG );
++  uint32_t xtal = ( sysclk >> 24 ) & 0x7fu;
++  uint32_t lp_clock = READ_REG( C5_MODEM_LPCON_BASE, 0x18 );
++  uint32_t lp_force = READ_REG( C5_MODEM_LPCON_BASE, 0x1c );
++  uint32_t i2c_clock = READ_REG( C5_MODEM_SYSCON_BASE, 0x04 );
++  uint32_t analog_mask = READ_REG( ESP_ANALOG_I2C_BASE, 0x1c );
++
++  if ( xtal != 40 && xtal != 48 ) {
++    rtems_panic( "ESP32-C5: unsupported crystal frequency" );
++  }
++
++  /* rtc_clk_init(): preinitialize ACTIVE modem APB/I2C/LP APB ICG maps. */
++  uint32_t reg = READ_REG( C5_PMU_BASE, 0x0c );
++  WRITE_REG( C5_PMU_BASE, 0x0c, ( reg & ~( 3u << 30 ) ) | ( 2u << 30 ) );
++  reg = READ_REG( C5_MODEM_SYSCON_BASE, 0x0c );
++  WRITE_REG( C5_MODEM_SYSCON_BASE, 0x0c,
++    ( reg & ~( 15u << 28 ) ) | ( 4u << 28 ) );
++  reg = READ_REG( C5_MODEM_LPCON_BASE, 0x20 );
++  WRITE_REG( C5_MODEM_LPCON_BASE, 0x20,
++    ( reg & ~0xff000000u ) | 0x44000000u );
++  WRITE_REG( C5_PMU_BASE, 0xdc, BSP_BIT32( 31 ) );
++  WRITE_REG( C5_PMU_BASE, 0xd0, BSP_BIT32( 28 ) );
++
++  WRITE_REG( C5_PMU_BASE, 0xd0, BSP_BIT32( 31 ) );
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG,
++    READ_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG ) & ~0xffu );
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_AHB_FREQ_CONF_REG,
++    READ_REG( CLK_PCR_BASE, CLK_PCR_AHB_FREQ_CONF_REG ) & ~0xffu );
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_SYSCLK_CONF_REG,
++    sysclk & ~( 3u << 16 ) );
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_BUS_CLK_UPDATE_REG, 1 );
++  while ( READ_REG( CLK_PCR_BASE, CLK_PCR_BUS_CLK_UPDATE_REG ) != 0 ) {
++  }
++  if ( ets_update_cpu_frequency != NULL ) {
++    ets_update_cpu_frequency( xtal );
++  }
++
++  /* Power the PLL and force the analog master clock during calibration. */
++  WRITE_REG( C5_PMU_BASE, 0xcc, 0x72000000u );
++  WRITE_REG( C5_MODEM_LPCON_BASE, 0x18, lp_clock | BSP_BIT32( 2 ) );
++  WRITE_REG( C5_MODEM_LPCON_BASE, 0x1c, lp_force | BSP_BIT32( 2 ) );
++  WRITE_REG( C5_MODEM_SYSCON_BASE, 0x04, i2c_clock | BSP_BIT32( 12 ) );
++  bsp_voltage_init();
++  uint32_t cal = READ_REG( ESP_ANALOG_I2C_BASE, 0x18 );
++  WRITE_REG( ESP_ANALOG_I2C_BASE, 0x18, ( cal & ~4u ) | 8u );
++
++  bsp_esp_bbpll_i2c_write( 2, 0xffu, 0x51u );
++  bsp_esp_bbpll_i2c_write( 3, 0xffu, xtal == 48 ? 10u : 12u );
++  bsp_esp_bbpll_i2c_write( 5, 0x77u, xtal == 48 ? 0x11u : 0u );
++  bsp_esp_bbpll_i2c_write( 6, 0xf0u, 0x70u );
++  bsp_esp_bbpll_i2c_write( 9, 3u, 3u );
++
++  uint32_t timeout = 1000000;
++  while ( !( READ_REG( ESP_ANALOG_I2C_BASE, 0x18 ) & BSP_BIT32( 24 ) ) ) {
++    if ( --timeout == 0 ) {
++      rtems_panic( "ESP32-C5: PLL calibration timed out" );
++    }
++  }
++  /* Allow at least the 10 us settling interval required by ESP-IDF. */
++  for ( volatile uint32_t delay = 0; delay < 1000; ++delay ) {
++    __asm__ volatile ( "nop" );
++  }
++  cal = READ_REG( ESP_ANALOG_I2C_BASE, 0x18 );
++  WRITE_REG( ESP_ANALOG_I2C_BASE, 0x18, ( cal & ~8u ) | 4u );
++  WRITE_REG( ESP_ANALOG_I2C_BASE, 0x1c, analog_mask );
++  WRITE_REG( C5_MODEM_SYSCON_BASE, 0x04, i2c_clock );
++  WRITE_REG( C5_MODEM_LPCON_BASE, 0x18, lp_clock );
++  WRITE_REG( C5_MODEM_LPCON_BASE, 0x1c, lp_force );
++}
++#endif
++
++#if defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++static void bsp_c6_bbpll_init( void )
++{
++  const uintptr_t pmu = 0x600b0000;
++  const uintptr_t syscon = 0x600a9800;
++  const uintptr_t lpcon = 0x600af000;
++  uint32_t reg;
++
++  /* rtc_clk_init(): ACTIVE ICG code and modem APB/I2C/LP APB maps must
++   * precede PLL configuration. Preserve other domains and power states.
++   */
++  reg = READ_REG( pmu, 0x0c );
++  WRITE_REG( pmu, 0x0c, ( reg & ~( 3u << 30 ) ) | ( 2u << 30 ) );
++  reg = READ_REG( syscon, 0x0c );
++  WRITE_REG( syscon, 0x0c, ( reg & ~( 15u << 28 ) ) | ( 4u << 28 ) );
++  reg = READ_REG( lpcon, 0x20 );
++  WRITE_REG( lpcon, 0x20, ( reg & ~0xff000000u ) | 0x44000000u );
++  WRITE_REG( pmu, 0xdc, BSP_BIT32( 31 ) );
++  WRITE_REG( pmu, 0xd0, BSP_BIT32( 28 ) );
++
++  /* Select the 40 MHz crystal while configuring the 480 MHz PLL. */
++  reg = READ_REG( CLK_PCR_BASE, 0x11c );
++  WRITE_REG( CLK_PCR_BASE, 0x11c, reg & ~0xffu );
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG );
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG, reg & ~0xffu );
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_SYSCLK_CONF_REG );
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_SYSCLK_CONF_REG, reg & ~( 3u << 16 ) );
++  ( (void (*)( uint32_t )) (uintptr_t) 0x40000048U )( 40 );
++
++  /* rtc_clk_init installs the safe MSPI divider before PLL configuration. */
++  reg = READ_REG( CLK_PCR_BASE, 0x1c );
++  WRITE_REG( CLK_PCR_BASE, 0x1c, ( reg & ~0xff00u ) | ( 5u << 8 ) );
++
++  /* rtc_clk_bbpll_enable()/configure(), clk_tree_ll.h and regi2c_impl.c.
++   * The C6 PLL is fixed at 480 MHz and supports a 40 MHz crystal.
++   */
++  WRITE_REG( pmu, 0xcc, 0x70000000u );
++  WRITE_REG( pmu, 0xcc, 0x02000000u );
++  uint32_t clock = READ_REG( lpcon, 0x18 );
++  uint32_t source = READ_REG( lpcon, 0x10 );
++  uint32_t analog_mask = READ_REG( ESP_ANALOG_I2C_BASE, 0x1c );
++  WRITE_REG( lpcon, 0x18, clock | BSP_BIT32( 2 ) );
++  WRITE_REG( lpcon, 0x10, source | 1u );
++  bsp_c6_rtc_tune();
++  bsp_voltage_init();
++  reg = READ_REG( ESP_ANALOG_I2C_BASE, 0x18 );
++  WRITE_REG( ESP_ANALOG_I2C_BASE, 0x18, ( reg & ~4u ) | 8u );
++  bsp_esp_bbpll_i2c_write( 2, 0xffu, 0x50u );
++  bsp_esp_bbpll_i2c_write( 3, 0xffu, 8u );
++  bsp_esp_bbpll_i2c_write( 5, 0x77u, 0u );
++  bsp_esp_bbpll_i2c_write( 6, 0xffu, 0x73u );
++  bsp_esp_bbpll_i2c_write( 9, 3u, 2u );
++  uint32_t timeout = 1000000;
++  while ( !( READ_REG( ESP_ANALOG_I2C_BASE, 0x18 ) & BSP_BIT32( 24 ) ) ) {
++    if ( --timeout == 0 ) {
++      rtems_panic( "ESP32-C6: PLL calibration timed out" );
++    }
++  }
++  /* ESP-IDF waits 10 us after CAL_DONE before stopping calibration. */
++  bsp_c6_delay( 10 );
++  reg = READ_REG( ESP_ANALOG_I2C_BASE, 0x18 );
++  WRITE_REG( ESP_ANALOG_I2C_BASE, 0x18, ( reg & ~8u ) | 4u );
++  WRITE_REG( ESP_ANALOG_I2C_BASE, 0x1c, analog_mask );
++  WRITE_REG( lpcon, 0x10, source );
++  WRITE_REG( lpcon, 0x18, clock );
++}
++#endif
++
++#if defined( LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H )
++/*
++ * Only these three analog blocks are used at startup.  Match ESP-IDF's
++ * regi2c_enable_block(): each has its own master selector and read mask.
++ * Both this helper and the PLL routine must remain out of flash, including
++ * when optimizing: FLASH_PLL is derived from the BBPLL being calibrated.
++ */
++static BSP_FAST_TEXT_SECTION __attribute__((noinline)) void bsp_h2_i2c_write(
++  uint32_t block,
++  uint32_t address,
++  uint32_t mask,
++  uint32_t value
++)
++{
++  uint32_t select = block == 0x66u ? 9 : block == 0x6au ? 8 : 12;
++  uint32_t read_bit = block == 0x66u ? 7 : block == 0x6au ? 6 : 10;
++  uint32_t host = ( READ_REG( ESP_ANALOG_I2C_BASE, 0x20 ) & BSP_BIT32( select ) )
++    != 0 ? 0 : 4;
++  uint32_t command = block | ( address << 8 );
++
++  WRITE_REG( ESP_ANALOG_I2C_BASE, 0x1c, 0xffffffu & ~BSP_BIT32( read_bit ) );
++  while ( READ_REG( ESP_ANALOG_I2C_BASE, host ) & BSP_BIT32( 25 ) ) {
++  }
++  WRITE_REG( ESP_ANALOG_I2C_BASE, host, command );
++  while ( READ_REG( ESP_ANALOG_I2C_BASE, host ) & BSP_BIT32( 25 ) ) {
++  }
++  uint32_t data = ( READ_REG( ESP_ANALOG_I2C_BASE, host ) >> 16 ) & 0xffu;
++  data = ( data & ~mask ) | value;
++  WRITE_REG( ESP_ANALOG_I2C_BASE, host,
++    command | BSP_BIT32( 24 ) | ( data << 16 ) );
++  while ( READ_REG( ESP_ANALOG_I2C_BASE, host ) & BSP_BIT32( 25 ) ) {
++  }
++}
++
++static uint32_t bsp_h2_dbias( uint32_t calibrated, uint32_t fallback )
++{
++  /* get_act_{hp,lp}_dbias(): zero means unburnt; add two, saturating at 31. */
++  if ( calibrated == 0 ) {
++    return fallback;
++  }
++  return calibrated > 29 ? 31 : calibrated + 2;
++}
++
++static void bsp_h2_voltage_init( void )
++{
++  const uintptr_t efuse = 0x600b0800;
++  const uintptr_t pmu = 0x600b0000;
++  const uintptr_t lpcon = 0x600ad000;
++  uint32_t version = READ_REG( efuse, 0x6c );
++  uint32_t blk_version = ( ( version >> 5 ) & 3u ) * 100
++    + ( ( version >> 2 ) & 7u );
++  uint32_t hp = 17;
++  uint32_t lp = 18;
++  uint32_t reg;
++
++  /* Bootloader's low-temperature DREG_0P8 fix, then rtc_clk_init's handoff
++   * from analog I2C DREG control to the PMU, before raising CPU frequency. */
++  WRITE_REG( lpcon, 0x08, READ_REG( lpcon, 0x08 ) | BSP_BIT32( 2 ) );
++  bsp_h2_i2c_write( 0x6a, 0, 0xf0u, 0x80u );
++  bsp_h2_i2c_write( 0x6d, 8, 0x03u, 0 );
++  WRITE_REG( lpcon, 0x08, READ_REG( lpcon, 0x08 ) & ~BSP_BIT32( 2 ) );
++
++  if ( blk_version >= 3 ) {
++    uint32_t calibrated = READ_REG( efuse, 0x4c );
++    hp = bsp_h2_dbias( ( calibrated >> 17 ) & 31u, hp );
++    lp = bsp_h2_dbias( ( calibrated >> 22 ) & 31u, lp );
++  }
++  reg = READ_REG( pmu, 0x5c );
++  WRITE_REG( pmu, 0x5c, ( reg & ~( 31u << 27 ) ) | ( hp << 27 ) );
++  reg = READ_REG( pmu, 0x28 );
++  WRITE_REG( pmu, 0x28, ( reg & ~( 31u << 27 ) ) | ( hp << 27 ) );
++  reg = READ_REG( pmu, 0x9c );
++  WRITE_REG( pmu, 0x9c, ( reg & ~( 31u << 27 ) ) | ( lp << 27 ) );
++}
++
++/*
++ * _start copies .fast_text before boot_card runs the bsp_start sysinit item.
++ * Do not move this call earlier: SRAM has no code in it before that copy.
++ * Leave MSPI on the ROM's 64 MHz FLASH_PLL source and execute exclusively
++ * from SRAM until calibration has stopped.  Like IDF, wait for CAL_DONE:
++ * returning to flash on a timeout would use an uncalibrated flash clock.
++ */
++static BSP_FAST_TEXT_SECTION __attribute__((noinline)) void bsp_h2_bbpll_init( void )
++{
++  const uintptr_t pmu = 0x600b0000;
++  const uintptr_t lpcon = 0x600ad000;
++  uint32_t reg;
++
++  /* Power the PLL and the analog I2C master that programs it. */
++  WRITE_REG(
++    pmu,
++    0xcc,
++    BSP_BIT32( 25 ) | BSP_BIT32( 28 ) | BSP_BIT32( 29 ) | BSP_BIT32( 30 )
++  );
++
++  /* ANALOG_CLOCK_ENABLE(): the regi2c bus is gated by MODEM_LPCON. */
++  WRITE_REG( lpcon, 0x08, READ_REG( lpcon, 0x08 ) | BSP_BIT32( 2 ) );
++
++  /* Start calibration BEFORE programming the analog PLL configuration. */
++  reg = READ_REG( ESP_ANALOG_I2C_BASE, 0x18 );
++  WRITE_REG( ESP_ANALOG_I2C_BASE, 0x18, ( reg & ~BSP_BIT32( 2 ) ) | BSP_BIT32( 3 ) );
++  /* clk_ll_bbpll_set_config(): OC_REF_DIV, OC_DIV, DHREF_SEL and DLREF_SEL. */
++  bsp_h2_i2c_write( 0x66, 2, 0x0fu, 0x00u );
++  bsp_h2_i2c_write( 0x66, 3, 0x3fu, 0x01u );
++  bsp_h2_i2c_write( 0x66, 5, 0xf0u, 0x70u );
++  while ( !( READ_REG( ESP_ANALOG_I2C_BASE, 0x18 ) & BSP_BIT32( 24 ) ) ) {
++  }
++  /* ESP-IDF waits 10 us after CAL_DONE before stopping calibration. */
++  for ( volatile uint32_t delay = 0; delay < 1000; ++delay ) {
++    __asm__ volatile ( "nop" );
++  }
++  /* BBPLL CALIBRATION STOP */
++  reg = READ_REG( ESP_ANALOG_I2C_BASE, 0x18 );
++  WRITE_REG( ESP_ANALOG_I2C_BASE, 0x18, ( reg & ~BSP_BIT32( 3 ) ) | BSP_BIT32( 2 ) );
++  WRITE_REG( lpcon, 0x08, READ_REG( lpcon, 0x08 ) & ~BSP_BIT32( 2 ) );
++}
++#endif
++
++#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++static void bsp_s31_bus_update( void )
++{
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x14, 1u );
++  uint32_t timeout = 1000000;
++  while ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x14 ) & 1u ) {
++    if ( --timeout == 0 ) {
++      rtems_panic( "ESP32-S31: clock update timed out" );
++    }
++  }
++}
++
++static void bsp_s31_cpll_init( void )
++{
++  const uintptr_t lp_clkrst = 0x20701000;
++  const uintptr_t lpcon = 0x2010f000;
++  const uintptr_t syscon = 0x20109c00;
++  uint32_t reg;
++
++  /* rtc_clk_cpu_freq_to_xtal(): switch all buses to XTAL before changing
++   * CPLL dividers. S31 supports a 40 MHz crystal.
++   */
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x4, 0u );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x8, 0u );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0xc, 0u );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x10, 0u );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x0, 0u );
++  bsp_s31_bus_update();
++  if ( ets_update_cpu_frequency != NULL ) {
++    ets_update_cpu_frequency( 40 );
++  }
++
++  /* clk_ll_cpll_enable(): power, ungate, HP clock, ACTIVE power state. */
++  reg = READ_REG( CLK_PMU_BASE, 0xf4 );
++  WRITE_REG( CLK_PMU_BASE, 0xf4, reg | ( 1u << 27 ) | ( 1u << 23 ) );
++  reg = READ_REG( CLK_PMU_BASE, 0xf4 );
++  WRITE_REG( CLK_PMU_BASE, 0xf4, reg | ( 1u << 19 ) );
++  reg = READ_REG( CLK_HP_ALIVE_SYS_BASE, 0x0 );
++  WRITE_REG( CLK_HP_ALIVE_SYS_BASE, 0x0, reg | ( 1u << 29 ) );
++  reg = READ_REG( CLK_PMU_BASE, 0x1c );
++  WRITE_REG( CLK_PMU_BASE, 0x1c, reg | ( 1u << 27 ) | ( 1u << 23 ) );
++
++  /* clk_ll_cpll_set_freq_mhz(): XTAL40 * feedback8 / reference1. */
++  reg = READ_REG( lp_clkrst, 0x4c );
++  WRITE_REG( lp_clkrst, 0x4c, ( reg & ~0xfffu ) | 0x81u );
++  uint32_t clock = READ_REG( lpcon, 0x18 );
++  uint32_t force = READ_REG( lpcon, 0x1c );
++  uint32_t source = READ_REG( syscon, 0x04 );
++  WRITE_REG( lpcon, 0x18, clock | ( 1u << 2 ) );
++  WRITE_REG( lpcon, 0x1c, force | ( 1u << 2 ) );
++  WRITE_REG( syscon, 0x04, source | ( 1u << 12 ) );
++  bsp_voltage_init();
++  /* rtc_clk_cpll_configure(): start, wait CAL_END, settle 10 us, stop. */
++  reg = READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x174 );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x174, reg & ~( 1u << 3 ) );
++  uint32_t timeout = 1000000;
++  while ( !( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x174 ) & ( 1u << 2 ) ) ) {
++    if ( --timeout == 0 ) {
++      rtems_panic( "ESP32-S31: CPLL calibration timed out" );
++    }
++  }
++  ( (void (*)( uint32_t )) (uintptr_t) 0x2f80003cU )( 10 );
++  reg = READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x174 );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x174, reg | ( 1u << 3 ) );
++  WRITE_REG( syscon, 0x04, source );
++  WRITE_REG( lpcon, 0x18, clock );
++  WRITE_REG( lpcon, 0x1c, force );
++}
++#endif
++
++#if defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++static void bsp_p4_bus_update( void )
++{
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x04, READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x04 ) | ( 1u << 4 ) );
++  uint32_t timeout = 1000000;
++  while ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x04 ) & ( 1u << 4 ) ) {
++    if ( --timeout == 0 ) {
++      rtems_panic( "ESP32-P4: clock update timed out" );
++    }
++  }
++}
++
++static void bsp_p4_regi2c_write( uint8_t block, uint8_t reg, uint8_t val )
++{
++  /* ESP-IDF regi2c_enable_block(): select only the CPLL on master 0. */
++  WRITE_REG( CLK_LP_I2C_ANA_BASE, 0x20, ( READ_REG( CLK_LP_I2C_ANA_BASE, 0x20 ) & ~0xffffffu ) | ( 1u << 11 ) );
++  WRITE_REG( CLK_LP_I2C_ANA_BASE, 0x1c, READ_REG( CLK_LP_I2C_ANA_BASE, 0x1c ) & ~0xffffffu );
++  uint32_t timeout = 1000000;
++  while ( READ_REG( CLK_LP_I2C_ANA_BASE, 0x00 ) & ( 1u << 25 ) ) {
++    if ( --timeout == 0 ) {
++      rtems_panic( "ESP32-P4: regi2c busy timed out" );
++    }
++  }
++  uint32_t data = ( (uint32_t) block & 0xffu ) |
++                  ( ( (uint32_t) reg & 0xffu ) << 8 ) |
++                  ( ( (uint32_t) val & 0xffu ) << 16 ) |
++                  ( 1u << 24 );
++  WRITE_REG( CLK_LP_I2C_ANA_BASE, 0x00, data );
++  timeout = 1000000;
++  while ( READ_REG( CLK_LP_I2C_ANA_BASE, 0x00 ) & ( 1u << 25 ) ) {
++    if ( --timeout == 0 ) {
++      rtems_panic( "ESP32-P4: regi2c write timed out" );
++    }
++  }
++}
++
++static void bsp_p4_cpll_init( void )
++{
++  /* ESP-IDF rtc_clk_cpu_freq_to_xtal(): switch the root first, since the
++   * hardware can silently correct illegal dividers while CPLL is selected. */
++  WRITE_REG( CLK_LP_CLKRST_BASE, 0x40, READ_REG( CLK_LP_CLKRST_BASE, 0x40 ) & ~3u );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x04, ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x04 ) & ~( 0xffffffu << 5 ) ) );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x08, ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x08 ) & ~( 0xffu | ( 0xffu << 24 ) ) ) );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x0c, ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x0c ) & ~( 0xffu << 16 ) ) );
++  bsp_p4_bus_update();
++
++  if ( ets_update_cpu_frequency != NULL ) {
++    ets_update_cpu_frequency( 40 );
++  }
++
++  /* Enable LP_I2CMST clock */
++  WRITE_REG( CLK_LP_PERI_BASE, 0x00, READ_REG( CLK_LP_PERI_BASE, 0x00 ) | ( 1u << 27 ) );
++  WRITE_REG( CLK_LP_I2C_ANA_BASE, 0x34, READ_REG( CLK_LP_I2C_ANA_BASE, 0x34 ) | 1u );
++  bsp_voltage_init();
++
++  /* Power up CPLL in PMU */
++  WRITE_REG( CLK_PMU_BASE, 0xcc, READ_REG( CLK_PMU_BASE, 0xcc ) | ( 1u << 27 ) | ( 1u << 23 ) | ( 1u << 17 ) );
++
++  /* ESP-IDF rtc_clk_cpll_configure(): start calibration before programming
++   * the analog registers, then wait for completion and a timed settling period. */
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0xbc, READ_REG( CLK_HP_SYS_CLKRST_BASE, 0xbc ) & ~( 1u << 3 ) );
++
++  /* ESP-IDF clk_ll_cpll_set_config(): ECO1 uses div7_0=9 for 360 MHz;
++   * v3 uses div7_0=10 for 400 MHz. ECO0 is not supported by this BSP. */
++  bsp_p4_regi2c_write( 0x67, 2, 0x50 );
++#if BSP_ESP32P4_REVISION == 1
++  bsp_p4_regi2c_write( 0x67, 3, 9 );
++#else
++  bsp_p4_regi2c_write( 0x67, 3, 10 );
++#endif
++  bsp_p4_regi2c_write( 0x67, 6, 0x73 );
++
++  uint32_t timeout = 1000000;
++  while ( !( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0xbc ) & ( 1u << 2 ) ) ) {
++    if ( --timeout == 0 ) {
++      rtems_panic( "ESP32-P4: CPLL calibration timed out" );
++    }
++  }
++  ( (void (*)( uint32_t )) (uintptr_t) 0x4fc0003cU )( 10 ); /* ets_delay_us */
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0xbc, READ_REG( CLK_HP_SYS_CLKRST_BASE, 0xbc ) | ( 1u << 3 ) );
++  WRITE_REG( CLK_LP_PERI_BASE, 0x00, READ_REG( CLK_LP_PERI_BASE, 0x00 ) & ~( 1u << 27 ) );
++
++  /* Configure Bus Dividers: APB -> SYS -> MEM -> CPU */
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x0c, ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x0c ) & ~( 0xffu << 16 ) ) | ( 1u << 16 ) );
++  bsp_p4_bus_update();
++
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x08, ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x08 ) & ~( 0xffu << 24 ) ) );
++  bsp_p4_bus_update();
++
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x08, ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x08 ) & ~0xffu ) | 1u );
++  bsp_p4_bus_update();
++
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x04, ( READ_REG( CLK_HP_SYS_CLKRST_BASE, 0x04 ) & ~( 0xffffffu << 5 ) ) );
++  bsp_p4_bus_update();
++
++  /* Select CPLL root clock */
++  WRITE_REG( CLK_LP_CLKRST_BASE, 0x40, ( READ_REG( CLK_LP_CLKRST_BASE, 0x40 ) & ~3u ) | 1u );
++}
++#endif
++
++static void bsp_clock_init( void )
++{
++  uint32_t cpu_freq_mhz = BSP_ESP32_CPU_FREQ_MHZ;
++
++#if defined( LIBBSP_ESP32_C3_CHIP_DEFINITIONS_H )
++
++  bsp_c3_clock_init();
++
++#elif defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H )
++
++  uint32_t reg;
++
++  bsp_c5_bbpll_init();
++
++  /* CPU = PLL_F160M / 1, AHB = PLL_F160M / 4 = 40 MHz. */
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG );
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG, reg & ~0xFFu );
++
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_AHB_FREQ_CONF_REG );
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_AHB_FREQ_CONF_REG, ( reg & ~0xFFu ) | 3u );
++
++  /* SOC_CLK_SEL = PLL_F160M (2). */
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_SYSCLK_CONF_REG );
++  WRITE_REG(
++    CLK_PCR_BASE,
++    CLK_PCR_SYSCLK_CONF_REG,
++    ( reg & ~( 0x3u << 16 ) ) | ( 2u << 16 )
++  );
++
++  /* Latch the change and wait for the bus to settle. */
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_BUS_CLK_UPDATE_REG, 1u );
++  while ( READ_REG( CLK_PCR_BASE, CLK_PCR_BUS_CLK_UPDATE_REG ) != 0u ) {
++  }
++
++#elif defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++
++  uint32_t reg;
++
++  bsp_c6_bbpll_init();
++
++  /* CPU = PLL(480) with the HS divider at 3 -> 160 MHz. */
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG );
++  reg &= ~( 0xFFu << 8 );
++  reg &= ~( 1u << 16 );
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG, reg );
++
++  /* SOC_CLK_SEL = PLL (1). */
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_SYSCLK_CONF_REG );
++  WRITE_REG(
++    CLK_PCR_BASE,
++    CLK_PCR_SYSCLK_CONF_REG,
++    ( reg & ~( 0x3u << 16 ) ) | ( 1u << 16 )
++  );
++
++#elif defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++
++  bsp_s31_cpll_init();
++
++  /* CPLL 320 -> CPU /1 (320), MEM /2 (160), SYS /3 (106.67), APB /2 (53.33). */
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x8, 1u );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0xc, 2u );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x10, 1u );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x4, 0u );
++  WRITE_REG( CLK_HP_SYS_CLKRST_BASE, 0x0, 1u );
++
++  bsp_s31_bus_update();
++
++#elif defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++
++  bsp_p4_cpll_init();
++
++#elif defined( LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H )
++
++  uint32_t reg;
++
++  bsp_h2_voltage_init();
++  bsp_h2_bbpll_init();
++  /* CPU = PLL(96) / 1, AHB = PLL(96) / 3 = 32 MHz, the AHB maximum. */
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG );
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_CPU_FREQ_CONF_REG, reg & ~0xFFu );
++
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_AHB_FREQ_CONF_REG );
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_AHB_FREQ_CONF_REG, ( reg & ~0xFFu ) | 2u );
++
++  /* SOC_CLK_SEL = PLL (1). */
++  reg = READ_REG( CLK_PCR_BASE, CLK_PCR_SYSCLK_CONF_REG );
++  WRITE_REG(
++    CLK_PCR_BASE,
++    CLK_PCR_SYSCLK_CONF_REG,
++    ( reg & ~( 0x3u << 16 ) ) | ( 1u << 16 )
++  );
++
++  /* Latch the dividers and the new source, then wait for the bus to settle. */
++  WRITE_REG( CLK_PCR_BASE, CLK_PCR_BUS_CLK_UPDATE_REG, 1u );
++  while ( READ_REG( CLK_PCR_BASE, CLK_PCR_BUS_CLK_UPDATE_REG ) != 0u ) {
++  }
++
++#endif
++
++#if defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++  ( (void (*)( uint32_t )) (uintptr_t) 0x40000048U )( cpu_freq_mhz );
++#else
++  if ( ets_update_cpu_frequency != NULL ) {
++    ets_update_cpu_frequency( cpu_freq_mhz );
++  }
++#endif
++}
++
++#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++void bsp_esp32s31_initialize_pma( void )
++{
++  /*
++   * The ROM's PMA entry 14 maps the 512 KiB HP TCM as read/write, without
++   * execute permission.  PMA applies even in machine mode and is per hart.
++   * Give RTEMS the same executable SRAM mapping as ESP-IDF before starting
++   * any tasks; Wi-Fi can execute on a different hart from its initializer.
++   * Keep the ROM's other PMA regions and their cache attributes unchanged.
++   */
++  __asm__ volatile (
++    ".option push\n"
++    ".option arch, +zicsr\n"
++    "csrw 0xbce, zero\n"
++    "csrw 0xbde, %0\n"
++    "csrw 0xbce, %1\n"
++    ".option pop\n"
++    :
++    : "r" ( ( 0x2f000000U | ( 0x80000U / 2U - 1U ) ) >> 2 ),
++      "r" ( 0xc000001dU ) /* NAPOT, enabled, read/write/execute */
++    : "memory"
++  );
++}
++#endif
++
++/*
++ * LP WDT register offsets.  The H2 carries one extra configuration register at
++ * the end of the block, which shifts write protection, the super watchdog's
++ * configuration and its write protection by one word each.
++ */
++#if defined( LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H )
++#define LP_WDT_WPROTECT_OFFSET     0x1cu
++#define LP_WDT_SWD_CONFIG_OFFSET   0x20u
++#define LP_WDT_SWD_WPROTECT_OFFSET 0x24u
++#else
++#define LP_WDT_WPROTECT_OFFSET     0x18u
++#define LP_WDT_SWD_CONFIG_OFFSET   0x1cu
++#define LP_WDT_SWD_WPROTECT_OFFSET 0x20u
++#endif
++
+ void bsp_start( void )
+ {
++#if BSP_ESP32P4_REVISION == 1
++  /* All supported L2 modes use only upper SRAM. Preserve ROM's mapping and
++   * cache configuration; never make the lower-bank allocator depend on size. */
++  uint32_t cache_size = READ_REG( (uintptr_t) 0x3ff10000U, 0x278 );
++  if ( cache_size != ( 1U << 9 ) && cache_size != ( 1U << 10 ) &&
++       cache_size != ( 1U << 11 ) ) {
++    rtems_panic( "ESP32-P4 v1: unsupported L2 cache size" );
++  }
++#endif
++
++#if defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H )
++  /* Like ESP-IDF, permit execution from SRAM. The direct-boot ROM leaves
++   * PMA entry 14 read/write only, which also constrains machine mode.
++   * Keep its range and other attributes, adding only execute permission.
++   */
++  uint32_t sram_pma;
++  __asm__ volatile (
++    ".option push\n"
++    ".option arch, +zicsr\n"
++    "csrr %0, 0xbce\n"
++    "csrw 0xbce, zero\n"
++    "ori %0, %0, 4\n"
++    "csrw 0xbce, %0\n"
++    ".option pop\n"
++    : "=&r" ( sram_pma )
++    :
++    : "memory"
++  );
++#endif
++
++#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++  bsp_esp32s31_initialize_pma();
++#endif
++
++  bsp_clock_init();
++
++#if defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++  bsp_p4_pvt_init();
++#elif defined( LIBBSP_ESP32_C3_CHIP_DEFINITIONS_H )
++  bsp_c3_rtc_init();
++#elif defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++  bsp_c6_rtc_init();
++#endif
++
++  uint32_t timg_wdtconfig0;
++
++#if defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++  /* Unlock and disable LP WDT */
++  WRITE_REG( LP_WDT_BASE, LP_WDT_WPROTECT_OFFSET, 0x50d83aa1U );
++  uint32_t lp_wdt = READ_REG( LP_WDT_BASE, 0x0 );
++  WRITE_REG( LP_WDT_BASE, 0x0, lp_wdt & ~( BSP_BIT32( 31 ) | BSP_BIT32( 12 ) ) );
++
++  /* Unlock and auto-feed the super watchdog (SWD) */
++  WRITE_REG( LP_WDT_BASE, LP_WDT_SWD_WPROTECT_OFFSET, 0x50d83aa1U );
++  uint32_t swd = READ_REG( LP_WDT_BASE, LP_WDT_SWD_CONFIG_OFFSET );
++  WRITE_REG( LP_WDT_BASE, LP_WDT_SWD_CONFIG_OFFSET, swd | BSP_BIT32( 18 ) );
++#else
+   uint32_t wdt_config0;
+   uint32_t swd_conf;
+-  uint32_t timg_wdtconfig0;
+ 
+   /* disable RTC watchdog write protection */
+   RTC_WRITE( RTC_CNTL_WDTWPROTECT_REG, RTC_CNTL_WDTWPROTECT_KEY );
+ 
+-  /* disable the RTC watchdog */
++  /*
++   * Disable the RTC watchdog.
++   *
++   * & ~EN, not & EN.  The original cleared every bit *except* the enable,
++   * which is the inverse of what it reads as -- it left the watchdog running
++   * and cleared its stage-action fields instead.
++   *
++   * That was accidentally safe rather than wrong in effect: RTC_CNTL_WDT_STG0
++   * and its three siblings occupy bits 30:28 downwards and encode 0 as "no
++   * action", so a watchdog with every stage set to nothing does nothing.  It
++   * is corrected because the next reader should not have to work that out, and
++   * because a mistake in this register presents on real silicon as a boot loop
++   * with no other symptom -- QEMU does not model these, so it has never been
++   * exercised either way.
++   */
+   wdt_config0 = RTC_READ( RTC_CNTL_WDTCONFIG0_REG );
+-  RTC_WRITE( RTC_CNTL_WDTCONFIG0_REG, wdt_config0 & RTC_CNTL_WDTCONFIG0_EN );
++  RTC_WRITE(
++    RTC_CNTL_WDTCONFIG0_REG,
++    wdt_config0 & ~( RTC_CNTL_WDTCONFIG0_EN | RTC_CNTL_WDT_FLASHBOOT_MOD_EN )
++  );
+ 
+   /* disable super watchdog write protection */
+   RTC_WRITE( RTC_CNTL_SWD_WPROTECT_REG, RTC_CNTL_SWD_WPROTECT_KEY );
+@@ -82,15 +899,48 @@ void bsp_start( void )
+ 
+   /* clear SWD stall register */
+   RTC_WRITE( RTC_CNTL_SW_CPU_STALL_REG, 0 );
++#endif
++
++  /*
++   * Disable timergroup 0's watchdog, the same correction as above -- and
++   * unlock it first, which the RTC watchdog above gets and this one did not.
++   *
++   * Every write to the timergroup watchdog registers is discarded while
++   * TIMG_WDTWPROTECT_REG holds anything other than the key, with no error and
++   * no other symptom, so the disable was a no-op and the watchdog stayed
++   * enabled at its reset timeout.
++   *
++   * The flash-boot mode bit matters more than the enable.  It defaults to 1
++   * and is independent: clearing only TIMG_WDTCONFIG0_EN leaves a watchdog
++   * that still bites, which is what the register read back as on hardware --
++   * 0x0004c000, enable clear and flash-boot mode set.
++   *
++   * On silicon that is roughly a second and a half, after which the chip
++   * resets with rst:0x7 (TG0WDT_SYS_RST).  Anything that boots and finishes
++   * inside that window looks perfectly healthy, which is why every test so far
++   * has: it only bites once something runs for longer, and the first thing
++   * that did was bringing up WiFi.  QEMU models neither watchdog, so this
++   * could not have shown up before hardware.
++   */
++  TIMG_WRITE( TIMG_WDTWPROTECT_REG, TIMG_WDTWPROTECT_KEY );
+ 
+-  /* Disable timergroup 0 watchdog */
+   timg_wdtconfig0 = TIMG_READ( TIMG_WDTCONFIG0_REG );
+-  TIMG_WRITE( TIMG_WDTCONFIG0_REG, timg_wdtconfig0 & TIMG_WDTCONFIG0_EN );
++  TIMG_WRITE(
++    TIMG_WDTCONFIG0_REG,
++    timg_wdtconfig0 & ~( TIMG_WDTCONFIG0_EN | TIMG_WDT_FLASHBOOT_MOD_EN )
++  );
+ 
+   bsp_interrupt_initialize();
+ }
+ 
+ /* src is the offset in flash */
++/*
++ * The distance from the instruction window to the data window onto the same
++ * SRAM, defined in the BSP's linker script.  A LINKER_SYMBOL rather than a
++ * constant here so that changing the memory map changes one place.
++ */
++LINKER_SYMBOL( esp32c_iram_to_dram_delta );
++
+ BSP_START_TEXT_SECTION static inline void copy_from_flash_offset(
+   void       *dest,
+   const void *src,
+@@ -98,7 +948,13 @@ BSP_START_TEXT_SECTION static inline void copy_from_flash_offset(
+ )
+ {
+   /* The RAM load sections are offset from 0x0, offset from mapped flash base */
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++  uintptr_t flash_base = 0x40000000;
++#elif defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H)
++  uintptr_t flash_base = 0x42000000;
++#else
+   uintptr_t flash_base = 0x3c000000;
++#endif
+ 
+   uintptr_t flash_address = ( (uintptr_t) src );
+   flash_address += flash_base;
+@@ -113,8 +969,17 @@ BSP_START_TEXT_SECTION void bsp_start_copy_sections( void )
+     (size_t) bsp_section_data_size
+   );
+ 
++  /*
++   * .fast_text is linked in the instruction window so that calls into it
++   * resolve to 0x4038xxxx, but it is *written* through the data window.  The
++   * two address the same SRAM; stores through the data bus are the access the
++   * part guarantees, and are how ESP-IDF loads its own IRAM.
++   *
++   * esp32c_iram_to_dram_delta comes from the linker script, so the two places
++   * that know the window layout cannot drift apart.
++   */
+   copy_from_flash_offset(
+-    bsp_section_fast_text_begin,
++    (char *) bsp_section_fast_text_begin + (intptr_t) esp32c_iram_to_dram_delta,
+     bsp_section_fast_text_load_begin,
+     (size_t) bsp_section_fast_text_size
+   );
+@@ -124,4 +989,14 @@ BSP_START_TEXT_SECTION void bsp_start_copy_sections( void )
+     bsp_section_fast_data_load_begin,
+     (size_t) bsp_section_fast_data_size
+   );
++#if defined( LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H )
++  /* Publish the SRAM instructions before bsp_start calls the PLL routines. */
++  __asm__ volatile (
++    ".option push\n"
++    ".option arch, +zifencei\n"
++    "fence.i\n"
++    ".option pop\n"
++    ::: "memory"
++  );
++#endif
+ }
+diff --git a/bsps/riscv/esp32/start/bspvoltage.h b/bsps/riscv/esp32/start/bspvoltage.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..01898e1190ee05ecbdbc1e4286e3bbff8e2d23ea
+--- /dev/null
++++ b/bsps/riscv/esp32/start/bspvoltage.h
+@@ -0,0 +1,260 @@
++/*
++ * SPDX-FileCopyrightText: 2022-2026 Espressif Systems (Shanghai) CO LTD
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/*
++ * Direct-boot voltage prerequisites, from ESP-IDF 9a97f6c54ec638111ce55cd36581b3c192f15207:
++ * esp_hw_support/port/<chip>/{rtc_clk_init.c,pmu_param.c,pmu_init.c},
++ * esp_hal_regi2c/<chip>/regi2c_impl.c and soc/<chip> register definitions.
++ * Initialize LP_ACTIVE sleep controls before building a retained LP_SLEEP
++ * template; P4 preserves XPD, matching its distinct PMU initializer.
++ * This is not the full IDF PMU/PVT or sleep policy.  The caller has selected
++ * XTAL, updated ROM timing and enabled the chip's analog master clock.
++ * C3 and H2 deliberately retain their existing startup sequences.
++ */
++#if defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H ) \
++  || defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H ) \
++  || defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H ) \
++  || defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++
++#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++#define VOLTAGE_I2C_BASE (uintptr_t) 0x2010f800
++#define VOLTAGE_PMU_BASE (uintptr_t) 0x20704000
++#elif defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++#define VOLTAGE_I2C_BASE (uintptr_t) 0x50124000
++#define VOLTAGE_PMU_BASE (uintptr_t) 0x50115000
++#else
++#define VOLTAGE_I2C_BASE (uintptr_t) 0x600af800
++#define VOLTAGE_PMU_BASE (uintptr_t) 0x600b0000
++#endif
++
++static void bsp_voltage_i2c_wait( uint32_t host )
++{
++  uint32_t timeout = 1000000;
++
++  while ( READ_REG( VOLTAGE_I2C_BASE, host ) & BSP_BIT32( 25 ) ) {
++    if ( --timeout == 0 ) {
++      rtems_panic( "ESP32: voltage regi2c timed out" );
++    }
++  }
++}
++
++/* C6 also accesses ULP (0x61) for power-on o-code initialization. */
++static void bsp_voltage_i2c_write(
++  uint32_t block,
++  uint32_t address,
++  uint32_t mask,
++  uint32_t value
++)
++{
++  uint32_t host;
++  uint32_t command = block | ( address << 8 );
++
++#if defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++  /* P4 actively selects one slave on master 0, unlike C5/C6/S31. */
++  uint32_t select = block == 0x6du ? 10 : 12;
++  WRITE_REG( VOLTAGE_I2C_BASE, 0x20,
++    ( READ_REG( VOLTAGE_I2C_BASE, 0x20 ) & ~0xffffffu ) | BSP_BIT32( select ) );
++  WRITE_REG( VOLTAGE_I2C_BASE, 0x1c,
++    READ_REG( VOLTAGE_I2C_BASE, 0x1c ) & ~0xffffffu );
++  host = 0;
++#else
++#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++  /* DIG_REG (0x6d) bit 13, BIAS (0x6a) bit 4, MPLL (0x0b) bit 12.
++   * CONF2 shift 4, CONF1 shift 2. */
++  uint32_t bit_mask;
++  switch ( block ) {
++    case 0x6d: bit_mask = 1u << 13; break; /* DIG_REG */
++    case 0x6a: bit_mask = 1u << 4; break;  /* BIAS */
++    case 0x0b: bit_mask = 1u << 12; break; /* MPLL */
++    default: bit_mask = 0; break;
++  }
++  uint32_t select = bit_mask << 4;
++  uint32_t read_mask = ~( bit_mask << 2 ) & 0xffffffu;
++  host = ( READ_REG( VOLTAGE_I2C_BASE, 0x20 ) & select ) != 0 ? 0 : 4;
++  WRITE_REG( VOLTAGE_I2C_BASE, 0x1c, read_mask );
++#else
++#if defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++  const uint32_t select = block == 0x61u ? 10 : 12;
++  const uint32_t read_bit = block == 0x61u ? 8 : 10;
++#else
++  const uint32_t select = 12;
++  const uint32_t read_bit = 10;
++#endif
++  host = ( READ_REG( VOLTAGE_I2C_BASE, 0x20 ) & BSP_BIT32( select ) )
++    != 0 ? 0 : 4;
++  WRITE_REG( VOLTAGE_I2C_BASE, 0x1c, 0xffffffu & ~BSP_BIT32( read_bit ) );
++#endif
++#endif
++  bsp_voltage_i2c_wait( host );
++  WRITE_REG( VOLTAGE_I2C_BASE, host, command );
++  bsp_voltage_i2c_wait( host );
++  uint32_t data = ( READ_REG( VOLTAGE_I2C_BASE, host ) >> 16 ) & 0xffu;
++  data = ( data & ~mask ) | ( value & mask );
++  WRITE_REG( VOLTAGE_I2C_BASE, host,
++    command | BSP_BIT32( 24 ) | ( data << 16 ) );
++  bsp_voltage_i2c_wait( host );
++}
++
++static void bsp_voltage_field( uint32_t offset, uint32_t mask, uint32_t value )
++{
++  WRITE_REG( VOLTAGE_PMU_BASE, offset,
++    ( READ_REG( VOLTAGE_PMU_BASE, offset ) & ~mask ) | value );
++}
++
++#if !defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++static uint32_t bsp_voltage_dbias(
++  uint32_t calibrated,
++  uint32_t margin,
++  uint32_t fallback
++)
++{
++  if ( calibrated == 0 ) {
++    return fallback;
++  }
++  return calibrated + margin > 31 ? 31 : calibrated + margin;
++}
++#endif
++
++static void bsp_voltage_init( void )
++{
++  uint32_t mask = READ_REG( VOLTAGE_I2C_BASE, 0x1c );
++#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++  /* pmu_hp_system_init(ACTIVE): the shared analog master is not owned by
++   * any individual PLL.  Power it and release isolation/retention. */
++  bsp_voltage_field( 0x1c, 7u << 20, BSP_BIT32( 22 ) );
++  WRITE_REG( VOLTAGE_PMU_BASE, 0xf0, BSP_BIT32( 28 ) | BSP_BIT32( 2 ) );
++  WRITE_REG( VOLTAGE_PMU_BASE, 0x110, BSP_BIT32( 31 ) );
++#elif defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H ) \
++  || defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++  bsp_voltage_field( 0x14, 7u << 26, BSP_BIT32( 28 ) );
++  WRITE_REG( VOLTAGE_PMU_BASE, 0xe8, BSP_BIT32( 31 ) );
++#endif
++#if defined( LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H )
++  uint32_t select = READ_REG( VOLTAGE_I2C_BASE, 0x20 );
++
++  /* P4 FORCE fields are NOT the C5/C6 ENIF fields. */
++  bsp_voltage_i2c_write( 0x6d, 10, 3u, 3u );
++  bsp_voltage_i2c_write( 0x6d, 13, 12u, 0 );
++  bsp_voltage_i2c_write( 0x6a, 4, 15u, 0 );
++
++  const uintptr_t efuse = 0x5012d000;
++  uint32_t version = READ_REG( efuse, 0x4c );
++  uint32_t blk = ( ( version >> 11 ) & 3u ) * 100
++    + ( ( version >> 8 ) & 7u );
++  uint32_t calibrated = blk >= 2 && blk != 100 ? READ_REG( efuse, 0x54 ) : 0;
++  uint32_t hp = bsp_voltage_dbias( ( calibrated >> 16 ) & 15u, 16, 24 );
++  uint32_t lp = bsp_voltage_dbias( ( calibrated >> 20 ) & 15u, 20, 29 );
++
++  /* Keep HP LDO on until the DCDC has settled.  Preserve a higher PVT VSET. */
++  bsp_voltage_field( 0x28, BSP_BIT32( 18 ), BSP_BIT32( 18 ) );
++  bsp_voltage_field( 0x28, 31u << 27, hp << 27 );
++  bsp_voltage_field( 0x9c, 0xffa00000u, lp << 27 );
++  uint32_t vset = ( READ_REG( VOLTAGE_PMU_BASE, 0x28 ) >> 9 ) & 31u;
++  if ( vset < 27 ) {
++    vset = 27;
++  }
++#if BSP_ESP32P4_REVISION != 1
++  /* Only the v3 BSP uses IDF's >=3.1 feedback-resistor/FIB workaround. */
++  uint32_t major = ( ( version >> 4 ) & 3u ) | ( ( ( version >> 23 ) & 1u ) << 2 );
++  uint32_t revision = major * 100 + ( version & 15u );
++  if ( revision >= 301 ) {
++    bsp_voltage_field( 0x204, BSP_BIT32( 11 ), BSP_BIT32( 11 ) );
++  }
++#endif
++  /* pmu_ll_set_dcdc_en(true): clear DONE_FORCE, then request ON. */
++  bsp_voltage_field( 0x204, BSP_BIT32( 7 ), 0 );
++  bsp_voltage_field( 0x204, BSP_BIT32( 0 ), BSP_BIT32( 0 ) );
++  bsp_voltage_field( 0x10c, 3u, 0 ); /* release both switch force controls */
++  bsp_voltage_field( 0x18, 31u << 18, vset << 18 );
++  bsp_voltage_field( 0x28, BSP_BIT32( 14 ), BSP_BIT32( 14 ) );
++  ( (void (*)( uint32_t )) (uintptr_t) 0x4fc0003cU )( 1000 );
++#if BSP_ESP32P4_REVISION != 1
++  if ( revision >= 301 ) {
++    const uintptr_t lp_system = 0x50110000;
++    WRITE_REG( lp_system, 0x08,
++      ( READ_REG( lp_system, 0x08 ) & ~( 255u << 21 ) ) | ( 0xefu << 21 ) );
++    bsp_voltage_field( 0x204, BSP_BIT32( 11 ), 0 );
++    ( (void (*)( uint32_t )) (uintptr_t) 0x4fc0003cU )( 10 );
++  }
++#endif
++  bsp_voltage_field( 0x28, BSP_BIT32( 18 ), 0 );
++  /* pmu_hp_system_init(ACTIVE): do not retain reset sleep-LDO controls. */
++  bsp_voltage_field( 0x28,
++    BSP_BIT32( 16 ) | BSP_BIT32( 17 ) | ( 15u << 23 ), 0 );
++
++  WRITE_REG( VOLTAGE_I2C_BASE, 0x20, select );
++#else
++  bsp_voltage_i2c_write( 0x6d, 5, 0x80u, 0x80u );
++  bsp_voltage_i2c_write( 0x6d, 7, 0x80u, 0x80u );
++#if !defined( LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H )
++  /* C6 rtc_clk_init deliberately does not clear XPD_RTC/DIG_REG. */
++  bsp_voltage_i2c_write( 0x6d, 13, 12u, 0 );
++#endif
++#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++  /* bootloader_esp32s31.c:61-63: unconditional analog-bias setup before clocks */
++  bsp_voltage_i2c_write( 0x0b, 1, 3u, 3u );       /* MPLL IR_CAL_EXT_CAP = 3 */
++  bsp_voltage_i2c_write( 0x6a, 0, 0xf0u, 0xc0u ); /* BIAS DREG_1P1 = 12 */
++  bsp_voltage_i2c_write( 0x6a, 1, 0x0fu, 0x0cu ); /* BIAS DREG_1P1_PVT = 12 */
++  bsp_voltage_i2c_write( 0x6d, 14, 0xffu, 0x80u ); /* DIG_REG SCK_DCAP = 128 */
++#endif
++
++#if defined( LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H )
++  /* S31 uses a deliberate fixed-voltage/no-PVT profile with nominal biases (26).
++   * PVT is disabled in RTEMS. */
++  bsp_voltage_field( 0x20, 0xfe000000u, BSP_BIT32( 25 ) );
++  bsp_voltage_field( 0x34, ( 31u << 27 ) | ( 31u << 9 ) | ( 31u << 4 )
++      | BSP_BIT32( 18 ) | BSP_BIT32( 14 ) | BSP_BIT32( 3 ),
++    ( 26u << 27 ) | ( 0x1cu << 9 ) | ( 0xdu << 4 )
++      | BSP_BIT32( 18 ) | BSP_BIT32( 14 ) | BSP_BIT32( 3 ) );
++  bsp_voltage_field( 0x74, 31u << 27, 26u << 27 );
++  bsp_voltage_field( 0xc0, 0xffe00000u, ( 26u << 27 ) | BSP_BIT32( 22 ) );
++
++  /* rtc_clk_init.c / clk.c: enable RC_FAST in PMU (xpd_fosc=1, pd_osc=0) */
++  WRITE_REG( VOLTAGE_PMU_BASE, 0xd0,
++    ( READ_REG( VOLTAGE_PMU_BASE, 0xd0 ) & ~BSP_BIT32( 31 ) ) | BSP_BIT32( 30 ) );
++  ( (void (*)( uint32_t )) (uintptr_t) 0x2f80003cU )( 50 ); /* 50 us delay */
++
++  /* Select fast clock source RC_FAST (0) and slow clock source RC_SLOW (0) */
++  const uintptr_t lp_root_clk_conf = 0x20701000;
++  WRITE_REG( lp_root_clk_conf, 0x00,
++    READ_REG( lp_root_clk_conf, 0x00 ) & ~( 3u << 26 ) );
++  ( (void (*)( uint32_t )) (uintptr_t) 0x2f80003cU )( 3 );   /* 3 us delay */
++  WRITE_REG( lp_root_clk_conf, 0x00,
++    READ_REG( lp_root_clk_conf, 0x00 ) & ~( 7u << 23 ) );
++  ( (void (*)( uint32_t )) (uintptr_t) 0x2f80003cU )( 300 ); /* 300 us delay */
++
++  /* Force releases and ICG updates belong to sleep's full FSM initializer,
++   * after its ACTIVE/LP policies are installed, not this voltage-only setup.
++   */
++  bsp_voltage_field( 0x15c, 3u << 16, 2u << 16 );
++#else
++#if defined( LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H )
++  const uintptr_t efuse = 0x600b4800;
++  uint32_t version = READ_REG( efuse, 0x4c );
++  uint32_t chip = ( ( version >> 4 ) & 3u ) * 100 + ( version & 15u );
++  uint32_t blk = ( ( version >> 11 ) & 3u ) * 100
++    + ( ( version >> 8 ) & 7u );
++  bool valid = ( chip == 1 && blk >= 1 ) || ( chip >= 100 && blk >= 2 );
++  uint32_t calibrated = valid ? READ_REG( efuse, 0x50 ) : 0;
++  uint32_t hp = bsp_voltage_dbias( ( calibrated >> 10 ) & 15u, 19, 28 );
++  uint32_t lp = bsp_voltage_dbias( ( calibrated >> 14 ) & 15u, 19, 28 );
++#else
++  const uintptr_t efuse = 0x600b0800;
++  uint32_t version = READ_REG( efuse, 0x50 );
++  uint32_t blk = ( ( version >> 30 ) & 3u ) * 100
++    + ( ( version >> 27 ) & 7u );
++  uint32_t calibrated = blk >= 3 ? READ_REG( efuse, 0x4c ) : 0;
++  uint32_t hp = bsp_voltage_dbias( calibrated & 31u, 2, 25 );
++  uint32_t lp = bsp_voltage_dbias( ( calibrated >> 5 ) & 31u, 2, 26 );
++#endif
++  bsp_voltage_field( 0x28, BSP_BIT32( 14 ), BSP_BIT32( 14 ) );
++  bsp_voltage_field( 0x28, 31u << 27, hp << 27 );
++  bsp_voltage_field( 0x5c, 31u << 27, hp << 27 );
++  bsp_voltage_field( 0x9c, 0xffe00000u, ( lp << 27 ) | BSP_BIT32( 22 ) );
++#endif
++#endif
++  WRITE_REG( VOLTAGE_I2C_BASE, 0x1c, mask );
++}
++#endif
+diff --git a/spec/build/bsps/riscv/esp32/obj.yml b/spec/build/bsps/riscv/esp32/obj.yml
+index 6beff6ea7c8eb6782b60220db23cef7b4926a3aa..27326f0137aeec950ee34574360b3e5598e94844 100644
+--- a/spec/build/bsps/riscv/esp32/obj.yml
++++ b/spec/build/bsps/riscv/esp32/obj.yml
+@@ -13,17 +13,30 @@ install:
+   - bsps/riscv/esp32/include/bsp.h
+ - destination: ${BSP_INCLUDEDIR}/bsp
+   source:
++  - bsps/riscv/esp32/include/bsp/bt.h
++  - bsps/riscv/esp32/include/bsp/i2c.h
++  - bsps/riscv/esp32/include/bsp/pin.h
++  - bsps/riscv/esp32/include/bsp/spi.h
++  - bsps/riscv/esp32/include/bsp/uart.h
+   - bsps/riscv/esp32/include/bsp/irq.h
+ links: []
+ source:
+ - bsps/riscv/esp32/console/console-config.c
++- bsps/riscv/esp32/console/uart_c3.c
+ - bsps/riscv/esp32/clock/clockdrv_systimer.c
++- bsps/riscv/esp32/bt/bt_c3.c
++- bsps/riscv/esp32/gpio/gpio_c3.c
++- bsps/riscv/esp32/i2c/i2c_c3.c
++- bsps/riscv/esp32/pin/pin.c
++- bsps/riscv/esp32/spi/spi_c3.c
+ - bsps/riscv/esp32/irq/irq_c3.c
+ - bsps/riscv/esp32/start/bspstart.c
++- bsps/riscv/esp32/start/bspsmp.c
+ - bsps/shared/atomics/__atomic_test_and_set.c
+ - bsps/shared/cache/nocache.c
+ - bsps/shared/dev/btimer/btimer-cpucounter.c
+ - bsps/shared/dev/getentropy/getentropy-cpucounter.c
++- bsps/shared/dev/gpio/gpio-support.c
+ - bsps/shared/dev/serial/console-polled.c
+ - bsps/shared/irq/irq-default-handler.c
+ - bsps/shared/start/bspfatal-default.c

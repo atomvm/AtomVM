@@ -1,0 +1,67 @@
+From c7bc59869b4d28cf4969c987e843d1eddffe1928 Mon Sep 17 00:00:00 2001
+From: Peter M <petermm@gmail.com>
+Date: Mon, 19 Oct 2026 08:14:52 +0200
+Subject: [PATCH 6/6] Allow DHCP leases behind Wi-Fi AP proxy ARP
+
+An AP can answer ARP announcements with the leased station address and the
+AP MAC. Full address-conflict detection then declines the valid DHCP lease.
+Keep the normal DHCP bind path and disable its ACD check on the ESP ports.
+
+Original-patch: 0007-esp32-allow-dhcp-with-ap-proxy-arp.patch
+Original-author/date: inferred from AtomVM commit
+57de16db46a63b82c7880199ddc875870338b680; original patch has no headers.
+---
+ rtemslwip/esp32c3/lwipbspopts.h  | 3 +++
+ rtemslwip/esp32c5/lwipbspopts.h  | 3 +++
+ rtemslwip/esp32c6/lwipbspopts.h  | 3 +++
+ rtemslwip/esp32s31/lwipbspopts.h | 3 +++
+ 4 files changed, 12 insertions(+)
+
+diff --git a/rtemslwip/esp32c3/lwipbspopts.h b/rtemslwip/esp32c3/lwipbspopts.h
+index b883f4c9c638ff6e76cb61ba762003fe68293e8b..974d22f9bd7b389c8c046f42b1dc068fed4427f3 100644
+--- a/rtemslwip/esp32c3/lwipbspopts.h
++++ b/rtemslwip/esp32c3/lwipbspopts.h
+@@ -113,4 +113,7 @@
+  */
+ #define LWIP_NETIF_STATUS_CALLBACK  1
+ 
++/* Wi-Fi AP proxy ARP can claim a station address with the AP MAC. */
++#define LWIP_DHCP_DOES_ACD_CHECK 0
++
+ #endif /* RTEMSLWIP_ESP32C3_LWIPBSPOPTS_H */
+diff --git a/rtemslwip/esp32c5/lwipbspopts.h b/rtemslwip/esp32c5/lwipbspopts.h
+index 8b3b7cb5b1112924e3b9542b52ce7981b78de2e3..29382755a34d3fa37c553d55faa6b9345bb917c5 100644
+--- a/rtemslwip/esp32c5/lwipbspopts.h
++++ b/rtemslwip/esp32c5/lwipbspopts.h
+@@ -46,4 +46,7 @@
+ 
+ #define LWIP_NETIF_STATUS_CALLBACK  1
+ 
++/* Wi-Fi AP proxy ARP can claim a station address with the AP MAC. */
++#define LWIP_DHCP_DOES_ACD_CHECK 0
++
+ #endif /* RTEMSLWIP_ESP32C5_LWIPBSPOPTS_H */
+diff --git a/rtemslwip/esp32c6/lwipbspopts.h b/rtemslwip/esp32c6/lwipbspopts.h
+index 9b1b315d5e5c771c929f07740be4c82925ed6f60..9d47c58ea2f7583979de7c92234fb5e956381316 100644
+--- a/rtemslwip/esp32c6/lwipbspopts.h
++++ b/rtemslwip/esp32c6/lwipbspopts.h
+@@ -46,4 +46,7 @@
+ 
+ #define LWIP_NETIF_STATUS_CALLBACK  1
+ 
++/* Wi-Fi AP proxy ARP can claim a station address with the AP MAC. */
++#define LWIP_DHCP_DOES_ACD_CHECK 0
++
+ #endif /* RTEMSLWIP_ESP32C6_LWIPBSPOPTS_H */
+diff --git a/rtemslwip/esp32s31/lwipbspopts.h b/rtemslwip/esp32s31/lwipbspopts.h
+index f6e40f328a7c98a977b87d1fb73604a3fbc298b6..d77dab601434981aa1d40fcc964292d1aadcc900 100644
+--- a/rtemslwip/esp32s31/lwipbspopts.h
++++ b/rtemslwip/esp32s31/lwipbspopts.h
+@@ -46,4 +46,7 @@
+ 
+ #define LWIP_NETIF_STATUS_CALLBACK  1
+ 
++/* Wi-Fi AP proxy ARP can claim a station address with the AP MAC. */
++#define LWIP_DHCP_DOES_ACD_CHECK 0
++
+ #endif /* RTEMSLWIP_ESP32S31_LWIPBSPOPTS_H */

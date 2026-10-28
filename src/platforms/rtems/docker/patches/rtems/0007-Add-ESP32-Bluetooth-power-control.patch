@@ -1,0 +1,434 @@
+From 56260cb5dc5569946d14fe6b39586b6befd6a4ea Mon Sep 17 00:00:00 2001
+From: Samuel Price <thesamprice@gmail.com>
+Date: Wed, 28 Oct 2026 17:54:12 +0100
+Subject: [PATCH 7/9] Add ESP32 Bluetooth power control
+
+Provide C3 Bluetooth block power control and explicit unsupported
+operations on other chips; interrupt routing is installed separately.
+
+Consolidates legacy kernel patches: 0012, 0014, 0015, 0017, 0035, 0037.
+
+Co-authored-by: Peter Madsen-Mygdal <petermm@gmail.com>
+Signed-off-by: Samuel Price <thesamprice@gmail.com>
+Assisted-by: Claude Opus 5 (1M context) <noreply@anthropic.com>
+Signed-off-by: Peter Madsen-Mygdal <petermm@gmail.com>
+---
+ bsps/riscv/esp32/bt/bt_c3.c       | 239 ++++++++++++++++++++++++++++++
+ bsps/riscv/esp32/include/bsp/bt.h | 162 ++++++++++++++++++++
+ 2 files changed, 401 insertions(+)
+ create mode 100644 bsps/riscv/esp32/bt/bt_c3.c
+ create mode 100644 bsps/riscv/esp32/include/bsp/bt.h
+
+diff --git a/bsps/riscv/esp32/bt/bt_c3.c b/bsps/riscv/esp32/bt/bt_c3.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..de31dbf6259dabaee72dc4228e049e54fffa0f19
+--- /dev/null
++++ b/bsps/riscv/esp32/bt/bt_c3.c
+@@ -0,0 +1,239 @@
++/* SPDX-License-Identifier: BSD-2-Clause */
++
++/**
++ * @file
++ *
++ * @ingroup RTEMSBSPsRISCVESP32BT
++ *
++ * @brief This source file contains the implementation of the ESP32-C3
++ *   Bluetooth hardware bring-up.
++ */
++
++/*
++ * Copyright (C) 2026 Samuel Price <thesamprice@gmail.com>
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ */
++
++#include <bsp.h>
++#include <bsp/bt.h>
++#include <bsp/irq.h>
++
++#include <rtems/counter.h>
++
++#if defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++
++void bsp_esp32_bt_get_state( bsp_esp32_bt_state *state )
++{
++  state->dig_pwc = 0;
++  state->dig_iso = 0;
++  state->clk_en = 0;
++}
++
++bool bsp_esp32_bt_is_enabled( void )
++{
++  return false;
++}
++
++rtems_status_code bsp_esp32_bt_enable( void )
++{
++  return RTEMS_UNSATISFIED;
++}
++
++rtems_status_code bsp_esp32_bt_disable( void )
++{
++  return RTEMS_SUCCESSFUL;
++}
++
++#else
++
++#define RTC_REG( off ) \
++  ( *( (volatile uint32_t *) ( RTC_CNTL_BASE + (off) ) ) )
++#define SYSCON_REG( off ) \
++  ( *( (volatile uint32_t *) ( SYSCON_BASE + (off) ) ) )
++
++/* soc/esp32c3/register/soc/rtc_cntl_reg.h */
++#define RTC_CNTL_DIG_PWC     0x0088
++#define BT_FORCE_PD          ( 1u << 11 )
++#define BT_FORCE_PU          ( 1u << 12 )
++#define BT_PD_EN             ( 1u << 27 )
++#define RTC_CNTL_DIG_ISO     0x008c
++#define BT_FORCE_ISO         ( 1u << 22 )
++#define BT_FORCE_NOISO       ( 1u << 23 )
++
++/* soc/esp32c3/register/soc/syscon_reg.h */
++#define SYSTEM_WIFI_CLK_EN   0x0014
++#define SYSTEM_WIFI_RST_EN   0x0018
++
++/*
++ * SYSTEM_BT_BASEBAND_EN and SYSTEM_BT_LC_EN.  ESP-IDF's own
++ * SYSTEM_WIFI_CLK_BT_EN_M is defined as 0 on this chip, so
++ * periph_module_enable( PERIPH_BT_MODULE ) enables nothing and something else
++ * has to do the work -- the same trap the WiFi port hit with the MAC clock,
++ * where SYSTEM_WIFI_CLK_WIFI_EN_M is likewise 0.  The comment on
++ * RTEMS_WIFI_CLK_EXTRA in the WiFi glue records bits 11, 12, 16 and 17 as
++ * still clear after WiFi bring-up and unnamed by any public header; three of
++ * those four are these.
++ */
++#define BT_BASEBAND_CLK_EN   ( 1u << 11 )
++#define BT_LC_CLK_EN         ( ( 1u << 16 ) | ( 1u << 17 ) )
++#define BT_CLK_EN            ( BT_BASEBAND_CLK_EN | BT_LC_CLK_EN )
++
++/*
++ * SYSTEM_WIFI_CLK_WIFI_BT_COMMON_M.  Shared with WiFi, so it is only ever set
++ * here, never cleared.
++ */
++#define WIFI_BT_COMMON_CLK   0x78078Fu
++
++/*
++ * The Bluetooth half of MODEM_RESET_FIELD_WHEN_PU: BTBB, BTMAC, RW_BTMAC,
++ * RW_BTMAC_REG and BTBB_REG.  RW_BTLP and RW_BTLP_REG are the low power
++ * module, which ESP-IDF leaves out of the power-up reset, so they are left out
++ * here too.
++ */
++#define BT_RESET_WHEN_PU                                                      \
++  ( ( 1u << 3 ) | ( 1u << 4 ) | ( 1u << 9 ) | ( 1u << 11 ) | ( 1u << 13 ) )
++
++/*
++ * ESP-IDF waits 10us after clearing the power-down force before it touches the
++ * block.  rtems_task_wake_after() cannot express that: it rounds to a whole
++ * tick and yields, and this runs with the domain half up.  The CPU counter is
++ * running by the time any of this is reachable.
++ */
++static void bt_delay_us( uint32_t us )
++{
++  rtems_counter_ticks start = rtems_counter_read();
++  rtems_counter_ticks want = rtems_counter_nanoseconds_to_ticks( us * 1000u );
++
++  while ( rtems_counter_read() - start < want ) {
++    /* wait */
++  }
++}
++
++void bsp_esp32_bt_get_state( bsp_esp32_bt_state *state )
++{
++  state->dig_pwc = RTC_REG( RTC_CNTL_DIG_PWC );
++  state->dig_iso = RTC_REG( RTC_CNTL_DIG_ISO );
++  state->clk_en = SYSCON_REG( SYSTEM_WIFI_CLK_EN );
++}
++
++bool bsp_esp32_bt_is_enabled( void )
++{
++  bsp_esp32_bt_state state;
++
++  bsp_esp32_bt_get_state( &state );
++
++  return ( state.dig_pwc & BT_FORCE_PD ) == 0 &&
++         ( state.dig_iso & BT_FORCE_ISO ) == 0 &&
++         ( state.clk_en & BT_CLK_EN ) == BT_CLK_EN;
++}
++
++rtems_status_code bsp_esp32_bt_enable( void )
++{
++  uint32_t reg;
++
++  /*
++   * Powered, and forced so rather than left to the automatic control.
++   *
++   * ESP-IDF clears only BT_FORCE_PD, because it can rely on BT_FORCE_PU and
++   * BT_FORCE_NOISO still holding their reset value of 1.  On this boot path
++   * they do not.  The WiFi port measured DIG_PWC as 0x00000800 and DIG_ISO as
++   * 0x00400080 by the time the port runs: bit 11 is BT_FORCE_PD and bit 22 is
++   * BT_FORCE_ISO, so Bluetooth arrives forced down and isolated with every
++   * FORCE_PU and FORCE_NOISO bit clear.  Clearing the negatives alone returns
++   * the domain to automatic control, which is the state it is already in and
++   * which leaves the block dark.
++   *
++   * BT_PD_EN is cleared so nothing power-gates the domain behind our back.
++   */
++  reg = RTC_REG( RTC_CNTL_DIG_PWC );
++  reg &= ~( BT_FORCE_PD | BT_PD_EN );
++  reg |= BT_FORCE_PU;
++  RTC_REG( RTC_CNTL_DIG_PWC ) = reg;
++
++  bt_delay_us( 10u );
++
++  /* The common clock has to be on across the reset pulse. */
++  reg = SYSCON_REG( SYSTEM_WIFI_CLK_EN );
++  SYSCON_REG( SYSTEM_WIFI_CLK_EN ) = reg | WIFI_BT_COMMON_CLK;
++
++  /* Reset the Bluetooth block now it has power: assert, then release. */
++  reg = SYSCON_REG( SYSTEM_WIFI_RST_EN );
++  SYSCON_REG( SYSTEM_WIFI_RST_EN ) = reg | BT_RESET_WHEN_PU;
++  SYSCON_REG( SYSTEM_WIFI_RST_EN ) = reg & ~BT_RESET_WHEN_PU;
++
++  /*
++   * Out of isolation.  Order matters: power, then reset, then this.
++   * BT_FORCE_NOISO for the same reason as BT_FORCE_PU above.
++   */
++  reg = RTC_REG( RTC_CNTL_DIG_ISO );
++  reg &= ~BT_FORCE_ISO;
++  reg |= BT_FORCE_NOISO;
++  RTC_REG( RTC_CNTL_DIG_ISO ) = reg;
++
++  /*
++   * The baseband and link controller clocks, which unlike the common ones stay
++   * on.  A controller reads its own registers before anything else, and
++   * without these the window is dark rather than merely idle.
++   */
++  reg = SYSCON_REG( SYSTEM_WIFI_CLK_EN );
++  SYSCON_REG( SYSTEM_WIFI_CLK_EN ) = reg | BT_CLK_EN;
++
++  /*
++   * Read back rather than assume.  Every bring-up failure seen on this part so
++   * far has been a write that did not stick, and reporting it here is the
++   * difference between a diagnosable error and a controller that hangs on its
++   * first register read.
++   */
++  if ( !bsp_esp32_bt_is_enabled() ) {
++    return RTEMS_IO_ERROR;
++  }
++
++  return RTEMS_SUCCESSFUL;
++}
++
++rtems_status_code bsp_esp32_bt_disable( void )
++{
++  uint32_t reg;
++
++  /*
++   * Clocks first, so the block is stopped before it is isolated rather than
++   * losing its supply mid-access.  Only the Bluetooth bits: the common ones
++   * are WiFi's as well.
++   */
++  reg = SYSCON_REG( SYSTEM_WIFI_CLK_EN );
++  SYSCON_REG( SYSTEM_WIFI_CLK_EN ) = reg & ~BT_CLK_EN;
++
++  reg = RTC_REG( RTC_CNTL_DIG_ISO );
++  reg &= ~BT_FORCE_NOISO;
++  reg |= BT_FORCE_ISO;
++  RTC_REG( RTC_CNTL_DIG_ISO ) = reg;
++
++  reg = RTC_REG( RTC_CNTL_DIG_PWC );
++  reg &= ~BT_FORCE_PU;
++  reg |= BT_FORCE_PD;
++  RTC_REG( RTC_CNTL_DIG_PWC ) = reg;
++
++  return RTEMS_SUCCESSFUL;
++}
++
++#endif /* C5/C6/S31 only */
+diff --git a/bsps/riscv/esp32/include/bsp/bt.h b/bsps/riscv/esp32/include/bsp/bt.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..f9942259324bc69b28b001e255a4acfa9085836c
+--- /dev/null
++++ b/bsps/riscv/esp32/include/bsp/bt.h
+@@ -0,0 +1,162 @@
++/* SPDX-License-Identifier: BSD-2-Clause */
++
++/**
++ * @file
++ *
++ * @ingroup RTEMSBSPsRISCVESP32
++ *
++ * @brief ESP32 Bluetooth hardware bring-up interface.
++ */
++
++/*
++ * Copyright (C) 2026 Samuel Price <thesamprice@gmail.com>
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ */
++
++#ifndef LIBBSP_ESP32_BSP_BT_H
++#define LIBBSP_ESP32_BSP_BT_H
++
++#include <rtems.h>
++
++#include <stdbool.h>
++#include <stdint.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/**
++ * @defgroup RTEMSBSPsRISCVESP32BT ESP32 Bluetooth
++ *
++ * @ingroup RTEMSBSPsRISCVESP32
++ *
++ * @brief This group contains the Bluetooth hardware bring-up for the ESP32-C3.
++ *
++ * This is the half of Bluetooth support that is the BSP's: the power domain,
++ * the clocks, the resets and the interrupt sources.  It brings the Bluetooth
++ * block from the state the ROM leaves it in -- powered down and isolated -- to
++ * one where a link layer controller can be started on it, and it makes the
++ * seven Bluetooth interrupt sources reachable through the ordinary RTEMS
++ * interrupt API.
++ *
++ * It does not contain a Bluetooth stack and there is no radio traffic here.
++ * The link layer on this part is a binary controller, libble_app.a from the
++ * esp32c3-bt-lib repository, which is out of the BSP's scope for the same
++ * reason the WiFi libraries are: it needs an operating system adapter with
++ * some ninety entry points, and that belongs in a glue layer above the BSP.
++ * What that controller needs from below is what is here.
++ *
++ * Interrupts are installed with rtems_interrupt_handler_install() on the
++ * vectors the chip header names: #BT_MAC_INTR, #BT_BB_INTR, #BT_BB_NMI_INTR,
++ * #RWBT_INTR, #RWBLE_INTR, #RWBT_NMI_INTR and #RWBLE_NMI_INTR.  No Bluetooth
++ * specific interrupt call is needed once those are in the matrix table.
++ *
++ * @{
++ */
++
++/**
++ * @brief This structure provides the hardware state this driver controls.
++ *
++ * The raw register values rather than decoded flags, so that a caller
++ * diagnosing a bring-up failure sees what the hardware actually says.  The
++ * bring-up is a sequence of read-modify-writes against three registers and
++ * every failure mode observed so far shows up as one of them not holding the
++ * value that was written.
++ */
++typedef struct {
++  /**
++   * @brief This member contains RTC_CNTL_DIG_PWC_REG.
++   *
++   * Bit 11 forces the Bluetooth domain down, bit 12 forces it up and bit 27
++   * hands it to the automatic power gate.
++   */
++  uint32_t dig_pwc;
++
++  /**
++   * @brief This member contains RTC_CNTL_DIG_ISO_REG.
++   *
++   * Bit 22 isolates the Bluetooth domain and bit 23 forces it out of
++   * isolation.
++   */
++  uint32_t dig_iso;
++
++  /**
++   * @brief This member contains SYSTEM_WIFI_CLK_EN_REG.
++   *
++   * Bit 11 is the Bluetooth baseband clock and bits 16 and 17 are the link
++   * controller's.  The bits shared with WiFi are in the low half.
++   */
++  uint32_t clk_en;
++} bsp_esp32_bt_state;
++
++/**
++ * @brief Brings the Bluetooth block out of power-down and reset.
++ *
++ * Powers the Bluetooth domain, takes it out of isolation, enables the baseband
++ * and link controller clocks and pulses the Bluetooth resets.  Safe to call
++ * when WiFi is already up: only the Bluetooth bits are written, and the clock
++ * bits the two share are set, never cleared.  A second call re-runs the
++ * sequence, which resets the block, so a caller that has already started a
++ * controller should not make one.
++ *
++ * @retval RTEMS_SUCCESSFUL Successful operation.
++ * @retval RTEMS_IO_ERROR The hardware did not hold what was written.  This
++ *   means the domain did not come up; bsp_esp32_bt_get_state() says which
++ *   register disagreed.
++ */
++rtems_status_code bsp_esp32_bt_enable( void );
++
++/**
++ * @brief Returns the Bluetooth block to power-down and isolation.
++ *
++ * Clears the Bluetooth clocks and forces the domain down and isolated.  The
++ * clock bits shared with WiFi are left alone, so this does not disturb a
++ * running WiFi.
++ *
++ * @retval RTEMS_SUCCESSFUL Successful operation.
++ */
++rtems_status_code bsp_esp32_bt_disable( void );
++
++/**
++ * @brief Reports whether the Bluetooth block is powered, out of isolation and
++ *   clocked.
++ *
++ * @return Returns true, if all three are the case, otherwise false.
++ */
++bool bsp_esp32_bt_is_enabled( void );
++
++/**
++ * @brief Reports the three registers the bring-up drives.
++ *
++ * @param[out] state is the pointer to a bsp_esp32_bt_state object.  The
++ *   registers are read in the order of the structure's members.
++ */
++void bsp_esp32_bt_get_state( bsp_esp32_bt_state *state );
++
++/** @} */
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* LIBBSP_ESP32_BSP_BT_H */

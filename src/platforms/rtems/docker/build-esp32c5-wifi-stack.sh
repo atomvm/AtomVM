@@ -320,7 +320,8 @@ riscv-rtems7-gcc -march=rv32imac -mabi=ilp32 -DRTEMS_BOARD_ESP32C5 -DESP_PLATFOR
 # stack orchestration, OS/PHY services), so it is built here where the vendor
 # NimBLE porting headers live rather than shipping them to the app.  The NPL
 # header os/os.h pulls in comes from the glue's include/nimble/ (added by
-# patch 0018), not the vendor FreeRTOS NPL, which needs the full FreeRTOS tree.
+# the C5 Bluetooth patch), not the vendor FreeRTOS NPL, which needs the full
+# FreeRTOS tree.
 BT_INC="-I ${HAL}/bt/porting/include \
         -I ${HAL}/bt/host/nimble/port/include \
         -I ${HAL}/bt/host/nimble/nimble/porting/nimble/include"

@@ -307,8 +307,8 @@ share a counter; different events use different counters. Check that received
 counters continue increasing throughout the test, including after Wi-Fi restarts.
 Connections, pairing and GATT are not implemented by this controller smoke test.
 
-The C5 SDK also needs RTEMS patch `0034-esp32c5-route-bluetooth-interrupts.patch`
-and Wi-Fi glue patch `0018-rtems-esp-wifi-c5-bluetooth.patch`. Rebuild an older
+The C5 SDK also needs RTEMS patch `0008-Fix-ESP32-interrupt-routing-and-clock-ticks.patch`
+and Wi-Fi glue patch `0008-c5-bluetooth-dependencies.patch`. Rebuild an older
 SDK: the C5's shared C6 interrupt table lacks the controller's BT_MAC and
 LP_TIMER routes, and its Bluetooth security and timer clocks need enabling.
 The C5 test runs each associated Wi-Fi phase for 60 seconds.
