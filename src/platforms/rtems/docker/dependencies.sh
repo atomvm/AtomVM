@@ -1,12 +1,12 @@
 # Copyright 2026 Peter M. <petermm@gmail.com>
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 
-# Source revisions used by the successful RTEMS CI run 39153602941.
+# Source revisions shared by RTEMS builds.
 # Keep CI, Docker and native builds on the same sources. RSB also pins its
 # compiler, binutils, newlib and RTEMS 6 kernel archives by revision and hash.
 RTEMS_RSB6_COMMIT=84b3f5660ebaa96e1e405ca12f67b538b48636d6
 RTEMS_RSB7_COMMIT=74fffa09a3df68b7e6cacabbde243ea7828edb34
-RTEMS_KERNEL7_COMMIT=4bca987369df73718cdee1576323c9384fc728b2
+RTEMS_KERNEL7_COMMIT=402de13a864f8876c48a8c108cc2e3541d87bd07
 RTEMS_LIBBSD_COMMIT=96319dbdbbd4a38244453e351a132bd728b27eb1
 RTEMS_LWIP_COMMIT=f7962bdca9f5dbbfc8bf21b38896596acc911cfb
 RTEMS_LWIP_WAF_COMMIT=8bd39e6047a93aca82d28638644b92cc7a141286
