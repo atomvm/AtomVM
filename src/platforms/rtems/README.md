@@ -530,13 +530,33 @@ SPI = spi:open([
 ok = spi:close(SPI).
 ```
 
-GPIO direct bank/pin access addresses `{Bank, Pin}` (`1..7`, `0..31`), with optional dynamic pinmuxing via `gpio:set_pin_mux/2`:
+All GPIO-enabled RTEMS targets use the generic `/dev/gpio` device API. ESP32
+uses its BSP controller; i.MX7 and GRiSP 2 register an FDT-discovered i.MX
+controller. RTEMS 6 SDKs without the API use the unmodified upstream
+[compatibility sources](compat/README.md), without changing the toolchain or
+LibBSD version. Targets without a GPIO controller still return `enotsup`.
+
+GPIO direct bank/pin access on i.MX addresses `{Bank, Pin}` (`1..7`, `0..31`);
+banks absent from the FDT are unavailable. Optional dynamic pinmuxing uses
+`gpio:set_pin_mux/2`:
 
 ```erlang
-ok = gpio:set_pin_mux({1, 3}, 5), % ALT5 = GPIO
+ok = gpio:set_pin_mux({1, 3}, 0), % i.MX7 GPIO1_IO03: ALT0 (i.MX6UL/GRiSP 2 uses ALT5)
 ok = gpio:set_pin_mode({1, 3}, output),
 ok = gpio:digital_write({1, 3}, high).
 ```
+
+Mode, pull and trigger changes preserve the output latch through
+release/configure; this is not a glitch-free operation. `gpio:deinit/1`
+disables the pin's interrupt and releases its configuration. The i.MX
+controller tracks its configured pins' latches, including input preloads;
+unknown hidden input latches on unowned pins cannot be recovered from a
+register that reads pad levels. Its lock is not shared with the legacy BSP
+GPIO API: do not mix concurrent legacy and generic accesses to the same
+bank. Pinmux remains board-specific, separate from the generic GPIO API.
+i.MX7 open drain is emulated through direction changes; i.MX6UL uses the
+pad's open-drain control. On i.MX, reads do not change direction: outputs
+report the tracked latch and inputs sample the pad.
 
 An FDT consumer property can instead identify a pin and preserve its active
 polarity:

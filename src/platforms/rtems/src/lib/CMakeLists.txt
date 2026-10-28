@@ -142,6 +142,14 @@ endforeach()
 target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${_rtems_force_link})
 
 if(RTEMS_ARCH STREQUAL "arm" AND RTEMS_BSP_NAME STREQUAL "imx7")
+    target_sources(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE imx_gpio_device.c)
+    include(CheckIncludeFile)
+    check_include_file("dev/gpio/gpio.h" RTEMS_HAS_GPIO_DEVICE_API)
+    if(NOT RTEMS_HAS_GPIO_DEVICE_API)
+        set(_rtems_gpio_compat "${CMAKE_CURRENT_SOURCE_DIR}/../../compat")
+        target_sources(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE "${_rtems_gpio_compat}/gpio.c")
+        target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE "${_rtems_gpio_compat}/include")
+    endif()
     target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
         RTEMS_HAS_GPIO
         RTEMS_HAS_IMX_GPIO
