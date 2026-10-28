@@ -34,8 +34,9 @@
 #include <bsp/irq.h>
 #include <libfdt.h>
 #elif defined(RTEMS_HAS_ESP32C3_GPIO)
-#include <bsp/gpio.h>
-#include <bsp/pin.h>
+#include <dev/gpio/gpio.h>
+#include <fcntl.h>
+#include <unistd.h>
 #endif
 #endif
 
@@ -138,41 +139,22 @@ RTEMS_INTERRUPT_LOCK_DEFINE(static, gpio_lock, "gpio_lock")
 static bool gpio_bank_irq_installed[7][2];
 static uint32_t open_drain_mask[7];
 #elif defined(RTEMS_HAS_ESP32C3_GPIO)
-#if defined(RTEMS_BOARD_ESP32P4)
-#define ESP32C3_GPIO_REG_BASE 0x500E0000
-#define ESP32C3_GPIO_PIN0_REG (ESP32C3_GPIO_REG_BASE + 0x74)
-#elif defined(RTEMS_BOARD_ESP32S31)
-#define ESP32C3_GPIO_REG_BASE 0x20583000
-#define ESP32C3_GPIO_PIN0_REG (ESP32C3_GPIO_REG_BASE + 0xF4)
-#else
-#define ESP32C3_GPIO_REG_BASE 0x60004000
-#define ESP32C3_GPIO_PIN0_REG (ESP32C3_GPIO_REG_BASE + 0x74)
-#endif
+static int esp32_gpio_fd = -1;
+static bool esp32_gpio_owned[BSP_GPIO_PIN_COUNT];
 
-static bool esp32c3_gpio_irq_installed = false;
-
-static void esp32c3_gpio_isr(void *arg)
+static void esp32_gpio_isr(uint32_t pin, void *arg)
 {
-    (void) arg;
-    uint32_t pending = rtems_gpio_bsp_interrupt_line(rtems_gpio_bsp_get_vector(0));
-    if (pending == 0) {
-        return;
-    }
+    UNUSED(arg);
 
     rtems_interrupt_lock_context lock_context;
     rtems_interrupt_lock_acquire(&gpio_lock, &lock_context);
 
-    while (pending != 0) {
-        unsigned pin = (unsigned) __builtin_ctz(pending);
-        pending &= ~(1u << pin);
-
-        uint32_t head = gpio_event_queue.head;
-        uint32_t next_head = (head + 1) % GPIO_EVENT_QUEUE_SIZE;
-        if (next_head != gpio_event_queue.tail) {
-            gpio_event_queue.events[head].bank = 0;
-            gpio_event_queue.events[head].pin = (uint8_t) pin;
-            gpio_event_queue.head = next_head;
-        }
+    uint32_t head = gpio_event_queue.head;
+    uint32_t next_head = (head + 1) % GPIO_EVENT_QUEUE_SIZE;
+    if (next_head != gpio_event_queue.tail) {
+        gpio_event_queue.events[head].bank = 0;
+        gpio_event_queue.events[head].pin = (uint8_t) pin;
+        gpio_event_queue.head = next_head;
     }
 
     rtems_interrupt_lock_release(&gpio_lock, &lock_context);
@@ -180,6 +162,69 @@ static void esp32c3_gpio_isr(void *arg)
     if (atomvm_main_task_id != 0) {
         rtems_event_send(atomvm_main_task_id, RTEMS_EVENT_0);
     }
+}
+
+static bool esp32_gpio_get_config(unsigned pin, rtems_gpio_config *config)
+{
+    if (esp32_gpio_fd < 0) {
+        esp32_gpio_fd = open("/dev/gpio", O_RDWR);
+    }
+    return esp32_gpio_fd >= 0
+        && rtems_gpio_pin_get_configuration(esp32_gpio_fd, pin, config) == 0;
+}
+
+/* The device API configures only free pins. Preserve the other settings and
+ * restore the previous configuration if a mode/pull/trigger change fails. */
+static bool esp32_gpio_configure(unsigned pin, rtems_gpio_config *config)
+{
+    rtems_gpio_config previous;
+    if (!esp32_gpio_get_config(pin, &previous)) {
+        return false;
+    }
+    bool configured = previous.direction != RTEMS_GPIO_DIRECTION_NONE;
+    if (configured && rtems_gpio_pin_release(esp32_gpio_fd, pin) != 0) {
+        return false;
+    }
+    if (config->direction == RTEMS_GPIO_DIRECTION_NONE) {
+        config->direction = RTEMS_GPIO_DIRECTION_INPUT;
+    }
+    bool success = rtems_gpio_pin_configure(esp32_gpio_fd, pin, config) == 0;
+    if (!success) {
+        if (!configured || rtems_gpio_pin_configure(esp32_gpio_fd, pin, &previous) != 0) {
+            esp32_gpio_owned[pin] = false;
+            return false;
+        }
+    }
+    esp32_gpio_owned[pin] = true;
+    if ((success ? config->trigger : previous.trigger) != RTEMS_GPIO_TRIGGER_NONE) {
+        for (size_t i = 0; i < MAX_GPIO_LISTENERS; i++) {
+            if (gpio_listeners[i].active && gpio_listeners[i].bank == 0 && gpio_listeners[i].pin == pin) {
+                if (rtems_gpio_pin_irq_enable(esp32_gpio_fd, pin, RTEMS_GPIO_IRQ_DEFAULT, esp32_gpio_isr, NULL) != 0) {
+                    return false;
+                }
+                break;
+            }
+        }
+    }
+    return success;
+}
+
+static void gpio_nif_destroy(GlobalContext *global)
+{
+    UNUSED(global);
+    if (esp32_gpio_fd >= 0) {
+        for (unsigned pin = 0; pin < BSP_GPIO_PIN_COUNT; pin++) {
+            if (esp32_gpio_owned[pin]) {
+                rtems_gpio_pin_release(esp32_gpio_fd, pin);
+                esp32_gpio_owned[pin] = false;
+            }
+        }
+        close(esp32_gpio_fd);
+        esp32_gpio_fd = -1;
+    }
+    memset(gpio_listeners, 0, sizeof(gpio_listeners));
+    memset(&gpio_event_queue, 0, sizeof(gpio_event_queue));
+    atomvm_main_task_id = 0;
 }
 
 static bool parse_esp32c3_pin(term pin_term, unsigned *pin_num, bool *is_int)
@@ -618,7 +663,12 @@ static term nif_gpio_init(Context *ctx, int argc, term argv[])
     unsigned pin_num;
     bool is_int;
     if (parse_esp32c3_pin(argv[0], &pin_num, &is_int)) {
-        if (rtems_gpio_bsp_select_input(0, pin_num, NULL) != RTEMS_SUCCESSFUL) {
+        rtems_gpio_config config;
+        if (!esp32_gpio_get_config(pin_num, &config)) {
+            return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));
+        }
+        config.direction = RTEMS_GPIO_DIRECTION_INPUT;
+        if (!esp32_gpio_configure(pin_num, &config)) {
             return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));
         }
         return OK_ATOM;
@@ -648,7 +698,21 @@ static term nif_gpio_deinit(Context *ctx, int argc, term argv[])
     unsigned pin_num;
     bool is_int;
     if (parse_esp32c3_pin(argv[0], &pin_num, &is_int)) {
-        bsp_pin_release(pin_num);
+        rtems_gpio_config config;
+        if (!esp32_gpio_get_config(pin_num, &config)
+            || (config.direction != RTEMS_GPIO_DIRECTION_NONE
+                && rtems_gpio_pin_release(esp32_gpio_fd, pin_num) != 0)) {
+            return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));
+        }
+        esp32_gpio_owned[pin_num] = false;
+        rtems_interrupt_lock_context lock_context;
+        rtems_interrupt_lock_acquire(&gpio_lock, &lock_context);
+        for (size_t i = 0; i < MAX_GPIO_LISTENERS; i++) {
+            if (gpio_listeners[i].active && gpio_listeners[i].bank == 0 && gpio_listeners[i].pin == pin_num) {
+                gpio_listeners[i].active = false;
+            }
+        }
+        rtems_interrupt_lock_release(&gpio_lock, &lock_context);
         return OK_ATOM;
     }
 #endif
@@ -671,22 +735,25 @@ static term nif_gpio_set_pin_mode(Context *ctx, int argc, term argv[])
     unsigned pin_num;
     bool is_int;
     if (parse_esp32c3_pin(argv[0], &pin_num, &is_int)) {
-        volatile uint32_t *reg = (volatile uint32_t *) (ESP32C3_GPIO_PIN0_REG + 4 * pin_num);
+        rtems_gpio_config config;
+        if (!esp32_gpio_get_config(pin_num, &config)) {
+            return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));
+        }
+        config.drive = RTEMS_GPIO_DRIVE_PUSH_PULL;
         if (globalcontext_is_term_equal_to_atom_string(ctx->global, argv[1], input_atom)) {
-            rtems_gpio_bsp_select_input(0, pin_num, NULL);
-            *reg &= ~(1u << 2);
-            return OK_ATOM;
+            config.direction = RTEMS_GPIO_DIRECTION_INPUT;
         } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, argv[1], output_atom)) {
-            rtems_gpio_bsp_select_output(0, pin_num, NULL);
-            *reg &= ~(1u << 2);
-            return OK_ATOM;
+            config.direction = RTEMS_GPIO_DIRECTION_OUTPUT;
         } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, argv[1], output_od_atom)) {
-            rtems_gpio_bsp_select_output(0, pin_num, NULL);
-            *reg |= (1u << 2);
-            return OK_ATOM;
+            config.direction = RTEMS_GPIO_DIRECTION_OUTPUT;
+            config.drive = RTEMS_GPIO_DRIVE_OPEN_DRAIN;
         } else {
             RAISE_ERROR(BADARG_ATOM);
         }
+        if (!esp32_gpio_configure(pin_num, &config)) {
+            return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));
+        }
+        return OK_ATOM;
     }
 #endif
 
@@ -746,17 +813,20 @@ static term nif_gpio_set_pin_pull(Context *ctx, int argc, term argv[])
     unsigned pin_num;
     bool is_int;
     if (parse_esp32c3_pin(pin_term, &pin_num, &is_int)) {
-        rtems_gpio_pull_mode pmode;
+        rtems_gpio_config config;
+        if (!esp32_gpio_get_config(pin_num, &config)) {
+            return error_atom(ctx, ATOM_STR("\x7", "einval"));
+        }
         if (globalcontext_is_term_equal_to_atom_string(ctx->global, pull_term, up_atom)) {
-            pmode = PULL_UP;
+            config.bias = RTEMS_GPIO_BIAS_PULL_UP;
         } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, pull_term, down_atom)) {
-            pmode = PULL_DOWN;
+            config.bias = RTEMS_GPIO_BIAS_PULL_DOWN;
         } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, pull_term, floating_atom)) {
-            pmode = NO_PULL_RESISTOR;
+            config.bias = RTEMS_GPIO_BIAS_NONE;
         } else {
             RAISE_ERROR(BADARG_ATOM);
         }
-        if (rtems_gpio_bsp_set_resistor_mode(0, pin_num, pmode) != RTEMS_SUCCESSFUL) {
+        if (!esp32_gpio_configure(pin_num, &config)) {
             return error_atom(ctx, ATOM_STR("\x7", "einval"));
         }
         return OK_ATOM;
@@ -801,10 +871,11 @@ static term nif_gpio_digital_write(Context *ctx, int argc, term argv[])
     unsigned pin_num;
     bool is_int;
     if (parse_esp32c3_pin(argv[0], &pin_num, &is_int)) {
-        if (value) {
-            rtems_gpio_bsp_set(0, pin_num);
-        } else {
-            rtems_gpio_bsp_clear(0, pin_num);
+        rtems_gpio_config config;
+        if (!esp32_gpio_get_config(pin_num, &config)
+            || (config.direction == RTEMS_GPIO_DIRECTION_NONE && !esp32_gpio_configure(pin_num, &config))
+            || rtems_gpio_pin_set(esp32_gpio_fd, pin_num, value) != 0) {
+            return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));
         }
         return OK_ATOM;
     }
@@ -852,7 +923,13 @@ static term nif_gpio_digital_read(Context *ctx, int argc, term argv[])
     unsigned pin_num;
     bool is_int;
     if (parse_esp32c3_pin(argv[0], &pin_num, &is_int)) {
-        uint32_t value = rtems_gpio_bsp_get_value(0, pin_num);
+        rtems_gpio_config config;
+        int value;
+        if (!esp32_gpio_get_config(pin_num, &config)
+            || (config.direction == RTEMS_GPIO_DIRECTION_NONE && !esp32_gpio_configure(pin_num, &config))
+            || rtems_gpio_pin_get(esp32_gpio_fd, pin_num, &value) != 0) {
+            return error_atom(ctx, ATOM_STR("\xB", "invalid_pin"));
+        }
         return globalcontext_make_atom(ctx->global, value ? high_atom : low_atom);
     }
 #endif
@@ -894,17 +971,17 @@ static term nif_gpio_set_int(Context *ctx, int argc, term argv[])
     unsigned pin_num;
     bool is_int;
     if (parse_esp32c3_pin(pin_term, &pin_num, &is_int)) {
-        rtems_gpio_interrupt intr_type;
+        rtems_gpio_trigger trigger;
         if (globalcontext_is_term_equal_to_atom_string(ctx->global, trigger_term, rising_atom)) {
-            intr_type = RISING_EDGE;
+            trigger = RTEMS_GPIO_TRIGGER_EDGE_RISING;
         } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, trigger_term, falling_atom)) {
-            intr_type = FALLING_EDGE;
+            trigger = RTEMS_GPIO_TRIGGER_EDGE_FALLING;
         } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, trigger_term, both_atom)) {
-            intr_type = BOTH_EDGES;
+            trigger = RTEMS_GPIO_TRIGGER_EDGE_BOTH;
         } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, trigger_term, low_atom)) {
-            intr_type = LOW_LEVEL;
+            trigger = RTEMS_GPIO_TRIGGER_LEVEL_LOW;
         } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, trigger_term, high_atom)) {
-            intr_type = HIGH_LEVEL;
+            trigger = RTEMS_GPIO_TRIGGER_LEVEL_HIGH;
         } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, trigger_term, none_atom)) {
             return nif_gpio_remove_int(ctx, 1, argv);
         } else {
@@ -912,23 +989,6 @@ static term nif_gpio_set_int(Context *ctx, int argc, term argv[])
         }
 
         atomvm_main_task_id = rtems_task_self();
-
-        if (!esp32c3_gpio_irq_installed) {
-            rtems_status_code sc = rtems_interrupt_handler_install(
-                rtems_gpio_bsp_get_vector(0),
-                "atomvm_gpio",
-                RTEMS_INTERRUPT_SHARED,
-                esp32c3_gpio_isr,
-                NULL);
-            if (sc != RTEMS_SUCCESSFUL) {
-                return error_atom(ctx, ATOM_STR("\xE", "irq_install_err"));
-            }
-            esp32c3_gpio_irq_installed = true;
-        }
-
-        if (rtems_gpio_bsp_enable_interrupt(0, pin_num, intr_type) != RTEMS_SUCCESSFUL) {
-            return error_atom(ctx, ATOM_STR("\xE", "irq_install_err"));
-        }
 
         rtems_interrupt_lock_context lock_context;
         rtems_interrupt_lock_acquire(&gpio_lock, &lock_context);
@@ -949,7 +1009,18 @@ static term nif_gpio_set_int(Context *ctx, int argc, term argv[])
             rtems_interrupt_lock_release(&gpio_lock, &lock_context);
             return error_atom(ctx, ATOM_STR("\x10", "listeners_full"));
         }
+        rtems_interrupt_lock_release(&gpio_lock, &lock_context);
 
+        rtems_gpio_config config;
+        if (!esp32_gpio_get_config(pin_num, &config)) {
+            return error_atom(ctx, ATOM_STR("\xE", "irq_install_err"));
+        }
+        config.trigger = trigger;
+        if (!esp32_gpio_configure(pin_num, &config)) {
+            return error_atom(ctx, ATOM_STR("\xE", "irq_install_err"));
+        }
+
+        rtems_interrupt_lock_acquire(&gpio_lock, &lock_context);
         gpio_listeners[free_slot].active = true;
         gpio_listeners[free_slot].bank = 0;
         gpio_listeners[free_slot].pin = (uint8_t) pin_num;
@@ -958,6 +1029,12 @@ static term nif_gpio_set_int(Context *ctx, int argc, term argv[])
 
         rtems_interrupt_lock_release(&gpio_lock, &lock_context);
 
+        if (rtems_gpio_pin_irq_enable(esp32_gpio_fd, pin_num, RTEMS_GPIO_IRQ_DEFAULT, esp32_gpio_isr, NULL) != 0) {
+            rtems_interrupt_lock_acquire(&gpio_lock, &lock_context);
+            gpio_listeners[free_slot].active = false;
+            rtems_interrupt_lock_release(&gpio_lock, &lock_context);
+            return error_atom(ctx, ATOM_STR("\xE", "irq_install_err"));
+        }
         return OK_ATOM;
     }
 #endif
@@ -1054,7 +1131,12 @@ static term nif_gpio_remove_int(Context *ctx, int argc, term argv[])
     unsigned pin_num;
     bool is_int;
     if (parse_esp32c3_pin(argv[0], &pin_num, &is_int)) {
-        rtems_gpio_bsp_disable_interrupt(0, pin_num, NONE);
+        rtems_gpio_config config;
+        if (!esp32_gpio_get_config(pin_num, &config)
+            || (config.direction != RTEMS_GPIO_DIRECTION_NONE
+                && rtems_gpio_pin_irq_disable(esp32_gpio_fd, pin_num) != 0)) {
+            return error_atom(ctx, ATOM_STR("\xE", "irq_install_err"));
+        }
 
         rtems_interrupt_lock_context lock_context;
         rtems_interrupt_lock_acquire(&gpio_lock, &lock_context);
@@ -1284,4 +1366,8 @@ static const struct Nif *gpio_nif_get_nif(const char *nifname)
 #endif
 }
 
+#if defined(RTEMS_HAS_ESP32C3_GPIO)
+REGISTER_NIF_COLLECTION(gpio, NULL, gpio_nif_destroy, gpio_nif_get_nif)
+#else
 REGISTER_NIF_COLLECTION(gpio, NULL, NULL, gpio_nif_get_nif)
+#endif

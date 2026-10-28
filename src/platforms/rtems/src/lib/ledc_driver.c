@@ -45,7 +45,6 @@
 #include "rtems_sys.h"
 
 #if defined(RTEMS_BOARD_ESP32)
-#include <bsp/gpio.h>
 #include <bsp/pin.h>
 
 #define WRITE_PERI_REG(addr, val) (*((volatile uint32_t *) (uintptr_t) (addr)) = (uint32_t) (val))

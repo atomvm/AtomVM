@@ -77,6 +77,14 @@ Supports configurable pull resistors (`up`, `down`, `floating`), open-drain mode
 notifications, and dynamic pinmuxing (`set_pin_mux/2`). GPIO on erc32 and
 RealView returns `{error, enotsup}`.
 
+ESP32 GPIO uses RTEMS's generic GPIO device API through `/dev/gpio`, with
+physical pin numbers (or `{0, Pin}` / `{1, Pin}` aliases) in the low 32-pin bank,
+limited to the pins present on the chip. The BSP owns muxing, pulls, open-drain
+output, interrupts and shared pin arbitration with other drivers. Mode and pull
+changes retain the other pin settings, but require a release/configure cycle
+and are not glitch-free. `gpio:deinit/1` disables the pin's interrupt and
+releases its GPIO claim.
+
 ESP32-C3/C5/C6/S31 support station RSSI and active/passive scanning through
 `network:sta_rssi/0` and `network:wifi_scan/0,1`. Managed station mode permits
 scanning before selecting an access point:

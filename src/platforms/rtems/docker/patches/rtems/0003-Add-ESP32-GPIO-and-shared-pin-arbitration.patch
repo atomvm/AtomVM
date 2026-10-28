@@ -1,10 +1,12 @@
-From 3d9cc106baec06234adcb046203d652c7b68fcbc Mon Sep 17 00:00:00 2001
+From 276bda3c290b145db14d02f29a128936ca0ba239 Mon Sep 17 00:00:00 2001
 From: Samuel Price <thesamprice@gmail.com>
 Date: Wed, 28 Oct 2026 17:54:10 +0100
 Subject: [PATCH 3/9] Add ESP32 GPIO and shared pin arbitration
 
-Keep pad ownership shared between BSP drivers, with chip-specific GPIO
-register layouts and pin validation.
+Expose a BSP-owned /dev/gpio controller through the upstream dev/gpio API,
+with per-pin interrupt callbacks and complete GPIO release. Keep pad
+ownership shared between BSP drivers, with chip-specific GPIO register
+layouts and pin validation.
 
 Consolidates legacy kernel patches: 0003, 0006, 0014, 0017, 0035.
 
@@ -13,28 +15,26 @@ Signed-off-by: Samuel Price <thesamprice@gmail.com>
 Assisted-by: Claude Opus 5 (1M context) <noreply@anthropic.com>
 Signed-off-by: Peter Madsen-Mygdal <petermm@gmail.com>
 ---
- bsps/riscv/esp32/gpio/gpio_c3.c    | 399 +++++++++++++++++++++++++++++
- bsps/riscv/esp32/include/bsp/pin.h | 108 ++++++++
- bsps/riscv/esp32/pin/pin.c         | 118 +++++++++
- 3 files changed, 625 insertions(+)
+ bsps/riscv/esp32/gpio/gpio_c3.c    | 466 +++++++++++++++++++++++++++++
+ bsps/riscv/esp32/include/bsp/pin.h | 108 +++++++
+ bsps/riscv/esp32/pin/pin.c         | 118 ++++++++
+ 3 files changed, 692 insertions(+)
  create mode 100644 bsps/riscv/esp32/gpio/gpio_c3.c
  create mode 100644 bsps/riscv/esp32/include/bsp/pin.h
  create mode 100644 bsps/riscv/esp32/pin/pin.c
 
 diff --git a/bsps/riscv/esp32/gpio/gpio_c3.c b/bsps/riscv/esp32/gpio/gpio_c3.c
 new file mode 100644
-index 0000000000000000000000000000000000000000..ed5cb15d369704c819a607544327d67fb066f5ee
+index 0000000000000000000000000000000000000000..e67c649af2758e725c3eff81f73d3d02e67ae38f
 --- /dev/null
 +++ b/bsps/riscv/esp32/gpio/gpio_c3.c
-@@ -0,0 +1,399 @@
+@@ -0,0 +1,466 @@
 +/* SPDX-License-Identifier: BSD-2-Clause */
 +
 +/**
 + * @file
-+ *
 + * @ingroup RTEMSBSPsRISCVESP32
-+ *
-+ * @brief ESP32-C3 GPIO driver.
++ * @brief ESP32 GPIO controller for the generic device API.
 + */
 +
 +/*
@@ -62,44 +62,29 @@ index 0000000000000000000000000000000000000000..ed5cb15d369704c819a607544327d67f
 + * SUCH DAMAGE.
 + */
 +
-+/*
-+ * A pad on this part is driven through two peripherals rather than one.
-+ * IO_MUX picks which of the pad's functions reaches the pin and holds the
-+ * pull resistors and the input buffer enable; the GPIO peripheral holds the
-+ * data, direction and interrupt registers.  Configuring a pin therefore
-+ * always touches both, and selecting the plain GPIO function means setting
-+ * IO_MUX's MCU_SEL to PIN_FUNC_GPIO *and* pointing the GPIO matrix output
-+ * for that pad at SIG_GPIO_OUT_IDX, which is what makes GPIO_OUT drive it.
-+ */
-+
 +#include <bsp.h>
-+#include <bsp/gpio.h>
 +#include <bsp/irq.h>
 +#include <bsp/pin.h>
++#include <dev/gpio/gpio.h>
++#include <rtems/irq-extension.h>
 +
-+#include <rtems/bspIo.h>
-+
-+#include <inttypes.h>
++#include <errno.h>
++#include <stdio.h>
++#include <string.h>
 +
 +#define GPIO_REG( off ) \
 +  ( *( (volatile uint32_t *) ( GPIO_BASE + (off) ) ) )
 +#define IO_MUX_REG( off ) \
 +  ( *( (volatile uint32_t *) ( IO_MUX_BASE + (off) ) ) )
 +
++/* Keep physical numbering and the existing low 32-bit bank implementation.
++ * The P4 and S31 high banks are not implemented by this controller. */
++#define ESP32_GPIO_PIN_COUNT ( BSP_GPIO_PIN_COUNT < 32 ? BSP_GPIO_PIN_COUNT : 32 )
++
 +#define GPIO_OUT          0x0004
 +#define GPIO_OUT_W1TS     0x0008
 +#define GPIO_OUT_W1TC     0x000c
-+#if defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
-+#define GPIO_ENABLE       0x0020
-+#define GPIO_ENABLE_W1TS  0x0024
-+#define GPIO_ENABLE_W1TC  0x0028
-+#define GPIO_IN           0x003c
-+#define GPIO_STATUS       0x0044
-+#define GPIO_STATUS_W1TC  0x004c
-+#define GPIO_PIN( n )     ( 0x0074 + 4 * (n) )
-+#define GPIO_FUNC_OUT_SEL_CFG( n ) ( 0x0558 + 4 * (n) )
-+#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
-+#define GPIO_ENABLE       0x0034
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
 +#define GPIO_ENABLE_W1TS  0x0038
 +#define GPIO_ENABLE_W1TC  0x003c
 +#define GPIO_IN           0x0064
@@ -107,35 +92,36 @@ index 0000000000000000000000000000000000000000..ed5cb15d369704c819a607544327d67f
 +#define GPIO_STATUS_W1TC  0x007c
 +#define GPIO_PIN( n )     ( 0x00f4 + 4 * (n) )
 +#define GPIO_FUNC_OUT_SEL_CFG( n ) ( 0x0af4 + 4 * (n) )
++#elif defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H)
++#define GPIO_ENABLE_W1TS  0x0038
++#define GPIO_ENABLE_W1TC  0x003c
++#define GPIO_IN           0x0064
++#define GPIO_STATUS       0x0074
++#define GPIO_STATUS_W1TC  0x007c
++#define GPIO_PIN( n )     ( 0x00d4 + 4 * (n) )
++#define GPIO_FUNC_OUT_SEL_CFG( n ) ( 0x0ad4 + 4 * (n) )
 +#else
-+#define GPIO_ENABLE       0x0020
 +#define GPIO_ENABLE_W1TS  0x0024
 +#define GPIO_ENABLE_W1TC  0x0028
 +#define GPIO_IN           0x003c
 +#define GPIO_STATUS       0x0044
 +#define GPIO_STATUS_W1TC  0x004c
 +#define GPIO_PIN( n )     ( 0x0074 + 4 * (n) )
++#if defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++#define GPIO_FUNC_OUT_SEL_CFG( n ) ( 0x0558 + 4 * (n) )
++#else
 +#define GPIO_FUNC_OUT_SEL_CFG( n ) ( 0x0554 + 4 * (n) )
 +#endif
++#endif
 +
-+#define GPIO_PIN_INT_TYPE_SHIFT  7
-+#define GPIO_PIN_INT_TYPE_MASK   ( 0x7U << GPIO_PIN_INT_TYPE_SHIFT )
-+#define GPIO_PIN_INT_ENA_SHIFT   13
-+#define GPIO_PIN_INT_ENA_MASK    ( 0x1fU << GPIO_PIN_INT_ENA_SHIFT )
-+#define GPIO_PIN_INT_ENA_CPU     ( 0x1U << GPIO_PIN_INT_ENA_SHIFT )
++#define GPIO_PIN_PAD_DRIVER     ( 1U << 2 )
++#define GPIO_PIN_INT_TYPE_SHIFT 7
++#define GPIO_PIN_INT_TYPE_MASK  ( 0x7U << GPIO_PIN_INT_TYPE_SHIFT )
++#define GPIO_PIN_INT_ENA_MASK   ( 0x1fU << 13 )
++#define GPIO_PIN_INT_ENA_CPU    ( 0x1U << 13 )
 +
-+/* INT_TYPE encoding, from the chip's technical reference manual. */
-+#define GPIO_INT_TYPE_DISABLE     0
-+#define GPIO_INT_TYPE_POSEDGE     1
-+#define GPIO_INT_TYPE_NEGEDGE     2
-+#define GPIO_INT_TYPE_ANYEDGE     3
-+#define GPIO_INT_TYPE_LOW_LEVEL   4
-+#define GPIO_INT_TYPE_HIGH_LEVEL  5
-+
-+/* IO_MUX pad configuration register for GPIOn, and its fields. The S31 gives
-+ * each pad a named register laid out one per word from the IO_MUX base; the
-+ * older parts leave a reserved word at the base, hence the differing bias. */
-+#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++/* C5 and S31 start pad zero at offset zero, unlike the older layouts. */
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H)
 +#define IO_MUX_PIN( n )   ( 4 * (n) )
 +#else
 +#define IO_MUX_PIN( n )   ( 0x0004 + 4 * (n) )
@@ -145,286 +131,369 @@ index 0000000000000000000000000000000000000000..ed5cb15d369704c819a607544327d67f
 +#define IO_MUX_FUN_IE     ( 1U << 9 )
 +#define IO_MUX_MCU_SEL_SHIFT 12
 +#define IO_MUX_MCU_SEL_MASK  ( 0x7U << IO_MUX_MCU_SEL_SHIFT )
-+
-+/* IO_MUX function number that routes a pad to the GPIO peripheral, and the
-+ * GPIO matrix signal that means "driven by GPIO_OUT". */
 +#define IO_MUX_FUNC_GPIO  1
-+#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++#if defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H) || defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H)
 +#define SIG_GPIO_OUT_IDX  256
 +#else
 +#define SIG_GPIO_OUT_IDX  128
 +#endif
 +
-+static const char esp32c3_gpio_owner[] = "esp32c3 gpio";
++static const char esp32_gpio_owner[] = "esp32 gpio";
++static rtems_gpio_config esp32_gpio_config[ ESP32_GPIO_PIN_COUNT ];
++static rtems_gpio_irq_handler esp32_gpio_handler[ ESP32_GPIO_PIN_COUNT ];
++static void *esp32_gpio_arg[ ESP32_GPIO_PIN_COUNT ];
++static uint32_t esp32_gpio_active_low[ 1 ];
++static uint32_t esp32_gpio_scratch[ 1 ];
 +
-+static bool esp32c3_gpio_select_gpio_function( uint32_t pin )
++/*
++ * The generic mutex serializes task operations, not the ISR.  Hold this
++ * interrupt lock THROUGH each callback, including on SMP: disable/release
++ * then wait for an already-running callback and cannot return with an old
++ * callback still using its argument.  Callbacks must be short, interrupt-safe
++ * and must not call this controller, nor take locks held by its callers.
++ */
++RTEMS_INTERRUPT_LOCK_DEFINE( static, esp32_gpio_irq_lock, "ESP32 GPIO IRQ" )
++
++static bool esp32_gpio_owned( uint32_t pin )
++{
++  return bsp_pin_owner( pin ) == esp32_gpio_owner &&
++    esp32_gpio_config[ pin ].direction != RTEMS_GPIO_DIRECTION_NONE;
++}
++
++/* ROM flash pads (including VDD_SPI) and the selected console are not
++ * GPIO resources.  These checks do not claim/release other drivers' pads.
++ * Console pads above the low bank are already outside this controller. */
++static const char *esp32_gpio_reserved( uint32_t pin )
++{
++#if defined(LIBBSP_ESP32_C3_CHIP_DEFINITIONS_H)
++  if ( pin >= 12 && pin <= 17 ) { return "flash"; }
++#ifdef ESPRESSIF_USE_USB_CONSOLE
++  if ( pin == 18 || pin == 19 ) { return "USB console"; }
++#else
++  if ( pin == 20 || pin == 21 ) { return "UART0 console"; }
++#endif
++#elif defined(LIBBSP_ESP32_C5_CHIP_DEFINITIONS_H)
++  if ( pin >= 16 && pin <= 22 ) { return "flash"; }
++#ifdef ESPRESSIF_USE_USB_CONSOLE
++  if ( pin == 13 || pin == 14 ) { return "USB console"; }
++#else
++  if ( pin == 11 || pin == 12 ) { return "UART0 console"; }
++#endif
++#elif defined(LIBBSP_ESP32_C6_CHIP_DEFINITIONS_H)
++  if ( pin >= 24 && pin <= 30 ) { return "flash"; }
++#ifdef ESPRESSIF_USE_USB_CONSOLE
++  if ( pin == 12 || pin == 13 ) { return "USB console"; }
++#else
++  if ( pin == 16 || pin == 17 ) { return "UART0 console"; }
++#endif
++#elif defined(LIBBSP_ESP32_H2_CHIP_DEFINITIONS_H)
++  if ( pin >= 15 && pin <= 21 ) { return "flash"; }
++#ifdef ESPRESSIF_USE_USB_CONSOLE
++  if ( pin == 26 || pin == 27 ) { return "USB console"; }
++#else
++  if ( pin == 23 || pin == 24 ) { return "UART0 console"; }
++#endif
++#elif defined(LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H)
++  if ( pin >= 26 ) { return "flash"; }
++#elif defined(LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H)
++#ifdef ESPRESSIF_USE_USB_CONSOLE
++  if ( pin == 24 || pin == 25 ) { return "USB console"; }
++#endif
++#endif
++  (void) pin;
++  return NULL;
++}
++
++static int esp32_gpio_get_info(
++  RTEMS_UNUSED rtems_gpio_drv_ctrl *ctrl,
++  uint32_t pin,
++  rtems_gpio_pin_info *info
++)
++{
++  const char *owner = bsp_pin_owner( pin );
++  const char *reserved = esp32_gpio_reserved( pin );
++
++  info->kind = RTEMS_GPIO_PIN_PHYSICAL;
++  info->capabilities = RTEMS_GPIO_CAP_INPUT | RTEMS_GPIO_CAP_OUTPUT |
++    RTEMS_GPIO_CAP_OUTPUT_READBACK | RTEMS_GPIO_CAP_PULL_UP |
++    RTEMS_GPIO_CAP_PULL_DOWN | RTEMS_GPIO_CAP_OPEN_DRAIN |
++    RTEMS_GPIO_CAP_EDGE_RISING | RTEMS_GPIO_CAP_EDGE_FALLING |
++    RTEMS_GPIO_CAP_EDGE_BOTH | RTEMS_GPIO_CAP_LEVEL_HIGH |
++    RTEMS_GPIO_CAP_LEVEL_LOW;
++  snprintf( info->name, sizeof( info->name ), "GPIO%lu", (unsigned long) pin );
++
++  /* IN_USE authorizes generic get/set/release, so it MUST NOT describe
++   * another peripheral's claim.  RESERVED protects it from configuration;
++   * the claim itself is checked again atomically before touching hardware. */
++  if ( reserved != NULL ) {
++    info->flags = RTEMS_GPIO_PIN_RESERVED;
++    snprintf( info->owner, sizeof( info->owner ), "%s", reserved );
++  } else if ( owner != NULL ) {
++    info->flags = esp32_gpio_owned( pin ) ?
++      RTEMS_GPIO_PIN_IN_USE : RTEMS_GPIO_PIN_RESERVED;
++    snprintf( info->owner, sizeof( info->owner ), "%s", owner );
++  }
++  return 0;
++}
++
++static uint32_t esp32_gpio_irq_type( rtems_gpio_trigger trigger )
++{
++  switch ( trigger ) {
++    case RTEMS_GPIO_TRIGGER_EDGE_RISING: return 1;
++    case RTEMS_GPIO_TRIGGER_EDGE_FALLING: return 2;
++    case RTEMS_GPIO_TRIGGER_EDGE_BOTH: return 3;
++    case RTEMS_GPIO_TRIGGER_LEVEL_LOW: return 4;
++    case RTEMS_GPIO_TRIGGER_LEVEL_HIGH: return 5;
++    default: return 0;
++  }
++}
++
++/* Caller holds esp32_gpio_irq_lock. Disable the type before acknowledging
++ * a level interrupt, otherwise the asserted level immediately relatches it. */
++static void esp32_gpio_irq_clear( uint32_t pin )
++{
++  GPIO_REG( GPIO_PIN( pin ) ) &=
++    ~( GPIO_PIN_INT_TYPE_MASK | GPIO_PIN_INT_ENA_MASK );
++  GPIO_REG( GPIO_STATUS_W1TC ) = 1U << pin;
++  esp32_gpio_handler[ pin ] = NULL;
++  esp32_gpio_arg[ pin ] = NULL;
++}
++
++static int esp32_gpio_set(
++  RTEMS_UNUSED rtems_gpio_drv_ctrl *ctrl,
++  uint32_t pin,
++  int value
++)
++{
++  if ( !esp32_gpio_owned( pin ) ) {
++    return EBADF;
++  }
++  /* Writing an input intentionally preloads the output latch. */
++  GPIO_REG( value != 0 ? GPIO_OUT_W1TS : GPIO_OUT_W1TC ) = 1U << pin;
++  return 0;
++}
++
++static int esp32_gpio_configure(
++  RTEMS_UNUSED rtems_gpio_drv_ctrl *ctrl,
++  uint32_t pin,
++  rtems_gpio_config *config
++)
 +{
 +  uint32_t mux;
++  uint32_t reg;
++  rtems_interrupt_lock_context lock_context;
 +
-+  /* The shared layer's rtems_gpio_request_pin() already stops two GPIO users
-+   * colliding.  What it cannot see is a pad taken by I2C or UART1, which
-+   * never go through it -- so the claim is taken here as well, and this is
-+   * the only place that catches a cross-driver collision.
-+   *
-+   * It is never given back.  rtems_gpio_release_pin() does its bookkeeping
-+   * in the shared layer and there is no rtems_gpio_bsp_release() for it to
-+   * call, so a pad the GPIO driver has configured stays claimed for the life
-+   * of the application.  Re-requesting it as GPIO still works, because a
-+   * re-claim by the same owner succeeds; what is refused is I2C or UART1
-+   * taking a pad that GPIO used earlier and has since released.  That is a
-+   * false refusal, and it is the safe direction to be wrong in -- the other
-+   * way round is the silent collision this exists to stop. */
-+  if ( !bsp_pin_claim( pin, esp32c3_gpio_owner ) ) {
-+    printk(
-+      "esp32c3 gpio: GPIO%" PRIu32 " belongs to %s\n",
-+      pin,
-+      bsp_pin_owner( pin )
-+    );
-+    return false;
++  if ( esp32_gpio_reserved( pin ) != NULL ) {
++    return EACCES;
++  }
++  if ( config->direction != RTEMS_GPIO_DIRECTION_INPUT &&
++       config->direction != RTEMS_GPIO_DIRECTION_OUTPUT ) {
++    return EINVAL;
++  }
++  if ( (unsigned) config->bias > RTEMS_GPIO_BIAS_PULL_DOWN ||
++       (unsigned) config->trigger > RTEMS_GPIO_TRIGGER_LEVEL_LOW ||
++       ( config->flags & ~RTEMS_GPIO_FLAG_ACTIVE_LOW ) != 0 ||
++       config->drive_strength != 0 || config->debounce != 0 ||
++       ( config->direction == RTEMS_GPIO_DIRECTION_OUTPUT &&
++         config->drive != RTEMS_GPIO_DRIVE_PUSH_PULL &&
++         config->drive != RTEMS_GPIO_DRIVE_OPEN_DRAIN ) ) {
++    return ENOTSUP;
++  }
++  if ( !bsp_pin_claim( pin, esp32_gpio_owner ) ) {
++    return EBUSY;
 +  }
 +
++  rtems_interrupt_lock_acquire( &esp32_gpio_irq_lock, &lock_context );
++  esp32_gpio_irq_clear( pin );
++  GPIO_REG( GPIO_ENABLE_W1TC ) = 1U << pin;
++  GPIO_REG( config->initial_value != 0 ? GPIO_OUT_W1TS : GPIO_OUT_W1TC ) =
++    1U << pin;
++
 +  mux = IO_MUX_REG( IO_MUX_PIN( pin ) );
-+
-+  mux &= ~IO_MUX_MCU_SEL_MASK;
-+  mux |= (uint32_t) IO_MUX_FUNC_GPIO << IO_MUX_MCU_SEL_SHIFT;
-+
-+  /* Leave the input buffer on for outputs too.  It costs nothing and it is
-+   * what lets a driver read back the level it is driving, which is the only
-+   * way an output can be tested without external wiring. */
-+  mux |= IO_MUX_FUN_IE;
-+
++  mux &= ~( IO_MUX_MCU_SEL_MASK | IO_MUX_FUN_PU | IO_MUX_FUN_PD );
++  /* Input readback remains enabled even for an output. */
++  mux |= ( IO_MUX_FUNC_GPIO << IO_MUX_MCU_SEL_SHIFT ) | IO_MUX_FUN_IE;
++  if ( config->bias == RTEMS_GPIO_BIAS_PULL_UP ) {
++    mux |= IO_MUX_FUN_PU;
++  } else if ( config->bias == RTEMS_GPIO_BIAS_PULL_DOWN ) {
++    mux |= IO_MUX_FUN_PD;
++  }
 +  IO_MUX_REG( IO_MUX_PIN( pin ) ) = mux;
 +  GPIO_REG( GPIO_FUNC_OUT_SEL_CFG( pin ) ) = SIG_GPIO_OUT_IDX;
-+
-+  return true;
-+}
-+
-+rtems_status_code rtems_gpio_bsp_multi_set(
-+  RTEMS_UNUSED uint32_t bank,
-+  uint32_t bitmask
-+)
-+{
-+  GPIO_REG( GPIO_OUT_W1TS ) = bitmask;
-+
-+  return RTEMS_SUCCESSFUL;
-+}
-+
-+rtems_status_code rtems_gpio_bsp_multi_clear(
-+  RTEMS_UNUSED uint32_t bank,
-+  uint32_t bitmask
-+)
-+{
-+  GPIO_REG( GPIO_OUT_W1TC ) = bitmask;
-+
-+  return RTEMS_SUCCESSFUL;
-+}
-+
-+uint32_t rtems_gpio_bsp_multi_read(
-+  RTEMS_UNUSED uint32_t bank,
-+  uint32_t bitmask
-+)
-+{
-+  return GPIO_REG( GPIO_IN ) & bitmask;
-+}
-+
-+rtems_status_code rtems_gpio_bsp_multi_select(
-+  RTEMS_UNUSED rtems_gpio_multiple_pin_select *pins,
-+  RTEMS_UNUSED uint32_t pin_count,
-+  RTEMS_UNUSED uint32_t select_bank
-+)
-+{
-+  return RTEMS_NOT_DEFINED;
-+}
-+
-+rtems_status_code rtems_gpio_bsp_specific_group_operation(
-+  RTEMS_UNUSED uint32_t bank,
-+  RTEMS_UNUSED uint32_t *pins,
-+  RTEMS_UNUSED uint32_t pin_count,
-+  RTEMS_UNUSED void *arg
-+)
-+{
-+  return RTEMS_NOT_DEFINED;
-+}
-+
-+rtems_status_code rtems_gpio_bsp_set( RTEMS_UNUSED uint32_t bank, uint32_t pin )
-+{
-+  GPIO_REG( GPIO_OUT_W1TS ) = 1U << pin;
-+
-+  return RTEMS_SUCCESSFUL;
-+}
-+
-+rtems_status_code rtems_gpio_bsp_clear( RTEMS_UNUSED uint32_t bank, uint32_t pin )
-+{
-+  GPIO_REG( GPIO_OUT_W1TC ) = 1U << pin;
-+
-+  return RTEMS_SUCCESSFUL;
-+}
-+
-+uint32_t rtems_gpio_bsp_get_value( RTEMS_UNUSED uint32_t bank, uint32_t pin )
-+{
-+  return GPIO_REG( GPIO_IN ) & ( 1U << pin );
-+}
-+
-+rtems_status_code rtems_gpio_bsp_select_input(
-+  RTEMS_UNUSED uint32_t bank,
-+  uint32_t pin,
-+  RTEMS_UNUSED void *bsp_specific
-+)
-+{
-+  if ( !esp32c3_gpio_select_gpio_function( pin ) ) {
-+    return RTEMS_RESOURCE_IN_USE;
++  reg = GPIO_REG( GPIO_PIN( pin ) ) & ~GPIO_PIN_PAD_DRIVER;
++  if ( config->direction == RTEMS_GPIO_DIRECTION_OUTPUT &&
++       config->drive == RTEMS_GPIO_DRIVE_OPEN_DRAIN ) {
++    reg |= GPIO_PIN_PAD_DRIVER;
 +  }
++  GPIO_REG( GPIO_PIN( pin ) ) = reg;
++  if ( config->direction == RTEMS_GPIO_DIRECTION_INPUT ) {
++    config->drive = RTEMS_GPIO_DRIVE_PUSH_PULL;
++  } else {
++    GPIO_REG( GPIO_ENABLE_W1TS ) = 1U << pin;
++  }
++  esp32_gpio_config[ pin ] = *config;
++  rtems_interrupt_lock_release( &esp32_gpio_irq_lock, &lock_context );
++  return 0;
++}
 +
++static int esp32_gpio_get_config(
++  RTEMS_UNUSED rtems_gpio_drv_ctrl *ctrl,
++  uint32_t pin,
++  rtems_gpio_config *config
++)
++{
++  if ( !esp32_gpio_owned( pin ) ) {
++    return EBADF;
++  }
++  *config = esp32_gpio_config[ pin ];
++  /* Report the CURRENT output latch, not the sampled pad or initial value.
++   * This also preserves input preloads over release/configure cycles. */
++  config->initial_value = ( GPIO_REG( GPIO_OUT ) & ( 1U << pin ) ) != 0;
++  return 0;
++}
++
++static int esp32_gpio_irq_disable(
++  RTEMS_UNUSED rtems_gpio_drv_ctrl *ctrl,
++  uint32_t pin
++)
++{
++  rtems_interrupt_lock_context lock_context;
++
++  if ( !esp32_gpio_owned( pin ) ) {
++    return EBADF;
++  }
++  rtems_interrupt_lock_acquire( &esp32_gpio_irq_lock, &lock_context );
++  esp32_gpio_irq_clear( pin );
++  rtems_interrupt_lock_release( &esp32_gpio_irq_lock, &lock_context );
++  return 0;
++}
++
++static int esp32_gpio_release( rtems_gpio_drv_ctrl *ctrl, uint32_t pin )
++{
++  int err = esp32_gpio_irq_disable( ctrl, pin );
++
++  if ( err != 0 ) {
++    return err;
++  }
 +  GPIO_REG( GPIO_ENABLE_W1TC ) = 1U << pin;
-+
-+  return RTEMS_SUCCESSFUL;
++  GPIO_REG( GPIO_OUT_W1TC ) = 1U << pin;
++  GPIO_REG( GPIO_PIN( pin ) ) &= ~GPIO_PIN_PAD_DRIVER;
++  GPIO_REG( GPIO_FUNC_OUT_SEL_CFG( pin ) ) = SIG_GPIO_OUT_IDX;
++  IO_MUX_REG( IO_MUX_PIN( pin ) ) =
++    ( IO_MUX_REG( IO_MUX_PIN( pin ) ) &
++      ~( IO_MUX_MCU_SEL_MASK | IO_MUX_FUN_IE | IO_MUX_FUN_PU | IO_MUX_FUN_PD ) ) |
++    ( IO_MUX_FUNC_GPIO << IO_MUX_MCU_SEL_SHIFT );
++  memset( &esp32_gpio_config[ pin ], 0, sizeof( esp32_gpio_config[ pin ] ) );
++  /* Last: no peripheral can claim the pin while it is being reset. */
++  bsp_pin_release( pin );
++  return 0;
 +}
 +
-+rtems_status_code rtems_gpio_bsp_select_output(
-+  RTEMS_UNUSED uint32_t bank,
++static int esp32_gpio_get(
++  RTEMS_UNUSED rtems_gpio_drv_ctrl *ctrl,
 +  uint32_t pin,
-+  RTEMS_UNUSED void *bsp_specific
++  int *value
 +)
 +{
-+  if ( !esp32c3_gpio_select_gpio_function( pin ) ) {
-+    return RTEMS_RESOURCE_IN_USE;
++  if ( !esp32_gpio_owned( pin ) ) {
++    return EBADF;
 +  }
-+
-+  GPIO_REG( GPIO_ENABLE_W1TS ) = 1U << pin;
-+
-+  return RTEMS_SUCCESSFUL;
++  *value = ( GPIO_REG( GPIO_IN ) & ( 1U << pin ) ) != 0;
++  return 0;
 +}
 +
-+/*
-+ * The BSP specific function is an IO_MUX function number, so this is how a
-+ * pad is handed to UART, SPI or any other peripheral that can reach it.
-+ */
-+rtems_status_code rtems_gpio_bsp_select_specific_io(
-+  RTEMS_UNUSED uint32_t bank,
++static int esp32_gpio_irq_enable(
++  RTEMS_UNUSED rtems_gpio_drv_ctrl *ctrl,
 +  uint32_t pin,
-+  uint32_t function,
-+  RTEMS_UNUSED void *pin_data
++  rtems_gpio_irq_flags flags,
++  rtems_gpio_irq_handler handler,
++  void *arg
 +)
 +{
-+  uint32_t mux;
++  rtems_interrupt_lock_context lock_context;
++  uint32_t type = esp32_gpio_irq_type( esp32_gpio_config[ pin ].trigger );
 +
-+  if ( function > ( IO_MUX_MCU_SEL_MASK >> IO_MUX_MCU_SEL_SHIFT ) ) {
-+    return RTEMS_UNSATISFIED;
++  if ( !esp32_gpio_owned( pin ) ) {
++    return EBADF;
 +  }
-+
-+  mux = IO_MUX_REG( IO_MUX_PIN( pin ) );
-+  mux &= ~IO_MUX_MCU_SEL_MASK;
-+  mux |= function << IO_MUX_MCU_SEL_SHIFT;
-+  IO_MUX_REG( IO_MUX_PIN( pin ) ) = mux;
-+
-+  return RTEMS_SUCCESSFUL;
-+}
-+
-+rtems_status_code rtems_gpio_bsp_set_resistor_mode(
-+  RTEMS_UNUSED uint32_t bank,
-+  uint32_t pin,
-+  rtems_gpio_pull_mode mode
-+)
-+{
-+  uint32_t mux = IO_MUX_REG( IO_MUX_PIN( pin ) );
-+
-+  mux &= ~( IO_MUX_FUN_PU | IO_MUX_FUN_PD );
-+
-+  switch ( mode ) {
-+    case PULL_UP:
-+      mux |= IO_MUX_FUN_PU;
-+      break;
-+    case PULL_DOWN:
-+      mux |= IO_MUX_FUN_PD;
-+      break;
-+    case NO_PULL_RESISTOR:
-+      break;
-+    default:
-+      return RTEMS_UNSATISFIED;
++  if ( flags != RTEMS_GPIO_IRQ_DEFAULT ) {
++    return ENOTSUP;
 +  }
-+
-+  IO_MUX_REG( IO_MUX_PIN( pin ) ) = mux;
-+
-+  return RTEMS_SUCCESSFUL;
-+}
-+
-+/*
-+ * All 22 pads share one interrupt, so the whole status register is the event
-+ * line.  Clearing it here rather than leaving it to the caller matches what
-+ * the shared layer expects and is required for the edge-triggered types: an
-+ * unacknowledged status bit keeps the interrupt asserted.
-+ */
-+uint32_t rtems_gpio_bsp_interrupt_line( RTEMS_UNUSED rtems_vector_number vector )
-+{
-+  uint32_t event = GPIO_REG( GPIO_STATUS );
-+
-+  GPIO_REG( GPIO_STATUS_W1TC ) = event;
-+
-+  return event;
-+}
-+
-+rtems_vector_number rtems_gpio_bsp_get_vector( RTEMS_UNUSED uint32_t bank )
-+{
-+  return GPIO_PROCPU_INTR;
-+}
-+
-+rtems_status_code rtems_gpio_bsp_enable_interrupt(
-+  RTEMS_UNUSED uint32_t bank,
-+  uint32_t pin,
-+  rtems_gpio_interrupt interrupt
-+)
-+{
-+  uint32_t type;
-+  uint32_t reg;
-+
-+  switch ( interrupt ) {
-+    case FALLING_EDGE:
-+      type = GPIO_INT_TYPE_NEGEDGE;
-+      break;
-+    case RISING_EDGE:
-+      type = GPIO_INT_TYPE_POSEDGE;
-+      break;
-+    case BOTH_EDGES:
-+      type = GPIO_INT_TYPE_ANYEDGE;
-+      break;
-+    case LOW_LEVEL:
-+      type = GPIO_INT_TYPE_LOW_LEVEL;
-+      break;
-+    case HIGH_LEVEL:
-+      type = GPIO_INT_TYPE_HIGH_LEVEL;
-+      break;
-+    default:
-+      /* BOTH_LEVELS has no encoding here: the pin selects one level, not
-+       * both, and a pin that interrupts on either level would never stop. */
-+      return RTEMS_UNSATISFIED;
++  if ( handler == NULL || type == 0 ) {
++    return EINVAL;
 +  }
-+
-+  reg = GPIO_REG( GPIO_PIN( pin ) );
-+  reg &= ~( GPIO_PIN_INT_TYPE_MASK | GPIO_PIN_INT_ENA_MASK );
-+  reg |= type << GPIO_PIN_INT_TYPE_SHIFT;
-+  reg |= GPIO_PIN_INT_ENA_CPU;
-+  GPIO_REG( GPIO_PIN( pin ) ) = reg;
-+
-+  return RTEMS_SUCCESSFUL;
++  rtems_interrupt_lock_acquire( &esp32_gpio_irq_lock, &lock_context );
++  esp32_gpio_irq_clear( pin );
++  esp32_gpio_handler[ pin ] = handler;
++  esp32_gpio_arg[ pin ] = arg;
++  GPIO_REG( GPIO_PIN( pin ) ) |=
++    ( type << GPIO_PIN_INT_TYPE_SHIFT ) | GPIO_PIN_INT_ENA_CPU;
++  rtems_interrupt_lock_release( &esp32_gpio_irq_lock, &lock_context );
++  return 0;
 +}
 +
-+rtems_status_code rtems_gpio_bsp_disable_interrupt(
-+  RTEMS_UNUSED uint32_t bank,
-+  uint32_t pin,
-+  RTEMS_UNUSED rtems_gpio_interrupt active_interrupt
-+)
++static void esp32_gpio_interrupt( RTEMS_UNUSED void *arg )
 +{
-+  uint32_t reg = GPIO_REG( GPIO_PIN( pin ) );
++  rtems_interrupt_lock_context lock_context;
++  uint32_t pending;
++  uint32_t pin;
 +
-+  reg &= ~( GPIO_PIN_INT_TYPE_MASK | GPIO_PIN_INT_ENA_MASK );
-+  GPIO_REG( GPIO_PIN( pin ) ) = reg;
++  rtems_interrupt_lock_acquire( &esp32_gpio_irq_lock, &lock_context );
++  pending = GPIO_REG( GPIO_STATUS );
++  for ( pin = 0; pin < ESP32_GPIO_PIN_COUNT; ++pin ) {
++    uint32_t bit = 1U << pin;
 +
-+  /* A level-triggered pin that is still at its trigger level re-asserts its
-+   * status bit until the type is cleared, which has just happened; drop what
-+   * it left behind so the next enable starts from no pending event. */
-+  GPIO_REG( GPIO_STATUS_W1TC ) = 1U << pin;
++    if ( ( pending & bit ) != 0 && esp32_gpio_handler[ pin ] != NULL ) {
++      /* Acknowledge only this controller's enabled pins. A level still
++       * asserted after the callback will raise another interrupt. */
++      GPIO_REG( GPIO_STATUS_W1TC ) = bit;
++      ( *esp32_gpio_handler[ pin ] )( pin, esp32_gpio_arg[ pin ] );
++    }
++  }
++  rtems_interrupt_lock_release( &esp32_gpio_irq_lock, &lock_context );
++}
 +
-+  return RTEMS_SUCCESSFUL;
++static const rtems_gpio_drv_handlers esp32_gpio_handlers = {
++  .pin_get_info = esp32_gpio_get_info,
++  .pin_configure = esp32_gpio_configure,
++  .pin_get_config = esp32_gpio_get_config,
++  .pin_release = esp32_gpio_release,
++  .pin_get = esp32_gpio_get,
++  .pin_set = esp32_gpio_set,
++  .pin_irq_enable = esp32_gpio_irq_enable,
++  .pin_irq_disable = esp32_gpio_irq_disable
++};
++
++static rtems_gpio_drv_ctrl esp32_gpio_ctrl = {
++  .handlers = &esp32_gpio_handlers,
++  .pin_count = ESP32_GPIO_PIN_COUNT,
++  .name = "ESP32 GPIO",
++  .can_block = false,
++  .active_low = esp32_gpio_active_low,
++  .scratch = esp32_gpio_scratch
++};
++
++/* Referenced by the bspstart sysinit item so archive linking retains this
++ * controller even when applications only use open/ioctl. No application API. */
++void esp32_gpio_initialize( void );
++
++void esp32_gpio_initialize( void )
++{
++  rtems_status_code sc;
++
++  if ( rtems_gpio_drv_ctrl_init( &esp32_gpio_ctrl ) != 0 ) {
++    rtems_panic( "ESP32 GPIO: controller initialization failed" );
++  }
++  sc = rtems_interrupt_handler_install(
++    GPIO_PROCPU_INTR, "GPIO", RTEMS_INTERRUPT_UNIQUE,
++    esp32_gpio_interrupt, NULL
++  );
++  if ( sc != RTEMS_SUCCESSFUL ) {
++    rtems_panic( "ESP32 GPIO: interrupt installation failed" );
++  }
++  if ( rtems_gpio_drv_ctrl_register( &esp32_gpio_ctrl, "/dev/gpio" ) != 0 ) {
++    rtems_panic( "ESP32 GPIO: device registration failed" );
++  }
 +}
 diff --git a/bsps/riscv/esp32/include/bsp/pin.h b/bsps/riscv/esp32/include/bsp/pin.h
 new file mode 100644

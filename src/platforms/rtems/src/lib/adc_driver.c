@@ -40,7 +40,6 @@
 #include "rtems_sys.h"
 
 #if defined(RTEMS_BOARD_ESP32)
-#include <bsp/gpio.h>
 #include <bsp/pin.h>
 #include <rtems/counter.h>
 

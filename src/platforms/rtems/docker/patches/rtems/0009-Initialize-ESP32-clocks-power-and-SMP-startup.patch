@@ -1,4 +1,4 @@
-From 2b7a015a29ab193b77a64d04e4901ec25ebf3dcb Mon Sep 17 00:00:00 2001
+From 58e6014ab84052e0aecf28d393d791b878649d17 Mon Sep 17 00:00:00 2001
 From: Peter Madsen-Mygdal <petermm@gmail.com>
 Date: Wed, 28 Oct 2026 17:54:13 +0100
 Subject: [PATCH 9/9] Initialize ESP32 clocks, power and SMP startup
@@ -23,14 +23,14 @@ Signed-off-by: Peter Madsen-Mygdal <petermm@gmail.com>
 ---
  bsps/riscv/esp32/start/bspc3power.h | 131 ++++
  bsps/riscv/esp32/start/bspc3rtc.h   | 209 +++++++
- bsps/riscv/esp32/start/bspc6pmu.h   |  99 ++++
+ bsps/riscv/esp32/start/bspc6pmu.h   |  99 +++
  bsps/riscv/esp32/start/bspc6rtc.h   | 173 ++++++
  bsps/riscv/esp32/start/bspp4pvt.h   | 146 +++++
  bsps/riscv/esp32/start/bspsmp.c     | 214 +++++++
- bsps/riscv/esp32/start/bspstart.c   | 887 +++++++++++++++++++++++++++-
+ bsps/riscv/esp32/start/bspstart.c   | 898 +++++++++++++++++++++++++++-
  bsps/riscv/esp32/start/bspvoltage.h | 260 ++++++++
- spec/build/bsps/riscv/esp32/obj.yml |  13 +
- 9 files changed, 2126 insertions(+), 6 deletions(-)
+ spec/build/bsps/riscv/esp32/obj.yml |  12 +
+ 9 files changed, 2136 insertions(+), 6 deletions(-)
  create mode 100644 bsps/riscv/esp32/start/bspc3power.h
  create mode 100644 bsps/riscv/esp32/start/bspc3rtc.h
  create mode 100644 bsps/riscv/esp32/start/bspc6pmu.h
@@ -1048,10 +1048,10 @@ index 0000000000000000000000000000000000000000..dc19e9d015e7beb656de53c048fae165
 +
 +#endif /* RTEMS_SMP && (LIBBSP_ESP32_S31_CHIP_DEFINITIONS_H || LIBBSP_ESP32_P4_CHIP_DEFINITIONS_H) */
 diff --git a/bsps/riscv/esp32/start/bspstart.c b/bsps/riscv/esp32/start/bspstart.c
-index eb4a997aa7538c07191f4d23e08e6784b007614b..1c1314ceb79bde0703643a705cb6e780eefd93c5 100644
+index eb4a997aa7538c07191f4d23e08e6784b007614b..1d9b50b2a87524cddfcdaa03ce3ba82fd555fabf 100644
 --- a/bsps/riscv/esp32/start/bspstart.c
 +++ b/bsps/riscv/esp32/start/bspstart.c
-@@ -23,10 +23,13 @@
+@@ -23,19 +23,41 @@
   * SUCH DAMAGE.
   */
  
@@ -1060,12 +1060,25 @@ index eb4a997aa7538c07191f4d23e08e6784b007614b..1c1314ceb79bde0703643a705cb6e780
  #include <bsp/fatal.h>
  #include <bsp/irq-generic.h>
  #include <bsp/linker-symbols.h>
++#include <rtems/sysinit.h>
 +
 +#include <stdint.h>
  #include <bsp/start.h>
  #include <bsp/utility.h>
  
-@@ -36,6 +39,14 @@
++/* Keep the BSP-owned controller linked even for open/ioctl-only users.
++ * Registration needs the filesystem, so it must not run in bsp_start(). */
++void esp32_gpio_initialize( void );
++
++RTEMS_SYSINIT_ITEM(
++  esp32_gpio_initialize,
++  RTEMS_SYSINIT_DEVICE_DRIVERS,
++  RTEMS_SYSINIT_ORDER_LAST
++);
++
+ #define RTC_CNTL_WDTWPROTECT_REG (uintptr_t) 0xa8
+ #define RTC_CNTL_WDTWPROTECT_KEY 0x50d83aa1U
+ 
  #define RTC_CNTL_WDTCONFIG0_REG (uintptr_t) 0x90
  #define RTC_CNTL_WDTCONFIG0_EN  BSP_BIT32( 31 )
  
@@ -1080,7 +1093,7 @@ index eb4a997aa7538c07191f4d23e08e6784b007614b..1c1314ceb79bde0703643a705cb6e780
  #define RTC_CNTL_SWD_CONF_REG          (uintptr_t) 0xac
  #define RTC_CNTL_SWD_CONF_AUTO_FEED_EN BSP_BIT32( 31 )
  
-@@ -50,6 +61,17 @@
+@@ -50,6 +72,17 @@
  #define TIMG_WDTCONFIG0_REG (uintptr_t) 0x48
  #define TIMG_WDTCONFIG0_EN  BSP_BIT32( 31 )
  
@@ -1098,7 +1111,7 @@ index eb4a997aa7538c07191f4d23e08e6784b007614b..1c1314ceb79bde0703643a705cb6e780
  #define TIMG_READ( reg )         READ_REG( TIMG_BASE, reg )
  #define TIMG_WRITE( reg, value ) WRITE_REG( TIMG_BASE, reg, value )
  
-@@ -57,18 +79,813 @@
+@@ -57,18 +90,813 @@
  #define WRITE_REG( base, reg, value ) \
    *(volatile uint32_t *) ( base + reg ) = value
  
@@ -1915,7 +1928,7 @@ index eb4a997aa7538c07191f4d23e08e6784b007614b..1c1314ceb79bde0703643a705cb6e780
  
    /* disable super watchdog write protection */
    RTC_WRITE( RTC_CNTL_SWD_WPROTECT_REG, RTC_CNTL_SWD_WPROTECT_KEY );
-@@ -82,15 +899,48 @@ void bsp_start( void )
+@@ -82,15 +910,48 @@ void bsp_start( void )
  
    /* clear SWD stall register */
    RTC_WRITE( RTC_CNTL_SW_CPU_STALL_REG, 0 );
@@ -1966,7 +1979,7 @@ index eb4a997aa7538c07191f4d23e08e6784b007614b..1c1314ceb79bde0703643a705cb6e780
  BSP_START_TEXT_SECTION static inline void copy_from_flash_offset(
    void       *dest,
    const void *src,
-@@ -98,7 +948,13 @@ BSP_START_TEXT_SECTION static inline void copy_from_flash_offset(
+@@ -98,7 +959,13 @@ BSP_START_TEXT_SECTION static inline void copy_from_flash_offset(
  )
  {
    /* The RAM load sections are offset from 0x0, offset from mapped flash base */
@@ -1980,7 +1993,7 @@ index eb4a997aa7538c07191f4d23e08e6784b007614b..1c1314ceb79bde0703643a705cb6e780
  
    uintptr_t flash_address = ( (uintptr_t) src );
    flash_address += flash_base;
-@@ -113,8 +969,17 @@ BSP_START_TEXT_SECTION void bsp_start_copy_sections( void )
+@@ -113,8 +980,17 @@ BSP_START_TEXT_SECTION void bsp_start_copy_sections( void )
      (size_t) bsp_section_data_size
    );
  
@@ -1999,7 +2012,7 @@ index eb4a997aa7538c07191f4d23e08e6784b007614b..1c1314ceb79bde0703643a705cb6e780
      bsp_section_fast_text_load_begin,
      (size_t) bsp_section_fast_text_size
    );
-@@ -124,4 +989,14 @@ BSP_START_TEXT_SECTION void bsp_start_copy_sections( void )
+@@ -124,4 +1000,14 @@ BSP_START_TEXT_SECTION void bsp_start_copy_sections( void )
      bsp_section_fast_data_load_begin,
      (size_t) bsp_section_fast_data_size
    );
@@ -2281,10 +2294,10 @@ index 0000000000000000000000000000000000000000..01898e1190ee05ecbdbc1e4286e3bbff
 +}
 +#endif
 diff --git a/spec/build/bsps/riscv/esp32/obj.yml b/spec/build/bsps/riscv/esp32/obj.yml
-index 6beff6ea7c8eb6782b60220db23cef7b4926a3aa..27326f0137aeec950ee34574360b3e5598e94844 100644
+index 6beff6ea7c8eb6782b60220db23cef7b4926a3aa..823fdf3de397c5661d5e18259c6f9e93e76a11db 100644
 --- a/spec/build/bsps/riscv/esp32/obj.yml
 +++ b/spec/build/bsps/riscv/esp32/obj.yml
-@@ -13,17 +13,30 @@ install:
+@@ -13,13 +13,25 @@ install:
    - bsps/riscv/esp32/include/bsp.h
  - destination: ${BSP_INCLUDEDIR}/bsp
    source:
@@ -2310,8 +2323,3 @@ index 6beff6ea7c8eb6782b60220db23cef7b4926a3aa..27326f0137aeec950ee34574360b3e55
  - bsps/shared/atomics/__atomic_test_and_set.c
  - bsps/shared/cache/nocache.c
  - bsps/shared/dev/btimer/btimer-cpucounter.c
- - bsps/shared/dev/getentropy/getentropy-cpucounter.c
-+- bsps/shared/dev/gpio/gpio-support.c
- - bsps/shared/dev/serial/console-polled.c
- - bsps/shared/irq/irq-default-handler.c
- - bsps/shared/start/bspfatal-default.c

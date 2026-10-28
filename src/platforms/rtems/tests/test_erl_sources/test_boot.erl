@@ -132,21 +132,31 @@ gpio_smoke() ->
 gpio_target_smoke() ->
     case gpio:init(2) of
         ok ->
+            ok = gpio:init(2),
             ok = gpio:set_pin_mode(2, output),
             ok = gpio:digital_write(2, high),
-            true = is_atom(gpio:digital_read(2)),
+            high = gpio:digital_read(2),
+            ok = gpio:set_pin_pull(2, down),
+            high = gpio:digital_read(2),
+            ok = gpio:set_pin_mode(2, output_od),
             ok = gpio:digital_write(2, low),
-            true = is_atom(gpio:digital_read(2)),
+            low = gpio:digital_read(2),
             ok = gpio:set_pin_mode(2, input),
             ok = gpio:set_pin_pull(2, up),
             ok = gpio:set_pin_pull(2, down),
             ok = gpio:set_pin_pull(2, floating),
             ok = gpio:set_int_nif(2, rising, self()),
+            ok = gpio:set_pin_pull(2, up),
+            ok = gpio:set_int_nif(2, falling, self()),
             ok = gpio:remove_int_nif(2),
             ok = gpio:attach_interrupt(2, rising),
             ok = gpio:detach_interrupt(2),
             ok = gpio:stop(),
             ok = gpio:deinit(2),
+            ok = gpio:deinit(2),
+            ok = gpio:set_pin_mode({0, 2}, output),
+            ok = gpio:digital_write({0, 2}, low),
+            ok = gpio:deinit({0, 2}),
             erlang:display({gpio, esp32c3, ok});
         {error, invalid_pin} ->
             ok
