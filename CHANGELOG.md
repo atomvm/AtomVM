@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `gen:start/5,6`, used by Elixir's `GenServer`
 - Added ML-KEM-768 (FIPS 203) key encapsulation to `crypto`, requiring libsodium >= 1.0.22
 - Added `AVM_STATIC_LIBSODIUM` CMake option to statically link libsodium
+- Added `{mode, rs485_half_duplex}` to the ESP32 `uart` module, driving `rts` as the RS485
+  transceiver's DE
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
