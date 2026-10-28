@@ -1196,17 +1196,26 @@ jobs:
           -DAVM_PACK="$PWD/src/platforms/rtems/build/rtems_boot.avm"
         cmake --build src/platforms/rtems/build
 
+    - name: Install esp-emulator
+      run: |
+        set -euo pipefail
+        . "$GITHUB_WORKSPACE/src/platforms/rtems/docker/dependencies.sh"
+        curl -fsSL "https://raw.githubusercontent.com/espressif/esp-emulator/${ESP_EMU_INSTALL_COMMIT}/install.sh" \
+          -o "$RUNNER_TEMP/esp-emu-install.sh"
+        sh "$RUNNER_TEMP/esp-emu-install.sh" --version "${RTEMS_ESP_EMU_VERSION}"
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    # C3/C6 timer light sleep hangs in the pinned emulator, including with
+    # pure ESP-IDF firmware. Keep full boot coverage on Wokwi below.
+    # See src/platforms/rtems/EMULATOR_ISSUE.md.
     - name: Run boot test on esp-emulator
+      if: matrix.chip != 'esp32c3' && matrix.chip != 'esp32c6'
       env:
         BOOT_MARKERS: ${{ matrix.boot_markers }}
       run: |
         set -euo pipefail
         BIN="src/platforms/rtems/build/AtomVM-${{ matrix.bsp_name }}.bin"
         test -f "$BIN"
-        . "$GITHUB_WORKSPACE/src/platforms/rtems/docker/dependencies.sh"
-        curl -fsSL "https://raw.githubusercontent.com/espressif/esp-emulator/${ESP_EMU_INSTALL_COMMIT}/install.sh" \
-          -o "$RUNNER_TEMP/esp-emu-install.sh"
-        sh "$RUNNER_TEMP/esp-emu-install.sh" --version "${RTEMS_ESP_EMU_VERSION}"
         export PATH="$HOME/.local/bin:$PATH"
         emu_opts=(--timeout 30s)
         if [ "${{ matrix.chip }}" = "esp32s31" ] || [ "${{ matrix.chip }}" = "esp32p4" ]; then
@@ -1242,12 +1251,29 @@ jobs:
       timeout-minutes: 10
       env:
         WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
+        BOOT_MARKERS: ${{ matrix.boot_markers }}
       run: |
         set -euo pipefail
         curl -fsSL https://wokwi.com/ci/install.sh | sh
         export PATH="$HOME/.wokwi/bin:$PATH"
         "$GITHUB_WORKSPACE/src/platforms/rtems/tools/run-wokwi.sh" \
           "${{ matrix.chip }}" "$GITHUB_WORKSPACE/src/platforms/rtems/build"
+        # Preserve the emulator boot-marker checks on its replacement path.
+        if [ "${{ matrix.chip }}" = esp32c3 ] || [ "${{ matrix.chip }}" = esp32c6 ]; then
+          log=src/platforms/rtems/build/wokwi/serial.log
+          grep -Fq '{atomvm_rtems_boot,rtems}' "$log"
+          read -r -a boot_markers <<< "$BOOT_MARKERS"
+          for marker in "${boot_markers[@]}"; do
+            grep -Fq "$marker" "$log" || {
+              echo "::error::${{ matrix.chip }} Wokwi boot test did not print ${marker}"
+              exit 1
+            }
+          done
+          if grep -q 'Failed load module' "$log"; then
+            echo "::error::${{ matrix.chip }} Wokwi boot failed to load a BEAM module"
+            exit 1
+          fi
+        fi
 
     - name: Upload Wokwi serial log
       if: failure() && matrix.has_wokwi
@@ -1265,8 +1291,8 @@ jobs:
           build-host/src/platforms/rtems/tests/test_erl_sources/test_peripherals.beam \
           build-host/libs/atomvmlib-rtems.avm
         # RTC/power coverage varies by chip. Isolate scheduler integration
-        # with the fixture; the boot test above retains the hardware backend
-        # and exposes emulator limitations such as C6's post-wake eFuse wait.
+        # with the fixture; the boot tests above retain the hardware backend
+        # (Wokwi only for C3/C6; see EMULATOR_ISSUE.md).
         cmake -S src/platforms/rtems -B src/platforms/rtems/build-peripherals -G Ninja \
           -DCMAKE_TOOLCHAIN_FILE=cmake/rtems-toolchain.cmake \
           -DRTEMS_PREFIX="${{ matrix.prefix }}" \
