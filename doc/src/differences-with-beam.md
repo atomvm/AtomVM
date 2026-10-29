@@ -146,17 +146,20 @@ Since `-0` is not allowed, the result is normalized to `0`.
 
 ### Bit syntax
 
-AtomVM supports binaries, binary construction and binary pattern matching. Bit syntax (i.e. with
-sizes not a multiple of 8) is only supported as long as they would not generate bitstrings, i.e.
-binaries with a number if bits that are not multiple of 8.
+AtomVM supports binaries and bitstrings, including construction and pattern matching of bitstrings
+whose size in bits is not a multiple of 8:
 
-The following is supported:
+    <<X:3>> = <<1:3>>
 
-    <<X:3, Y:5>> = <<N>>
+There is one limitation, which follows from the 256-bit integer limit described above: an integer
+segment that is more than 256 bits wide cannot be matched, and AtomVM raises `unsupported` where
+BEAM would match it, even when the value is small.
 
-The following is not:
+    <<X:300>> = <<0:300>>
 
-    <<X:3>>
+Integer segments of up to 256 bits can be constructed and matched at any offset, in either byte
+order, including those that are wider than 64 bits and whose size is not a multiple of 8, such as
+`<<Flag:1, Hash:64>>` or `<<_:1, X:72, _:7>> = Bin`.
 
 ### Code reloading
 

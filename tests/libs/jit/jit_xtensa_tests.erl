@@ -1506,6 +1506,106 @@ return_if_not_equal_to_ctx_a2_test() ->
 %% call_primitive second clause: when available_regs = 0
 %%-----------------------------------------------------------------------------
 
+%% a8 is the backend's scratch register and is not allocatable: a call result
+%% placed there would be dropped from the register bookkeeping and could be
+%% overwritten. With a5-a7 in use, the result must go to a free high register.
+call_primitive_result_not_in_scratch_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State10, Regs} = lists:foldl(
+        fun(X, {AccState, AccRegs}) ->
+            {NewState, Reg} = ?BACKEND:move_to_native_register(AccState, {x_reg, X}),
+            {NewState, [Reg | AccRegs]}
+        end,
+        {State0, []},
+        lists:seq(0, 9)
+    ),
+    [a5, a6, a7] = lists:sort(Regs -- [a9, a10, a11, a12, a13, a14, a15]),
+    State11 = ?BACKEND:free_native_registers(State10, [a9, a10, a11, a12, a13, a14, a15]),
+    {State12, ResultReg} = ?BACKEND:call_primitive(State11, 0, [ctx, jit_state]),
+    ?assertNotEqual(a8, ResultReg),
+    ?assert(lists:member(ResultReg, ?BACKEND:used_regs(State12))).
+
+%% With a5-a7, a9 and a15 in use, a five-argument call loads the primitive
+%% into a14, a parameter register. It must be moved to the scratch register,
+%% not to a7, which holds an argument that is still live after the call.
+call_primitive_ptr_out_of_params_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State10 = lists:foldl(
+        fun(X, AccState) ->
+            {NewState, _Reg} = ?BACKEND:move_to_native_register(AccState, {x_reg, X}),
+            NewState
+        end,
+        State0,
+        lists:seq(0, 9)
+    ),
+    State11 = ?BACKEND:free_native_registers(State10, [a10, a11, a12, a13, a14]),
+    {State12, a9} = ?BACKEND:call_primitive(State11, ?PRIM_BITSTRING_INSERT_INTEGER, [
+        a7, a6, {free, a15}, 32, {free, a9}
+    ]),
+    ?assert(lists:member(a7, ?BACKEND:used_regs(State12))),
+    Stream = ?BACKEND:stream(State12),
+    Dump = <<
+        "   0:	0622f2        	l32i	a15, a2, 24\n"
+        "   3:	0722e2        	l32i	a14, a2, 28\n"
+        "   6:	0822d2        	l32i	a13, a2, 32\n"
+        "   9:	0922c2        	l32i	a12, a2, 36\n"
+        "   c:	0a22b2        	l32i	a11, a2, 40\n"
+        "   f:	0b22a2        	l32i	a10, a2, 44\n"
+        "  12:	0c2292        	l32i	a9, a2, 48\n"
+        "  15:	0d2272        	l32i	a7, a2, 52\n"
+        "  18:	0e2262        	l32i	a6, a2, 56\n"
+        "  1b:	0f2252        	l32i	a5, a2, 60\n"
+        "  1e:	3924e2        	l32i	a14, a4, 228\n"
+        "  21:	0e8d      	mov.n	a8, a14\n"
+        "  23:	07ad      	mov.n	a10, a7\n"
+        "  25:	06bd      	mov.n	a11, a6\n"
+        "  27:	0fcd      	mov.n	a12, a15\n"
+        "  29:	20a0d2        	movi	a13, 32\n"
+        "  2c:	09ed      	mov.n	a14, a9\n"
+        "  2e:	0008e0        	callx8	a8\n"
+        "  31:	0a9d      	mov.n	a9, a10"
+    >>,
+    ?assertStream(xtensa, Dump, Stream).
+
+call_primitive_args_all_regs_used_except(Free) ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State10 = lists:foldl(
+        fun(X, AccState) ->
+            {NewState, _Reg} = ?BACKEND:move_to_native_register(AccState, {x_reg, X}),
+            NewState
+        end,
+        State0,
+        lists:seq(0, 9)
+    ),
+    ?BACKEND:free_native_registers(State10, Free).
+
+call_primitive_args_reordered_without_parking_test() ->
+    State0 = call_primitive_args_all_regs_used_except([a11, a12, a13]),
+    {State1, _} = ?BACKEND:call_primitive(State0, 0, [a6, a9, {free, a15}, {free, a10}]),
+    Stream = ?BACKEND:stream(State1),
+    Offset = fun(Instr) ->
+        {Pos, _} = binary:match(Stream, Instr),
+        Pos
+    end,
+    MovA10 = Offset(jit_xtensa_asm:mov(a10, a6)),
+    MovA13 = Offset(jit_xtensa_asm:mov(a13, a10)),
+    MovA11 = Offset(jit_xtensa_asm:mov(a11, a9)),
+    MovA12 = Offset(jit_xtensa_asm:mov(a12, a15)),
+    ?assert(MovA13 < MovA10),
+    ?assert(MovA11 > 0),
+    ?assert(MovA12 > 0).
+
+call_primitive_args_swapped_without_parking_test() ->
+    State0 = call_primitive_args_all_regs_used_except([]),
+    {State1, _} = ?BACKEND:call_primitive(State0, 0, [a11, a10, a12, a13, a14, a15]),
+    Stream = ?BACKEND:stream(State1),
+    Swap = <<
+        (jit_xtensa_asm:xor_(a11, a11, a10))/binary,
+        (jit_xtensa_asm:xor_(a10, a11, a10))/binary,
+        (jit_xtensa_asm:xor_(a11, a11, a10))/binary
+    >>,
+    ?assertNotEqual(nomatch, binary:match(Stream, Swap)).
+
 call_primitive_no_avail_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, _} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),

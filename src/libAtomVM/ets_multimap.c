@@ -685,6 +685,12 @@ static uint32_t hash_binary(term t, uint32_t h, GlobalContext *global)
     for (size_t i = 0; i < len; ++i) {
         h = h * LARGE_PRIME_BINARY + data[i];
     }
+    unsigned int trailing_bits = (unsigned int) (term_bit_size(t) % 8);
+    if (trailing_bits != 0) {
+        uint8_t last = (uint8_t) (data[len] & (0xFF << (8 - trailing_bits)));
+        h = h * LARGE_PRIME_BINARY + last;
+        h = h * LARGE_PRIME_BINARY + trailing_bits;
+    }
     return h * LARGE_PRIME_BINARY;
 }
 
@@ -708,7 +714,7 @@ static uint32_t hash_term_incr(term t, uint32_t h, GlobalContext *global)
         return hash_local_reference(t, h, global);
     } else if (term_is_external_reference(t)) {
         return hash_external_reference(t, h, global);
-    } else if (term_is_binary(t)) {
+    } else if (term_is_bitstring(t)) {
         return hash_binary(t, h, global);
     } else if (term_is_tuple(t)) {
         size_t arity = term_get_tuple_arity(t);

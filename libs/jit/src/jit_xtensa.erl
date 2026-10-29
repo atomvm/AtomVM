@@ -191,6 +191,7 @@
     | {'(int)', maybe_free_xtensa_register(), '!=', xtensa_register() | integer()}
     | {'(bool)', maybe_free_xtensa_register(), '==', false}
     | {'(bool)', maybe_free_xtensa_register(), '!=', false}
+    | {'(unsigned)', maybe_free_xtensa_register(), '<', xtensa_register()}
     | {maybe_free_xtensa_register(), '&', non_neg_integer(), '!=', integer()}
     | {{free, xtensa_register()}, '==', {free, xtensa_register()}}.
 
@@ -1068,6 +1069,22 @@ if_block_cond(
     {State3, JumpDelta};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {'(unsigned)', RegOrTuple, '<', RegB}
+) when is_atom(RegB) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    %% Xtensa: bltu Reg, RegB, +2; J placeholder
+    I1 = jit_xtensa_asm:bltu(Reg, RegB, 2),
+    JPlaceholder = <<16#FF, 16#FF, 16#FF>>,
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, JPlaceholder/binary>>),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, byte_size(I1)};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '<', RegB}
 ) when is_atom(RegB) ->
     Reg =
@@ -1811,23 +1828,41 @@ call_func_ptr(
                                     RegArgs0
                                 };
                             [] ->
-                                % Swap with a reg used in RegArgs0 that is not in ParameterRegs
-                                [NewArgReg | _] = SetArgsRegsOnlyAvailableArgs,
-                                [FuncPtrReg1 | _] = RegArgsRegs -- ParameterRegs,
-                                MovInstr1 = jit_xtensa_asm:mov(NewArgReg, FuncPtrReg1),
-                                MovInstr2 = jit_xtensa_asm:mov(FuncPtrReg1, FuncPtrReg0),
-                                SetArgsAvailableArgs1 =
-                                    (SetArgsRegsOnlyAvailableArgs -- [FuncPtrReg1]) ++
-                                        [FuncPtrReg0],
-                                RegArgs1 = replace_reg(RegArgs0, FuncPtrReg1, NewArgReg),
-                                {
-                                    StreamModule:append(
-                                        State1#state.stream, <<MovInstr1/binary, MovInstr2/binary>>
-                                    ),
-                                    SetArgsAvailableArgs1,
-                                    FuncPtrReg1,
-                                    RegArgs1
-                                };
+                                case lists:member(?A8_REG, RegArgsRegs) of
+                                    false ->
+                                        % Use the scratch register, which holds no
+                                        % argument and is clobbered by the call
+                                        % anyway, rather than a register an argument
+                                        % lives in, which may still be live after
+                                        % the call
+                                        MovInstr = jit_xtensa_asm:mov(?A8_REG, FuncPtrReg0),
+                                        {
+                                            StreamModule:append(State1#state.stream, MovInstr),
+                                            SetArgsRegsOnlyAvailableArgs ++ [FuncPtrReg0],
+                                            ?A8_REG,
+                                            RegArgs0
+                                        };
+                                    true ->
+                                        % Swap with a reg used in RegArgs0 that is not in
+                                        % ParameterRegs
+                                        [NewArgReg | _] = SetArgsRegsOnlyAvailableArgs,
+                                        [FuncPtrReg1 | _] = RegArgsRegs -- ParameterRegs,
+                                        MovInstr1 = jit_xtensa_asm:mov(NewArgReg, FuncPtrReg1),
+                                        MovInstr2 = jit_xtensa_asm:mov(FuncPtrReg1, FuncPtrReg0),
+                                        SetArgsAvailableArgs1 =
+                                            (SetArgsRegsOnlyAvailableArgs -- [FuncPtrReg1]) ++
+                                                [FuncPtrReg0],
+                                        RegArgs1 = replace_reg(RegArgs0, FuncPtrReg1, NewArgReg),
+                                        {
+                                            StreamModule:append(
+                                                State1#state.stream,
+                                                <<MovInstr1/binary, MovInstr2/binary>>
+                                            ),
+                                            SetArgsAvailableArgs1,
+                                            FuncPtrReg1,
+                                            RegArgs1
+                                        }
+                                end;
                             [FuncPtrReg1 | _] ->
                                 MovInstr = jit_xtensa_asm:mov(FuncPtrReg1, FuncPtrReg0),
                                 SetArgsAvailableArgs1 =
@@ -1880,7 +1915,10 @@ call_func_ptr(
     %% After CALLX8, a8-a15 are all clobbered, so they are all available
     %% (except for any we still need to restore from stack).
     %% a5-a7 are preserved and may still hold live values.
-    PostCallAvail = (AvailableRegs1 -- HighRegs) ++ (HighRegs -- RegsToSave),
+    %% a8 is the scratch register and is not allocatable: a result left there
+    %% would be dropped from the bookkeeping by the next merge and could be
+    %% overwritten, so it is only the last resort below.
+    PostCallAvail = (AvailableRegs1 -- HighRegs) ++ (HighRegs -- [?A8_REG | RegsToSave]),
     {Stream6, UsedRegs2, ResultReg} =
         case PostCallAvail of
             [ResultReg0 | _] ->
@@ -2062,7 +2100,7 @@ set_registers_args0(
 set_registers_args0(
     #state{stream_module = StreamModule} = State0,
     [Arg | ArgsT],
-    [_ArgReg | ArgsRegsT],
+    [ArgReg | ArgsRegsT],
     [ParamReg | ParamRegsT],
     AvailGP,
     StackOffset
@@ -2071,6 +2109,10 @@ set_registers_args0(
         false ->
             State1 = set_registers_args1(State0, Arg, ParamReg, StackOffset),
             set_registers_args0(State1, ArgsT, ArgsRegsT, ParamRegsT, AvailGP, StackOffset);
+        true when AvailGP =:= [] ->
+            set_registers_args_no_temp(
+                State0, [Arg | ArgsT], [ArgReg | ArgsRegsT], [ParamReg | ParamRegsT], StackOffset
+            );
         true ->
             [Avail | AvailGPT] = AvailGP,
             I = jit_xtensa_asm:mov(Avail, ParamReg),
@@ -2083,6 +2125,74 @@ set_registers_args0(
                 State1, NewArgsT, ArgsRegsT, ParamRegsT, AvailGPT, StackOffset
             )
     end.
+
+set_registers_args_no_temp(State, Args, ArgsRegs, ParamRegs, StackOffset) ->
+    Moves = args_moves(Args, ArgsRegs, ParamRegs),
+    set_registers_args_no_temp0(State, Moves, StackOffset).
+
+args_moves([], [], []) ->
+    [];
+args_moves([{free, Arg} | ArgsT], ArgsRegs, ParamRegs) ->
+    args_moves([Arg | ArgsT], ArgsRegs, ParamRegs);
+args_moves([{avm_int64_t, Value} | ArgsT], [_ | ArgsRegsT], ParamRegs) when is_integer(Value) ->
+    LowPart = Value band 16#FFFFFFFF,
+    HighPart = (Value bsr 32) band 16#FFFFFFFF,
+    args_moves([LowPart, HighPart | ArgsT], [imm, imm | ArgsRegsT], ParamRegs);
+args_moves([Arg | ArgsT], [ArgReg | ArgsRegsT], [ParamReg | ParamRegsT]) ->
+    [{Arg, move_source_reg(Arg, ArgReg), ParamReg} | args_moves(ArgsT, ArgsRegsT, ParamRegsT)].
+
+move_source_reg({ptr, Reg}, _ArgReg) -> Reg;
+move_source_reg(Reg, _ArgReg) when ?IS_GPR(Reg) -> Reg;
+move_source_reg(_Arg, ArgReg) when ArgReg =:= ?CTX_REG -> ?CTX_REG;
+move_source_reg(_Arg, _ArgReg) -> none.
+
+set_registers_args_no_temp0(State, [], _StackOffset) ->
+    State;
+set_registers_args_no_temp0(State0, Moves, StackOffset) ->
+    case take_unblocked_move(Moves, []) of
+        {{Arg, _Source, ParamReg}, Others} ->
+            State1 = set_registers_args1(State0, Arg, ParamReg, StackOffset),
+            set_registers_args_no_temp0(State1, Others, StackOffset);
+        none ->
+            {_Arg, Source, ParamReg} = find_register_move(Moves),
+            #state{stream_module = StreamModule, stream = Stream0} = State0,
+            Swap = <<
+                (jit_xtensa_asm:xor_(Source, Source, ParamReg))/binary,
+                (jit_xtensa_asm:xor_(ParamReg, Source, ParamReg))/binary,
+                (jit_xtensa_asm:xor_(Source, Source, ParamReg))/binary
+            >>,
+            State1 = State0#state{stream = StreamModule:append(Stream0, Swap)},
+            Others = [Move || Move <- Moves, element(3, Move) =/= ParamReg],
+            Swapped = [
+                {swap_arg_reg(A, Source, ParamReg), swap_reg(S, Source, ParamReg), P}
+             || {A, S, P} <- Others
+            ],
+            set_registers_args_no_temp0(State1, Swapped, StackOffset)
+    end.
+
+take_unblocked_move([], _Skipped) ->
+    none;
+take_unblocked_move([{_Arg, Source, ParamReg} = Move | Rest], Skipped) ->
+    Others = lists:reverse(Skipped, Rest),
+    Blocked = Source =/= ParamReg andalso lists:any(fun({_, S, _}) -> S =:= ParamReg end, Others),
+    case Blocked of
+        false -> {Move, Others};
+        true -> take_unblocked_move(Rest, [Move | Skipped])
+    end.
+
+find_register_move([{Arg, Source, ParamReg} = Move | Rest]) ->
+    case Arg =:= Source andalso ?IS_GPR(Source) andalso Source =/= ParamReg of
+        true -> Move;
+        false -> find_register_move(Rest)
+    end.
+
+swap_reg(Reg, Reg1, Reg2) when Reg =:= Reg1 -> Reg2;
+swap_reg(Reg, Reg1, Reg2) when Reg =:= Reg2 -> Reg1;
+swap_reg(Reg, _Reg1, _Reg2) -> Reg.
+
+swap_arg_reg({ptr, Reg}, Reg1, Reg2) -> {ptr, swap_reg(Reg, Reg1, Reg2)};
+swap_arg_reg(Reg, Reg1, Reg2) when ?IS_GPR(Reg) -> swap_reg(Reg, Reg1, Reg2);
+swap_arg_reg(Arg, _Reg1, _Reg2) -> Arg.
 
 set_registers_args1(State, Reg, Reg, _Offset) ->
     State;

@@ -51,6 +51,7 @@ term bif_erlang_length_1(Context *ctx, uint32_t fail_label, int live, term arg1)
 
 term bif_erlang_is_atom_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_binary_1(Context *ctx, uint32_t fail_label, term arg1);
+term bif_erlang_is_bitstring_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_boolean_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_float_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_function_1(Context *ctx, uint32_t fail_label, term arg1);

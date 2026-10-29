@@ -35,6 +35,10 @@
     jnz_rel8/1,
     jge/1,
     jge_rel8/1,
+    jb/1,
+    jb_rel8/1,
+    jae/1,
+    jae_rel8/1,
     jle/1,
     jle_rel8/1,
     jmp/1,
@@ -371,6 +375,22 @@ jge(Offset) when Offset >= -126 andalso Offset =< 129 ->
 
 jge_rel8(Offset) when Offset >= -126 andalso Offset =< 129 ->
     {1, jge(Offset)}.
+
+jb(Offset) when Offset >= -126 andalso Offset =< 129 ->
+    % Use short jump (matches assembler behavior)
+    AdjustedOffset = Offset - 2,
+    <<16#72, AdjustedOffset>>.
+
+jb_rel8(Offset) when Offset >= -126 andalso Offset =< 129 ->
+    {1, jb(Offset)}.
+
+jae(Offset) when Offset >= -126 andalso Offset =< 129 ->
+    % Use short jump (matches assembler behavior)
+    AdjustedOffset = Offset - 2,
+    <<16#73, AdjustedOffset>>.
+
+jae_rel8(Offset) when Offset >= -126 andalso Offset =< 129 ->
+    {1, jae(Offset)}.
 
 jle(Offset) when Offset >= -126 andalso Offset =< 129 ->
     % Use short jump (matches assembler behavior)

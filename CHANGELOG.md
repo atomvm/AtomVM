@@ -10,12 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `gen:start/5,6`, used by Elixir's `GenServer`
 - Added ML-KEM-768 (FIPS 203) key encapsulation to `crypto`, requiring libsodium >= 1.0.22
 - Added `AVM_STATIC_LIBSODIUM` CMake option to statically link libsodium
+- Added support for non-byte-aligned bitstrings
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
 - `.avm` files, binaries and the pack embedded in an escript must now end exactly with the pack
   terminator: data after the end of the pack (for example a padded partition dump passed to
   `atomvm:add_avm_pack_binary/2`) is rejected when loaded
+- STM32 builds now enable `AVM_MINIMAL_OPCODES` by default, so modules compiled with the
+  `no_bs_create_bin`, `no_bs_match` or `no_ssa_opt_bs_ensure` compiler options cannot be loaded
 
 ### Fixed
 - Fixed maps decoded by `binary_to_term/1,2` and received over distribution keeping the
@@ -70,6 +73,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a 64-bit magnitude, such as `(1 bsl 63) rem 7`
 - Fixed `rem` crashing the VM when the most negative boxed integer is divided by `-1`, such as
   `-(1 bsl 63) rem -1` on x86_64
+- Fixed the xtensa JIT losing a value held across a call when few registers were free, for
+  example corrupting a binary built with a `little` utf16 segment followed by other segments
+- Fixed `erlang:list_to_binary/1`, `erlang:iolist_to_binary/1`, `erlang:iolist_size/1` and the
+  `unicode:characters_to_*` functions accepting an integer improper tail, such as `[1 | 2]`
+- Fixed float segments at a bit offset that is not a multiple of 8, which raised `badarg` on
+  construction and did not match
+- Fixed the x86_64 JIT failing to compile a float segment of variable size
+- Fixed integer segments wider than 64 bits being written at the end of the binary under
+  construction instead of in their own field when other segments followed them, and raising
+  `badarg` instead of being truncated when the field was narrower than the value
+- Fixed the `bs_add` instruction (binaries built with the `no_bs_create_bin` compiler option)
+  scaling the number of bits it is given, which allocated binaries of the wrong size
+- Fixed modules compiled with the `no_bs_create_bin` compiler option failing to load when
+  `bs_init_bits` or `bs_append` were followed by the creation of funs, and `bs_append` not
+  reserving the extra heap words it is given
 
 ## [0.7.0-beta.0] - 2026-09-28
 

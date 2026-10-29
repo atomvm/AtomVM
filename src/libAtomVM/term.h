@@ -143,6 +143,18 @@ extern "C" {
 #error
 #endif
 
+/**
+ * @brief Largest representable binary size, in bytes.
+ *
+ * @details A sub-binary packs its byte offset and its trailing bit count into a
+ * single word as `(offset << 3) | trailing_bits`, and `term_bit_size` computes
+ * `byte_size * 8 + trailing_bits`. Both require byte sizes and offsets to fit in
+ * a word once multiplied by 8. Binaries are therefore capped at `SIZE_MAX >> 3`
+ * bytes: unreachable on 64-bit, slightly under 512 MiB on 32-bit. Larger sizes
+ * are rejected with `system_limit`, as OTP does for unrepresentable binaries.
+ */
+#define TERM_MAX_BINARY_SIZE (SIZE_MAX >> 3)
+
 #define TERM_MAX_LOCAL_PROCESS_ID ((1 << 28) - 1)
 
 #define BINARY_HEADER_SIZE 2
@@ -378,6 +390,22 @@ term term_alloc_refc_binary(size_t size, bool is_const, Heap *heap, GlobalContex
 term term_alloc_sub_binary(term binary, size_t offset, size_t len, Heap *heap);
 
 /**
+ * @brief Allocate a sub-binary that may be non-byte-aligned (a bitstring).
+ *
+ * @details Same as term_alloc_sub_binary but carries a trailing partial-byte
+ * bit count (0..7). When trailing_bits is 0 the result is an ordinary
+ * byte-aligned binary; when non-zero the total bit size is len*8 + trailing_bits
+ * and the last referenced byte is only partially valid.
+ * @param binary the referenced binary
+ * @param offset the offset (in bytes) into the referenced binary
+ * @param len the number of whole bytes of the sub-binary
+ * @param trailing_bits number of valid bits (0..7) in the byte following the whole bytes
+ * @param heap the heap to allocate the binary in
+ * @return a term (reference) pointing to the newly allocated sub-binary.
+ */
+term term_alloc_sub_binary_bits(term binary, size_t offset, size_t len, uint8_t trailing_bits, Heap *heap);
+
+/**
  * @brief Gets a pointer to a term stored on the heap
  *
  * @details Casts a term to a term * that points to a value stored on the heap. Be aware: terms are assumed to be immutable.
@@ -508,9 +536,40 @@ static inline size_t term_boxed_size(term t)
 }
 
 /**
+ * @brief Checks if a term is a bitstring
+ *
+ * @details Returns \c true if a term is a bitstring (a binary or a
+ * sub-binary carrying trailing bits), otherwise \c false. This is the
+ * predicate behind the is_bitstring/1 BIF.
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool term_is_bitstring(term t)
+{
+    /* boxed: 10 */
+    if ((t & TERM_PRIMARY_MASK) == TERM_PRIMARY_BOXED) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        int masked_value = boxed_value[0] & TERM_BOXED_TAG_MASK;
+        switch (masked_value) {
+            case TERM_BOXED_REFC_BINARY:
+            case TERM_BOXED_HEAP_BINARY:
+            case TERM_BOXED_SUB_BINARY:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    return false;
+}
+
+/**
  * @brief Checks if a term is a binary
  *
- * @details Returns \c true if a term is a binary stored on the heap, otherwise \c false.
+ * @details Returns \c true if a term is a byte-aligned binary, otherwise
+ * \c false. A sub-binary carrying trailing bits (a non-byte-aligned
+ * bitstring) is not a binary; use \c term_is_bitstring to accept it. This
+ * is the predicate behind the is_binary/1 BIF.
  * @param t the term that will be checked.
  * @return \c true if check succeeds, \c false otherwise.
  */
@@ -523,8 +582,10 @@ static inline bool term_is_binary(term t)
         switch (masked_value) {
             case TERM_BOXED_REFC_BINARY:
             case TERM_BOXED_HEAP_BINARY:
-            case TERM_BOXED_SUB_BINARY:
                 return true;
+            case TERM_BOXED_SUB_BINARY:
+                // boxed_value[2] packs (byte_offset << 3) | trailing_bits
+                return (boxed_value[2] & 0x7) == 0;
             default:
                 return false;
         }
@@ -1949,7 +2010,7 @@ static inline size_t term_binary_heap_size(size_t size)
  */
 static inline unsigned long term_binary_size(term t)
 {
-    TERM_DEBUG_ASSERT(term_is_binary(t));
+    TERM_DEBUG_ASSERT(term_is_bitstring(t));
 
     const term *boxed_value = term_to_const_term_ptr(t);
     return boxed_value[1];
@@ -1992,7 +2053,7 @@ static inline struct RefcBinary *term_resource_refc_binary_ptr(term resource)
  */
 static inline const char *term_binary_data(term t)
 {
-    TERM_DEBUG_ASSERT(term_is_binary(t));
+    TERM_DEBUG_ASSERT(term_is_bitstring(t));
 
     const term *boxed_value = term_to_const_term_ptr(t);
     if (term_is_refc_binary(t)) {
@@ -2006,7 +2067,8 @@ static inline const char *term_binary_data(term t)
         }
     }
     if (term_is_sub_binary(t)) {
-        return term_binary_data(boxed_value[3]) + boxed_value[2]; // offset
+        // boxed_value[2] packs (byte_offset << 3) | trailing_bits
+        return term_binary_data(boxed_value[3]) + (boxed_value[2] >> 3);
     }
     return (const char *) (boxed_value + 2);
 }
@@ -2093,7 +2155,7 @@ static inline term term_maybe_create_sub_binary(term binary, size_t offset, size
         return term_alloc_sub_binary(binary, offset, len, heap);
     } else if (term_is_sub_binary(binary) && len >= SUB_BINARY_MIN) {
         const term *boxed_value = term_to_const_term_ptr(binary);
-        return term_alloc_sub_binary(boxed_value[3], boxed_value[2] + offset, len, heap);
+        return term_alloc_sub_binary(boxed_value[3], (boxed_value[2] >> 3) + offset, len, heap);
     } else {
         const char *data = term_binary_data(binary);
         return term_from_literal_binary(data + offset, len, heap, glb);
@@ -2138,12 +2200,16 @@ static inline term term_create_empty_binary(size_t size, Heap *heap, GlobalConte
  * @brief Reuse a binary.  If the binary is a refc binary with a ref count of
  * 1, try to reuse it. Otherwise, create a new binary and copy the data.
  *
- * @details Try to reuse a binary and return a term pointing to it.
- * @param src binary to reuse.
- * @param size size of binary data buffer.
+ * @details Try to reuse a binary and return a term pointing to it. If src is a
+ * bitstring, its storage is reused as a whole, trailing bits included: src must
+ * then be a sub-binary at offset 0 over its own storage, which is what a
+ * private_append accumulator always is.
+ * @param src binary or bitstring to reuse.
+ * @param size size of binary data buffer, in bytes.
  * @param heap the heap to allocate memory in
  * @param glb the global context as refc binaries are global
- * @return a term pointing to the boxed binary pointer.
+ * @return a term pointing to the boxed binary pointer, or `term_invalid_term()`
+ * if the buffer could not be allocated.
  */
 term term_reuse_binary(term src, size_t size, Heap *heap, GlobalContext *glb);
 
@@ -2172,47 +2238,6 @@ static inline bool term_is_nomatch_binary_pos_len(BinaryPosLen pos_len)
 static inline BinaryPosLen term_nomatch_binary_pos_len(void)
 {
     return (BinaryPosLen){ .pos = -1, .len = -1 };
-}
-
-/**
- * @brief Insert an binary into a binary (using bit syntax).
- *
- * @details Insert the data from the input binary, starting
- * at the bit position starting in offset.
- * @param t a term pointing to binary data. Fails if t is not a binary term.
- * @param offset the bitwise offset in t at which to start writing the integer value
- * @param src binary source to insert binary data into.
- * @param n the number of low-order bits from value to write.
- * @return 0 on success; non-zero value if:
- *           t is not a binary term
- *           n is greater than the number of bits in an integer
- *           there is insufficient capacity in the binary to write these bits
- * In general, none of these conditions should apply, if this function is being
- * called in the context of generated bit syntax instructions.
- */
-static inline int term_bs_insert_binary(term t, int offset, term src, int n)
-{
-    if (!term_is_binary(t)) {
-        fprintf(stderr, "Target is not a binary\n");
-        return -1;
-    }
-    if (!term_is_binary(src)) {
-        fprintf(stderr, "Source is not a binary\n");
-        return -2;
-    }
-    if (offset % 8 != 0) {
-        fprintf(stderr, "Offset not aligned on a byte boundary\n");
-        return -3;
-    }
-    unsigned long capacity = term_binary_size(t);
-    if (capacity < (unsigned long) (offset / 8 + n)) {
-        fprintf(stderr, "Insufficient capacity to write binary\n");
-        return -4;
-    }
-    uint8_t *dst_pos = (uint8_t *) term_binary_data(t) + offset / 8;
-    uint8_t *src_pos = (uint8_t *) term_binary_data(src);
-    memcpy(dst_pos, src_pos, n);
-    return 0;
 }
 
 /**
@@ -3060,6 +3085,40 @@ static inline term term_get_sub_binary_ref(term t)
 {
     const term *boxed_value = term_to_const_term_ptr(t);
     return boxed_value[3];
+}
+
+/**
+ * @brief Number of trailing (partial-byte) bits of a sub-binary (0..7).
+ *
+ * @details A byte-aligned sub-binary returns 0. A non-byte-aligned bitstring
+ * returns 1..7, meaning its total bit size is term_binary_size(t)*8 + this.
+ */
+static inline uint8_t term_get_sub_binary_num_trailing_bits(term t)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return (uint8_t) (boxed_value[2] & 0x7);
+}
+
+/**
+ * @brief Offset (in bytes) of a sub-binary into its parent binary.
+ */
+static inline size_t term_get_sub_binary_offset(term t)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return (size_t) (boxed_value[2] >> 3);
+}
+
+/**
+ * @brief Total size in bits of any bitstring (binary or sub-binary).
+ */
+static inline size_t term_bit_size(term t)
+{
+    size_t bits = term_binary_size(t) * 8;
+    const term *boxed_value = term_to_const_term_ptr(t);
+    if ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_SUB_BINARY) {
+        bits += boxed_value[2] & 0x7;
+    }
+    return bits;
 }
 
 /**

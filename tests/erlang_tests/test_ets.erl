@@ -26,6 +26,7 @@ start() ->
     ok = isolated(fun test_ets_new/0),
     ok = isolated(fun test_permissions/0),
     ok = isolated(fun test_keys/0),
+    ok = isolated(fun test_bitstring_keys/0),
     ok = isolated(fun test_keypos/0),
     ok = isolated(fun test_lookup_element/0),
     ok = isolated(fun test_member/0),
@@ -136,6 +137,29 @@ test_keys() ->
         <<1, 2, 3, 4>> => <<-4, -3, -2, -1>>
     }),
     ok = assert_stored_key(T, binary_to_term(DistributedPortBin)),
+    ok.
+
+test_bitstring_keys() ->
+    T = ets:new(test, []),
+    ok = assert_stored_key(T, <<0:1>>),
+    ok = assert_stored_key(T, <<1:1>>),
+    ok = assert_stored_key(T, <<7:3>>),
+    ok = assert_stored_key(T, <<1, 2, 5:3>>),
+    true = ets:insert(T, {<<0:2>>, a}),
+    true = ets:insert(T, {<<0:3>>, b}),
+    true = ets:insert(T, {<<1:3>>, c}),
+    [{<<0:2>>, a}] = ets:lookup(T, <<0:2>>),
+    [{<<0:3>>, b}] = ets:lookup(T, <<0:3>>),
+    [{<<1:3>>, c}] = ets:lookup(T, <<1:3>>),
+    Ones = binary:copy(<<255>>, 100),
+    <<Prefix:259/bits, _/bits>> = Ones,
+    PrefixKey = <<-1:256, 7:3>>,
+    true = ets:insert(T, {PrefixKey, prefix}),
+    [{PrefixKey, prefix}] = ets:lookup(T, Prefix),
+    <<_:8, Middle:267/bits, _/bits>> = Ones,
+    MiddleKey = <<-1:264, 7:3>>,
+    true = ets:insert(T, {MiddleKey, middle}),
+    [{MiddleKey, middle}] = ets:lookup(T, Middle),
     ok.
 
 test_keypos() ->

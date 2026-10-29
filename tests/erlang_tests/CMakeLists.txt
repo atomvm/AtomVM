@@ -455,9 +455,13 @@ compile_erlang(test_match)
 compile_erlang(test_ordering_0)
 compile_erlang(test_ordering_1)
 compile_erlang(test_bs)
+compile_erlang(test_bs_gettail)
 compile_erlang(test_bs_int)
 compile_erlang(test_bs_int_any_flags)
 compile_erlang(test_bs_int_unaligned)
+compile_erlang(test_bs_size_limits)
+compile_erlang(test_bs_unaligned_segments)
+compile_erlang(test_bs_bigint_unaligned DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/test_bs_bigint_common.hrl)
 compile_erlang(test_bs_start_match_live)
 compile_erlang(test_bs_utf)
 compile_erlang(test_catch)
@@ -580,6 +584,7 @@ compile_erlang(test_has_map_fields)
 compile_erlang(test_bs_create_bin_accum)
 compile_assembler(test_bs_create_bin_accum_asm)
 compile_erlang(test_no_bs_create_bin)
+compile_erlang(test_no_bs_unaligned DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/test_bs_bigint_common.hrl)
 compile_erlang(bs_context_to_binary_with_offset)
 compile_erlang(bs_restore2_start_offset)
 compile_erlang(test_refc_binaries)
@@ -1021,9 +1026,13 @@ set(erlang_test_beams
     test_ordering_0.beam
     test_ordering_1.beam
     test_bs.beam
+    test_bs_gettail.beam
     test_bs_int.beam
     test_bs_int_any_flags.beam
     test_bs_int_unaligned.beam
+    test_bs_size_limits.beam
+    test_bs_unaligned_segments.beam
+    test_bs_bigint_unaligned.beam
     test_bs_start_match_live.beam
     test_bs_utf.beam
     test_catch.beam
@@ -1150,6 +1159,7 @@ set(erlang_test_beams
     test_has_map_fields.beam
     test_bs_create_bin_accum.beam
     test_no_bs_create_bin.beam
+    test_no_bs_unaligned.beam
     bs_context_to_binary_with_offset.beam
     bs_restore2_start_offset.beam
     bs_append_extra_words.beam

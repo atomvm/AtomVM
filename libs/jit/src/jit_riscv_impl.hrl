@@ -767,6 +767,21 @@ if_block_cond(
     {State3, {bge, Temp, Reg}, BranchDelta};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {'(unsigned)', RegOrTuple, '<', RegB}
+) when is_atom(RegB) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    % RISC-V: bgeu Reg, RegB, offset (branch if Reg >= RegB unsigned, i.e., NOT below)
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
+    Stream1 = StreamModule:append(Stream0, BranchInstr),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, {bgeu, Reg, RegB}, 0};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '<', RegB}
 ) when is_atom(RegB) ->
     Reg =

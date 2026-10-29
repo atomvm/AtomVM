@@ -24,10 +24,6 @@
 
 -define(ID(X), ?MODULE:id(X)).
 
-%% AtomVM does not support non-byte-aligned bitstrings, so only byte-aligned
-%% binaries are exercised. This matches the compiler's use of
-%% erlang:bitstring_to_list/1 (beam_core_to_ssa:pattern_bin/3), which only ever
-%% passes byte-aligned binaries.
 start() ->
     [1, 2, 3] = erlang:bitstring_to_list(?ID(<<1, 2, 3>>)),
     [] = erlang:bitstring_to_list(?ID(<<>>)),
@@ -36,7 +32,26 @@ start() ->
     Bytes = erlang:bitstring_to_list(?ID(<<0, 1, 2, 127, 128, 200, 254, 255>>)),
     ok = raises_badarg(fun() -> erlang:bitstring_to_list(?ID([1, 2, 3])) end),
     ok = raises_badarg(fun() -> erlang:bitstring_to_list(?ID(not_a_bitstring)) end),
+    %% Non-byte-aligned bitstrings: the trailing partial byte is returned as a
+    %% final bitstring element. beam_core_to_ssa relies on this when compiling a
+    %% match against a non-byte-aligned literal segment (e.g. <<1:1,_:63>>).
+    [B1] = erlang:bitstring_to_list(?ID(<<1:1>>)),
+    true = is_bitstring(B1),
+    false = is_binary(B1),
+    1 = bit_size(B1),
+    1 = extract(B1),
+    [B3] = erlang:bitstring_to_list(?ID(<<3:3>>)),
+    3 = bit_size(B3),
+    3 = extract(B3),
+    [255, B7] = erlang:bitstring_to_list(?ID(<<255, 5:7>>)),
+    7 = bit_size(B7),
+    5 = extract(B7),
     0.
+
+extract(Bitstring) ->
+    Size = bit_size(Bitstring),
+    <<Value:Size>> = Bitstring,
+    Value.
 
 raises_badarg(Fun) ->
     try Fun() of
