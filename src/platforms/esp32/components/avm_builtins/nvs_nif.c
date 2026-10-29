@@ -86,6 +86,7 @@ static term nif_esp_nvs_fetch_binary(Context *ctx, int argc, term argv[])
             break;
         case ESP_ERR_NVS_NOT_FOUND: {
             TRACE("No such entry.  namespace='%s' key='%s'\n", namespace, key);
+            nvs_close(nvs);
             if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
@@ -97,11 +98,13 @@ static term nif_esp_nvs_fetch_binary(Context *ctx, int argc, term argv[])
         }
         default:
             TRACE("Unable to get NVS blob size. namespace '%s'  key='%s' err=%i\n", namespace, key, err);
+            nvs_close(nvs);
             RAISE_ERROR(esp_err_to_term(ctx->global, err));
     }
 
     if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(size) + TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
         TRACE("Unabled to ensure free space for binary.  namespace='%s' key='%s' size=%i\n", namespace, key, size);
+        nvs_close(nvs);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term binary = term_create_uninitialized_binary(size, &ctx->heap, ctx->global);
