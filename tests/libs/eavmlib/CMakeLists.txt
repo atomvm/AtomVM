@@ -28,6 +28,7 @@ set(ERLANG_MODULES
     test_ahttp_client
     test_http_server
     test_mdns
+    test_network
     test_port
     test_subprocess
     test_timer_manager

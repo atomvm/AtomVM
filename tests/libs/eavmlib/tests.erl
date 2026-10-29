@@ -28,6 +28,7 @@ start() ->
         test_file,
         test_http_server,
         test_mdns,
+        test_network,
         test_port,
         test_subprocess,
         test_timer_manager,
