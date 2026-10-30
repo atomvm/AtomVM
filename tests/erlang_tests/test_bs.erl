@@ -1059,9 +1059,32 @@ test_float() ->
     <<Pi16B:16/float-little, 3, 14>> = <<72, 66, 3, 14>>,
     true = abs(Pi16B - Pi16) < 0.001,
 
+    ok = test_float16_rounding(),
     ok = test_integer_outside_float_limits(),
     ok = test_create_with_invalid_float_value(),
     ok = test_create_with_invalid_float_size(),
+    ok.
+
+test_float16_rounding() ->
+    % The spacing is 4 in [4096, 8192), so 6546.0 is exactly halfway between
+    % two half-precision values and must round to the even mantissa.
+    <<16#6E, 16#64>> = <<(id(6546.0)):16/float>>,
+    <<16#6E, 16#64>> = <<(id(6545.0)):16/float>>,
+    <<16#6E, 16#65>> = <<(id(6547.0)):16/float>>,
+    % Ties round to even for negative values too.
+    <<16#EC, 16#5E>> = <<(id(-4474.0)):16/float>>,
+    <<16#EE, 16#64>> = <<(id(-6546.0)):16/float>>,
+    % Subnormal values are rounded, not truncated.
+    <<0, 17>> = <<(id(1.0e-6)):16/float>>,
+    <<0, 1>> = <<(id(6.0e-8)):16/float>>,
+    % Half of the smallest subnormal is a tie and rounds to even, zero.
+    <<0, 0>> = <<(id(2.9802322387695312e-8)):16/float>>,
+    <<0, 1>> = <<(id(3.0e-8)):16/float>>,
+    % Rounding up the largest subnormal gives the smallest normal number.
+    <<4, 0>> = <<(id(6.103515e-5)):16/float>>,
+    % A tie at the top of the range rounds up to infinity.
+    <<123, 255>> = <<(id(65519.0)):16/float>>,
+    <<124, 0>> = <<(id(65520.0)):16/float>>,
     ok.
 
 test_create_with_invalid_float_value() ->
