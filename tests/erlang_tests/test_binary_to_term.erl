@@ -154,6 +154,7 @@ start() ->
     {32768, 6} = erlang:binary_to_term(<<131, 98, 0, 0, 128, 0, 127>>, [used]),
     test_catenate_and_split([foo, bar, 128, {foo, bar}, [a, b, c, {d}]]),
     ok = test_invalid_term_encoding(),
+    ok = test_truncated_tuple_encoding(),
     ok = test_mutate_encodings(),
     ok = test_atom_decoding(),
     ok = test_atom_decoding_checks(),
@@ -247,6 +248,35 @@ test_invalid_term_encoding() ->
     ),
     ok.
 
+% The size pass used to account only for the SMALL_TUPLE_EXT tag and not for
+% its arity byte, so an input missing the last byte of the last element passed
+% validation and the decoder read one byte past the end of the input.
+test_truncated_tuple_encoding() ->
+    % {1, 2} with the value byte of the last SMALL_INTEGER_EXT missing
+    ok = expect_badarg(fun() -> binary_to_term(id(<<131, 104, 2, 97, 1, 97>>)) end),
+    ok = expect_badarg(fun() -> binary_to_term(id(<<131, 104, 2, 97, 1, 97>>), [safe]) end),
+    ok = expect_badarg(fun() -> binary_to_term(id(<<131, 104, 2, 97, 1, 97>>), [used]) end),
+    % arity byte missing
+    ok = expect_badarg(fun() -> binary_to_term(id(<<131, 104>>)) end),
+    % {1, '…'} with the ATOM_EXT length and name truncated
+    ok = expect_badarg(fun() -> binary_to_term(id(<<131, 104, 2, 97, 1, 100, 0>>)) end),
+    % nested: {{1, <truncated>}}
+    ok = expect_badarg(fun() -> binary_to_term(id(<<131, 104, 1, 104, 2, 97, 1, 97>>)) end),
+    % same shape with LARGE_TUPLE_EXT, which was already rejected
+    ok = expect_badarg(fun() -> binary_to_term(id(<<131, 105, 0, 0, 0, 2, 97, 1, 97>>)) end),
+    % a refc-sized input: the byte read past the end would be outside the allocation
+    Payload = id(list_to_binary(repeat(60, $A))),
+    ok = expect_badarg(fun() ->
+        binary_to_term(<<131, 104, 2, 109, 0, 0, 0, 60, Payload/binary, 97>>)
+    end),
+    % complete encodings still decode
+    {1, 2} = binary_to_term(id(<<131, 104, 2, 97, 1, 97, 2>>)),
+    {{1, 2}, 7} = binary_to_term(id(<<131, 104, 2, 97, 1, 97, 2>>), [used]),
+    {} = binary_to_term(id(<<131, 104, 0>>)),
+    {1, 2} = binary_to_term(id(<<131, 105, 0, 0, 0, 2, 97, 1, 97, 2>>)),
+    {Payload, 3} = binary_to_term(id(<<131, 104, 2, 109, 0, 0, 0, 60, Payload/binary, 97, 3>>)),
+    ok.
+
 test_mutate_encodings() ->
     Terms = [
         0,
@@ -270,6 +300,9 @@ test_mutate_encoding(Term) ->
     %% verify the VM does not crash, even if the term can't be decoded
     [catch (binary_to_term(Mutation)) || Mutation <- Mutations],
     ok.
+
+repeat(0, _C) -> [];
+repeat(N, C) -> [C | repeat(N - 1, C)].
 
 seq(N) -> seq(0, N).
 

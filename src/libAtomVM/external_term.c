@@ -74,6 +74,8 @@
 #define BIT_BINARY_EXT_BASE_SIZE 6
 #define MAP_EXT_BASE_SIZE 5
 #define SMALL_ATOM_EXT_BASE_SIZE 2
+#define SMALL_TUPLE_EXT_BASE_SIZE 2
+#define LARGE_TUPLE_EXT_BASE_SIZE 5
 
 // MAINTENANCE NOTE.  Range checking on the external term buffer is only performed in
 // the calculate_heap_usage function, which will fail with an invalid term if there is
@@ -1263,19 +1265,20 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             size_t arity;
             size_t buf_pos;
             if (external_term_buf[0] == SMALL_TUPLE_EXT) {
-                if (UNLIKELY(remaining < 1)) {
+                // tag and arity byte: both must be present before the arity is read
+                if (UNLIKELY(remaining < SMALL_TUPLE_EXT_BASE_SIZE)) {
                     return INVALID_TERM_SIZE;
                 }
-                remaining--;
+                remaining -= SMALL_TUPLE_EXT_BASE_SIZE;
                 arity = external_term_buf[1];
-                buf_pos = 2;
+                buf_pos = SMALL_TUPLE_EXT_BASE_SIZE;
             } else {
-                if (UNLIKELY(remaining < 5)) {
+                if (UNLIKELY(remaining < LARGE_TUPLE_EXT_BASE_SIZE)) {
                     return INVALID_TERM_SIZE;
                 }
-                remaining -= 5;
+                remaining -= LARGE_TUPLE_EXT_BASE_SIZE;
                 arity = READ_32_UNALIGNED(external_term_buf + 1);
-                buf_pos = 5;
+                buf_pos = LARGE_TUPLE_EXT_BASE_SIZE;
             }
 
             if (UNLIKELY(remaining < arity)) {
