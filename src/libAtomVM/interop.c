@@ -254,6 +254,11 @@ InteropFunctionResult interop_chardata_fold(term t, interop_chardata_fold_fun fo
     }
 
     if (UNLIKELY(!term_is_list(t))) {
+        // report the top-level term through rest_fun, as is done for a
+        // non-chardata element inside a list, so that callers can reject it
+        if (rest_fun) {
+            rest_fun(t, accum);
+        }
         return InteropBadArg;
     }
 
