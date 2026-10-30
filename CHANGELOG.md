@@ -214,6 +214,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed float bitstring construction ignoring segment units in the interpreter and JIT
 - Fixed non-integer bitstring pattern sizes raising `badarg` instead of failing the match
 - Fixed float bitstring matching ignoring segment units and rejecting zero-width fields
+- Fixed `:16/float` segments rounding halfway values away from zero and truncating subnormals
+  instead of rounding to nearest, ties to even, so constructed bytes now match BEAM
 
 ## [0.7.0-beta.0] - 2026-09-28
 
