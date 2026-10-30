@@ -112,6 +112,8 @@ compile_erlang(test_crypto)
 compile_erlang(test_monotonic_time)
 compile_erlang(test_mount)
 compile_erlang(test_net)
+compile_erlang(test_eth)
+compile_erlang(test_eth_teardown)
 compile_erlang(test_no_line_info_stacktrace)
 compile_erlang(test_nvs)
 compile_erlang(test_rtc_slow)
@@ -144,6 +146,8 @@ set(erlang_test_beams
     test_monotonic_time.beam
     test_mount.beam
     test_net.beam
+    test_eth.beam
+    test_eth_teardown.beam
     test_no_line_info_stacktrace.beam
     test_nvs.beam
     test_rtc_slow.beam

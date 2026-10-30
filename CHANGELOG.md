@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   WPA2 only
 - Added `{mode, rs485_half_duplex}` to the ESP32 `uart` module, driving `rts` as the RS485
   transceiver's DE
+- Added Ethernet to the `network` module on ESP32 and ESP32-P4 (ESP-IDF 5.4 or newer, opt-in
+  with `CONFIG_AVM_ENABLE_ETHERNET=y`): `{eth, [...]}` in `network:start/1` brings up the EMAC
+  with an RMII PHY, alone or next to STA/AP, plus `network:wait_for_eth/0,1,2` and
+  `network:eth_status/0`
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
