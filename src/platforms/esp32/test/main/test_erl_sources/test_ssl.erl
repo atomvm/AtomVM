@@ -21,20 +21,19 @@
 -module(test_ssl).
 -export([start/0]).
 
+% requires local_test_servers.escript
 start() ->
     % start SSL
     Entropy = ssl:nif_entropy_init(),
     CtrDrbg = ssl:nif_ctr_drbg_init(),
     ok = ssl:nif_ctr_drbg_seed(CtrDrbg, Entropy, <<"AtomVM">>),
-    % Get address of github.com
     {ok, Results} = net:getaddrinfo_nif("github.com", undefined),
-    [TCPAddr | _] = [
+    [_TCPAddr | _] = [
         Addr
      || #{addr := #{addr := Addr}, type := stream, protocol := tcp, family := inet} <- Results
     ],
-    % Connect to github.com:443
     {ok, Socket} = socket:open(inet, stream, tcp),
-    ok = socket:connect(Socket, #{family => inet, addr => TCPAddr, port => 443}),
+    ok = socket:connect(Socket, #{family => inet, addr => {10, 0, 2, 2}, port => 443}),
     % Initialize SSL Socket and config
     SSLContext = ssl:nif_init(),
     ok = ssl:nif_set_bio(SSLContext, Socket),
