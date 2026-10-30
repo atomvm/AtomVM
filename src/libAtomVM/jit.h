@@ -137,8 +137,13 @@ typedef struct Module Module;
 // Interface to native code:
 // Entry point returns the current (or new) context
 // jit_state->remaining_reductions is updated.
-// If returned context is different from passed context, scheduler resumes in
-// schedule_in.
+// If returned context is different from passed context, scheduler resumes at
+// that context in schedule_in.
+// A primitive that destroys the dispatched context (terminate_context, and
+// handle_error, which the raise/call primitives route through) must not return
+// that context or any pointer that could alias it: it stores the context
+// returned by the scheduler in jit_state->next_context and returns NULL. The
+// dispatcher then resumes next_context if non-NULL, or stops if both are NULL.
 typedef Context *(*ModuleNativeEntryPoint)(Context *ctx, JITState *jit_state, const ModuleNativeInterface *p);
 
 // Type for storing a native continuation reference.
@@ -162,6 +167,14 @@ struct JITState
 #if JIT_ARCH_TARGET == JIT_ARCH_XTENSA
     const void *code_base;
 #endif
+    // Set by a primitive that terminated the dispatched context to the context
+    // returned by the scheduler, or NULL if the scheduler stopped. The dispatcher
+    // must take `next_context` directly instead of comparing the returned
+    // context with the dispatched one: the dispatched context was destroyed and
+    // a concurrent spawn may already have reused its address, which would make
+    // the new process compare equal and resume it at the terminated process's
+    // continuation.
+    struct Context *next_context;
 };
 
 // Remember to keep this struct in sync with libs/jit/src/primitives.hrl

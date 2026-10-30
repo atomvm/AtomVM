@@ -300,7 +300,13 @@ static Context *jit_terminate_context(Context *ctx, JITState *jit_state)
     }
     scheduler_terminate(ctx);
     jit_state->remaining_reductions = 0;
-    return scheduler_run(global);
+    // ctx has been destroyed (a leader is destroyed after the scheduler loop).
+    // Return the next context out of band: the caller must not compare the
+    // returned context with ctx, as a concurrent spawn may already have reused
+    // the freed address, which would make the new process be mistaken for this
+    // one and be resumed at this process's continuation.
+    jit_state->next_context = scheduler_run(global);
+    return NULL;
 }
 
 static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
@@ -521,6 +527,8 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
                 }
             }
             if ((long) ctx->cp == -1) {
+                // Ends the scheduler loop. next_context stays NULL, and the
+                // dispatcher assigns this NULL to ctx, so schedule_in returns 0.
                 return 0;
             }
 
