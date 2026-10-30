@@ -45,26 +45,33 @@ unsub(PubSub, Topic, Pid) ->
     gen_server:call(PubSub, {unsub, Topic, Pid}).
 
 init(_) ->
-    {ok, []}.
+    {ok, {[], #{}}}.
 
-handle_call({pub, Topic, Term}, {FromPid, _Ref}, Table) ->
+handle_call({pub, Topic, Term}, {FromPid, _Ref}, {Table, _Monitors} = State) ->
     Sub = broadcast_subscribers(Table, Topic, FromPid, Term),
-    {reply, {ok, Sub}, Table};
-handle_call({sub, Topic}, {FromPid, _Ref}, Table) ->
-    NewTable = add_subscriber(Table, FromPid, Topic),
-    {reply, ok, NewTable};
-handle_call({sub, Topic, Subscriber}, _From, Table) ->
-    NewTable = add_subscriber(Table, Subscriber, Topic),
-    {reply, ok, NewTable};
-handle_call({unsub, Topic}, {FromPid, _Ref}, Table) ->
-    NewTable = remove_subscriber(Table, FromPid, Topic),
-    {reply, ok, NewTable};
-handle_call({unsub, Topic, Subscriber}, _From, Table) ->
-    NewTable = remove_subscriber(Table, Subscriber, Topic),
-    {reply, ok, NewTable}.
+    {reply, {ok, Sub}, State};
+handle_call({sub, Topic}, {FromPid, _Ref}, State) ->
+    NewState = add_subscriber(State, FromPid, Topic),
+    {reply, ok, NewState};
+handle_call({sub, Topic, Subscriber}, _From, State) ->
+    NewState = add_subscriber(State, Subscriber, Topic),
+    {reply, ok, NewState};
+handle_call({unsub, Topic}, {FromPid, _Ref}, State) ->
+    NewState = remove_subscriber(State, FromPid, Topic),
+    {reply, ok, NewState};
+handle_call({unsub, Topic, Subscriber}, _From, State) ->
+    NewState = remove_subscriber(State, Subscriber, Topic),
+    {reply, ok, NewState}.
 
-handle_info(_Info, Table) ->
-    {noreply, Table}.
+handle_info({'DOWN', Ref, process, Pid, _Reason}, {Table, Monitors} = State) ->
+    case maps:find(Pid, Monitors) of
+        {ok, Ref} ->
+            {noreply, {remove_from_all(Table, Pid), maps:remove(Pid, Monitors)}};
+        _ ->
+            {noreply, State}
+    end;
+handle_info(_Info, State) ->
+    {noreply, State}.
 
 terminate(_Reason, _State) ->
     ok.
@@ -75,25 +82,72 @@ broadcast_subscribers(Table, Topic, From, Term) ->
     lists:foreach(fun(Subscriber) -> Subscriber ! Message end, Subs),
     length(Subs).
 
-add_subscriber(Table, Subscriber, Pattern) ->
+add_subscriber({Table, Monitors}, Subscriber, Pattern) ->
+    NewTable =
+        case lists:keyfind(Pattern, 2, Table) of
+            {Subscribers, Pattern} ->
+                case lists:member(Subscriber, Subscribers) of
+                    false ->
+                        lists:keyreplace(Pattern, 2, Table, {[Subscriber | Subscribers], Pattern});
+                    true ->
+                        Table
+                end;
+            false ->
+                [{[Subscriber], Pattern} | Table]
+        end,
+    {NewTable, ensure_monitor(Monitors, Subscriber)}.
+
+remove_subscriber({Table, Monitors} = State, Subscriber, Pattern) ->
     case lists:keyfind(Pattern, 2, Table) of
         {Subscribers, Pattern} ->
-            case lists:member(Subscriber, Subscribers) of
-                false -> lists:keyreplace(Pattern, 2, Table, {[Subscriber | Subscribers], Pattern});
-                true -> Table
-            end;
+            NewTable =
+                case lists:delete(Subscriber, Subscribers) of
+                    [] -> lists:keydelete(Pattern, 2, Table);
+                    NewSubs -> lists:keyreplace(Pattern, 2, Table, {NewSubs, Pattern})
+                end,
+            {NewTable, maybe_demonitor(NewTable, Monitors, Subscriber)};
         false ->
-            [{[Subscriber], Pattern} | Table]
+            State
     end.
 
-remove_subscriber(Table, Subscriber, Pattern) ->
-    case lists:keyfind(Pattern, 2, Table) of
-        {Subscribers, Pattern} ->
-            NewSubs = lists:delete(Subscriber, Subscribers),
-            lists:keyreplace(Pattern, 2, Table, {NewSubs, Pattern});
+remove_from_all(Table, Subscriber) ->
+    lists:foldr(
+        fun({Subscribers, Pattern}, Acc) ->
+            case lists:delete(Subscriber, Subscribers) of
+                [] -> Acc;
+                NewSubs -> [{NewSubs, Pattern} | Acc]
+            end
+        end,
+        [],
+        Table
+    ).
+
+%% TODO: monitor remote subscribers too once erlang:monitor/2 supports pids from other
+%% nodes; until then they stay in the table without being cleaned up, as before this fix.
+ensure_monitor(Monitors, Subscriber) when is_pid(Subscriber), node(Subscriber) =:= node() ->
+    case maps:is_key(Subscriber, Monitors) of
+        true -> Monitors;
+        false -> Monitors#{Subscriber => monitor(process, Subscriber)}
+    end;
+ensure_monitor(Monitors, _Subscriber) ->
+    Monitors.
+
+maybe_demonitor(Table, Monitors, Subscriber) ->
+    case is_subscribed(Table, Subscriber) of
+        true ->
+            Monitors;
         false ->
-            [{[Subscriber], Pattern} | Table]
+            case maps:find(Subscriber, Monitors) of
+                {ok, Ref} ->
+                    demonitor(Ref, [flush]),
+                    maps:remove(Subscriber, Monitors);
+                error ->
+                    Monitors
+            end
     end.
+
+is_subscribed(Table, Subscriber) ->
+    lists:any(fun({Subscribers, _Pattern}) -> lists:member(Subscriber, Subscribers) end, Table).
 
 find_subscribers(Table, Topic) ->
     find_subscribers(Table, Topic, []).

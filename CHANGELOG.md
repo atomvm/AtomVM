@@ -88,6 +88,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed modules compiled with the `no_bs_create_bin` compiler option failing to load when
   `bs_init_bits` or `bs_append` were followed by the creation of funs, and `bs_append` not
   reserving the extra heap words it is given
+- Fixed `avm_pubsub` keeping subscribers after they exit, and `avm_pubsub:unsub/2,3` on a
+  topic with no subscribers subscribing the caller instead
 
 ## [0.7.0-beta.0] - 2026-09-28
 

@@ -26,6 +26,7 @@ set(ERLANG_MODULES
     test_dir
     test_file
     test_ahttp_client
+    test_avm_pubsub
     test_http_server
     test_mdns
     test_network
