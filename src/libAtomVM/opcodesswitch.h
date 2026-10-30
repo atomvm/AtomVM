@@ -1781,6 +1781,7 @@ schedule_in:
             jit_state.continuation = (NativeContinuation) 0;
             jit_state.module = mod;
             jit_state.remaining_reductions = remaining_reductions;
+            jit_state.next_context = NULL;
             // __asm__ volatile("int $0x03");
 #if JIT_ARCH_TARGET == JIT_ARCH_XTENSA
             jit_state.code_base = (const void *) mod->native_code;
@@ -1789,6 +1790,14 @@ schedule_in:
             Context *new_ctx = native_pc(ctx, &jit_state, &module_native_interface);
             TRACE("returning from native code at %p, ctx = %p, new_ctx = %p, jit_state.continuation = %p\n", (void *) native_pc, (void *) ctx, (void *) new_ctx, (void *) jit_state.continuation);
             remaining_reductions = jit_state.remaining_reductions;
+            if (UNLIKELY(new_ctx == NULL)) {
+                // A terminated context returns the next context out of band:
+                // a concurrent spawn may have reused the dispatched address.
+                // If the scheduler stopped, next_context is also NULL, which
+                // schedule_in handles by returning.
+                ctx = jit_state.next_context;
+                goto schedule_in;
+            }
             if (UNLIKELY(new_ctx != ctx)) {
                 ctx = new_ctx;
                 goto schedule_in;
