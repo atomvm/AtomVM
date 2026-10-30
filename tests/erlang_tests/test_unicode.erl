@@ -28,7 +28,22 @@ start() ->
     ok = test_to_binary_latin1(),
     ok = test_to_binary_utf8(),
     ok = test_improper_tail(),
+    ok = test_non_chardata_argument(),
     0.
+
+% A top-level term that is not chardata is rejected with badarg, rather than
+% converted to an error tuple with an undefined rest.
+test_non_chardata_argument() ->
+    ok = raises_badarg(fun() -> unicode:characters_to_list(id(foo)) end),
+    ok = raises_badarg(fun() -> unicode:characters_to_list(id(foo), latin1) end),
+    ok = raises_badarg(fun() -> unicode:characters_to_list(id(42)) end),
+    ok = raises_badarg(fun() -> unicode:characters_to_list(id(<<1:1>>)) end),
+    ok = raises_badarg(fun() -> unicode:characters_to_binary(id({1, 2})) end),
+    ok = raises_badarg(fun() -> unicode:characters_to_binary(id({1, 2}), latin1) end),
+    ok = raises_badarg(fun() -> unicode:characters_to_binary(id({1, 2}), latin1, latin1) end),
+    ok = raises_badarg(fun() -> unicode:characters_to_binary(id(42)) end),
+    ok = raises_badarg(fun() -> unicode:characters_to_binary(id(<<1:1>>)) end),
+    ok.
 
 % Characters are only accepted as list elements: an improper tail may be a
 % binary, but never an integer.
