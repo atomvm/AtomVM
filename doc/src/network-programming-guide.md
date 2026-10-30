@@ -331,10 +331,11 @@ The `<ap-properties>` property list may contain the following entries:
 * `{ssid, string() | binary()}`  The SSID to which the device should connect.
 * `{psk, string() | binary()}` The password required to authenticate to the network, if required.  Note that this password must be a minimum of 8 characters.
 * `{ap_channel, wifi_channel()}` The channel the access point should use.
+* `{ap_authmode, wpa_wpa2_psk | wpa2_psk | wpa2_wpa3_psk | wpa3_psk}` The security the access point offers when it has a password.
 
 If the SSID is omitted in configuration, the SSID name `atomvm-<hexmac>` will be created, where `<hexmac>` is the hexadecimal representation of the factory-assigned MAC address of the device.  This name should be sufficiently unique to disambiguate it from other reachable ESP32 devices, but it may also be difficult to read or remember.
 
-If the password is omitted, then an __open network__ will be created, and a warning will be printed to the console.  Otherwise, the AP network will be started using WPA+WPA2 authentication.
+If the password is omitted, then an __open network__ will be created, and a warning will be printed to the console.  Otherwise, the AP network will be started using WPA+WPA2 authentication, or the mode given in `ap_authmode`: `wpa2_psk` refuses stations that only speak WPA (TKIP), `wpa2_wpa3_psk` lets WPA3 stations use SAE while WPA2 ones still join, and `wpa3_psk` accepts only WPA3 stations. A mode the platform cannot offer, or `ap_authmode` without a `psk`, is refused rather than quietly replaced: the AP is not started, so `ap_started` never comes, and the ESP32 logs why. On the ESP32 the WPA3 modes need `CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT`, on by default; on the Pico W, only an explicit `wpa_wpa2_psk` is supported, and `wpa2_psk` is refused because its driver does not enforce WPA2-only authorization; omitting `ap_authmode` keeps its existing default.
 
 If the channel is omitted the default channel for esp32 is `1`. This setting is only used while a device is operation in AP mode only. If `ap_channel` is configured, it will be temporarily changed to match the associated access point if AP + STA mode is used and the station is associated with an access point. This is a hardware limitation due to the modem radio only being able to operate on a single channel (frequency) at a time.
 

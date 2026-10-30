@@ -46,6 +46,7 @@
 #define DEFAULT_HOSTNAME_SIZE (strlen("atomvm-") + 12 + 1)
 
 static const char *const ap_atom = ATOM_STR("\x2", "ap");
+static const char *const ap_authmode_atom = ATOM_STR("\xB", "ap_authmode");
 static const char *const ap_channel_atom = ATOM_STR("\xA", "ap_channel");
 static const char *const ap_sta_connected_atom = ATOM_STR("\x10", "ap_sta_connected");
 static const char *const ap_sta_disconnected_atom = ATOM_STR("\x13", "ap_sta_disconnected");
@@ -456,6 +457,7 @@ static term start_ap(term ap_config, GlobalContext *global)
     term pass_term = interop_kv_get_value(ap_config, psk_atom, global);
     term channel_term = interop_kv_get_value(ap_config, ap_channel_atom, global);
     term hostname_term = interop_kv_get_value(ap_config, dhcp_hostname_atom, global);
+    term authmode_term = interop_kv_get_value(ap_config, ap_authmode_atom, global);
 
     //
     // Check parameters
@@ -487,6 +489,20 @@ static term start_ap(term ap_config, GlobalContext *global)
             return BADARG_ATOM;
         }
     }
+    // Without a password the AP is open, and the default is kept. The CYW43
+    // AP driver cannot enforce WPA2-only authorization (it enables the WPA
+    // bit for CYW43_AUTH_WPA2_AES_PSK too), so only an explicit WPA/WPA2 mode
+    // is accepted; any other mode is refused rather than quietly replaced.
+    uint32_t auth = (psk == NULL) ? CYW43_AUTH_OPEN : CYW43_AUTH_WPA2_AES_PSK;
+    if (!term_is_invalid_term(authmode_term)) {
+        if (psk != NULL && globalcontext_is_term_equal_to_atom_string(global, authmode_term, ATOM_STR("\xC", "wpa_wpa2_psk"))) {
+            auth = CYW43_AUTH_WPA2_MIXED_PSK;
+        } else {
+            free(ssid);
+            free(psk);
+            return BADARG_ATOM;
+        }
+    }
     uint32_t channel = 0;
     if (!term_is_invalid_term(channel_term)) {
         channel = term_to_int32(channel_term);
@@ -502,7 +518,6 @@ static term start_ap(term ap_config, GlobalContext *global)
         return error_code_to_term(ret, global);
     }
 
-    uint32_t auth = (psk == NULL) ? CYW43_AUTH_OPEN : CYW43_AUTH_WPA2_AES_PSK;
     cyw43_state.assoc_cb = network_driver_cyw43_assoc_cb;
     cyw43_arch_enable_ap_mode(ssid, psk, auth);
     // Set hostname after enabling AP mode otherwise hostname will revert to "PicoW"

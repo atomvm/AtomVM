@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added ML-KEM-768 (FIPS 203) key encapsulation to `crypto`, requiring libsodium >= 1.0.22
 - Added `AVM_STATIC_LIBSODIUM` CMake option to statically link libsodium
 - Added support for non-byte-aligned bitstrings
+- Added `ap_authmode` to the network AP configuration: on the ESP32, WPA2 only, WPA2/WPA3 or WPA3
+  instead of the fixed WPA/WPA2; on the Pico W, only `wpa_wpa2_psk`, as its driver cannot enforce
+  WPA2 only
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
