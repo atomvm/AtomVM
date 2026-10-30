@@ -177,6 +177,36 @@ term posix_errno_to_term(int err, GlobalContext *glb)
         case ENOTEMPTY:
             result = globalcontext_make_atom(glb, ATOM_STR("\x9", "enotempty"));
             break;
+        case ECONNREFUSED:
+            result = globalcontext_make_atom(glb, ATOM_STR("\xC", "econnrefused"));
+            break;
+        case ECONNRESET:
+            result = globalcontext_make_atom(glb, ATOM_STR("\xA", "econnreset"));
+            break;
+        case ECONNABORTED:
+            result = globalcontext_make_atom(glb, ATOM_STR("\xC", "econnaborted"));
+            break;
+        case ETIMEDOUT:
+            result = globalcontext_make_atom(glb, ATOM_STR("\x9", "etimedout"));
+            break;
+        case EHOSTUNREACH:
+            result = globalcontext_make_atom(glb, ATOM_STR("\xC", "ehostunreach"));
+            break;
+        case ENETUNREACH:
+            result = globalcontext_make_atom(glb, ATOM_STR("\xB", "enetunreach"));
+            break;
+        case ENETDOWN:
+            result = globalcontext_make_atom(glb, ATOM_STR("\x8", "enetdown"));
+            break;
+        case EADDRNOTAVAIL:
+            result = globalcontext_make_atom(glb, ATOM_STR("\xD", "eaddrnotavail"));
+            break;
+        case EALREADY:
+            result = globalcontext_make_atom(glb, ATOM_STR("\x8", "ealready"));
+            break;
+        case EISCONN:
+            result = globalcontext_make_atom(glb, ATOM_STR("\x7", "eisconn"));
+            break;
         default:
             return term_from_int(err);
     }
