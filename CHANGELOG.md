@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `ap_authmode` to the network AP configuration: on the ESP32, WPA2 only, WPA2/WPA3 or WPA3
   instead of the fixed WPA/WPA2; on the Pico W, only `wpa_wpa2_psk`, as its driver cannot enforce
   WPA2 only
+- Added `{mode, rs485_half_duplex}` to the ESP32 `uart` module, driving `rts` as the RS485
+  transceiver's DE
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
