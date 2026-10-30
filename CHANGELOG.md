@@ -99,6 +99,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reserving the extra heap words it is given
 - Fixed `avm_pubsub` keeping subscribers after they exit, and `avm_pubsub:unsub/2,3` on a
   topic with no subscribers subscribing the caller instead
+- Fixed the empty binary being printed as `<<"">>` instead of `<<>>` by `erlang:display/1`,
+  crash reports and `io_lib:format/2` with `~p`
 
 ## [0.7.0-beta.0] - 2026-09-28
 

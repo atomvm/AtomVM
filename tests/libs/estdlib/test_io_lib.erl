@@ -53,10 +53,20 @@ test_format() ->
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", ["bar"])), "foo: \"bar\"\n"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~s~n", ["bar"])), "foo: bar\n"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", ["bar"])), "foo: [98,97,114]\n"),
+    % empty lists are not quoted, but remain valid strings
+    ?ASSERT_MATCH(?FLT(io_lib:format("~p", [[]])), "[]"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("~tp", [[]])), "[]"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("~s", [[]])), ""),
+    ?ASSERT_MATCH(?FLT(io_lib:format("~ts", [[]])), ""),
     % printable binaries
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [<<"bar">>])), "foo: <<\"bar\">>\n"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~s~n", [<<"bar">>])), "foo: bar\n"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [<<"bar">>])), "foo: <<98,97,114>>\n"),
+    % the empty binary has no quoted form: OTP prints <<>>, not <<"">>
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [<<>>])), "foo: <<>>\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~w~n", [<<>>])), "foo: <<>>\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~tp~n", [<<>>])), "foo: <<>>\n"),
+    ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [{<<>>, [<<>>]}])), "foo: {<<>>,[<<>>]}\n"),
     % unprintable binaries
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [<<1, 2, 3>>])), "foo: <<1,2,3>>\n"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~s~n", [<<1, 2, 3>>])), ?FLT(["foo: ", 1, 2, 3, "\n"])),
@@ -319,6 +329,7 @@ test_chars_length() ->
 
 test_printable_list() ->
     UnicodeRange = io:printable_range() =:= unicode,
+    ?ASSERT_MATCH(io_lib:printable_list([]), true),
     ?ASSERT_MATCH(io_lib:printable_list("foo"), true),
     ?ASSERT_MATCH(io_lib:printable_list([$f, [$o, [$o]]]), false),
     ?ASSERT_MATCH(io_lib:printable_list("アトム"), UnicodeRange),

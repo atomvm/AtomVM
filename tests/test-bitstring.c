@@ -202,7 +202,7 @@ void test_print_bitstring(void)
     // collect, and the terms below are plain C locals rather than roots, so a
     // second reservation would leave the earlier ones dangling.
     size_t heap_size = 3 * TERM_BOXED_SUB_BINARY_SIZE + 3 * term_binary_heap_size(1)
-        + 2 * term_binary_heap_size(2);
+        + 2 * term_binary_heap_size(2) + term_binary_heap_size(0);
     assert(memory_ensure_free(ctx, heap_size) == MEMORY_GC_OK);
 
     // <<1:1>>: no complete byte, a single trailing bit
@@ -246,6 +246,12 @@ void test_print_bitstring(void)
     len = term_snprint(buf, sizeof(buf), bin5, glb);
     assert(len > 0);
     assert(strcmp(buf, "<<\"*\">>") == 0);
+
+    // the empty binary has no quoted form: OTP prints <<>>, not <<"">>
+    term empty = term_create_empty_binary(0, &ctx->heap, glb);
+    len = term_snprint(buf, sizeof(buf), empty, glb);
+    assert(len > 0);
+    assert(strcmp(buf, "<<>>") == 0);
 
     context_destroy(ctx);
     globalcontext_destroy(glb);
