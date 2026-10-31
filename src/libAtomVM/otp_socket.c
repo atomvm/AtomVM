@@ -2030,6 +2030,9 @@ static ssize_t do_socket_recv(struct SocketResource *rsrc_obj, uint8_t *buf, siz
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
             return SocketWouldBlock;
         }
+        if (errno == ECONNRESET) {
+            return SocketClosed;
+        }
         return SocketOtherError;
     }
     return res;
@@ -2111,7 +2114,7 @@ static ssize_t do_socket_recv(struct SocketResource *rsrc_obj, uint8_t *buf, siz
 
         return len - remaining;
     }
-    if (closed) {
+    if (closed || err == ERR_RST || err == ERR_ABRT || err == ERR_CLSD) {
         return SocketClosed;
     }
     return err == ERR_OK ? SocketWouldBlock : SocketOtherError;
@@ -2684,7 +2687,9 @@ static void tcp_err_cb(void *arg, err_t err)
     GlobalContext *global = rsrc_refc->resource_type->global;
     int32_t target_pid = rsrc_obj->selecting_process_id;
     rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
-    rsrc_obj->socket_state = SocketStateTCPConnected;
+    // lwIP has already freed the PCB before invoking the error callback.
+    rsrc_obj->tcp_pcb = NULL;
+    rsrc_obj->socket_state = SocketStateClosed;
     if (target_pid != INVALID_PROCESS_ID) {
         struct LWIPEvent event;
         event.handler = trap_answer_closed;
