@@ -72,7 +72,7 @@ endmacro()
 function(compile_erlang module_name)
     add_custom_command(
         OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${module_name}.beam"
-        COMMAND erlc ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
+        COMMAND erlc ${ARGN} ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
         DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl"
         COMMENT "Compiling ${module_name}.erl"
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
@@ -120,7 +120,11 @@ compile_erlang(test_rtc_slow)
 compile_erlang(test_select)
 compile_erlang(test_socket)
 compile_erlang(test_spi)
-compile_erlang(test_ssl)
+if(CONFIG_MBEDTLS_SSL_PROTO_TLS1_3)
+    compile_erlang(test_ssl -DTEST_SSL_TLS13)
+else()
+    compile_erlang(test_ssl)
+endif()
 compile_erlang(test_system_architecture)
 compile_erlang(test_time_and_processes)
 compile_erlang(test_twdt)
