@@ -28,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `atomvm:add_avm_pack_binary/2`) is rejected when loaded
 - STM32 builds now enable `AVM_MINIMAL_OPCODES` by default, so modules compiled with the
   `no_bs_create_bin`, `no_bs_match` or `no_ssa_opt_bs_ensure` compiler options cannot be loaded
+- `erlang:term_to_binary/1,2` and `erlang:binary_to_term/1,2` now encode and decode terms
+  iteratively instead of with unbounded C recursion, so a deeply nested term no longer risks
+  exhausting the C stack
+- `erlang:binary_to_term/1,2` now rejects a `LIST_EXT` with no tail (raising `badarg`), matching OTP
 
 ### Fixed
 - Fixed maps decoded by `binary_to_term/1,2` and received over distribution keeping the
