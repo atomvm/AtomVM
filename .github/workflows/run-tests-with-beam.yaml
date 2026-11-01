@@ -40,6 +40,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+        # OTP 26 is deprecated, keep testing it on Linux only
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
           otp: "26"
@@ -61,9 +62,6 @@ jobs:
           container: erlang:29
 
         # This is ARM64
-        - os: "macos-15"
-          otp: "26"
-
         - os: "macos-15"
           otp: "27"
 
@@ -103,7 +101,7 @@ jobs:
       if: runner.os == 'macOS'
       with:
         otp-version: ${{ matrix.otp }}
-        rebar3-version: ${{ fromJSON('{"26":"3.25.1","27":"3.25.1","28":"3.26"}')[matrix.otp] || '3' }}
+        rebar3-version: ${{ fromJSON('{"27":"3.25.1","28":"3.26"}')[matrix.otp] || '3' }}
         hexpm-mirrors: |
           https://builds.hex.pm
           https://repo.hex.pm
