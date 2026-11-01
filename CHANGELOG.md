@@ -28,6 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `atomvm:add_avm_pack_binary/2`) is rejected when loaded
 - STM32 builds now enable `AVM_MINIMAL_OPCODES` by default, so modules compiled with the
   `no_bs_create_bin`, `no_bs_match` or `no_ssa_opt_bs_ensure` compiler options cannot be loaded
+- OTP 27 is now the minimum supported version. OTP 26 is deprecated: BEAM files compiled by OTP 26
+  with default compiler options still load and are still tested, but this will be removed in a
+  future release
+
+### Removed
+- Removed support for BEAM files compiled by OTP 26 with the `no_init_yregs`, `no_make_fun3`,
+  `r22` or `r23` compiler options
 
 ### Fixed
 - Fixed maps decoded by `binary_to_term/1,2` and received over distribution keeping the
