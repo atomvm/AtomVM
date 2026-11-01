@@ -38,18 +38,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["macos-14", "macos-15", "macos-15-intel", "macos-26"]
+        os: ["macos-15", "macos-15-intel", "macos-26"]
         otp: ["26", "27", "28"]
         mbedtls: ["mbedtls@3"]
         cmake_opts_other: [""]
 
         include:
         - os: "macos-15-intel"
-          otp: "28"
-          mbedtls: "mbedtls@3"
-          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
-
-        - os: "macos-14"
           otp: "28"
           mbedtls: "mbedtls@3"
           cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
