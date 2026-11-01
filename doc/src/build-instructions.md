@@ -85,6 +85,23 @@ AtomVM depends on `uf2tool`. It is used to pack both native and Erlang/Elixir/Gl
 
 It is possible to use a local copy of `uf2tool` source code by setting `UF2TOOL_PATH` variable to a path to a source checkout of [`uf2tool`](https://github.com/pguyot/uf2tool) when invoking CMake.
 
+## Opcodes for legacy compiler options
+
+The `AVM_MINIMAL_OPCODES` CMake option reduces the size of the VM by leaving out the opcodes that
+only the `no_bs_create_bin`, `no_bs_match` and `no_ssa_opt_bs_ensure` Erlang compiler options
+emit. BEAM files compiled with the default compiler options never use them, and neither the Elixir
+nor the Gleam compiler passes those options.
+
+It is enabled by default on ESP32, STM32 and RP2, and disabled on generic UNIX and emscripten. To
+run modules compiled with those options on a microcontroller, disable it, for example with
+`idf.py -DAVM_MINIMAL_OPCODES=OFF build` on ESP32 or `cmake -DAVM_MINIMAL_OPCODES=OFF ..` on STM32
+and RP2.
+
+```{warning}
+Modules that use the left out opcodes are loaded, but the VM aborts with "Undecoded opcode" when
+it executes one of them.
+```
+
 ## Platform Specific Build Instructions
 
 * [Generic UNIX](#building-for-generic-unix)
