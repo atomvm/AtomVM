@@ -76,6 +76,20 @@ struct Test
 #define SKIP_STACKTRACES false
 #endif
 
+// AVM_MINIMAL_OPCODES sets these to 0, see src/libAtomVM/CMakeLists.txt
+#if defined(SUPPORT_COMPILER_OPT_NO_BS_CREATE_BIN) && !SUPPORT_COMPILER_OPT_NO_BS_CREATE_BIN
+#define SKIP_NO_BS_CREATE_BIN true
+#else
+#define SKIP_NO_BS_CREATE_BIN false
+#endif
+
+#if defined(SUPPORT_COMPILER_OPT_NO_BS_MATCH) && !SUPPORT_COMPILER_OPT_NO_BS_MATCH \
+    && defined(SUPPORT_COMPILER_OPT_NO_SSA_OPT_BS_ENSURE) && !SUPPORT_COMPILER_OPT_NO_SSA_OPT_BS_ENSURE
+#define SKIP_NO_BS_MATCH true
+#else
+#define SKIP_NO_BS_MATCH false
+#endif
+
 // Enabling this will override malloc and calloc weak symbols,
 // so we can force an alternative version of malloc that returns
 // NULL when size is 0.
@@ -547,8 +561,8 @@ struct Test tests[] = {
     TEST_CASE(test_allocate_zero),
     TEST_CASE(test_has_map_fields),
     TEST_CASE(test_bs_create_bin_accum),
-    TEST_CASE(test_no_bs_create_bin),
-    TEST_CASE(test_no_bs_unaligned),
+    TEST_CASE_COND(test_no_bs_create_bin, 0, SKIP_NO_BS_CREATE_BIN),
+    TEST_CASE_COND(test_no_bs_unaligned, 0, SKIP_NO_BS_CREATE_BIN),
     TEST_CASE_EXPECTED(bs_context_to_binary_with_offset, 42),
     TEST_CASE_EXPECTED(bs_restore2_start_offset, 823),
 
@@ -585,7 +599,7 @@ struct Test tests[] = {
     TEST_CASE(test_erlang_loaded),
 
     TEST_CASE(test_op_bs_start_match),
-    TEST_CASE(test_op_bs_test_unit),
+    TEST_CASE_COND(test_op_bs_test_unit, 0, SKIP_NO_BS_MATCH),
     TEST_CASE(test_op_bs_test_tail2),
     TEST_CASE(test_bs_match_ensure_at_least),
     TEST_CASE(test_bs_match_get_tail),
