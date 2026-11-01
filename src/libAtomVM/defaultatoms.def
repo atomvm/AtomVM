@@ -230,5 +230,6 @@ X(REPLY_DEMONITOR_ATOM, "\xF", "reply_demonitor")
 X(REPLY_ATOM, "\x5", "reply")
 X(TAG_ATOM, "\x3", "tag")
 X(PRIORITY_ATOM, "\x8", "priority")
+X(BADFIELD_ATOM, "\x8", "badfield")
 
 X(INVALID_AVM_ATOM, "\xB", "invalid_avm")

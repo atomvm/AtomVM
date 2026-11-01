@@ -402,8 +402,15 @@ static Context *jit_raise_error_mfa(
     return jit_handle_error(ctx, jit_state, 0);
 }
 
-static const struct RecordDef *jit_resolve_record_id(Context *ctx, JITState *jit_state, term id)
+static const struct RecordDef *jit_resolve_record_id(Context *ctx, JITState *jit_state, term id, term src)
 {
+    // Like ERTS, an update ignores id.
+    if (term_is_record(src)) {
+        return term_get_record_def(src);
+    }
+    if (!term_is_nil(src)) {
+        return NULL;
+    }
     if (term_is_atom(id)) {
         return module_find_record_def(jit_state->module, id);
     }
@@ -415,9 +422,9 @@ static const struct RecordDef *jit_resolve_record_id(Context *ctx, JITState *jit
     return NULL;
 }
 
-static uint32_t jit_record_def_arity(Context *ctx, JITState *jit_state, term id)
+static uint32_t jit_record_def_arity(Context *ctx, JITState *jit_state, term id, term src)
 {
-    const struct RecordDef *def = jit_resolve_record_id(ctx, jit_state, id);
+    const struct RecordDef *def = jit_resolve_record_id(ctx, jit_state, id, src);
     if (def == NULL) {
         return 0;
     }
@@ -561,16 +568,9 @@ static term jit_put_record_resolved(Context *ctx, JITState *jit_state, uint32_t 
 
 static term jit_put_record(Context *ctx, JITState *jit_state, term id, term src, uint32_t num_pairs, term *kv)
 {
-    const struct RecordDef *def = jit_resolve_record_id(ctx, jit_state, id);
+    const struct RecordDef *def = jit_resolve_record_id(ctx, jit_state, id, src);
     if (UNLIKELY(def == NULL)) {
-        return raise_badrecord(ctx, id);
-    }
-
-    if (UNLIKELY(!term_is_nil(src) && !term_is_record(src))) {
-        return raise_badrecord(ctx, src);
-    }
-    if (!term_is_nil(src) && term_get_record_def(src) != def) {
-        return raise_badrecord(ctx, src);
+        return raise_badrecord(ctx, term_is_nil(src) ? id : src);
     }
 
     Module *owning_mod = globalcontext_get_module(
@@ -606,12 +606,14 @@ static term jit_put_record(Context *ctx, JITState *jit_state, term id, term src,
     for (uint32_t j = 0; j < num_pairs; j++) {
         term field_name = kv[j * 2];
         term value = kv[j * 2 + 1];
-        for (size_t k = 0; k < num_fields; k++) {
-            if (def->fields[k].name == field_name) {
-                term_put_record_value(dst, k, value);
-                break;
-            }
+        size_t k = 0;
+        while (k < num_fields && def->fields[k].name != field_name) {
+            k++;
         }
+        if (UNLIKELY(k == num_fields)) {
+            return raise_badfield(ctx, def, term_to_atom_index(field_name));
+        }
+        term_put_record_value(dst, k, value);
     }
 
     return dst;

@@ -393,6 +393,27 @@ term raise_badrecord(Context *ctx, term src)
     return term_invalid_term();
 }
 
+term raise_badfield(Context *ctx, const struct RecordDef *def, atom_index_t field)
+{
+    if (UNLIKELY(memory_ensure_free(ctx, 3 * TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        context_set_exception_class(ctx, ERROR_ATOM);
+        ctx->exception_reason = OUT_OF_MEMORY_ATOM;
+        return term_invalid_term();
+    }
+    term id = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(id, 0, def->module);
+    term_put_tuple_element(id, 1, def->name);
+    term reason = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(reason, 0, id);
+    term_put_tuple_element(reason, 1, term_from_atom_index(field));
+    term err = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(err, 0, BADFIELD_ATOM);
+    term_put_tuple_element(err, 1, reason);
+    context_set_exception_class(ctx, ERROR_ATOM);
+    ctx->exception_reason = err;
+    return term_invalid_term();
+}
+
 term bif_erlang_get_record_field_3(Context *ctx, uint32_t fail_label, term src, term id, term field)
 {
     if (UNLIKELY(!term_is_record(src))) {

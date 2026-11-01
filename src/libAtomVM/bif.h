@@ -87,6 +87,11 @@ term bif_records_get_definition_2(Context *ctx, uint32_t fail_label, int live, t
  */
 term raise_badrecord(Context *ctx, term src);
 
+/**
+ * @brief Raise @c {badfield,{{Module,Name},Field}}. Returns @c term_invalid_term().
+ */
+term raise_badfield(Context *ctx, const struct RecordDef *def, atom_index_t field);
+
 term bif_erlang_is_map_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_map_key_2(Context *ctx, uint32_t fail_label, term arg1, term arg2);
 

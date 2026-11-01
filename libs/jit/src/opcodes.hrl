@@ -177,7 +177,9 @@
 -define(OP_PUT_RECORD, 189).
 -define(OP_IS_RECORD_ACCESSIBLE, 190).
 -define(OP_GET_RECORD_FIELD, 191).
+-define(OP_GET_RECORD_ELEMENTS_ID, 192).
+-define(OP_UPDATE_RECORD_ID, 193).
 
--define(OPCODE_MAX, 191).
+-define(OPCODE_MAX, 193).
 
 % Remember to keep this list in sync with src/libAtomVM/opcodes.h
