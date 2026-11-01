@@ -99,6 +99,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reserving the extra heap words it is given
 - Fixed `avm_pubsub` keeping subscribers after they exit, and `avm_pubsub:unsub/2,3` on a
   topic with no subscribers subscribing the caller instead
+- Fixed `AVM_MINIMAL_OPCODES` builds aborting with `Undecoded opcode` on modules compiled with
+  the `no_ssa_opt` or `beam_debug_info` compiler options, which use `bs_test_tail2`
 
 ## [0.7.0-beta.0] - 2026-09-28
 
