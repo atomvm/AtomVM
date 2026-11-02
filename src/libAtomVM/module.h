@@ -367,6 +367,7 @@ static inline void module_get_fun_arity_old_index_uniq(const Module *this_module
     int funs_count = READ_32_UNALIGNED(table_data + 8);
 
     assert(fun_index < funs_count);
+    UNUSED(funs_count);
 
     // fun atom index
     *arity = READ_32_UNALIGNED(table_data + fun_index * 24 + 4 + 12);
