@@ -26,8 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.avm` files, binaries and the pack embedded in an escript must now end exactly with the pack
   terminator: data after the end of the pack (for example a padded partition dump passed to
   `atomvm:add_avm_pack_binary/2`) is rejected when loaded
-- STM32 builds now enable `AVM_MINIMAL_OPCODES` by default, so modules compiled with the
-  `no_bs_create_bin`, `no_bs_match` or `no_ssa_opt_bs_ensure` compiler options cannot be loaded
+- ESP32, STM32 and RP2 builds now enable `AVM_MINIMAL_OPCODES` by default: modules compiled with
+  the `no_bs_create_bin`, `no_bs_match` or `no_ssa_opt_bs_ensure` compiler options can abort with
+  `Undecoded opcode` unless the VM is built with `-DAVM_MINIMAL_OPCODES=OFF`
 - OTP 27 is now the minimum supported version. OTP 26 is deprecated: BEAM files compiled by OTP 26
   with default compiler options still load and are still tested, but this will be removed in a
   future release
@@ -106,6 +107,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reserving the extra heap words it is given
 - Fixed `avm_pubsub` keeping subscribers after they exit, and `avm_pubsub:unsub/2,3` on a
   topic with no subscribers subscribing the caller instead
+- Fixed `AVM_MINIMAL_OPCODES` builds aborting with `Undecoded opcode` on modules compiled with
+  the `no_ssa_opt` or `beam_debug_info` compiler options, which use `bs_test_tail2`
 
 ## [0.7.0-beta.0] - 2026-09-28
 

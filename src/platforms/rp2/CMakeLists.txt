@@ -83,6 +83,7 @@ set(AVM_USB_CDC_MANUFACTURER "AtomVM" CACHE STRING "USB CDC iManufacturer string
 set(AVM_USB_CDC_PRODUCT "AtomVM CDC" CACHE STRING "USB CDC iProduct string descriptor")
 set(AVM_USB_CDC_INTERFACE_NAME "AtomVM CDC ACM" CACHE STRING "USB CDC interface string descriptor")
 option(AVM_PRINT_PROCESS_CRASH_DUMPS "Print crash reports when processes die with non-standard reasons" ON)
+option(AVM_MINIMAL_OPCODES "Reduce VM size by excluding opcodes that only legacy compiler options emit (no_bs_create_bin, no_bs_match, no_ssa_opt_bs_ensure)" ON)
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^cortex-m0")
     # Cortex-M0/M0+ (e.g. RP2040): ARMv6-M, Thumb-1 only
     if (NOT AVM_DISABLE_JIT)

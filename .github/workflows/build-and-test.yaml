@@ -185,6 +185,11 @@ jobs:
           cxx: "c++"
           cmake_opts_other: "-DAVM_CREATE_STACKTRACES=off -DAVM_WARNINGS_ARE_ERRORS=ON"
 
+        # Additional run with -DAVM_MINIMAL_OPCODES=ON, the default on microcontrollers
+        - cc: "cc"
+          cxx: "c++"
+          cmake_opts_other: "-DAVM_MINIMAL_OPCODES=ON -DAVM_WARNINGS_ARE_ERRORS=ON"
+
         # JIT build
         - cc: "cc"
           cxx: "c++"

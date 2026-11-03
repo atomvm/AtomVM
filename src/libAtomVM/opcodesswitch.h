@@ -4353,7 +4353,9 @@ schedule_in:
             }
 #endif
 
-#if SUPPORT_COMPILER_OPT_NO_BS_MATCH || SUPPORT_COMPILER_OPT_NO_SSA_OPT_BS_ENSURE
+            // Not guarded by SUPPORT_COMPILER_OPT_*: besides no_bs_match and
+            // no_ssa_opt_bs_ensure, OTP 27+ also emits it with no_ssa_opt and
+            // beam_debug_info (OTP 28+)
             case OP_BS_TEST_TAIL2: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
@@ -4375,7 +4377,6 @@ schedule_in:
                 }
                 break;
             }
-#endif
 
             case OP_BS_GET_INTEGER2: {
                 uint32_t fail;
