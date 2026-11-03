@@ -32,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - OTP 27 is now the minimum supported version. OTP 26 is deprecated: BEAM files compiled by OTP 26
   with default compiler options still load and are still tested, but this will be removed in a
   future release
+- Stopped CI testing on macOS 14, whose GitHub Actions runner image is being retired;
+  existing macOS 15 coverage is unchanged
 
 ### Removed
 - Removed support for BEAM files compiled by OTP 26 with the `no_init_yregs`, `no_make_fun3`,
