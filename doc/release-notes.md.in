@@ -27,9 +27,7 @@ AtomVM will run BEAM files that have been compiled using the following Erlang an
 
 | Erlang Version | Elixir Version |
 |----------------|----------------|
-| ✅ OTP 26 | ✅ 1.17 |
-| ✅ OTP 26 | ✅ 1.18 |
-| ✅ OTP 26 | ✅ 1.19 |
+| ⚠️ OTP 26 (deprecated) | ✅ 1.17 |
 | ✅ OTP 27 | ✅ 1.17 |
 | ✅ OTP 27 | ✅ 1.18 |
 | ✅ OTP 27 | ✅ 1.19 |
@@ -38,6 +36,10 @@ AtomVM will run BEAM files that have been compiled using the following Erlang an
 
 ```{note}
 Versions of Elixir that are compatible with a particular OTP version may work.  This table reflects the versions that are tested.
+```
+
+```{warning}
+OTP 27 is the minimum supported version. OTP 26 is deprecated: BEAM files compiled by OTP 26 with default compiler options still work and are still tested, but support for OTP 26 will be removed in a future release.
 ```
 
 Not all BEAM instructions are supported for every Erlang and Elixir compiler.  For details about which instructions are supported, see the `src/libAtomVM/opcodes.h` header file in the  [AtomVM](https://github.com/atomvm/AtomVM/) github repository corresponding to the current release.

@@ -45,7 +45,7 @@
 // These constants can be used to reduce the size of the VM for a specific
 // range of compiler versions
 #ifndef MINIMUM_OTP_COMPILER_VERSION
-#define MINIMUM_OTP_COMPILER_VERSION 26
+#define MINIMUM_OTP_COMPILER_VERSION 27
 #endif
 #ifndef MAXIMUM_OTP_COMPILER_VERSION
 #define MAXIMUM_OTP_COMPILER_VERSION 29
@@ -1403,32 +1403,6 @@ static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t **e
     }
 }
 
-static term make_fun(Context *ctx, const Module *mod, int fun_index, term argv[])
-{
-    uint32_t n_freeze = module_get_fun_freeze(mod, fun_index);
-
-    int size = BOXED_FUN_SIZE + n_freeze;
-    if (memory_ensure_free_with_roots(ctx, size, MINI(MAX_REG, n_freeze), argv, MEMORY_CAN_SHRINK)
-        != MEMORY_GC_OK) {
-        return term_invalid_term();
-    }
-    term *boxed_func = memory_heap_alloc(&ctx->heap, size);
-
-    boxed_func[0] = ((size - 1) << 6) | TERM_BOXED_FUN;
-    boxed_func[1] = (term) mod;
-    boxed_func[2] = term_from_int(fun_index);
-
-    for (uint32_t i = 3; i < MINI(n_freeze, MAX_REG) + 3; i++) {
-        boxed_func[i] = argv[i - 3];
-    }
-    for (uint32_t i = MINI(n_freeze, MAX_REG) + 3; i < n_freeze + 3; i++) {
-        dreg_t ext_reg = extended_register_ptr(ctx, i - 3);
-        boxed_func[i] = *ext_reg;
-    }
-
-    return ((term) boxed_func) | TERM_PRIMARY_BOXED;
-}
-
 static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index_t function_name, int arity,
     term *return_value)
 {
@@ -2307,28 +2281,6 @@ schedule_in:
                 break;
             }
 
-            case OP_ALLOCATE_ZERO: {
-                uint32_t stack_need;
-                DECODE_LITERAL(stack_need, pc);
-                uint32_t live;
-                DECODE_LITERAL(live, pc);
-                TRACE("allocate_zero/2 stack_need=%i, live=%i\n", stack_need, live);
-
-                if (ctx->heap.root->next || ((ctx->heap.heap_ptr > ctx->e - (stack_need + 1)))) {
-                    TRIM_LIVE_REGS(live);
-                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                }
-
-                ctx->e -= stack_need + 1;
-                for (uint32_t s = 0; s < stack_need; s++) {
-                    ctx->e[s] = term_nil();
-                }
-                ctx->e[stack_need] = ctx->cp;
-                break;
-            }
-
             case OP_TEST_HEAP: {
                 uint32_t heap_need;
                 DECODE_ALLOCATOR_LIST(heap_need, pc);
@@ -2353,16 +2305,6 @@ schedule_in:
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 }
-                break;
-            }
-
-            case OP_KILL: {
-                uint32_t target;
-                DECODE_YREG(target, pc);
-
-                TRACE("kill/1 target=%i\n", target);
-
-                ctx->e[target] = term_nil();
                 break;
             }
 
@@ -3262,20 +3204,6 @@ schedule_in:
                     }
                 }
 
-                break;
-            }
-
-            case OP_MAKE_FUN2: {
-                uint32_t fun_index;
-                DECODE_LITERAL(fun_index, pc)
-
-                TRACE("make_fun/2, fun_index=%i\n", fun_index);
-                term f = make_fun(ctx, mod, fun_index, x_regs);
-                if (term_is_invalid_term(f)) {
-                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                } else {
-                    x_regs[0] = f;
-                }
                 break;
             }
 

@@ -94,7 +94,7 @@ jobs:
         # Loose bounds: exact counts would need updating by every commit that
         # adds a function.
         test "$(wc -l < funcs.txt)" -ge 2000
-        test "$(wc -l < instructions.txt)" -ge 140
+        test "$(wc -l < instructions.txt)" -ge 120
         LC_ALL=C sort -c -u funcs.txt
         for func in erlang:length/1 erlang:+/2 erlang:nif_error/1 \
                     gpio:digital_write/2 atomvm:posix_unlink/1 \
@@ -112,7 +112,8 @@ jobs:
           grep -qxF "$instruction" instructions.txt ||
             { echo "missing from instructions.txt: $instruction"; exit 1; }
         done
-        for instruction in put_tuple put recv_mark bs_init2 allocate_heap_zero; do
+        for instruction in put_tuple put recv_mark bs_init2 allocate_heap_zero \
+                           allocate_zero kill make_fun2; do
           if grep -qxF "$instruction" instructions.txt; then
             echo "removed opcode in instructions.txt: $instruction"
             exit 1

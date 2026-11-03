@@ -32,7 +32,7 @@ The JIT compiler supports the following target architectures:
 
 ### Requirements
 
-* Erlang/OTP 28 or later is required to run the JIT compiler at load time (ahead-of-time compiled modules can be executed with OTP 26+).
+* Erlang/OTP 28 or later is required to run the JIT compiler at load time (ahead-of-time compiled modules can be executed with OTP 27+).
 
 ## Building with JIT support
 

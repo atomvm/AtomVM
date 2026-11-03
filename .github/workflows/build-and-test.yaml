@@ -58,7 +58,7 @@ jobs:
         # We want to test every compiler but don't need to test every OS
         # We only test several OTP versions with default compilers for supported OSes (gcc 11, gcc 13, clang 14, clang 18)
         cc: ["gcc-11", "gcc-13", "clang-14", "clang-18"]
-        otp: ["26", "27", "28"]
+        otp: ["27", "28", "29"]
 
         include:
         ### gcc
@@ -132,6 +132,10 @@ jobs:
           compiler_pkgs: "clang-18"
           # otp: all
 
+        # rebar3 for the OTP 29 cells of the matrix above
+        - otp: "29"
+          rebar3_version: "3.27.0"
+
         # Additional runs with older elixir
         - cc: "cc"
           cxx: "c++"
@@ -143,11 +147,7 @@ jobs:
           otp: "27"
           elixir_version: "1.17"
 
-        - cc: "cc"
-          cxx: "c++"
-          otp: "26"
-          elixir_version: "1.18"
-
+        # OTP 26 is deprecated, keep testing it with the oldest Elixir
         - cc: "cc"
           cxx: "c++"
           otp: "26"
