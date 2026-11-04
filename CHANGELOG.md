@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with `CONFIG_AVM_ENABLE_ETHERNET=y`): `{eth, [...]}` in `network:start/1` brings up the EMAC
   with an RMII PHY, alone or next to STA/AP, plus `network:wait_for_eth/0,1,2` and
   `network:eth_status/0`
+- Added `enif_select_write`, which was declared but not implemented
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
@@ -38,6 +39,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - Removed support for BEAM files compiled by OTP 26 with the `no_init_yregs`, `no_make_fun3`,
   `r22` or `r23` compiler options
+- STM32 builds now enable `AVM_MINIMAL_OPCODES` by default, so modules compiled with the
+  `no_bs_create_bin`, `no_bs_match` or `no_ssa_opt_bs_ensure` compiler options cannot be loaded
+- With BSD sockets (generic_unix, ESP32), `socket:connect/2` returns the reason a connect failed,
+  as OTP does (`{error, econnrefused}`, `{error, etimedout}`, `{error, ehostunreach}`...), instead
+  of `{error, closed}`. On ESP32, Wi-Fi down gives `{error, ehostunreach}`, and a refused port gives
+  `{error, econnreset}` because lwIP reports a RST during the handshake as a reset. It may also
+  return `{error, econnreset}` when the peer accepts and immediately resets, where it previously
+  returned `ok` and the error surfaced on the first `recv` or `send`; this is the OTP behaviour
+- `posix_errno_to_term` maps `econnrefused`, `econnreset`, `econnaborted`, `etimedout`,
+  `ehostunreach`, `enetunreach`, `enetdown`, `eaddrnotavail`, `ealready` and `eisconn` to atoms
+  instead of returning the raw integer
 
 ### Fixed
 - Fixed maps decoded by `binary_to_term/1,2` and received over distribution keeping the
@@ -113,6 +125,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `no_ssa_opt` or `beam_debug_info` compiler options, which use `bs_test_tail2`
 - Fixed Release builds with `AVM_WARNINGS_ARE_ERRORS=ON` failing on an unused variable in
   `module.h`
+- Fixed `socket:connect/2` (and so `gen_tcp:connect` and `ssl:connect`) blocking the scheduler
+  with BSD sockets (ESP32, generic_unix) while the peer did not answer: the connect is now
+  non-blocking, and only the calling process waits
 
 ## [0.7.0-beta.0] - 2026-09-28
 
