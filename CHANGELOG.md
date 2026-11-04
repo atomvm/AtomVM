@@ -70,6 +70,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stored configuration (for example in a crash report of that process) no longer exposes those
   passwords. Driver messages still carry them in plaintext, and this does not redact credentials in
   pending `sta_connect/1` requests, caller error reports or other diagnostic data
+- On ESP32, `network:start/1` accepts a configuration with only `sntp`, for an interface another
+  driver brought up: it was refused as a configuration with no STA, AP, ETH or PPP
 
 ### Removed
 - Removed support for BEAM files compiled by OTP 26 with the `no_init_yregs`, `no_make_fun3`,
