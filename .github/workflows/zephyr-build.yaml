@@ -31,7 +31,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    container: ghcr.io/zephyrproject-rtos/ci:v0.29.3
+    container: ghcr.io/zephyrproject-rtos/ci:v0.29.4
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -113,26 +113,26 @@ jobs:
         run: |
           west build -b rpi_pico/rp2040/w -p=auto .
 
-      - name: Build for rpi_pico2/rp2350a/m33
+      - name: Build for rpi_pico2/rp2350a/m33_0
         id: build_pico2_m33
         continue-on-error: true
         working-directory: ./src/platforms/zephyr
         run: |
-          west build -b rpi_pico2/rp2350a/m33 -p=auto .
+          west build -b rpi_pico2/rp2350a/m33_0 -p=auto .
 
-      - name: Build for rpi_pico2/rp2350a/m33/w
+      - name: Build for rpi_pico2/rp2350a/m33_0/w
         id: build_pico2_m33_w
         continue-on-error: true
         working-directory: ./src/platforms/zephyr
         run: |
-          west build -b rpi_pico2/rp2350a/m33/w -p=auto .
+          west build -b rpi_pico2/rp2350a/m33_0/w -p=auto .
 
-      - name: Build for rpi_pico2/rp2350a/hazard3
+      - name: Build for rpi_pico2/rp2350a/hazard3_0
         id: build_pico2_hazard3
         continue-on-error: true
         working-directory: ./src/platforms/zephyr
         run: |
-          west build -b rpi_pico2/rp2350a/hazard3 -p=auto .
+          west build -b rpi_pico2/rp2350a/hazard3_0 -p=auto .
 
       - name: Build Wokwi Test for ESP32
         id: build_wokwi_esp32
@@ -192,9 +192,9 @@ jobs:
           check_build "esp32s3_devkitc/esp32s3/procpu" "$ESP32S3"
           check_build "rpi_pico/rp2040" "$PICO"
           check_build "rpi_pico/rp2040/w" "$PICO_W"
-          check_build "rpi_pico2/rp2350a/m33" "$PICO2_M33"
-          check_build "rpi_pico2/rp2350a/m33/w" "$PICO2_M33_W"
-          check_build "rpi_pico2/rp2350a/hazard3" "$PICO2_HAZARD3"
+          check_build "rpi_pico2/rp2350a/m33_0" "$PICO2_M33"
+          check_build "rpi_pico2/rp2350a/m33_0/w" "$PICO2_M33_W"
+          check_build "rpi_pico2/rp2350a/hazard3_0" "$PICO2_HAZARD3"
           check_build "Wokwi ESP32 test" "$WOKWI_ESP32"
           check_build "Wokwi ESP32-C3 test" "$WOKWI_ESP32C3"
           check_build "Wokwi ESP32-S3 test" "$WOKWI_ESP32S3"
@@ -252,7 +252,7 @@ jobs:
 
   test:
     runs-on: ubuntu-24.04
-    container: ghcr.io/zephyrproject-rtos/ci:v0.29.3
+    container: ghcr.io/zephyrproject-rtos/ci:v0.29.4
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6

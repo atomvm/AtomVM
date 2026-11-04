@@ -11,7 +11,7 @@ This is an experimental port that will hopefully replace the current STM32 `libo
 
 Not all boards supported by Zephyr are capable of running AtomVM. The most likely excluding factor will be lack of flash storage space to accommodate both the VM and user BEAM applications. Currently a build can be attempted for any board supported by the Zephyr SDK, and the user will need to determine if the final build can fit onto the device and still have space left for a user application partition (on STM32 devices this is typically a 128K block size).
 
-This port is currently configured to target **Zephyr RTOS v4.4.2** and **Zephyr SDK v1.0.1**.
+This port is currently configured to target **Zephyr RTOS v4.5.0** and **Zephyr SDK v1.0.1**.
 
 ## Prerequisites (Local Build)
 
@@ -46,7 +46,7 @@ A helper script is provided at `src/platforms/zephyr/docker-build.sh`. To build:
     $ ./docker-build.sh -b esp32s3_devkitc/esp32s3/procpu
 
 This will:
-1. Build a local Docker image named `atomvm-zephyr-build` based on `ghcr.io/zephyrproject-rtos/ci:v0.29.2` (which bundles Zephyr SDK v1.0.1).
+1. Build a local Docker image named `atomvm-zephyr-build` based on `ghcr.io/zephyrproject-rtos/ci:v0.29.4` (which bundles Zephyr SDK v1.0.1).
 2. Clone the Zephyr project dependencies inside the container's workspace using `west update`.
 3. Build the AtomVM firmware for the specified board (`nucleo_f429zi` by default).
 
