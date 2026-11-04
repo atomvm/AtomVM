@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   future release
 - Stopped CI testing on macOS 14, whose GitHub Actions runner image is being retired;
   existing macOS 15 coverage is unchanged
+- `erlang:term_to_binary/1,2` and `erlang:binary_to_term/1,2` now process nested lists, tuples
+  and maps iteratively
 
 ### Removed
 - Removed support for BEAM files compiled by OTP 26 with the `no_init_yregs`, `no_make_fun3`,
@@ -44,6 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   encoder's key order, which broke `==` and made `=>` updates on an existing key produce
   duplicate keys
 - Fixed `binary_to_term/1,2` accepting maps with duplicate keys instead of raising `badarg`
+- Fixed `binary_to_term/1,2` decoding a zero-length `LIST_EXT` as `[]` and skipping its tail:
+  it now decodes to the tail, like OTP
 - Fixed `erlang:send_after/3` and `timer:send_after/2,3` returning a timer that could not
   be canceled with `erlang:cancel_timer/1`
 - Fixed a VM abort (`context_monitors_handle_terminate: Assertion 'target != NULL'`) when a
