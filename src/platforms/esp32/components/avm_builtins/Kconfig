@@ -119,6 +119,15 @@ config AVM_ENABLE_PPP
         entry, e.g. to a cellular modem the application has already dialed
         (it answered CONNECT).
 
+config AVM_ENABLE_ESPNOW
+    bool "Enable the ESP-NOW port driver"
+    depends on AVM_ENABLE_NETWORK_PORT_DRIVER && (ESP_WIFI_ENABLED || ESP32_WIFI_ENABLED)
+    default n
+    help
+        Let espnow:open/1 send and receive ESP-NOW frames. The network
+        driver owns the Wi-Fi radio: ESP-NOW holds it, and network:stop/0
+        leaves it on while ESP-NOW is open.
+
 config AVM_ENABLE_SOCKET_PORT_DRIVER
     bool "Enable socket port driver"
 	depends on ESP_WIFI_ENABLED || ESP_HOST_WIFI_ENABLED || ESP32_WIFI_ENABLED || ETH_ENABLED || ESP_WIFI_REMOTE_ENABLED

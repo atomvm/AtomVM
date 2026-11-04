@@ -537,6 +537,48 @@ Config = [
 {ok, _Pid} = network:start(Config).
 ```
 
+## ESP-NOW (ESP32)
+
+The `espnow` module sends and receives ESP-NOW frames: connectionless frames of up to 250 bytes
+between ESP32 devices, on the WiFi radio, with no access point. It is opt-in, with
+`CONFIG_AVM_ENABLE_ESPNOW=y` (`idf.py menuconfig`, or a line in `sdkconfig.defaults`); without it
+`espnow:open/1` returns an error.
+
+The `network` driver owns the WiFi radio, and ESP-NOW borrows it:
+
+- With no network started, `espnow:open/1` turns WiFi on as a station that does not connect, on
+  the channel given with `{channel, 1..14}` (or the current one).
+- `network:start/1` and `network:stop/0` can be called while ESP-NOW is open: `network:stop/0`
+  leaves the radio on, back on the ESP-NOW channel, and ESP-NOW keeps working.
+- While the STA is connected, frames go on the access point's channel, so the peers must be on it
+  too; `espnow:set_channel/2` fails until the STA disconnects.
+- `espnow:close/1` turns WiFi off, unless the network uses it.
+
+Only one port can be open. The receiver (the caller of `espnow:open/1`, or `{receiver, Pid}`) gets
+`{espnow, rx, Mac, Data, #{rssi := Rssi}}` for each frame, and `{espnow, sent, Mac, ok | fail}` for
+each `espnow:send/3`: for a unicast frame `ok` means the peer acknowledged it, for a broadcast only
+that it went out. The driver queues 8 events: when the receiver does not keep up, further events
+are dropped and counted in `espnow:stats/1`.
+
+A unicast peer must be added first, optionally with an `lmk` key to encrypt the traffic with it
+(the `pmk` given to `espnow:open/1` encrypts the `lmk` keys); broadcast needs no peer.
+
+```erlang
+{ok, Port} = espnow:open([{channel, 1}]),
+Peer = <<16#94, 16#E6, 16#86, 16#DB, 16#02, 16#00>>,
+ok = espnow:add_peer(Port, Peer),
+ok = espnow:send(Port, Peer, <<"ping">>),
+receive
+    {espnow, sent, Peer, Result} -> io:format("sent: ~p~n", [Result])
+end,
+receive
+    {espnow, rx, From, Data, #{rssi := Rssi}} ->
+        io:format("~p from ~p at ~p dBm~n", [Data, From, Rssi])
+after 1000 -> no_reply
+end,
+ok = espnow:close(Port).
+```
+
 ## SNTP Support
 
 You may configure the networking layer to automatically synchronize time on the ESP32 with an NTP server accessible on the network.

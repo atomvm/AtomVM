@@ -26,6 +26,7 @@ set(ERLANG_MODULES
     esp
     esp_adc
     esp_dac
+    espnow
     gpio
     i2c
     ledc
