@@ -5,7 +5,7 @@
 #
 
 # Use the official Zephyr CI image matching our GitHub Actions workflow
-FROM ghcr.io/zephyrproject-rtos/ci:v0.29.3
+FROM ghcr.io/zephyrproject-rtos/ci:v0.29.4
 
 USER root
 

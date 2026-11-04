@@ -20,7 +20,7 @@
 #ifndef _AVM_DEVCFG_H_
 #define _AVM_DEVCFG_H_
 
-#include <autoconf.h>
+#include <zephyr/autoconf.h>
 #include <zephyr/devicetree.h>
 
 #ifndef CONFIG_FLASH_BASE_ADDRESS
