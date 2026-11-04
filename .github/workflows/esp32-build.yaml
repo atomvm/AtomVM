@@ -84,6 +84,7 @@ jobs:
         - esp-idf-target: "esp32"
           idf-version: 'v5.5.5'
           ppp: 'ON'
+          espnow: 'ON'
           jit: false
         # JIT builds (v5.5.5 only)
         - esp-idf-target: "esp32c3"
@@ -132,6 +133,7 @@ jobs:
         USB_CDC: ${{ matrix.usb-cdc || 'OFF' }}
         ETHERNET: ${{ matrix.ethernet || 'OFF' }}
         PPP: ${{ matrix.ppp || 'OFF' }}
+        ESPNOW: ${{ matrix.espnow || 'OFF' }}
       run: |
         . $IDF_PATH/export.sh
         if [[ "${USB_SERIAL}" == "ON" ]]; then
@@ -148,6 +150,9 @@ jobs:
         fi
         if [[ "${PPP}" == "ON" ]]; then
           printf '%s\n' 'CONFIG_LWIP_PPP_SUPPORT=y' 'CONFIG_AVM_ENABLE_PPP=y' >> sdkconfig.defaults.in
+        fi
+        if [[ "${ESPNOW}" == "ON" ]]; then
+          echo 'CONFIG_AVM_ENABLE_ESPNOW=y' >> sdkconfig.defaults.in
         fi
         export IDF_TARGET=${{matrix.esp-idf-target}}
         if [ "${{ matrix.jit }}" = "true" ]; then
