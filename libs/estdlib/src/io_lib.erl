@@ -508,6 +508,7 @@ format_char(_, _) ->
 
 %% @private
 %% String classes:
+%% empty
 %% latin1_printable
 %% unicode
 %% unprintable
@@ -518,6 +519,8 @@ format_char(_, _) ->
 %% io_lib:format("~tc", [16#D800]).
 %% io:format("~tc", [16#D800]).
 %% ```
+test_string_class([]) ->
+    empty;
 test_string_class(Str) ->
     test_string_class(Str, latin1_printable).
 
@@ -590,6 +593,7 @@ printable_list(List) ->
     case {StringClass, io:printable_range()} of
         {not_a_string, _} -> false;
         {unprintable, _} -> false;
+        {empty, _} -> true;
         {latin1_printable, _} -> true;
         {unicode, unicode} -> true;
         {unicode, latin1} -> false

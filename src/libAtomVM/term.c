@@ -352,7 +352,8 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
         const unsigned char *binary_data = (const unsigned char *) term_binary_data(t);
         uint8_t trailing_bits = (uint8_t) (term_bit_size(t) % 8);
 
-        int is_printable = (trailing_bits == 0);
+        // The empty binary has no printable form: OTP prints <<>>, not <<"">>.
+        int is_printable = (trailing_bits == 0) && (len > 0);
         for (int i = 0; i < len; i++) {
             if (!isprint(binary_data[i])) {
                 is_printable = 0;
