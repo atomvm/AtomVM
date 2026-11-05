@@ -162,6 +162,13 @@ jobs:
         run: |
           west build -b rpi_pico/rp2040 -p=auto -d build-pico-test tests
 
+      - name: Build Wokwi Test for Pico 2
+        id: build_wokwi_pico2
+        continue-on-error: true
+        working-directory: ./src/platforms/zephyr
+        run: |
+          west build -b rpi_pico2/rp2350a/m33_0 -p=auto -d build-pico2-test tests
+
       - name: Report build failures
         if: ${{ always() }}
         env:
@@ -177,6 +184,7 @@ jobs:
           WOKWI_ESP32C3: ${{ steps.build_wokwi_esp32c3.outcome }}
           WOKWI_ESP32S3: ${{ steps.build_wokwi_esp32s3.outcome }}
           WOKWI_PICO: ${{ steps.build_wokwi_pico.outcome }}
+          WOKWI_PICO2: ${{ steps.build_wokwi_pico2.outcome }}
         run: |
           failed=0
 
@@ -199,6 +207,7 @@ jobs:
           check_build "Wokwi ESP32-C3 test" "$WOKWI_ESP32C3"
           check_build "Wokwi ESP32-S3 test" "$WOKWI_ESP32S3"
           check_build "Wokwi Pico test" "$WOKWI_PICO"
+          check_build "Wokwi Pico 2 test" "$WOKWI_PICO2"
 
           exit "$failed"
 
@@ -249,6 +258,18 @@ jobs:
         with:
           name: zephyr-pico-test-elf
           path: pico-test-artifact/
+
+      - name: Stage Pico 2 Test Files
+        run: |
+          mkdir -p pico2-test-artifact
+          cp src/platforms/zephyr/build-pico2-test/zephyr/zephyr.elf pico2-test-artifact/
+          cp src/platforms/zephyr/build-pico2-test/zephyr/zephyr.uf2 pico2-test-artifact/
+
+      - name: Upload Pico 2 Test Files
+        uses: actions/upload-artifact@v7
+        with:
+          name: zephyr-pico2-test-elf
+          path: pico2-test-artifact/
 
   test:
     runs-on: ubuntu-24.04
@@ -415,6 +436,11 @@ jobs:
             artifact: zephyr-pico-test-elf
             sim_dir: pico-sim
             diagram: diagram.pico.json
+            firmware: zephyr.elf
+          - target: Pico 2
+            artifact: zephyr-pico2-test-elf
+            sim_dir: pico2-sim
+            diagram: diagram.pico2.json
             firmware: zephyr.elf
     steps:
       - name: Checkout repo

@@ -49,6 +49,10 @@ case "$BOARD" in
         DIAGRAM_FILE="diagram.pico.json"
         FIRMWARE_FILE="zephyr.elf"
         ;;
+    rpi_pico2/rp2350a/m33_0)
+        DIAGRAM_FILE="diagram.pico2.json"
+        FIRMWARE_FILE="zephyr.elf"
+        ;;
     *)
         echo "Error: Unsupported board for Wokwi CLI simulation: $BOARD"
         exit 1
