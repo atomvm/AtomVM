@@ -167,6 +167,7 @@ start() ->
     ok = test_atom_utf8_ext_node(),
     ok = test_encode_process_ref(),
     ok = test_zero_length_list_ext(),
+    ok = test_empty_string_ext(),
     ok = test_deeply_nested(),
     ok = test_term_to_binary_options(),
     ok = test_map_ext_small_key_order(),
@@ -1371,6 +1372,16 @@ test_zero_length_list_ext() ->
     %% A zero-length LIST_EXT decodes to its tail term.
     5 = binary_to_term(<<131, 108, 0, 0, 0, 0, 97, 5>>),
     {5, 8} = binary_to_term(<<131, 108, 0, 0, 0, 0, 97, 5>>, [used]),
+    ok.
+
+test_empty_string_ext() ->
+    [] = binary_to_term(<<131, 107, 0, 0>>),
+    {[], 4} = binary_to_term(<<131, 107, 0, 0>>, [used]),
+    %% nested, so the corrupted words would have been the enclosing term's header
+    {[]} = binary_to_term(<<131, 104, 1, 107, 0, 0>>),
+    {[], [], 1} = binary_to_term(<<131, 104, 3, 107, 0, 0, 107, 0, 0, 97, 1>>),
+    [[] | 2] = binary_to_term(<<131, 108, 0, 0, 0, 1, 107, 0, 0, 97, 2>>),
+    #{a := []} = binary_to_term(<<131, 116, 0, 0, 0, 1, 119, 1, $a, 107, 0, 0>>),
     ok.
 
 %% Regression test for C-stack exhaustion: encoding and decoding used unbounded

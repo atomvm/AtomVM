@@ -2629,6 +2629,9 @@ static inline int term_get_tuple_arity(term t)
  */
 static inline term term_from_string(const uint8_t *data, uint16_t size, Heap *heap)
 {
+    if (size == 0) {
+        return term_nil();
+    }
     // TODO: write a real implementation
     // align constraints here
     term *list_cells = memory_heap_alloc(heap, size * 2);

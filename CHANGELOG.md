@@ -117,6 +117,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `no_ssa_opt` or `beam_debug_info` compiler options, which use `bs_test_tail2`
 - Fixed Release builds with `AVM_WARNINGS_ARE_ERRORS=ON` failing on an unused variable in
   `module.h`
+- Fixed `binary_to_term/1,2` corrupting the heap when decoding a zero-length `STRING_EXT`
+  (OTP never emits one, but it is valid and decodes to `[]`)
 
 ## [0.7.0-beta.0] - 2026-09-28
 
