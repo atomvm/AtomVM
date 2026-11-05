@@ -1752,6 +1752,9 @@ void network_driver_destroy(GlobalContext *global)
     UNUSED(global);
 
     if (driver_data) {
+        /* A VM can exit without calling network:stop(). Match the ESP32 port
+         * and tear down the radio state with the port driver. */
+        stop_network();
         if (driver_data->cb_registered) {
             net_mgmt_del_event_callback(&driver_data->wifi_cb);
             net_mgmt_del_event_callback(&driver_data->ipv4_cb);
