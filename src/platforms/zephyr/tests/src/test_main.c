@@ -230,9 +230,13 @@ ZTEST(atomvm_tests, test_ssl)
 }
 #endif
 
-#if defined(CONFIG_WIFI)
+#if defined(CONFIG_WIFI) && !defined(CONFIG_SOC_SERIES_ESP32)
 /* Named so ZTEST sorts after test_ssl / test_wifi_*. Leftover AP
- * sockets starve later STA cases if this runs first. */
+ * sockets starve later STA cases if this runs first.
+ *
+ * Not run on the classic ESP32 Wokwi image: Mbed TLS 4.1 leaves too little
+ * heap for the development-mode HTTP server after the TLS test in the same
+ * boot. The ESP32-C3 and ESP32-S3 images cover dev mode. */
 ZTEST(atomvm_tests, test_wifi_z_devmode)
 {
     term ret_value = avm_test_case("test_devmode.beam");
