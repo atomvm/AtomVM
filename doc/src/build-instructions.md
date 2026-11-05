@@ -494,6 +494,17 @@ Use `idf.py menuconfig` in `src/platforms/esp32`
 
 See [MBEDTLS_ECP_FIXED_POINT_OPTIM](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/kconfig-reference.html#config-mbedtls-ecp-fixed-point-optim)
 
+Two builds of the same commit report the same version, even when their configuration (sdkconfig,
+partition table) differs. To tell them apart, append a suffix to the version at configure time,
+for example a hash of the configuration:
+
+```shell
+$ idf.py -DATOMVM_VERSION_SUFFIX=.cfg.1a2b3c4d build
+```
+
+The version, as seen in `erlang:system_info(atomvm_version)` and in the boot log, becomes
+`0.7.0-beta.1+git.86a4175e.cfg.1a2b3c4d`. The same option works with `cmake` on the other platforms.
+
 ### Flash Layout
 
 The AtomVM Flash memory is partitioned to include areas for the above binary artifacts created from the build, as well areas for runtime information used by the ESP32 and compiled Erlang/Elixir code.
