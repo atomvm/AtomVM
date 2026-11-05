@@ -27,13 +27,18 @@ Or use the Zephyr Docker image wrapper from `src/platforms/zephyr`:
 ```
 
 The `-b` option mirrors `docker-build.sh`. Wokwi runtime coverage is available
-for the ESP32, ESP32-C3, and ESP32-S3 test builds:
+for the ESP32, ESP32-C3, ESP32-S3, and Pico test builds:
 
 ```shell
 ./wokwi-test.sh -b esp32_devkitc/esp32/procpu
 ./wokwi-test.sh -b esp32c3_devkitm/esp32c3
 ./wokwi-test.sh -b esp32s3_devkitc/esp32s3/procpu
+./wokwi-test.sh -b rpi_pico/rp2040
 ```
+
+The Pico image omits Settings/NVS because Wokwi's RP2040 SSI model only
+implements the flash reads needed by the bootloader, not flash programming.
+Settings/NVS remains covered by the native_sim, QEMU, and ESP32 targets.
 
 Normal Wokwi helper runs use a pristine Zephyr build so changes to Erlang
 libraries embedded by the `HostAtomVM` external project cannot be hidden by a
