@@ -221,8 +221,23 @@
     | {got_ip, fun((ip_info()) -> term())}.
 -type eth_config() :: {eth, [eth_config_property()]}.
 
+-type ppp_config_property() ::
+    {uart, non_neg_integer()}
+    | {tx, non_neg_integer()}
+    | {rx, non_neg_integer()}
+    | {speed, pos_integer()}
+    | {route_priority, 0..255}
+    | {disconnected, fun(() -> term())}
+    | {got_ip, fun((ip_info()) -> term())}.
+%% `ppp_config_property()' PPP on a UART whose other end is ready for it, e.g. a modem the
+%% application has dialed (it answered `CONNECT'). `uart', `tx' and `rx' are required; `speed'
+%% defaults to 115200 and `route_priority' to 20, below Ethernet and the STA. `disconnected' runs
+%% when the link ends or cannot be negotiated: the application dials again and restarts the
+%% network.
+-type ppp_config() :: {ppp, [ppp_config_property()]}.
+
 -type network_config() :: [
-    sta_config() | ap_config() | eth_config() | sntp_config() | mdns_config()
+    sta_config() | ap_config() | eth_config() | ppp_config() | sntp_config() | mdns_config()
 ].
 
 -type dbm() :: integer().
@@ -930,6 +945,12 @@ handle_info({Ref, {eth_got_ip, IpInfo}} = _Msg, #state{ref = Ref, config = Confi
     maybe_callback1({got_ip, IpInfo}, proplists:get_value(eth, Config)),
     State1 = State0#state{eth_ip_info = IpInfo, eth_state = connected},
     {noreply, maybe_start_mdns(State1)};
+handle_info({Ref, {ppp_got_ip, IpInfo}} = _Msg, #state{ref = Ref, config = Config} = State) ->
+    maybe_callback1({got_ip, IpInfo}, proplists:get_value(ppp, Config)),
+    {noreply, State};
+handle_info({Ref, ppp_disconnected} = _Msg, #state{ref = Ref, config = Config} = State) ->
+    maybe_callback0(disconnected, proplists:get_value(ppp, Config)),
+    {noreply, State};
 handle_info({Ref, ap_started} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_ap_started_callback(Config),
     {noreply, State};

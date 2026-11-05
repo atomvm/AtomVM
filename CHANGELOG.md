@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with `CONFIG_AVM_ENABLE_ETHERNET=y`): `{eth, [...]}` in `network:start/1` brings up the EMAC
   with an RMII PHY, alone or next to STA/AP, plus `network:wait_for_eth/0,1,2` and
   `network:eth_status/0`
+- Added PPP over a UART to the `network` module on ESP32 (opt-in with `CONFIG_AVM_ENABLE_PPP=y`,
+  which needs `CONFIG_LWIP_PPP_SUPPORT=y`): `{ppp, [...]}` in `network:start/1` runs the link on a
+  UART whose other end is ready for it, such as a cellular modem the application has dialed
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
