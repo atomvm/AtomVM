@@ -6,4 +6,5 @@ build/
 twister-out*/
 build-esp32-test/
 build-pico-test/
+build-pico2-test/
 build-wokwi-test/
