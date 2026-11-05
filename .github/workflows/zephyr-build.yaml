@@ -400,14 +400,22 @@ jobs:
             artifact: zephyr-esp32-test-elf
             sim_dir: esp32-sim
             diagram: diagram.esp32.json
+            firmware: zephyr.bin
           - target: ESP32-C3
             artifact: zephyr-esp32c3-test-elf
             sim_dir: esp32c3-sim
             diagram: diagram.esp32c3.json
+            firmware: zephyr.bin
           - target: ESP32-S3
             artifact: zephyr-esp32s3-test-elf
             sim_dir: esp32s3-sim
             diagram: diagram.esp32s3.json
+            firmware: zephyr.bin
+          - target: Pico
+            artifact: zephyr-pico-test-elf
+            sim_dir: pico-sim
+            diagram: diagram.pico.json
+            firmware: zephyr.elf
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -426,10 +434,11 @@ jobs:
           WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
           SIM_DIR: ${{ matrix.sim_dir }}
           DIAGRAM: ${{ matrix.diagram }}
+          FIRMWARE: ${{ matrix.firmware }}
           TARGET_NAME: ${{ matrix.target }}
         run: |
           cd "$SIM_DIR"
-          echo -e "[wokwi]\nversion = 1\nfirmware = \"zephyr.bin\"\nelf = \"zephyr.elf\"" > wokwi.toml
+          echo -e "[wokwi]\nversion = 1\nfirmware = \"$FIRMWARE\"\nelf = \"zephyr.elf\"" > wokwi.toml
           cp "../src/platforms/zephyr/tests/sim_boards/$DIAGRAM" diagram.json
           set +e
           wokwi-cli --timeout 180000 --expect-text "PROJECT EXECUTION SUCCESSFUL" --fail-text "PROJECT EXECUTION FAILED" . | tee wokwi.log
@@ -480,61 +489,3 @@ jobs:
                       sf.write("\n#### Summary Log\n```\n" + "\n".join(summary_block) + "\n```\n")
           ' wokwi.log "$GITHUB_STEP_SUMMARY" "$TARGET_NAME"
           exit $WOKWI_EXIT
-
-      # - name: Run Pico Wokwi Test
-      #   if: ${{ !cancelled() }}
-      #   env:
-      #     WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
-      #   run: |
-      #     cd pico-sim
-      #     echo -e "[wokwi]\nversion = 1\nfirmware = \"zephyr.elf\"\nelf = \"zephyr.elf\"" > wokwi.toml
-      #     echo '{"version": 1, "author": "AtomVM", "editor": "wokwi", "parts": [{"type": "wokwi-pi-pico", "id": "pico", "top": 0, "left": 0}], "connections": [["pico:GP0", "$serialMonitor:RX", "", []], ["pico:GP1", "$serialMonitor:TX", "", []]]}' > diagram.json
-      #     set +e
-      #     wokwi-cli --timeout 20000 --expect-text "PROJECT EXECUTION SUCCESSFUL" . | tee wokwi.log
-      #     WOKWI_EXIT=${PIPESTATUS[0]}
-      #     set -e
-      #     python3 -c '
-      #     import sys, re
-      #     log_file = sys.argv[1]
-      #     summary_file = sys.argv[2]
-      #     target_name = sys.argv[3]
-      #     try:
-      #         with open(log_file, "r", errors="ignore") as f:
-      #             lines = f.readlines()
-      #     except Exception as e:
-      #         lines = []
-      #     test_cases = []
-      #     summary_block = []
-      #     in_summary = False
-      #     seen_tests = set()
-      #     for line in lines:
-      #         line_str = line.strip()
-      #         m_case = re.search(r"\b(PASS|FAIL|SKIP)\b\s*-\s*\[?([\w\._\d]+)\]?\s*(?:in|duration\s*=)\s*([\d\.]+)\s*(?:seconds)?", line_str)
-      #         if m_case:
-      #             status, name, duration = m_case.groups()
-      #             short_name = name.split(".")[-1]
-      #             if short_name not in seen_tests:
-      #                 seen_tests.add(short_name)
-      #                 test_cases.append((short_name, status, duration))
-      #         if "------ TESTSUITE SUMMARY START ------" in line_str:
-      #             in_summary = True
-      #             continue
-      #         if "------ TESTSUITE SUMMARY END ------" in line_str:
-      #             in_summary = False
-      #             continue
-      #         if in_summary:
-      #             summary_block.append(line_str)
-      #     with open(summary_file, "a") as sf:
-      #         sf.write(f"\n### Wokwi Test Results: {target_name}\n")
-      #         if test_cases:
-      #             sf.write("| Test Case | Status | Duration |\n")
-      #             sf.write("| --- | --- | --- |\n")
-      #             for name, status, duration in test_cases:
-      #                 status_icon = "✅ PASS" if status == "PASS" else ("❌ FAIL" if status == "FAIL" else "⚠️ SKIP")
-      #                 sf.write(f"| {name} | {status_icon} | {duration}s |\n")
-      #         else:
-      #             sf.write("❌ No test cases were detected. The simulation may have crashed or timed out.\n")
-      #             if summary_block:
-      #                 sf.write("\n#### Summary Log\n```\n" + "\n".join(summary_block) + "\n```\n")
-      #     ' wokwi.log "$GITHUB_STEP_SUMMARY" "Pico"
-      #     exit $WOKWI_EXIT

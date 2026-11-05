@@ -33,11 +33,16 @@ start() ->
 %% `riscv32-esp-zephyr`; GPIO0 does not read back a driven low
 %% on Wokwi. GPIO10 is a spare digital pin (not strapping, USB-JTAG,
 %% UART, or the ADC pot on GPIO3).
+%%
+%% On RP2040, GPIO0 is UART0 TX (the test console), so driving it
+%% stops all serial output. GP15 is spare on both Pico and Pico W.
 test_pin() ->
     Architecture = erlang:system_info(system_architecture),
     case binary:split(Architecture, <<"-">>, [global]) of
         [<<"riscv32">>, <<"esp">> | _] ->
             {0, 10};
+        [<<"arm">>, <<"zephyr">> | _] ->
+            {0, 15};
         _ ->
             {0, 0}
     end.

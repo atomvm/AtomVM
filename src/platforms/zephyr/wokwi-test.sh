@@ -73,15 +73,17 @@ fi
 
 # Locate build binaries on host
 HOST_BUILD_DIR="$SCRIPT_DIR/${BUILD_DIR}/zephyr"
-if [ ! -f "$HOST_BUILD_DIR/zephyr.bin" ] || [ ! -f "$HOST_BUILD_DIR/zephyr.elf" ]; then
+if [ ! -f "$HOST_BUILD_DIR/$FIRMWARE_FILE" ] || [ ! -f "$HOST_BUILD_DIR/zephyr.elf" ]; then
     echo "Error: Binaries not found at $HOST_BUILD_DIR. Please build them first."
     exit 1
 fi
 
 echo "==> Staging Wokwi simulation files in $SIM_DIR..."
 mkdir -p "$SIM_DIR"
-cp "$HOST_BUILD_DIR/zephyr.bin" "$SIM_DIR/"
 cp "$HOST_BUILD_DIR/zephyr.elf" "$SIM_DIR/"
+if [ "$FIRMWARE_FILE" != "zephyr.elf" ]; then
+    cp "$HOST_BUILD_DIR/$FIRMWARE_FILE" "$SIM_DIR/"
+fi
 
 # Create wokwi.toml
 cat <<EOF > "$SIM_DIR/wokwi.toml"
@@ -91,29 +93,7 @@ firmware = "${FIRMWARE_FILE}"
 elf = "zephyr.elf"
 EOF
 
-if [ "$DIAGRAM_FILE" = "diagram.pico.json" ]; then
-    cat <<EOF > "$SIM_DIR/diagram.json"
-{
-  "version": 1,
-  "author": "AtomVM",
-  "editor": "wokwi",
-  "parts": [
-    {
-      "type": "${WOKWI_BOARD_TYPE}",
-      "id": "pico",
-      "top": 0,
-      "left": 0
-    }
-  ],
-  "connections": [
-    ["pico:GP0", "\$serialMonitor:RX", "", []],
-    ["pico:GP1", "\$serialMonitor:TX", "", []]
-  ]
-}
-EOF
-else
-    cp "$SCRIPT_DIR/tests/sim_boards/$DIAGRAM_FILE" "$SIM_DIR/diagram.json"
-fi
+cp "$SCRIPT_DIR/tests/sim_boards/$DIAGRAM_FILE" "$SIM_DIR/diagram.json"
 
 # Run wokwi-cli
 echo "==> Running Wokwi simulation..."
