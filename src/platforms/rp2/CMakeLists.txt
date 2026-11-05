@@ -76,6 +76,7 @@ option(AVM_WAIT_BOOTSEL_ON_EXIT "Wait in BOOTSEL rather than shutdown on exit" O
 option(AVM_REBOOT_ON_NOT_OK "Reboot Pico if result is not ok" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 option(AVM_DISABLE_JIT "Disable just in time compilation." ON)
+option(AVM_RP2_WOKWI_TEST "Enable the Pico W network test for Wokwi." OFF)
 option(AVM_USB_CDC_PORT_DRIVER_ENABLED "Enable USB CDC port driver." OFF)
 set(AVM_USB_CDC_VID "0x2E8A" CACHE STRING "USB CDC vendor ID (default: Raspberry Pi VID)")
 set(AVM_USB_CDC_PID "0x0009" CACHE STRING "USB CDC product ID (default: Pi standard Pico SDK CDC UART, chip-agnostic)")

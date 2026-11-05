@@ -30,6 +30,7 @@ start() ->
     {ok, UDPAddr} = test_udp(false, 2024),
     ok = test_tcp_server(true, 10080),
     ok = test_tcp_server(false, 10081),
+    ok = test_otp_socket_close_after_connect_error(),
     ok = test_connect_to_unreachable_recovers(),
     0.
 
@@ -341,6 +342,24 @@ test_connect_to_unreachable_recovers() ->
     {error, _} = call(Port, {init, Params}, 120000),
     Port2 = open_port({spawn, "socket"}, []),
     true = is_port(Port2),
+    ok.
+
+test_otp_socket_close_after_connect_error() ->
+    {ok, ListenSocket} = socket:open(inet, stream, tcp),
+    ok = socket:bind(ListenSocket, #{family => inet, addr => loopback, port => 0}),
+    ok = socket:listen(ListenSocket),
+    {ok, #{port := ClosedPort}} = socket:sockname(ListenSocket),
+    ok = socket:close(ListenSocket),
+
+    {ok, Socket} = socket:open(inet, stream, tcp),
+    {error, closed} = socket:connect(Socket, #{
+        family => inet, addr => {127, 0, 0, 1}, port => ClosedPort
+    }),
+    ok = socket:close(Socket),
+
+    % Verify that the failed connection cleanup did not corrupt lwIP state.
+    {ok, ProbeSocket} = socket:open(inet, stream, tcp),
+    ok = socket:close(ProbeSocket),
     ok.
 
 call(DriverPid, Msg) ->

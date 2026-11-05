@@ -1,0 +1,4 @@
+[wokwi]
+version = 1
+firmware = "../build.wokwi/tests/rp2_wokwi_tests.uf2"
+elf = "../build.wokwi/tests/rp2_tests.elf"
