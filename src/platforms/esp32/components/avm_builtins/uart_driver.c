@@ -22,6 +22,7 @@
 #ifdef CONFIG_AVM_ENABLE_UART_PORT_DRIVER
 
 #include <assert.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -220,6 +221,21 @@ static size_t uart_received_len(struct UARTData *uart_data)
     size_t count = 0;
     uart_get_buffered_data_len(uart_data->uart_num, &count);
     return count;
+}
+
+// Disables the UART interrupts before uart_driver_delete(), which frees the ISR
+// first and disables them second. QEMU's interrupt matrix leaves a CPU interrupt
+// pending forever when its source is routed away while asserted
+// (https://github.com/espressif/qemu/issues/184), and its UART raises a receive
+// timeout without any data (https://github.com/espressif/qemu/issues/209), so
+// closing an idle port could end in an endless "Unhandled interrupt N on cpu C!"
+// with the scheduler stuck. Disabling the interrupts first keeps the source low
+// while it is rerouted. On hardware the matrix is combinational and this changes
+// nothing.
+static esp_err_t uart_silence_and_delete(uart_port_t uart_num)
+{
+    uart_disable_intr_mask(uart_num, UINT32_MAX);
+    return uart_driver_delete(uart_num);
 }
 
 // Reads up to max_len received bytes without waiting, and returns how many it read.
@@ -532,7 +548,7 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
         }
         if (mode != UART_MODE_UART && uart_set_mode(uart_num, (uart_mode_t) mode) != ESP_OK) {
             ESP_LOGE(TAG, "failed to set uart mode.");
-            uart_driver_delete(uart_num);
+            uart_silence_and_delete(uart_num);
             free(uart_data);
             return NULL;
         }
@@ -569,7 +585,7 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
             if (!use_usj)
 #endif
             {
-                uart_driver_delete(uart_num);
+                uart_silence_and_delete(uart_num);
             }
             free(uart_data);
             return NULL;
@@ -769,7 +785,7 @@ static void uart_driver_do_close(Context *ctx, GenMessage gen_message)
     if (!uart_data->use_usj)
 #endif
     {
-        esp_err_t err = uart_driver_delete(uart_data->uart_num);
+        esp_err_t err = uart_silence_and_delete(uart_data->uart_num);
         if (UNLIKELY(err != ESP_OK)) {
             ESP_LOGE(TAG, "Failed to delete UART driver. Error: %s", esp_err_to_name(err));
             result = ERROR_ATOM;
