@@ -47,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed use-after-free during VM shutdown when live socket owners still have
+  pending read or write selections
 - TCP and UDP socket backend servers remain responsive to receive and close requests
   while sends wait for write readiness; queued sends retain packet order
 - Send errors preserve the underlying reason, and stream errors after partial progress

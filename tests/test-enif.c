@@ -1114,6 +1114,33 @@ static void test_socket_write_stop(void)
     globalcontext_destroy(global);
 }
 
+static void test_socket_destroy_with_live_owners(void)
+{
+    GlobalContext *global = globalcontext_new();
+    Context *reader = context_new(global);
+    Context *writer = context_new(global);
+    BEGIN_WITH_STACK_HEAP(32, inputs)
+    term args[] = { INET_ATOM, globalcontext_make_atom(global, ATOM_STR("\x5", "dgram")), globalcontext_make_atom(global, ATOM_STR("\x3", "udp")) };
+    term result = call_socket_nif(reader, "socket:open/3", 3, args);
+    assert(term_get_tuple_element(result, 0) == OK_ATOM);
+    args[0] = memory_copy_term_tree(&inputs, term_get_tuple_element(result, 1));
+    args[1] = UNDEFINED_ATOM;
+    result = call_socket_nif(reader, "socket:nif_select_read/2", 2, args);
+    assert(result == OK_ATOM);
+    result = call_socket_nif(writer, "socket:nif_select_write/2", 2, args);
+    assert(result == OK_ATOM);
+    END_WITH_STACK_HEAP(inputs, global)
+
+    // Stack-heap resource releases are normally drained by the scheduler.
+#ifdef AVM_TASK_DRIVER_ENABLED
+    globalcontext_process_task_driver_queues(global);
+#endif
+
+    // Global teardown must cancel live owners' selections before freeing the
+    // platform polling/signaling state used by their resource-down callbacks.
+    globalcontext_destroy(global);
+}
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
@@ -1134,6 +1161,7 @@ int main(int argc, char **argv)
 #endif
     test_select_cancel();
     test_socket_write_stop();
+    test_socket_destroy_with_live_owners();
 
     return EXIT_SUCCESS;
 }

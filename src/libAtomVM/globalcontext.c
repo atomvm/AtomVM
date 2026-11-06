@@ -252,11 +252,11 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
     smp_scheduler_join_all();
 #endif
 
-    sys_free_platform(glb);
-
     struct ListHead *item;
     struct ListHead *tmp;
 
+    // Resource-down callbacks can unregister events and signal the platform.
+    // Keep it alive until all remaining process owners have been destroyed.
     while (true) {
         struct ListHead *processes = synclist_rdlock(&glb->processes_table);
         struct ListHead *first = list_first(processes);
@@ -268,6 +268,9 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
         synclist_unlock(&glb->processes_table);
         context_destroy(ctx);
     }
+
+    // Stop platform event producers before destroying the shared event lists.
+    sys_free_platform(glb);
 
     int module_index = glb->loaded_modules_count;
     for (int i = 0; i < module_index; i++) {
