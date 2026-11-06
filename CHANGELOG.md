@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0-beta.1] - Unreleased
 
 ### Added
+- Added `socket:send/3` and `socket:sendto/4` with timeout, `nowait` and select-reference
+  forms; send timeouts preserve independent read selections
 - Added `gen:start/5,6`, used by Elixir's `GenServer`
 - Added ML-KEM-768 (FIPS 203) key encapsulation to `crypto`, requiring libsodium >= 1.0.22
 - Added `AVM_STATIC_LIBSODIUM` CMake option to statically link libsodium
@@ -45,6 +47,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- TCP and UDP socket backend servers remain responsive to receive and close requests
+  while sends wait for write readiness; queued sends retain packet order
+- Send errors preserve the underlying reason, and stream errors after partial progress
+  return the unsent binary as `{error, {Reason, Rest}}`
+- Fixed lwIP write retries spinning after allocation failure, closed-socket selection
+  and buffered receive handling after reset or shutdown, and ESP32 select poll-count
+  publication losing concurrent registrations
+- Fixed epmd crashing when sending an ALIVE2 response to a disconnected node
 - `socket:send/2` now waits for write-readiness and retries partial stream sends under
   transient backpressure (lwIP `ERR_MEM` / BSD `EAGAIN`|`EWOULDBLOCK`), so higher-level TCP
   send paths no longer leak `{ok, Rest}` or `{error, eagain}` on normal backpressure;
