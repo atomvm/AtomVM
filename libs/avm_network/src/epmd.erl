@@ -157,18 +157,25 @@ process_req(
 ) ->
     case socket:recv(Socket, 1, nowait) of
         {select, {select_info, recv, Ref}} ->
-            ok = socket:send(Socket, <<?ALIVE2_X_RESP, 0, Creation:32>>),
-            State#state{
-                recv_selects = [{Ref, client} | RecvSelects],
-                clients = [
-                    {Name, Port, Ref,
-                        <<Port:16, NodeType, Protocol, HighestVersion:16, LowestVersion:16,
-                            NameLen:16, Name:NameLen/binary, ExtraLen:16,
-                            ExtraData:ExtraLen/binary>>}
-                    | Clients
-                ],
-                creation = (Creation + 1) rem 16#ffffffff
-            };
+            case socket:send(Socket, <<?ALIVE2_X_RESP, 0, Creation:32>>) of
+                ok ->
+                    State#state{
+                        recv_selects = [{Ref, client} | RecvSelects],
+                        clients = [
+                            {Name, Port, Ref,
+                                <<Port:16, NodeType, Protocol, HighestVersion:16, LowestVersion:16,
+                                    NameLen:16, Name:NameLen/binary, ExtraLen:16,
+                                    ExtraData:ExtraLen/binary>>}
+                            | Clients
+                        ],
+                        creation = (Creation + 1) rem 16#ffffffff
+                    };
+                {error, _Reason} ->
+                    % Closing also cancels the pending recv select. Do not
+                    % register the node or consume a creation on send failure.
+                    socket:close(Socket),
+                    State
+            end;
         {ok, <<_Byte>>} ->
             socket:close(Socket),
             State;
