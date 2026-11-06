@@ -124,6 +124,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   crash reports and `io_lib:format/2` with `~p`
 - Fixed `binary_to_term/1,2` corrupting the heap when decoding a zero-length `STRING_EXT`
   (OTP never emits one, but it is valid and decodes to `[]`)
+- Fixed `unicode:characters_to_list/1,2` and `unicode:characters_to_binary/1,2,3` returning an
+  error tuple with an uninitialized value in place of the rest for a top-level argument that is
+  not chardata, such as `unicode:characters_to_list(foo)`; they now raise `badarg`
 
 ## [0.7.0-beta.0] - 2026-09-28
 
