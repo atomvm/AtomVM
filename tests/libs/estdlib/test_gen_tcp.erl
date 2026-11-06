@@ -31,7 +31,77 @@ test() ->
     ok = test_connect_parameters(),
     ok = test_connect_bad_address(),
     ok = test_tcp_double_close(),
+    ok = test_backpressured_send(drain),
+    ok = test_backpressured_send(close),
     ok.
+
+%% A peer-observed prefix establishes that the large send is in progress.
+%% Nothing drains the rest until after recv has replied on the SAME socket.
+%% This catches a socket server that blocks inside send, without sleeps or
+%% inspection of its private queue/state.
+test_backpressured_send(Action) ->
+    Options = [{inet_backend, socket}, binary, {active, false}],
+    {ok, Listen} = gen_tcp:listen(0, Options),
+    {ok, {_, Port}} = inet:sockname(Listen),
+    {ok, Client} = gen_tcp:connect({127, 0, 0, 1}, Port, Options),
+    {ok, Peer} = gen_tcp:accept(Listen),
+    Data = binary:copy(<<7>>, 16 * 1024 * 1024),
+    Parent = self(),
+    First = start_send_call(fun() -> gen_tcp:send(Client, [<<91>>, Data]) end),
+    {ok, <<91>>} = gen_tcp:recv(Peer, 1, 60000),
+    Second = start_send_call(fun() ->
+        Parent ! {self(), calling},
+        gen_tcp:send(Client, <<42, 73>>)
+    end),
+    {SecondPid, _} = Second,
+    receive
+        {SecondPid, calling} -> ok
+    after 60000 -> error(queued_sender_not_started)
+    end,
+    ok = gen_tcp:send(Peer, <<19>>),
+    Receiver = start_send_call(fun() -> gen_tcp:recv(Client, 1, 60000) end),
+    {ok, <<19>>} = await_send_call(Receiver),
+    case Action of
+        drain ->
+            ok = recv_repeated_bytes(Peer, byte_size(Data), 7),
+            {ok, <<42, 73>>} = gen_tcp:recv(Peer, 2, 60000),
+            ok = await_send_call(First),
+            ok = await_send_call(Second),
+            ok = gen_tcp:close(Client);
+        close ->
+            Closer = start_send_call(fun() -> gen_tcp:close(Client) end),
+            ok = await_send_call(Closer),
+            {error, closed} = await_send_call(First),
+            {error, closed} = await_send_call(Second)
+    end,
+    {error, closed} = gen_tcp:send(Client, <<0>>),
+    ok = gen_tcp:close(Peer),
+    ok = gen_tcp:close(Listen).
+
+start_send_call(Fun) ->
+    Parent = self(),
+    spawn_opt(fun() -> Parent ! {self(), send_call_result, Fun()} end, [link, monitor]).
+
+await_send_call({Pid, Monitor}) ->
+    Result =
+        receive
+            {Pid, send_call_result, Value} -> Value
+        after 60000 -> error({socket_call_unresponsive, Pid})
+        end,
+    receive
+        {'DOWN', Monitor, process, Pid, normal} -> Result
+    after 60000 -> error({socket_call_did_not_exit, Pid})
+    end.
+
+recv_repeated_bytes(_Socket, 0, _Byte) ->
+    ok;
+recv_repeated_bytes(Socket, Remaining, Byte) ->
+    Size = erlang:min(Remaining, 65536),
+    {ok, Data} = gen_tcp:recv(Socket, Size, 60000),
+    Received = byte_size(Data),
+    true = Received > 0 andalso Received =< Size,
+    Data = binary:copy(<<Byte>>, Received),
+    recv_repeated_bytes(Socket, Remaining - Received, Byte).
 
 test_echo_server() ->
     test_echo_server(false).
