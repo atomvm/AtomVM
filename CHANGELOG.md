@@ -122,6 +122,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `module.h`
 - Fixed the empty binary being printed as `<<"">>` instead of `<<>>` by `erlang:display/1`,
   crash reports and `io_lib:format/2` with `~p`
+- Fixed `binary_to_term/1,2` corrupting the heap when decoding a zero-length `STRING_EXT`
+  (OTP never emits one, but it is valid and decodes to `[]`)
 
 ## [0.7.0-beta.0] - 2026-09-28
 
