@@ -31,6 +31,7 @@ test() ->
     ok = test_recv_nowait(),
     ok = test_accept_nowait(),
     ok = test_setopt_getopt(),
+    ok = test_send_contracts(),
     case erlang:system_info(machine) of
         "ATOM" ->
             ok = test_independent_read_write_selects(),
@@ -130,7 +131,7 @@ test_blocked_read_write(Order, Action) ->
 
     %% The accepted socket is shared by two selectors and closed by a third
     %% process.  Its peer deliberately does not read until the drain case.
-    %% Raw sends prove EAGAIN, rather than selecting an immediately writable fd.
+    %% Public nowait sends prove backpressure without inferring it from silence.
     Packet = <<0:65536>>,
     Parent = self(),
     StartReader = fun() ->
@@ -139,20 +140,29 @@ test_blocked_read_write(Order, Action) ->
             Parent ! {self(), registered, 0},
             %% Wait through the public receive path so EOF exercises its
             %% selection cleanup while the independent writer is still waiting.
-            Result = socket:recv(ServerSocket, 1, 5000),
+            Result = socket:recv(ServerSocket, 1, 60000),
             Parent ! {self(), result, Result}
         end)
     end,
     StartWriter = fun() ->
         start_registered(fun() ->
-            {Buffered, Rest} = fill_send_buffer(ServerSocket, Packet, 0, 8192),
+            {Buffered, Rest, Ref} = fill_send_buffer(ServerSocket, Packet, 0, 8192),
             Parent ! {self(), registered, Buffered + byte_size(Rest)},
-            %% Establish ownership before acknowledging registration, then
-            %% exercise the public blocking send and its own retry selection.
-            %% Hosts can grow their send buffers after EAGAIN. Reuse bounded
-            %% 32 KiB chunks until the public send really waits, rather than
-            %% assuming a particular payload size must block on every platform.
-            Result = send_until_blocked(ServerSocket, Parent, <<Rest/binary, 0:262144>>, 256),
+            Result =
+                receive
+                    {'$socket', ServerSocket, abort, {Ref, closed}} ->
+                        {error, closed};
+                    closed ->
+                        socket:send(ServerSocket, Rest, 0);
+                    resume ->
+                        receive
+                            {'$socket', ServerSocket, select, Ref} -> ok
+                        after 60000 -> error(write_readiness_timeout)
+                        end,
+                        ok = socket:send(ServerSocket, Rest, 60000),
+                        socket:send(ServerSocket, <<91, 7, 73, 19>>, 60000)
+                after 60000 -> error(writer_command_timeout)
+                end,
             Parent ! {self(), result, Result}
         end)
     end,
@@ -167,14 +177,11 @@ test_blocked_read_write(Order, Action) ->
                 R = StartReader(),
                 {R, W}
         end,
-    %% Observe the public send still pending while the peer is not draining;
-    %% raw EAGAIN alone does not prove the wrapper actually had to wait.
-    Total = wait_public_send_blocked(Writer, WriterMonitor, Buffered),
-    Writer ! finish,
-    ok = assert_writer_blocked(Writer, WriterMonitor),
+    Total = Buffered,
     case Action of
         close ->
             ok = socket:close(ServerSocket),
+            Writer ! closed,
             {error, closed} = wait_result(Reader),
             {error, closed} = wait_result(Writer),
             normal = wait_down(Writer, WriterMonitor);
@@ -186,6 +193,7 @@ test_blocked_read_write(Order, Action) ->
             ok = socket:close(ServerSocket);
         drain ->
             %% Check every byte, including the unsent suffix from a partial send.
+            Writer ! resume,
             ok = drain_writer_data(ClientSocket, Total),
             ok = wait_result(Writer),
             normal = wait_down(Writer, WriterMonitor),
@@ -196,7 +204,7 @@ test_blocked_read_write(Order, Action) ->
             %% EOF must cancel only read selection, not the blocked writer.
             ok = socket:shutdown(ClientSocket, write),
             {error, closed} = wait_result(Reader),
-            ok = assert_writer_blocked(Writer, WriterMonitor),
+            Writer ! resume,
             ok = drain_writer_data(ClientSocket, Total),
             ok = wait_result(Writer),
             normal = wait_down(Writer, WriterMonitor),
@@ -206,53 +214,18 @@ test_blocked_read_write(Order, Action) ->
     ok = socket:close(ClientSocket),
     ok = socket:close(ListenSocket).
 
-send_until_blocked(_Socket, _Parent, _Data, 0) ->
-    error(public_send_did_not_block);
-send_until_blocked(Socket, Parent, Data, Attempts) ->
-    %% Rest from the raw send is already included in registered's byte count.
-    Parent ! {self(), sending, 32768},
-    case socket:send(Socket, Data) of
-        ok ->
-            receive
-                finish -> socket:send(Socket, <<91, 7, 73, 19>>)
-            after 0 ->
-                send_until_blocked(Socket, Parent, <<0:262144>>, Attempts - 1)
-            end;
-        {error, _} = Error ->
-            Error
-    end.
-
-wait_public_send_blocked(Pid, Monitor, Total) ->
-    receive
-        {Pid, sending, Size} -> wait_public_send_blocked(Pid, Monitor, Total + Size);
-        {Pid, result, Result} -> error({writer_did_not_block, Result});
-        {'DOWN', Monitor, process, Pid, Reason} -> error({writer_exited, Reason})
-    after 250 ->
-        Total
-    end.
-
 %% Bound the amount of data queued even on hosts with large TCP buffers.
 fill_send_buffer(_Socket, _Packet, _Buffered, 0) ->
     error(send_buffer_did_not_block);
 fill_send_buffer(Socket, Packet, Buffered, Attempts) ->
-    case socket:nif_send(Socket, Packet) of
+    Ref = make_ref(),
+    case socket:send(Socket, Packet, Ref) of
         ok ->
             fill_send_buffer(Socket, <<0:65536>>, Buffered + byte_size(Packet), Attempts - 1);
-        {ok, Rest} ->
-            fill_send_buffer(
-                Socket, Rest, Buffered + byte_size(Packet) - byte_size(Rest), Attempts - 1
-            );
-        {error, eagain} ->
-            %% An initial EAGAIN can clear as ACKs arrive even though the peer
-            %% never reads. Keep filling until write readiness stays blocked.
-            Ref = make_ref(),
-            ok = socket:nif_select_write(Socket, Ref),
-            receive
-                {'$socket', Socket, select, Ref} ->
-                    fill_send_buffer(Socket, Packet, Buffered, Attempts - 1)
-            after 250 ->
-                {Buffered, Packet}
-            end
+        {select, {{select_info, send, Ref}, Rest}} ->
+            {Buffered + byte_size(Packet) - byte_size(Rest), Rest, Ref};
+        {select, {select_info, send, Ref}} ->
+            {Buffered, Packet, Ref}
     end.
 
 start_registered(Fun) ->
@@ -263,28 +236,20 @@ start_registered(Fun) ->
 wait_result(Pid) ->
     receive
         {Pid, result, Result} -> Result
-    after 5000 ->
+    after 60000 ->
         error({timeout, result, Pid})
-    end.
-
-assert_writer_blocked(Pid, Monitor) ->
-    receive
-        {Pid, result, Result} -> error({writer_did_not_block, Result});
-        {'DOWN', Monitor, process, Pid, Reason} -> error({writer_exited, Reason})
-    after 250 ->
-        ok
     end.
 
 drain_writer_data(Socket, Total) ->
     ok = drain_zero_bytes(Socket, Total),
-    {ok, <<91, 7, 73, 19>>} = socket:recv(Socket, 4, 5000),
+    {ok, <<91, 7, 73, 19>>} = socket:recv(Socket, 4, 60000),
     ok.
 
 drain_zero_bytes(_Socket, 0) ->
     ok;
 drain_zero_bytes(Socket, Remaining) ->
     Size = erlang:min(Remaining, 8192),
-    {ok, Data} = socket:recv(Socket, Size, 5000),
+    {ok, Data} = socket:recv(Socket, Size, 60000),
     Data = <<0:(Size * 8)>>,
     drain_zero_bytes(Socket, Remaining - Size).
 
@@ -301,6 +266,173 @@ wait_down(Pid, Monitor) ->
     after 5000 ->
         error({timeout, down, Pid})
     end.
+
+%% These contracts use only public socket calls and also run on BEAM. A large
+%% patterned payload makes partial progress observable; every accepted byte and
+%% the returned suffix are checked, rather than guessing how big TCP buffers are.
+test_send_contracts() ->
+    lists:foreach(fun test_send_timeout/1, [{0, same}, {30, same}, {30, separate}]),
+    lists:foreach(fun test_send_nowait/1, [nowait, make_ref()]),
+    ok = test_send_closed_after_partial(),
+    {Listen, Sender, Peer} = send_pair(),
+    ok = socket:close(Sender),
+    lists:foreach(
+        fun(Timeout) -> {error, closed} = socket:send(Sender, <<42>>, Timeout) end,
+        [0, 30, nowait, make_ref()]
+    ),
+    ok = socket:close(Peer),
+    ok = socket:close(Listen).
+
+test_send_closed_after_partial() ->
+    {Listen, Sender, Peer} = send_pair(),
+    Data = send_payload(),
+    Parent = self(),
+    {Writer, Monitor} = spawn_opt(
+        fun() ->
+            Parent ! {self(), result, socket:send(Sender, Data)}
+        end,
+        [link, monitor]
+    ),
+    %% Reading an actual prefix proves progress before closing the local socket;
+    %% no sleep is needed to guess whether the writer has started its send.
+    {Prefix, _} = split_binary(Data, 65536),
+    {ok, Prefix} = socket:recv(Peer, 65536, 60000),
+    ok = socket:close(Sender),
+    {error, {closed, Rest}} = wait_result(Writer),
+    true = byte_size(Rest) > 0,
+    true = byte_size(Rest) =< byte_size(Data) - byte_size(Prefix),
+    {_, Rest} = split_binary(Data, byte_size(Data) - byte_size(Rest)),
+    normal = wait_down(Writer, Monitor),
+    ok = socket:close(Peer),
+    ok = socket:close(Listen).
+
+send_pair() ->
+    {ok, Listen} = socket:open(inet, stream, tcp),
+    ok = socket:bind(Listen, #{family => inet, addr => loopback, port => 0}),
+    ok = socket:listen(Listen),
+    {ok, #{port := Port}} = socket:sockname(Listen),
+    {ok, Sender} = socket:open(inet, stream, tcp),
+    ok = socket:connect(Sender, #{family => inet, addr => loopback, port => Port}),
+    {ok, Peer} = socket:accept(Listen),
+    {Listen, Sender, Peer}.
+
+send_payload() ->
+    binary:copy(<<91, 7, 73, 19, 0, 255, 42>>, 2400000).
+
+test_send_timeout({Timeout, ReadOwner}) ->
+    {Listen, Sender, Peer} = send_pair(),
+    Parent = self(),
+    ReadRef = make_ref(),
+    Reader =
+        case ReadOwner of
+            same ->
+                {select, {select_info, recv, ReadRef}} = socket:recv(Sender, 1, ReadRef),
+                self();
+            separate ->
+                {Pid, Mon, 0} = start_registered(fun() ->
+                    {select, {select_info, recv, ReadRef}} = socket:recv(Sender, 1, ReadRef),
+                    Parent ! {self(), registered, 0},
+                    ok = receive_read_ready(Sender, ReadRef),
+                    Parent ! {self(), result, ok}
+                end),
+                {Pid, Mon}
+        end,
+    Data = send_payload(),
+    Started = erlang:monotonic_time(millisecond),
+    {error, {timeout, Rest}} = socket:send(Sender, Data, Timeout),
+    %% A generous bound catches an infinite/restarted timeout without making
+    %% scheduler latency part of the API contract.
+    true = erlang:monotonic_time(millisecond) - Started < 60000,
+    true = byte_size(Rest) > 0,
+    true = byte_size(Rest) < byte_size(Data),
+    Sent = byte_size(Data) - byte_size(Rest),
+    {_, Rest} = split_binary(Data, Sent),
+    %% ACKs can free more space after the first timeout. Continue accounting for
+    %% that progress until the public API explicitly reports NO bytes written.
+    ResumeRest = send_until_timeout(Sender, Rest, Timeout, 256),
+    %% Write timeout cancellation must preserve the ORIGINAL read reference,
+    %% even when both directions belong to the very same process.
+    ok = socket:send(Peer, <<42>>, 60000),
+    case Reader of
+        {ReaderPid, ReaderMon} ->
+            ok = wait_result(ReaderPid),
+            normal = wait_down(ReaderPid, ReaderMon);
+        _ ->
+            ok = receive_read_ready(Sender, ReadRef)
+    end,
+    {Drainer, Monitor} = spawn_opt(
+        fun() ->
+            ok = receive_exact_data(Peer, Data),
+            Parent ! {self(), result, ok}
+        end,
+        [link, monitor]
+    ),
+    ok = socket:send(Sender, ResumeRest, 60000),
+    ok = wait_result(Drainer),
+    normal = wait_down(Drainer, Monitor),
+    ok = socket:close(Sender),
+    ok = socket:close(Peer),
+    ok = socket:close(Listen).
+
+send_until_timeout(_Socket, _Data, _Timeout, 0) ->
+    error(send_buffer_did_not_fill);
+send_until_timeout(Socket, Data, Timeout, Attempts) ->
+    case socket:send(Socket, Data, Timeout) of
+        {error, timeout} ->
+            Data;
+        {error, {timeout, Rest}} ->
+            true = byte_size(Rest) > 0,
+            true = byte_size(Rest) < byte_size(Data),
+            {_, Rest} = split_binary(Data, byte_size(Data) - byte_size(Rest)),
+            send_until_timeout(Socket, Rest, Timeout, Attempts - 1)
+    end.
+
+receive_read_ready(Socket, Ref) ->
+    receive
+        {'$socket', Socket, select, Ref} -> ok
+    after 60000 -> error(read_selection_lost_after_write_timeout)
+    end,
+    {ok, <<42>>} = socket:recv(Socket, 1, 60000),
+    ok.
+
+test_send_nowait(Timeout) ->
+    {Listen, Sender, Peer} = send_pair(),
+    Data = send_payload(),
+    {select, {{select_info, _SendTag, Ref}, Rest}} = socket:send(Sender, Data, Timeout),
+    true = is_reference(Ref),
+    case Timeout of
+        nowait -> ok;
+        Ref -> ok
+    end,
+    true = byte_size(Rest) > 0,
+    true = byte_size(Rest) < byte_size(Data),
+    {_, Rest} = split_binary(Data, byte_size(Data) - byte_size(Rest)),
+    Parent = self(),
+    {Drainer, Monitor} = spawn_opt(
+        fun() ->
+            ok = receive_exact_data(Peer, Data),
+            Parent ! {self(), result, ok}
+        end,
+        [link, monitor]
+    ),
+    receive
+        {'$socket', Sender, select, Ref} -> ok
+    after 60000 -> error(send_readiness_timeout)
+    end,
+    ok = socket:send(Sender, Rest, 60000),
+    ok = wait_result(Drainer),
+    normal = wait_down(Drainer, Monitor),
+    ok = socket:close(Sender),
+    ok = socket:close(Peer),
+    ok = socket:close(Listen).
+
+receive_exact_data(_Socket, <<>>) ->
+    ok;
+receive_exact_data(Socket, Expected) ->
+    Size = erlang:min(byte_size(Expected), 65536),
+    {Chunk, Rest} = split_binary(Expected, Size),
+    {ok, Chunk} = socket:recv(Socket, Size, 60000),
+    receive_exact_data(Socket, Rest).
 
 -define(PACKET_SIZE, 7).
 

@@ -71,9 +71,39 @@ test_datagram_send() ->
     ok = socket:send(Sender, <<>>),
     {ok, {_Source, <<>>}} = socket:recvfrom(Receiver, 0, 5000),
 
+    %% UDP must retain packet boundaries for every new timeout form, both
+    %% connected and addressed sends. Loopback does not reliably produce UDP
+    %% EAGAIN, so these exercise success and permanent errors, not a fake select.
+    {ok, Addressed} = socket:open(inet, dgram, udp),
+    lists:foreach(
+        fun(Timeout) ->
+            ok = socket:sendto(Addressed, [<<91, 7>>, [19, <<73>>]], Dest, Timeout),
+            ok = socket:sendto(Addressed, <<>>, Dest, Timeout),
+            {ok, {_, <<91, 7, 19, 73>>}} = socket:recvfrom(Receiver, 0, 60000),
+            {ok, {_, <<>>}} = socket:recvfrom(Receiver, 0, 60000),
+            {error, emsgsize} = socket:sendto(Addressed, <<0:(65508 * 8)>>, Dest, Timeout),
+            {error, timeout} = socket:recvfrom(Receiver, 0, 0),
+            ok = socket:send(Sender, [<<42>>, [0, 255]], Timeout),
+            ok = socket:send(Sender, <<>>, Timeout),
+            {ok, {_, <<42, 0, 255>>}} = socket:recvfrom(Receiver, 0, 60000),
+            {ok, {_, <<>>}} = socket:recvfrom(Receiver, 0, 60000),
+            {error, emsgsize} = socket:send(Sender, <<0:(65508 * 8)>>, Timeout),
+            {error, timeout} = socket:recvfrom(Receiver, 0, 0)
+        end,
+        [0, 1000, infinity, nowait, make_ref()]
+    ),
+
+    ok = socket:close(Addressed),
     ok = socket:close(Sender),
-    {error, _} = socket:send(Sender, <<>>),
-    {error, _} = socket:sendto(Sender, <<>>, Dest),
+    {error, closed} = socket:send(Sender, <<>>),
+    {error, closed} = socket:sendto(Sender, <<>>, Dest),
+    lists:foreach(
+        fun(Timeout) ->
+            {error, closed} = socket:send(Sender, <<42>>, Timeout),
+            {error, closed} = socket:sendto(Sender, <<42>>, Dest, Timeout)
+        end,
+        [0, 1000, nowait, make_ref()]
+    ),
     ok = socket:close(Receiver).
 
 start_echo_server(Port) ->

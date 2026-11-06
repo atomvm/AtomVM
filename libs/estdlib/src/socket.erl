@@ -36,7 +36,9 @@
     recvfrom/2,
     recvfrom/3,
     send/2,
+    send/3,
     sendto/3,
+    sendto/4,
     setopt/3,
     getopt/2,
     connect/2,
@@ -51,6 +53,7 @@
     nif_recv/2,
     nif_recvfrom/2,
     nif_select_read_stop/1,
+    nif_select_write_stop/1,
     nif_select_stop/1,
     nif_send/2,
     nif_sendto/3
@@ -586,11 +589,22 @@ recvfrom0_nowait(Socket, Length, Ref) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec send(Socket :: socket(), Data :: iodata()) ->
-    ok | {error, Reason :: term()}.
-send(Socket, Data) when is_binary(Data) ->
-    send_all_binary(Socket, Data);
+    ok | {error, Reason :: term()} | {error, {Reason :: term(), binary()}}.
 send(Socket, Data) ->
-    send_all_binary(Socket, erlang:iolist_to_binary(Data)).
+    send(Socket, Data, infinity).
+
+%% @doc Send with a timeout, or return immediately with a write selection.
+%% A timeout covers the entire operation, not each retry. After a partial
+%% send, errors include the unsent binary. With nowait or a reference,
+%% a select result is followed by {'$socket', Socket, select, Ref} when ready.
+-spec send(socket(), iodata(), timeout() | nowait | reference()) ->
+    ok | {error, term()} | {select, term()}.
+send(Socket, Data, nowait) ->
+    send_nowait(Socket, send_binary(Data), undefined, make_ref());
+send(Socket, Data, Ref) when is_reference(Ref) ->
+    send_nowait(Socket, send_binary(Data), undefined, Ref);
+send(Socket, Data, Timeout) ->
+    send_all(Socket, send_binary(Data), undefined, deadline(Timeout), false).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
@@ -615,10 +629,19 @@ send(Socket, Data) ->
 %%-----------------------------------------------------------------------------
 -spec sendto(Socket :: socket(), Data :: iodata(), Dest :: sockaddr()) ->
     ok | {ok, Rest :: binary()} | {error, Reason :: term()}.
-sendto(Socket, Data, Dest) when is_binary(Data) ->
-    sendto_binary(Socket, Data, Dest);
 sendto(Socket, Data, Dest) ->
-    sendto_binary(Socket, erlang:iolist_to_binary(Data), Dest).
+    sendto(Socket, Data, Dest, infinity).
+
+%% @doc Send a datagram with a timeout, nowait or a caller-provided select ref.
+%% A partial datagram is returned to the caller, never split into packets.
+-spec sendto(socket(), iodata(), sockaddr(), timeout() | nowait | reference()) ->
+    ok | {ok, binary()} | {error, term()} | {select, term()}.
+sendto(Socket, Data, Dest, nowait) ->
+    send_nowait(Socket, send_binary(Data), Dest, make_ref());
+sendto(Socket, Data, Dest, Ref) when is_reference(Ref) ->
+    send_nowait(Socket, send_binary(Data), Dest, Ref);
+sendto(Socket, Data, Dest, Timeout) ->
+    send_all(Socket, send_binary(Data), Dest, deadline(Timeout), false).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
@@ -735,6 +758,10 @@ nif_select_read_stop(_Socket) ->
     erlang:nif_error(undefined).
 
 %% @private
+nif_select_write_stop(_Socket) ->
+    erlang:nif_error(undefined).
+
+%% @private
 nif_select_stop(_Socket) ->
     erlang:nif_error(undefined).
 
@@ -746,49 +773,94 @@ nif_send(_Socket, _Data) ->
 nif_sendto(_Socket, _Data, _Dest) ->
     erlang:nif_error(undefined).
 
-send_all_binary(Socket, Data) ->
-    case ?MODULE:nif_send(Socket, Data) of
+send_binary(Data) when is_binary(Data) -> Data;
+send_binary(Data) -> erlang:iolist_to_binary(Data).
+
+deadline(infinity) ->
+    infinity;
+deadline(Timeout) when is_integer(Timeout), Timeout >= 0 ->
+    erlang:monotonic_time(millisecond) + Timeout;
+deadline(Timeout) ->
+    erlang:error({invalid, {timeout, Timeout}}).
+
+remaining(infinity) -> infinity;
+remaining(Deadline) -> max(0, Deadline - erlang:monotonic_time(millisecond)).
+
+send_dest(Socket, Data, undefined) -> ?MODULE:nif_send(Socket, Data);
+send_dest(Socket, Data, Dest) -> ?MODULE:nif_sendto(Socket, Data, Dest).
+
+send_all(Socket, Data, Dest, Deadline, Partial) ->
+    case send_dest(Socket, Data, Dest) of
         ok ->
             ok;
-        {ok, Rest} ->
-            send_all_binary(Socket, Rest);
+        {ok, Rest} when Dest =:= undefined ->
+            continue_send(Socket, Rest, Dest, Deadline, true);
         {error, eagain} ->
-            case wait_write(Socket) of
-                ok ->
-                    send_all_binary(Socket, Data);
-                {error, _Reason} = Error ->
-                    Error
-            end;
-        {error, _Reason} = Error ->
-            Error
-    end.
-
-sendto_binary(Socket, Data, Dest) ->
-    case ?MODULE:nif_sendto(Socket, Data, Dest) of
-        {error, eagain} ->
-            case wait_write(Socket) of
-                ok ->
-                    %% Raw lwIP UDP readiness is advisory and immediate, even
-                    %% after ERR_MEM. Yield with a timer rather than busy-loop.
-                    receive
-                    after 10 -> sendto_binary(Socket, Data, Dest)
-                    end;
-                {error, _Reason} = Error ->
-                    Error
-            end;
+            continue_send(Socket, Data, Dest, Deadline, Partial);
+        {error, Reason} ->
+            send_error(Reason, Data, Partial);
         Result ->
             Result
     end.
 
-wait_write(Socket) ->
+continue_send(Socket, Data, Dest, Deadline, Partial) ->
+    case remaining(Deadline) of
+        0 ->
+            send_error(timeout, Data, Partial);
+        _ ->
+            case wait_write(Socket, Deadline) of
+                ok -> send_all(Socket, Data, Dest, Deadline, Partial);
+                {error, Reason} -> send_error(Reason, Data, Partial)
+            end
+    end.
+
+send_error(Reason, Data, true) -> {error, {Reason, Data}};
+send_error(Reason, _Data, false) -> {error, Reason}.
+
+send_nowait(Socket, Data, Dest, Ref) ->
+    case send_dest(Socket, Data, Dest) of
+        {ok, Rest} when Dest =:= undefined ->
+            select_send(Socket, Rest, Dest, Ref, true);
+        {error, eagain} ->
+            select_send(Socket, Data, Dest, Ref, false);
+        Result ->
+            Result
+    end.
+
+select_send(Socket, Data, Dest, Ref, Partial) ->
+    case ?MODULE:nif_select_write(Socket, Ref) of
+        ok ->
+            Op =
+                case Dest of
+                    undefined -> send;
+                    _ -> sendto
+                end,
+            Info = {select_info, Op, Ref},
+            case Partial of
+                true -> {select, {Info, Data}};
+                false -> {select, Info}
+            end;
+        {error, Reason} ->
+            send_error(Reason, Data, Partial)
+    end.
+
+wait_write(Socket, Deadline) ->
     Ref = erlang:make_ref(),
     case ?MODULE:nif_select_write(Socket, Ref) of
         ok ->
             receive
                 {'$socket', Socket, select, Ref} ->
                     ok;
-                {'$socket', Socket, abort, {Ref, closed}} ->
-                    {error, closed}
+                {'$socket', Socket, abort, {Ref, Reason}} ->
+                    {error, Reason}
+            after remaining(Deadline) ->
+                ?MODULE:nif_select_write_stop(Socket),
+                receive
+                    {'$socket', Socket, select, Ref} -> ok;
+                    {'$socket', Socket, abort, {Ref, _Reason}} -> ok
+                after 0 -> ok
+                end,
+                {error, timeout}
             end;
         {error, _Reason} = Error ->
             Error
