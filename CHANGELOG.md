@@ -122,6 +122,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `module.h`
 - Fixed the empty binary being printed as `<<"">>` instead of `<<>>` by `erlang:display/1`,
   crash reports and `io_lib:format/2` with `~p`
+- Fixed `:16/float` segments rounding halfway values away from zero and truncating subnormals
+  instead of rounding to nearest, ties to even, so constructed bytes now match BEAM
 
 ## [0.7.0-beta.0] - 2026-09-28
 
