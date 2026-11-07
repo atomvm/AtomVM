@@ -320,27 +320,27 @@ connection_loop(#connection{kernel = Kernel} = Connection) ->
                     ?shutdown2(
                         {Connection#connection.node, Connection#connection.socket}, net_tick_timeout
                     );
-                {ok, LastRead, LastWritten, 0} ->
-                    % nothing read, nothing written and send queue is empty: send tick
-                    SendTick = Connection#connection.send_tick,
-                    SendTick(Socket),
+                {ok, NewRead, NewWrite, Pending} ->
+                    % Only incoming traffic proves that the peer is alive.
+                    NewTimeout =
+                        case NewRead of
+                            LastRead -> TickTimeout - 1;
+                            _ -> Connection#connection.tick_intensity - 1
+                        end,
+                    % Do not queue ticks behind output already waiting to send.
+                    NextWritten =
+                        case NewWrite =:= LastWritten andalso Pending =:= 0 of
+                            true ->
+                                SendTick = Connection#connection.send_tick,
+                                SendTick(Socket),
+                                NewWrite + 1;
+                            false ->
+                                NewWrite
+                        end,
                     connection_loop(Connection#connection{
-                        last_written = LastWritten + 1, tick_timeout = TickTimeout - 1
-                    });
-                {ok, NewRead, LastWritten, _} ->
-                    % nothing read and send queue is empty: send tick
-                    SendTick = Connection#connection.send_tick,
-                    SendTick(Socket),
-                    connection_loop(Connection#connection{
-                        last_written = LastWritten + 1,
                         last_read = NewRead,
-                        tick_timeout = Connection#connection.tick_intensity - 1
-                    });
-                {ok, NewRead, NewWrite, _} ->
-                    connection_loop(Connection#connection{
-                        last_read = NewRead,
-                        last_written = NewWrite,
-                        tick_timeout = Connection#connection.tick_intensity - 1
+                        last_written = NextWritten,
+                        tick_timeout = NewTimeout
                     });
                 {error, Reason} ->
                     ?shutdown2({Connection#connection.node, Connection#connection.socket}, Reason)

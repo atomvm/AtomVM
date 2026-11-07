@@ -28,6 +28,7 @@ test() ->
     case stop_epmd() of
         ok ->
             {ok, Pid} = epmd:start_link([]),
+            ok = test_failed_alive2_response(Pid),
             ok = test_client(),
             ok = test_two_clients(),
             MonitorRef = monitor(process, Pid),
@@ -50,6 +51,74 @@ test() ->
             ok
     end,
     ok.
+
+test_failed_alive2_response(Pid) ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            test_failed_alive2_response_beam(Pid);
+        "ATOM" ->
+            % Deterministic fault injection needs OTP's public socket registry
+            % and socket monitors, which AtomVM does not currently implement.
+            ok
+    end.
+
+test_failed_alive2_response_beam(Pid) ->
+    {ok, Existing} = connect_epmd(),
+    ok = send_alive2(Existing, <<"test_epmd_existing">>, 12345),
+    {ok, <<118, 0, Creation:32>>} = socket:recv(Existing, 6, 5000),
+    {ok, Failed} = connect_epmd(),
+    {ok, Peer} = socket:sockname(Failed),
+    Deadline = erlang:monotonic_time(millisecond) + 5000,
+    ServerSocket = registration_socket(Pid, Peer, Deadline),
+    ClosedRef = socket:monitor(ServerSocket),
+    % Disable only the response direction, before submitting the request. The
+    % server can still read ALIVE2 and arm its recv select, but sending the
+    % response must fail. This avoids racing a peer disconnect against send.
+    ok = socket:shutdown(ServerSocket, write),
+    ok = send_alive2(Failed, <<"test_epmd_failed">>, 12346),
+    receive
+        {'DOWN', ClosedRef, socket, ServerSocket, _Reason} -> ok
+    after 5000 -> error(registration_socket_not_closed)
+    end,
+    ok = socket:close(Failed),
+    % Exercise the public protocol rather than inspecting epmd's private state.
+    {port, 12345, 6} = erl_epmd:port_please("test_epmd_existing", "localhost"),
+    noport = erl_epmd:port_please("test_epmd_failed", "localhost"),
+    {ok, Names} = erl_epmd:names("localhost"),
+    true = lists:member({"test_epmd_existing", 12345}, Names),
+    false = lists:member({"test_epmd_failed", 12346}, Names),
+    {ok, Retry} = connect_epmd(),
+    ok = send_alive2(Retry, <<"test_epmd_failed">>, 12346),
+    {ok, <<118, 0, NextCreation:32>>} = socket:recv(Retry, 6, 5000),
+    NextCreation = (Creation + 1) rem 16#ffffffff,
+    {port, 12346, 6} = erl_epmd:port_please("test_epmd_failed", "localhost"),
+    ok = socket:close(Retry),
+    ok = socket:close(Existing),
+    ok.
+
+connect_epmd() ->
+    {ok, Socket} = socket:open(inet, stream, tcp),
+    ok = socket:connect(Socket, #{family => inet, addr => loopback, port => ?EPMD_PORT}),
+    {ok, Socket}.
+
+send_alive2(Socket, Name, Port) ->
+    NameLen = byte_size(Name),
+    Request = <<120, Port:16, 77, 0, 6:16, 6:16, NameLen:16, Name/binary, 0:16>>,
+    socket:send(Socket, <<(byte_size(Request)):16, Request/binary>>).
+
+registration_socket(Pid, Peer, Deadline) ->
+    case [S || S <- socket:which_sockets(Pid), socket:peername(S) =:= {ok, Peer}] of
+        [Socket] ->
+            Socket;
+        [] ->
+            case erlang:monotonic_time(millisecond) < Deadline of
+                true ->
+                    erlang:yield(),
+                    registration_socket(Pid, Peer, Deadline);
+                false ->
+                    error(registration_socket_not_accepted)
+            end
+    end.
 
 has_epmd(Platform) ->
     has_command(Platform, "epmd").

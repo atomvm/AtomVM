@@ -106,26 +106,24 @@ typedef enum
 
 /**
  * @brief enif_select mode flags
- * @details ERL_NIF_SELECT_CANCEL which was introduced with OTP-22, is unimplemented.
  */
 enum ErlNifSelectFlags
 {
     ERL_NIF_SELECT_READ = 1,
     ERL_NIF_SELECT_WRITE = 2,
     ERL_NIF_SELECT_STOP = 4,
-    //  ERL_NIF_SELECT_CANCEL = 8,
+    ERL_NIF_SELECT_CANCEL = 8,
 };
 
 /**
  * @brief enif_select result flags
- * @details ERL_NIF_SELECT_CANCEL which was introduced with OTP-22, is unimplemented.
  */
 enum
 {
     ERL_NIF_SELECT_STOP_CALLED = 1,
     ERL_NIF_SELECT_STOP_SCHEDULED = 2,
-    //  ERL_NIF_SELECT_READ_CANCELLED = 4,
-    //  ERL_NIF_SELECT_WRITE_CANCELLED = 8,
+    ERL_NIF_SELECT_READ_CANCELLED = 4,
+    ERL_NIF_SELECT_WRITE_CANCELLED = 8,
 
     ERL_NIF_SELECT_INVALID_EVENT = -1,
     ERL_NIF_SELECT_FAILED = -2,
@@ -253,6 +251,10 @@ ERL_NIF_TERM enif_make_resource_binary(ErlNifEnv *env, void *obj, const void *da
  * objects, for example for vnodes and EOF.
  *
  * On `esp32`, this is currently implemented using `poll(2)`.
+ *
+ * Cancelling ignores `pid` and `ref`, preserves the other direction and keeps
+ * the event associated with the resource until `ERL_NIF_SELECT_STOP`. The
+ * `*_CANCELLED` result flags indicate which pending notifications were cancelled.
  *
  * @param env current environment
  * @param event event object (typically a file descriptor)

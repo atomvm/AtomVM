@@ -19,7 +19,10 @@
  */
 
 #include <assert.h>
+#include <errno.h>
+#include <netinet/in.h>
 #include <stdlib.h>
+#include <sys/socket.h>
 #include <unistd.h>
 
 #include "context.h"
@@ -33,6 +36,8 @@
 #include "list.h"
 #include "mailbox.h"
 #include "memory.h"
+#include "otp_socket.h"
+#include "posix_nifs.h"
 #include "resources.h"
 #include "scheduler.h"
 #include "synclist.h"
@@ -141,7 +146,9 @@ void test_resource(void)
     uint32_t *resource = (uint32_t *) ptr;
     *resource = 42;
 
-    assert(memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFERENCE_RESOURCE_SIZE) == MEMORY_GC_OK);
+    enum MemoryGCResult gc_result = memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFERENCE_RESOURCE_SIZE);
+    assert(gc_result == MEMORY_GC_OK);
+    UNUSED(gc_result);
     ERL_NIF_TERM resource_term = term_from_resource(ptr, &env->heap);
     assert(term_is_reference(resource_term));
     assert(term_is_resource_reference(resource_term));
@@ -508,7 +515,9 @@ void test_resource_binary(void)
     uint32_t *resource = (uint32_t *) ptr;
     *resource = 42;
 
-    assert(memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFC_BINARY_SIZE) == MEMORY_GC_OK);
+    enum MemoryGCResult gc_result = memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFC_BINARY_SIZE);
+    assert(gc_result == MEMORY_GC_OK);
+    UNUSED(gc_result);
     ERL_NIF_TERM binary = term_from_resource_binary(ptr, "hello", 5, &env->heap, env->global);
     assert(term_is_binary(binary));
     assert(term_is_refc_binary(binary));
@@ -582,7 +591,8 @@ void test_resource_binaries(void)
     uint32_t *resource = (uint32_t *) ptr;
     *resource = 42;
 
-    assert(memory_erl_nif_env_ensure_free(env1, TERM_BOXED_REFC_BINARY_SIZE) == MEMORY_GC_OK);
+    enum MemoryGCResult gc_result = memory_erl_nif_env_ensure_free(env1, TERM_BOXED_REFC_BINARY_SIZE);
+    assert(gc_result == MEMORY_GC_OK);
     ERL_NIF_TERM binary1 = term_from_resource_binary(ptr, "hello", 5, &env1->heap, env1->global);
     assert(term_is_binary(binary1));
     assert(term_is_refc_binary(binary1));
@@ -591,7 +601,9 @@ void test_resource_binaries(void)
 
     assert(cb_read_resource == 0);
 
-    assert(memory_erl_nif_env_ensure_free(env2, TERM_BOXED_REFC_BINARY_SIZE) == MEMORY_GC_OK);
+    gc_result = memory_erl_nif_env_ensure_free(env2, TERM_BOXED_REFC_BINARY_SIZE);
+    assert(gc_result == MEMORY_GC_OK);
+    UNUSED(gc_result);
     ERL_NIF_TERM binary2 = term_from_resource_binary(ptr, "world", 5, &env2->heap, env2->global);
     assert(term_is_binary(binary2));
     assert(term_is_refc_binary(binary2));
@@ -733,7 +745,9 @@ void test_select_event_armed_during_listener_only_rebuild(void)
 
     // Dirty only the listeners count.
     int listener_pipe[2];
-    assert(pipe(listener_pipe) == 0);
+    int r = pipe(listener_pipe);
+    assert(r == 0);
+    UNUSED(r);
     EventListener listener;
     listener.handler = regression_noop_listener_handler;
     listener.fd = listener_pipe[0];
@@ -751,8 +765,11 @@ void test_select_event_armed_during_listener_only_rebuild(void)
     assert(ptr != NULL);
 
     int select_pipe[2];
-    assert(pipe(select_pipe) == 0);
-    assert(write(select_pipe[1], "x", 1) == 1);
+    r = pipe(select_pipe);
+    assert(r == 0);
+    ssize_t written = write(select_pipe[1], "x", 1);
+    assert(written == 1);
+    UNUSED(written);
 
     struct SelectEvent *select_event = malloc(sizeof(struct SelectEvent));
     assert(select_event != NULL);
@@ -761,9 +778,12 @@ void test_select_event_armed_during_listener_only_rebuild(void)
     select_event->read = true;
     select_event->write = false;
     select_event->close = false;
-    select_event->local_pid = ctx->process_id;
-    select_event->ref_ticks = 0;
-    select_event->message = NULL;
+    select_event->read_local_pid = ctx->process_id;
+    select_event->write_local_pid = INVALID_PROCESS_ID;
+    select_event->read_ref_ticks = 0;
+    select_event->write_ref_ticks = 0;
+    select_event->read_message = NULL;
+    select_event->write_message = NULL;
     refc_binary_increment_refcount(select_event->resource);
     list_init(&select_event->head);
     struct ListHead *select_events = synclist_wrlock(&glb->select_events);
@@ -784,8 +804,11 @@ void test_select_event_armed_during_listener_only_rebuild(void)
     mailbox_process_outer_list_native(&ctx->mailbox);
     assert(mailbox_has_next(&ctx->mailbox));
 
-    assert(enif_select(env, select_pipe[0], ERL_NIF_SELECT_STOP, ptr, NULL, term_nil()) == ERL_NIF_SELECT_STOP_CALLED);
-    assert(enif_release_resource(ptr));
+    r = enif_select(env, select_pipe[0], ERL_NIF_SELECT_STOP, ptr, NULL, term_nil());
+    assert(r == ERL_NIF_SELECT_STOP_CALLED);
+    int release_result = enif_release_resource(ptr);
+    assert(release_result);
+    UNUSED(release_result);
     sys_unregister_listener(glb, &listener);
     close(listener_pipe[0]);
     close(listener_pipe[1]);
@@ -795,6 +818,328 @@ void test_select_event_armed_during_listener_only_rebuild(void)
     globalcontext_destroy(glb);
 }
 #endif
+
+void test_select_cancel(void)
+{
+    dtor_call_count = 0;
+    GlobalContext *global = globalcontext_new();
+    Context *reader = context_new(global);
+    Context *writer = context_new(global);
+    ErlNifEnv *env = erl_nif_env_from_context(reader);
+    ErlNifResourceTypeInit init = { .members = 1, .dtor = resource_dtor };
+    ErlNifResourceType *type = enif_init_resource_type(env, "select_cancel", &init, ERL_NIF_RT_CREATE, NULL);
+    assert(type != NULL);
+    void *resource = enif_alloc_resource(type, sizeof(uint32_t));
+    *((uint32_t *) resource) = 42;
+    int sockets[2];
+    int r = socketpair(AF_UNIX, SOCK_STREAM, 0, sockets);
+    assert(r == 0);
+    ErlNifEvent event = sockets[0];
+
+    r = enif_select(env, event, ERL_NIF_SELECT_CANCEL, resource, NULL, UNDEFINED_ATOM);
+    assert(r == ERL_NIF_SELECT_BADARG);
+    r = enif_select(env, event, ERL_NIF_SELECT_READ | ERL_NIF_SELECT_CANCEL, resource, NULL, UNDEFINED_ATOM);
+    assert(r == 0);
+    enum MemoryGCResult gc_result = memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFERENCE_RESOURCE_SIZE);
+    assert(gc_result == MEMORY_GC_OK);
+    term resource_message = term_from_resource(resource, &env->heap);
+    r = enif_select_read(env, event, resource, &reader->process_id, resource_message, NULL);
+    assert(r == 0);
+    r = enif_select_write(env, event, resource, &writer->process_id, term_from_int(29), NULL);
+    assert(r == 0);
+    r = enif_select(env, event, ERL_NIF_SELECT_READ | ERL_NIF_SELECT_CANCEL, resource, NULL, UNDEFINED_ATOM);
+    assert(r == ERL_NIF_SELECT_READ_CANCELLED);
+    r = enif_select(env, event, ERL_NIF_SELECT_READ | ERL_NIF_SELECT_CANCEL, resource, NULL, UNDEFINED_ATOM);
+    assert(r == 0);
+    ssize_t written = write(sockets[1], "x", 1);
+    assert(written == 1);
+    sys_poll_events(global, 0);
+
+    term notification;
+    MailboxMessage *signal = mailbox_process_outer_list_native(&reader->mailbox);
+    assert(signal == NULL);
+    bool has_message = mailbox_peek(reader, &notification);
+    assert(!has_message);
+    signal = mailbox_process_outer_list_native(&writer->mailbox);
+    assert(signal == NULL);
+    has_message = mailbox_peek(writer, &notification);
+    assert(has_message);
+    assert(notification == term_from_int(29));
+    mailbox_remove_message(&writer->mailbox, &writer->heap);
+
+    // Reuse the retained event; cancelling write must leave a reference-based
+    // read selection intact, including its owner and reference.
+    gc_result = memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFERENCE_SHORT_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE);
+    assert(gc_result == MEMORY_GC_OK);
+    term ref = term_from_ref_ticks(123, &env->heap);
+    resource_message = term_from_resource(resource, &env->heap);
+    r = enif_select_write(env, event, resource, &writer->process_id, resource_message, NULL);
+    assert(r == 0);
+    r = enif_select(env, event, ERL_NIF_SELECT_READ, resource, &reader->process_id, ref);
+    assert(r == 0);
+    r = enif_select(env, event, ERL_NIF_SELECT_WRITE | ERL_NIF_SELECT_CANCEL, resource, NULL, term_from_int(99));
+    assert(r == ERL_NIF_SELECT_WRITE_CANCELLED);
+    sys_poll_events(global, 0);
+    signal = mailbox_process_outer_list_native(&writer->mailbox);
+    assert(signal == NULL);
+    has_message = mailbox_peek(writer, &notification);
+    assert(!has_message);
+    signal = mailbox_process_outer_list_native(&reader->mailbox);
+    assert(signal == NULL);
+    has_message = mailbox_peek(reader, &notification);
+    assert(has_message);
+    assert(term_is_tuple(notification) && term_get_tuple_arity(notification) == 4);
+    assert(term_get_tuple_element(notification, 0) == SELECT_ATOM);
+    assert(term_to_ref_ticks(term_get_tuple_element(notification, 2)) == 123);
+    assert(term_get_tuple_element(notification, 3) == READY_INPUT_ATOM);
+    mailbox_remove_message(&reader->mailbox, &reader->heap);
+
+    r = enif_select_read(env, event, resource, &reader->process_id, term_from_int(37), NULL);
+    assert(r == 0);
+    r = enif_select_write(env, event, resource, &writer->process_id, term_from_int(41), NULL);
+    assert(r == 0);
+    enum ErlNifSelectFlags cancel_both = ERL_NIF_SELECT_READ | ERL_NIF_SELECT_WRITE | ERL_NIF_SELECT_CANCEL;
+    r = enif_select(env, event, cancel_both, resource, NULL, UNDEFINED_ATOM);
+    assert(r == (ERL_NIF_SELECT_READ_CANCELLED | ERL_NIF_SELECT_WRITE_CANCELLED));
+    r = enif_select(env, event, cancel_both, resource, NULL, UNDEFINED_ATOM);
+    assert(r == 0);
+    sys_poll_events(global, 0);
+    signal = mailbox_process_outer_list_native(&reader->mailbox);
+    assert(signal == NULL);
+    has_message = mailbox_peek(reader, &notification);
+    assert(!has_message);
+    signal = mailbox_process_outer_list_native(&writer->mailbox);
+    assert(signal == NULL);
+    has_message = mailbox_peek(writer, &notification);
+    assert(!has_message);
+
+    // An inactive registration for another resource must not shadow readiness
+    // after the OS reuses its descriptor for a new socket.
+    void *replacement = enif_alloc_resource(type, sizeof(uint32_t));
+    *((uint32_t *) replacement) = 42;
+    r = enif_select_read(env, event, replacement, &reader->process_id, term_from_int(53), NULL);
+    assert(r == 0);
+    sys_poll_events(global, 0);
+    signal = mailbox_process_outer_list_native(&reader->mailbox);
+    assert(signal == NULL);
+    has_message = mailbox_peek(reader, &notification);
+    assert(has_message);
+    assert(notification == term_from_int(53));
+    mailbox_remove_message(&reader->mailbox, &reader->heap);
+    r = enif_select(env, event, ERL_NIF_SELECT_STOP, replacement, NULL, UNDEFINED_ATOM);
+    assert(r == ERL_NIF_SELECT_STOP_CALLED);
+    enif_release_resource(replacement);
+
+    r = enif_select(env, event, ERL_NIF_SELECT_STOP, resource, NULL, UNDEFINED_ATOM);
+    assert(r == ERL_NIF_SELECT_STOP_CALLED);
+    enif_release_resource(resource);
+    close(sockets[0]);
+    close(sockets[1]);
+    context_destroy(reader);
+    context_destroy(writer);
+#ifdef AVM_TASK_DRIVER_ENABLED
+    globalcontext_process_task_driver_queues(global);
+#endif
+    assert(dtor_call_count == 2);
+    globalcontext_destroy(global);
+}
+
+static term call_socket_nif(Context *ctx, const char *name, int argc, term argv[])
+{
+    const struct Nif *nif = otp_socket_nif_get_nif(name);
+    assert(nif != NULL);
+    term args[3];
+    for (int i = 0; i < argc; i++) {
+        args[i] = argv[i];
+    }
+    term result = nif->nif_ptr(ctx, argc, args);
+    assert(!term_is_invalid_term(result));
+    return result;
+}
+
+// Exercise socket direction ownership through the real public NIF entrypoints,
+// including the case where one process owns both independent directions.
+static void test_socket_write_stop(void)
+{
+    // Kernels differ on the errno for UDP send without a destination.
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    assert(fd >= 0);
+    struct sockaddr_in local_address = { .sin_family = AF_INET, .sin_port = 0, .sin_addr = { .s_addr = htonl(INADDR_LOOPBACK) } };
+    int r = bind(fd, (struct sockaddr *) &local_address, sizeof(local_address));
+    assert(r == 0);
+    UNUSED(r);
+    ssize_t sent = send(fd, "x", 1, 0);
+    int expected_send_error = errno;
+    assert(sent == -1);
+    struct sockaddr_in invalid_destination = { .sin_family = AF_INET, .sin_port = htons(9), .sin_addr = { .s_addr = htonl(INADDR_BROADCAST) } };
+    sent = sendto(fd, "x", 1, 0, (struct sockaddr *) &invalid_destination, sizeof(invalid_destination));
+    int expected_sendto_error = errno;
+    assert(sent == -1);
+    UNUSED(sent);
+    close(fd);
+    GlobalContext *global = globalcontext_new();
+    Context *reader = context_new(global);
+    Context *writer = context_new(global);
+    // Native entrypoints may collect their caller's heap. Keep shared inputs
+    // in an independent rooted heap, just like messages passed between NIFs.
+    BEGIN_WITH_STACK_HEAP(512, inputs)
+    term args[] = { INET_ATOM, globalcontext_make_atom(global, ATOM_STR("\x5", "dgram")), globalcontext_make_atom(global, ATOM_STR("\x3", "udp")) };
+    term result = call_socket_nif(reader, "socket:open/3", 3, args);
+    assert(term_get_tuple_element(result, 0) == OK_ATOM);
+    term socket = memory_copy_term_tree(&inputs, term_get_tuple_element(result, 1));
+    term address = term_alloc_map(3, &inputs);
+    term_set_map_assoc(address, 0, globalcontext_make_atom(global, ATOM_STR("\x4", "addr")), globalcontext_make_atom(global, ATOM_STR("\x8", "loopback")));
+    term_set_map_assoc(address, 1, FAMILY_ATOM, INET_ATOM);
+    term_set_map_assoc(address, 2, PORT_ATOM, term_from_int(0));
+    args[0] = socket;
+    args[1] = address;
+    result = call_socket_nif(reader, "socket:bind/2", 2, args);
+    assert(result == OK_ATOM);
+    result = call_socket_nif(reader, "socket:sockname/1", 1, args);
+    assert(term_get_tuple_element(result, 0) == OK_ATOM);
+    term destination = memory_copy_term_tree(&inputs, term_get_tuple_element(result, 1));
+    term data = term_from_literal_binary((const uint8_t *) "x", 1, &inputs, global);
+
+    for (int same_owner = 0; same_owner < 2; same_owner++) {
+        Context *write_owner = same_owner ? reader : writer;
+        args[0] = socket;
+        args[1] = term_from_ref_ticks(123 + same_owner, &inputs);
+        result = call_socket_nif(reader, "socket:nif_select_read/2", 2, args);
+        assert(result == OK_ATOM);
+        args[1] = term_from_ref_ticks(456, &inputs);
+        result = call_socket_nif(write_owner, "socket:nif_select_write/2", 2, args);
+        assert(result == OK_ATOM);
+        result = call_socket_nif(write_owner, "socket:nif_select_write_stop/1", 1, args);
+        assert(result == OK_ATOM);
+        // Cancellation is idempotent and cannot clear the remaining read owner.
+        result = call_socket_nif(write_owner, "socket:nif_select_write_stop/1", 1, args);
+        assert(result == OK_ATOM);
+        args[1] = data;
+        args[2] = destination;
+        result = call_socket_nif(reader, "socket:nif_sendto/3", 3, args);
+        assert(result == OK_ATOM);
+        // Leave monitor bookkeeping for context_destroy; move only ordinary
+        // notifications to the inner mailbox, as a native process would.
+        // A poll can return for its registration wakeup before UDP arrives.
+        term notification;
+        bool ready = false;
+        for (int attempt = 0; attempt < 50 && !ready; attempt++) {
+            sys_poll_events(global, 100);
+            mailbox_requeue_outer_signals(&reader->mailbox, mailbox_process_outer_list_native(&reader->mailbox));
+            ready = mailbox_peek(reader, &notification);
+        }
+        mailbox_requeue_outer_signals(&writer->mailbox, mailbox_process_outer_list_native(&writer->mailbox));
+        assert(ready);
+        assert(term_get_tuple_element(notification, 0) == DOLLAR_SOCKET_ATOM);
+        assert(term_get_tuple_element(notification, 2) == SELECT_ATOM);
+        assert(term_to_ref_ticks(term_get_tuple_element(notification, 3)) == (uint64_t) (123 + same_owner));
+        mailbox_remove_message(&reader->mailbox, &reader->heap);
+        bool has_message = mailbox_peek(reader, &notification);
+        assert(!has_message);
+        has_message = mailbox_peek(writer, &notification);
+        assert(!has_message);
+        UNUSED(has_message);
+        args[1] = term_from_int(1);
+        result = call_socket_nif(reader, "socket:nif_recv/2", 2, args);
+        assert(term_get_tuple_element(result, 0) == OK_ATOM);
+        term received = term_get_tuple_element(result, 1);
+        assert(term_binary_size(received) == 1 && term_binary_data(received)[0] == 'x');
+        UNUSED(received);
+    }
+
+    // A real OS send error must not be collapsed to closed, for send or sendto.
+    args[1] = data;
+    result = call_socket_nif(reader, "socket:nif_send/2", 2, args);
+    term expected_error = posix_errno_to_term(expected_send_error, global);
+    assert(term_get_tuple_element(result, 0) == ERROR_ATOM);
+    assert(term_get_tuple_element(result, 1) == expected_error);
+    // Broadcasting without SO_BROADCAST is rejected by the OS.
+    term broadcast = term_alloc_tuple(4, &inputs);
+    for (int i = 0; i < 4; i++) {
+        term_put_tuple_element(broadcast, i, term_from_int(255));
+    }
+    term broadcast_destination = term_alloc_map(3, &inputs);
+    term_set_map_assoc(broadcast_destination, 0, globalcontext_make_atom(global, ATOM_STR("\x4", "addr")), broadcast);
+    term_set_map_assoc(broadcast_destination, 1, FAMILY_ATOM, INET_ATOM);
+    term_set_map_assoc(broadcast_destination, 2, PORT_ATOM, term_from_int(9));
+    args[2] = broadcast_destination;
+    result = call_socket_nif(reader, "socket:nif_sendto/3", 3, args);
+    expected_error = posix_errno_to_term(expected_sendto_error, global);
+    assert(term_get_tuple_element(result, 0) == ERROR_ATOM);
+    assert(term_get_tuple_element(result, 1) == expected_error);
+    UNUSED(expected_error);
+    result = call_socket_nif(reader, "socket:close/1", 1, args);
+    assert(result == OK_ATOM);
+    for (int empty = 0; empty < 2; empty++) {
+        args[1] = term_from_literal_binary((const uint8_t *) "x", empty ? 0 : 1, &inputs, global);
+        args[2] = destination;
+        result = call_socket_nif(reader, "socket:nif_send/2", 2, args);
+        assert(term_get_tuple_element(result, 0) == ERROR_ATOM && term_get_tuple_element(result, 1) == CLOSED_ATOM);
+        result = call_socket_nif(reader, "socket:nif_sendto/3", 3, args);
+        assert(term_get_tuple_element(result, 0) == ERROR_ATOM && term_get_tuple_element(result, 1) == CLOSED_ATOM);
+    }
+    result = call_socket_nif(reader, "socket:nif_select_write_stop/1", 1, args);
+    assert(result == OK_ATOM);
+    result = call_socket_nif(reader, "socket:nif_select_read_stop/1", 1, args);
+    assert(result == OK_ATOM);
+    result = call_socket_nif(reader, "socket:nif_select_stop/1", 1, args);
+    assert(result == OK_ATOM);
+    args[1] = term_from_ref_ticks(789, &inputs);
+    result = call_socket_nif(reader, "socket:nif_select_read/2", 2, args);
+    assert(result == OK_ATOM);
+    result = call_socket_nif(reader, "socket:nif_select_write/2", 2, args);
+    assert(result == OK_ATOM);
+    mailbox_requeue_outer_signals(&reader->mailbox, mailbox_process_outer_list_native(&reader->mailbox));
+    for (int direction = 0; direction < 2; direction++) {
+        term notification;
+        bool has_message = mailbox_peek(reader, &notification);
+        assert(has_message);
+        UNUSED(has_message);
+        assert(term_get_tuple_element(notification, 2) == ABORT_ATOM);
+        term reason = term_get_tuple_element(notification, 3);
+        assert(term_to_ref_ticks(term_get_tuple_element(reason, 0)) == 789);
+        assert(term_get_tuple_element(reason, 1) == CLOSED_ATOM);
+        UNUSED(reason);
+        mailbox_remove_message(&reader->mailbox, &reader->heap);
+    }
+    args[1] = globalcontext_make_atom(global, ATOM_STR("\xA", "read_write"));
+    result = call_socket_nif(reader, "socket:shutdown/2", 2, args);
+    assert(term_get_tuple_element(result, 0) == ERROR_ATOM && term_get_tuple_element(result, 1) == CLOSED_ATOM);
+    END_WITH_STACK_HEAP(inputs, global)
+    context_destroy(reader);
+    context_destroy(writer);
+#ifdef AVM_TASK_DRIVER_ENABLED
+    globalcontext_process_task_driver_queues(global);
+#endif
+    globalcontext_destroy(global);
+}
+
+static void test_socket_destroy_with_live_owners(void)
+{
+    GlobalContext *global = globalcontext_new();
+    Context *reader = context_new(global);
+    Context *writer = context_new(global);
+    BEGIN_WITH_STACK_HEAP(32, inputs)
+    term args[] = { INET_ATOM, globalcontext_make_atom(global, ATOM_STR("\x5", "dgram")), globalcontext_make_atom(global, ATOM_STR("\x3", "udp")) };
+    term result = call_socket_nif(reader, "socket:open/3", 3, args);
+    assert(term_get_tuple_element(result, 0) == OK_ATOM);
+    args[0] = memory_copy_term_tree(&inputs, term_get_tuple_element(result, 1));
+    args[1] = UNDEFINED_ATOM;
+    result = call_socket_nif(reader, "socket:nif_select_read/2", 2, args);
+    assert(result == OK_ATOM);
+    result = call_socket_nif(writer, "socket:nif_select_write/2", 2, args);
+    assert(result == OK_ATOM);
+    END_WITH_STACK_HEAP(inputs, global)
+
+    // Stack-heap resource releases are normally drained by the scheduler.
+#ifdef AVM_TASK_DRIVER_ENABLED
+    globalcontext_process_task_driver_queues(global);
+#endif
+
+    // Global teardown must cancel live owners' selections before freeing the
+    // platform polling/signaling state used by their resource-down callbacks.
+    globalcontext_destroy(global);
+}
 
 int main(int argc, char **argv)
 {
@@ -814,6 +1159,9 @@ int main(int argc, char **argv)
 #ifndef HAVE_KQUEUE
     test_select_event_armed_during_listener_only_rebuild();
 #endif
+    test_select_cancel();
+    test_socket_write_stop();
+    test_socket_destroy_with_live_owners();
 
     return EXIT_SUCCESS;
 }

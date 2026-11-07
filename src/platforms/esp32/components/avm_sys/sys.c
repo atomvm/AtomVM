@@ -711,11 +711,9 @@ static void *select_thread_loop(void *arg)
             // Means it is dirty and should be rebuilt.
             struct ListHead *select_events = synclist_wrlock(&glb->select_events);
             size_t select_events_new_count;
-            if (select_events_poll_count < 0) {
-                select_event_count_and_destroy_closed(select_events, NULL, NULL, &select_events_new_count, glb);
-            } else {
-                select_events_new_count = select_events_poll_count;
-            }
+            // Registration changes the list before marking the cache dirty.
+            // Count and fill the poll set from the same locked snapshot.
+            select_event_count_and_destroy_closed(select_events, NULL, NULL, &select_events_new_count, glb);
 
             if (fds) {
                 fds = realloc(fds, sizeof(struct pollfd) * (poll_count + select_events_new_count));
@@ -740,10 +738,9 @@ static void *select_thread_loop(void *arg)
                     fd_index++;
                 }
             }
-            synclist_unlock(&glb->select_events);
-
             select_events_poll_count = select_events_new_count;
             platform->select_events_poll_count = select_events_new_count;
+            synclist_unlock(&glb->select_events);
         }
 
         poll_count += select_events_poll_count;

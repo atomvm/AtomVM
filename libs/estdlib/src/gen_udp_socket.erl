@@ -90,7 +90,12 @@ open(Port, Options) ->
     Packet :: packet()
 ) -> ok | {error, reason()}.
 send(Socket, Address, Port, Packet) ->
-    call(Socket, {sendto, Address, Port, Packet}).
+    try
+        call(Socket, {sendto, Address, Port, Packet})
+    catch
+        exit:{Reason, {gen_server, call, _}} when Reason =:= noproc; Reason =:= normal ->
+            {error, closed}
+    end.
 
 %% @hidden
 -spec recv(Socket :: inet:socket(), Length :: non_neg_integer()) ->
@@ -138,7 +143,9 @@ sockname(Socket) ->
     monitor_ref = undefined,
     active,
     options,
-    pending_selects = #{}
+    pending_selects = #{},
+    pending_send = undefined,
+    send_queue = queue:new()
 }).
 
 init({Socket, ControllingProcess, Options}) ->
@@ -163,19 +170,27 @@ init({Socket, ControllingProcess, Options}) ->
             {ok, #state{
                 socket = Socket,
                 controlling_process = ControllingProcess,
+                monitor_ref = erlang:monitor(process, ControllingProcess),
                 active = false,
                 options = Options
             }}
     end.
 
 %% @hidden
-handle_call({sendto, Address, Port, Packet}, _From, State) ->
+handle_call({sendto, Address, Port, Packet}, From, State) ->
     Dest = #{
         family => inet,
         port => Port,
         addr => Address
     },
-    {reply, socket:sendto(State#state.socket, Packet, Dest), State};
+    Data = erlang:iolist_to_binary(Packet),
+    case State#state.pending_send of
+        undefined ->
+            {noreply, start_sendto(Data, Dest, From, State)};
+        _ ->
+            Queue = queue:in({From, Data, Dest}, State#state.send_queue),
+            {noreply, State#state{send_queue = Queue}}
+    end;
 handle_call({recvfrom, Length, Timeout}, From, State) ->
     case State#state.active of
         true ->
@@ -219,7 +234,8 @@ handle_call(sockname, _From, State) ->
         end,
     {reply, Reply, State};
 handle_call(close, _From, State) ->
-    {stop, normal, socket:close(State#state.socket), State};
+    Reply = socket:close(State#state.socket),
+    {stop, normal, Reply, fail_pending_sends(closed, State)};
 handle_call({controlling_process, Pid, Caller}, _From, State) ->
     case State#state.active of
         false ->
@@ -242,6 +258,16 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 %% @hidden
+handle_info(
+    {'$socket', Socket, select, Ref},
+    #state{socket = Socket, pending_send = {Ref, From, Data, Dest}} = State
+) ->
+    {noreply, start_sendto(Data, Dest, From, State#state{pending_send = undefined})};
+handle_info(
+    {'$socket', Socket, abort, {Ref, Reason}},
+    #state{socket = Socket, pending_send = {Ref, _From, _Data, _Dest}} = State
+) ->
+    {noreply, fail_pending_sends(Reason, State)};
 handle_info({'$socket', _Socket, select, Ref}, State) ->
     case maps:get(Ref, State#state.pending_selects, undefined) of
         undefined ->
@@ -272,7 +298,7 @@ handle_info({'DOWN', MonitorRef, process, ControllingProcess, _Info}, State) ->
             ?LOG_INFO("Controlling process ~p has terminated.  Stopping ~p.", [
                 ControllingProcess, ?MODULE
             ]),
-            {stop, normal, State};
+            {stop, normal, fail_pending_sends(closed, State)};
         _ ->
             {noreply, State}
     end;
@@ -299,6 +325,38 @@ proplist_to_map([Atom | T], Accum) when is_atom(Atom) ->
     proplist_to_map(T, Accum#{Atom => true});
 proplist_to_map([{K, V} | T], Accum) ->
     proplist_to_map(T, Accum#{K => V}).
+
+%% Keep the server responsive while preserving datagram order and boundaries.
+start_sendto(Data, Dest, From, State) ->
+    case socket:sendto(State#state.socket, Data, Dest, nowait) of
+        ok ->
+            gen_server:reply(From, ok),
+            next_sendto(State);
+        {select, {select_info, sendto, Ref}} ->
+            State#state{pending_send = {Ref, From, Data, Dest}};
+        Result ->
+            gen_server:reply(From, Result),
+            next_sendto(State)
+    end.
+
+next_sendto(State) ->
+    case queue:out(State#state.send_queue) of
+        {{value, {From, Data, Dest}}, Queue} ->
+            start_sendto(Data, Dest, From, State#state{pending_send = undefined, send_queue = Queue});
+        {empty, _Queue} ->
+            State#state{pending_send = undefined}
+    end.
+
+fail_pending_sends(Reason, State) ->
+    case State#state.pending_send of
+        {_Ref, From, _Data, _Dest} -> gen_server:reply(From, {error, Reason});
+        undefined -> ok
+    end,
+    lists:foreach(
+        fun({From, _Data, _Dest}) -> gen_server:reply(From, {error, Reason}) end,
+        queue:to_list(State#state.send_queue)
+    ),
+    State#state{pending_send = undefined, send_queue = queue:new()}.
 
 %% @private
 handle_active_recvfrom(State) ->
@@ -335,7 +393,7 @@ handle_active_recvfrom(State) ->
             State;
         {error, _} = E ->
             %% CAUTION: internal API
-            socket:nif_select_stop(Socket),
+            socket:nif_select_read_stop(Socket),
             ?LOG_INFO("unable to receive on pending select~n"),
             State#state.controlling_process ! {udp_error, WrappedSocket, E},
             State
@@ -353,7 +411,7 @@ handle_passive_recvfrom(State, From, Length, _Timeout) ->
             gen_server:reply(From, {ok, {Addr, Port, BinaryOrList}}),
             State;
         {error, _} = E ->
-            socket:nif_select_stop(Socket),
+            socket:nif_select_read_stop(Socket),
             ?LOG_INFO("unable to receive on pending select~n"),
             gen_server:reply(From, E),
             State
