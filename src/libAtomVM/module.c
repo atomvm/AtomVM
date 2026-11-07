@@ -923,6 +923,7 @@ static enum ModuleLoadResult module_build_imported_functions_table(Module *this_
         fprintf(stderr, "Cannot allocate memory while loading module (line: %i).\n", __LINE__);
         return MODULE_ERROR_FAILED_ALLOCATION;
     }
+    this_module->imported_funcs_count = functions_count;
 
     for (int i = 0; i < functions_count; i++) {
         int local_module_atom_index = READ_32_UNALIGNED(table_data + i * 12 + 12);
@@ -1315,6 +1316,27 @@ COLD_FUNC void module_destroy(Module *module)
 #endif
 
     free(module->labels);
+    if (module->imported_funcs) {
+        for (uint32_t i = 0; i < module->imported_funcs_count; i++) {
+            const struct ExportedFunction *func = module->imported_funcs[i];
+            if (func) {
+                switch (func->type) {
+                    case UnresolvedFunctionCall:
+                        free(EXPORTED_FUNCTION_TO_UNRESOLVED_FUNCTION_CALL(func));
+                        break;
+                    case ModuleFunction:
+#ifndef AVM_NO_JIT
+                    case ModuleNativeFunction:
+#endif
+                        free((void *) EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func));
+                        break;
+                    default:
+                        // BIF and NIF descriptors are borrowed from their registries.
+                        break;
+                }
+            }
+        }
+    }
     free(module->imported_funcs);
     free(module->literals_table);
     free(module->local_atoms_to_global_table);

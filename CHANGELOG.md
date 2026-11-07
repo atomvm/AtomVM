@@ -47,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed module teardown leaking unresolved and resolved imported function descriptors,
+  including native-code imports, without reading BEAM data already released by another module
 - Fixed TCP socket backend operations retaining completed receive and accept timers;
   infinite receives no longer create a 30-second timeout
 - Fixed use-after-free during VM shutdown when live socket owners still have
