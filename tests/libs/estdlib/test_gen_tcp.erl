@@ -25,6 +25,7 @@
 -include("etest.hrl").
 
 test() ->
+    ok = test_receive_timers(),
     ok = test_echo_server(),
     ok = test_echo_server(true),
     ok = test_listen_connect_parameters(),
@@ -34,6 +35,37 @@ test() ->
     ok = test_backpressured_send(drain),
     ok = test_backpressured_send(close),
     ok.
+
+test_receive_timers() ->
+    InitialTimers = timer_refs(),
+    Options = [{inet_backend, socket}, binary, {active, false}],
+    {ok, Listen} = gen_tcp:listen(0, Options),
+    {ok, {_, Port}} = inet:sockname(Listen),
+    {ok, Client} = gen_tcp:connect({127, 0, 0, 1}, Port, Options),
+    {ok, Peer} = gen_tcp:accept(Listen, 60000),
+    [] = timer_refs() -- InitialTimers,
+    lists:foreach(
+        fun(Timeout) ->
+            ok = gen_tcp:send(Client, <<31>>),
+            {ok, <<31>>} = gen_tcp:recv(Peer, 1, Timeout),
+            [] = timer_refs() -- InitialTimers
+        end,
+        [60000, infinity, 60000, infinity]
+    ),
+    {error, timeout} = gen_tcp:recv(Peer, 1, 10),
+    [] = timer_refs() -- InitialTimers,
+    ok = gen_tcp:send(Client, <<47>>),
+    {ok, <<47>>} = gen_tcp:recv(Peer, 1, infinity),
+    ok = gen_tcp:close(Client),
+    ok = gen_tcp:close(Peer),
+    ok = gen_tcp:close(Listen).
+
+%% Observe the public timer registry on AtomVM; BEAM uses native timers.
+timer_refs() ->
+    case erlang:system_info(machine) of
+        "ATOM" -> timer_manager:get_timer_refs();
+        _ -> []
+    end.
 
 %% A peer-observed prefix establishes that the large send is in progress.
 %% Nothing drains the rest until after recv has replied on the SAME socket.

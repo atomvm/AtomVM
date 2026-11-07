@@ -251,17 +251,12 @@ handle_call({accept, Timeout, AcceptingProc}, From, State) ->
         {accept, Timeout, AcceptingProc}, From, State
     ]),
     Ref = erlang:make_ref(),
-    case Timeout of
-        TimeoutMs when is_integer(TimeoutMs) andalso TimeoutMs >= 0 ->
-            erlang:send_after(TimeoutMs, self(), {timeout, Ref, From});
-        infinity ->
-            ok
-    end,
     case socket:nif_select_read(State#state.socket, Ref) of
         ok ->
             ?LOG_INFO("Starting accept select with ref ~p", [Ref]),
+            TimerRef = start_timer(Timeout, Ref, From),
             PendingSelects = State#state.pending_selects,
-            NewPendingSelects = PendingSelects#{Ref => {accept, From, AcceptingProc, Timeout}},
+            NewPendingSelects = PendingSelects#{Ref => {accept, From, AcceptingProc, TimerRef}},
             {noreply, State#state{pending_selects = NewPendingSelects}};
         {error, _Reason} = Error ->
             ?LOG_ERROR("An error occurred in select for accept ~p", [Error]),
@@ -288,21 +283,11 @@ handle_call({recv, Length, Timeout}, From, State) ->
             {reply, {error, einval}, State};
         _ ->
             Ref = erlang:make_ref(),
-            case Timeout of
-                TimeoutMs when is_integer(TimeoutMs) andalso TimeoutMs >= 0 ->
-                    ?LOG_DEBUG("setting timeout counter for TimeoutMs=~p on ref=~p", [
-                        TimeoutMs, Ref
-                    ]),
-                    erlang:send_after(TimeoutMs, self(), {timeout, Ref, From});
-                infinity ->
-                    %% TEST
-                    erlang:send_after(30000, self(), {timeout, Ref, From}),
-                    ok
-            end,
             case socket:nif_select_read(State#state.socket, Ref) of
                 ok ->
+                    TimerRef = start_timer(Timeout, Ref, From),
                     PendingSelects = State#state.pending_selects,
-                    NewPendingSelects = PendingSelects#{Ref => {passive, From, Length, Timeout}},
+                    NewPendingSelects = PendingSelects#{Ref => {passive, From, Length, TimerRef}},
                     ?LOG_INFO("Added pending select.  NewPendingSelects=~p", [NewPendingSelects]),
                     {noreply, State#state{pending_selects = NewPendingSelects}};
                 {error, _Reason} = Error ->
@@ -377,13 +362,13 @@ handle_info(
 ) ->
     {noreply, fail_pending_sends(Reason, State)};
 handle_info({'$socket', _Socket, select, Ref}, State) ->
-    %% TODO cancel timer
     case maps:get(Ref, State#state.pending_selects, undefined) of
         undefined ->
             ?LOG_WARNING("Unable to find select ref ~p in pending selects", [Ref]),
             %% select_stop?
             {noreply, State};
-        {accept, From, AcceptingProc, _Timeout} ->
+        {accept, From, AcceptingProc, TimerRef} ->
+            cancel_timer(TimerRef),
             ?LOG_INFO("Select ready for read on accept"),
             NewState = handle_accept(State, From, AcceptingProc),
             {noreply, NewState#state{
@@ -393,29 +378,33 @@ handle_info({'$socket', _Socket, select, Ref}, State) ->
             ?LOG_INFO("Select ready for read on active recv"),
             NewState = handle_active_recv(State),
             {noreply, NewState};
-        {passive, From, Length, Timeout} ->
+        {passive, From, Length, TimerRef} ->
+            cancel_timer(TimerRef),
             ?LOG_INFO("Select ready for read on passive recv"),
-            NewState = handle_passive_recv(State, From, Length, Timeout),
+            NewState = handle_passive_recv(State, From, Length),
             {noreply, NewState#state{
                 pending_selects = maps:remove(Ref, State#state.pending_selects)
             }}
     end;
 handle_info({'$socket', Socket, abort, {Ref, closed}}, State) ->
-    %% TODO cancel timer
     case maps:get(Ref, State#state.pending_selects, undefined) of
         undefined ->
             ?LOG_WARNING("Unable to find select ref ~p in pending selects", [Ref]),
             socket:nif_select_read_stop(Socket),
             {noreply, State};
-        {accept, From, _AcceptingProc, _Timeout} ->
+        {accept, From, _AcceptingProc, TimerRef} ->
+            cancel_timer(TimerRef),
             socket:nif_select_read_stop(Socket),
             gen_server:reply(From, {error, closed}),
-            {noreply, State};
+            {noreply, State#state{
+                pending_selects = maps:remove(Ref, State#state.pending_selects)
+            }};
         active ->
             WrappedSocket = {?GEN_TCP_MONIKER, self(), ?MODULE},
             State#state.controlling_process ! {tcp_closed, WrappedSocket},
             {noreply, State};
-        {passive, From, _Length, _Timeout} ->
+        {passive, From, _Length, TimerRef} ->
+            cancel_timer(TimerRef),
             socket:nif_select_read_stop(Socket),
             gen_server:reply(From, {error, closed}),
             {noreply, State#state{
@@ -455,11 +444,29 @@ handle_info(Info, State) ->
 %% @hidden
 terminate(Reason, State) ->
     ?LOG_INFO("Closing socket ~p for reason ~p", [State#state.socket, Reason]),
-    catch socket:close(State#state.socket).
+    catch socket:close(State#state.socket),
+    maps:foreach(
+        fun
+            (_Ref, active) -> ok;
+            (_Ref, {_Mode, _From, _Arg, TimerRef}) -> cancel_timer(TimerRef)
+        end,
+        State#state.pending_selects
+    ).
 
 %%
 %% Internal operations
 %%
+
+start_timer(infinity, _Ref, _From) ->
+    undefined;
+start_timer(Timeout, Ref, From) when is_integer(Timeout), Timeout >= 0 ->
+    erlang:send_after(Timeout, self(), {timeout, Ref, From}).
+
+cancel_timer(undefined) ->
+    ok;
+cancel_timer(TimerRef) ->
+    erlang:cancel_timer(TimerRef),
+    ok.
 
 %% @private
 proplist_to_map(PropList) ->
@@ -590,7 +597,7 @@ handle_active_recv(State) ->
     end.
 
 %% @private
-handle_passive_recv(State, From, Length, _Timeout) ->
+handle_passive_recv(State, From, Length) ->
     Socket = State#state.socket,
     %% CAUTION: internal API
     case socket:nif_recv(Socket, Length) of
