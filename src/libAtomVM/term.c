@@ -1191,10 +1191,40 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                 && ((opts & TermCompareExact) != TermCompareExact) && (map_key_nesting == 0)) {
                 avm_float_t t_float = term_conv_to_float(t);
                 avm_float_t other_float = term_conv_to_float(other);
-                if (t_float == other_float) {
+                int cmp = (t_float > other_float) - (t_float < other_float);
+                // Below this boundary every integer is exactly representable. Above it,
+                // equal floats can hide different integers, so compare the original
+                // integer with the float's exact (integral) value instead.
+                double exact_limit = sizeof(avm_float_t) == sizeof(float) ? 0x1p24 : 0x1p53;
+                if (cmp == 0 && fabs(t_float) >= exact_limit) {
+                    term integer = type_t == TERM_TYPE_INDEX_INTEGER ? t : other;
+                    intn_digit_t integer_buf[INTN_INT64_LEN];
+                    const intn_digit_t *integer_digits;
+                    size_t integer_len;
+                    intn_integer_sign_t integer_sign;
+                    if (term_is_bigint(integer)) {
+                        term_to_bigint(integer, &integer_digits, &integer_len, &integer_sign);
+                    } else {
+                        intn_from_int64(term_maybe_unbox_int64(integer), integer_buf, &integer_sign);
+                        integer_digits = integer_buf;
+                        integer_len = INTN_INT64_LEN;
+                    }
+                    // Matching an integer's rounded value bounds the float to the
+                    // integer range, with at most one extra digit for rounding up.
+                    intn_digit_t float_digits[INTN_MAX_RES_LEN];
+                    intn_integer_sign_t float_sign;
+                    int float_len = intn_from_double(t_float, float_digits, &float_sign);
+                    assert(float_len >= 0);
+                    cmp = intn_cmp(integer_digits, integer_len, integer_sign,
+                        float_digits, float_len, float_sign);
+                    if (type_t == TERM_TYPE_INDEX_FLOAT) {
+                        cmp = -cmp;
+                    }
+                }
+                if (cmp == 0) {
                     CMP_POP_AND_CONTINUE();
                 } else {
-                    result = (t_float > other_float) ? TermGreaterThan : TermLessThan;
+                    result = cmp > 0 ? TermGreaterThan : TermLessThan;
                     break;
                 }
             } else {

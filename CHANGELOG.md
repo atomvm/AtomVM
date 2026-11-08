@@ -47,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed non-exact comparisons of large integers and floats losing integer precision,
+  making unequal numbers compare as equal or in the wrong order
 - Fixed `0.0` and `-0.0` comparing as exactly equal, selecting the wrong pattern clause
   and collapsing into a single map key
 - Fixed maps decoded by `binary_to_term/1,2` and received over distribution keeping the
