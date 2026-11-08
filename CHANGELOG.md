@@ -133,6 +133,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and collapsing into a single map key
 - Fixed non-exact comparisons of large integers and floats losing integer precision,
   making unequal numbers compare as equal or in the wrong order
+- Fixed large integers rounding incorrectly when converted to floats, affecting
+  `float/1` and floating-point arithmetic such as division
 
 ## [0.7.0-beta.0] - 2026-09-28
 
