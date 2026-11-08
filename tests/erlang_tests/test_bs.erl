@@ -118,6 +118,7 @@ start() ->
     ok = test_bs_variable_size_bitstring(),
     ok = test_negative_dynamic_size(),
     ok = test_oversized_dynamic_size(),
+    ok = test_noninteger_dynamic_size(),
     ok = test_construction_size_overflow(),
     ok = test_wide_integer_construction(),
     ok = test_float(),
@@ -1166,6 +1167,22 @@ test_oversized_dynamic_size() ->
     nope = skip_unit64(id(1 bsl 61), B),
     nope = int_unit64(id(1 bsl 61), B),
     nope = bin_unit8(id(1 bsl 61), B),
+    ok.
+
+test_noninteger_dynamic_size() ->
+    B = id(<<63, 248, 0, 0, 0, 0, 0, 0>>),
+    [
+        begin
+            nope = skip_unit8(id(N), B),
+            nope = int_unit64(id(N), B),
+            nope = float_unit64(id(N), B),
+            nope = bin_unit8(id(N), B)
+        end
+     || N <- [bad, 1.0, [], {}, <<>>]
+    ],
+    <<248, 0, 0, 0, 0, 0, 0>> = skip_unit8(id(1), B),
+    16#3FF8000000000000 = int_unit64(id(1), B),
+    {<<63>>, <<248, 0, 0, 0, 0, 0, 0>>} = bin_unit8(id(1), B),
     ok.
 
 % Construction (bs_create_bin) with a size whose scaling by the segment unit

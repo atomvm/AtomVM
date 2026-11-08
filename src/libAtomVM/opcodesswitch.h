@@ -4309,7 +4309,7 @@ schedule_in:
                 DECODE_LITERAL(flags_value, pc)
 
                 VERIFY_IS_MATCH_STATE(src, "bs_skip_bits2", 0);
-                VERIFY_IS_ANY_INTEGER(size, "bs_skip_bits2", 0);
+                VERIFY_IS_ANY_INTEGER(size, "bs_skip_bits2", fail);
                 // Ignore flags value as skipping bits is the same whatever the endianness
                 TRACE("bs_skip_bits2/5, fail=%u src=%p size=0x%lx unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned long) term_to_int(size), (unsigned) unit, (int) flags_value);
 
@@ -4392,7 +4392,7 @@ schedule_in:
                 DECODE_LITERAL(flags_value, pc)
 
                 VERIFY_IS_MATCH_STATE(src, "bs_get_integer", 0);
-                VERIFY_IS_ANY_INTEGER(size, "bs_get_integer", 0);
+                VERIFY_IS_ANY_INTEGER(size, "bs_get_integer", fail);
 
                 TRACE("bs_get_integer2/7, fail=%u src=%p live=%u size=%u unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned) term_to_int(size), (unsigned) live, (unsigned) unit, (int) flags_value);
 
@@ -4469,7 +4469,7 @@ schedule_in:
                 DECODE_LITERAL(flags_value, pc);
 
                 VERIFY_IS_MATCH_STATE(src, "bs_get_float", 0);
-                VERIFY_IS_ANY_INTEGER(size, "bs_get_float", 0);
+                VERIFY_IS_ANY_INTEGER(size, "bs_get_float", fail);
 
                 TRACE("bs_get_float2/7, fail=%u src=%p unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned) unit, (int) flags_value);
 
@@ -4570,7 +4570,7 @@ schedule_in:
                     size_bits = remaining_bits;
                 } else {
                     TRACE("bs_get_binary2: size is neither an integer nor the atom `all`\n");
-                    RAISE_ERROR(BADARG_ATOM);
+                    JUMP_TO_ADDRESS(mod->labels[fail]);
                 }
 
                 TRACE("bs_get_binary2/7, fail=%u src=%p live=%u unit=%u\n", (unsigned) fail, (void *) bs_bin, (unsigned) live, (unsigned) unit);
