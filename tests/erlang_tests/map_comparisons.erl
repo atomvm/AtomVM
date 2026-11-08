@@ -23,6 +23,7 @@
 -export([start/0]).
 
 start() ->
+    ok = signed_zero(),
     A = fact(4, 1, 1),
     B = fact(4, 1.0, 1.0),
 
@@ -52,6 +53,57 @@ start() ->
         test(not (#{a => #{x => y, A => a}} =:= #{a => #{x => y, B => a}})) * 8388608 +
         test(not (#{a => A, b => A} > #{a => B, b => B})) * 16777216 +
         test(#{a => A, b => A} == #{a => B, b => B}) * 33554432.
+
+%% OTP 27 introduced distinct signed zeros in exact comparisons and map keys.
+-if(?OTP_RELEASE >= 27).
+signed_zero() ->
+    Positive = id(0.0),
+    Negative = id(-0.0),
+    true = Positive == Negative,
+    true = Negative == Positive,
+    false = Positive /= Negative,
+    false = Positive =:= Negative,
+    false = Negative =:= Positive,
+    true = Positive =/= Negative,
+    true = Positive =:= id(0.0),
+    true = Negative =:= id(-0.0),
+    false = Positive < Negative,
+    false = Positive > Negative,
+    false = Negative < Positive,
+    false = Negative > Positive,
+    true = Positive =< Negative,
+    true = Positive >= Negative,
+    false = {Positive} =:= {Negative},
+    false = [Positive] =:= [Negative],
+    positive_zero = zero_pattern(Positive),
+    negative_zero = zero_pattern(Negative),
+
+    Map = #{Positive => positive, Negative => negative},
+    2 = map_size(Map),
+    #{Positive := positive, Negative := negative} = Map,
+    Updated = Map#{Negative := updated},
+    #{Positive := positive, Negative := updated} = Updated,
+    2 = map_size(Updated),
+    false = #{Positive => value} == #{Negative => value},
+    true = #{Negative => value} < #{Positive => value},
+    true = #{Positive => value} > #{Negative => value},
+    true = #{value => Positive} == #{value => Negative},
+    false = #{value => Positive} =:= #{value => Negative},
+    %% Even values inside a map used as a key must compare exactly.
+    false = #{#{value => Positive} => value} == #{#{value => Negative} => value},
+    true = #{#{value => Negative} => value} < #{#{value => Positive} => value},
+    ok.
+
+zero_pattern(+0.0) -> positive_zero;
+zero_pattern(-0.0) -> negative_zero;
+zero_pattern(1.0) -> one;
+zero_pattern(_) -> other.
+
+id(X) -> X.
+-else.
+signed_zero() ->
+    ok.
+-endif.
 
 test(true) ->
     1;

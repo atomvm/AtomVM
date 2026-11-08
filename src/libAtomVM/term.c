@@ -33,6 +33,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <inttypes.h>
+#include <math.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -1099,6 +1100,12 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                         avm_float_t t_float = term_to_float(t);
                         avm_float_t other_float = term_to_float(other);
                         if (t_float == other_float) {
+                            // Exact comparisons and map keys distinguish -0.0 from +0.0.
+                            if (((opts & TermCompareExact) || (map_key_nesting > 0))
+                                && (signbit(t_float) != signbit(other_float))) {
+                                result = signbit(t_float) ? TermLessThan : TermGreaterThan;
+                                goto unequal;
+                            }
                             CMP_POP_AND_CONTINUE();
                             break;
                         } else {
