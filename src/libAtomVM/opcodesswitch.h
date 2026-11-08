@@ -4483,11 +4483,14 @@ schedule_in:
                     TRACE("bs_get_float2: size is negative or exceeds the remaining capacity\n");
                     JUMP_TO_ADDRESS(mod->labels[fail]);
                 }
-                // both bounded by the remaining capacity, so they fit in an avm_int_t
-                avm_int_t size_val = term_to_int(size);
+                // bounded by the remaining capacity, so it fits in an avm_int_t
                 avm_int_t increment = (avm_int_t) increment_bits;
                 bool status;
-                switch (size_val) {
+                switch (increment) {
+                    case 0:
+                        value = 0.0;
+                        status = true;
+                        break;
                     case 16:
                         status = bitstring_extract_f16(bs_bin, bs_offset, increment, flags_value, &value);
                         break;

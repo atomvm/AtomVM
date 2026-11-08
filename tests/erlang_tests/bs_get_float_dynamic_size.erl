@@ -26,7 +26,7 @@
 -compile([no_bs_match]).
 -endif.
 
--export([start/0]).
+-export([start/0, ext_id/1]).
 
 start() ->
     %% Test bs_get_float2 with runtime-variable size.
@@ -34,6 +34,18 @@ start() ->
     ok = test_float64_dynamic(Bin64, id(64)),
     Bin32 = id(<<3.14:32/float>>),
     ok = test_float32_dynamic(Bin32, id(32)),
+    {1.5, <<7:3>>} = match_float(id(<<62, 0, 7:3>>), id(8)),
+    {1.5, <<7:3>>} = match_float(id(<<63, 192, 0, 0, 7:3>>), id(16)),
+    {1.5, <<7:3>>} = match_float(id(<<63, 248, 0, 0, 0, 0, 0, 0, 7:3>>), id(32)),
+    {1.5, <<3:2>>} = match_float_little(id(<<5:3, 0, 62, 3:2>>), id(8)),
+    {1.5, <<3:2>>} = match_float_little(id(<<5:3, 0, 0, 192, 63, 3:2>>), id(16)),
+    {1.5, <<3:2>>} = match_float_little(id(<<5:3, 0, 0, 0, 0, 0, 0, 248, 63, 3:2>>), id(32)),
+    {+0.0, <<>>} = match_float(id(<<>>), id(0)),
+    {+0.0, <<129, 7:3>>} = match_float(id(<<129, 7:3>>), id(0)),
+    {+0.0, <<3:2>>} = match_float_little(id(<<5:3, 3:2>>), id(0)),
+    nope = match_float(id(<<62>>), id(8)),
+    nope = match_float(id(<<0, 0, 0, 0>>), id(12)),
+    nope = match_float(id(<<0, 0, 0, 0>>), id(-1)),
     0.
 
 test_float64_dynamic(Bin, Size) ->
@@ -48,4 +60,18 @@ test_float32_dynamic(Bin, Size) ->
     true = (F < 3.15),
     ok.
 
-id(X) -> X.
+match_float(Bin, Size) ->
+    case Bin of
+        <<F:Size/float-unit:2, Rest/bitstring>> -> {F, Rest};
+        _ -> nope
+    end.
+
+match_float_little(Bin, Size) ->
+    case Bin of
+        <<5:3, F:Size/float-little-unit:2, Rest/bitstring>> -> {F, Rest};
+        _ -> nope
+    end.
+
+id(X) -> ?MODULE:ext_id(X).
+
+ext_id(X) -> X.
