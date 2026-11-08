@@ -131,6 +131,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not chardata, such as `unicode:characters_to_list(foo)`; they now raise `badarg`
 - Fixed `0.0` and `-0.0` comparing as exactly equal, selecting the wrong pattern clause
   and collapsing into a single map key
+- Fixed non-exact comparisons of large integers and floats losing integer precision,
+  making unequal numbers compare as equal or in the wrong order
 
 ## [0.7.0-beta.0] - 2026-09-28
 
