@@ -2,7 +2,7 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 
 -module(differential).
--export([compare/2, arithmetic/3, maps/3, bits/4]).
+-export([compare/2, arithmetic/3, maps/3, bits/4, float_bits/4]).
 
 %% Inputs cross a module boundary to prevent constant-folded operations.
 compare(A, B) ->
@@ -22,10 +22,8 @@ arithmetic(fdiv, A, B) -> A / B.
 maps(A, B, Size) ->
     Base = fill(Size, #{}),
     M = Base#{A => first, B => second},
-    {M, map_size(M), maps:find(A, M), maps:find(B, M),
-        maps:remove(A, M), M#{B := updated},
-        compare(#{A => value}, #{B => value}),
-        compare(#{value => A}, #{value => B})}.
+    {M, map_size(M), maps:find(A, M), maps:find(B, M), maps:remove(A, M), M#{B := updated},
+        compare(#{A => value}, #{B => value}), compare(#{value => A}, #{value => B})}.
 
 fill(0, Map) -> Map;
 fill(N, Map) -> fill(N - 1, Map#{N => N * 3}).
@@ -38,3 +36,13 @@ bits(Value, Width, Offset, little) ->
     Bits = <<0:Offset, Value:Width/signed-little, 5:3>>,
     <<_:Offset, Read:Width/signed-little, Tail/bitstring>> = Bits,
     {bit_size(Bits), Read, Tail, Bits}.
+
+%% Return raw encodings, including overflow to infinity, without decoding floats.
+float_bits(Value, Width, Offset, big) ->
+    Bits = <<5:Offset, Value:Width/float-big, 3:3>>,
+    <<_:Offset, Encoded:Width/bitstring, _:3>> = Bits,
+    {Bits, Encoded};
+float_bits(Value, Width, Offset, little) ->
+    Bits = <<5:Offset, Value:Width/float-little, 3:3>>,
+    <<_:Offset, Encoded:Width/bitstring, _:3>> = Bits,
+    {Bits, Encoded}.

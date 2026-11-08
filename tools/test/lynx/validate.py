@@ -20,106 +20,8 @@ from pathlib import Path
 
 # Keep local runs from leaving imported bytecode in the source checkout.
 sys.dont_write_bytecode = True
+from fixtures import cases
 from generated import candidates, expression, generate
-
-
-def cases():
-    selected = []
-
-    def add(module, function, *args):
-        expression = f"{module}:{function}({','.join(args)})"
-        selected.append(expression)
-
-    for function in ["integers", "floats", "bitstrings", "tuples", "maps", "pooled_nested"]:
-        add("literal", function)
-    add("literal", "computed_maps", "1.0", "{nested,7}")
-    for value in ["[]", "[5,-12,19]", "[1.5,2]", "[bad]", "[1|2]"]:
-        add("sum", "sum", value)
-    add("sum", "sum_empty_ensures")
-    for value in ["-(1 bsl 60)", "0", "1 bsl 60"]:
-        add("sum", "sum_singleton_requires", value)
-        add("sum", "sum_singleton_ensures", value)
-    for value in ["1.5", "not_an_integer"]:
-        add("sum", "sum_singleton_requires", value)
-    for function in ["odd", "even", "first", "second"]:
-        add("mutual", function, "[a,b,c]")
-    add("mutual", "triples", "[1,2]", "[a]", "[x,y]")
-    for function in ["captured_closures", "apply_calls", "sequence_calls", "qualified_capture"]:
-        add("functions", function, "-7")
-    add("functions", "calls_by_name", "functions", "9")
-    selected.append("{A,B,M}=functions:references(), {A,B,map_size(M)}")
-    for value in ["1", "1.0", "0.0", "-0.0", "-1.5", "{0.1,[5.0e-324]}"]:
-        add("patterns", "floats", value)
-    selected.append(
-        "P=element(2,literal:computed_tuples(0.0)), "
-        "N=element(2,literal:computed_tuples(-0.0)), "
-        "{P==N,P=:=N,map_size(#{P=>positive,N=>negative}),"
-        "#{#{value=>P}=>key}==#{#{value=>N}=>key}}"
-    )
-    add("patterns", "map_duplicate", "a", "a", "#{a=>{ok,9}}")
-    add("patterns", "map_nested", "{tag,[#{a=>#{b=>7}}]}")
-    for value in ["#{a=>0,b=>3}", "#{a=>2,b=>3}", "#{a=>0,b=>no}", "#{}"]:
-        add("patterns", "map_grouped", value)
-    for function, value in [("integer", "1.0"), ("binary", "<<1:1>>"), ("bitstring", "<<1:1>>")]:
-        add("guard_patterns", function, value)
-    for left, right in [("0", "bad"), ("1", "[]"), ("[]", "not_boolean"), ("1", "bad")]:
-        add("guard_patterns", "short_circuit", left, right)
-    for function in ["scope", "handler_scope", "reraised", "after_effect", "after_raises", "success_clause", "nested"]:
-        for value in ["1", "bad"]:
-            add("tries", function, value)
-    selected.append("{C,R,S}=tries:caught(bad), {C,R,is_list(S)}")
-    add("tries", "effectful")
-    add("higher_order", "map", "[1,-4,8]", "fun functions:inc/1")
-    add("higher_order", "proper_list", "[1|2]")
-    for function, args in [
-        ("comprehension_filtered", ["[{a,1},{2,3},skip,{b,4}]"]),
-        ("comprehension_lists", ["[1,2]", "[a,b,c]"]),
-        ("comprehension_lists3", ["[1,2]", "[a]", "[x,y]"]),
-        ("comprehension_zip", ["[1]", "[a,b]"]),
-        ("map_comprehension", ["[{a,1},{a,2},{b,3}]"]),
-        ("comprehension_map_list", ["#{a=>1,b=>2}", "[x,y]"]),
-        ("bits_generator", ["<<7:3,1:2,2:3,3:2>>"]),
-        ("binary_generator_strict", ["<<1,2,3>>"]),
-        ("binary_generator", ["<<65,226,130,172>>"]),
-        ("utf8_generator", ["<<65,226,130,172>>"]),
-        ("binary_comprehension", ["[1,2,15]"]),
-        ("binary_zip", ["<<1,2>>", "<<3:4,4:4>>"]),
-        ("self_reference", []),
-    ]:
-        add("named_locals", function, *args)
-    selected.append("lists:sort(named_locals:map_generator(#{b=>2,a=>1}))")
-    for function in ["integer_big", "integer_signed_big", "integer_little", "integer_signed_little"]:
-        for size in ["0", "12", "-1"]:
-            add("binary_construction", function, "-257", size)
-    for function in ["float16", "float32", "float_mixed"]:
-        add("binary_construction", function, "-2.25")
-    for function in ["utf8", "utf16_little", "utf32_big", "utf_mixed"]:
-        for value in ["16#1f600", "16#d800"]:
-            add("binary_construction", function, value)
-    for function, args in [
-        ("partial_literal", ["<<5:3>>"]),
-        ("integers", ["<<200:8,-257:12/signed-big,1023:12/signed-little>>"]),
-        ("integer_sized", ["<<12:8,-257:12/signed-little,5:3>>"]),
-        ("float16", ["<<16#3e00:16>>"]),
-        ("float32", ["<<1.5:32/float-big,-2.25:32/float-little>>"]),
-        ("binary_fixed", ["2", "<<3:3,1,2>>"]),
-        ("utf8", ["<<255>>"]),
-        ("utf8", ["<<226,130,172,1:1>>"]),
-        ("utf16_little", ["<<16#3d,16#d8,0,16#de>>"]),
-    ]:
-        add("bitstring_matching", function, *args)
-    selected.extend([
-        "self()!ignored, self()!{tag,9}, {receives:selective(tag),receives:plain()}",
-        "self()!{tag,<<1>>}, receives:guarded(tag)",
-        "self()!{self(),9}, receives:self_guard()",
-        "receives:poll()",
-        "self()!{ok,9}, receives:poll()",
-        "receives:timed(1)",
-        "receives:timed(bad)",
-        "self()!{ok,tag}, self()!tag, receives:nested()",
-        "self()!{1,2}, self()!{3,3}, {receives:repeated(),receives:plain()}",
-    ])
-    return selected
 
 
 def command(argv, cwd, log, timeout=600):
@@ -179,8 +81,8 @@ def validate(args, work):
             if "operation" in entry:
                 entry["expression"] = expression(entry)
     else:
-        selected = ([{"expression": value} for value in cases()] if lynx else [])
-        selected += generate(args.seed, args.generated)
+        selected = cases() if lynx else []
+        selected += generate(args.seed, args.generated, args.float_encoding)
     if not selected:
         raise RuntimeError("No cases selected; use --generated, --replay, or --lynx")
     print(f"Seed {args.seed}; {len(selected)} cases; build {build}", flush=True)
@@ -257,7 +159,11 @@ def validate(args, work):
         failures = json.loads((work / "failures.json").read_text())
         if args.shrink:
             shrink(args, work, failures[0])
-        raise RuntimeError(f"{summary['failed']} differential failures; replay {work / 'failures.json'}")
+    if summary["failed"] or summary["unverified"] or (summary["uncovered"] and not args.replay):
+        raise RuntimeError(
+            f"{summary['failed']} differential failures, {summary['unverified']} unverified cases, "
+            f"{summary['uncovered']} uncovered exports; see {work / 'summary.json'}"
+        )
 
 
 def shrink(args, work, failure):
@@ -303,6 +209,7 @@ def main():
     parser.add_argument("--lynx", type=Path, help="Also check fixture laws/calls from this Lynx checkout")
     parser.add_argument("--seed", type=int, default=1, help="Reproducible generator seed (default: 1)")
     parser.add_argument("--generated", type=int, default=1000, help="Generated cases (default: 1000; 0 for fixtures only)")
+    parser.add_argument("--float-encoding", action="store_true", help="Focus generated cases on float16/32 encoding boundaries")
     parser.add_argument("--replay", type=Path, help="Replay cases.json, failures.json, or minimized.json instead of generating")
     parser.add_argument("--shrink", action="store_true", help="Try up to 30 reductions of the first generated failure")
     parser.add_argument(
