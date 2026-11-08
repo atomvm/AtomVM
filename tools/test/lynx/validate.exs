@@ -21,7 +21,9 @@ case System.argv() do
 
         File.write!(Path.join(work, "#{module}.beam"), beam)
         {:module, ^module} = :code.load_binary(module, String.to_charlist(source), beam)
-        {:ok, {^module, [attributes: attributes]}} = :beam_lib.chunks(beam, [:attributes])
+
+        {:ok, {^module, [attributes: attributes, exports: exports]}} =
+          :beam_lib.chunks(beam, [:attributes, :exports])
 
         checked =
           if Keyword.has_key?(attributes, :law) do
@@ -35,7 +37,12 @@ case System.argv() do
             0
           end
 
-        {Atom.to_string(module), count + checked}
+        exports =
+          for {name, arity} <- exports,
+              name != :module_info,
+              do: [Atom.to_string(module), Atom.to_string(name), arity]
+
+        {%{name: Atom.to_string(module), exports: exports}, count + checked}
       end)
 
     if mode == "prepare" do
@@ -46,33 +53,32 @@ case System.argv() do
 
     true = :code.add_patha(String.to_charlist(work))
 
-    expected =
+    references =
       Enum.map(cases, fn entry ->
         task = Task.async(fn -> apply(String.to_atom(entry["module"]), :actual, []) end)
 
-        value =
-          case Task.yield(task, String.to_integer(timeout)) do
-            {:ok, value} ->
-              value
+        case Task.yield(task, String.to_integer(timeout)) do
+          {:ok, {:exception, :error, :undef}} ->
+            %{value: nil, error: "OTP reference called an undefined function"}
 
-            nil ->
-              Task.shutdown(task, :brutal_kill)
-              raise "OTP reference timed out: #{entry["expression"]}"
-          end
+          {:ok, value} ->
+            %{value: Base.encode64(:erlang.term_to_binary(value)), error: nil}
 
-        if value == {:exception, :error, :undef} do
-          raise "OTP reference called an undefined function: #{entry["expression"]}"
+          nil ->
+            Task.shutdown(task, :brutal_kill)
+            IO.puts("UNVERIFIED OTP reference timed out: #{entry["expression"]}")
+            %{value: nil, error: "OTP reference timed out"}
         end
-
-        Base.encode64(:erlang.term_to_binary(value))
       end)
 
     File.write!(
       Path.join(work, "manifest.json"),
       JSON.encode!(%{
-        fixtures: modules,
+        fixtures: Enum.map(modules, & &1.name),
+        exports: Enum.flat_map(modules, & &1.exports),
         laws: laws,
-        expected: expected,
+        expected: Enum.map(references, & &1.value),
+        oracle_errors: Enum.map(references, & &1.error),
         otp: :erlang.system_info(:otp_release) |> List.to_string()
       })
     )
@@ -85,45 +91,74 @@ case System.argv() do
     true = length(cases) == length(actuals) and length(cases) == length(manifest["expected"])
     decode = fn value -> value |> Base.decode64!() |> :erlang.binary_to_term() end
 
-    failures =
-      Enum.zip([cases, manifest["expected"], actuals])
-      |> Enum.flat_map(fn {entry, encoded, actual} ->
-        expected = decode.(encoded)
+    results =
+      Enum.zip([cases, manifest["expected"], actuals, manifest["oracle_errors"]])
+      |> Enum.map(fn
+        {entry, nil, actual, error} ->
+          IO.puts("UNVERIFIED #{entry["expression"]}: #{error}")
+          %{status: :unverified, case: entry, message: error, actual: actual}
 
-        {actual, value} =
-          if actual["status"] == "ok" do
-            try do
-              {actual, decode.(actual["value"])}
-            rescue
-              ArgumentError ->
-                {%{"status" => "error", "message" => "Invalid serialized result"}, nil}
+        {entry, encoded, actual, nil} ->
+          expected = decode.(encoded)
+
+          {actual, value} =
+            if actual["status"] == "ok" do
+              try do
+                {actual, decode.(actual["value"])}
+              rescue
+                ArgumentError ->
+                  {%{"status" => "error", "message" => "Invalid serialized result"}, nil}
+              end
+            else
+              {actual, nil}
             end
-          else
-            {actual, nil}
-          end
 
-        if actual["status"] == "ok" and value === expected do
-          unless Map.has_key?(entry, "operation"), do: IO.puts("PASS #{entry["expression"]}")
-          []
-        else
-          IO.puts("FAIL #{entry["expression"]}")
-          IO.puts("  expected: #{inspect(expected, limit: 30)}")
-          value = if actual["status"] == "ok", do: value, else: actual
-          IO.puts("  actual:   #{inspect(value, limit: 30)}")
-          [%{case: entry, expected: encoded, actual: actual}]
-        end
+          if actual["status"] == "ok" and value === expected do
+            unless Map.has_key?(entry, "operation"), do: IO.puts("PASS #{entry["expression"]}")
+            %{status: :passed, case: entry}
+          else
+            IO.puts("FAIL #{entry["expression"]}")
+            IO.puts("  expected: #{inspect(expected, limit: 30)}")
+            value = if actual["status"] == "ok", do: value, else: actual
+            IO.puts("  actual:   #{inspect(value, limit: 30)}")
+            %{status: :failed, case: entry, expected: encoded, actual: actual}
+          end
       end)
+
+    # This is direct-call coverage, not instrumentation or branch coverage.
+    coverage =
+      Enum.map(manifest["exports"], fn export ->
+        calls = Enum.filter(results, &(&1.case["fixture"] == export))
+
+        %{
+          export: export,
+          cases: length(calls),
+          passed: Enum.count(calls, &(&1.status == :passed)),
+          failed: Enum.count(calls, &(&1.status == :failed)),
+          unverified: Enum.count(calls, &(&1.status == :unverified))
+        }
+      end)
+
+    uncovered = Enum.filter(coverage, &(&1.cases == 0))
+    for entry <- uncovered, do: IO.puts("UNCOVERED #{inspect(entry.export)}")
+    failures = Enum.filter(results, &(&1.status == :failed))
+    unverified = Enum.filter(results, &(&1.status == :unverified))
 
     summary = %{
       laws: manifest["laws"],
-      passed: length(cases) - length(failures),
-      failed: length(failures)
+      passed: Enum.count(results, &(&1.status == :passed)),
+      failed: length(failures),
+      unverified: length(unverified),
+      uncovered: length(uncovered)
     }
 
     File.write!(Path.join(work, "failures.json"), JSON.encode!(failures))
+    File.write!(Path.join(work, "unverified.json"), JSON.encode!(unverified))
+    File.write!(Path.join(work, "coverage.json"), JSON.encode!(coverage))
     File.write!(Path.join(work, "summary.json"), JSON.encode!(summary))
 
     IO.puts(
-      "#{summary.laws} laws checked; #{summary.passed} matched OTP; #{summary.failed} failed"
+      "#{summary.laws} laws checked; #{summary.passed} matched OTP; #{summary.failed} failed; " <>
+        "#{summary.unverified} unverified; #{summary.uncovered} uncovered exports"
     )
 end

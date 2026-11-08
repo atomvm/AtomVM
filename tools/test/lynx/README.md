@@ -12,7 +12,7 @@ python3 tools/test/lynx/validate.py --build build --seed 1 --generated 1000 \
   --output /tmp/atomvm-differential-1 --shrink
 ```
 
-Requires Python 3, `erl`, `erlc`, and `elixir` on PATH. Lynx, Lean, Mix, and
+Requires Python 3.9+, `erl`, `erlc`, and `elixir` on PATH. Lynx, Lean, Mix, and
 AtomVM's `spawn_executable` support are **not required** for generated tests.
 The runner installs nothing, builds no AtomVM targets, and edits no repository
 sources. Validation currently uses OTP 29. A nonzero exit means a mismatch,
@@ -20,9 +20,9 @@ runtime error/timeout, or a failed prerequisite/reference/proof check.
 
 ## Generated inputs
 
-The default is 1,000 cases, reproducible with `--seed`. Ten fixed boundary cases
+The default is 1,000 cases, reproducible with `--seed`. Sixteen fixed boundary cases
 precede seeded exploration so short runs still exercise known dangerous edges.
-This generates inputs to four operation families, not arbitrary Erlang programs:
+This generates inputs to five operation families, not arbitrary Erlang programs:
 
 - Numeric comparison: all eight equality/order operators, signed zeros,
   subnormal/extreme finite floats, and integer/float pairs around precision and
@@ -35,6 +35,10 @@ This generates inputs to four operation families, not arbitrary Erlang programs:
 - Bitstrings: signed big/little-endian construction and matching at varied bit
   offsets and widths through 255 bits, including zero-width and invalid-size
   controls. Full bitstrings and decoded results are compared.
+- Float encoding: float16/32 halfway values and their adjacent double values,
+  subnormal/normal and overflow boundaries, signed zero, both signs and byte
+  orders, and aligned/unaligned segments. Full bitstrings and extracted payload
+  bytes are compared, without decoding floats that could hide rounding errors.
 
 Inputs cross a module boundary before operations execute, preventing OTP's
 compiler from precomputing the expressions being tested. OTP and AtomVM use the
@@ -43,6 +47,26 @@ each target case runs in a separate AtomVM process with a timeout. Serialized
 results are compared **on OTP**, so AtomVM's own comparator cannot hide a bug.
 Exceptions compare class/reason, not stack frames. Standalone generated tests
 use AtomVM's bundled standard library, without packaging OTP's `lists.beam`.
+
+## Focused float encoding checks
+
+```sh
+python3 tools/test/lynx/validate.py --build build --float-encoding \
+  --seed 1 --generated 256 --output /tmp/atomvm-float-encoding
+```
+
+This mode starts with 189 fixed encoding/error cases, then samples those values
+with seeded offsets and byte orders. Use at least 189 cases for the entire fixed
+matrix; a six-case smoke run includes float16's `6546.0`, `1.0e-6`, and
+`6546.0001`, plus float32 even/odd and underflow ties. These detect the known
+float16 rounding defect fixed by [PR #2457](https://github.com/atomvm/AtomVM/pull/2457).
+The regular mixed generator includes those six smoke cases too.
+
+Both modes use runtime arguments, including a dynamic float-segment width.
+Overflow is checked as infinity's **encoded bytes**, not by constructing an OTP
+infinity term. Invalid widths compare exception class/reason. Encoding failures
+are neither skipped nor allowlisted: an unfixed runtime should exit nonzero.
+`--shrink` reduces the float value while preserving width, offset, and byte order.
 
 ## Replay, shrinking, and evidence
 
@@ -59,6 +83,10 @@ python3 tools/test/lynx/validate.py --build build \
   --replay /tmp/atomvm-differential-1/failures.json
 ```
 
+Seeds reproduce a given generator revision; use saved case files to compare
+builds across generator changes. `--replay` overrides generated-case selection,
+including `--float-encoding`.
+
 `--shrink` attempts at most 30 reductions of the first generated failure and
 writes `minimized.json`. It simplifies numbers and nested keys and reruns each
 candidate against both real runtimes; compilation/oracle errors are not accepted
@@ -69,11 +97,12 @@ Replay files are trusted local input: they contain Erlang expressions to execute
 
 ## Optional Lynx checks
 
-Also check laws and selected calls from an existing
+Also check laws and a boundary-driven call corpus from an existing
 [Lynx](https://github.com/josevalim/lynx) checkout:
 
 ```sh
-python3 tools/test/lynx/validate.py --lynx ../lynx --build build --generated 0
+python3 tools/test/lynx/validate.py --lynx ../lynx --build build --generated 0 \
+  --output /tmp/atomvm-lynx-fixtures
 ```
 
 With `--lynx`, `mix` and `lake` must also be on PATH with the Elixir/Lean versions
@@ -93,13 +122,54 @@ This additional mode:
    not stack frames. Cases returning references compare observable properties,
    not runtime-specific identities.
 
-The 125 selected fixture calls cover numeric literals, signed zero, nested maps, recursion,
-closures, exceptions, comprehensions, bitstrings, UTF, and selective receive.
-Every selected case must match; failures and timeouts produce a nonzero exit.
-The known zero-width generator hangs and host executable-process ports are not
-in this selected corpus. This is not exhaustive fixture coverage or a proof of
-the AtomVM implementation. Lean's unbounded integers also differ from AtomVM's
-finite integer capacity.
+The corpus contains **2,118 calls covering all 191 exports in 12 fixture modules**
+at the pinned revision. It includes:
+
+- Literal pooling, numeric/map-key boundaries, recursive base/step/error cases,
+  asymmetric nested traversals, closure captures, dynamic calls, and observable
+  process-dictionary effects.
+- Every type guard, with matching and nonmatching term types; repeated variables,
+  map-pattern fallthrough, and short-circuit success/error paths.
+- Exception scope, rethrowing, cleanup effects, success-clause failures, and
+  callback return/throw/error/exit paths. Stack contents are not compared.
+- Empty, valid, improper, mismatched-length, filtered, zipped, and strict
+  comprehensions over lists, maps, binaries, and partial bitstrings. Unspecified
+  map iteration order is normalized, not asserted as a portable guarantee.
+- Signed/endian/unit bitstring construction and matching, dynamic and invalid
+  sizes, numeric representation boundaries, float16/32 rounding boundaries,
+  float16/32/64 decoding of normal/subnormal and infinity/NaN wire patterns,
+  UTF encoding boundaries, surrogates, invalid/truncated sequences, and tails.
+- Selective receive, guards, aliases, repeated variables, nested receives, and
+  valid/invalid timeouts. Queued messages are deterministic; both the selected
+  result and remaining mailbox are checked, without asserting elapsed timing.
+
+`coverage.json` inventories the **actual compiled exports**, with selected,
+matched, failed, and unverified call counts per export. A full fixture run exits
+nonzero if an export lacks a recipe, so updating Lynx cannot silently leave new
+exports untested. This is **direct-call coverage, not branch or instruction
+coverage**, and does not prove the VM correct. Some branches are unreachable or
+cannot be selected through the public fixture API. Lean's unbounded integers
+also differ from AtomVM's finite integer capacity.
+
+OTP reference timeouts and undefined calls are recorded in `unverified.json`,
+separate from AtomVM differential failures in `failures.json`. Neither counts as
+a pass, and either produces a nonzero exit. Other cases continue, and bounded
+target execution is still recorded for unverified cases. In the tested OTP 29,
+both `sized_generator(0, Bits)` and `zero_generator(Bits)` time out for empty and
+nonempty inputs: four explicit unverified cases, not four AtomVM mismatches.
+Consequently even a runtime with all known fixes does not yield an all-green
+full fixture run on that OTP. No failures are allowlisted.
+
+To rerun fixture failures, include `--lynx` so their modules are packaged:
+
+```sh
+python3 tools/test/lynx/validate.py --lynx ../lynx --build build \
+  --replay /tmp/atomvm-lynx-fixtures/failures.json
+```
+
+Partial replays still report uncovered exports, but these do not cause a failing
+exit: only the selected cases are being validated. `unverified.json` is also
+replayable. Host executable-process ports are not part of this corpus.
 
 **Lynx-mode dependency choice:** the package includes OTP's `lists.beam`, because Lynx's
 `sum` fixture calls `lists:sum/1`, which AtomVM's bundled module lacks. This
@@ -116,9 +186,14 @@ library. Neither covers on-demand JIT compilation, scheduler interleavings, GC
 stress, or embedded platforms. No CI workflow or Lynx dependency is added to the
 normal AtomVM build/tests. Run `--help` for options.
 
-The runner's CLI integration tests check seeded replay and deliberately wrong
-target output, including reduction and replay of the retained failure:
+The runner's CLI integration tests check seeded replay, independent encoding byte
+oracles, deliberately wrong/malformed target output, reduction and replay, and
+continuation after reference timeouts/undefined calls:
 
 ```sh
 python3 -B -m unittest discover -s tools/test/lynx -p test_validate.py -v
 ```
+
+Set `LYNX_CHECKOUT=/path/to/lynx` to enable the additional full-fixture/export
+inventory and partial-replay integration test. It requires Mix/Lean on PATH and
+takes several minutes; ordinary integration tests do not require Lynx.

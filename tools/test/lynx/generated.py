@@ -30,8 +30,40 @@ def expression(case):
     return "differential:" + case["operation"] + "(" + ",".join(map(erlang, case["args"])) + ")"
 
 
-def generate(seed, count):
+def float_boundaries():
+    # Keep known float16 defects and float32 even/odd ties in short smoke runs.
+    cases = [
+        [6546.0, 16, 0, "big"],
+        [1.0e-6, 16, 3, "little"],
+        [6546.0001, 16, 0, "little"],
+        [1.0 + 2.0**-24, 32, 0, "big"],
+        [2.0**-150, 32, 3, "little"],
+        [1.0 + 3 * 2.0**-24, 32, 7, "big"],
+    ]
+    for width, precision, min_exp, max_exp in [(16, 11, -14, 15), (32, 24, -126, 127)]:
+        subnormal = 2.0**(min_exp - precision + 1)
+        normal = 2.0**min_exp
+        maximum = 2.0**(max_exp + 1) - 2.0**(max_exp - precision + 1)
+        values = [0.0, 1.0, 2.25, subnormal, normal, maximum]
+        ties = [subnormal / 2, normal - subnormal / 2,
+                1.0 + 2.0**-precision, 1.0 + 3 * 2.0**-precision,
+                2.0**(max_exp + 1) - 2.0**(max_exp - precision)]
+        if width == 16:
+            ties.append(6546.0)
+        for tie in ties:
+            values.extend([math.nextafter(tie, -math.inf), tie, math.nextafter(tie, math.inf)])
+        for value in values:
+            for sign in [1, -1]:
+                for offset, endian in [(0, "big"), (3, "little")]:
+                    cases.append([sign * value, width, offset, endian])
+    # Invalid widths should raise the same exception, not escape the harness.
+    cases.extend([[1.5, 8, 0, "big"], [1.5, 24, 3, "little"], [1.5, 0, 7, "big"]])
+    return cases
+
+
+def generate(seed, count, float_encoding=False):
     rng = random.Random(seed)
+    encodings = float_boundaries()
     numbers = [0, 1, -1, 0.0, -0.0, 0.1, -1.5, 5e-324, 1.7976931348623157e308]
     for power in [28, 31, 32, 53, 59, 60, 63, 64, 127, 128, 255]:
         for delta in [-1, 0, 1]:
@@ -64,17 +96,23 @@ def generate(seed, count):
         ("bits", [2**100 + 7, 101, 7, "big"]),
         ("arithmetic", ["idiv", -(2**63), -1]),
     ]
+    boundaries += [("float_bits", args) for args in encodings[:6]]
+    if float_encoding:
+        boundaries = [("float_bits", args) for args in encodings]
     result = []
     for index in range(count):
         if index < len(boundaries):
             operation, args = boundaries[index]
-        elif index % 4 == 0:
+        elif float_encoding or index % 5 == 4:
+            value, width = rng.choice(encodings[:-3])[:2]
+            operation, args = "float_bits", [value, width, rng.choice([0, 1, 3, 7]), rng.choice(["big", "little"])]
+        elif index % 5 == 0:
             operation, args = "compare", [number(), number()]
-        elif index % 4 == 1:
+        elif index % 5 == 1:
             a = key()
             b = rng.choice([a, key(), 0.0, -0.0, 1, 1.0])
             operation, args = "maps", [a, b, rng.choice([0, 1, 2, 30, 31, 32, 33, 34])]
-        elif index % 4 == 2:
+        elif index % 5 == 2:
             value = rng.choice([-1, 0, 1, -257, 2**64 - 1, rng.getrandbits(120)])
             operation, args = "bits", [value, rng.choice([0, 1, 7, 8, 9, 31, 32, 63, 64, 65, 127, 128, 129, 255, -1]),
                                        rng.choice([0, 1, 3, 7, 8]), rng.choice(["big", "little"])]
@@ -121,6 +159,8 @@ def reductions(value):
 def candidates(case):
     seen = {json.dumps(case["args"], sort_keys=True)}
     for index, value in enumerate(case["args"]):
+        if case["operation"] == "float_bits" and index != 0:
+            continue
         for smaller in reductions(value):
             if case["operation"] == "maps" and index == 2 and smaller < 0:
                 continue
