@@ -47,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed float bitstring construction ignoring segment units in the interpreter and JIT
 - Fixed large integers rounding incorrectly when converted to floats, affecting
   `float/1` and floating-point arithmetic such as division
 - Fixed non-exact comparisons of large integers and floats losing integer precision,
