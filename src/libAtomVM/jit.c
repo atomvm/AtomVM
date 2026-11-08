@@ -1542,6 +1542,10 @@ static term jit_bitstring_extract_float(Context *ctx, JITState *jit_state, term 
     avm_float_t value;
     bool status;
     switch (n) {
+        case 0:
+            value = 0.0;
+            status = true;
+            break;
         case 16:
             status = bitstring_extract_f16(match_state_ptr[1], offset, n, bs_flags, &value);
             break;
