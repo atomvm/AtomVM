@@ -1062,7 +1062,31 @@ test_float() ->
     ok = test_integer_outside_float_limits(),
     ok = test_create_with_invalid_float_value(),
     ok = test_create_with_invalid_float_size(),
+    ok = test_create_with_float_unit(),
     ok.
+
+test_create_with_float_unit() ->
+    V = id(1.5),
+    <<63, 248, 0, 0, 0, 0, 0, 0>> = create_float_unit8(V),
+    <<62, 0>> = create_float_unit2(V, id(8)),
+    <<63, 192, 0, 0>> = create_float_unit2(V, id(16)),
+    <<63, 248, 0, 0, 0, 0, 0, 0>> = create_float_unit2(V, id(32)),
+    <<5:3, 0, 62, 3:2>> = create_float_unit2_mixed(V, id(8)),
+    <<5:3, 0, 0, 192, 63, 3:2>> = create_float_unit2_mixed(V, id(16)),
+    <<5:3, 0, 0, 0, 0, 0, 0, 248, 63, 3:2>> = create_float_unit2_mixed(V, id(32)),
+    <<128, 0, 0, 0, 0, 0, 0, 0>> = create_float_unit2(id(-0.0), id(32)),
+    <<64, 8, 0, 0, 0, 0, 0, 0>> = create_float_unit8(id(3)),
+    [
+        ok = expect_error(fun() -> create_float_unit2(V, id(Size)) end, badarg)
+     || Size <- [0, -1, 1, 12, 64, bad, 1.0]
+    ],
+    ok = expect_construction_error(fun() -> create_float_unit2(V, id(1 bsl 60)) end),
+    ok = expect_construction_error(fun() -> create_float_unit2(V, id(-(1 bsl 60))) end),
+    ok.
+
+create_float_unit8(V) -> <<V:8/float-unit:8>>.
+create_float_unit2(V, N) -> <<V:N/float-unit:2>>.
+create_float_unit2_mixed(V, N) -> <<5:3, V:N/float-little-unit:2, 3:2>>.
 
 test_create_with_invalid_float_value() ->
     ok = expect_error(fun() -> create_float_binary(foo, id(64)) end, badarg),

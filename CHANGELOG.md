@@ -211,6 +211,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   making unequal numbers compare as equal or in the wrong order
 - Fixed large integers rounding incorrectly when converted to floats, affecting
   `float/1` and floating-point arithmetic such as division
+- Fixed float bitstring construction ignoring segment units in the interpreter and JIT
 
 ## [0.7.0-beta.0] - 2026-09-28
 
