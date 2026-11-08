@@ -3732,23 +3732,21 @@ schedule_in:
                     }
                 }
 
-                avm_int_t signed_size_value = 64;
-                if (size != term_nil()) {
-                    VERIFY_IS_INTEGER(size, "bs_put_float", fail);
-                    signed_size_value = term_to_int(size);
-                    if (UNLIKELY(signed_size_value != 16 && signed_size_value != 32 && signed_size_value != 64)) {
-                        if (fail == 0) {
-                            RAISE_ERROR(BADARG_ATOM);
-                        } else {
-                            JUMP_TO_LABEL(mod, fail);
-                        }
+                size_t size_bits;
+                term size_term = size == term_nil() ? term_from_int(64) : size;
+                if (UNLIKELY(!bs_scaled_size_bits(size_term, unit, 64, &size_bits)
+                        || (size_bits != 16 && size_bits != 32 && size_bits != 64))) {
+                    if (fail == 0) {
+                        RAISE_ERROR(BADARG_ATOM);
+                    } else {
+                        JUMP_TO_LABEL(mod, fail);
                     }
                 }
 
                 bool result;
-                if (signed_size_value == 16) {
+                if (size_bits == 16) {
                     result = bitstring_insert_f16(ctx->bs, ctx->bs_offset, float_value, flags_value);
-                } else if (signed_size_value == 32) {
+                } else if (size_bits == 32) {
                     result = bitstring_insert_f32(ctx->bs, ctx->bs_offset, float_value, flags_value);
                 } else {
                     result = bitstring_insert_f64(ctx->bs, ctx->bs_offset, float_value, flags_value);
@@ -3759,7 +3757,7 @@ schedule_in:
                     RAISE_ERROR(BADARG_ATOM);
                 }
 
-                ctx->bs_offset += signed_size_value * unit;
+                ctx->bs_offset += size_bits;
                 break;
             }
 
@@ -5698,16 +5696,16 @@ schedule_in:
                                     JUMP_TO_LABEL(mod, fail);
                                 }
                             }
-                            VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
-                            avm_int_t signed_size_value = term_to_int(size);
-                            if (UNLIKELY(signed_size_value != 16 && signed_size_value != 32 && signed_size_value != 64)) {
+                            size_t float_bits;
+                            if (UNLIKELY(!bs_scaled_size_bits(size, segment_unit, 64, &float_bits)
+                                    || (float_bits != 16 && float_bits != 32 && float_bits != 64))) {
                                 if (fail == 0) {
                                     RAISE_ERROR(BADARG_ATOM);
                                 } else {
                                     JUMP_TO_LABEL(mod, fail);
                                 }
                             }
-                            segment_size = signed_size_value;
+                            segment_size = float_bits;
                             segment_unit = 1;
                             break;
                         }
@@ -5869,7 +5867,7 @@ schedule_in:
                             size_value = (size_t) term_to_int(size);
                             break;
                         case FLOAT_ATOM:
-                            size_value = (size_t) term_to_int(size);
+                            size_value = (size_t) term_to_int(size) * segment_unit;
                             break;
                         default:
                             break;
