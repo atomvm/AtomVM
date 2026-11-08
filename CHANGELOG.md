@@ -205,6 +205,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rebuilding its poll set was not polled until another one was registered or unregistered
 - Fixed TLS connections with `verify_none` being limited to TLS 1.2 when built
   with MbedTLS 3.6.1 or later and TLS 1.3 support enabled
+- Fixed `0.0` and `-0.0` comparing as exactly equal, selecting the wrong pattern clause
+  and collapsing into a single map key
 
 ## [0.7.0-beta.0] - 2026-09-28
 
