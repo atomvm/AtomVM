@@ -4,6 +4,7 @@
 """Public CLI integration tests; requires a built AtomVM and host OTP/Elixir."""
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -21,11 +22,14 @@ class ValidationTests(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "--build", str(ROOT / "build"),
              "--output", str(output), *map(str, args)],
-            capture_output=True, text=True, timeout=180,
+            capture_output=True, text=True, timeout=900,
         )
         self.assertTrue((output / "summary.json").is_file(), result.stdout + result.stderr)
         summary = json.loads((output / "summary.json").read_text())
-        self.assertEqual(result.returncode, int(summary["failed"] > 0), result.stdout + result.stderr)
+        self.assertEqual(result.returncode,
+                         int(summary["failed"] > 0 or summary["unverified"] > 0
+                             or (summary["uncovered"] > 0 and "--replay" not in args)),
+                         result.stdout + result.stderr)
         return summary
 
     def test_seed_and_replay_preserve_inputs_and_outcomes(self):
@@ -52,6 +56,78 @@ class ValidationTests(unittest.TestCase):
             self.assertNotEqual((first / "cases.json").read_text(), (other / "cases.json").read_text())
             self.assertEqual(summary["passed"] + summary["failed"], 32)
             self.assertEqual(summary["laws"], 0)
+            selected = json.loads((first / "cases.json").read_text())
+            self.assertEqual({entry["operation"] for entry in selected},
+                             {"compare", "maps", "bits", "arithmetic", "float_bits"})
+
+    def test_float_encoding_smoke_cases_have_known_byte_oracles(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "floats"
+            summary = self.invoke(output, "--float-encoding", "--generated", 6)
+            self.assertEqual(summary["passed"] + summary["failed"], 6)
+            selected = json.loads((output / "cases.json").read_text())
+            self.assertEqual({entry["operation"] for entry in selected}, {"float_bits"})
+            # Independent IEEE encodings: even tie, subnormal, near tie,
+            # float32 even tie, underflow tie, and odd tie. Compare bytes,
+            # not round-tripped floats (which cannot represent infinity in OTP).
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                values = JSON.decode!(File.read!(path))["expected"]
+                encodings = Enum.map(values, fn value ->
+                  {:ok, {_bits, encoded}} = :erlang.binary_to_term(Base.decode64!(value))
+                  Base.encode16(encoded)
+                end)
+                ["6E64", "1100", "656E", "3F800000", "00000000", "3F800002"] = encodings
+                """, str(output / "manifest.json")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_reference_failures_are_reported_without_stopping_other_cases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            source.write_text(json.dumps([
+                {"expression": "receive after infinity -> never end"},
+                {"expression": "missing_lynx_module:missing()"},
+                {"expression": "7-2"},
+            ]))
+            output = work / "references"
+            summary = self.invoke(output, "--replay", source, "--timeout", 1)
+            self.assertEqual(summary, {"laws": 0, "passed": 1, "failed": 0,
+                                       "unverified": 2, "uncovered": 0})
+            unverified = json.loads((output / "unverified.json").read_text())
+            self.assertEqual([entry["message"] for entry in unverified],
+                             ["OTP reference timed out", "OTP reference called an undefined function"])
+            self.assertEqual(json.loads((output / "failures.json").read_text()), [])
+            actuals = json.loads((output / "actuals.json").read_text())
+            self.assertEqual([entry["status"] for entry in actuals], ["error", "ok", "ok"])
+            self.assertIn("Timed out", actuals[0]["message"])
+            self.assertEqual(unverified[0]["actual"], actuals[0])
+
+    @unittest.skipUnless(os.getenv("LYNX_CHECKOUT"), "Set LYNX_CHECKOUT to test fixture coverage")
+    def test_lynx_exports_have_cases_and_partial_replay_is_scoped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            full = work / "full"
+            summary = self.invoke(full, "--lynx", os.environ["LYNX_CHECKOUT"],
+                                  "--generated", 0, "--timeout", 1)
+            self.assertGreater(summary["laws"], 0)
+            self.assertEqual(summary["uncovered"], 0)
+            coverage = json.loads((full / "coverage.json").read_text())
+            self.assertGreater(len(coverage), 100)
+            self.assertTrue(all(row["cases"] > 0 for row in coverage))
+            # A partial replay must not claim full fixture coverage merely
+            # because its one selected call matched.
+            source = work / "one.json"
+            source.write_text(json.dumps([{"fixture": ["literal", "integers", 0],
+                                          "expression": "literal:integers()"}]))
+            partial = work / "partial"
+            subset = self.invoke(partial, "--lynx", os.environ["LYNX_CHECKOUT"], "--replay", source)
+            self.assertEqual(subset["passed"], 1)
+            self.assertEqual(subset["failed"], 0)
+            self.assertEqual(subset["uncovered"], len(coverage) - 1)
+            self.assertEqual(subset["unverified"], 0)
 
     def test_wrong_target_result_is_saved_shrunk_and_replayable(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -71,7 +147,8 @@ class ValidationTests(unittest.TestCase):
             source.write_text(json.dumps([{"operation": "compare", "args": [100, -7]}]))
             output = work / "failure"
             summary = self.invoke(output, "--build", build, "--replay", source, "--shrink")
-            self.assertEqual(summary, {"laws": 0, "passed": 0, "failed": 1})
+            self.assertEqual(summary, {"laws": 0, "passed": 0, "failed": 1,
+                                       "unverified": 0, "uncovered": 0})
             failures = json.loads((output / "failures.json").read_text())
             self.assertEqual(failures[0]["case"]["args"], [100, -7])
             reduced = json.loads((output / "minimized.json").read_text())
