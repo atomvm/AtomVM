@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0-beta.1] - Unreleased
 
 ### Added
+- Added `erlang:binary_part/2`, including use in guards
 - Added `gen:start/5,6`, used by Elixir's `GenServer`
 - Added ML-KEM-768 (FIPS 203) key encapsulation to `crypto`, requiring libsodium >= 1.0.22
 - Added `AVM_STATIC_LIBSODIUM` CMake option to statically link libsodium

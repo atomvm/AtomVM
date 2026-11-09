@@ -26,6 +26,15 @@
 start() ->
     ok = test_with_binary_part_fun(?ID(fun binary:part/3)),
     ok = test_with_binary_part_fun(?ID(fun erlang:binary_part/3)),
+    Part2 = ?ID(fun erlang:binary_part/2),
+    ok = test_with_binary_part_fun(fun(Bin, Pos, Len) -> Part2(Bin, {Pos, Len}) end),
+    ok = test_with_binary_part_fun(fun(Bin, Pos, Len) -> binary_part(Bin, {Pos, Len}) end),
+    ok = fail_with_badarg(fun() -> Part2(<<1, 2, 3>>, bad) end),
+    ok = fail_with_badarg(fun() -> Part2(<<1, 2, 3>>, {0}) end),
+    ok = fail_with_badarg(fun() -> Part2(<<1, 2, 3>>, {0, 1, 2}) end),
+    true = pair_guard(?ID(<<1, 2, 3>>), {3, -2}, <<2, 3>>),
+    false = pair_guard(?ID(<<1, 2, 3>>), {2, 2}, <<2, 3>>),
+    false = pair_guard(?ID(<<1, 2, 3>>), bad, <<>>),
     ok = test_with_binary_part_fun(
         ?ID(fun(Bin, Pos, Len) ->
             Pattern = binary_part(Bin, Pos, Len),
@@ -57,6 +66,11 @@ test_with_binary_part_fun(BinaryPart) ->
     ok = fail_with_badarg(fun() -> BinaryPart(?ID(<<"BadPos">>), fail, 1) end),
     ok = fail_with_badarg(fun() -> BinaryPart(?ID(<<"BadLen">>), 1, fail) end),
     ok.
+
+pair_guard(Bin, Range, Part) when binary_part(Bin, Range) =:= Part ->
+    true;
+pair_guard(_Bin, _Range, _Part) ->
+    false.
 
 as_guard(Bin, Pattern, Pos, Len) when binary_part(Bin, Pos, Len) == Pattern ->
     Pattern;
