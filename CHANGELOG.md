@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   across `network:start/1` and `network:stop/0`
 - Added `erlang:binary_part/2`, including use in guards
 - Added `erlang:get_keys/0,1` to query process dictionary keys
+- Added the `{scope, {Start, Length}}` option to `binary:split/3`
 
 ### Changed
 - With BSD sockets (generic_unix, ESP32), `socket:connect/2` returns the reason a connect failed,
