@@ -24,6 +24,9 @@
     termination_queue/1,
     termination_cascade/2,
     suspended_receive/1,
+    missing_link/1,
+    process_liveness/0,
+    raise_exception/3,
     function_apply/3,
     function_named/3,
     function_make/4,
@@ -469,6 +472,51 @@ suspended_receive(Mode) ->
             end,
         {Value, get(waited), get(cleanup), drain()}
     end).
+
+missing_link(Trap) ->
+    isolated(fun() ->
+        process_flag(trap_exit, Trap),
+        {Child, Ref} = spawn_monitor(fun() -> ok end),
+        receive
+            {'DOWN', Ref, process, Child, normal} -> ok
+        end,
+        try link(Child) of
+            Linked ->
+                receive
+                    {'EXIT', Child, Reason} -> {Linked, Reason, drain()}
+                end
+        catch
+            C:R -> {exception, C, R}
+        end
+    end).
+
+process_liveness() ->
+    isolated(fun() ->
+        {Child, Ref} = spawn_monitor(fun() ->
+            receive
+                stop -> ok
+            end
+        end),
+        Alive = {is_process_alive(self()), is_process_alive(Child)},
+        Unnamed = process_info(Child, registered_name),
+        true = register(lynx_liveness_child, Child),
+        Named = {whereis(lynx_liveness_child) =:= Child, process_info(Child, registered_name)},
+        true = unregister(lynx_liveness_child),
+        Unregistered = {whereis(lynx_liveness_child), process_info(Child, registered_name)},
+        Child ! stop,
+        receive
+            {'DOWN', Ref, process, Child, normal} -> ok
+        end,
+        Dead = {is_process_alive(Child), process_info(Child, registered_name)},
+        {Alive, Unnamed, Named, Unregistered, Dead}
+    end).
+
+raise_exception(Class, Reason, Stack) ->
+    try erlang:raise(Class, Reason, Stack) of
+        Value -> {returned, Value}
+    catch
+        C:R:S -> {raised, C, R, S =:= Stack}
+    end.
 
 %% Never serialize function identities or compiler-generated closure names.
 function_value(local_zero, Captured) -> fun() -> {Captured, zero} end;

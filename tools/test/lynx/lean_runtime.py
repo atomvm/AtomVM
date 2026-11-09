@@ -263,6 +263,26 @@ def cases():
     for mode in ["timeout", "message", "nested"]:
         probe(p, "timeout_handler_scope", f"differential:suspended_receive({mode})")
 
+    for trap in ["true", "false"]:
+        probe("Modules/Signals", "link_to_missing_process", f"differential:missing_link({trap})")
+    probe("Modules/Signals", "liveness", "differential:process_liveness()")
+    for value in ["bad", "1", "[]", "{}", "make_ref()", "fun()->ok end"]:
+        call("Modules/Signals", "liveness", "is_process_alive", value)
+        call("Modules/Signals", "liveness", "process_info", value, "registered_name")
+    for cls in ["error", "exit", "throw", "bad", "1"]:
+        for stack in ["[]", "[{differential,call,3,[]}]", "[{differential,call,[a,b,c],[]}]",
+                      "bad", "[bad]", "[{differential,call,3,[]}|bad]", "[{1,call,3,[]}]"]:
+            probe("Modules/Signals", "raise_classes",
+                  f"differential:raise_exception({cls},#{{reason=>[1,2,3]}},{stack})")
+    for key, items in [("b", "[skipped,{}, {a,1},{b,first},{b,second}]"),
+                       ("missing", "[skipped,{a,1}]"), ("1", "[{1.0,float},{1,integer}]"),
+                       ("1.0", "[{1,integer},{1.0,float}]"), ("0.0", "[{-0.0,negative}]"),
+                       ("{1}", "[{{1.0},nested}]"), ("b", "[{b,first}|improper]"),
+                       ("missing", "[{a,1}|improper]"), ("b", "[]"), ("b", "bad")]:
+        for position in ["1", "2", "0", "-1", "1.0", "1 bsl 100"]:
+            for fn in ["keyfind", "keymember"]:
+                call("Modules/Signals", "keyfind_finds_first_match", fn, key, position, items, module="lists")
+
     for kind in ["local_zero", "local_one", "local_two", "external_zero", "external_one",
                  "external_two", "bif_zero", "bif_one", "missing_export", "missing_module", "not_fun"]:
         for args in ["[]", "[7]", "[left,right]", "[7|improper]", "bad"]:

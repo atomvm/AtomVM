@@ -105,7 +105,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **1,366 deterministic cases**:
+At the pinned Lynx revision below, this selects **1,536 deterministic cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -135,6 +135,14 @@ success/error/throw/exit with monitors, links, and small heaps. Error payloads
 retain within-run fun/argument equality without serializing fun identities or
 compiler-generated names. Undefined-call recipes catch `undef` explicitly so
 an expected child/call failure is verified, not classified as a missing oracle.
+
+An additional 170 cases cover already-dead links with and without trapped exits,
+live/dead process and registered-name queries, invalid liveness arguments,
+`raise/3` classes and stack validation, and `keyfind/3`/`keymember/3` first-match,
+numeric-equality, tuple-position, and improper-list behavior. Actual OTP results
+remain the oracle: the model's exception for an invalid `raise/3` stack is not
+used in place of OTP's returned `badarg` atom. Malformed external stack traces
+and raw internal re-raise traces are distinct paths.
 
 Permanent dictionary-query and scoped-split GC-pressure regressions also live in
 the ordinary Erlang library/runtime test suites; they are not Lean proof samples.
@@ -189,7 +197,7 @@ This additional mode:
    not stack frames. Cases returning references compare observable properties,
    not runtime-specific identities.
 
-The corpus contains **2,118 calls covering all 191 exports in 12 fixture modules**
+The corpus contains **2,131 calls covering all 191 exports in 12 fixture modules**
 at the pinned revision. It includes:
 
 - Literal pooling, numeric/map-key boundaries, recursive base/step/error cases,
