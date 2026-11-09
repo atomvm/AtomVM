@@ -105,18 +105,31 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **1,042 deterministic cases**:
+At the pinned Lynx revision below, this selects **1,157 deterministic cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
-handshakes, and UTF-8/16/32 construction/matching. UTF cases include malformed,
-incomplete, unaligned, and valid codepoints with invalid suffixes. Child identities
+handshakes, lifecycle combinations, and UTF-8/16/32 construction/matching. UTF cases
+include malformed, incomplete, unaligned, and valid codepoints with invalid suffixes. Child identities
 are compared within each run, never serialized as cross-runtime expectations.
 This mode uses **AtomVM's bundled standard library**, not OTP's `lists.beam`.
 Missing functions and differing error precedence remain failures, not skips.
 OTP is the execution oracle, not the Lean model: for example, tested OTP 29
 accepts an already queued receive match before checking an invalid timeout.
 That differs from the model test named `timeout_validation_precedes_scan`.
+
+The lifecycle/receive subset contains 127 cases: linked normal/abnormal exits,
+unlinking, trapped exits, untrappable `kill`, demonitor option validation and
+active/queued/consumed monitor states, standalone and monitor aliases, pending
+monitors while both the target and observer terminate, and empty-mailbox timeout
+errors at and beyond the 32-bit boundary. Positive timer waits without a possible
+sender exercise exception/cleanup scopes after suspension; no elapsed duration
+or cross-sender message ordering is compared. Linked crashes are contained in
+monitored workers. Queued-DOWN flush recipes requeue a received real DOWN so
+mailbox presence is deterministic rather than inferred from a delay.
+
+Permanent dictionary-query and scoped-split GC-pressure regressions also live in
+the ordinary Erlang library/runtime test suites; they are not Lean proof samples.
 
 `lean-coverage.json` inventories unindented theorem/private-theorem declarations
 and `#guard ` sites in all 23 test files, recording source hashes, lines, sample
@@ -131,8 +144,9 @@ make the run fail. Renamed/missing attributed declarations do fail validation.
 Kernel audits, API snapshots, purity/fixed-point/exhaustion proofs, internal
 model representations, all-schedule claims, and deadlock diagnostics do not have
 ordinary deterministic VM-test equivalents. Their inventory notes explain those
-boundaries. Signal/link/alias combinations and many executable behaviors still
-need more recipes. Standalone runs check **zero fresh laws**.
+boundaries. Lifecycle samples are not exhaustive signal/scheduler coverage;
+distributed processes and ports are outside these recipes. Many executable
+behaviors still need more recipes. Standalone runs check **zero fresh laws**.
 
 The flag is additive with `--lynx` and generated cases. All modes use AtomVM's
 bundled standard library. A replay selects only saved cases; include

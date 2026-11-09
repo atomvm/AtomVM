@@ -17,6 +17,13 @@
     receive_timeout/2,
     process_exchange/1,
     monitor_exit/1,
+    linked_exit/2,
+    exit_signal/2,
+    monitor_options/2,
+    alias_lifetime/2,
+    termination_queue/1,
+    termination_cascade/2,
+    suspended_receive/1,
     utf/3,
     utf_construct/3
 ]).
@@ -182,6 +189,275 @@ monitor_exit(Mode) ->
                     end
             end
     end.
+
+%% Linked crashes run in a monitored worker, never in the host reference task.
+isolated(Fun) ->
+    Parent = self(),
+    {Pid, Ref} = spawn_monitor(fun() -> Parent ! {self(), Fun()} end),
+    receive
+        {'DOWN', Ref, process, Pid, normal} ->
+            receive
+                {Pid, Result} -> {ok, Result}
+            end;
+        {'DOWN', Ref, process, Pid, Reason} ->
+            {exit, Reason}
+    end.
+
+linked_exit(Mode, Reason) ->
+    isolated(fun() ->
+        process_flag(trap_exit, Mode =:= trapped),
+        Child = spawn_link(fun() ->
+            receive
+                go -> exit(Reason)
+            end
+        end),
+        Ref = monitor(process, Child),
+        case Mode of
+            unlinked -> unlink(Child);
+            _ -> ok
+        end,
+        Child ! go,
+        Exit =
+            case Mode of
+                trapped ->
+                    receive
+                        {'EXIT', Child, R} -> R
+                    end;
+                _ ->
+                    ignored
+            end,
+        receive
+            {'DOWN', Ref, process, Child, Down} -> {Exit, Down}
+        end
+    end).
+
+exit_signal(Trap, Reason) ->
+    Parent = self(),
+    {Child, Ref} = spawn_monitor(fun() ->
+        process_flag(trap_exit, Trap),
+        Parent ! {self(), ready},
+        receive
+            {'EXIT', Parent, R} -> Parent ! {self(), {trapped, R}};
+            ping -> Parent ! {self(), ignored}
+        end
+    end),
+    receive
+        {Child, ready} -> ok
+    end,
+    true = exit(Child, Reason),
+    Child ! ping,
+    receive
+        {'DOWN', Ref, process, Child, Down} ->
+            Observation =
+                receive
+                    {Child, Value} -> Value
+                after 0 -> no_reply
+                end,
+            {Down, Observation}
+    end.
+
+monitor_options(unknown, Options) ->
+    {demonitor(make_ref(), Options), []};
+monitor_options(State, Options) ->
+    Child = spawn(fun() ->
+        receive
+            stop -> ok
+        end
+    end),
+    Ref = monitor(process, Child),
+    case State of
+        active ->
+            ok;
+        active_message ->
+            self() ! {other, Ref, a, b, c};
+        _ ->
+            Child ! stop,
+            receive
+                {'DOWN', Ref, process, Child, normal} = Down ->
+                    %% Requeue a real DOWN so its presence is not a scheduling race.
+                    case State of
+                        queued ->
+                            self() ! Down;
+                        queued_twice ->
+                            self() ! Down,
+                            self() ! Down;
+                        queued_other ->
+                            self() ! {other, Ref, a, b, c},
+                            self() ! Down;
+                        consumed ->
+                            ok
+                    end
+            end
+    end,
+    Result =
+        try
+            demonitor(Ref, Options)
+        catch
+            C:R -> {C, R}
+        end,
+    case State of
+        S when S =:= active; S =:= active_message ->
+            Fence = monitor(process, Child),
+            Child ! stop,
+            receive
+                {'DOWN', Fence, process, Child, normal} -> ok
+            end;
+        _ ->
+            ok
+    end,
+    Remaining = [
+        case M of
+            {'DOWN', Ref, process, Child, R0} -> {down, R0};
+            {other, Ref, a, b, c} -> other;
+            _ -> unexpected
+        end
+     || M <- drain()
+    ],
+    {Result, Remaining}.
+
+alias_lifetime(standalone, Options) ->
+    Alias = erlang:alias(Options),
+    Alias ! first,
+    Alias ! second,
+    receive
+        first -> ok
+    end,
+    Removed = erlang:unalias(Alias),
+    Alias ! dropped,
+    {Removed, erlang:unalias(Alias), drain()};
+alias_lifetime(Mode, Event) ->
+    Child = spawn(fun() ->
+        receive
+            stop -> ok
+        end
+    end),
+    Ref = monitor(process, Child, [{alias, Mode}]),
+    End =
+        case Event of
+            demonitor ->
+                Ref ! before_end,
+                receive
+                    before_end -> ok
+                end,
+                Result = demonitor(Ref, [info]),
+                Fence = monitor(process, Child),
+                Child ! stop,
+                receive
+                    {'DOWN', Fence, process, Child, normal} -> ok
+                end,
+                Result;
+            down ->
+                Child ! stop,
+                receive
+                    {'DOWN', Ref, process, Child, normal} -> down
+                end;
+            unalias ->
+                Result = erlang:unalias(Ref),
+                Child ! stop,
+                receive
+                    {'DOWN', Ref, process, Child, normal} -> ok
+                end,
+                Result
+        end,
+    Ref ! after_end,
+    Removed = erlang:unalias(Ref),
+    {End, Removed, drain()}.
+
+termination_queue(Count) ->
+    Child = spawn(fun() ->
+        receive
+            stop -> ok
+        end
+    end),
+    Refs = [{N, monitor(process, Child)} || N <- lists:seq(1, Count)],
+    [demonitor(Ref, [flush]) || {N, Ref} <- Refs, N rem 2 =:= 0],
+    [Child ! {unmatched, N, <<N:32>>} || N <- lists:seq(1, Count)],
+    true = exit(Child, kill),
+    Reasons = [
+        receive
+            {'DOWN', Ref, process, Child, R} -> R
+        end
+     || {N, Ref} <- Refs, N rem 2 =:= 1
+    ],
+    {Reasons, [demonitor(Ref, [info]) || {_, Ref} <- Refs], drain()}.
+
+termination_cascade(Count, Order) ->
+    Parent = self(),
+    {Target, TargetRef} = spawn_monitor(fun() ->
+        receive
+            stop -> ok
+        end
+    end),
+    {Observer, ObserverRef} = spawn_monitor(fun() ->
+        [monitor(process, Target) || _ <- lists:seq(1, Count)],
+        Parent ! {self(), ready},
+        receive
+            stop -> ok
+        end
+    end),
+    receive
+        {Observer, ready} -> ok
+    end,
+    case Order of
+        target_first ->
+            exit(Target, kill),
+            exit(Observer, kill);
+        observer_first ->
+            exit(Observer, kill),
+            exit(Target, kill)
+    end,
+    TargetReason =
+        receive
+            {'DOWN', TargetRef, process, Target, R1} -> R1
+        end,
+    ObserverReason =
+        receive
+            {'DOWN', ObserverRef, process, Observer, R2} -> R2
+        end,
+    {TargetReason, ObserverReason, drain()}.
+
+%% No sender can satisfy the first positive timeout: the protected computation
+%% must traverse a timer wait before reaching its message/timeout continuation.
+suspended_receive(Mode) ->
+    isolated(fun() ->
+        erase(),
+        self() ! retained,
+        Value =
+            try
+                receive
+                    never -> unexpected
+                after 1 -> ok
+                end,
+                put(waited, true),
+                case Mode of
+                    timeout ->
+                        receive
+                            never -> unexpected
+                        after 1 -> throw(timeout_body)
+                        end;
+                    message ->
+                        Me = self(),
+                        spawn(fun() -> Me ! resume end),
+                        receive
+                            resume -> throw(message_body)
+                        end;
+                    nested ->
+                        try
+                            receive
+                                never -> unexpected
+                            after 1 -> error(inner)
+                            end
+                        catch
+                            error:inner -> throw(outer)
+                        end
+                end
+            catch
+                C:R -> {C, R}
+            after
+                put(cleanup, ran)
+            end,
+        {Value, get(waited), get(cleanup), drain()}
+    end).
 
 utf(Encoding, Bits, Offset) ->
     <<_:Offset, Input/bitstring>> = Bits,
