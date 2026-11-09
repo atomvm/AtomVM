@@ -24,6 +24,7 @@
 
 start() ->
     ok = test_get_keys(),
+    ok = test_get_keys_gc(),
     ok = test_get_0_erase_0(),
     put_int(0),
     X = put_int(1),
@@ -111,6 +112,62 @@ test_get_keys() ->
     6 = length(erase()),
     [] = get_keys(),
     ok.
+
+test_get_keys_gc() ->
+    {Pid, Ref} = spawn_opt(
+        fun() ->
+            fill_dictionary(256),
+            get_keys_gc(32)
+        end,
+        [monitor, {min_heap_size, 100}]
+    ),
+    %% Check GC correctness, not wall-clock performance under instrumentation.
+    normal =
+        receive
+            {'DOWN', Ref, process, Pid, Reason} -> Reason
+        end,
+    ok.
+
+fill_dictionary(0) ->
+    ok;
+fill_dictionary(N) ->
+    put({N, list_to_binary([N rem 256, $k])}, {N rem 2, list_to_binary([N rem 2, $v])}),
+    fill_dictionary(N - 1).
+
+get_keys_gc(0) ->
+    256 = length(erase()),
+    [] = get_keys(),
+    ok;
+get_keys_gc(N) ->
+    % Shrink before allocating the result lists.  The boxed search value must
+    % survive any collection inside get_keys/1, not just a collection before it.
+    true = erlang:garbage_collect(),
+    Keys = get_keys(),
+    Value = {N rem 2, list_to_binary([N rem 2, $v])},
+    Matching = get_keys(Value),
+    [] = get_keys({2, list_to_binary([N rem 2, $v])}),
+    % Keep both results live while allocating far beyond the minimum heap.
+    Pressure = dictionary_pressure(1024, []),
+    true = erlang:garbage_collect(),
+    1024 = length(Pressure),
+    256 = length(Keys),
+    128 = length(Matching),
+    ok = check_dictionary_keys(256, Keys, Matching, N rem 2),
+    get_keys_gc(N - 1).
+
+dictionary_pressure(0, Acc) -> Acc;
+dictionary_pressure(N, Acc) -> dictionary_pressure(N - 1, [{N, N + 1} | Acc]).
+
+check_dictionary_keys(0, _Keys, _Matching, _Parity) ->
+    ok;
+check_dictionary_keys(N, Keys, Matching, Parity) ->
+    Key = {N, list_to_binary([N rem 256, $k])},
+    true = has_key(Key, Keys),
+    Expected = N rem 2 =:= Parity,
+    Expected = has_key(Key, Matching),
+    ExpectedValue = {N rem 2, list_to_binary([N rem 2, $v])},
+    ExpectedValue = get(Key),
+    check_dictionary_keys(N - 1, Keys, Matching, Parity).
 
 has_key(_Key, []) -> false;
 has_key(Key, [Key | _]) -> true;
