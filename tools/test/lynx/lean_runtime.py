@@ -238,6 +238,17 @@ def cases():
                             "[{alias,reply_demonitor}]"]:
                 probe("Modules/Signals", ["monitor_missing_process", "alias_ends_with_demonitor"],
                       f"differential:monitor_target({kind},{state},{options})")
+    for state in ["self", "live", "dead", "named_self", "named_live", "missing"]:
+        for options in ["bad", "0", "#{}", "[bad]", "[alias]", "[{alias}]",
+                        "[{alias,bad}]", "[{alias,reply}]", "[{alias,demonitor,extra}]",
+                        "[{alias,1}]", "[{alias,demonitor}|bad]", "[{alias,demonitor},bad]",
+                        "[bad,{alias,explicit_unalias}]", "[{alias,bad},{alias,demonitor}]"]:
+            probe("Modules/Signals", ["monitor_missing_process", "alias_ends_with_demonitor"],
+                  f"differential:monitor_target(process,{state},{options})")
+        for first in ["demonitor", "explicit_unalias", "reply_demonitor"]:
+            for last in ["demonitor", "explicit_unalias", "reply_demonitor"]:
+                probe("Modules/Signals", "alias_ends_with_demonitor",
+                      f"differential:monitor_target(process,{state},[{{alias,{first}}},{{alias,{last}}}])")
     for mode in ["trapped", "untrapped", "unlinked"]:
         for reason in ["normal", "boom", "kill"]:
             probe("Modules/Signals", ["linked_crash_kills_parent", "linked_normal_exit_is_ignored",
