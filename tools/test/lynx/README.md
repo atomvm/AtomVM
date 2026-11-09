@@ -134,9 +134,9 @@ ordinary deterministic VM-test equivalents. Their inventory notes explain those
 boundaries. Signal/link/alias combinations and many executable behaviors still
 need more recipes. Standalone runs check **zero fresh laws**.
 
-The flag is additive with `--lynx` and generated cases. Combining it with
-`--lynx` inherits that mode's OTP `lists.beam` substitution. A replay selects
-only saved cases; include `--lean-runtime ../lynx` to regenerate its scoped
+The flag is additive with `--lynx` and generated cases. All modes use AtomVM's
+bundled standard library. A replay selects only saved cases; include
+`--lean-runtime ../lynx` to regenerate its scoped
 source inventory. Like other modes, real mismatches or incomplete references
 produce a nonzero exit and retain evidence.
 
@@ -216,11 +216,10 @@ Partial replays still report uncovered exports, but these do not cause a failing
 exit: only the selected cases are being validated. `unverified.json` is also
 replayable. Host executable-process ports are not part of this corpus.
 
-**Lynx-mode dependency choice:** the package includes OTP's `lists.beam`, because Lynx's
-`sum` fixture calls `lists:sum/1`, which AtomVM's bundled module lacks. This
-checks the VM with that dependency, not full compatibility of the bundled
-standard library. Interpreter execution uses the exact proof-input fixture
-binaries. For a JIT/precompiled build, the script transforms those same binaries
+**Lynx-mode dependencies:** fixtures use AtomVM's bundled standard library,
+including `lists:sum/1`; no OTP library modules are substituted into the target.
+Interpreter execution uses the exact proof-input fixture binaries. For a
+JIT/precompiled build, the script transforms those same binaries
 to native-only code using that build's JIT compiler. It selects the matching
 native runtime library automatically. Cross-target/emulator runs are not supported.
 

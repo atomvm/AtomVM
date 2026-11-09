@@ -118,11 +118,7 @@ def validate(args, work):
                     str(int(args.timeout * 1000))], lynx or work, work / "proofs.log")
     manifest = json.loads((work / "manifest.json").read_text())
     print(f"Checked {manifest['laws']} laws; running {len(entries)} cases ({arch or 'interpreter'}).", flush=True)
-    if lynx:
-        print("Dependency: packaged OTP lists.beam; bundled lists:sum/1 is not tested.", flush=True)
     fixture_beams = [work / "differential.beam"] + [work / f"{name}.beam" for name in manifest["fixtures"]]
-    if lynx:
-        fixture_beams.append(work / "lists.beam")
     drivers = [work / f"{entry['module']}.beam" for entry in entries]
     if native:
         native_dir = work / "native"
