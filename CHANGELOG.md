@@ -53,6 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Fixed receive timeouts outside `0..4294967295` being accepted or truncated instead
   of raising `timeout_value`
+- Fixed `demonitor/2` accepting invalid options and returning incorrect `info` results
+  with `flush`; flushing now preserves active-monitor messages and removes only the
+  first matching five-tuple for an inactive monitor, like OTP
 - Fixed `maps:fold/3` rejecting exhausted iterators and reporting `badmap` instead of
   `badarg` for invalid callbacks on non-map inputs
 - Fixed `min/2` and `max/2` returning the second argument instead of the first on numeric ties

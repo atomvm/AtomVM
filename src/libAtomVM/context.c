@@ -447,24 +447,23 @@ bool context_process_signal_set_group_leader(Context *ctx, const struct TermSign
 void context_process_flush_monitor_signal(Context *ctx, uint64_t ref_ticks, bool info)
 {
     context_update_flags(ctx, ~Trap, NoFlags);
-    bool result = true;
     mailbox_reset(&ctx->mailbox);
     term msg;
     while (mailbox_peek(ctx, &msg)) {
         if (term_is_tuple(msg)
             && term_get_tuple_arity(msg) == 5
-            && term_get_tuple_element(msg, 0) == DOWN_ATOM
             && term_is_local_reference(term_get_tuple_element(msg, 1))
             && term_to_ref_ticks(term_get_tuple_element(msg, 1)) == ref_ticks) {
             mailbox_remove_message(&ctx->mailbox, &ctx->heap);
-            // If option info is combined with option flush, false is returned if a flush was needed, otherwise true.
-            result = !info;
+            break;
         } else {
             mailbox_next(&ctx->mailbox);
         }
     }
     mailbox_reset(&ctx->mailbox);
-    ctx->x[0] = result ? TRUE_ATOM : FALSE_ATOM;
+    // Only an inactive monitor needs flushing; finding a queued message does
+    // not change the info result established by demonitor/2.
+    ctx->x[0] = info ? FALSE_ATOM : TRUE_ATOM;
 }
 
 bool context_process_link_exit_signal(Context *ctx, struct TermSignal *signal)

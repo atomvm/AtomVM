@@ -23,6 +23,7 @@
 -export([start/0]).
 
 start() ->
+    ok = test_demonitor_boundaries(),
     ok = test_monitor_normal(),
     ok = test_monitor_demonitor(),
     ok = test_monitor_noproc(),
@@ -77,6 +78,44 @@ start() ->
     ok = test_binary_to_term_invalid_process_ref(),
     ok = test_alias_ref_ordering(),
     0.
+
+test_demonitor_boundaries() ->
+    false = demonitor(make_ref(), [flush, info]),
+    Child = spawn_opt(
+        fun() ->
+            receive
+                stop -> ok
+            end
+        end,
+        []
+    ),
+    Ref = monitor(process, Child),
+    [
+        badarg =
+            try
+                demonitor(Ref, Options)
+            catch
+                error:badarg -> badarg
+            end
+     || Options <- [[bad], [info | bad], [{flush, true}], not_a_list]
+    ],
+    %% Invalid options must not remove the active monitor. Flushing an active
+    %% monitor must also leave even matching five-tuples in the mailbox alone.
+    self() ! {other, Ref, a, b, c},
+    true = demonitor(Ref, [info, flush]),
+    {other, Ref, a, b, c} = recv_one(),
+    Fence = monitor(process, Child),
+    Child ! stop,
+    {'DOWN', Fence, process, Child, normal} = recv_one(),
+    false = demonitor(Fence, [flush, info]),
+    %% Flush removes just the oldest matching five-tuple, irrespective of tag;
+    %% it does not change the info result for an already consumed monitor.
+    self() ! {other, Fence, a, b, c},
+    self() ! {'DOWN', Fence, process, Child, normal},
+    false = demonitor(Fence, [flush, info]),
+    {'DOWN', Fence, process, Child, normal} = recv_one(),
+    ok = assert_no_message(),
+    ok.
 
 %% An alias sorts after every plain reference whichever was created first. Two
 %% owners' aliases are distinct and strictly ordered, but that direction follows
