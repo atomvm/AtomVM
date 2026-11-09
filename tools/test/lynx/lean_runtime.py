@@ -109,6 +109,26 @@ def cases():
     for ordinal, fn, texts in [(1, "binary_to_integer", integers), (2, "binary_to_float", floats)]:
         for text in texts:
             call(c, f"guard:{ordinal}", fn, f'<<"{text}">>')
+    for base, texts in [("2", ["101101", "-101101", "+000101", "102"]),
+                        ("10", ["+00012", "-0", "123456789012345678901234567890", "1_0"]),
+                        ("16", ["fF", "-8000000000000001", "10000000000000000000000001", "0x10"]),
+                        ("36", ["Zz", "+000Z", "-zZ", "zZ!"])]:
+        for text in texts:
+            call(c, "guard:1", "binary_to_integer", f'<<"{text}">>', base)
+            call(c, "guard:1", "list_to_integer", f'"{text}"', base)
+    for bytes_ in ["49,0", "49,0,50", "0,49", "43,49,0,50"]:
+        for base in [None, "2", "10", "16", "36"]:
+            args = [] if base is None else [base]
+            call(c, "guard:1", "binary_to_integer", f"<<{bytes_}>>", *args)
+            call(c, "guard:1", "list_to_integer", f"[{bytes_}]", *args)
+    for base in ["1", "37", "-1", "1.0", "1 bsl 100"]:
+        for fn, value in [("binary_to_integer", '<<"10">>'), ("list_to_integer", '"10"'),
+                          ("integer_to_binary", "10"), ("integer_to_list", "10")]:
+            call(c, "integer_binary_round_trip", fn, value, base)
+    for base in ["2", "16", "36"]:
+        for value in ["0", "-1", "(1 bsl 63)+1", "-((1 bsl 127)+35)"]:
+            for fn in ["integer_to_binary", "integer_to_list"]:
+                call(c, "integer_binary_round_trip", fn, value, base)
     for value in ["0.0", "-0.0", "5.0e-324", "1.7976931348623157e308", "100.0", "1000.0",
                   "1230.0", "12300.0", "0.0012", "0.00012", "0.1", "0.3", "123456.0",
                   "12345.678", "1.0e23", "9.999999999999999e22", "9007199254740991.0",
