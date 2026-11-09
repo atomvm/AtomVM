@@ -105,7 +105,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **2,581 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **2,667 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -137,6 +137,17 @@ does not match. AtomVM mirrors that immediate-integer special case only in key
 lookup, without weakening general or nested comparison. On 32-bit targets these
 large integer keys are boxed and do not take that path; compare against an OTP
 oracle with matching word size for these representation-dependent recipes.
+
+The iodata grammar matrix has 96 cases across `iolist_to_binary/1`,
+`iolist_size/1`, `list_to_binary/1`, and `list_to_bitstring/1` (86 additions to
+the original conversion samples). It checks binary versus list roots, nested
+binary tails, partial-bitstring elements/tails that only `list_to_bitstring/1`
+accepts, and invalid nested bytes, floats, atoms, and improper integer tails.
+Two 64-level input shapes exercise deep traversal and a buried invalid tail;
+reused slices of a runtime-created large binary check exact bytes and size.
+These public-API extensions do not imply additional Lean proofs or GC-pressure
+coverage. In particular, byte-only APIs must reject partial input segments even
+when concatenating those segments would produce a complete byte.
 
 The lifecycle/receive cases cover linked normal/abnormal exits,
 unlinking, trapped exits, untrappable `kill`, demonitor option validation and
