@@ -24,6 +24,17 @@
     termination_queue/1,
     termination_cascade/2,
     suspended_receive/1,
+    function_apply/3,
+    function_named/3,
+    function_make/4,
+    function_spawn/3,
+    function_zero/0,
+    function_one/1,
+    function_two/2,
+    function_child/0,
+    function_child_error/0,
+    function_child_throw/0,
+    function_child_exit/0,
     utf/3,
     utf_construct/3
 ]).
@@ -458,6 +469,116 @@ suspended_receive(Mode) ->
             end,
         {Value, get(waited), get(cleanup), drain()}
     end).
+
+%% Never serialize function identities or compiler-generated closure names.
+function_value(local_zero, Captured) -> fun() -> {Captured, zero} end;
+function_value(local_one, Captured) -> fun(X) -> {Captured, X} end;
+function_value(local_two, Captured) -> fun(X, Y) -> {Captured, X, Y} end;
+function_value(external_zero, _) -> fun ?MODULE:function_zero/0;
+function_value(external_one, _) -> fun ?MODULE:function_one/1;
+function_value(external_two, _) -> fun ?MODULE:function_two/2;
+function_value(bif_zero, _) -> fun erlang:self/0;
+function_value(bif_one, _) -> fun erlang:abs/1;
+function_value(missing_export, _) -> fun ?MODULE:missing/0;
+function_value(missing_module, _) -> fun lynx_missing_functions:missing/0;
+function_value(not_fun, Captured) -> Captured.
+
+function_zero() -> zero.
+function_one(X) -> {one, X}.
+function_two(X, Y) -> {two, X, Y}.
+
+function_apply(Kind, Captured, Args) ->
+    Fun = function_value(Kind, Captured),
+    try apply(Fun, Args) of
+        Pid when is_pid(Pid) -> {ok, {pid, Pid =:= self()}};
+        Value -> {ok, Value}
+    catch
+        error:{badarity, {BadFun, BadArgs}} ->
+            {error, badarity, BadFun =:= Fun, BadArgs =:= Args};
+        error:{badfun, BadFun} ->
+            {error, badfun, BadFun =:= Fun};
+        C:R ->
+            {C, R}
+    end.
+
+function_named(Module, Name, Args) ->
+    try apply(Module, Name, Args) of
+        Value -> {ok, Value}
+    catch
+        C:R -> {C, R}
+    end.
+
+function_make(Module, Name, Arity, Args) ->
+    Fun = erlang:make_fun(Module, Name, Arity),
+    {
+        is_function(Fun),
+        erlang:fun_info(Fun, module),
+        erlang:fun_info(Fun, name),
+        erlang:fun_info(Fun, arity),
+        function_apply(not_fun, Fun, Args)
+    }.
+
+function_spawn(Kind, Mode, Value) ->
+    isolated(fun() ->
+        process_flag(trap_exit, true),
+        Parent = self(),
+        Fun =
+            case Kind of
+                local -> fun() -> Parent ! {self(), Value} end;
+                external -> fun ?MODULE:function_child/0;
+                external_error -> fun ?MODULE:function_child_error/0;
+                external_throw -> fun ?MODULE:function_child_throw/0;
+                external_exit -> fun ?MODULE:function_child_exit/0;
+                _ -> function_value(Kind, Value)
+            end,
+        Options =
+            case Mode of
+                monitored -> [monitor];
+                linked -> [link, monitor];
+                small_heap -> [monitor, {min_heap_size, 100}]
+            end,
+        try spawn_opt(Fun, Options) of
+            {Child, Ref} ->
+                Child ! {Parent, Value},
+                receive
+                    {'DOWN', Ref, process, Child, Reason} ->
+                        Messages = [
+                            case M of
+                                {Child, V} -> {reply, V};
+                                {'EXIT', Child, R} -> {exit, function_exit(R, Fun)};
+                                _ -> unexpected
+                            end
+                         || M <- drain()
+                        ],
+                        {child, function_exit(Reason, Fun), Messages}
+                end
+        catch
+            C:R -> {caller, C, R}
+        end
+    end).
+
+function_exit({{badarity, {Fun, Args}}, Stack}, Expected) ->
+    {badarity, Fun =:= Expected, Args =:= [], is_list(Stack)};
+function_exit({Reason, Stack}, _) when is_list(Stack) -> {Reason, stack};
+function_exit(Reason, _) ->
+    Reason.
+
+function_child() ->
+    receive
+        {Parent, Value} -> Parent ! {self(), Value}
+    end.
+
+function_child_error() ->
+    function_child(),
+    error(child_error).
+
+function_child_throw() ->
+    function_child(),
+    throw(child_throw).
+
+function_child_exit() ->
+    function_child(),
+    exit(child_exit).
 
 utf(Encoding, Bits, Offset) ->
     <<_:Offset, Input/bitstring>> = Bits,
