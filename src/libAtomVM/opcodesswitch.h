@@ -2458,17 +2458,13 @@ schedule_in:
                 DECODE_COMPACT_TERM(timeout, pc)
 
                 avm_int64_t t = 0;
-                if (term_is_any_integer(timeout)) {
-                    t = term_maybe_unbox_int64(timeout);
-                    if (UNLIKELY(t < 0)) {
+                if (timeout != INFINITY_ATOM) {
+                    if (UNLIKELY(!term_is_uint32(timeout))) {
                         mailbox_reset(&ctx->mailbox);
                         ctx->mailbox.receive_has_match_clauses = false;
                         RAISE_ERROR(TIMEOUT_VALUE_ATOM);
                     }
-                } else if (UNLIKELY(timeout != INFINITY_ATOM)) {
-                    mailbox_reset(&ctx->mailbox);
-                    ctx->mailbox.receive_has_match_clauses = false;
-                    RAISE_ERROR(TIMEOUT_VALUE_ATOM);
+                    t = term_to_uint32(timeout);
                 }
                 TRACE("wait_timeout/2, label: %i, timeout: %li\n", label, (long int) t);
 

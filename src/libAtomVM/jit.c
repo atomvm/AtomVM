@@ -1089,17 +1089,13 @@ static Context *jit_wait_timeout(Context *ctx, JITState *jit_state, term timeout
 {
     TRACE("jit_wait_timeout: timeout=%p label=%d\n", (void *) timeout, label);
     avm_int64_t t = 0;
-    if (term_is_any_integer(timeout)) {
-        t = term_maybe_unbox_int64(timeout);
-        if (UNLIKELY(t < 0)) {
+    if (timeout != INFINITY_ATOM) {
+        if (UNLIKELY(!term_is_uint32(timeout))) {
             mailbox_reset(&ctx->mailbox);
             ctx->mailbox.receive_has_match_clauses = false;
             return jit_raise_error(ctx, jit_state, 0, TIMEOUT_VALUE_ATOM);
         }
-    } else if (UNLIKELY(timeout != INFINITY_ATOM)) {
-        mailbox_reset(&ctx->mailbox);
-        ctx->mailbox.receive_has_match_clauses = false;
-        return jit_raise_error(ctx, jit_state, 0, TIMEOUT_VALUE_ATOM);
+        t = term_to_uint32(timeout);
     }
 
     Context *r = jit_process_signal_messages(ctx, jit_state);
