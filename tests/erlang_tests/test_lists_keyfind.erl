@@ -34,6 +34,7 @@ start() ->
     ok = test_keyfind_with_existing_key_and_different_length_of_tuples(),
     ok = test_keyfind_with_invalid_input(),
     ok = test_numeric_keys(),
+    ok = test_numeric_precision(),
     0.
 
 test_numeric_keys() ->
@@ -48,6 +49,42 @@ test_numeric_keys() ->
     %% Map keys remain exact even when the containing terms use == equality.
     false = lists:keyfind(?ID(#{1 => value}), 1, ?ID([{#{1.0 => value}, wrong}])),
     false = lists:keymember(?ID(#{1 => value}), 1, ?ID([{#{1.0 => value}, wrong}])),
+    ok.
+
+test_numeric_precision() ->
+    Wide = erlang:system_info(wordsize) =:= 8,
+    [
+        begin
+            Key = ?ID(Sign * ((1 bsl Power) + Offset)),
+            Stored = ?ID(Sign * float(1 bsl Power)),
+            Items = ?ID([skipped, {}, {prefix}, {prefix, Stored, rounded}]),
+            Match = lists:keymember(Key, 2, Items),
+            Found = lists:keyfind(Key, 2, Items),
+            Fallback = lists:keyfind(Key, 2, ?ID(Items ++ [{prefix, Key, exact} | improper])),
+            case Match of
+                true ->
+                    {prefix, Stored, rounded} = Found,
+                    Found = Fallback;
+                false ->
+                    false = Found,
+                    {prefix, Key, exact} = Fallback
+            end,
+            %% OTP's rounded match is scalar and directional. Ordinary numeric
+            %% comparison, reversed keys, and nested values must stay precise.
+            Equal = (Key == Stored),
+            Equal = lists:keymember(Stored, 1, ?ID([{Key, reversed}])),
+            Equal = lists:keymember({Key}, 1, ?ID([{{Stored}, nested}])),
+            Equal = lists:keymember(#{value => Key}, 1, ?ID([{#{value => Stored}, nested}]))
+        end
+     || {Power, Offset, Match, Equal} <- [
+            {24, 1, false, false},
+            {53, 1, Wide, false},
+            {59, -1, Wide, false},
+            {59, 1, false, false},
+            {59, 0, true, true}
+        ],
+        Sign <- [1, -1]
+    ],
     ok.
 
 test_keyfind_with_existing_key() ->
