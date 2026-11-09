@@ -1288,13 +1288,16 @@ first_pass(<<?OP_IS_FUNCTION2, Rest0/binary>>, MMod, MSt0, State0) ->
             {BSt2, FunArity} = MMod:call_primitive(BSt1, ?PRIM_MODULE_GET_FUN_ARITY, [
                 ModuleReg, {free, IndexReg}
             ]),
-            cond_jump_to_label({'(int)', {free, FunArity}, '!=', Arity}, Label, MMod, BSt2)
+            % The primitive returns a C int; clear unspecified upper register bits,
+            % but compare the queried arity at full width to avoid truncation.
+            {BSt3, FunArityReg} = MMod:and_(BSt2, {free, FunArity}, 16#FFFFFFFF),
+            cond_jump_to_label({{free, FunArityReg}, '!=', Arity}, Label, MMod, BSt3)
         end,
         fun(BSt0) ->
             BSt1 = MMod:free_native_registers(BSt0, [IndexOrModuleReg]),
             {BSt2, FunArity} = MMod:get_array_element(BSt1, FuncPtr, 3),
             {BSt3, FunArityReg} = MMod:shift_right(BSt2, {free, FunArity}, 4),
-            cond_jump_to_label({'(int)', {free, FunArityReg}, '!=', Arity}, Label, MMod, BSt3)
+            cond_jump_to_label({{free, FunArityReg}, '!=', Arity}, Label, MMod, BSt3)
         end
     ),
     MSt8 = MMod:free_native_registers(MSt7, [FuncPtr, ModuleReg, Arity]),
