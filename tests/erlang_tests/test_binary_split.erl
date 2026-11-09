@@ -38,6 +38,24 @@ start() ->
     ok = split_compare_expected([], <<>>, <<":">>, [trim]),
     ok = split_compare_expected([<<"abc">>], <<"abc">>, [<<"z">>, <<"y">>], [trim_all]),
     ok = split_compare_expected([<<"a">>], <<"a">>, <<":">>, [global | foo]),
+    ok = split_compare_expected([<<"a,b">>, <<"c">>], <<"a,b,c">>, <<",">>, [{scope, {2, 3}}]),
+    ok = split_compare_expected([<<"a">>, <<"b">>, <<"c">>], <<"a,b,c">>, <<",">>, [
+        {scope, {4, -3}}, global
+    ]),
+    ok = split_compare_expected([<<"a">>, <<"b,c">>], <<"a,b,c">>, <<",">>, [
+        {scope, {1, 1}}, global
+    ]),
+    ok = split_compare_expected([<<"a,b,c">>], <<"a,b,c">>, <<",">>, [{scope, {2, 0}}, global]),
+    ok = split_compare_expected([<<"a,b,c">>], <<"a,b,c">>, <<"b,c">>, [{scope, {2, 2}}]),
+    ok = split_compare_expected([<<"a,b">>, <<"c">>], <<"a,b,c">>, [<<",">>, <<"b,">>], [
+        {scope, {3, 2}}, global
+    ]),
+    ok = split_compare_expected([<<"a,b">>], <<"a,b,">>, <<",">>, [{scope, {3, 1}}, trim]),
+    ok = invalid_scope(bad),
+    ok = invalid_scope({1}),
+    ok = invalid_scope({-1, 1}),
+    ok = invalid_scope({1, 5}),
+    ok = invalid_scope({1.0, 1}),
     ok = fail_split(<<>>),
     ok = fail_split([]),
     ok = fail_split([<<>>]),
@@ -89,6 +107,13 @@ compare_bin(Bin1, Bin2, Index) ->
     B1 = binary:at(Bin1, Index),
     B1 = binary:at(Bin2, Index),
     compare_bin(Bin1, Bin2, Index - 1).
+
+invalid_scope(Scope) ->
+    try binary:split(<<"a,b,c">>, <<",">>, [{scope, Scope}]) of
+        Value -> {unexpected, Value}
+    catch
+        error:badarg -> ok
+    end.
 
 fail_split(Separator) ->
     try binary:split(<<"TESTBIN">>, Separator) of

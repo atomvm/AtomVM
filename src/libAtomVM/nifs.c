@@ -4027,6 +4027,8 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(bin_term, term_is_binary);
     VALIDATE_VALUE(pattern_term, is_valid_pattern);
 
+    size_t bin_size = term_binary_size(bin_term);
+    BinaryPosLen scope = { .pos = 0, .len = bin_size };
     bool global = false;
     bool trim = false;
     bool trim_all = false;
@@ -4049,8 +4051,23 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
                 case TRIM_ALL_ATOM:
                     trim_all = true;
                     break;
-                default:
-                    RAISE_ERROR(BADARG_ATOM);
+                default: {
+                    if (UNLIKELY(!term_is_tuple(head) || term_get_tuple_arity(head) != 2
+                            || term_get_tuple_element(head, 0) != SCOPE_ATOM)) {
+                        RAISE_ERROR(BADARG_ATOM);
+                    }
+                    term range = term_get_tuple_element(head, 1);
+                    if (UNLIKELY(!term_is_tuple(range) || term_get_tuple_arity(range) != 2)) {
+                        RAISE_ERROR(BADARG_ATOM);
+                    }
+                    term pos = term_get_tuple_element(range, 0);
+                    term len = term_get_tuple_element(range, 1);
+                    if (UNLIKELY(!term_is_integer(pos) || !term_is_integer(len)
+                            || !term_normalize_binary_pos_len(bin_term, term_to_int(pos), term_to_int(len), &scope))) {
+                        RAISE_ERROR(BADARG_ATOM);
+                    }
+                    break;
+                }
             }
             options = term_get_list_tail(options);
         }
@@ -4073,13 +4090,13 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
     size_t shortest_pattern_length = 0;
     init_split_patterns(pattern_term, patterns, &shortest_pattern_length);
 
-    size_t bin_size = term_binary_size(bin_term);
     const char *bin_data = term_binary_data(bin_term);
 
     // Count segments first to allocate memory once.
     size_t num_segments = 1;
-    const char *temp_bin_data = bin_data;
-    size_t temp_bin_size = bin_size;
+    const char *temp_bin_data = bin_data + scope.pos;
+    size_t temp_bin_size = scope.len;
+    size_t segment_start = 0;
     size_t heap_size = 0;
     do {
         size_t matched_pattern_index = 0;
@@ -4088,13 +4105,14 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
             break;
         }
         num_segments++;
-        heap_size += CONS_SIZE + term_sub_binary_heap_size(argv[0], found - temp_bin_data);
+        heap_size += CONS_SIZE + term_sub_binary_heap_size(argv[0], (found - bin_data) - segment_start);
         size_t next_search_offset = (found - temp_bin_data) + patterns[matched_pattern_index].size;
         temp_bin_data += next_search_offset;
         temp_bin_size -= next_search_offset;
+        segment_start = temp_bin_data - bin_data;
     } while (global && temp_bin_size >= shortest_pattern_length);
 
-    heap_size += CONS_SIZE + term_sub_binary_heap_size(argv[0], temp_bin_size);
+    heap_size += CONS_SIZE + term_sub_binary_heap_size(argv[0], bin_size - segment_start);
 
     term result_list = term_nil();
 
@@ -4120,15 +4138,16 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
     init_split_patterns(argv[1], patterns, &shortest_pattern_length);
 
     term list_cursor = result_list;
-    temp_bin_data = bin_data;
-    temp_bin_size = bin_size;
+    temp_bin_data = bin_data + scope.pos;
+    temp_bin_size = scope.len;
+    segment_start = 0;
     term *list_ptr = term_get_list_ptr(list_cursor);
     do {
         size_t matched_pattern_index = 0;
         const char *found = find_pattern(temp_bin_data, temp_bin_size, patterns, pattern_count, &matched_pattern_index);
 
         if (found) {
-            term tok = term_maybe_create_sub_binary(argv[0], temp_bin_data - bin_data, found - temp_bin_data, &ctx->heap, ctx->global);
+            term tok = term_maybe_create_sub_binary(argv[0], segment_start, (found - bin_data) - segment_start, &ctx->heap, ctx->global);
             list_ptr[LIST_HEAD_INDEX] = tok;
 
             list_cursor = list_ptr[LIST_TAIL_INDEX];
@@ -4137,10 +4156,11 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
             size_t next_search_offset = (found - temp_bin_data) + patterns[matched_pattern_index].size;
             temp_bin_data += next_search_offset;
             temp_bin_size -= next_search_offset;
+            segment_start = temp_bin_data - bin_data;
         }
 
         if (!found || !global) {
-            term rest = term_maybe_create_sub_binary(argv[0], temp_bin_data - bin_data, temp_bin_size, &ctx->heap, ctx->global);
+            term rest = term_maybe_create_sub_binary(argv[0], segment_start, bin_size - segment_start, &ctx->heap, ctx->global);
             list_ptr[LIST_HEAD_INDEX] = rest;
             break;
         }
