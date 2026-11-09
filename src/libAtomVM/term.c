@@ -965,14 +965,6 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                     case TERM_TYPE_INDEX_NON_EMPTY_LIST: {
                         term t_tail = term_get_list_tail(t);
                         term other_tail = term_get_list_tail(other);
-                        // invalid term is used as a term lower than any other
-                        // so "a" < "ab" -> true can be implemented.
-                        if (term_is_nil(t_tail)) {
-                            t_tail = term_invalid_term();
-                        }
-                        if (term_is_nil(other_tail)) {
-                            other_tail = term_invalid_term();
-                        }
                         if (UNLIKELY(temp_stack_push(&temp_stack, t_tail) != TempStackOk)) {
                             return TermCompareMemoryAllocFail;
                         }
