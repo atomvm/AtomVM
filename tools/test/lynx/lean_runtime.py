@@ -248,6 +248,14 @@ def cases():
             for count in [0, 1, 16]:
                 probe("Modules/Signals", ["linked_normal_exit_is_ignored", "trapped_exit_is_a_message"],
                       f"differential:self_link({trap},{linked},{count})")
+    for owner in ["parent", "child"]:
+        for trap in ["true", "false"]:
+            for final in ["linked", "unlinked"]:
+                for reason in ["normal", "boom"]:
+                    for count in [0, 1, 16]:
+                        probe("Modules/Signals", ["linked_crash_kills_parent", "linked_normal_exit_is_ignored",
+                                                  "trapped_exit_is_a_message"],
+                              f"differential:relink({owner},{trap},{final},{reason},{count})")
     for trap in ["true", "false"]:
         for reason in ["normal", "boom", "kill"]:
             probe("Modules/Signals", ["trapped_exit_is_a_message", "kill_cannot_be_trapped",
