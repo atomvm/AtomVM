@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed `erlang:link/1` creating a link to self instead of succeeding without changing links
 - Fixed `erlang:monitor/2,3` checking target types only for live non-self targets
   and rejecting registered names of the other type instead of reporting `noproc`
 - Fixed exception stack traces ignoring the depth limit; added support for

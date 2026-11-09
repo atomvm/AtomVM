@@ -5634,6 +5634,10 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[])
 
     term target_pid = argv[0];
 
+    if (target_pid == term_from_local_process_id(ctx->process_id)) {
+        return TRUE_ATOM;
+    }
+
     if (term_is_local_pid_or_port(target_pid)) {
         int local_process_id = term_to_local_process_id(target_pid);
         Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);

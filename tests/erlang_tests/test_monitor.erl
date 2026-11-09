@@ -24,6 +24,7 @@
 
 start() ->
     ok = test_link_dead_process(),
+    ok = test_self_link(),
     ok = test_demonitor_boundaries(),
     ok = test_monitor_target_types(),
     ok = test_monitor_normal(),
@@ -80,6 +81,55 @@ start() ->
     ok = test_binary_to_term_invalid_process_ref(),
     ok = test_alias_ref_ordering(),
     0.
+
+test_self_link() ->
+    {Child, Ref} = spawn_opt(
+        fun() ->
+            receive
+                stop -> ok
+            end
+        end,
+        [link, monitor]
+    ),
+    {links, Links} = process_info(self(), links),
+    Previous = process_flag(trap_exit, false),
+    self() ! self_link_sentinel,
+    try
+        [
+            begin
+                process_flag(trap_exit, Trap),
+                [
+                    begin
+                        true = link(self()),
+                        {links, Links} = process_info(self(), links),
+                        true = link(self()),
+                        true = garbage_collect(),
+                        {links, Links} = process_info(self(), links),
+                        true = unlink(self()),
+                        {links, Links} = process_info(self(), links)
+                    end
+                 || _ <- [first, second]
+                ]
+            end
+         || Trap <- [false, true]
+        ],
+        self_link_sentinel = recv_one(),
+        ok
+    after
+        process_flag(trap_exit, Previous),
+        Child ! stop,
+        receive
+            {'DOWN', Ref, process, Child, normal} -> ok
+        end,
+        case Previous of
+            true ->
+                receive
+                    {'EXIT', Child, normal} -> ok
+                end;
+            false ->
+                ok
+        end
+    end.
 
 test_monitor_target_types() ->
     {Dead, DeadRef} = spawn_opt(fun() -> ok end, [monitor]),
