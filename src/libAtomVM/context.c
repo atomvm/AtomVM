@@ -501,18 +501,24 @@ void context_process_flush_monitor_signal(Context *ctx, uint64_t ref_ticks, bool
 bool context_process_link_exit_signal(Context *ctx, struct TermSignal *signal)
 {
     term link_pid = term_get_tuple_element(signal->signal_term, 1);
-    // Always remove link.
-    struct ListHead *item;
-    LIST_FOR_EACH (item, &ctx->monitors_head) {
-        struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
-        if (monitor->monitor_type == CONTEXT_MONITOR_LINK_LOCAL) {
-            struct LinkLocalMonitor *link = CONTAINER_OF(monitor, struct LinkLocalMonitor, monitor);
-            if (link->link_local_process_id == link_pid) {
-                // Remove link
-                list_remove(&monitor->monitor_list_head);
-                free(link);
-                break;
+    if (term_is_local_pid_or_port(link_pid)) {
+        bool active_link = false;
+        struct ListHead *item;
+        LIST_FOR_EACH (item, &ctx->monitors_head) {
+            struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
+            if (monitor->monitor_type == CONTEXT_MONITOR_LINK_LOCAL) {
+                struct LinkLocalMonitor *link = CONTAINER_OF(monitor, struct LinkLocalMonitor, monitor);
+                if (link->link_local_process_id == link_pid) {
+                    active_link = link->unlink_id == UNLINK_ID_LINK_ACTIVE;
+                    list_remove(&monitor->monitor_list_head);
+                    free(link);
+                    break;
+                }
             }
+        }
+        // unlink/1 can deactivate the link after this exit was queued.
+        if (!active_link) {
+            return false;
         }
     }
     // Determine if we are trapping exits

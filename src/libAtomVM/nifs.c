@@ -5703,15 +5703,16 @@ static term nif_erlang_unlink(Context *ctx, int argc, term argv[])
     term target_pid = argv[0];
 
     if (term_is_local_pid_or_port(target_pid)) {
-        int local_process_id = term_to_local_process_id(target_pid);
-        Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
-        if (IS_NULL_PTR(target)) {
+        uint64_t unlink_id;
+        if (UNLIKELY(!context_set_unlink_id(ctx, target_pid, &unlink_id))) {
             return TRUE_ATOM;
         }
 
-        uint64_t unlink_id;
-        if (UNLIKELY(!context_set_unlink_id(ctx, target_pid, &unlink_id))) {
-            globalcontext_get_process_unlock(ctx->global, target);
+        int local_process_id = term_to_local_process_id(target_pid);
+        Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
+        if (IS_NULL_PTR(target)) {
+            // A dead peer may already have queued a linked exit.
+            context_unlink_ack(ctx, target_pid, unlink_id);
             return TRUE_ATOM;
         }
 
