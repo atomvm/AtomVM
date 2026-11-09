@@ -684,15 +684,16 @@ term context_get_monitor_pid(Context *ctx, uint64_t ref_ticks, bool *is_monitori
  * @details Called within the process only. This function is called from
  * MonitorSignal. Monitor is not added if it already exists. Monitors are
  * identified by a reference, but links have no reference and a link can
- * only exist once.
+ * only exist once. Only a direct link/1 call reactivates a pending local unlink.
  *
  * @param ctx the context being executed
  * @param new_monitor monitor object to add (ownership belongs to context
  * afterwards)
- * @return true if the monitor was added, false if it already existed and
- * new_monitor waw freed.
+ * @param reactivate_link whether a direct link/1 call may cancel a pending local unlink
+ * @return true if the monitor was added or a local link was reactivated,
+ * false otherwise. new_monitor is freed when an existing entry is reused.
  */
-bool context_add_monitor(Context *ctx, struct Monitor *new_monitor);
+bool context_add_monitor(Context *ctx, struct Monitor *new_monitor, bool reactivate_link);
 
 /**
  * @brief Get catch label from stack
