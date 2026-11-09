@@ -238,6 +238,15 @@ def cases():
             for timeout in ["0", "1"]:
                 probe(p, ["guard_errors_and_false_preserve_messages", "zero_timeout_preserves_unmatched"],
                       f"differential:receive_guards({kind},{timeout},{messages})")
+    for operation in ["operator", "function"]:
+        for destination in ["self", "live", "dead", "named_self", "named_live", "missing",
+                            "unregistered", "reference", "stale_alias", "{invalid,0}",
+                            "{invalid,1 bsl 100}", "{invalid,1.5}", "{invalid,[]}",
+                            "{invalid,[a]}", "{invalid,<<>>}", "{invalid,<<5:3>>}",
+                            "{invalid,fun()->ok end}", "{invalid,{}}", "{invalid,{bad}}"]:
+            for payload in ["ok", "{nested,[1,<<5:3>>],1 bsl 100}", "#{value=>[1,2,3],bytes=><<1,2,3>>}"]:
+                probe(p, ["send_to_self", "send_to_missing_pid", "send_rejects_non_pid"],
+                      f"differential:send_destination({operation},{destination},{payload})")
     for value in ["child", "#{a=>1}", "-0.0"]:
         probe(p, ["successive_references_are_distinct", "references_are_unique_across_processes",
                   "dictionary_preserves_reference_counter", "dictionary_preserves_mailbox",
