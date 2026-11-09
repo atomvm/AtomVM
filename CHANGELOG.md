@@ -255,6 +255,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `erlang:link/1` failing to reactivate a local link while an unlink is pending
 - Fixed queued local linked exits being delivered after `erlang:unlink/1` returns
 - Fixed `erlang:demonitor/2` ignoring `flush` when called by the monitored process
+- Fixed `lists:keyfind/3` and `lists:keymember/3` not matching OTP's rounded
+  comparison of immediate integer keys against float fields
 
 ## [0.7.0-beta.0] - 2026-09-28
 
