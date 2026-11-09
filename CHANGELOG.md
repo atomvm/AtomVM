@@ -51,6 +51,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed spawning external funs aborting the VM and nonzero-arity local funs
+  executing without arguments instead of failing in the child
+- Fixed fun calls checking arity after dispatch, including native funs, and raising
+  bare `badarity` instead of `{badarity, {Fun, Args}}`
+- Fixed `erlang:make_fun/3` accepting arities outside `0..255`
+- Fixed AArch64 native compilation of `is_function/2` with a dynamic arity
 - Fixed receive timeouts outside `0..4294967295` being accepted or truncated instead
   of raising `timeout_value`
 - Fixed `demonitor/2` accepting invalid options and returning incorrect `info` results

@@ -263,6 +263,31 @@ def cases():
     for mode in ["timeout", "message", "nested"]:
         probe(p, "timeout_handler_scope", f"differential:suspended_receive({mode})")
 
+    for kind in ["local_zero", "local_one", "local_two", "external_zero", "external_one",
+                 "external_two", "bif_zero", "bif_one", "missing_export", "missing_module", "not_fun"]:
+        for args in ["[]", "[7]", "[left,right]", "[7|improper]", "bad"]:
+            probe(e, ["dynamic_apply_2", "dynamic_apply_captures", "dynamic_apply_2_errors"],
+                  f"differential:function_apply({kind},#{{capture=><<1,2,3>>}},{args})")
+    for module, name in [("differential", "function_zero"), ("differential", "function_one"),
+                         ("differential", "missing"), ("lynx_missing_functions", "missing"),
+                         ("erlang", "abs"), ("1", "function_one"), ("differential", "1")]:
+        for arity in ["0", "1", "255", "-1", "256", "1 bsl 100", "1.0", "bad"]:
+            probe("Term/Dispatch", ["make_fun_resolves_by_name", "apply_calls_by_name"],
+                  f"differential:function_make({module},{name},{arity},[7])")
+        for args in ["[]", "[7]", "[left,right]", "[7|improper]", "bad"]:
+            probe("Term/Dispatch", "apply_calls_by_name",
+                  f"differential:function_named({module},{name},{args})")
+    for fun in ["fun differential:function_one/1", "fun(X)->X end", "not_fun"]:
+        for arity in ["0", "1", "2", "255", "256", "-1", "1 bsl 100", "1.0"]:
+            call(e, ["is_function/2_arity", "is_function/2_invalid_arity", "is_function/2_mismatch"],
+                 "is_function", fun, arity)
+    for kind in ["local", "external", "external_error", "external_throw", "external_exit",
+                 "local_zero", "local_one", "external_one", "bif_zero", "bif_one",
+                 "missing_export", "missing_module", "not_fun"]:
+        for mode in ["monitored", "linked", "small_heap"]:
+            probe("Term/Dispatch", ["spawned_dispatch", "spawn_exception_boundaries"],
+                  f"differential:function_spawn({kind},{mode},#{{capture=>[1,2,3]}})")
+
     construction = "Term/Bitstring/Construction"
     matching = "Term/Bitstring/Matching"
     for encoding, bits in [

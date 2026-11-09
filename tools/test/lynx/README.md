@@ -105,7 +105,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **1,157 deterministic cases**:
+At the pinned Lynx revision below, this selects **1,366 deterministic cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -127,6 +127,14 @@ sender exercise exception/cleanup scopes after suspension; no elapsed duration
 or cross-sender message ordering is compared. Linked crashes are contained in
 monitored workers. Queued-DOWN flush recipes requeue a received real DOWN so
 mailbox presence is deterministic rather than inferred from a delay.
+
+The function/apply/spawn subset contains 209 cases: captured local closures,
+external funs and BIFs, dynamic `apply/2,3`, improper argument lists, wrong arities,
+undefined exports/modules, `make_fun/3` and `is_function/2` boundaries, and child
+success/error/throw/exit with monitors, links, and small heaps. Error payloads
+retain within-run fun/argument equality without serializing fun identities or
+compiler-generated names. Undefined-call recipes catch `undef` explicitly so
+an expected child/call failure is verified, not classified as a missing oracle.
 
 Permanent dictionary-query and scoped-split GC-pressure regressions also live in
 the ordinary Erlang library/runtime test suites; they are not Lean proof samples.
