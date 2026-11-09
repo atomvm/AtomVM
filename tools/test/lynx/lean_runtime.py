@@ -321,6 +321,13 @@ def cases():
             probe("Modules/Signals", ["alias_ends_with_demonitor", "demonitor_flushes_down",
                                       "monitor_reports_normal_exit"],
                   f"differential:alias_owner({mode},{action})")
+    for mode in ["plain", "demonitor", "explicit_unalias", "reply_demonitor"]:
+        for state in ["active", "removed"]:
+            for action in ["unalias", "demonitor", "{demonitor,[]}", "{demonitor,[flush]}",
+                           "{demonitor,[info]}", "{demonitor,[flush,info]}", "{demonitor,[info,flush]}"]:
+                probe("Modules/Signals", ["alias_ends_with_demonitor", "demonitor_flushes_down",
+                                          "monitor_reports_normal_exit"],
+                      f"differential:target_cancel({mode},{state},{action})")
     for count in ["1", "8", "64"]:
         probe("Modules/Signals", ["monitor_reports_normal_exit", "kill_cannot_be_trapped"],
               f"differential:termination_queue({count})")
