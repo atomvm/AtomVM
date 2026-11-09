@@ -1723,30 +1723,44 @@ static term nif_erlang_spawn_fun_opt(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(fun_term, term_is_function);
     VALIDATE_VALUE(opts_term, term_is_list);
 
-    Context *new_ctx = context_new(ctx->global);
-    context_update_flags(new_ctx, ~Spawning, Spawning);
-
     const term *boxed_value = term_to_const_term_ptr(fun_term);
-
-    Module *fun_module = (Module *) boxed_value[1];
-    term index_or_module = boxed_value[2];
-    if (term_is_atom(index_or_module)) {
-        // it is not possible to spawn a function reference except for those having
-        // 0 arity, however right now they are not supported.
-        // TODO: implement for funs having arity 0.
-        AVM_ABORT();
-    }
-    uint32_t fun_index = term_to_int32(index_or_module);
-
+    Module *fun_module;
     uint32_t label;
     uint32_t arity;
     uint32_t n_freeze;
-    module_get_fun(fun_module, fun_index, &label, &arity, &n_freeze);
+    bool apply_fun = term_is_external_fun(fun_term);
+    if (!apply_fun) {
+        fun_module = (Module *) boxed_value[1];
+        uint32_t fun_index = term_to_int32(boxed_value[2]);
+        module_get_fun(fun_module, fun_index, &label, &arity, &n_freeze);
+        apply_fun = arity != n_freeze;
+    }
+    if (apply_fun) {
+        // Apply external and nonzero-arity funs in the child, like OTP. This
+        // also handles BIFs and undefined exports without failing the caller.
+        term erlang = globalcontext_make_atom(ctx->global, ATOM_STR("\x6", "erlang"));
+        term apply = globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "apply"));
+        fun_module = globalcontext_get_module(ctx->global, term_to_atom_index(erlang));
+        if (IS_NULL_PTR(fun_module)) {
+            RAISE_ERROR(UNDEF_ATOM);
+        }
+        label = module_search_exported_function(fun_module, term_to_atom_index(apply), 2);
+        if (UNLIKELY(label == 0)) {
+            RAISE_ERROR(UNDEF_ATOM);
+        }
+        arity = 2;
+        n_freeze = 2;
+    }
 
-    // TODO: new process should fail with badarity if arity != 0
-
-    for (uint32_t i = 0; i < n_freeze; i++) {
-        new_ctx->x[i + arity - n_freeze] = boxed_value[i + 3];
+    Context *new_ctx = context_new(ctx->global);
+    context_update_flags(new_ctx, ~Spawning, Spawning);
+    if (apply_fun) {
+        new_ctx->x[0] = fun_term;
+        new_ctx->x[1] = term_nil();
+    } else {
+        for (uint32_t i = 0; i < n_freeze; i++) {
+            new_ctx->x[i + arity - n_freeze] = boxed_value[i + 3];
+        }
     }
 
     new_ctx->saved_module = fun_module;
