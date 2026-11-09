@@ -152,6 +152,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `badarg` for invalid callbacks on non-map inputs
 - Fixed receive timeouts outside `0..4294967295` being accepted or truncated instead
   of raising `timeout_value`
+- Fixed `demonitor/2` accepting invalid options and returning incorrect `info` results
+  with `flush`; flushing now preserves active-monitor messages and removes only the
+  first matching five-tuple for an inactive monitor, like OTP
 
 ## [0.7.0-beta.0] - 2026-09-28
 

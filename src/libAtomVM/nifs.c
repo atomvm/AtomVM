@@ -5458,9 +5458,18 @@ static term nif_erlang_demonitor(Context *ctx, int argc, term argv[])
 
     if (argc == 2) {
         term options = argv[1];
-        VALIDATE_VALUE(options, term_is_list);
-        flush = interop_proplist_get_value_default(options, FLUSH_ATOM, FALSE_ATOM) == TRUE_ATOM;
-        info = interop_proplist_get_value_default(options, INFO_ATOM, FALSE_ATOM) == TRUE_ATOM;
+        while (term_is_nonempty_list(options)) {
+            term option = term_get_list_head(options);
+            if (option == FLUSH_ATOM) {
+                flush = true;
+            } else if (option == INFO_ATOM) {
+                info = true;
+            } else {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            options = term_get_list_tail(options);
+        }
+        VALIDATE_VALUE(options, term_is_nil);
     }
 
     VALIDATE_VALUE(ref, term_is_local_reference);
@@ -5481,12 +5490,10 @@ static term nif_erlang_demonitor(Context *ctx, int argc, term argv[])
         if (target) {
             mailbox_send_ref_signal(target, DemonitorSignal, ref_ticks);
             globalcontext_get_process_unlock(ctx->global, target);
-            result = true;
-        } else {
-            result = false;
         }
+        result = true;
     }
-    if (flush) {
+    if (flush && !result) {
         mailbox_send_ref_signal(ctx, info ? FlushInfoMonitorSignal : FlushMonitorSignal, ref_ticks);
         context_update_flags(ctx, ~NoFlags, Trap);
         return term_invalid_term();
