@@ -105,7 +105,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **2,183 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **2,321 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -205,6 +205,13 @@ leave the second monitor intact. Reply delivery is fenced before termination;
 real DOWN notifications, post-termination alias delivery, and final reference
 states distinguish monitor cancellation from alias removal. Plain references are
 not used as reply destinations, and cross-reference DOWN order is not compared.
+Another 138 monitor-option cases cover malformed lists and alias tuples, invalid
+alias modes, invalid entries before or after valid options, and all nine ordered
+pairs of repeated alias options. Direct and registered self/live targets, dead targets, and missing
+names check that validation is not bypassed by a target shortcut. Repeated options
+check last-option-wins behavior through the remaining alias state, rather than
+only accepting a returned reference. Tagged and priority monitors are outside
+this option-validation batch.
 
 The function/apply/spawn subset contains 209 cases: captured local closures,
 external funs and BIFs, dynamic `apply/2,3`, improper argument lists, wrong arities,
