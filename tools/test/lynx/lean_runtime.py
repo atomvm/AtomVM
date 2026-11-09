@@ -328,6 +328,13 @@ def cases():
                 probe("Modules/Signals", ["alias_ends_with_demonitor", "demonitor_flushes_down",
                                           "monitor_reports_normal_exit"],
                       f"differential:target_cancel({mode},{state},{action})")
+    for first in ["plain", "demonitor", "explicit_unalias", "reply_demonitor"]:
+        for second in ["plain", "demonitor", "explicit_unalias", "reply_demonitor"]:
+            for action in ["keep", "demonitor", "unalias", "reply"]:
+                if first == "plain" and action == "reply":
+                    continue  # Plain monitor references are not message destinations.
+                probe("Modules/Signals", ["monitor_reports_normal_exit", "alias_ends_with_demonitor"],
+                      f"differential:monitor_pair({first},{second},{action})")
     for count in ["1", "8", "64"]:
         probe("Modules/Signals", ["monitor_reports_normal_exit", "kill_cannot_be_trapped"],
               f"differential:termination_queue({count})")
