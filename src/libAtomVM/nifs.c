@@ -1928,6 +1928,7 @@ static term nif_erlang_is_process_alive_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
+    VALIDATE_VALUE(argv[0], term_is_local_pid);
     int local_process_id = term_to_local_process_id(argv[0]);
     bool process_exists = globalcontext_process_exists(ctx->global, local_process_id);
 
