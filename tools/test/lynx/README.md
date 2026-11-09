@@ -105,7 +105,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **2,507 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **2,537 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -117,6 +117,14 @@ Missing functions and differing error precedence remain failures, not skips.
 OTP is the execution oracle, not the Lean model: for example, tested OTP 29
 accepts an already queued receive match before checking an invalid timeout.
 That differs from the model test named `timeout_validation_precedes_scan`.
+
+Thirty map-fold callback cases extend the model's input-validation samples:
+tuple accumulators count entries and sum asymmetric values, while callbacks
+throw, error, or exit with a fixed reason. Empty maps and exhausted iterators
+must not invoke callbacks; non-functions must still be rejected. Single-entry,
+three-entry, and 40-entry maps exercise dispatch without asserting traversal
+order, alongside invalid-map controls. These are public-API extensions, not
+additional Lean proofs.
 
 The lifecycle/receive cases cover linked normal/abnormal exits,
 unlinking, trapped exits, untrappable `kill`, demonitor option validation and

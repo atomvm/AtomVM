@@ -90,8 +90,20 @@ map_entries(Map) ->
     Entries = maps:to_list(Map),
     {length(Entries), maps:from_list(Entries)}.
 
-map_fold(Map, valid) -> maps:fold(fun(K, V, Acc) -> Acc#{K => V} end, #{}, Map);
-map_fold(Map, wrong_arity) -> maps:fold(fun(K, V) -> {K, V} end, #{}, Map).
+map_fold(Map, valid) ->
+    maps:fold(fun(K, V, Acc) -> Acc#{K => V} end, #{}, Map);
+map_fold(Map, wrong_arity) ->
+    maps:fold(fun(K, V) -> {K, V} end, #{}, Map);
+map_fold(Map, counted) ->
+    maps:fold(fun(_K, V, {Count, Sum}) -> {Count + 1, Sum + V} end, {0, 0}, Map);
+map_fold(Map, throw) ->
+    maps:fold(fun(_, _, _) -> throw(folded) end, initial, Map);
+map_fold(Map, error) ->
+    maps:fold(fun(_, _, _) -> error(folded) end, initial, Map);
+map_fold(Map, exit) ->
+    maps:fold(fun(_, _, _) -> exit(folded) end, initial, Map);
+map_fold(Map, non_function) ->
+    call(maps, fold, [not_fun, initial, Map]).
 
 dictionary(A, B) ->
     erase(),
