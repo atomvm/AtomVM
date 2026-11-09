@@ -26,6 +26,7 @@ start() ->
     ok = test_link_dead_process(),
     ok = test_self_link(),
     ok = test_relink(),
+    ok = test_unlink_exit_race(64),
     ok = test_crossed_unlinks(64),
     ok = test_demonitor_boundaries(),
     ok = test_monitor_target_types(),
@@ -136,6 +137,57 @@ crossed_unlink_action(Pid, Relink) ->
     true = unlink(Pid),
     case Relink of
         true -> true = link(Pid);
+        false -> ok
+    end.
+
+%% A linked exit may win the race, but cannot kill a worker after unlink returns.
+test_unlink_exit_race(0) ->
+    ok;
+test_unlink_exit_race(N) ->
+    Parent = self(),
+    {Child, ChildRef} = spawn_opt(
+        fun() ->
+            receive
+                %% Still kills a non-trapping peer, without printing a crash dump.
+                go -> exit(shutdown)
+            end
+        end,
+        [monitor]
+    ),
+    {Worker, WorkerRef} = spawn_opt(
+        fun() ->
+            true = link(Child),
+            Parent ! {self(), ready},
+            wait_unlink_target_dead(Child),
+            true = unlink(Child),
+            Parent ! {self(), unlinked},
+            receive
+                stop -> ok
+            end
+        end,
+        [monitor]
+    ),
+    receive
+        {Worker, ready} -> ok
+    end,
+    Child ! go,
+    receive
+        {'DOWN', ChildRef, process, Child, shutdown} -> ok
+    end,
+    Worker ! stop,
+    Reason =
+        receive
+            {'DOWN', WorkerRef, process, Worker, R} -> R
+        end,
+    receive
+        {Worker, unlinked} -> normal = Reason
+    after 0 -> shutdown = Reason
+    end,
+    test_unlink_exit_race(N - 1).
+
+wait_unlink_target_dead(Child) ->
+    case is_process_alive(Child) of
+        true -> wait_unlink_target_dead(Child);
         false -> ok
     end.
 

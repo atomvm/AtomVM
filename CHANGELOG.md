@@ -52,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Fixed crossed local unlink/relink operations leaving a link active at only one endpoint
+- Fixed queued local linked exits being delivered after `erlang:unlink/1` returns
 - Fixed `erlang:link/1` failing to reactivate a local link while an unlink is pending
 - Fixed `erlang:link/1` creating a link to self instead of succeeding without changing links
 - Fixed `erlang:monitor/2,3` checking target types only for live non-self targets
