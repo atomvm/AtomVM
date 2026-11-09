@@ -250,6 +250,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `erlang:system_flag(backtrace_depth, Depth)` with OTP-compatible defaults and bounds
 - Fixed `erlang:monitor/2,3` checking target types only for live non-self targets
   and rejecting registered names of the other type instead of reporting `noproc`
+- Fixed `erlang:link/1` creating a link to self instead of succeeding without changing links
 
 ## [0.7.0-beta.0] - 2026-09-28
 
