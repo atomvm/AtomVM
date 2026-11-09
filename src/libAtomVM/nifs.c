@@ -5527,6 +5527,17 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[])
         int local_process_id = term_to_local_process_id(target_pid);
         Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
         if (IS_NULL_PTR(target)) {
+            if (ctx->trap_exit) {
+                if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(3), 1, &target_pid, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+                term message = term_alloc_tuple(3, &ctx->heap);
+                term_put_tuple_element(message, 0, EXIT_ATOM);
+                term_put_tuple_element(message, 1, target_pid);
+                term_put_tuple_element(message, 2, NOPROC_ATOM);
+                mailbox_send(ctx, message);
+                return TRUE_ATOM;
+            }
             RAISE_ERROR(NOPROC_ATOM);
         }
 

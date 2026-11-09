@@ -165,6 +165,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed AArch64 native compilation of `is_function/2` with a dynamic arity
 - Fixed `lists:keyfind/3` and `lists:keymember/3` using exact instead of numeric equality
 - Fixed `is_process_alive/1` accepting non-PID arguments
+- Fixed linking to a dead local process raising `noproc` instead of delivering an
+  exit message when the caller traps exits
 
 ## [0.7.0-beta.0] - 2026-09-28
 
