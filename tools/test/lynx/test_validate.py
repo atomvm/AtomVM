@@ -3,6 +3,7 @@
 
 """Public CLI integration tests; requires a built AtomVM and host OTP/Elixir."""
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -104,6 +105,70 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual([entry["status"] for entry in actuals], ["error", "ok", "ok"])
             self.assertIn("Timed out", actuals[0]["message"])
             self.assertEqual(unverified[0]["actual"], actuals[0])
+
+    def test_lean_inventory_replay_reports_samples_not_proof_coverage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            checkout = work / "lynx"
+            tests = checkout / "Lean/LynxTest"
+            tests.mkdir(parents=True)
+            lean = tests / "Example.lean"
+            lean.write_text("theorem sampled : True := by trivial\n"
+                            "private theorem unsampled : True := by trivial\n#guard true\n")
+            origin = ["Example.lean#sampled"]
+            source = work / "input.json"
+            source.write_text(json.dumps([
+                {"lean_origins": origin,
+                 "expression": "differential:utf(utf8,<<16#E2,16#82,16#AC,255>>,0)"},
+                {"lean_origins": origin,
+                 "expression": "differential:short_circuit(or_else,true,throw)"},
+                {"lean_origins": origin,
+                 "expression": "differential:process_exchange({value,7})"},
+                {"lean_origins": origin,
+                 "expression": "differential:receive_timeout(-1,[wanted,other])"},
+                {"lean_origins": origin, "expression": "missing_lynx_module:missing()"},
+            ]))
+            output = work / "full"
+            summary = self.invoke(output, "--lean-runtime", checkout, "--replay", source)
+            self.assertEqual(summary, {"laws": 0, "passed": 4, "failed": 0,
+                                       "unverified": 1, "uncovered": 0})
+            report = json.loads((output / "lean-coverage.json").read_text())
+            self.assertEqual(report[0]["sha256"], hashlib.sha256(lean.read_bytes()).hexdigest())
+            sampled, unsampled, guard = report[0]["tests"]
+            self.assertEqual(sampled, {"test": "sampled", "line": 1, "status": "has_samples",
+                                       "cases": 5, "passed": 4, "failed": 0, "unverified": 1})
+            self.assertEqual([r["status"] for r in [unsampled, guard]], ["no_samples"] * 2)
+            # Independent public-result oracles for Unicode, skipped effects,
+            # child isolation, and a queued match before timeout validation.
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                values = JSON.decode!(File.read!(path))["expected"]
+                [utf, short, process, timeout] = Enum.map(Enum.take(values, 4), fn value ->
+                  :erlang.binary_to_term(Base.decode64!(value))
+                end)
+                {:ok, {8364, <<255>>}} = utf
+                {:ok, {true, :seen, :undefined}} = short
+                {:ok, {true, true, true, true, true, true, :undefined,
+                       {:value, 7}, :normal, [:pending]}} = process
+                {:ok, {:matched, [:other]}} = timeout
+                """, str(output / "manifest.json")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+            subset = json.loads(source.read_text())[:1]
+            source.write_text(json.dumps(subset))
+            partial = work / "partial"
+            self.assertEqual(self.invoke(partial, "--lean-runtime", checkout, "--replay", source)["passed"], 1)
+            row = json.loads((partial / "lean-coverage.json").read_text())[0]["tests"][0]
+            self.assertEqual((row["cases"], row["passed"], row["unverified"]), (1, 1, 0))
+            subset[0]["lean_origins"] = ["Example.lean#renamed"]
+            source.write_text(json.dumps(subset))
+            rejected = subprocess.run([
+                sys.executable, str(SCRIPT), "--lean-runtime", str(checkout),
+                "--replay", str(source), "--output", str(work / "stale")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("attribution no longer exists", rejected.stderr)
 
     @unittest.skipUnless(os.getenv("LYNX_CHECKOUT"), "Set LYNX_CHECKOUT to test fixture coverage")
     def test_lynx_exports_have_cases_and_partial_replay_is_scoped(self):
