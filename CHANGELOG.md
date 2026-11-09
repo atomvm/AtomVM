@@ -239,6 +239,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bare `badarity` instead of `{badarity, {Fun, Args}}`
 - Fixed `erlang:make_fun/3` accepting arities outside `0..255`
 - Fixed AArch64 native compilation of `is_function/2` with a dynamic arity
+- Fixed `lists:keyfind/3` and `lists:keymember/3` using exact instead of numeric equality
 
 ## [0.7.0-beta.0] - 2026-09-28
 
