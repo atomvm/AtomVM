@@ -7736,7 +7736,7 @@ static term nif_lists_keyfind(Context *ctx, int argc, term argv[])
 
         term nth_element = term_get_tuple_element(tuple, n_pos - 1);
 
-        TermCompareResult cmp_result = term_compare(nth_element, key, TermCompareExact, ctx->global);
+        TermCompareResult cmp_result = term_compare(nth_element, key, TermCompareNoOpts, ctx->global);
 
         if (cmp_result == TermEquals) {
             return tuple;

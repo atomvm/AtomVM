@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed `lists:keyfind/3` and `lists:keymember/3` using exact instead of numeric equality
 - Fixed spawning external funs aborting the VM and nonzero-arity local funs
   executing without arguments instead of failing in the child
 - Fixed fun calls checking arity after dispatch, including native funs, and raising
