@@ -61,6 +61,8 @@
     nif_error/1,
     get/0,
     get/1,
+    get_keys/0,
+    get_keys/1,
     put/2,
     erase/0,
     erase/1,
@@ -905,6 +907,16 @@ get() ->
 %%-----------------------------------------------------------------------------
 -spec get(Key :: any()) -> any().
 get(_Key) ->
+    erlang:nif_error(undefined).
+
+%% @doc Return all process dictionary keys in unspecified order.
+-spec get_keys() -> [term()].
+get_keys() ->
+    erlang:nif_error(undefined).
+
+%% @doc Return keys whose values exactly match `Value', in unspecified order.
+-spec get_keys(Value :: term()) -> [term()].
+get_keys(_Value) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

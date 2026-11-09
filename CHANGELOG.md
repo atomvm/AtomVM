@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0-beta.1] - Unreleased
 
 ### Added
+- Added `erlang:get_keys/0,1` to query process dictionary keys
 - Added `erlang:binary_part/2`, including use in guards
 - Added `gen:start/5,6`, used by Elixir's `GenServer`
 - Added ML-KEM-768 (FIPS 203) key encapsulation to `crypto`, requiring libsodium >= 1.0.22

@@ -23,6 +23,7 @@
 -export([start/0, put_int/1, stringize/1, factorial/1, id/1, the_get/1, the_erase/1]).
 
 start() ->
+    ok = test_get_keys(),
     ok = test_get_0_erase_0(),
     put_int(0),
     X = put_int(1),
@@ -81,6 +82,39 @@ test_put_get_erase() ->
     2 = apply(erlang, list_to_atom("erase"), [{any_term}]),
     undefined = erase({any_term}),
     ok.
+
+test_get_keys() ->
+    [] = get_keys(),
+    [] = get_keys(missing),
+    put(1, integer),
+    put(1.0, float),
+    put(a, 1),
+    put(b, 1.0),
+    put(c, 1),
+    Keys = get_keys(),
+    5 = length(Keys),
+    true = has_key(1, Keys),
+    true = has_key(1.0, Keys),
+    true = has_key(a, Keys),
+    true = has_key(b, Keys),
+    true = has_key(c, Keys),
+    [1] = get_keys(integer),
+    [1.0] = get_keys(float),
+    IntegerKeys = get_keys(1),
+    2 = length(IntegerKeys),
+    true = has_key(a, IntegerKeys),
+    true = has_key(c, IntegerKeys),
+    [b] = get_keys(1.0),
+    put(boxed, {<<"value">>, #{x => 1}}),
+    [boxed] = get_keys({<<"value">>, #{x => 1}}),
+    [] = get_keys({<<"value">>, #{x => 1.0}}),
+    6 = length(erase()),
+    [] = get_keys(),
+    ok.
+
+has_key(_Key, []) -> false;
+has_key(Key, [Key | _]) -> true;
+has_key(Key, [_ | Rest]) -> has_key(Key, Rest).
 
 test_get_0_erase_0() ->
     [] = get(),

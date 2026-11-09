@@ -218,6 +218,7 @@ static term nif_erlang_processes(Context *ctx, int argc, term argv[]);
 static term nif_erlang_process_info(Context *ctx, int argc, term argv[]);
 static term nif_erlang_fun_info_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_get_0(Context *ctx, int argc, term argv[]);
+static term nif_erlang_get_keys(Context *ctx, int argc, term argv[]);
 static term nif_erlang_put_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_info(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_flag(Context *ctx, int argc, term argv[]);
@@ -637,6 +638,11 @@ static const struct Nif process_info_nif = {
 static const struct Nif get_0_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_get_0
+};
+
+static const struct Nif get_keys_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_get_keys
 };
 
 static const struct Nif put_nif = {
@@ -5189,6 +5195,36 @@ static term nif_erlang_get_0(Context *ctx, int argc, term argv[])
         result = term_list_prepend(tuple, result, &ctx->heap);
     }
 
+    return result;
+}
+
+static term nif_erlang_get_keys(Context *ctx, int argc, term argv[])
+{
+    size_t size = 0;
+    struct ListHead *item;
+    LIST_FOR_EACH (item, &ctx->dictionary) {
+        size++;
+    }
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, LIST_SIZE(size, 0), argc, argv,
+                     MEMORY_CAN_SHRINK)
+            != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term result = term_nil();
+    LIST_FOR_EACH (item, &ctx->dictionary) {
+        struct DictEntry *entry = GET_LIST_ENTRY(item, struct DictEntry, head);
+        if (argc == 1) {
+            TermCompareResult comparison = term_compare(entry->value, argv[0], TermCompareExact, ctx->global);
+            if (UNLIKELY(comparison == TermCompareMemoryAllocFail)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            if (comparison != TermEquals) {
+                continue;
+            }
+        }
+        result = term_list_prepend(entry->key, result, &ctx->heap);
+    }
     return result;
 }
 
