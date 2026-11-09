@@ -172,6 +172,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `erlang:raise/3` preserving legacy stack frames without adding empty locations
 - Fixed exception stack traces ignoring the depth limit; added support for
   `erlang:system_flag(backtrace_depth, Depth)` with OTP-compatible defaults and bounds
+- Fixed `erlang:monitor/2,3` checking target types only for live non-self targets
+  and rejecting registered names of the other type instead of reporting `noproc`
 
 ## [0.7.0-beta.0] - 2026-09-28
 
