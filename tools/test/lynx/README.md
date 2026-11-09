@@ -105,7 +105,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **1,941 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **1,977 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -164,6 +164,13 @@ and normal, kill, killed, and structured reasons. They check catch/cleanup effec
 trapped self-messages, termination before return, and monitor/link exit reasons.
 The child uses a small heap; raw process identities and cross-signal arrival order
 are not compared. These extend the model-inspired exception and signal samples.
+Thirty-six explicit-exit cases test linked targets and targets just unlinked by
+the sender, with both trap settings and the same six exit reasons. Explicit
+`exit/2` signals must still arrive after unlinking, unlike linked-exit propagation.
+Fenced cases check both endpoints' link lists before sending; unfenced cases omit
+the peer handshake without assuming an unlink acknowledgement is still pending.
+Monitor and linked-exit notifications are awaited independently. The original six
+never-linked explicit-exit cases remain as controls.
 
 The function/apply/spawn subset contains 209 cases: captured local closures,
 external funs and BIFs, dynamic `apply/2,3`, improper argument lists, wrong arities,
