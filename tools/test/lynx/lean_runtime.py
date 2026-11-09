@@ -179,6 +179,12 @@ def cases():
         call(m, "from_list_pairs", "from_list", value, module="maps")
     for value in ["none", "[0|#{}]"]:
         probe(m, "fold_inputs", f"differential:map_fold({value},valid)")
+    # Extend fold_inputs with callback dispatch/exception behavior. Count and sum
+    # are traversal-order independent, including beyond OTP's small-map limit.
+    for value in ["#{}", "#{a=>7}", "#{a=>3,b=> -7,c=>11}",
+                  "maps:from_list([{I,I*3-7} || I <- lists:seq(1,40)])", "none", "1"]:
+        for mode in ["counted", "throw", "error", "exit", "non_function"]:
+            probe(m, "fold_inputs", f"differential:map_fold({value},{mode})")
     for value in ["#{}", "#{a=>1,b=>2}", "#{1=>one,1.0=>float}"]:
         for key in ["a", "1", "1.0"]:
             put = f"differential:call(maps,put,[{key},new,{value}])"
