@@ -25,6 +25,7 @@
     crossed_unlink/4,
     linked_exit/2,
     exit_signal/2,
+    self_exit/4,
     monitor_options/2,
     alias_lifetime/2,
     termination_queue/1,
@@ -583,6 +584,63 @@ exit_signal(Trap, Reason) ->
                 end,
             {Down, Observation}
     end.
+
+self_exit(Arity, Trap, Linked, Reason) ->
+    isolated(fun() ->
+        process_flag(trap_exit, true),
+        Parent = self(),
+        Options =
+            case Linked of
+                true -> [link, monitor];
+                false -> [monitor]
+            end,
+        {Child, Ref} = spawn_opt(
+            fun() ->
+                process_flag(trap_exit, Trap),
+                Self = self(),
+                Result =
+                    try
+                        case Arity of
+                            one -> exit(Reason);
+                            two -> exit(Self, Reason)
+                        end
+                    catch
+                        C:R -> {caught, C, R}
+                    after
+                        Parent ! {self(), cleanup}
+                    end,
+                Message =
+                    receive
+                        {'EXIT', Self, R0} -> {trapped, R0}
+                    after 0 -> none
+                    end,
+                Parent ! {self(), {returned, Result, Message}}
+            end,
+            [{min_heap_size, 100} | Options]
+        ),
+        Down =
+            receive
+                {'DOWN', Ref, process, Child, R1} -> R1
+            end,
+        Exit =
+            case Linked of
+                true ->
+                    receive
+                        {'EXIT', Child, R2} -> R2
+                    after 1000 -> missing_exit
+                    end;
+                false ->
+                    unlinked
+            end,
+        Observations = [
+            case M of
+                {Child, Value} -> Value;
+                _ -> unexpected
+            end
+         || M <- drain()
+        ],
+        {Down, Exit, Observations}
+    end).
 
 monitor_options(unknown, Options) ->
     {demonitor(make_ref(), Options), []};
