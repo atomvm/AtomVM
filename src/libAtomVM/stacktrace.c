@@ -148,6 +148,10 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, size_t current_offset,
 
     unsigned int num_frames = 0;
     unsigned int num_aux_terms = 0;
+    unsigned int max_frames = ctx->global->backtrace_depth;
+    if (max_frames == 0) {
+        max_frames = 1;
+    }
     size_t filename_lens = 0;
     Module *prev_mod = NULL;
     size_t prev_mod_offset = (size_t) -1;
@@ -157,7 +161,7 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, size_t current_offset,
     const void **locations = NULL;
     size_t num_locations = 0;
 
-    while (ct != stack_base) {
+    while (ct != stack_base && num_frames + 1 < max_frames) {
         if (term_is_cp(*ct)) {
 
             Module *cp_mod;
@@ -293,7 +297,8 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, size_t current_offset,
     // GC may have moved stack
     ct = ctx->e;
     stack_base = context_stack_base(ctx);
-    while (ct != stack_base) {
+    unsigned int remaining_frames = num_frames - 1;
+    while (ct != stack_base && remaining_frames > 0) {
         if (term_is_cp(*ct)) {
             Module *cp_mod;
             size_t mod_offset;
@@ -309,6 +314,7 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, size_t current_offset,
                 term_put_tuple_element(frame_info, 1, term_from_int(mod_offset));
 
                 raw_stacktrace = term_list_prepend(frame_info, raw_stacktrace, &ctx->heap);
+                remaining_frames--;
             }
         } else if (term_is_catch_label(*ct)) {
 
@@ -327,6 +333,7 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, size_t current_offset,
                 term_put_tuple_element(frame_info, 1, term_from_int(mod_offset));
 
                 raw_stacktrace = term_list_prepend(frame_info, raw_stacktrace, &ctx->heap);
+                remaining_frames--;
             }
         }
         ct++;

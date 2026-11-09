@@ -51,6 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed exception stack traces ignoring the depth limit; added support for
+  `erlang:system_flag(backtrace_depth, Depth)` with OTP-compatible defaults and bounds
 - Fixed `erlang:raise/3` preserving legacy stack frames without adding empty locations
 - Fixed `lists:keyfind/3` and `lists:keymember/3` using exact instead of numeric equality
 - Fixed `is_process_alive/1` accepting non-PID arguments

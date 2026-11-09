@@ -499,6 +499,10 @@ system_info(_Key) ->
 %%
 %% This function allows to modify system flags at runtime.
 %%
+%% <b>backtrace_depth</b> sets the maximum exception stack trace depth. It accepts
+%% nonnegative small integers, capped at 64; the default is 8. A nonempty trace
+%% retains at least one frame even when the depth is zero.
+%%
 %% The following key is supported on SMP builds:
 %% <ul>
 %%       <li><b>schedulers_online</b> the number of schedulers online</li>

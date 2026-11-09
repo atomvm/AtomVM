@@ -58,6 +58,7 @@
 #include "posix_nifs.h"
 #include "scheduler.h"
 #include "smp.h"
+#include "stacktrace.h"
 #include "synclist.h"
 #include "sys.h"
 #include "tempstack.h"
@@ -3637,6 +3638,23 @@ static term nif_erlang_system_flag(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
+    if (key == BACKTRACE_DEPTH_ATOM) {
+        VALIDATE_VALUE(value, term_is_int);
+        avm_int_t depth = term_to_int(value);
+        if (depth < 0) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        int new_value = depth > MAX_BACKTRACE_DEPTH ? MAX_BACKTRACE_DEPTH : depth;
+        int old_value = ctx->global->backtrace_depth;
+#ifndef AVM_NO_SMP
+        while (!ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&ctx->global->backtrace_depth, &old_value, new_value)) {
+        }
+#else
+        ctx->global->backtrace_depth = new_value;
+#endif
+        return term_from_int11(old_value);
+    }
+
 #ifndef AVM_NO_SMP
     if (key == SCHEDULERS_ONLINE_ATOM) {
         VALIDATE_VALUE(value, term_is_integer);
@@ -4486,6 +4504,10 @@ static term nif_erlang_raise(Context *ctx, int argc, term argv[])
         term stack = argv[2];
         size_t stack_len = 0;
         size_t heap_needed = 0;
+        size_t depth = ctx->global->backtrace_depth;
+        if (depth == 0) {
+            depth = 1;
+        }
         while (term_is_nonempty_list(stack)) {
             term frame = term_get_list_head(stack);
             if (!term_is_tuple(frame)) {
@@ -4497,7 +4519,9 @@ static term nif_erlang_raise(Context *ctx, int argc, term argv[])
                     if (!term_is_function(term_get_tuple_element(frame, 0))) {
                         return BADARG_ATOM;
                     }
-                    heap_needed += TUPLE_SIZE(3);
+                    if (stack_len < depth) {
+                        heap_needed += TUPLE_SIZE(3);
+                    }
                     break;
                 case 3:
                     if (term_is_function(term_get_tuple_element(frame, 0))) {
@@ -4505,7 +4529,9 @@ static term nif_erlang_raise(Context *ctx, int argc, term argv[])
                     } else if (!term_is_atom(term_get_tuple_element(frame, 0)) || !term_is_atom(term_get_tuple_element(frame, 1))) {
                         return BADARG_ATOM;
                     } else {
-                        heap_needed += TUPLE_SIZE(4);
+                        if (stack_len < depth) {
+                            heap_needed += TUPLE_SIZE(4);
+                        }
                     }
                     break;
                 case 4:
@@ -4526,7 +4552,10 @@ static term nif_erlang_raise(Context *ctx, int argc, term argv[])
         if (!term_is_nil(stack)) {
             return BADARG_ATOM;
         }
-        if (heap_needed != 0) {
+        if (heap_needed != 0 || stack_len > depth) {
+            if (stack_len > depth) {
+                stack_len = depth;
+            }
             heap_needed += stack_len * CONS_SIZE;
             if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_needed, argc, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -4536,7 +4565,7 @@ static term nif_erlang_raise(Context *ctx, int argc, term argv[])
             stack = argv[2];
             term normalized_stack = term_nil();
             term *tail = &normalized_stack;
-            while (term_is_nonempty_list(stack)) {
+            for (size_t i = 0; i < stack_len; i++) {
                 term frame = term_get_list_head(stack);
                 int arity = term_get_tuple_arity(frame);
                 if (arity == 2 || (arity == 3 && term_is_atom(term_get_tuple_element(frame, 0)))) {
