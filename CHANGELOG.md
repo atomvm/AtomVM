@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   which needs `CONFIG_LWIP_PPP_SUPPORT=y`): `{ppp, [...]}` in `network:start/1` runs the link on a
   UART whose other end is ready for it, such as a cellular modem the application has dialed
 - Added `erlang:binary_part/2`, including use in guards
+- Added `erlang:get_keys/0,1` to query process dictionary keys
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
