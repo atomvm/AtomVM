@@ -184,11 +184,17 @@ class ValidationTests(unittest.TestCase):
                 "differential:receive_timeout(1 bsl 100,[])",
                 "differential:suspended_receive(message)",
                 "differential:termination_cascade(8,target_first)",
+                "differential:missing_link(true)",
+                "differential:missing_link(false)",
+                "differential:process_liveness()",
+                "differential:raise_exception(error,reason,[bad])",
+                "differential:call(lists,keyfind,[1,1,[{1.0,float},{1,integer}]])",
+                "differential:call(erlang,is_process_alive,[bad])",
             ]
             source.write_text(json.dumps([{"expression": e} for e in expressions]))
             output = work / "results"
             self.assertEqual(self.invoke(output, "--replay", source),
-                             {"laws": 0, "passed": 9, "failed": 0,
+                             {"laws": 0, "passed": 15, "failed": 0,
                               "unverified": 0, "uncovered": 0})
             check = subprocess.run([
                 "elixir", "-e", """
@@ -204,7 +210,14 @@ class ValidationTests(unittest.TestCase):
                   {:ok, {false, false, []}},
                   {:ok, {{:exception, :error, :timeout_value}, []}},
                   {:ok, {:ok, {{:throw, :message_body}, true, :ran, [:retained]}}},
-                  {:ok, {:killed, :killed, []}}
+                  {:ok, {:killed, :killed, []}},
+                  {:ok, {:ok, {true, :noproc, []}}},
+                  {:ok, {:ok, {:exception, :error, :noproc}}},
+                  {:ok, {:ok, {{true, true}, [], {true, {:registered_name, :lynx_liveness_child}},
+                               {:undefined, []}, {false, :undefined}}}},
+                  {:ok, {:returned, :badarg}},
+                  {:ok, {1.0, :float}},
+                  {:exception, :error, :badarg}
                 ] = actual
                 """, str(output / "manifest.json")
             ], capture_output=True, text=True, timeout=30)
