@@ -38,6 +38,7 @@
 #include "resources.h"
 #include "scheduler.h"
 #include "smp.h"
+#include "stacktrace.h"
 #include "synclist.h"
 #include "sys.h"
 #include "term.h"
@@ -88,6 +89,7 @@ GlobalContext *globalcontext_new(void)
     ets_init(&glb->ets);
 
     glb->last_process_id = 0;
+    glb->backtrace_depth = DEFAULT_BACKTRACE_DEPTH;
 
     glb->atom_table = atom_table_new();
     if (IS_NULL_PTR(glb->atom_table)) {
