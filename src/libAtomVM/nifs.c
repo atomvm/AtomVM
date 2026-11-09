@@ -5604,12 +5604,10 @@ static term nif_erlang_demonitor(Context *ctx, int argc, term argv[])
     bool is_monitoring;
     term monitor_pid = context_get_monitor_pid(ctx, ref_ticks, &is_monitoring);
     bool result;
-    if (UNLIKELY(term_is_invalid_term(monitor_pid))) {
+    // An incoming monitor is not ours to remove, but flush still applies to our mailbox.
+    if (UNLIKELY(term_is_invalid_term(monitor_pid) || !is_monitoring)) {
         result = false;
     } else {
-        if (UNLIKELY(!is_monitoring)) {
-            return !info ? TRUE_ATOM : FALSE_ATOM;
-        }
         context_demonitor(ctx, ref_ticks);
         int local_process_id = term_to_local_process_id(monitor_pid);
         Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);

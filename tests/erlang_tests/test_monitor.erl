@@ -39,6 +39,7 @@ start() ->
     ok = test_monitor_demonitor_flush_info_false(),
     ok = test_monitor_self(),
     ok = test_monitor_demonitor_from_other(),
+    ok = test_monitor_demonitor_from_target(),
     ok = test_monitor_registered(),
     ok = test_monitor_registered_noproc(),
 
@@ -651,6 +652,61 @@ test_monitor_demonitor_from_other() ->
             {'DOWN', Ref, process, Pid, normal} -> ok
         after 500 -> timeout
         end,
+    ok.
+
+test_monitor_demonitor_from_target() ->
+    [
+        begin
+            Parent = self(),
+            {Pid, Fence} = spawn_opt(
+                fun() ->
+                    receive
+                        {check, Ref} ->
+                            Other = make_ref(),
+                            self() ! {matching, Ref, a, b, c},
+                            self() ! {other, Other, a, b, c},
+                            self() ! keep,
+                            false = demonitor(Ref, [info]),
+                            Expected = demonitor(Ref, Options),
+                            {other, Other, a, b, c} = recv_one(),
+                            keep = recv_one(),
+                            ok = assert_no_message(),
+                            Parent ! {self(), checked},
+                            receive
+                                stop -> ok
+                            end
+                    end
+                end,
+                [monitor, {min_heap_size, 100}]
+            ),
+            Ref =
+                case Mode of
+                    plain -> monitor(process, Pid);
+                    _ -> monitor(process, Pid, [{alias, Mode}])
+                end,
+            Pid ! {check, Ref},
+            receive
+                {Pid, checked} -> ok;
+                {'DOWN', Fence, process, Pid, Failed} -> error({target_demonitor, Failed})
+            after 5000 -> error(target_demonitor_timeout)
+            end,
+            Pid ! stop,
+            receive
+                {'DOWN', Fence, process, Pid, normal} -> ok
+            end,
+            receive
+                {'DOWN', Ref, process, Pid, normal} -> ok
+            after 5000 -> error(owner_monitor_lost)
+            end,
+            _ = erlang:unalias(Ref)
+        end
+     || {Mode, Options, Expected} <- [
+            {plain, [flush], true},
+            {plain, [flush, info], false},
+            {explicit_unalias, [flush], true},
+            {explicit_unalias, [flush, info], false}
+        ]
+    ],
     ok.
 
 test_alias() ->
