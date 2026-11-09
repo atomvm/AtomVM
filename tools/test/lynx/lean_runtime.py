@@ -121,8 +121,18 @@ def cases():
         probe(c, "integer_binary_round_trip",
               f"differential:call(erlang,binary_to_integer,[differential:call(erlang,integer_to_binary,[{value}])])")
     for value in ["[]", "<<>>", "[0,255,[1,<<2,3>>]|<<4,5>>]", "[[[]],<<7>>]",
-                  "[1|2]", "[-1]", "[256]", "[<<1:1>>]", "<<1:1>>", "bad"]:
-        call(c, "iodata_total_and_exact", "iolist_to_binary", value)
+                  "[1|2]", "[-1]", "[256]", "[<<1:1>>]", "<<1:1>>", "bad",
+                  "0", "[<<>>,[],[[]]]", "[[1|<<2,3>>],[4,[]]|<<5,6>>]",
+                  "[<<5:3>>,17,<<3:2>>]", "[[1|<<2,5:3>>],7]",
+                  "[<<5:3>>,<<17:5>>]", "[1|<<5:3>>]", "[[[]]|1]",
+                  "[1,[2,bad],3]", "[1,[2.0],3]", "[1,[1 bsl 100],3]",
+                  "lists:foldl(fun(_,A)->[A,23] end,[17|<<19>>],lists:seq(1,64))",
+                  "lists:foldl(fun(_,A)->[A,23] end,[17|19],lists:seq(1,64))",
+                  "begin B=binary:copy(<<0,17,255>>,40),S=binary:part(B,1,65),[S,[S]|<<7>>] end"]:
+        # The other APIs extend the model's iodata grammar samples: list-only
+        # roots differ from iodata roots, and only list_to_bitstring accepts bits.
+        for fn in ["iolist_to_binary", "iolist_size", "list_to_binary", "list_to_bitstring"]:
+            call(c, "iodata_total_and_exact", fn, value)
     call(c, "binary_part_of_whole", "binary_part", "<<1,2>>", "0", "2")
 
     b = "Modules/Binary"
