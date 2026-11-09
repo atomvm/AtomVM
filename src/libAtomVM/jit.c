@@ -1092,9 +1092,13 @@ static Context *jit_wait_timeout(Context *ctx, JITState *jit_state, term timeout
     if (term_is_any_integer(timeout)) {
         t = term_maybe_unbox_int64(timeout);
         if (UNLIKELY(t < 0)) {
+            mailbox_reset(&ctx->mailbox);
+            ctx->mailbox.receive_has_match_clauses = false;
             return jit_raise_error(ctx, jit_state, 0, TIMEOUT_VALUE_ATOM);
         }
     } else if (UNLIKELY(timeout != INFINITY_ATOM)) {
+        mailbox_reset(&ctx->mailbox);
+        ctx->mailbox.receive_has_match_clauses = false;
         return jit_raise_error(ctx, jit_state, 0, TIMEOUT_VALUE_ATOM);
     }
 

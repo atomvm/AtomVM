@@ -23,7 +23,39 @@
 -export([start/0]).
 
 start() ->
+    ok = retained_messages([-1, 1.0, bad]),
     test_infinity() + test_float().
+
+retained_messages([]) ->
+    ok;
+retained_messages([Timeout | Rest]) ->
+    self() ! first,
+    self() ! second,
+    invalid = timed(Timeout),
+    first = next(),
+    second = next(),
+    empty = next(),
+    %% An already queued match is accepted before checking the timeout.
+    self() ! wanted,
+    matched = timed(Timeout),
+    empty = next(),
+    retained_messages(Rest).
+
+timed(Timeout) ->
+    try
+        receive
+            wanted -> matched
+        after Timeout -> timeout
+        end
+    catch
+        error:timeout_value -> invalid
+    end.
+
+next() ->
+    receive
+        Message -> Message
+    after 0 -> empty
+    end.
 
 test_infinity() ->
     Parent = self(),
