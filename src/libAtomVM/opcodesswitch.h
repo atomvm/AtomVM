@@ -2461,9 +2461,13 @@ schedule_in:
                 if (term_is_any_integer(timeout)) {
                     t = term_maybe_unbox_int64(timeout);
                     if (UNLIKELY(t < 0)) {
+                        mailbox_reset(&ctx->mailbox);
+                        ctx->mailbox.receive_has_match_clauses = false;
                         RAISE_ERROR(TIMEOUT_VALUE_ATOM);
                     }
                 } else if (UNLIKELY(timeout != INFINITY_ATOM)) {
+                    mailbox_reset(&ctx->mailbox);
+                    ctx->mailbox.receive_has_match_clauses = false;
                     RAISE_ERROR(TIMEOUT_VALUE_ATOM);
                 }
                 TRACE("wait_timeout/2, label: %i, timeout: %li\n", label, (long int) t);
