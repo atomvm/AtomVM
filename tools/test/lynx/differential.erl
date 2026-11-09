@@ -20,6 +20,7 @@
     monitor_target/3,
     monitor_rebind/3,
     self_link/3,
+    relink/5,
     linked_exit/2,
     exit_signal/2,
     monitor_options/2,
@@ -339,6 +340,87 @@ self_link(Trap, Linked, Count) ->
         {links, Final} = process_info(self(), links),
         {Observations, Final =:= [], Exit, drain()}
     end).
+
+relink(Owner, Trap, Final, Reason, Count) ->
+    isolated(fun() ->
+        process_flag(trap_exit, Trap),
+        Parent = self(),
+        {Child, Ref} = spawn_monitor(fun Loop() ->
+            receive
+                {relink, N} ->
+                    Parent ! {self(), relink_steps(Parent, N)},
+                    Loop();
+                check ->
+                    {links, Links} = process_info(self(), links),
+                    Parent ! {self(), lists:member(Parent, Links)},
+                    Loop();
+                {stop, R} ->
+                    exit(R)
+            end
+        end),
+        true = link(Child),
+        self() ! retained,
+        Observations =
+            case Owner of
+                parent ->
+                    relink_steps(Child, Count);
+                child ->
+                    Child ! {relink, Count},
+                    receive
+                        {Child, Steps} -> Steps
+                    end
+            end,
+        %% The reply is behind link/unlink signals and old acknowledgements from this sender.
+        Child ! check,
+        PeerLinked =
+            receive
+                {Child, Linked} -> Linked
+            end,
+        {links, Links} = process_info(self(), links),
+        LocalLinked = lists:member(Child, Links),
+        case Final of
+            linked -> ok;
+            unlinked -> unlink(Child)
+        end,
+        Child ! check,
+        PeerFinal =
+            receive
+                {Child, LastLinked} -> LastLinked
+            end,
+        {links, FinalLinks} = process_info(self(), links),
+        LocalFinal = lists:member(Child, FinalLinks),
+        Child ! {stop, Reason},
+        Down =
+            receive
+                {'DOWN', Ref, process, Child, R} -> R
+            end,
+        Exit =
+            case Trap andalso Final =:= linked of
+                true ->
+                    receive
+                        {'EXIT', Child, R2} -> R2
+                    after 1000 -> missing_exit
+                    end;
+                false ->
+                    ignored
+            end,
+        {Observations, LocalLinked, PeerLinked, LocalFinal, PeerFinal, Down, Exit, drain()}
+    end).
+
+relink_steps(Pid, Count) ->
+    [
+        begin
+            true = link(Pid),
+            true = link(Pid),
+            {links, Before} = process_info(self(), links),
+            true = unlink(Pid),
+            {links, Unlinked} = process_info(self(), links),
+            true = link(Pid),
+            {links, After} = process_info(self(), links),
+            {lists:member(Pid, Before), lists:member(Pid, Unlinked), lists:member(Pid, After)}
+        end
+     || _ <- lists:seq(1, Count)
+    ].
 
 linked_exit(Mode, Reason) ->
     isolated(fun() ->
