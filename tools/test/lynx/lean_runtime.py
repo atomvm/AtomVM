@@ -244,6 +244,11 @@ def cases():
                                       "trapped_exit_is_a_message"],
                   f"differential:linked_exit({mode},{reason})")
     for trap in ["true", "false"]:
+        for linked in ["true", "false"]:
+            for count in [0, 1, 16]:
+                probe("Modules/Signals", ["linked_normal_exit_is_ignored", "trapped_exit_is_a_message"],
+                      f"differential:self_link({trap},{linked},{count})")
+    for trap in ["true", "false"]:
         for reason in ["normal", "boom", "kill"]:
             probe("Modules/Signals", ["trapped_exit_is_a_message", "kill_cannot_be_trapped",
                                       "normal_exit_signal_is_ignored"],

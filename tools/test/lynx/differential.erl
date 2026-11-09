@@ -19,6 +19,7 @@
     monitor_exit/1,
     monitor_target/3,
     monitor_rebind/3,
+    self_link/3,
     linked_exit/2,
     exit_signal/2,
     monitor_options/2,
@@ -290,6 +291,53 @@ monitor_target(Type, State, Options) ->
         end,
         %% Keep identities out of the result; any unexpected queued signal is a failure.
         {Result, length(drain())}
+    end).
+
+self_link(Trap, Linked, Count) ->
+    isolated(fun() ->
+        process_flag(trap_exit, Trap),
+        {Child, Ref} = spawn_monitor(fun() ->
+            receive
+                stop -> ok
+            end
+        end),
+        case Linked of
+            true -> link(Child);
+            false -> ok
+        end,
+        {links, Before} = process_info(self(), links),
+        self() ! retained,
+        Observations = [
+            begin
+                First = link(self()),
+                {links, AfterFirst} = process_info(self(), links),
+                Second = link(self()),
+                garbage_collect(),
+                {links, AfterSecond} = process_info(self(), links),
+                Unlink = unlink(self()),
+                {links, AfterUnlink} = process_info(self(), links),
+                {First, AfterFirst =:= Before, Second, AfterSecond =:= Before, Unlink,
+                    AfterUnlink =:= Before}
+            end
+         || _ <- lists:seq(1, Count)
+        ],
+        Child ! stop,
+        receive
+            {'DOWN', Ref, process, Child, normal} -> ok
+        end,
+        Exit =
+            case Trap andalso Linked of
+                true ->
+                    receive
+                        {'EXIT', Child, normal} -> trapped
+                    end;
+                false ->
+                    ignored
+            end,
+        %% A DOWN need not arrive after a linked-exit signal; settle the child link explicitly.
+        true = unlink(Child),
+        {links, Final} = process_info(self(), links),
+        {Observations, Final =:= [], Exit, drain()}
     end).
 
 linked_exit(Mode, Reason) ->
