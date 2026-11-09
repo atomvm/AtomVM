@@ -23,6 +23,7 @@
 -export([start/0]).
 
 start() ->
+    ok = test_link_dead_process(),
     ok = test_demonitor_boundaries(),
     ok = test_monitor_normal(),
     ok = test_monitor_demonitor(),
@@ -78,6 +79,39 @@ start() ->
     ok = test_binary_to_term_invalid_process_ref(),
     ok = test_alias_ref_ordering(),
     0.
+
+test_link_dead_process() ->
+    {Child, Ref} = spawn_opt(fun() -> ok end, [monitor]),
+    receive
+        {'DOWN', Ref, process, Child, normal} -> ok
+    end,
+    Previous = process_flag(trap_exit, false),
+    try
+        noproc =
+            try link(Child) of
+                _ -> unexpected
+            catch
+                error:Reason -> Reason
+            end,
+        false = process_flag(trap_exit, true),
+        [
+            begin
+                true = link(Child),
+                receive
+                    {'EXIT', Child, noproc} -> ok
+                after 1000 -> error(no_exit)
+                end
+            end
+         || _ <- [first, second]
+        ],
+        true = unlink(Child),
+        receive
+            {'EXIT', Child, _} -> error(duplicate_exit)
+        after 0 -> ok
+        end
+    after
+        process_flag(trap_exit, Previous)
+    end.
 
 test_demonitor_boundaries() ->
     false = demonitor(make_ref(), [flush, info]),
