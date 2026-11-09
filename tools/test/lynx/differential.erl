@@ -32,6 +32,7 @@
     alias_lifetime/2,
     alias_owner/2,
     target_cancel/3,
+    monitor_pair/3,
     termination_queue/1,
     termination_cascade/2,
     suspended_receive/1,
@@ -1175,6 +1176,80 @@ target_cancel(Mode, State, Action) ->
             {'DOWN', Fence, process, Target, normal} -> ok
         end,
         {Result, CallerMailbox, Mailbox, Removed, ActiveMonitor}
+    end).
+
+monitor_pair(FirstMode, SecondMode, Action) ->
+    isolated(fun() ->
+        {Target, Fence} = spawn_opt(
+            fun() ->
+                receive
+                    stop -> ok
+                end
+            end,
+            [monitor, {min_heap_size, 100}]
+        ),
+        Refs = [
+            {Slot, Mode,
+                case Mode of
+                    plain -> monitor(process, Target);
+                    _ -> monitor(process, Target, [{alias, Mode}])
+                end}
+         || {Slot, Mode} <- [{first, FirstMode}, {second, SecondMode}]
+        ],
+        [{first, _, FirstRef}, _] = Refs,
+        Result =
+            case Action of
+                keep -> kept;
+                demonitor -> demonitor(FirstRef, [info]);
+                unalias -> erlang:unalias(FirstRef);
+                reply -> FirstRef ! {reply, first}
+            end,
+        %% Fence the reply before terminating the target, not against its DOWN.
+        self() ! pair_fence,
+        receive
+            pair_fence -> ok
+        end,
+        Target ! stop,
+        Downs = [
+            case
+                Slot =:= first andalso
+                    (Action =:= demonitor orelse
+                        (Action =:= reply andalso Mode =:= reply_demonitor))
+            of
+                true ->
+                    cancelled;
+                false ->
+                    receive
+                        {'DOWN', Ref, process, Target, Reason} -> Reason
+                    end
+            end
+         || {Slot, Mode, Ref} <- Refs
+        ],
+        receive
+            {'DOWN', Fence, process, Target, normal} -> ok
+        end,
+        [
+            begin
+                Ref ! {late, Slot, one},
+                Ref ! {late, Slot, two}
+            end
+         || {Slot, Mode, Ref} <- Refs, Mode =/= plain
+        ],
+        self() ! pair_fence,
+        receive
+            pair_fence -> ok
+        end,
+        Messages = lists:sort([
+            case M of
+                {reply, first} -> M;
+                {late, _, _} -> M;
+                _ -> unexpected
+            end
+         || M <- drain()
+        ]),
+        Removed = [erlang:unalias(Ref) || {_, _, Ref} <- Refs],
+        Active = [demonitor(Ref, [info]) || {_, _, Ref} <- Refs],
+        {Result, Downs, Messages, Removed, Active}
     end).
 
 termination_queue(Count) ->
