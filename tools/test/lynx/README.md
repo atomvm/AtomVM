@@ -105,7 +105,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **1,977 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **2,025 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -171,6 +171,15 @@ Fenced cases check both endpoints' link lists before sending; unfenced cases omi
 the peer handshake without assuming an unlink acknowledgement is still pending.
 Monitor and linked-exit notifications are awaited independently. The original six
 never-linked explicit-exit cases remain as controls.
+Forty-eight trap-flag transition cases change `trap_exit` before linked or explicit
+exits arrive, or after explicit/self-exit signals become queued messages. Both
+final flag settings and the same six reasons are covered, including unchanged-flag
+controls and the previous flag returned by `process_flag/2`. Same-sender markers
+fence signal reception before queued-message tests change the flag; the actual
+EXIT remains unconsumed, not reconstructed or requeued. Turning trapping off must
+not reinterpret an existing message as a fatal signal. An unfenced self-exit is
+not treated as deterministic queued-message coverage. These cases extend the
+model-inspired signal samples rather than translating a Lean proof.
 
 The function/apply/spawn subset contains 209 cases: captured local closures,
 external funs and BIFs, dynamic `apply/2,3`, improper argument lists, wrong arities,

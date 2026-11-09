@@ -27,6 +27,7 @@
     exit_signal/2,
     exit_signal/3,
     self_exit/4,
+    trap_transition/3,
     monitor_options/2,
     alias_lifetime/2,
     termination_queue/1,
@@ -693,6 +694,89 @@ self_exit(Arity, Trap, Linked, Reason) ->
          || M <- drain()
         ],
         {Down, Exit, Observations}
+    end).
+
+trap_transition(queued_self, Final, Reason) ->
+    isolated(fun() ->
+        false = process_flag(trap_exit, true),
+        Self = self(),
+        true = exit(Self, Reason),
+        %% Fence reception while trapping is on, leaving the real EXIT queued.
+        Self ! sent,
+        receive
+            sent -> ok
+        end,
+        true = process_flag(trap_exit, Final),
+        receive
+            {'EXIT', Self, R} -> {true, {trapped, R}}
+        after 0 -> missing_message
+        end
+    end);
+trap_transition(Mode, Final, Reason) ->
+    isolated(fun() ->
+        Initial =
+            case Mode of
+                queued_explicit -> true;
+                _ -> not Final
+            end,
+        false = process_flag(trap_exit, Initial),
+        Parent = self(),
+        Links =
+            case Mode of
+                before_linked -> [link];
+                _ -> []
+            end,
+        {Child, Ref} = spawn_opt(
+            fun() ->
+                receive
+                    go ->
+                        case Mode of
+                            before_linked ->
+                                exit(Reason);
+                            _ ->
+                                true = exit(Parent, Reason),
+                                Parent ! {self(), sent}
+                        end
+                end
+            end,
+            [monitor, {min_heap_size, 100} | Links]
+        ),
+        case Mode of
+            queued_explicit ->
+                Child ! go,
+                %% This sender's earlier exit is processed while trapping is on.
+                %% Selectively receiving its marker leaves the real EXIT queued.
+                receive
+                    {Child, sent} -> ok
+                end;
+            _ ->
+                ok
+        end,
+        Previous = process_flag(trap_exit, Final),
+        Initial = Previous,
+        case Mode of
+            queued_explicit -> ok;
+            _ -> Child ! go
+        end,
+        Down =
+            receive
+                {'DOWN', Ref, process, Child, R1} -> R1
+            end,
+        Wait =
+            case {Mode, Final, Reason} of
+                {M, false, normal} when M =/= queued_explicit -> 0;
+                _ -> 1000
+            end,
+        Message =
+            receive
+                {'EXIT', Child, R2} -> {trapped, R2}
+            after Wait ->
+                case Wait of
+                    0 -> none;
+                    _ -> missing_exit
+                end
+            end,
+        {Previous, Down, Message}
     end).
 
 monitor_options(unknown, Options) ->
