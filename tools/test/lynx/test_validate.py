@@ -106,6 +106,27 @@ class ValidationTests(unittest.TestCase):
             self.assertIn("Timed out", actuals[0]["message"])
             self.assertEqual(unverified[0]["actual"], actuals[0])
 
+    def test_true_assertions_reject_agreement_on_wrong_results(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            source.write_text(json.dumps([
+                {"expression": expression, "assert_true": True}
+                for expression in ["true", "false", "1", "{true}", "error(boom)"]
+            ] + [{"expression": "false"}]))
+            output = work / "assertions"
+            summary = self.invoke(output, "--replay", source)
+            self.assertEqual(summary, {"laws": 0, "passed": 2, "failed": 4,
+                                       "unverified": 0, "uncovered": 0})
+            failures = json.loads((output / "failures.json").read_text())
+            self.assertEqual([f["case"]["expression"] for f in failures],
+                             ["false", "1", "{true}", "error(boom)"])
+            self.assertTrue(all(f["case"]["assert_true"] for f in failures))
+            self.assertIn("must return true", (output / "comparison.log").read_text())
+            self.assertEqual(self.invoke(work / "replay", "--replay", output / "failures.json"),
+                             {"laws": 0, "passed": 0, "failed": 4,
+                              "unverified": 0, "uncovered": 0})
+
     def test_lean_inventory_replay_reports_samples_not_proof_coverage(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
@@ -275,6 +296,13 @@ class ValidationTests(unittest.TestCase):
             coverage = json.loads((full / "coverage.json").read_text())
             self.assertGreater(len(coverage), 100)
             self.assertTrue(all(row["cases"] > 0 for row in coverage))
+            selected = json.loads((full / "cases.json").read_text())
+            law_samples = [c for c in selected if c.get("assert_true")]
+            self.assertEqual(len(law_samples), 5)
+            self.assertTrue(all(c["fixture"] == ["sum", "sum_singleton_ensures", 1]
+                                for c in law_samples))
+            failures = json.loads((full / "failures.json").read_text())
+            self.assertFalse(any(f["case"].get("assert_true") for f in failures))
             # A partial replay must not claim full fixture coverage merely
             # because its one selected call matched.
             source = work / "one.json"
