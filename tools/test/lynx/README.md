@@ -105,7 +105,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **1,536 deterministic cases**:
+At the pinned Lynx revision below, this selects **1,557 deterministic cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -143,6 +143,11 @@ numeric-equality, tuple-position, and improper-list behavior. Actual OTP results
 remain the oracle: the model's exception for an invalid `raise/3` stack is not
 used in place of OTP's returned `badarg` atom. Malformed external stack traces
 and raw internal re-raise traces are distinct paths.
+
+Another 21 cases exercise legacy MFA/fun frame normalization and already-modern
+frames across all three exception classes, including mixed stacks and supplied
+locations. Frame normalization preserves the caller's input and adds an empty
+location to legacy frames; modern frames retain their supplied locations.
 
 Permanent dictionary-query and scoped-split GC-pressure regressions also live in
 the ordinary Erlang library/runtime test suites; they are not Lean proof samples.
