@@ -283,6 +283,19 @@ def cases():
                       "[{fun erlang:abs/1,[-7],[{line,17}|tail]}]"]:
             probe("Modules/Signals", "raise_classes",
                   f"differential:raise_exception({cls},#{{reason=>[1,2,3]}},{stack})")
+    # Extend raise recipes to VM depth controls, which the model does not expose.
+    for depth in ["default", "0", "1", "3", "8", "64", "65", "1 bsl 40"]:
+        for count in [0, 1, 7, 8, 9, 65]:
+            for style in ["{modern,error}", "{legacy,throw}"]:
+                probe("Modules/Signals", "raise_classes",
+                      f"differential:trace_depth({depth},{count},{style})")
+        for style in ["generated", "{modern,exit}", "{invalid_suffix,error}",
+                      "{improper,throw}", "{child,{legacy,exit}}"]:
+            probe("Modules/Signals", "raise_classes",
+                  f"differential:trace_depth({depth},80,{style})")
+    for depth in ["-1", "1.0", "bad", "[]", "1 bsl 100"]:
+        probe("Modules/Signals", "raise_classes",
+              f"differential:trace_depth({depth},9,{{modern,error}})")
     for key, items in [("b", "[skipped,{}, {a,1},{b,first},{b,second}]"),
                        ("missing", "[skipped,{a,1}]"), ("1", "[{1.0,float},{1,integer}]"),
                        ("1.0", "[{1,integer},{1.0,float}]"), ("0.0", "[{-0.0,negative}]"),

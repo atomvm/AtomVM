@@ -105,7 +105,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **1,557 deterministic cases**:
+At the pinned Lynx revision below, this selects **1,698 deterministic cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -148,6 +148,12 @@ Another 21 cases exercise legacy MFA/fun frame normalization and already-modern
 frames across all three exception classes, including mixed stacks and supplied
 locations. Frame normalization preserves the caller's input and adds an empty
 location to legacy frames; modern frames retain their supplied locations.
+
+An additional 141 cases extend the raise recipes to VM backtrace-depth controls
+(which the Lean model does not expose): defaults, zero depth, truncation, empty
+traces, modern and legacy frames, discarded malformed suffixes, generated
+non-tail call chains, child visibility, upper-bound clamping, and invalid flags.
+Configured recipes restore the previous VM-wide setting even on exceptions.
 
 Permanent dictionary-query and scoped-split GC-pressure regressions also live in
 the ordinary Erlang library/runtime test suites; they are not Lean proof samples.

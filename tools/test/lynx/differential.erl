@@ -27,6 +27,9 @@
     missing_link/1,
     process_liveness/0,
     raise_exception/3,
+    trace_depth/3,
+    trace_depth_a/1,
+    trace_depth_b/1,
     function_apply/3,
     function_named/3,
     function_make/4,
@@ -517,6 +520,46 @@ raise_exception(Class, Reason, Stack) ->
     catch
         C:R:S -> {raised, C, R, S =:= Stack}
     end.
+
+trace_depth(default, Count, Style) ->
+    trace_depth_result(Count, Style);
+trace_depth(Depth, Count, Style) ->
+    Previous = erlang:system_flag(backtrace_depth, Depth),
+    try
+        Stored = erlang:system_flag(backtrace_depth, Depth),
+        {Stored, trace_depth_result(Count, Style)}
+    after
+        erlang:system_flag(backtrace_depth, Previous)
+    end.
+
+trace_depth_result(Count, generated) ->
+    try
+        ?MODULE:trace_depth_a(Count)
+    catch
+        error:depth_error:Stack -> {generated, length(Stack)}
+    end;
+trace_depth_result(Count, {child, Style}) ->
+    isolated(fun() -> trace_depth_result(Count, Style) end);
+trace_depth_result(Count, {Style, Class}) ->
+    Modern = [{?MODULE, supplied, I, []} || I <- lists:seq(1, Count)],
+    Stack =
+        case Style of
+            modern -> Modern;
+            legacy -> [{?MODULE, supplied, I} || I <- lists:seq(1, Count)];
+            invalid_suffix -> Modern ++ [bad];
+            improper -> Modern ++ bad
+        end,
+    try apply(erlang, raise, [Class, supplied, Stack]) of
+        Value -> {returned, Value}
+    catch
+        C:R:S -> {raised, C, R, S}
+    end.
+
+%% Remote calls prevent the compiler proving this recursion never returns
+%% and deleting its post-call arithmetic (which would make it tail-recursive).
+trace_depth_a(0) -> error(depth_error);
+trace_depth_a(N) -> ?MODULE:trace_depth_b(N - 1) + 1.
+trace_depth_b(N) -> ?MODULE:trace_depth_a(N - 1) + 2.
 
 %% Never serialize function identities or compiler-generated closure names.
 function_value(local_zero, Captured) -> fun() -> {Captured, zero} end;
