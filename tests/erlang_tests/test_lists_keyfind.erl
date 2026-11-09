@@ -33,7 +33,22 @@ start() ->
     ok = test_keyfind_with_existing_key_on_different_position(),
     ok = test_keyfind_with_existing_key_and_different_length_of_tuples(),
     ok = test_keyfind_with_invalid_input(),
+    ok = test_numeric_keys(),
     0.
+
+test_numeric_keys() ->
+    [
+        begin
+            Items = ?ID([skipped, {}, {Stored, first}, {Key, second} | improper]),
+            {Stored, first} = lists:keyfind(Key, 1, Items),
+            true = lists:keymember(Key, 1, Items)
+        end
+     || {Key, Stored} <- [{1, 1.0}, {1.0, 1}, {0.0, -0.0}, {{1}, {1.0}}]
+    ],
+    %% Map keys remain exact even when the containing terms use == equality.
+    false = lists:keyfind(?ID(#{1 => value}), 1, ?ID([{#{1.0 => value}, wrong}])),
+    false = lists:keymember(?ID(#{1 => value}), 1, ?ID([{#{1.0 => value}, wrong}])),
+    ok.
 
 test_keyfind_with_existing_key() ->
     Key = ?ID(bob),
