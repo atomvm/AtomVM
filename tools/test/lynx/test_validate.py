@@ -210,6 +210,45 @@ class ValidationTests(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_function_recipes_have_independent_result_oracles(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            expressions = [
+                "differential:function_apply(local_one,captured,[7])",
+                "differential:function_apply(bif_zero,captured,[7])",
+                "differential:function_apply(missing_export,captured,[7])",
+                "differential:function_make(differential,function_one,1,[7])",
+                "differential:function_make(differential,function_one,256,[7])",
+                "differential:function_named(differential,missing,[])",
+                "differential:function_spawn(external,linked,payload)",
+                "differential:function_spawn(local_one,monitored,payload)",
+            ]
+            source.write_text(json.dumps([{"expression": e} for e in expressions]))
+            output = work / "results"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 8, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                actual = JSON.decode!(File.read!(path))["expected"]
+                         |> Enum.map(&:erlang.binary_to_term(Base.decode64!(&1)))
+                [
+                  {:ok, {:ok, {:captured, 7}}},
+                  {:ok, {:error, :badarity, true, true}},
+                  {:ok, {:error, :badarity, true, true}},
+                  {:ok, {true, {:module, :differential}, {:name, :function_one},
+                         {:arity, 1}, {:ok, {:one, 7}}}},
+                  {:exception, :error, :badarg},
+                  {:ok, {:error, :undef}},
+                  {:ok, {:ok, {:child, :normal, [{:reply, :payload}, {:exit, :normal}]}}},
+                  {:ok, {:ok, {:child, {:badarity, true, true, true}, []}}}
+                ] = actual
+                """, str(output / "manifest.json")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     @unittest.skipUnless(os.getenv("LYNX_CHECKOUT"), "Set LYNX_CHECKOUT to test fixture coverage")
     def test_lynx_exports_have_cases_and_partial_replay_is_scoped(self):
         with tempfile.TemporaryDirectory() as directory:

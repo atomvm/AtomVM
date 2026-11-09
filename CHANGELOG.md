@@ -233,6 +233,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   first matching five-tuple for an inactive monitor, like OTP
 - Fixed exception handling and crash reports reading beyond stacks in older heap
   fragments, causing memory corruption with stacktrace creation disabled
+- Fixed spawning external funs aborting the VM and nonzero-arity local funs
+  executing without arguments instead of failing in the child
+- Fixed fun calls checking arity after dispatch, including native funs, and raising
+  bare `badarity` instead of `{badarity, {Fun, Args}}`
+- Fixed `erlang:make_fun/3` accepting arities outside `0..255`
+- Fixed AArch64 native compilation of `is_function/2` with a dynamic arity
 
 ## [0.7.0-beta.0] - 2026-09-28
 
