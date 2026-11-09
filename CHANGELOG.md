@@ -71,6 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   making unequal numbers compare as equal or in the wrong order
 - Fixed `0.0` and `-0.0` comparing as exactly equal, selecting the wrong pattern clause
   and collapsing into a single map key
+- Fixed exception handling and crash reports reading beyond stacks in older heap
+  fragments, causing memory corruption with stacktrace creation disabled
 - Fixed maps decoded by `binary_to_term/1,2` and received over distribution keeping the
   encoder's key order, which broke `==` and made `=>` updates on an existing key produce
   duplicate keys

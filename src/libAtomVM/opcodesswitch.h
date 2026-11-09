@@ -1099,6 +1099,10 @@ static inline ModuleNativeEntryPoint do_return_native(Module *mod, Context *ctx)
     if (term_is_atom(index_or_function)) {                              \
         term module = boxed_value[1];                                   \
         fun_arity = term_to_int(boxed_value[3]);                        \
+        if (UNLIKELY(args_count != fun_arity)) {                        \
+            term reason = context_make_badarity(ctx, fun, args_count); \
+            RAISE_ERROR(reason);                                      \
+        }                                                              \
         atom_index_t module_name = term_to_atom_index(module);          \
         atom_index_t function_name = term_to_atom_index(index_or_function); \
         term return_value;                                              \
@@ -1134,9 +1138,10 @@ static inline ModuleNativeEntryPoint do_return_native(Module *mod, Context *ctx)
         module_get_fun(fun_module, fun_index, &label, &fun_arity_and_freeze, &n_freeze); \
         fun_arity = fun_arity_and_freeze - n_freeze;                    \
         TRACE_CALL(ctx, mod, "call_fun", label, args_count);            \
-    }                                                                   \
-    if (UNLIKELY(args_count != fun_arity)) {                            \
-        RAISE_ERROR(BADARITY_ATOM);                                     \
+        if (UNLIKELY(args_count != fun_arity)) {                        \
+            term reason = context_make_badarity(ctx, fun, args_count); \
+            RAISE_ERROR(reason);                                      \
+        }                                                              \
     }                                                                   \
     uint32_t lim_freeze = MINI(fun_arity + n_freeze, MAX_REG);          \
     for (uint32_t i = fun_arity; i < lim_freeze; i++) {                 \

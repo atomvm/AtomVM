@@ -303,6 +303,12 @@ static inline void context_ensure_fpregs(Context *c)
 int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity);
 
 /**
+ * @brief Build {badarity, {Fun, Args}} from the current argument registers.
+ * @return the exception reason, or out_of_memory if allocation fails.
+ */
+term context_make_badarity(Context *ctx, term fun, unsigned int args_count);
+
+/**
  * @brief Returns 1 if the context is a port driver
  *
  * @details Checks if the given context has a native_handler or not.
