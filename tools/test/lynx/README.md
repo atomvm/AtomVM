@@ -370,6 +370,19 @@ This additional mode:
    not stack frames. Cases returning references compare observable properties,
    not runtime-specific identities.
 
+Five existing `sum_singleton` samples additionally require the proved
+postcondition to return **true on both OTP and AtomVM**, not just equal results.
+Inputs are 0, −1, 1, 2^60, and 2^100; each first checks the law's integer
+precondition. Noninteger inputs remain differential/error-path samples, outside
+the law's premise. The law already exists in Lynx; no new theorem is added.
+
+These cases carry `"assert_true": true` in `cases.json`. False, nonboolean, or
+exception results fail even if both runtimes agree; the marker survives failure
+replay. Include `--lynx ../lynx` when replaying these fixture calls to package
+the fixtures and freshly check their laws. The assertion marker alone does not
+invoke Lean or establish a proof. This checks finite runtime instances of a
+proved model property, not correctness of the VM or the translation/compiler.
+
 The corpus contains **2,131 calls covering all 191 exports in 12 fixture modules**
 at the pinned revision. It includes:
 

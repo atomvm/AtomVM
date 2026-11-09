@@ -111,11 +111,15 @@ case System.argv() do
               {actual, nil}
             end
 
-          if actual["status"] == "ok" and value === expected do
+          assertion_ok =
+            entry["assert_true"] != true or (expected === {:ok, true} and value === {:ok, true})
+
+          if actual["status"] == "ok" and value === expected and assertion_ok do
             unless Map.has_key?(entry, "operation"), do: IO.puts("PASS #{entry["expression"]}")
             %{status: :passed, case: entry}
           else
             IO.puts("FAIL #{entry["expression"]}")
+            unless assertion_ok, do: IO.puts("  assertion: OTP and AtomVM must return true")
             IO.puts("  expected: #{inspect(expected, limit: 30)}")
             value = if actual["status"] == "ok", do: value, else: actual
             IO.puts("  actual:   #{inspect(value, limit: 30)}")
