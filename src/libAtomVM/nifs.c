@@ -3118,7 +3118,9 @@ static term nif_erlang_list_to_integer(Context *ctx, int argc, term argv[])
     if (UNLIKELY(!ok)) {
         RAISE_ERROR(BADARG_ATOM);
     }
-    size_t int_as_string_len = strlen(int_as_string);
+    // The validated byte list can contain NUL; the parser must see all bytes.
+    int proper;
+    size_t int_as_string_len = term_list_length(argv[0], &proper);
     term res = parse_integer(ctx, int_as_string, int_as_string_len, base);
     free(int_as_string);
     return res;

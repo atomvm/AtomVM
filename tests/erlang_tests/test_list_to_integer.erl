@@ -23,6 +23,7 @@
 -export([start/0, sum_integers/2, append_0/1]).
 
 start() ->
+    ok = test_embedded_nul(),
     sum_integers(append_0("10"), "-1") +
         safe_list_to_integer("--") - 5 +
         safe_list_to_integer(nan) - 5 +
@@ -33,6 +34,29 @@ start() ->
         safe_list_to_integer("0a", 16) - 10 +
         safe_list_to_integer("-0a", 16) + 10 +
         safe_list_to_integer("1010", 2) - 10.
+
+test_embedded_nul() ->
+    [
+        begin
+            ok =
+                try list_to_integer(String) of
+                    _ -> accepted
+                catch
+                    error:badarg -> ok
+                end,
+            [
+                ok =
+                    try list_to_integer(String, Base) of
+                        _ -> accepted
+                    catch
+                        error:badarg -> ok
+                    end
+             || Base <- [2, 10, 16, 36]
+            ]
+        end
+     || String <- [[49, 0], [49, 0, 50], [0, 49], [43, 49, 0, 50]]
+    ],
+    ok.
 
 append_0(L) ->
     L ++ "0".
