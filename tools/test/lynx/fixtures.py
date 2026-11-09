@@ -9,11 +9,13 @@ from generated import erlang, float_boundaries
 def cases():
     selected = []
 
-    def add(module, function, *args, setup="", observe=None):
+    def add(module, function, *args, setup="", observe=None, assert_true=False):
         call = f"{module}:{function}({','.join(args)})"
         if observe:
             call = f"({observe})({call})"
         selected.append({"fixture": [module, function, len(args)], "expression": setup + call})
+        if assert_true:
+            selected[-1]["assert_true"] = True
 
     terms = ["0", "-1", "1.0", "-0.0", "ok", "[]", "[a]", "[a|b]",
              "{}", "{1}", "#{}", "#{a=>1}", "<<>>", "<<1>>", "<<1:1>>"]
@@ -34,7 +36,10 @@ def cases():
     add("sum", "sum_empty_ensures")
     for function in ["sum_singleton_requires", "sum_singleton_ensures"]:
         for value in numbers:
-            add("sum", function, value)
+            law_sample = function == "sum_singleton_ensures" and value in [
+                "0", "-1", "1", "1 bsl 60", "1 bsl 100"]
+            add("sum", function, value, assert_true=law_sample,
+                setup=f"true=sum:sum_singleton_requires({value})," if law_sample else "")
     for function in ["odd", "even", "first", "second"]:
         for value in ["[]", "[a]", "[a,b]", "[a,b,c]", "[a,b,c,d]", "[a|bad]", "bad"]:
             add("mutual", function, value)
