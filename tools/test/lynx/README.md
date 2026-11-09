@@ -105,7 +105,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **2,067 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **2,123 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -191,6 +191,13 @@ not identical ownership-check policies. Cross-process alias messages check norma
 and one-shot delivery. The owner then removes its alias and checks whether its
 monitor remains active; the caller's independent monitor observes real termination.
 Mailbox contents are normalized without comparing cross-sender arrival order.
+Fifty-six target-caller cases pass the owner's monitor reference to the monitored
+process itself. Active incoming monitors and owner-removed controls cover all four
+monitor kinds and seven cancellation actions. Owner install/removal signals are
+fenced by a message from the same owner before the target attempts cancellation.
+These cases compare raw return/error results as well as caller/owner mailboxes,
+alias delivery, and the owner's remaining monitor state. In particular, flushing
+must still scan the caller's mailbox without removing an incoming monitor.
 
 The function/apply/spawn subset contains 209 cases: captured local closures,
 external funs and BIFs, dynamic `apply/2,3`, improper argument lists, wrong arities,
