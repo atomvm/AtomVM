@@ -254,6 +254,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed crossed local unlink/relink operations leaving a link active at only one endpoint
 - Fixed `erlang:link/1` failing to reactivate a local link while an unlink is pending
 - Fixed queued local linked exits being delivered after `erlang:unlink/1` returns
+- Fixed `erlang:demonitor/2` ignoring `flush` when called by the monitored process
 
 ## [0.7.0-beta.0] - 2026-09-28
 
