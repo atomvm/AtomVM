@@ -34,7 +34,52 @@ start() ->
     ok = test_raise_empty_stacktrace_direct(),
     ok = test_raise_empty_stacktrace_dynamic(),
     ok = test_invalid_stacktrace(),
+    ok = test_legacy_stacktrace(),
     0.
+
+test_legacy_stacktrace() ->
+    Captured = make_ref(),
+    Fun = fun(X) -> {Captured, X} end,
+    Reason = #{reference => Captured},
+    Location = [{file, "supplied.erl"}, {line, 17}],
+    Stack = [
+        {?MODULE, start, 0},
+        {Fun, [Captured]},
+        {Fun, [], Location},
+        {?MODULE, id, [Captured], Location},
+        {?MODULE, id, [Captured]}
+    ],
+    Expected = [
+        {?MODULE, start, 0, []},
+        {Fun, [Captured], []},
+        {Fun, [], Location},
+        {?MODULE, id, [Captured], Location},
+        {?MODULE, id, [Captured], []}
+    ],
+    [
+        begin
+            ok =
+                try ?MODULE:reraise_with(Class, Reason, Stack) of
+                    _ -> unexpected
+                catch
+                    Class:Reason:DirectStack ->
+                        Expected = DirectStack,
+                        ok
+                end,
+            ok =
+                try apply(?MODULE:id(erlang), ?MODULE:id(raise), [Class, Reason, Stack]) of
+                    _ -> unexpected
+                catch
+                    Class:Reason:DynamicStack ->
+                        Expected = DynamicStack,
+                        ok
+                end
+        end
+     || Class <- [error, exit, throw]
+    ],
+    %% The caller's list and frames must not be changed during normalization.
+    [{?MODULE, start, 0}, {Fun, [Captured]} | _] = Stack,
+    ok.
 
 test_invalid_stacktrace() ->
     Fun = fun(X) -> X end,

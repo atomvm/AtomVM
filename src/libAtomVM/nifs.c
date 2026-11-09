@@ -4484,6 +4484,8 @@ static term nif_erlang_raise(Context *ctx, int argc, term argv[])
         // Accept the frame forms allowed by OTP, but reject malformed frames
         // and improper stack lists before changing exception state.
         term stack = argv[2];
+        size_t stack_len = 0;
+        size_t heap_needed = 0;
         while (term_is_nonempty_list(stack)) {
             term frame = term_get_list_head(stack);
             if (!term_is_tuple(frame)) {
@@ -4495,12 +4497,15 @@ static term nif_erlang_raise(Context *ctx, int argc, term argv[])
                     if (!term_is_function(term_get_tuple_element(frame, 0))) {
                         return BADARG_ATOM;
                     }
+                    heap_needed += TUPLE_SIZE(3);
                     break;
                 case 3:
                     if (term_is_function(term_get_tuple_element(frame, 0))) {
                         location = term_get_tuple_element(frame, 2);
                     } else if (!term_is_atom(term_get_tuple_element(frame, 0)) || !term_is_atom(term_get_tuple_element(frame, 1))) {
                         return BADARG_ATOM;
+                    } else {
+                        heap_needed += TUPLE_SIZE(4);
                     }
                     break;
                 case 4:
@@ -4515,10 +4520,38 @@ static term nif_erlang_raise(Context *ctx, int argc, term argv[])
             if (!term_is_list(location)) {
                 return BADARG_ATOM;
             }
+            stack_len++;
             stack = term_get_list_tail(stack);
         }
         if (!term_is_nil(stack)) {
             return BADARG_ATOM;
+        }
+        if (heap_needed != 0) {
+            heap_needed += stack_len * CONS_SIZE;
+            if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_needed, argc, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            // Add empty locations to legacy frames, preserving order and the
+            // caller's list. Modern frames need no allocation or modification.
+            stack = argv[2];
+            term normalized_stack = term_nil();
+            term *tail = &normalized_stack;
+            while (term_is_nonempty_list(stack)) {
+                term frame = term_get_list_head(stack);
+                int arity = term_get_tuple_arity(frame);
+                if (arity == 2 || (arity == 3 && term_is_atom(term_get_tuple_element(frame, 0)))) {
+                    term normalized_frame = term_alloc_tuple(arity + 1, &ctx->heap);
+                    for (int i = 0; i < arity; i++) {
+                        term_put_tuple_element(normalized_frame, i, term_get_tuple_element(frame, i));
+                    }
+                    term_put_tuple_element(normalized_frame, arity, term_nil());
+                    frame = normalized_frame;
+                }
+                *tail = term_list_prepend(frame, term_nil(), &ctx->heap);
+                tail = &term_get_list_ptr(*tail)[LIST_TAIL_INDEX];
+                stack = term_get_list_tail(stack);
+            }
+            argv[2] = normalized_stack;
         }
         RAISE_WITH_STACKTRACE(ex_class, argv[1], argv[2]);
     }
