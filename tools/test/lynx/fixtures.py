@@ -59,6 +59,9 @@ def cases():
                            ("fun(X,Y)->X-Y end", "[7,2]"), ("bad", "[]"),
                            ("fun functions:inc/1", "bad")]:
         add("functions", "explicit", callback, args)
+    selected.append({"fixture": ["functions", "explicit", 2], "expression":
+                     "Fun=fun functions:inc/1, try functions:explicit(Fun,[]) "
+                     "catch error:{badarity,{BadFun,Args}} -> {badarity,BadFun=:=Fun,Args=:=[]} end"})
     for module in ["functions", "1"]:
         add("functions", "calls_by_name", module, "9")
     add("functions", "references", observe="fun({A,B,M})->{A,B,map_size(M)} end")
@@ -133,7 +136,7 @@ def cases():
     for function, inputs in {
         "comprehension_filtered": [("[]",), ("[{a,1},{2,3},skip,{b,4}]",), ("[{a,1}|bad]",), ("bad",)],
         "comprehension_nested": [("tag", "[]"), ("tag", "[[1,2],[],[a]]"), ("tag", "[[1],bad]")],
-        "comprehension_lists": [("[]", "[a]"), ("[1]", "[]"), ("[1,2]", "[a,b,c]"), ("[1]", "bad")],
+        "comprehension_lists": [("[]", "[a]"), ("[]", "bad"), ("[1]", "[]"), ("[1,2]", "[a,b,c]"), ("[1]", "bad")],
         "comprehension_lists3": [("[1,2]", "[a]", "[x,y]"), ("[1]", "[]", "[x]"), ("[1]", "[a]", "bad")],
         "comprehension_mixed3": [("[0,2]", "#{a=>1,b=>3}", "[x,y]"), ("[]", "#{}", "[]"), ("[0]", "bad", "[x]")],
         "comprehension_zip": [("[]", "[]"), ("[1,2]", "[a,b]"), ("[1]", "[a,b]"), ("[1,2]", "[a]"), ("bad", "[a]")],
@@ -161,6 +164,8 @@ def cases():
         for args in inputs:
             observe = "fun lists:sort/1" if function in ["map_generator", "map_generator_strict", "comprehension_mixed3", "comprehension_list_map", "comprehension_filtered_maps"] else None
             add("named_locals", function, *args, observe=observe)
+    add("named_locals", "map_to_map", "#{a=>same,b=>same}",
+        observe="fun(M)->{map_size(M),maps:is_key(same,M)} end")
 
     add("binary_construction", "empty")
     for function in ["integer_default", "integer_mixed", "integer_invalid_size"]:
@@ -222,7 +227,7 @@ def cases():
         for size in ["0", "1", "2", "3", "8", "16", "32", "-1", "1.0", "bad"]:
             for value in ["<<>>", "<<3:3,1,2>>", "<<1,2,5:3>>", "<<1.5:64/float,5:3>>", "bad"]:
                 add("bitstring_matching", function, size, value)
-    for value in ["0", "1", "255", "256", "-1", "1.0", "bad"]:
+    for value in ["0", "1", "255", "256", "257", "-1", "1.0", "bad"]:
         add("bitstring_matching", "pinned", value, "<<1,5:3>>")
     for function, width in [("float16", 16), ("float32", 32), ("float64", 64)]:
         for value in ["0.0", "-0.0", "1.5", "5.0e-324", "1.0e-6", "6546.0"]:
@@ -236,6 +241,10 @@ def cases():
                          64: [1, 0x000fffffffffffff, 0x0010000000000000, 0x7fefffffffffffff, 0x7ff0000000000000, 0xfff0000000000000, 0x7ff8000000000000]}[width]:
             bits = f"<<{encoding}:{width}/big,{encoding}:{width}/little>>" if width != 16 else f"<<{encoding}:16,5:3>>"
             add("bitstring_matching", function, bits)
+        for encoding in {16: [0x7c00, 0xfc00, 0x7e00],
+                         32: [0x7f800000, 0xff800000, 0x7fc00000],
+                         64: [0x7ff0000000000000, 0xfff0000000000000, 0x7ff8000000000000]}[width]:
+            add("bitstring_matching", "float_sized", str(width // 2), f"<<{encoding}:{width},5:3>>")
     for function, encoding in [("utf8", "utf8"), ("utf8_little", "utf8"), ("utf16", "utf16-big"),
                                ("utf16_big", "utf16-big"), ("utf16_little", "utf16-little"),
                                ("utf32", "utf32-big"), ("utf32_big", "utf32-big"), ("utf32_little", "utf32-little")]:
