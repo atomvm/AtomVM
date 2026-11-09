@@ -5126,7 +5126,7 @@ static term nif_erlang_make_fun_3(Context *ctx, int argc, term argv[])
 
     VALIDATE_VALUE(module_term, term_is_atom);
     VALIDATE_VALUE(function_term, term_is_atom);
-    VALIDATE_VALUE(arity_term, term_is_integer);
+    VALIDATE_VALUE(arity_term, term_is_uint8);
 
     if (UNLIKELY(memory_ensure_free_opt(ctx, FUNCTION_REFERENCE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
