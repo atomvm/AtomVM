@@ -179,6 +179,7 @@ class ValidationTests(unittest.TestCase):
                                   "--generated", 0, "--timeout", 1)
             self.assertGreater(summary["laws"], 0)
             self.assertEqual(summary["uncovered"], 0)
+            self.assertFalse((full / "lists.beam").exists())
             coverage = json.loads((full / "coverage.json").read_text())
             self.assertGreater(len(coverage), 100)
             self.assertTrue(all(row["cases"] > 0 for row in coverage))

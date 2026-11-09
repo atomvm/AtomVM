@@ -47,8 +47,6 @@ case System.argv() do
 
     if mode == "prepare" do
       true = laws > 0
-      {:lists, lists, _path} = :code.get_object_code(:lists)
-      File.write!(Path.join(work, "lists.beam"), lists)
     end
 
     true = :code.add_patha(String.to_charlist(work))
