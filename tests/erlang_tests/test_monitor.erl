@@ -25,6 +25,7 @@
 start() ->
     ok = test_link_dead_process(),
     ok = test_demonitor_boundaries(),
+    ok = test_monitor_target_types(),
     ok = test_monitor_normal(),
     ok = test_monitor_demonitor(),
     ok = test_monitor_noproc(),
@@ -79,6 +80,67 @@ start() ->
     ok = test_binary_to_term_invalid_process_ref(),
     ok = test_alias_ref_ordering(),
     0.
+
+test_monitor_target_types() ->
+    {Dead, DeadRef} = spawn_opt(fun() -> ok end, [monitor]),
+    {'DOWN', DeadRef, process, Dead, normal} = recv_one(),
+    {Child, ChildRef} = spawn_opt(
+        fun() ->
+            receive
+                stop -> ok
+            end
+        end,
+        [monitor]
+    ),
+    try
+        [
+            begin
+                badarg =
+                    try
+                        monitor(port, Target)
+                    catch
+                        error:R -> R
+                    end,
+                [
+                    badarg =
+                        try
+                            monitor(port, Target, Options)
+                        catch
+                            error:R2 -> R2
+                        end
+                 || Options <- [[], [{alias, explicit_unalias}]]
+                ]
+            end
+         || Target <- [self(), Child, Dead]
+        ],
+        [
+            begin
+                true = register(test_monitor_target_name, Owner),
+                try
+                    [
+                        begin
+                            Ref = monitor(port, test_monitor_target_name, Options),
+                            {'DOWN', Ref, port, {test_monitor_target_name, Node}, noproc} = recv_one(),
+                            true = Node =:= node(),
+                            false = demonitor(Ref, [info]),
+                            HasAlias = Options =/= [],
+                            HasAlias = erlang:unalias(Ref)
+                        end
+                     || Options <- [[], [{alias, explicit_unalias}]]
+                    ]
+                after
+                    unregister(test_monitor_target_name)
+                end
+            end
+         || Owner <- [self(), Child]
+        ],
+        ok = assert_no_message()
+    after
+        Child ! stop,
+        receive
+            {'DOWN', ChildRef, process, Child, normal} -> ok
+        end
+    end.
 
 test_link_dead_process() ->
     {Child, Ref} = spawn_opt(fun() -> ok end, [monitor]),

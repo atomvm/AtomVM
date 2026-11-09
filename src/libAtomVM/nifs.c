@@ -5450,8 +5450,16 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
         target_pid = globalcontext_get_registered_process(ctx->global, term_to_atom_index(target_proc));
         target_proc_size = TUPLE_SIZE(2);
     } else {
-        VALIDATE_VALUE(target_proc, term_is_local_pid_or_port);
         target_pid = target_proc;
+    }
+
+    // Direct targets must have the requested type even when self or already dead.
+    // A registered name belonging to the other type instead reports noproc.
+    if ((object_type == PROCESS_ATOM && !term_is_local_pid(target_pid)) || (object_type == PORT_ATOM && !term_is_local_port(target_pid))) {
+        if (!term_is_atom(target_proc)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        target_pid = UNDEFINED_ATOM;
     }
 
     Context *target;
@@ -5511,11 +5519,6 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
         term_put_tuple_element(down_message_tuple, 4, NOPROC_ATOM);
         mailbox_send(ctx, down_message_tuple);
         return ref;
-    }
-
-    if ((object_type == PROCESS_ATOM && target->native_handler != NULL) || (object_type == PORT_ATOM && target->native_handler == NULL)) {
-        globalcontext_get_process_unlock(ctx->global, target);
-        RAISE_ERROR(BADARG_ATOM);
     }
 
     RefData ref_data;
