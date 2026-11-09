@@ -105,7 +105,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **2,667 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **2,755 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -148,6 +148,14 @@ reused slices of a runtime-created large binary check exact bytes and size.
 These public-API extensions do not imply additional Lean proofs or GC-pressure
 coverage. In particular, byte-only APIs must reject partial input segments even
 when concatenating those segments would produce a complete byte.
+
+Another 88 binary search/split cases exercise overlapping patterns in both list
+orders, earliest-match precedence, longest fitting matches, scope endpoints and
+negative lengths, and first versus global splitting. Duplicate scopes must all
+be valid even though the last one determines the search range; valid improper
+option prefixes retain OTP's ignored-tail behavior. Invalid pattern lists are
+checked on empty and nonempty subjects so an early match or empty input cannot
+hide an invalid later pattern. These extend the model's binary API samples.
 
 The lifecycle/receive cases cover linked normal/abnormal exits,
 unlinking, trapped exits, untrappable `kill`, demonitor option validation and
