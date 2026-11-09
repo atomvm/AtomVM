@@ -105,7 +105,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **2,537 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **2,581 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -125,6 +125,18 @@ must not invoke callbacks; non-functions must still be rejected. Single-entry,
 three-entry, and 40-entry maps exercise dispatch without asserting traversal
 order, alongside invalid-map controls. These are public-API extensions, not
 additional Lean proofs.
+
+Another 44 key-search cases check interior tuple positions, skipped short tuples,
+first matches before improper tails, nested numeric equality, and exact map keys
+with loosely equal values. Scalar precision-boundary cases check an OTP
+compatibility quirk: OTP 29's integer-key fast path in `keyfind/3`
+and `keymember/3` converts small integer keys to double when testing float fields.
+On 64-bit OTP, integer key 9007199254740993 matches float 9007199254740992.0,
+although `==` rejects that pair; swapping the key/field types or nesting the key
+does not match. AtomVM mirrors that immediate-integer special case only in key
+lookup, without weakening general or nested comparison. On 32-bit targets these
+large integer keys are boxed and do not take that path; compare against an OTP
+oracle with matching word size for these representation-dependent recipes.
 
 The lifecycle/receive cases cover linked normal/abnormal exits,
 unlinking, trapped exits, untrappable `kill`, demonitor option validation and

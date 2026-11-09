@@ -438,6 +438,34 @@ def cases():
             for fn in ["keyfind", "keymember"]:
                 call("Modules/Signals", "keyfind_finds_first_match", fn, key, position, items, module="lists")
 
+    # Interior fields skip short tuples; map keys remain exact. The scalar
+    # precision controls also expose OTP's lossy integer-key fast path, which
+    # can select a candidate that ordinary == would reject.
+    for key, decoy, stored in [
+        ("9007199254740993", "9007199254740992.0", "9007199254740993"),
+        ("9007199254740992.0", "9007199254740993", "9007199254740992"),
+        ("-9007199254740993", "-9007199254740992.0", "-9007199254740993"),
+        ("{[1],2}", "{[1],3}", "{[1.0],2.0}"),
+        ("[1|2]", "[1|3]", "[1.0|2.0]"),
+        ("#{1=>value}", "#{1.0=>value}", "#{1=>value}"),
+        ("#{key=>1}", "#{key=>2}", "#{key=>1.0}"),
+        ("#{key=>0.0}", "#{key=>1.0}", "#{key=> -0.0}"),
+        ("#{#{1=>a}=>[2]}", "#{#{1.0=>a}=>[2]}", "#{#{1=>a}=>[2.0]}"),
+    ]:
+        for tail in ["[]", "improper"]:
+            items = (f"[skipped,{{}},{{prefix}},{{prefix,{decoy},decoy}},"
+                     f"{{prefix,{stored},first}},{{prefix,{key},second}}|{tail}]")
+            for fn in ["keyfind", "keymember"]:
+                call("Modules/Signals", "keyfind_finds_first_match", fn, key, "2", items, module="lists")
+    # Without an exact fallback, keymember must expose the same disagreement.
+    for key, stored in [("9007199254740993", "9007199254740992.0"),
+                        ("9007199254740992.0", "9007199254740993"),
+                        ("-9007199254740993", "-9007199254740992.0"),
+                        ("-9007199254740992.0", "-9007199254740993")]:
+        for fn in ["keyfind", "keymember"]:
+            call("Modules/Signals", "keyfind_finds_first_match", fn, key, "2",
+                 f"[skipped,{{}},{{prefix}},{{prefix,{stored},only}}]", module="lists")
+
     for kind in ["local_zero", "local_one", "local_two", "external_zero", "external_one",
                  "external_two", "bif_zero", "bif_one", "missing_export", "missing_module", "not_fun"]:
         for args in ["[]", "[7]", "[left,right]", "[7|improper]", "bad"]:
