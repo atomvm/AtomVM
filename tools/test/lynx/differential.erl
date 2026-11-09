@@ -31,6 +31,7 @@
     monitor_options/2,
     alias_lifetime/2,
     alias_owner/2,
+    target_cancel/3,
     termination_queue/1,
     termination_cascade/2,
     suspended_receive/1,
@@ -1094,6 +1095,86 @@ alias_owner(Mode, Action) ->
             {'DOWN', OtherFence, process, Other, normal} -> ok
         end,
         {Allowed, CallerMailbox, Mailbox, Removed, ActiveMonitor, Late, OwnDown}
+    end).
+
+target_cancel(Mode, State, Action) ->
+    isolated(fun() ->
+        Parent = self(),
+        {Target, Fence} = spawn_opt(
+            fun() ->
+                receive
+                    {run, Ref} ->
+                        Other = make_ref(),
+                        self() ! {other, Ref, a, b, c},
+                        self() ! {other, Other, a, b, c},
+                        self() ! keep,
+                        Result =
+                            try
+                                case Action of
+                                    unalias -> erlang:unalias(Ref);
+                                    demonitor -> demonitor(Ref);
+                                    {demonitor, Options} -> demonitor(Ref, Options)
+                                end
+                            catch
+                                C:R -> {C, R}
+                            end,
+                        Remaining = lists:sort([
+                            case M of
+                                {other, Ref, a, b, c} -> matching;
+                                {other, Other, a, b, c} -> unrelated;
+                                keep -> keep;
+                                _ -> unexpected
+                            end
+                         || M <- drain()
+                        ]),
+                        case Mode of
+                            plain ->
+                                ok;
+                            _ ->
+                                Ref ! {via_alias, first},
+                                Ref ! {via_alias, second}
+                        end,
+                        Parent ! {self(), Result, Remaining},
+                        receive
+                            stop -> ok
+                        end
+                end
+            end,
+            [monitor, {min_heap_size, 100}]
+        ),
+        Ref =
+            case Mode of
+                plain -> monitor(process, Target);
+                _ -> monitor(process, Target, [{alias, Mode}])
+            end,
+        self() ! {'DOWN', Ref, process, Target, owner_sentinel},
+        self() ! keep,
+        case State of
+            active -> ok;
+            removed -> true = demonitor(Ref, [info])
+        end,
+        %% The monitor install/removal precedes this message from the same owner.
+        Target ! {run, Ref},
+        {Result, CallerMailbox} =
+            receive
+                {Target, Return, Messages} -> {Return, Messages}
+            end,
+        Mailbox = lists:sort([
+            case M of
+                {'DOWN', Ref, process, Target, owner_sentinel} -> owner_down;
+                {via_alias, Value} -> Value;
+                keep -> keep;
+                _ -> unexpected
+            end
+         || M <- drain()
+        ]),
+        Removed = erlang:unalias(Ref),
+        ActiveMonitor = demonitor(Ref, [info]),
+        Target ! stop,
+        receive
+            {'DOWN', Fence, process, Target, normal} -> ok
+        end,
+        {Result, CallerMailbox, Mailbox, Removed, ActiveMonitor}
     end).
 
 termination_queue(Count) ->
