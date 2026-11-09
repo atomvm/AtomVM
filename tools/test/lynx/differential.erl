@@ -941,7 +941,11 @@ monitor_rebind(Mode, Action, Order) ->
     end).
 
 alias_lifetime(standalone, Options) ->
-    Alias = erlang:alias(Options),
+    Alias =
+        case Options of
+            default -> erlang:alias();
+            _ -> erlang:alias(Options)
+        end,
     Alias ! first,
     Alias ! second,
     receive
@@ -985,6 +989,11 @@ alias_lifetime(Mode, Event) ->
                 Result
         end,
     Ref ! after_end,
+    %% Establish delivery before removing an explicit alias that survived the event.
+    self() ! alias_fence,
+    receive
+        alias_fence -> ok
+    end,
     Removed = erlang:unalias(Ref),
     {End, Removed, drain()}.
 
