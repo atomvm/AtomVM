@@ -2099,7 +2099,7 @@ term bif_erlang_min_2(Context *ctx, uint32_t fail_label, term arg1, term arg2)
     if (UNLIKELY(r == TermCompareMemoryAllocFail)) {
         RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
     }
-    return r == TermLessThan ? arg1 : arg2;
+    return r == TermGreaterThan ? arg2 : arg1;
 }
 
 term bif_erlang_max_2(Context *ctx, uint32_t fail_label, term arg1, term arg2)
@@ -2108,7 +2108,7 @@ term bif_erlang_max_2(Context *ctx, uint32_t fail_label, term arg1, term arg2)
     if (UNLIKELY(r == TermCompareMemoryAllocFail)) {
         RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
     }
-    return r == TermGreaterThan ? arg1 : arg2;
+    return r == TermLessThan ? arg2 : arg1;
 }
 
 term bif_erlang_size_1(Context *ctx, uint32_t fail_label, int live, term arg1)

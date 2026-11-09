@@ -47,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed `min/2` and `max/2` returning the second argument instead of the first on numeric ties
 - Fixed queued messages being skipped by the next receive after an invalid timeout error
 - Fixed list ordering treating `[]` as smaller than every improper tail
 - Fixed map ordering comparing values before all keys had been compared
