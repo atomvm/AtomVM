@@ -17,6 +17,7 @@
     receive_timeout/2,
     process_exchange/1,
     monitor_exit/1,
+    monitor_target/3,
     linked_exit/2,
     exit_signal/2,
     monitor_options/2,
@@ -219,6 +220,76 @@ isolated(Fun) ->
         {'DOWN', Ref, process, Pid, Reason} ->
             {exit, Reason}
     end.
+
+monitor_target(Type, State, Options) ->
+    isolated(fun() ->
+        {Child, Fence} = spawn_monitor(fun() ->
+            receive
+                stop -> ok
+            end
+        end),
+        Target =
+            case State of
+                self ->
+                    self();
+                live ->
+                    Child;
+                dead ->
+                    Child ! stop,
+                    receive
+                        {'DOWN', Fence, process, Child, normal} -> Child
+                    end;
+                named_self ->
+                    register(lynx_monitor_target, self()),
+                    lynx_monitor_target;
+                named_live ->
+                    register(lynx_monitor_target, Child),
+                    lynx_monitor_target;
+                missing ->
+                    lynx_monitor_missing
+            end,
+        Object =
+            case is_atom(Target) of
+                true -> {Target, node()};
+                false -> Target
+            end,
+        ExpectDown =
+            State =:= dead orelse State =:= missing orelse
+                (Type =:= port andalso is_atom(Target)),
+        Result =
+            try
+                Ref =
+                    case Options of
+                        two -> monitor(Type, Target);
+                        _ -> monitor(Type, Target, Options)
+                    end,
+                Down =
+                    case ExpectDown of
+                        true ->
+                            receive
+                                {'DOWN', Ref, Type, ActualObject, Reason} ->
+                                    {down, ActualObject =:= Object, Reason}
+                            after 1000 -> missing_down
+                            end;
+                        false ->
+                            none
+                    end,
+                {reference, Down, demonitor(Ref, [info]), erlang:unalias(Ref)}
+            catch
+                C:R -> {C, R}
+            end,
+        case State of
+            dead ->
+                ok;
+            _ ->
+                Child ! stop,
+                receive
+                    {'DOWN', Fence, process, Child, normal} -> ok
+                end
+        end,
+        %% Keep identities out of the result; any unexpected queued signal is a failure.
+        {Result, length(drain())}
+    end).
 
 linked_exit(Mode, Reason) ->
     isolated(fun() ->

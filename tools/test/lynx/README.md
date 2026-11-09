@@ -105,7 +105,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **1,698 deterministic cases**:
+At the pinned Lynx revision below, this selects **1,758 deterministic cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -118,7 +118,7 @@ OTP is the execution oracle, not the Lean model: for example, tested OTP 29
 accepts an already queued receive match before checking an invalid timeout.
 That differs from the model test named `timeout_validation_precedes_scan`.
 
-The lifecycle/receive subset contains 127 cases: linked normal/abnormal exits,
+The lifecycle/receive subset contains 187 cases: linked normal/abnormal exits,
 unlinking, trapped exits, untrappable `kill`, demonitor option validation and
 active/queued/consumed monitor states, standalone and monitor aliases, pending
 monitors while both the target and observer terminate, and empty-mailbox timeout
@@ -127,6 +127,11 @@ sender exercise exception/cleanup scopes after suspension; no elapsed duration
 or cross-sender message ordering is compared. Linked crashes are contained in
 monitored workers. Queued-DOWN flush recipes requeue a received real DOWN so
 mailbox presence is deterministic rather than inferred from a delay.
+Monitor target-type cases compare both arities, all three alias options, and
+self/live/dead PIDs versus registered process names for process and port monitors.
+They distinguish direct wrong-type `badarg` from a registered name's `noproc` DOWN,
+including retained explicit aliases. These cases do not create live ports; the
+permanent echo-driver regression separately covers live/dead port targets.
 
 The function/apply/spawn subset contains 209 cases: captured local closures,
 external funs and BIFs, dynamic `apply/2,3`, improper argument lists, wrong arities,

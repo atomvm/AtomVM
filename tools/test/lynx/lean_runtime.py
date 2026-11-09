@@ -232,6 +232,12 @@ def cases():
     for mode, name in [("normal", "monitor_reports_normal_exit"), ("raised", "monitor_reports_raised_reason"),
                        ("noproc", "monitor_missing_process"), ("flush", "demonitor_flushes_down")]:
         probe("Modules/Signals", name, f"differential:monitor_exit({mode})")
+    for kind in ["process", "port"]:
+        for state in ["self", "live", "dead", "named_self", "named_live", "missing"]:
+            for options in ["two", "[]", "[{alias,demonitor}]", "[{alias,explicit_unalias}]",
+                            "[{alias,reply_demonitor}]"]:
+                probe("Modules/Signals", ["monitor_missing_process", "alias_ends_with_demonitor"],
+                      f"differential:monitor_target({kind},{state},{options})")
     for mode in ["trapped", "untrapped", "unlinked"]:
         for reason in ["normal", "boom", "kill"]:
             probe("Modules/Signals", ["linked_crash_kills_parent", "linked_normal_exit_is_ignored",
