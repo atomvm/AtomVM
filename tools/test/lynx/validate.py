@@ -22,6 +22,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 from fixtures import cases
 from generated import candidates, expression, generate
+import lean_runtime
 
 
 def command(argv, cwd, log, timeout=600):
@@ -82,9 +83,11 @@ def validate(args, work):
                 entry["expression"] = expression(entry)
     else:
         selected = cases() if lynx else []
+        if args.lean_runtime:
+            selected += lean_runtime.cases()
         selected += generate(args.seed, args.generated, args.float_encoding)
     if not selected:
-        raise RuntimeError("No cases selected; use --generated, --replay, or --lynx")
+        raise RuntimeError("No cases selected; use --generated, --replay, --lynx, or --lean-runtime")
     print(f"Seed {args.seed}; {len(selected)} cases; build {build}", flush=True)
     entries = []
     for index, entry in enumerate(selected):
@@ -97,6 +100,10 @@ def validate(args, work):
             'start() -> io:format("LYNX_RESULT ~w~n",'
             "[binary_to_list(term_to_binary(actual()))]), ok.\n"
         )
+    if args.lean_runtime:
+        report = lean_runtime.inventory(args.lean_runtime.resolve(), entries)
+        (work / "lean-coverage.json").write_text(json.dumps(report, indent=2))
+        print("Lean-inspired public-API samples; no Lean proofs or schedule coverage implied.", flush=True)
     (work / "cases.json").write_text(json.dumps(entries))
     shutil.copyfile(Path(__file__).with_name("differential.erl"), work / "differential.erl")
     command(
@@ -155,6 +162,13 @@ def validate(args, work):
     compare_host = ["mix", "run", "--no-compile"] if lynx else ["elixir"]
     print(command(compare_host + [helper, "compare", str(work)], lynx or work, work / "comparison.log"), end="")
     summary = json.loads((work / "summary.json").read_text())
+    if args.lean_runtime:
+        report = lean_runtime.inventory(
+            args.lean_runtime.resolve(), entries,
+            json.loads((work / "failures.json").read_text()),
+            json.loads((work / "unverified.json").read_text()),
+        )
+        (work / "lean-coverage.json").write_text(json.dumps(report, indent=2))
     if summary["failed"]:
         failures = json.loads((work / "failures.json").read_text())
         if args.shrink:
@@ -207,8 +221,10 @@ def shrink(args, work, failure):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lynx", type=Path, help="Also check fixture laws/calls from this Lynx checkout")
+    parser.add_argument("--lean-runtime", type=Path,
+                        help="Also sample public behaviors from this checkout's Lean/LynxTest inventory")
     parser.add_argument("--seed", type=int, default=1, help="Reproducible generator seed (default: 1)")
-    parser.add_argument("--generated", type=int, default=1000, help="Generated cases (default: 1000; 0 for fixtures only)")
+    parser.add_argument("--generated", type=int, default=1000, help="Generated cases (default: 1000; 0 disables generation)")
     parser.add_argument("--float-encoding", action="store_true", help="Focus generated cases on float16/32 encoding boundaries")
     parser.add_argument("--replay", type=Path, help="Replay cases.json, failures.json, or minimized.json instead of generating")
     parser.add_argument("--shrink", action="store_true", help="Try up to 30 reductions of the first generated failure")
