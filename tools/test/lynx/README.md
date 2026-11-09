@@ -105,7 +105,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **2,871 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **2,946 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -124,6 +124,14 @@ zeros, mixed-case digits, invalid digits/suffixes/bases, boxed and large integer
 values, and NUL bytes before or after valid digits. Both default and explicit
 base parsers must reject the entire NUL-containing input rather than accepting
 a prefix; list and binary results are checked directly, not only by round trips.
+
+Seventy-five term-order recipes compare same-code closures with runtime captures,
+including numeric types, signed zero, precision boundaries, nested containers,
+and exact map keys. Both operand orders and equal-capture controls are checked.
+Type-order samples include live references, local/external functions, and the
+current PID, plus Unicode atoms and container boundaries; only comparison
+booleans escape, never raw identities or generated function names. The source
+inventory includes public as well as private and unqualified theorem sites.
 
 Thirty map-fold callback cases extend the model's input-validation samples:
 tuple accumulators count entries and sum asymmetric values, while callbacks

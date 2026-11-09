@@ -44,6 +44,7 @@
     trace_depth/3,
     trace_depth_a/1,
     trace_depth_b/1,
+    function_compare/2,
     function_apply/3,
     function_named/3,
     function_make/4,
@@ -1591,6 +1592,9 @@ function_value(bif_one, _) -> fun erlang:abs/1;
 function_value(missing_export, _) -> fun ?MODULE:missing/0;
 function_value(missing_module, _) -> fun lynx_missing_functions:missing/0;
 function_value(not_fun, Captured) -> Captured.
+
+function_compare(A, B) ->
+    compare(function_value(local_one, A), function_value(local_one, B)).
 
 function_zero() -> zero.
 function_one(X) -> {one, X}.

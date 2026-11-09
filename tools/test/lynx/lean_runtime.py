@@ -264,6 +264,30 @@ def cases():
             probe(source, names, f"differential:compare({a},{b})")
             probe(source, names, f"differential:compare({b},{a})")
 
+    # Same factory/code, different runtime captures: no generated fun names or
+    # raw identities escape. Include numeric equality through nested captures.
+    for a, b in [("10", "20"), ("1", "1.0"), ("0.0", "-0.0"),
+                 ("9007199254740993", "9007199254740992.0"),
+                 ("{1,a}", "{1.0,a}"), ("[1|a]", "[1.0|a]"),
+                 ("#{a=>1}", "#{a=>1.0}"), ("#{1=>a}", "#{1.0=>a}"),
+                 ("#{a=>99,b=>0}", "#{a=>0,c=>0}"),
+                 ("<<128>>", "<<1:1>>"), ("[0|a]", "[0]"), ("{a,b}", "{z}")]:
+        for left, right in [(a, b), (b, a), (a, a)]:
+            probe("Term/Compare", "closure_captures_comparison",
+                  f"differential:function_compare({left},{right})")
+    for a, b in [("1", "make_ref()"), ("a", "make_ref()"),
+                 ("make_ref()", "fun erlang:abs/1"), ("make_ref()", "fun()->ok end"),
+                 ("fun erlang:abs/1", "self()"), ("fun()->ok end", "self()"),
+                 ("self()", "{}"), ("{}", "#{}"), ("#{}", "[]"),
+                 ("[]", "[0]"), ("[0]", "<<>>"),
+                 ("''", "a"), ("a", "aa"), ("aa", "b"),
+                 ("b", "'é'"), ("'é'", "'λ'"), ("'λ'", "'😀'")]:
+        probe("Term/Compare", "ordered_terms", f"differential:compare({a},{b})")
+        probe("Term/Compare", "ordered_terms", f"differential:compare({b},{a})")
+    for value in ["make_ref()", "fun erlang:abs/1", "fun()->ok end", "self()", "'😀'"]:
+        probe("Term/Compare", "ordered_terms",
+              f"begin V={value},differential:compare(V,V) end")
+
     s = "Term/ShortCircuit"
     for op, names in [("or_else", ["orElse_short_circuits", "orElse_returns_right", "orElse_rejects_non_boolean",
                                     "orElse_keeps_left_requests"]),
