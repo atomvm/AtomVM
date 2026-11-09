@@ -256,6 +256,11 @@ def cases():
                         probe("Modules/Signals", ["linked_crash_kills_parent", "linked_normal_exit_is_ignored",
                                                   "trapped_exit_is_a_message"],
                               f"differential:relink({owner},{trap},{final},{reason},{count})")
+    # Extend linked-exit samples to unlink races; compare legal outcomes, not schedules.
+    for reason in ["normal", "boom", "killed"]:
+        for count in [1, 16, 64]:
+            probe("Modules/Signals", ["linked_crash_kills_parent", "linked_normal_exit_is_ignored"],
+                  f"differential:unlink_exit_race({reason},{count})")
     for trap in ["true", "false"]:
         for reason in ["normal", "boom", "kill"]:
             probe("Modules/Signals", ["trapped_exit_is_a_message", "kill_cannot_be_trapped",
