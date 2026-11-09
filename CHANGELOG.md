@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed `erlang:raise/3` preserving legacy stack frames without adding empty locations
 - Fixed `lists:keyfind/3` and `lists:keymember/3` using exact instead of numeric equality
 - Fixed `is_process_alive/1` accepting non-PID arguments
 - Fixed linking to a dead local process raising `noproc` instead of delivering an
