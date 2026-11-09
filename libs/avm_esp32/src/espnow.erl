@@ -75,7 +75,9 @@ open() ->
 -spec open([open_option()]) -> {ok, port()} | {error, term()}.
 open(Options) ->
     Receiver = proplists:get_value(receiver, Options, self()),
-    try open_port({spawn, "espnow"}, [{receiver, Receiver} | proplists:delete(receiver, Options)]) of
+    try
+        open_port({spawn, "espnow"}, [{receiver, Receiver} | proplists:delete(receiver, Options)])
+    of
         Port -> {ok, Port}
     catch
         error:Reason -> {error, Reason}
