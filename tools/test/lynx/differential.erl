@@ -15,6 +15,7 @@
     float_text/2,
     short_circuit/3,
     receive_timeout/2,
+    receive_guards/3,
     process_exchange/1,
     monitor_exit/1,
     monitor_target/3,
@@ -144,6 +145,39 @@ receive_timeout(Timeout, Messages) ->
             C:R -> {exception, C, R}
         end,
     {Result, drain()}.
+
+receive_guards(Kind, Timeout, Messages) ->
+    isolated(fun() ->
+        [self() ! M || M <- Messages],
+        First = receive_guard(Kind, Timeout),
+        Next =
+            case Kind of
+                boolean -> false;
+                tuple -> {resume, wanted};
+                map -> #{key => wanted, phase => resumed};
+                division -> 2;
+                binary -> <<2, 7>>;
+                alternatives -> fallback
+            end,
+        self() ! Next,
+        Second = receive_guard(Kind, Timeout),
+        {First, Second, drain()}
+    end).
+
+receive_guard(Kind, Timeout) ->
+    receive
+        M when
+            Kind =:= boolean, not M;
+            Kind =:= tuple, element(2, M) =:= wanted;
+            Kind =:= map, map_get(key, M) =:= wanted;
+            Kind =:= division, 12 div M >= 3;
+            Kind =:= binary, binary_part(M, 0, 1) =:= <<2>>;
+            Kind =:= alternatives, is_tuple(M), element(2, M) =:= wanted;
+            Kind =:= alternatives, M =:= fallback
+        ->
+            {matched, M}
+    after Timeout -> timeout
+    end.
 
 drain() ->
     receive
