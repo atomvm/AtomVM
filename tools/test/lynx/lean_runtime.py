@@ -287,6 +287,14 @@ def cases():
                     probe("Modules/Signals", ["raise_classes", "trapped_exit_is_a_message",
                                               "kill_cannot_be_trapped"],
                           f"differential:self_exit({arity},{trap},{linked},{reason})")
+    # Extend fixed trap settings to causally ordered flag changes, not reception races.
+    for mode in ["before_linked", "before_explicit", "queued_explicit", "queued_self"]:
+        for final in ["true", "false"]:
+            for reason in ["normal", "boom", "kill", "killed", "{shutdown,[1,<<5:3>>]}",
+                           "#{reason=>{nested,1 bsl 100}}"]:
+                probe("Modules/Signals", ["trapped_exit_is_a_message", "kill_cannot_be_trapped",
+                                          "normal_exit_signal_is_ignored"],
+                      f"differential:trap_transition({mode},{final},{reason})")
     for state in ["active", "active_message", "queued", "queued_twice", "queued_other", "consumed", "unknown"]:
         for options in ["[]", "[flush]", "[info]", "[flush,info]", "[info,flush]",
                         "[bad]", "[info|bad]", "[{flush,true}]"]:
