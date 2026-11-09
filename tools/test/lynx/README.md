@@ -105,7 +105,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **1,788 deterministic cases**:
+At the pinned Lynx revision below, this selects **1,800 deterministic cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -118,7 +118,7 @@ OTP is the execution oracle, not the Lean model: for example, tested OTP 29
 accepts an already queued receive match before checking an invalid timeout.
 That differs from the model test named `timeout_validation_precedes_scan`.
 
-The lifecycle/receive subset contains 217 cases: linked normal/abnormal exits,
+The lifecycle/receive subset contains 229 cases: linked normal/abnormal exits,
 unlinking, trapped exits, untrappable `kill`, demonitor option validation and
 active/queued/consumed monitor states, standalone and monitor aliases, pending
 monitors while both the target and observer terminate, and empty-mailbox timeout
@@ -138,6 +138,10 @@ process's termination does not unregister its replacement. Plain monitors and al
 alias modes cover keeping, demonitoring, unaliasing, and replying to the original
 reference without changing the replacement monitor. Exit reasons distinguish
 the two processes; no cross-sender arrival order or raw identity is compared.
+Twelve self-link cases check repeated `link(self())` and `unlink(self())` with
+and without existing child links and trapped exits, including zero-iteration
+controls, explicit GC, and retained mailbox messages. A self-link must be a
+successful no-op, not an extra entry in `process_info/2`'s link list.
 
 The function/apply/spawn subset contains 209 cases: captured local closures,
 external funs and BIFs, dynamic `apply/2,3`, improper argument lists, wrong arities,
