@@ -314,6 +314,19 @@ def cases():
     for options in ["[]", "[explicit_unalias]", "[reply]"]:
         probe("Modules/Signals", "alias_ends_with_demonitor",
               f"differential:alias_lifetime(standalone,{options})")
+    for options in ["default", "bad", "0", "#{}", "{}", "[bad]", "[demonitor]",
+                    "[reply_demonitor]", "[{alias,reply}]", "[reply|bad]",
+                    "[explicit_unalias|bad]", "[reply|1]", "[reply,bad]", "[bad,reply]",
+                    "[reply,bad,explicit_unalias]", "[explicit_unalias,bad,reply]",
+                    "[explicit_unalias,explicit_unalias]", "[reply,reply]",
+                    "[explicit_unalias,reply]", "[reply,explicit_unalias]",
+                    "[reply,explicit_unalias,reply]", "[explicit_unalias,reply,explicit_unalias]",
+                    "[reply,reply,explicit_unalias]"]:
+        probe("Modules/Signals", "alias_ends_with_demonitor",
+              f"differential:alias_lifetime(standalone,{options})")
+    for value in ["bad", "0", "1 bsl 100", "1.0", "[]", "[a]", "{}", "#{}",
+                  "<<>>", "<<5:3>>", "self()", "fun()->ok end", "make_ref()"]:
+        call("Modules/Signals", "alias_ends_with_demonitor", "unalias", value)
     for mode in ["demonitor", "explicit_unalias", "reply_demonitor"]:
         for event in ["demonitor", "down", "unalias"]:
             probe("Modules/Signals", "alias_ends_with_demonitor",
