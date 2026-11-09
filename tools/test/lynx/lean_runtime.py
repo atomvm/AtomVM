@@ -157,6 +157,26 @@ def cases():
         ('<<"abcab">>', '<<"ab">>', "[{scope,{1,3}}]"),
     ]:
         call(b, "guard:3", "match", subject, pattern, options, module="binary")
+    # Earlier matches beat longer later ones; at the same position the longest
+    # fitting pattern wins, independent of pattern-list order and scope sign.
+    for pattern in ['[<<"ab">>,<<"abc">>]', '[<<"abc">>,<<"ab">>]']:
+        for options in ["[]", "[{scope,{3,3}}]", "[{scope,{6,-3}}]",
+                        "[{scope,{3,2}}]", "[{scope,{3,0}}]", "[{scope,{8,0}}]"]:
+            call(b, "guard:3", "match", '<<"zababcab">>', pattern, options, module="binary")
+            call(b, "guard:1", "split", '<<"zababcab">>', pattern, options, module="binary")
+            call(b, "guard:1", "split", '<<"zababcab">>', pattern, f"[global|{options}]", module="binary")
+    for options in ["[{scope,{0,3}},{scope,{3,3}}]", "[{scope,{3,3}},{scope,{0,3}}]",
+                    "[{scope,invalid},{scope,{3,3}}]", "[{scope,{0,99}},{scope,{3,3}}]",
+                    "[{scope,{3,3}},{scope,invalid}]", "[{scope,{3,3}}|ignored]",
+                    "[{scope,{3,3}},bad]", "[{scope,{3,3,0}}]", "[{scope,{3,1.0}}]",
+                    "bad", "[bad]", "[{scope,{1 bsl 100,0}}]"]:
+        for fn, label in [("match", "guard:3"), ("split", "guard:1")]:
+            call(b, label, fn, '<<"zababcab">>', '<<"ab">>', options, module="binary")
+    for pattern in ['[]', '[<<>>]', '[<<"ab">>,<<>>]', '[<<"ab">>,bad]',
+                    '[<<"ab">>|tail]', '[<<1:1>>]', '[[<<"ab">>]]']:
+        for subject in ['<<>>', '<<"zababcab">>']:
+            for fn, label in [("match", "guard:3"), ("split", "guard:1")]:
+                call(b, label, fn, subject, pattern, "[]", module="binary")
     call(b, "guard:4", "last", '<<"ab]">>', module="binary")
     call(b, "guard:5", "last", "<<>>", module="binary")
 
