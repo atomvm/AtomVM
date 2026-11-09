@@ -5,6 +5,7 @@
 % split/2 function Copyright Ericsson AB 1996-2023.
 % keytake/3 function Copyright Ericsson AB 1996-2024.
 % append/1, append/2 functions Copyright Ericsson AB 1996-2025.
+% sum/1 function Copyright Ericsson AB 1996-2026.
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -75,7 +76,8 @@
     zip/2,
     zipwith/3,
     min/1,
-    max/1
+    max/1,
+    sum/1
 ]).
 
 %%-----------------------------------------------------------------------------
@@ -1009,4 +1011,21 @@ max_r([H | T], Acc) when H > Acc ->
 max_r([_ | T], Acc) ->
     max_r(T, Acc);
 max_r([], Acc) ->
+    Acc.
+
+%%-----------------------------------------------------------------------------
+%% @param   List a list of numbers
+%% @returns the sum of the elements, or integer zero for an empty list
+%% @doc     Sum the elements of `List' from left to right.
+%% @end
+%%-----------------------------------------------------------------------------
+%% Attribution: https://github.com/erlang/otp/blob/e14591f196d4eacc1946e7073e0ec27f72df2a12/lib/stdlib/src/lists.erl#L570-L573
+-spec sum(List :: [number()]) -> number().
+sum(List) ->
+    sum(List, 0).
+
+%% @private
+sum([H | T], Acc) ->
+    sum(T, Acc + H);
+sum([], Acc) ->
     Acc.

@@ -62,6 +62,7 @@ test() ->
     ok = test_droplast(),
     ok = test_zip(),
     ok = test_zipwith(),
+    ok = test_sum(),
     ok.
 
 test_nth() ->
@@ -557,6 +558,21 @@ test_zipwith() ->
     ?ASSERT_MATCH(lists:zipwith(fun(A, B) -> A + B end, [1, 2, 3], [10, 20, 30]), [11, 22, 33]),
     ?ASSERT_MATCH(lists:zipwith(fun(_, _) -> ok end, [], []), []),
     ?ASSERT_ERROR(lists:zipwith(fun(A, B) -> {A, B} end, [a], [1, 2]), function_clause),
+    ok.
+
+test_sum() ->
+    ?ASSERT_MATCH(lists:sum(id([])), 0),
+    ?ASSERT_MATCH(lists:sum(id([9, -4, 2])), 7),
+    Big = 1 bsl 100,
+    ?ASSERT_MATCH(lists:sum(id([Big, 17, -Big])), 17),
+    ?ASSERT_MATCH(lists:sum(id([1, 2.5, -4])), -0.5),
+    ?ASSERT_MATCH(lists:sum(id([0.0])), 0.0),
+    %% Accumulate left-to-right, rather than reassociating float additions.
+    ?ASSERT_MATCH(lists:sum(id([1.0e20, -1.0e20, 3.0])), 3.0),
+    ?ASSERT_ERROR(lists:sum(id(not_a_list)), function_clause),
+    ?ASSERT_ERROR(lists:sum(id([1 | bad_tail])), function_clause),
+    ?ASSERT_ERROR(lists:sum(id([1, bad_number])), badarith),
+    ?ASSERT_ERROR(lists:sum(id([bad_number | bad_tail])), badarith),
     ok.
 
 id(X) ->

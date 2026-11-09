@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0-beta.1] - Unreleased
 
 ### Added
+- Added `lists:sum/1`
 - Added the `{scope, {Start, Length}}` option to `binary:split/3`
 - Added `erlang:get_keys/0,1` to query process dictionary keys
 - Added `erlang:binary_part/2`, including use in guards
