@@ -55,6 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `is_process_alive/1` accepting non-PID arguments
 - Fixed linking to a dead local process raising `noproc` instead of delivering an
   exit message when the caller traps exits
+- Fixed `erlang:raise/3` accepting malformed stack traces instead of returning `badarg`,
+  while preserving re-raising with `undefined` stack traces when stacktrace creation is disabled
 - Fixed spawning external funs aborting the VM and nonzero-arity local funs
   executing without arguments instead of failing in the child
 - Fixed fun calls checking arity after dispatch, including native funs, and raising

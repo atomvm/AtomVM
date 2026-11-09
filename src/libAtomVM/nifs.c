@@ -4474,6 +4474,52 @@ static term nif_erlang_raise(Context *ctx, int argc, term argv[])
     if (argc == 2) {
         RAISE(ex_class, argv[1]);
     } else {
+#ifndef AVM_CREATE_STACKTRACES
+        // catch supplies undefined when stacktrace creation is disabled.
+        // Keep that value usable for re-raising without accepting other atoms.
+        if (argv[2] == UNDEFINED_ATOM) {
+            RAISE_WITH_STACKTRACE(ex_class, argv[1], argv[2]);
+        }
+#endif
+        // Accept the frame forms allowed by OTP, but reject malformed frames
+        // and improper stack lists before changing exception state.
+        term stack = argv[2];
+        while (term_is_nonempty_list(stack)) {
+            term frame = term_get_list_head(stack);
+            if (!term_is_tuple(frame)) {
+                return BADARG_ATOM;
+            }
+            term location = term_nil();
+            switch (term_get_tuple_arity(frame)) {
+                case 2:
+                    if (!term_is_function(term_get_tuple_element(frame, 0))) {
+                        return BADARG_ATOM;
+                    }
+                    break;
+                case 3:
+                    if (term_is_function(term_get_tuple_element(frame, 0))) {
+                        location = term_get_tuple_element(frame, 2);
+                    } else if (!term_is_atom(term_get_tuple_element(frame, 0)) || !term_is_atom(term_get_tuple_element(frame, 1))) {
+                        return BADARG_ATOM;
+                    }
+                    break;
+                case 4:
+                    if (!term_is_atom(term_get_tuple_element(frame, 0)) || !term_is_atom(term_get_tuple_element(frame, 1))) {
+                        return BADARG_ATOM;
+                    }
+                    location = term_get_tuple_element(frame, 3);
+                    break;
+                default:
+                    return BADARG_ATOM;
+            }
+            if (!term_is_list(location)) {
+                return BADARG_ATOM;
+            }
+            stack = term_get_list_tail(stack);
+        }
+        if (!term_is_nil(stack)) {
+            return BADARG_ATOM;
+        }
         RAISE_WITH_STACKTRACE(ex_class, argv[1], argv[2]);
     }
 }

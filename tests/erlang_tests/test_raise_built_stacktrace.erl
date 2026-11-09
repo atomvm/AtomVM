@@ -33,7 +33,49 @@ start() ->
     ok = test_raise_throw_dynamic(),
     ok = test_raise_empty_stacktrace_direct(),
     ok = test_raise_empty_stacktrace_dynamic(),
+    ok = test_invalid_stacktrace(),
     0.
+
+test_invalid_stacktrace() ->
+    Fun = fun(X) -> X end,
+    Invalid = [
+        bad,
+        [bad],
+        [{?MODULE, start, 0, []} | bad],
+        [{}],
+        [{?MODULE}],
+        [{not_a_fun, []}],
+        [{1, start, 0}],
+        [{?MODULE, 1, 0, []}],
+        [{?MODULE, start, 0, bad}],
+        [{Fun, [], bad}],
+        [{?MODULE, start, 0, [], extra}]
+    ],
+    [
+        begin
+            badarg = ?MODULE:reraise_with(Class, reason, Stack),
+            badarg = apply(?MODULE:id(erlang), ?MODULE:id(raise), [Class, reason, Stack])
+        end
+     || Class <- [error, exit, throw], Stack <- Invalid
+    ],
+    [
+        reason =
+            try ?MODULE:reraise_with(error, reason, Stack) of
+                _ -> unexpected
+            catch
+                error:Reason -> Reason
+            end
+     || Stack <- [
+            [],
+            [{?MODULE, start, 0, []}],
+            [{?MODULE, start, [], []}],
+            [{?MODULE, start, 0}],
+            [{Fun, []}],
+            [{Fun, [], []}]
+        ]
+    ],
+    badarg = ?MODULE:reraise_with(bad, reason, []),
+    ok.
 
 %% Tests the raw_raise opcode path (erlang:raise/3 compiled to raw_raise).
 test_raise_direct() ->
