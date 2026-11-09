@@ -51,6 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed missing modules aborting Emscripten builds on Node with an unavailable
+  `XMLHttpRequest` instead of raising `undef`
 - Fixed `list_to_integer/1,2` accepting a numeric prefix before an embedded NUL
 - Fixed `binary:match/3` accepting an invalid scope when a later scope replaces it
 - Fixed `lists:keyfind/3` and `lists:keymember/3` not matching OTP's rounded
