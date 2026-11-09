@@ -259,6 +259,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   comparison of immediate integer keys against float fields
 - Fixed `binary:match/3` accepting an invalid scope when a later scope replaces it
 - Fixed `list_to_integer/1,2` accepting a numeric prefix before an embedded NUL
+- Fixed missing modules aborting Emscripten builds on Node with an unavailable
+  `XMLHttpRequest` instead of raising `undef`
 
 ## [0.7.0-beta.0] - 2026-09-28
 
