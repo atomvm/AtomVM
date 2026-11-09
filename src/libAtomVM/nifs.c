@@ -7845,6 +7845,11 @@ static term nif_lists_keyfind(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
+    // OTP's immediate-integer key fast path compares float fields after a
+    // binary64 conversion, even when rounding differs from general equality.
+    bool integer_key = term_is_int(key);
+    double float_key = integer_key ? (double) term_to_int(key) : 0.0;
+
     while (term_is_nonempty_list(tuple_list)) {
         term tuple = term_get_list_head(tuple_list);
 
@@ -7862,13 +7867,18 @@ static term nif_lists_keyfind(Context *ctx, int argc, term argv[])
 
         term nth_element = term_get_tuple_element(tuple, n_pos - 1);
 
-        TermCompareResult cmp_result = term_compare(nth_element, key, TermCompareNoOpts, ctx->global);
-
-        if (cmp_result == TermEquals) {
-            return tuple;
-        }
-        if (UNLIKELY(cmp_result == TermCompareMemoryAllocFail)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        if (integer_key && term_is_float(nth_element)) {
+            if ((double) term_to_float(nth_element) == float_key) {
+                return tuple;
+            }
+        } else {
+            TermCompareResult cmp_result = term_compare(nth_element, key, TermCompareNoOpts, ctx->global);
+            if (cmp_result == TermEquals) {
+                return tuple;
+            }
+            if (UNLIKELY(cmp_result == TermCompareMemoryAllocFail)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
         }
 
         tuple_list = term_get_list_tail(tuple_list);
