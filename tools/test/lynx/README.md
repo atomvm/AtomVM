@@ -105,7 +105,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **2,123 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **2,183 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -198,6 +198,13 @@ fenced by a message from the same owner before the target attempts cancellation.
 These cases compare raw return/error results as well as caller/owner mailboxes,
 alias delivery, and the owner's remaining monitor state. In particular, flushing
 must still scan the caller's mailbox without removing an incoming monitor.
+Sixty paired-monitor cases give the same owner two independently created monitors
+of one target, with every pairing of plain and the three monitor-alias kinds.
+Keeping, demonitoring, unaliasing, or replying through the first reference must
+leave the second monitor intact. Reply delivery is fenced before termination;
+real DOWN notifications, post-termination alias delivery, and final reference
+states distinguish monitor cancellation from alias removal. Plain references are
+not used as reply destinations, and cross-reference DOWN order is not compared.
 
 The function/apply/spawn subset contains 209 cases: captured local closures,
 external funs and BIFs, dynamic `apply/2,3`, improper argument lists, wrong arities,
