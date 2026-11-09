@@ -95,6 +95,51 @@ errors. This is a bounded greedy reduction, **not a guarantee of a globally
 minimal case or the same underlying root cause**. Original failures remain intact.
 Replay files are trusted local input: they contain Erlang expressions to execute.
 
+## Lean runtime test inventory
+
+Sample additional public behaviors inspired by `Lean/LynxTest`, without running
+Lean, Mix, or proofs:
+
+```sh
+python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
+  --generated 0 --output /tmp/atomvm-lean-runtime
+```
+
+At the pinned Lynx revision below, this selects **1,042 deterministic cases**:
+numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
+search/split, maps, process dictionaries, comparison, effectful short circuit,
+timeout validation with retained mailboxes, monitored process/reference/dictionary
+handshakes, and UTF-8/16/32 construction/matching. UTF cases include malformed,
+incomplete, unaligned, and valid codepoints with invalid suffixes. Child identities
+are compared within each run, never serialized as cross-runtime expectations.
+This mode uses **AtomVM's bundled standard library**, not OTP's `lists.beam`.
+Missing functions and differing error precedence remain failures, not skips.
+OTP is the execution oracle, not the Lean model: for example, tested OTP 29
+accepts an already queued receive match before checking an invalid timeout.
+That differs from the model test named `timeout_validation_precedes_scan`.
+
+`lean-coverage.json` inventories unindented theorem/private-theorem declarations
+and `#guard ` sites in all 23 test files, recording source hashes, lines, sample
+counts, and matched/failed/unverified counts. It is a lexical inventory, not a
+Lean parser: `#check`, examples, and other macros are not counted. `lean_origins`
+links samples to their inspiration, **not exact theorem instantiations**; some
+samples extend to invalid inputs outside the theorem premises. Do not interpret
+the number of linked declarations as proof, branch, or complete API coverage.
+Unselected declarations remain `no_samples`, not implicit passes; they do not
+make the run fail. Renamed/missing attributed declarations do fail validation.
+
+Kernel audits, API snapshots, purity/fixed-point/exhaustion proofs, internal
+model representations, all-schedule claims, and deadlock diagnostics do not have
+ordinary deterministic VM-test equivalents. Their inventory notes explain those
+boundaries. Signal/link/alias combinations and many executable behaviors still
+need more recipes. Standalone runs check **zero fresh laws**.
+
+The flag is additive with `--lynx` and generated cases. Combining it with
+`--lynx` inherits that mode's OTP `lists.beam` substitution. A replay selects
+only saved cases; include `--lean-runtime ../lynx` to regenerate its scoped
+source inventory. Like other modes, real mismatches or incomplete references
+produce a nonzero exit and retain evidence.
+
 ## Optional Lynx checks
 
 Also check laws and a boundary-driven call corpus from an existing
@@ -188,7 +233,9 @@ normal AtomVM build/tests. Run `--help` for options.
 
 The runner's CLI integration tests check seeded replay, independent encoding byte
 oracles, deliberately wrong/malformed target output, reduction and replay, and
-continuation after reference timeouts/undefined calls:
+continuation after reference timeouts/undefined calls. They also check scoped Lean
+sample inventories, unverified counts, stale source attribution rejection, and
+independent Unicode/short-circuit/process/receive result oracles:
 
 ```sh
 python3 -B -m unittest discover -s tools/test/lynx -p test_validate.py -v
