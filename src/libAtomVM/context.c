@@ -62,6 +62,38 @@ static struct Monitor *context_monitors_handle_terminate(Context *ctx);
 static void context_distribution_handle_terminate(Context *ctx);
 static void destroy_extended_registers(Context *ctx, unsigned int live);
 
+term context_make_badarity(Context *ctx, term fun, unsigned int args_count)
+{
+    // Do not move the fun or argument registers while building the reason.
+    if (UNLIKELY(memory_ensure_free_opt(ctx, 2 * TUPLE_SIZE(2) + args_count * CONS_SIZE, MEMORY_NO_GC) != MEMORY_GC_OK)) {
+        return OUT_OF_MEMORY_ATOM;
+    }
+    term args = term_nil();
+    for (unsigned int i = args_count; i > 0; i--) {
+        term value = term_nil();
+        if (i - 1 < MAX_REG) {
+            value = ctx->x[i - 1];
+        } else {
+            struct ListHead *item;
+            LIST_FOR_EACH (item, &ctx->extended_x_regs) {
+                struct ExtendedRegister *reg = GET_LIST_ENTRY(item, struct ExtendedRegister, head);
+                if (reg->index == i - 1) {
+                    value = reg->value;
+                    break;
+                }
+            }
+        }
+        args = term_list_prepend(value, args, &ctx->heap);
+    }
+    term call = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(call, 0, fun);
+    term_put_tuple_element(call, 1, args);
+    term reason = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(reason, 0, BADARITY_ATOM);
+    term_put_tuple_element(reason, 1, call);
+    return reason;
+}
+
 Context *context_new(GlobalContext *glb)
 {
     Context *ctx = malloc(sizeof(Context));
@@ -1411,8 +1443,9 @@ int context_get_catch_label(Context *ctx, Module **mod)
 {
     term *ct = ctx->e;
     term *last_frame = ctx->e;
+    term *stack_base = context_stack_base(ctx);
 
-    while (ct != ctx->heap.heap_end) {
+    while (ct != stack_base) {
         if (term_is_catch_label(*ct)) {
             int target_module;
             int target_label = term_to_catch_label_and_module(*ct, &target_module);
@@ -1467,8 +1500,9 @@ COLD_FUNC void context_dump(Context *ctx)
     fprintf(stderr, "\n\nStack \n-----\n\n");
 
     term *ct = ctx->e;
+    term *stack_base = context_stack_base(ctx);
 
-    while (ct != ctx->heap.heap_end) {
+    while (ct != stack_base) {
         if (term_is_catch_label(*ct)) {
             int target_module;
             int target_label = term_to_catch_label_and_module(*ct, &target_module);
