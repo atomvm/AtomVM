@@ -882,7 +882,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                 case MonitorSignal: {                                                           \
                     struct MonitorPointerSignal *monitor_signal                                 \
                         = CONTAINER_OF(signal_message, struct MonitorPointerSignal, base);      \
-                    context_add_monitor(ctx, monitor_signal->monitor);                          \
+                    context_add_monitor(ctx, monitor_signal->monitor, false);                   \
                     break;                                                                      \
                 }                                                                               \
                 case DemonitorSignal: {                                                         \

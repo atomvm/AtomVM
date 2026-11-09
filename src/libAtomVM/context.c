@@ -218,7 +218,7 @@ void context_destroy(Context *ctx)
             case MonitorSignal: {
                 struct MonitorPointerSignal *monitor_signal
                     = CONTAINER_OF(signal_message, struct MonitorPointerSignal, base);
-                (void) context_add_monitor(ctx, monitor_signal->monitor);
+                (void) context_add_monitor(ctx, monitor_signal->monitor, false);
                 break;
             }
             case UnlinkIDSignal: {
@@ -1137,7 +1137,7 @@ void monitor_destroy(struct Monitor *monitor)
     }
 }
 
-bool context_add_monitor(Context *ctx, struct Monitor *new_monitor)
+bool context_add_monitor(Context *ctx, struct Monitor *new_monitor, bool reactivate_link)
 {
     struct ListHead *item;
     LIST_FOR_EACH (item, &ctx->monitors_head) {
@@ -1148,8 +1148,13 @@ bool context_add_monitor(Context *ctx, struct Monitor *new_monitor)
                     struct LinkLocalMonitor *new_link_monitor = CONTAINER_OF(new_monitor, struct LinkLocalMonitor, monitor);
                     struct LinkLocalMonitor *existing_link_monitor = CONTAINER_OF(existing, struct LinkLocalMonitor, monitor);
                     if (UNLIKELY(existing_link_monitor->link_local_process_id == new_link_monitor->link_local_process_id)) {
+                        // Only link/1 cancels our pending unlink, not an incoming link signal.
+                        bool relinking = reactivate_link && existing_link_monitor->unlink_id != UNLINK_ID_LINK_ACTIVE;
+                        if (relinking) {
+                            existing_link_monitor->unlink_id = UNLINK_ID_LINK_ACTIVE;
+                        }
                         free(new_link_monitor);
-                        return false;
+                        return relinking;
                     }
                     break;
                 }
@@ -1264,25 +1269,10 @@ void context_ack_unlink(Context *ctx, term link_pid, uint64_t unlink_id, bool pr
             struct LinkLocalMonitor *link = CONTAINER_OF(monitor, struct LinkLocalMonitor, monitor);
             if (link->link_local_process_id == link_pid) {
                 if (link->unlink_id == UNLINK_ID_LINK_ACTIVE) {
-                    // Send ack and remove link
-                    int local_process_id = term_to_local_process_id(link_pid);
-                    Context *target;
-                    if (process_table_locked) {
-                        target = globalcontext_get_process_nolock(ctx->global, local_process_id);
-                    } else {
-                        target = globalcontext_get_process_lock(ctx->global, local_process_id);
-                    }
-                    if (LIKELY(target)) {
-                        term self_pid = term_pid_or_port_from_context(ctx);
-                        mailbox_send_immediate_ref_signal(target, UnlinkIDAckSignal, self_pid, unlink_id);
-                        if (!process_table_locked) {
-                            globalcontext_get_process_unlock(ctx->global, target);
-                        }
-                    }
                     list_remove(&monitor->monitor_list_head);
                     free(link);
                 }
-                return;
+                break;
             }
         } else if (term_is_external_pid(link_pid) && monitor->monitor_type == CONTEXT_MONITOR_LINK_REMOTE) {
             struct LinkRemoteMonitor *link = CONTAINER_OF(monitor, struct LinkRemoteMonitor, monitor);
@@ -1291,12 +1281,25 @@ void context_ack_unlink(Context *ctx, term link_pid, uint64_t unlink_id, bool pr
                 && link->pid_serial == term_get_external_pid_serial(link_pid)
                 && link->creation == term_get_external_node_creation(link_pid)) {
                 if (link->unlink_id == UNLINK_ID_LINK_ACTIVE) {
-                    // Send ack and remove link
                     dist_send_unlink_id_ack(unlink_id, term_from_local_process_id(ctx->process_id), link_pid, ctx);
                     list_remove(&monitor->monitor_list_head);
                     free(link);
                 }
                 return;
+            }
+        }
+    }
+    // Acknowledge even an absent or inactive local link: both peers may be unlinking.
+    if (term_is_local_pid_or_port(link_pid)) {
+        int local_process_id = term_to_local_process_id(link_pid);
+        Context *target = process_table_locked
+            ? globalcontext_get_process_nolock(ctx->global, local_process_id)
+            : globalcontext_get_process_lock(ctx->global, local_process_id);
+        if (LIKELY(target)) {
+            term self_pid = term_pid_or_port_from_context(ctx);
+            mailbox_send_immediate_ref_signal(target, UnlinkIDAckSignal, self_pid, unlink_id);
+            if (!process_table_locked) {
+                globalcontext_get_process_unlock(ctx->global, target);
             }
         }
     }
