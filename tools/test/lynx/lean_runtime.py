@@ -260,6 +260,13 @@ def cases():
         for event in ["demonitor", "down", "unalias"]:
             probe("Modules/Signals", "alias_ends_with_demonitor",
                   f"differential:alias_lifetime({mode},{event})")
+    for mode in ["plain", "demonitor", "explicit_unalias", "reply_demonitor"]:
+        for action in ["keep", "demonitor", "unalias", "reply"]:
+            if mode == "plain" and action == "reply":
+                continue  # Only aliases are message destinations.
+            for order in ["original_first", "replacement_first"]:
+                probe("Modules/Signals", ["monitor_reports_normal_exit", "alias_ends_with_demonitor"],
+                      f"differential:monitor_rebind({mode},{action},{order})")
     for count in ["1", "8", "64"]:
         probe("Modules/Signals", ["monitor_reports_normal_exit", "kill_cannot_be_trapped"],
               f"differential:termination_queue({count})")

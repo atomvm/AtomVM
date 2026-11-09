@@ -18,6 +18,7 @@
     process_exchange/1,
     monitor_exit/1,
     monitor_target/3,
+    monitor_rebind/3,
     linked_exit/2,
     exit_signal/2,
     monitor_options/2,
@@ -402,6 +403,96 @@ monitor_options(State, Options) ->
      || M <- drain()
     ],
     {Result, Remaining}.
+
+%% A name lookup binds the monitor to that process, not to future owners of the name.
+monitor_rebind(Mode, Action, Order) ->
+    isolated(fun() ->
+        Options =
+            case Mode of
+                plain -> [];
+                _ -> [{alias, Mode}]
+            end,
+        {Original, OriginalFence} = spawn_monitor(fun() ->
+            receive
+                stop -> exit(original)
+            end
+        end),
+        {Replacement, ReplacementFence} = spawn_monitor(fun() ->
+            receive
+                stop -> exit(replacement)
+            end
+        end),
+        true = register(lynx_rebound_monitor, Original),
+        OriginalRef = monitor(process, lynx_rebound_monitor, Options),
+        true = unregister(lynx_rebound_monitor),
+        true = register(lynx_rebound_monitor, Replacement),
+        ReplacementRef = monitor(process, lynx_rebound_monitor, Options),
+        Rebound = whereis(lynx_rebound_monitor) =:= Replacement,
+        Acted =
+            case Action of
+                keep ->
+                    kept;
+                demonitor ->
+                    demonitor(OriginalRef, [info]);
+                unalias ->
+                    erlang:unalias(OriginalRef);
+                reply ->
+                    OriginalRef ! reply,
+                    receive
+                        reply -> replied
+                    end
+            end,
+        Cancelled = Action =:= demonitor orelse (Action =:= reply andalso Mode =:= reply_demonitor),
+        Cancellation =
+            case Cancelled of
+                true -> demonitor(OriginalRef, [info]);
+                false -> not_cancelled
+            end,
+        Targets =
+            case Order of
+                original_first ->
+                    [
+                        {Original, OriginalFence, original},
+                        {Replacement, ReplacementFence, replacement}
+                    ];
+                replacement_first ->
+                    [
+                        {Replacement, ReplacementFence, replacement},
+                        {Original, OriginalFence, original}
+                    ]
+            end,
+        Registrations = [
+            begin
+                Pid ! stop,
+                receive
+                    {'DOWN', Fence, process, Pid, Reason} -> ok
+                end,
+                whereis(lynx_rebound_monitor) =:= Replacement
+            end
+         || {Pid, Fence, Reason} <- Targets
+        ],
+        Object = {lynx_rebound_monitor, node()},
+        OriginalDown =
+            case Cancelled of
+                true ->
+                    cancelled;
+                false ->
+                    receive
+                        {'DOWN', OriginalRef, process, OldObject, OldReason} ->
+                            {OldObject =:= Object, OldReason}
+                    after 1000 -> missing_original_down
+                    end
+            end,
+        ReplacementDown =
+            receive
+                {'DOWN', ReplacementRef, process, NewObject, NewReason} ->
+                    {NewObject =:= Object, NewReason}
+            after 1000 -> missing_replacement_down
+            end,
+        {Rebound, Acted, Cancellation, Registrations, OriginalDown, ReplacementDown,
+            erlang:unalias(OriginalRef), erlang:unalias(ReplacementRef),
+            whereis(lynx_rebound_monitor), length(drain())}
+    end).
 
 alias_lifetime(standalone, Options) ->
     Alias = erlang:alias(Options),
