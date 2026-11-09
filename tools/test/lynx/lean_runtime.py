@@ -272,6 +272,13 @@ def cases():
             probe("Modules/Signals", ["trapped_exit_is_a_message", "kill_cannot_be_trapped",
                                       "normal_exit_signal_is_ignored"],
                   f"differential:exit_signal({trap},{reason})")
+    for mode in ["linked", "unlink_unfenced", "unlink_settled"]:
+        for trap in ["true", "false"]:
+            for reason in ["normal", "boom", "kill", "killed", "{shutdown,[1,<<5:3>>]}",
+                           "#{reason=>{nested,1 bsl 100}}"]:
+                probe("Modules/Signals", ["trapped_exit_is_a_message", "kill_cannot_be_trapped",
+                                          "normal_exit_signal_is_ignored"],
+                      f"differential:exit_signal({trap},{reason},{mode})")
     for arity in ["one", "two"]:
         for trap in ["true", "false"]:
             for linked in ["true", "false"]:

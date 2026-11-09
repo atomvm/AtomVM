@@ -25,6 +25,7 @@
     crossed_unlink/4,
     linked_exit/2,
     exit_signal/2,
+    exit_signal/3,
     self_exit/4,
     monitor_options/2,
     alias_lifetime/2,
@@ -561,10 +562,30 @@ linked_exit(Mode, Reason) ->
     end).
 
 exit_signal(Trap, Reason) ->
+    {_, _, Down, Observation, _} = exit_signal_run(Trap, Reason, unlinked),
+    {Down, Observation}.
+
+exit_signal(Trap, Reason, Mode) ->
+    isolated(fun() ->
+        process_flag(trap_exit, true),
+        exit_signal_run(Trap, Reason, Mode)
+    end).
+
+exit_signal_run(Trap, Reason, Mode) ->
     Parent = self(),
     {Child, Ref} = spawn_monitor(fun() ->
         process_flag(trap_exit, Trap),
         Parent ! {self(), ready},
+        case Mode of
+            unlink_unfenced ->
+                ok;
+            _ ->
+                receive
+                    check_link ->
+                        {links, Links} = process_info(self(), links),
+                        Parent ! {self(), {peer_link, lists:member(Parent, Links)}}
+                end
+        end,
         receive
             {'EXIT', Parent, R} -> Parent ! {self(), {trapped, R}};
             ping -> Parent ! {self(), ignored}
@@ -573,17 +594,49 @@ exit_signal(Trap, Reason) ->
     receive
         {Child, ready} -> ok
     end,
+    case Mode of
+        unlinked ->
+            ok;
+        linked ->
+            link(Child);
+        _ ->
+            link(Child),
+            unlink(Child)
+    end,
+    PeerLinked =
+        case Mode of
+            unlink_unfenced ->
+                unobserved;
+            _ ->
+                Child ! check_link,
+                receive
+                    {Child, {peer_link, Linked}} -> Linked
+                end
+        end,
+    {links, LocalLinks} = process_info(self(), links),
+    LocalLinked = lists:member(Child, LocalLinks),
     true = exit(Child, Reason),
     Child ! ping,
-    receive
-        {'DOWN', Ref, process, Child, Down} ->
-            Observation =
+    Down =
+        receive
+            {'DOWN', Ref, process, Child, R1} -> R1
+        end,
+    Exit =
+        case Mode of
+            linked ->
                 receive
-                    {Child, Value} -> Value
-                after 0 -> no_reply
-                end,
-            {Down, Observation}
-    end.
+                    {'EXIT', Child, R2} -> R2
+                after 1000 -> missing_exit
+                end;
+            _ ->
+                unlinked
+        end,
+    Observation =
+        receive
+            {Child, Value} -> Value
+        after 0 -> no_reply
+        end,
+    {LocalLinked, PeerLinked, Down, Observation, Exit}.
 
 self_exit(Arity, Trap, Linked, Reason) ->
     isolated(fun() ->
