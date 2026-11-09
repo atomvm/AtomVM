@@ -16,6 +16,7 @@
     short_circuit/3,
     receive_timeout/2,
     receive_guards/3,
+    send_destination/3,
     process_exchange/1,
     monitor_exit/1,
     monitor_target/3,
@@ -178,6 +179,96 @@ receive_guard(Kind, Timeout) ->
             {matched, M}
     after Timeout -> timeout
     end.
+
+send_destination(Operation, Mode, Payload) ->
+    isolated(fun() ->
+        Parent = self(),
+        {Child, Fence} = spawn_monitor(fun() ->
+            receive
+                {payload, Value} ->
+                    Parent ! {self(), Value},
+                    receive
+                        stop -> ok
+                    end;
+                stop ->
+                    ok
+            end
+        end),
+        Target =
+            case Mode of
+                self ->
+                    self();
+                live ->
+                    Child;
+                dead ->
+                    Child ! stop,
+                    receive
+                        {'DOWN', Fence, process, Child, normal} -> Child
+                    end;
+                named_self ->
+                    true = register(lynx_send_target, self()),
+                    lynx_send_target;
+                named_live ->
+                    true = register(lynx_send_target, Child),
+                    lynx_send_target;
+                missing ->
+                    lynx_send_missing;
+                unregistered ->
+                    true = register(lynx_send_target, Child),
+                    true = unregister(lynx_send_target),
+                    lynx_send_target;
+                reference ->
+                    make_ref();
+                stale_alias ->
+                    Alias = erlang:alias(),
+                    true = erlang:unalias(Alias),
+                    Alias;
+                {invalid, Value} ->
+                    Value
+            end,
+        self() ! retained,
+        Message = {payload, Payload},
+        Result =
+            try
+                Returned =
+                    case Operation of
+                        operator -> Target ! Message;
+                        function -> call(erlang, send, [Target, Message])
+                    end,
+                {sent, Returned =:= Message}
+            catch
+                C:R -> {exception, C, R}
+            end,
+        Delivery =
+            case {Result, Mode} of
+                {{sent, _}, M} when M =:= self; M =:= named_self ->
+                    receive
+                        {payload, Payload} -> {delivered, Payload}
+                    end;
+                {{sent, _}, M} when M =:= live; M =:= named_live ->
+                    receive
+                        {Child, Payload} -> {delivered, Payload}
+                    end;
+                _ ->
+                    none
+            end,
+        case Mode of
+            dead ->
+                ok;
+            _ ->
+                Child ! stop,
+                receive
+                    {'DOWN', Fence, process, Child, normal} -> ok
+                end
+        end,
+        {Result, Delivery, [
+            case M of
+                retained -> retained;
+                _ -> unexpected
+            end
+         || M <- drain()
+        ]}
+    end).
 
 drain() ->
     receive
