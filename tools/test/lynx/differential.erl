@@ -21,6 +21,7 @@
     monitor_rebind/3,
     self_link/3,
     relink/5,
+    unlink_exit_race/2,
     linked_exit/2,
     exit_signal/2,
     monitor_options/2,
@@ -421,6 +422,50 @@ relink_steps(Pid, Count) ->
         end
      || _ <- lists:seq(1, Count)
     ].
+
+%% Compare an allowed-outcome predicate, not which participant wins the race.
+unlink_exit_race(Reason, Count) ->
+    [unlink_exit_race_once(Reason) || _ <- lists:seq(1, Count)].
+
+unlink_exit_race_once(Reason) ->
+    Parent = self(),
+    {Child, ChildRef} = spawn_monitor(fun() ->
+        receive
+            go -> exit(Reason)
+        end
+    end),
+    {Worker, WorkerRef} = spawn_monitor(fun() ->
+        true = link(Child),
+        Parent ! {self(), ready},
+        unlink_wait_dead(Child),
+        true = unlink(Child),
+        Parent ! {self(), unlinked},
+        receive
+            stop -> ok
+        end
+    end),
+    receive
+        {Worker, ready} -> ok
+    end,
+    Child ! go,
+    receive
+        {'DOWN', ChildRef, process, Child, Reason} -> ok
+    end,
+    Worker ! stop,
+    Down =
+        receive
+            {'DOWN', WorkerRef, process, Worker, R} -> R
+        end,
+    receive
+        {Worker, unlinked} -> Down =:= normal
+    after 0 -> Reason =/= normal andalso Down =:= Reason
+    end.
+
+unlink_wait_dead(Child) ->
+    case is_process_alive(Child) of
+        true -> unlink_wait_dead(Child);
+        false -> ok
+    end.
 
 linked_exit(Mode, Reason) ->
     isolated(fun() ->
