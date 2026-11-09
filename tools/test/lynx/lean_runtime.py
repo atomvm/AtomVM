@@ -217,9 +217,10 @@ def cases():
                 probe(s, names, f"differential:short_circuit({op},{left},{right})")
 
     p = "Modules/Process"
-    for timeout in ["-1", "1.0", "bad", "4294967296", "0", "1", "infinity"]:
-        for messages in ["[before,wanted,after_message]", "[before]"]:
-            if timeout in ["4294967296", "infinity"] and messages == "[before]":
+    for timeout in ["-1", "1.0", "bad", "4294967295", "4294967296",
+                    "4294967297", "1 bsl 64", "1 bsl 100", "-(1 bsl 100)", "0", "1", "infinity"]:
+        for messages in ["[before,wanted,after_message]", "[before]", "[]"]:
+            if timeout in ["4294967295", "infinity"] and messages != "[before,wanted,after_message]":
                 continue  # No deliberate long/infinite wait without a matching message.
             probe(p, ["timeout_validation_precedes_scan", "zero_timeout_scans_mailbox",
                       "zero_timeout_preserves_unmatched", "queued_match_precedes_timeout_choice"],
@@ -231,6 +232,36 @@ def cases():
     for mode, name in [("normal", "monitor_reports_normal_exit"), ("raised", "monitor_reports_raised_reason"),
                        ("noproc", "monitor_missing_process"), ("flush", "demonitor_flushes_down")]:
         probe("Modules/Signals", name, f"differential:monitor_exit({mode})")
+    for mode in ["trapped", "untrapped", "unlinked"]:
+        for reason in ["normal", "boom", "kill"]:
+            probe("Modules/Signals", ["linked_crash_kills_parent", "linked_normal_exit_is_ignored",
+                                      "trapped_exit_is_a_message"],
+                  f"differential:linked_exit({mode},{reason})")
+    for trap in ["true", "false"]:
+        for reason in ["normal", "boom", "kill"]:
+            probe("Modules/Signals", ["trapped_exit_is_a_message", "kill_cannot_be_trapped",
+                                      "normal_exit_signal_is_ignored"],
+                  f"differential:exit_signal({trap},{reason})")
+    for state in ["active", "active_message", "queued", "queued_twice", "queued_other", "consumed", "unknown"]:
+        for options in ["[]", "[flush]", "[info]", "[flush,info]", "[info,flush]",
+                        "[bad]", "[info|bad]", "[{flush,true}]"]:
+            probe("Modules/Signals", ["demonitor_flushes_down", "demonitor_active_does_not_flush"],
+                  f"differential:monitor_options({state},{options})")
+    for options in ["[]", "[explicit_unalias]", "[reply]"]:
+        probe("Modules/Signals", "alias_ends_with_demonitor",
+              f"differential:alias_lifetime(standalone,{options})")
+    for mode in ["demonitor", "explicit_unalias", "reply_demonitor"]:
+        for event in ["demonitor", "down", "unalias"]:
+            probe("Modules/Signals", "alias_ends_with_demonitor",
+                  f"differential:alias_lifetime({mode},{event})")
+    for count in ["1", "8", "64"]:
+        probe("Modules/Signals", ["monitor_reports_normal_exit", "kill_cannot_be_trapped"],
+              f"differential:termination_queue({count})")
+        for order in ["target_first", "observer_first"]:
+            probe("Modules/Signals", "kill_cannot_be_trapped",
+                  f"differential:termination_cascade({count},{order})")
+    for mode in ["timeout", "message", "nested"]:
+        probe(p, "timeout_handler_scope", f"differential:suspended_receive({mode})")
 
     construction = "Term/Bitstring/Construction"
     matching = "Term/Bitstring/Matching"

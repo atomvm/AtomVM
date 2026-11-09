@@ -170,6 +170,46 @@ class ValidationTests(unittest.TestCase):
             self.assertNotEqual(rejected.returncode, 0)
             self.assertIn("attribution no longer exists", rejected.stderr)
 
+    def test_lifecycle_recipes_have_independent_result_oracles(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            expressions = [
+                "differential:linked_exit(trapped,kill)",
+                "differential:linked_exit(untrapped,boom)",
+                "differential:exit_signal(true,kill)",
+                "differential:monitor_options(active_message,[flush,info])",
+                "differential:monitor_options(queued_other,[flush,info])",
+                "differential:alias_lifetime(reply_demonitor,demonitor)",
+                "differential:receive_timeout(1 bsl 100,[])",
+                "differential:suspended_receive(message)",
+                "differential:termination_cascade(8,target_first)",
+            ]
+            source.write_text(json.dumps([{"expression": e} for e in expressions]))
+            output = work / "results"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 9, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                values = JSON.decode!(File.read!(path))["expected"]
+                actual = Enum.map(values, &:erlang.binary_to_term(Base.decode64!(&1)))
+                [
+                  {:ok, {:ok, {:kill, :kill}}},
+                  {:ok, {:exit, :boom}},
+                  {:ok, {:killed, :no_reply}},
+                  {:ok, {true, [:other]}},
+                  {:ok, {false, [{:down, :normal}]}},
+                  {:ok, {false, false, []}},
+                  {:ok, {{:exception, :error, :timeout_value}, []}},
+                  {:ok, {:ok, {{:throw, :message_body}, true, :ran, [:retained]}}},
+                  {:ok, {:killed, :killed, []}}
+                ] = actual
+                """, str(output / "manifest.json")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     @unittest.skipUnless(os.getenv("LYNX_CHECKOUT"), "Set LYNX_CHECKOUT to test fixture coverage")
     def test_lynx_exports_have_cases_and_partial_replay_is_scoped(self):
         with tempfile.TemporaryDirectory() as directory:
