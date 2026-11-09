@@ -1211,6 +1211,9 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term
     if (term_is_atom(index_or_function)) {
         term module = boxed_value[1];
         fun_arity = term_to_int(boxed_value[3]);
+        if (UNLIKELY(args_count != fun_arity)) {
+            return jit_raise_error(ctx, jit_state, 0, context_make_badarity(ctx, fun, args_count));
+        }
         atom_index_t module_name = term_to_atom_index(module);
         atom_index_t function_name = term_to_atom_index(index_or_function);
         term return_value;
@@ -1245,9 +1248,9 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term
         uint32_t fun_arity_and_freeze;
         module_get_fun(fun_module, fun_index, &label, &fun_arity_and_freeze, &n_freeze);
         fun_arity = fun_arity_and_freeze - n_freeze;
-    }
-    if (UNLIKELY(args_count != fun_arity)) {
-        return jit_raise_error(ctx, jit_state, 0, BADARITY_ATOM);
+        if (UNLIKELY(args_count != fun_arity)) {
+            return jit_raise_error(ctx, jit_state, 0, context_make_badarity(ctx, fun, args_count));
+        }
     }
     uint32_t lim_freeze = MINI(fun_arity + n_freeze, MAX_REG);
     for (uint32_t i = fun_arity; i < lim_freeze; i++) {

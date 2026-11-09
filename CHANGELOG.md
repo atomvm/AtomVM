@@ -155,6 +155,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `demonitor/2` accepting invalid options and returning incorrect `info` results
   with `flush`; flushing now preserves active-monitor messages and removes only the
   first matching five-tuple for an inactive monitor, like OTP
+- Fixed exception handling and crash reports reading beyond stacks in older heap
+  fragments, causing memory corruption with stacktrace creation disabled
 
 ## [0.7.0-beta.0] - 2026-09-28
 
