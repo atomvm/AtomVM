@@ -1660,14 +1660,14 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
     // Nothing can fail from here on. Publish in order so the entries keep their relative position
     // in the monitor lists. context_add_monitor on new_ctx is safe because it is not started yet.
     if (new_link != NULL) {
-        context_add_monitor(new_ctx, new_link);
-        context_add_monitor(ctx, self_link);
+        context_add_monitor(new_ctx, new_link, false);
+        context_add_monitor(ctx, self_link, false);
     }
     if (is_spawn_monitor) {
-        context_add_monitor(new_ctx, new_monitor);
-        context_add_monitor(ctx, self_monitor);
+        context_add_monitor(new_ctx, new_monitor, false);
+        context_add_monitor(ctx, self_monitor, false);
         if (is_alias) {
-            context_add_monitor(ctx, alias_monitor);
+            context_add_monitor(ctx, alias_monitor, false);
         }
     }
 
@@ -5501,7 +5501,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         if (alias_monitor != NULL) {
-            context_add_monitor(ctx, alias_monitor);
+            context_add_monitor(ctx, alias_monitor, false);
         }
         term ref = term_from_ref_data(&ref_data, &ctx->heap);
         term down_message_tuple = term_alloc_tuple(5, &ctx->heap);
@@ -5568,9 +5568,9 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     mailbox_send_monitor_signal(target, MonitorSignal, other_monitor);
     globalcontext_get_process_unlock(ctx->global, target);
 
-    context_add_monitor(ctx, self_monitor);
+    context_add_monitor(ctx, self_monitor, false);
     if (is_alias) {
-        context_add_monitor(ctx, alias_monitor);
+        context_add_monitor(ctx, alias_monitor, false);
     }
 
     return term_from_ref_data(&ref_data, &ctx->heap);
@@ -5669,7 +5669,7 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[])
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 
-        if (UNLIKELY(!context_add_monitor(ctx, self_link))) {
+        if (UNLIKELY(!context_add_monitor(ctx, self_link, true))) {
             globalcontext_get_process_unlock(ctx->global, target);
             monitor_destroy(other_link);
             return TRUE_ATOM;
@@ -5685,7 +5685,7 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[])
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 
-        if (UNLIKELY(!context_add_monitor(ctx, self_link))) {
+        if (UNLIKELY(!context_add_monitor(ctx, self_link, false))) {
             return TRUE_ATOM;
         }
 
@@ -8229,7 +8229,7 @@ static term nif_erlang_alias(Context *ctx, int argc, term argv[])
     if (IS_NULL_PTR(monitor)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    context_add_monitor(ctx, monitor);
+    context_add_monitor(ctx, monitor, false);
     return process_ref;
 }
 

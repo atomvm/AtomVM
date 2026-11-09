@@ -98,7 +98,7 @@ static void scheduler_process_native_signal_messages(Context *ctx)
             case MonitorSignal: {
                 struct MonitorPointerSignal *monitor_signal
                     = CONTAINER_OF(signal_message, struct MonitorPointerSignal, base);
-                context_add_monitor(ctx, monitor_signal->monitor);
+                context_add_monitor(ctx, monitor_signal->monitor, false);
                 break;
             }
             case DemonitorSignal: {

@@ -25,6 +25,8 @@
 start() ->
     ok = test_link_dead_process(),
     ok = test_self_link(),
+    ok = test_relink(),
+    ok = test_crossed_unlinks(64),
     ok = test_demonitor_boundaries(),
     ok = test_monitor_target_types(),
     ok = test_monitor_normal(),
@@ -81,6 +83,113 @@ start() ->
     ok = test_binary_to_term_invalid_process_ref(),
     ok = test_alias_ref_ordering(),
     0.
+
+test_crossed_unlinks(0) ->
+    ok;
+test_crossed_unlinks(N) ->
+    [test_crossed_unlink(A, B) || A <- [false, true], B <- [false, true]],
+    test_crossed_unlinks(N - 1).
+
+test_crossed_unlink(A, B) ->
+    Parent = self(),
+    {Child, Ref} = spawn_opt(
+        fun Loop() ->
+            receive
+                {go, Relink} ->
+                    crossed_unlink_action(Parent, Relink),
+                    Loop();
+                check ->
+                    {links, Links} = process_info(self(), links),
+                    Parent ! {self(), [Parent] =:= [P || P <- Links, P =:= Parent]},
+                    Loop();
+                stop ->
+                    ok
+            end
+        end,
+        [monitor]
+    ),
+    true = link(Child),
+    true = crossed_unlink_check(Child),
+    Child ! {go, B},
+    crossed_unlink_action(Child, A),
+    %% The first reply fences peer operations; the second fences our acknowledgements.
+    _ = crossed_unlink_check(Child),
+    PeerLinked = crossed_unlink_check(Child),
+    {links, Links} = process_info(self(), links),
+    PeerLinked = [Child] =:= [P || P <- Links, P =:= Child],
+    %% Both pending unlink entries must also be gone before a later fresh link.
+    true = link(Child),
+    true = crossed_unlink_check(Child),
+    true = unlink(Child),
+    Child ! stop,
+    receive
+        {'DOWN', Ref, process, Child, normal} -> ok
+    end.
+
+crossed_unlink_check(Child) ->
+    Child ! check,
+    receive
+        {Child, Linked} -> Linked
+    end.
+
+crossed_unlink_action(Pid, Relink) ->
+    true = unlink(Pid),
+    case Relink of
+        true -> true = link(Pid);
+        false -> ok
+    end.
+
+test_relink() ->
+    Parent = self(),
+    {Child, Ref} = spawn_opt(
+        fun Loop() ->
+            receive
+                check ->
+                    {links, Links} = process_info(self(), links),
+                    Parent ! {self(), [Pid || Pid <- Links, Pid =:= Parent]},
+                    Loop();
+                {stop, Reason} ->
+                    exit(Reason)
+            end
+        end,
+        [monitor]
+    ),
+    Previous = process_flag(trap_exit, true),
+    try
+        [
+            begin
+                true = link(Child),
+                true = link(Child),
+                true = unlink(Child),
+                {links, Unlinked} = process_info(self(), links),
+                [] = [Pid || Pid <- Unlinked, Pid =:= Child],
+                true = link(Child),
+                {links, Relinked} = process_info(self(), links),
+                [Child] = [Pid || Pid <- Relinked, Pid =:= Child],
+                Child ! check,
+                {Child, [Parent]} = recv_one(),
+                %% The peer reply also puts any earlier unlink acknowledgement behind us.
+                {links, Settled} = process_info(self(), links),
+                [Child] = [Pid || Pid <- Settled, Pid =:= Child]
+            end
+         || _ <- [first, second, third]
+        ],
+        Child ! {stop, relinked},
+        receive
+            {'EXIT', Child, relinked} -> ok
+        after 1000 -> error(missing_relinked_exit)
+        end,
+        receive
+            {'DOWN', Ref, process, Child, relinked} -> ok
+        after 1000 -> error(missing_relinked_down)
+        end,
+        ok
+    after
+        unlink(Child),
+        Child ! {stop, normal},
+        demonitor(Ref, [flush]),
+        process_flag(trap_exit, Previous)
+    end.
 
 test_self_link() ->
     {Child, Ref} = spawn_opt(
