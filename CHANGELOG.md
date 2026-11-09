@@ -169,6 +169,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exit message when the caller traps exits
 - Fixed `erlang:raise/3` accepting malformed stack traces instead of returning `badarg`,
   while preserving re-raising with `undefined` stack traces when stacktrace creation is disabled
+- Fixed `erlang:raise/3` preserving legacy stack frames without adding empty locations
 
 ## [0.7.0-beta.0] - 2026-09-28
 
