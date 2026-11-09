@@ -66,6 +66,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
+#include <lwip/tcpip.h>
 #define HAVE_PPP 1
 #endif
 #pragma GCC diagnostic pop
@@ -1791,6 +1792,11 @@ error:
     return false;
 }
 
+static void ppp_rx_drained(void *arg)
+{
+    xSemaphoreGive((SemaphoreHandle_t) arg);
+}
+
 // Frees what start_ppp set up, once the session is dead (or never started): lwIP keeps timers
 // on a session until its dead phase, and the netif and its PPP control block must outlive them.
 static void free_ppp(struct PPPGlue *glue)
@@ -1802,6 +1808,15 @@ static void free_ppp(struct PPPGlue *glue)
     if (glue->running) {
         ESP_LOGI(TAG, "PPP closed: %u bytes in, %u bytes out", (unsigned) glue->rx_bytes, (unsigned) glue->tx_bytes);
         glue->stop = true;
+        xSemaphoreTake(glue->stopped, portMAX_DELAY);
+        // The RX task has stopped, but input it queued for the TCP/IP task still points at the
+        // netif. With core locking, esp_netif_destroy runs at once instead of behind that input,
+        // so a callback through the mailbox, which is FIFO, waits it out. Not
+        // esp_netif_tcpip_exec or tcpip_callback_wait: under core locking both run inline.
+        if (tcpip_callback(ppp_rx_drained, glue->stopped) != ERR_OK) {
+            ESP_LOGE(TAG, "Failed to drain PPP input, left allocated");
+            return;
+        }
         xSemaphoreTake(glue->stopped, portMAX_DELAY);
     }
     if (glue->stopped != NULL) {
@@ -1828,7 +1843,7 @@ static void ppp_teardown_task(void *args)
     struct PPPGlue *glue = args;
     if (xSemaphoreTake(glue->died, pdMS_TO_TICKS(PPP_TEARDOWN_MS)) == pdTRUE) {
         free_ppp(glue);
-        ESP_LOGI(TAG, "PPP closed late, freed");
+        ESP_LOGI(TAG, "PPP late close teardown finished");
     } else {
         ESP_LOGE(TAG, "PPP did not close in %d ms, left allocated", PPP_TEARDOWN_MS);
     }
