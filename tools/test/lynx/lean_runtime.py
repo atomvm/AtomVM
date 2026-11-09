@@ -314,6 +314,13 @@ def cases():
             for order in ["original_first", "replacement_first"]:
                 probe("Modules/Signals", ["monitor_reports_normal_exit", "alias_ends_with_demonitor"],
                       f"differential:monitor_rebind({mode},{action},{order})")
+    for mode in ["{standalone,explicit_unalias}", "{standalone,reply}", "{monitor,plain}",
+                 "{monitor,demonitor}", "{monitor,explicit_unalias}", "{monitor,reply_demonitor}"]:
+        for action in ["unalias", "demonitor", "{demonitor,[]}", "{demonitor,[flush]}",
+                       "{demonitor,[info]}", "{demonitor,[flush,info]}", "{demonitor,[info,flush]}"]:
+            probe("Modules/Signals", ["alias_ends_with_demonitor", "demonitor_flushes_down",
+                                      "monitor_reports_normal_exit"],
+                  f"differential:alias_owner({mode},{action})")
     for count in ["1", "8", "64"]:
         probe("Modules/Signals", ["monitor_reports_normal_exit", "kill_cannot_be_trapped"],
               f"differential:termination_queue({count})")

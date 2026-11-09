@@ -30,6 +30,7 @@
     trap_transition/3,
     monitor_options/2,
     alias_lifetime/2,
+    alias_owner/2,
     termination_queue/1,
     termination_cascade/2,
     suspended_receive/1,
@@ -975,6 +976,125 @@ alias_lifetime(Mode, Event) ->
     Ref ! after_end,
     Removed = erlang:unalias(Ref),
     {End, Removed, drain()}.
+
+alias_owner(Mode, Action) ->
+    isolated(fun() ->
+        Parent = self(),
+        {Target, Fence} = spawn_monitor(fun() ->
+            receive
+                stop -> ok
+            end
+        end),
+        Ref =
+            case Mode of
+                {standalone, Option} -> erlang:alias([Option]);
+                {monitor, plain} -> monitor(process, Target);
+                {monitor, Option} -> monitor(process, Target, [{alias, Option}])
+            end,
+        self() ! {'DOWN', Ref, process, Target, owner_sentinel},
+        self() ! {keep, Ref},
+        {Other, OtherFence} = spawn_opt(
+            fun() ->
+                OwnRef = monitor(process, Target),
+                self() ! {other, Ref, process, Target, foreign_sentinel},
+                self() ! {'DOWN', OwnRef, process, Target, own_sentinel},
+                self() ! {keep, Ref},
+                Options =
+                    case Action of
+                        {demonitor, Opts} -> Opts;
+                        _ -> []
+                    end,
+                Result =
+                    try
+                        case Action of
+                            unalias -> erlang:unalias(Ref);
+                            demonitor -> demonitor(Ref);
+                            {demonitor, Options} -> demonitor(Ref, Options)
+                        end
+                    catch
+                        C:R -> {C, R}
+                    end,
+                %% OTP permits badarg when foreign-monitor ownership is cheap
+                %% to check. Otherwise the reference behaves as an absent monitor.
+                Allowed =
+                    case Action of
+                        unalias ->
+                            Result =:= false;
+                        _ ->
+                            Result =:= not lists:member(info, Options) orelse
+                                (element(1, Mode) =:= monitor andalso Result =:= {error, badarg})
+                    end,
+                Flushed = Result =/= {error, badarg} andalso lists:member(flush, Options),
+                Remaining = lists:sort([
+                    case M of
+                        {other, Ref, process, Target, foreign_sentinel} -> foreign_down;
+                        {'DOWN', OwnRef, process, Target, own_sentinel} -> own_down;
+                        {keep, Ref} -> keep;
+                        _ -> unexpected
+                    end
+                 || M <- drain()
+                ]),
+                Expected =
+                    case Flushed of
+                        true -> [keep, own_down];
+                        false -> [foreign_down, keep, own_down]
+                    end,
+                case Mode of
+                    {monitor, plain} ->
+                        ok;
+                    _ ->
+                        Ref ! {via_alias, first},
+                        Ref ! {via_alias, second}
+                end,
+                Parent ! {self(), {attempt, Allowed, Remaining =:= Expected}},
+                receive
+                    collect -> ok
+                end,
+                receive
+                    {'DOWN', OwnRef, process, Target, Down} ->
+                        Parent ! {self(), {own_down, Down}}
+                end
+            end,
+            [monitor, {min_heap_size, 100}]
+        ),
+        {Allowed, CallerMailbox} =
+            receive
+                {Other, {attempt, A, B}} -> {A, B}
+            end,
+        Mailbox = lists:sort([
+            case M of
+                {'DOWN', Ref, process, Target, owner_sentinel} -> owner_down;
+                {keep, Ref} -> keep;
+                {via_alias, Value} -> Value;
+                _ -> unexpected
+            end
+         || M <- drain()
+        ]),
+        Removed = erlang:unalias(Ref),
+        ActiveMonitor = demonitor(Ref, [info]),
+        case Mode of
+            {monitor, plain} -> ok;
+            _ -> Ref ! dropped
+        end,
+        self() ! fence,
+        receive
+            fence -> ok
+        end,
+        Late = drain(),
+        Target ! stop,
+        receive
+            {'DOWN', Fence, process, Target, normal} -> ok
+        end,
+        Other ! collect,
+        OwnDown =
+            receive
+                {Other, {own_down, R1}} -> R1
+            end,
+        receive
+            {'DOWN', OtherFence, process, Other, normal} -> ok
+        end,
+        {Allowed, CallerMailbox, Mailbox, Removed, ActiveMonitor, Late, OwnDown}
+    end).
 
 termination_queue(Count) ->
     Child = spawn(fun() ->

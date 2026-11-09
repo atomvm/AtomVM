@@ -105,7 +105,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **2,025 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **2,067 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -180,6 +180,17 @@ EXIT remains unconsumed, not reconstructed or requeued. Turning trapping off mus
 not reinterpret an existing message as a fatal signal. An unfenced self-exit is
 not treated as deterministic queued-message coverage. These cases extend the
 model-inspired signal samples rather than translating a Lean proof.
+Forty-two ownership cases pass standalone aliases, plain monitor references, and
+all three monitor-alias types to a third process distinct from the monitored
+target. Foreign `unalias/1` and both
+`demonitor` arities must not cancel the owner's state or the caller's independent
+monitor. Flush options are checked against distinct caller and owner mailboxes.
+OTP explicitly permits `badarg` for cheaply detected foreign monitors; those
+recipes check the documented allowed outcome and corresponding mailbox effects,
+not identical ownership-check policies. Cross-process alias messages check normal
+and one-shot delivery. The owner then removes its alias and checks whether its
+monitor remains active; the caller's independent monitor observes real termination.
+Mailbox contents are normalized without comparing cross-sender arrival order.
 
 The function/apply/spawn subset contains 209 cases: captured local closures,
 external funs and BIFs, dynamic `apply/2,3`, improper argument lists, wrong arities,
