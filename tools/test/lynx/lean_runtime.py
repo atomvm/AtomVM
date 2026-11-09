@@ -588,7 +588,7 @@ def inventory(checkout, selected, failures=None, unverified=()):
         guard = 0
         tests = []
         for line, text in enumerate(raw.decode().splitlines(), 1):
-            match = re.match(r"^(?:private\s+)?theorem\s+(«[^»]+»|[\w'.]+)", text)
+            match = re.match(r"^(?:(?:private|public)\s+)?theorem\s+(«[^»]+»|[\w'.]+)", text)
             if match:
                 name = match[1].strip("«»")
             elif text.startswith("#guard "):

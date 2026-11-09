@@ -113,7 +113,7 @@ class ValidationTests(unittest.TestCase):
             tests = checkout / "Lean/LynxTest"
             tests.mkdir(parents=True)
             lean = tests / "Example.lean"
-            lean.write_text("theorem sampled : True := by trivial\n"
+            lean.write_text("public theorem sampled : True := by trivial\n"
                             "private theorem unsampled : True := by trivial\n#guard true\n")
             origin = ["Example.lean#sampled"]
             source = work / "input.json"
