@@ -184,6 +184,7 @@
     'bnot'/1,
     byte_size/1,
     bit_size/1,
+    binary_part/2,
     binary_part/3,
     element/2,
     error/1,
@@ -2503,6 +2504,13 @@ bit_size(_Bitstring) ->
 -spec binary_part(Subject :: binary(), Start :: non_neg_integer(), Length :: integer()) ->
     binary().
 binary_part(_Subject, _Start, _Length) ->
+    erlang:nif_error(undefined).
+
+%% @doc Extract a binary part using a `{Start, Length}' range.
+%% May be used in guards; negative lengths count backwards from `Start'.
+-spec binary_part(Subject :: binary(), {Start :: non_neg_integer(), Length :: integer()}) ->
+    binary().
+binary_part(_Subject, _Range) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
