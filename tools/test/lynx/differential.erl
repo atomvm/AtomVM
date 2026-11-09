@@ -22,6 +22,7 @@
     self_link/3,
     relink/5,
     unlink_exit_race/2,
+    crossed_unlink/4,
     linked_exit/2,
     exit_signal/2,
     monitor_options/2,
@@ -422,6 +423,69 @@ relink_steps(Pid, Count) ->
         end
      || _ <- lists:seq(1, Count)
     ].
+
+crossed_unlink(A, B, Final, Count) ->
+    isolated(fun() -> [crossed_unlink_once(A, B, Final) || _ <- lists:seq(1, Count)] end).
+
+crossed_unlink_once(A, B, Final) ->
+    Parent = self(),
+    {Child, Ref} = spawn_monitor(fun Loop() ->
+        receive
+            {go, Relink} ->
+                crossed_unlink_action(Parent, Relink),
+                Loop();
+            link ->
+                true = link(Parent),
+                Loop();
+            check ->
+                {links, Links} = process_info(self(), links),
+                Parent ! {self(), lists:member(Parent, Links)},
+                Loop();
+            stop ->
+                ok
+        end
+    end),
+    true = link(Child),
+    true = crossed_unlink_check(Child),
+    Child ! {go, B},
+    crossed_unlink_action(Child, A),
+    %% First fence peer operations, then our acknowledgements of those operations.
+    _ = crossed_unlink_check(Child),
+    Peer = crossed_unlink_check(Child),
+    {links, Links} = process_info(self(), links),
+    Local = lists:member(Child, Links),
+    Consistent = Local =:= Peer andalso (A =/= B orelse Local =:= A),
+    case Final of
+        keep -> ok;
+        local -> true = link(Child);
+        peer -> Child ! link
+    end,
+    _ = crossed_unlink_check(Child),
+    FinalPeer = crossed_unlink_check(Child),
+    {links, FinalLinks} = process_info(self(), links),
+    FinalLocal = lists:member(Child, FinalLinks),
+    Valid =
+        Consistent andalso FinalLocal =:= FinalPeer andalso
+            (Final =:= keep orelse FinalLocal),
+    true = unlink(Child),
+    Child ! stop,
+    receive
+        {'DOWN', Ref, process, Child, normal} -> ok
+    end,
+    Valid.
+
+crossed_unlink_check(Child) ->
+    Child ! check,
+    receive
+        {Child, Linked} -> Linked
+    end.
+
+crossed_unlink_action(Pid, Relink) ->
+    true = unlink(Pid),
+    case Relink of
+        true -> true = link(Pid);
+        false -> ok
+    end.
 
 %% Compare an allowed-outcome predicate, not which participant wins the race.
 unlink_exit_race(Reason, Count) ->

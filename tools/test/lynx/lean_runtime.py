@@ -261,6 +261,12 @@ def cases():
         for count in [1, 16, 64]:
             probe("Modules/Signals", ["linked_crash_kills_parent", "linked_normal_exit_is_ignored"],
                   f"differential:unlink_exit_race({reason},{count})")
+    for a in ["false", "true"]:
+        for b in ["false", "true"]:
+            for final in ["keep", "local", "peer"]:
+                for count in [1, 16, 64]:
+                    probe("Modules/Signals", "linked_crash_kills_parent",
+                          f"differential:crossed_unlink({a},{b},{final},{count})")
     for trap in ["true", "false"]:
         for reason in ["normal", "boom", "kill"]:
             probe("Modules/Signals", ["trapped_exit_is_a_message", "kill_cannot_be_trapped",

@@ -105,7 +105,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **1,857 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **1,893 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -118,7 +118,7 @@ OTP is the execution oracle, not the Lean model: for example, tested OTP 29
 accepts an already queued receive match before checking an invalid timeout.
 That differs from the model test named `timeout_validation_precedes_scan`.
 
-The lifecycle/receive subset contains 286 cases: linked normal/abnormal exits,
+The lifecycle/receive subset contains 322 cases: linked normal/abnormal exits,
 unlinking, trapped exits, untrappable `kill`, demonitor option validation and
 active/queued/consumed monitor states, standalone and monitor aliases, pending
 monitors while both the target and observer terminate, and empty-mailbox timeout
@@ -152,6 +152,12 @@ iterations. Each checks an allowed-outcome predicate: an abnormal linked exit ma
 kill the worker before unlink completes, but must not kill it after `unlink/1`
 returns. The recipes compare neither scheduling order nor outcome frequencies;
 repetition increases the chance of exposing a race, not exhaustive schedule coverage.
+Thirty-six crossed-unlink cases run unlink/relink combinations at both endpoints,
+then fence peer operations and their acknowledgements before checking agreement.
+Mixed combinations accept either settled link state, not a particular winner.
+Fresh linking from either endpoint additionally checks that an old pending unlink
+does not suppress the new link. These extend the model-inspired link samples;
+they are not an exhaustive schedule exploration or translated Lean proofs.
 
 The function/apply/spawn subset contains 209 cases: captured local closures,
 external funs and BIFs, dynamic `apply/2,3`, improper argument lists, wrong arities,
