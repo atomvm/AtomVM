@@ -239,8 +239,13 @@ test_fold() ->
     Fun = fun(_Key, Value, Sum) -> Sum + Value end,
     ?ASSERT_EQUALS(maps:fold(Fun, 0, maps:new()), 0),
     ?ASSERT_EQUALS(maps:fold(Fun, 0, #{a => 1, b => 2, c => 3}), 6),
+    ?ASSERT_EQUALS(maps:fold(Fun, 7, id(none)), 7),
+    ?ASSERT_EQUALS(maps:fold(Fun, 7, maps:iterator(#{a => 3})), 10),
     ok = check_bad_map(fun() -> maps:fold(Fun, any, id(not_a_map)) end),
-    ok = check_bad_map_or_badarg(fun() -> maps:fold(not_a_function, any, id(not_a_map)) end),
+    ?ASSERT_ERROR(maps:fold(not_a_function, any, id(not_a_map)), badarg),
+    WrongArity = fun(_K, _V) -> ignored end,
+    ?ASSERT_ERROR(maps:fold(WrongArity, any, id(not_a_map)), badarg),
+    ?ASSERT_ERROR(maps:fold(WrongArity, any, none), badarg),
     ?ASSERT_ERROR(maps:fold(not_a_function, any, maps:new()), badarg),
     ok.
 

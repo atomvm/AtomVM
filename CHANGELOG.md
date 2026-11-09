@@ -223,6 +223,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed list ordering treating `[]` as smaller than every improper tail
 - Fixed queued messages being skipped by the next receive after an invalid timeout error
 - Fixed `min/2` and `max/2` returning the second argument instead of the first on numeric ties
+- Fixed `maps:fold/3` rejecting exhausted iterators and reporting `badmap` instead of
+  `badarg` for invalid callbacks on non-map inputs
 
 ## [0.7.0-beta.0] - 2026-09-28
 

@@ -355,7 +355,9 @@ fold(Fun, Init, [Pos | Map] = Iterator) when
     is_function(Fun, 3) andalso is_integer(Pos) andalso is_map(Map)
 ->
     iterate_fold(Fun, maps:next(Iterator), Init);
-fold(_Fun, _Init, Map) when not is_map(Map) ->
+fold(Fun, Init, none) when is_function(Fun, 3) ->
+    Init;
+fold(Fun, _Init, Map) when is_function(Fun, 3) andalso not is_map(Map) ->
     error({badmap, Map});
 fold(_Fun, _Init, _Map) ->
     error(badarg).
