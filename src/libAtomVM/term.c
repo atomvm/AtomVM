@@ -546,15 +546,16 @@ static enum TermTypeIndex term_type_to_index(term t)
 #define BEGIN_MAP_KEY TERM_RESERVED_MARKER(1)
 #define END_MAP_KEY TERM_RESERVED_MARKER(0)
 
-#define CMP_POP_AND_CONTINUE()               \
-    other = temp_stack_pop(&temp_stack);     \
-    if (other == BEGIN_MAP_KEY) {            \
-        map_key_nesting++;                   \
-        other = temp_stack_pop(&temp_stack); \
-    } else if (other == END_MAP_KEY) {       \
-        map_key_nesting--;                   \
-        other = temp_stack_pop(&temp_stack); \
-    }                                        \
+#define CMP_POP_AND_CONTINUE()                               \
+    other = temp_stack_pop(&temp_stack);                     \
+    while (other == BEGIN_MAP_KEY || other == END_MAP_KEY) { \
+        if (other == BEGIN_MAP_KEY) {                        \
+            map_key_nesting++;                               \
+        } else {                                             \
+            map_key_nesting--;                               \
+        }                                                    \
+        other = temp_stack_pop(&temp_stack);                 \
+    }                                                        \
     t = temp_stack_pop(&temp_stack);
 
 TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalContext *global)
@@ -1053,7 +1054,9 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                             goto unequal;
                         }
                         if (t_size > 0) {
-                            for (int i = t_size - 1; i >= 1; i--) {
+                            // Compare all keys before any values. Values remain
+                            // ordered by their keys once the key sets agree.
+                            for (int i = t_size - 1; i >= 0; i--) {
                                 if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(t, i))
                                         != TempStackOk)) {
                                     return TermCompareMemoryAllocFail;
@@ -1062,6 +1065,8 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                                         != TempStackOk)) {
                                     return TermCompareMemoryAllocFail;
                                 }
+                            }
+                            for (int i = t_size - 1; i >= 1; i--) {
                                 if (UNLIKELY(
                                         temp_stack_push(&temp_stack, END_MAP_KEY) != TempStackOk)) {
                                     return TermCompareMemoryAllocFail;
@@ -1078,12 +1083,6 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                                         temp_stack_push(&temp_stack, BEGIN_MAP_KEY) != TempStackOk)) {
                                     return TermCompareMemoryAllocFail;
                                 }
-                            }
-                            if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(t, 0)) != TempStackOk)) {
-                                return TermCompareMemoryAllocFail;
-                            }
-                            if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(other, 0)) != TempStackOk)) {
-                                return TermCompareMemoryAllocFail;
                             }
                             map_key_nesting++;
                             if (UNLIKELY(temp_stack_push(&temp_stack, END_MAP_KEY) != TempStackOk)) {

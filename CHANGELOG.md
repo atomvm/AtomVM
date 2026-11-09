@@ -47,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed map ordering comparing values before all keys had been compared
 - Fixed float bitstring matching ignoring segment units and rejecting zero-width fields
 - Fixed non-integer bitstring pattern sizes raising `badarg` instead of failing the match
 - Fixed float bitstring construction ignoring segment units in the interpreter and JIT
