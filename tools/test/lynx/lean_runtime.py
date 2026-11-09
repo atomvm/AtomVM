@@ -274,6 +274,15 @@ def cases():
                       "bad", "[bad]", "[{differential,call,3,[]}|bad]", "[{1,call,3,[]}]"]:
             probe("Modules/Signals", "raise_classes",
                   f"differential:raise_exception({cls},#{{reason=>[1,2,3]}},{stack})")
+    for cls in ["error", "exit", "throw"]:
+        for stack in ["[{differential,call,3}]", "[{differential,call,[a,b,c]}]",
+                      "[{differential,call,bad}]", "[{fun erlang:abs/1,[-7]}]",
+                      "[{fun erlang:abs/1,[-7],[]}]",
+                      "[{differential,call,3},{fun erlang:abs/1,[-7]},"
+                      "{differential,call,3,[{line,17}]}]",
+                      "[{fun erlang:abs/1,[-7],[{line,17}|tail]}]"]:
+            probe("Modules/Signals", "raise_classes",
+                  f"differential:raise_exception({cls},#{{reason=>[1,2,3]}},{stack})")
     for key, items in [("b", "[skipped,{}, {a,1},{b,first},{b,second}]"),
                        ("missing", "[skipped,{a,1}]"), ("1", "[{1.0,float},{1,integer}]"),
                        ("1.0", "[{1,integer},{1.0,float}]"), ("0.0", "[{-0.0,negative}]"),
