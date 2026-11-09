@@ -182,6 +182,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `lists:keyfind/3` and `lists:keymember/3` not matching OTP's rounded
   comparison of immediate integer keys against float fields
 - Fixed `binary:match/3` accepting an invalid scope when a later scope replaces it
+- Fixed `list_to_integer/1,2` accepting a numeric prefix before an embedded NUL
 
 ## [0.7.0-beta.0] - 2026-09-28
 
