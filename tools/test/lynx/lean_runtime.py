@@ -225,6 +225,19 @@ def cases():
             probe(p, ["timeout_validation_precedes_scan", "zero_timeout_scans_mailbox",
                       "zero_timeout_preserves_unmatched", "queued_match_precedes_timeout_choice"],
                   f"differential:receive_timeout({timeout},{messages})")
+    for kind, mixed, rejected in [
+        ("boolean", "[7,true,false,tail,false]", "[7,true,tail]"),
+        ("tuple", "[bad,{},{tag,wrong},{tag,wanted},{last,wanted}]", "[bad,{},{tag,wrong}]"),
+        ("map", "[bad,#{},#{key=>wrong},#{key=>wanted},#{key=>wanted,other=>last}]",
+         "[bad,#{},#{key=>wrong}]"),
+        ("division", "[0,bad,-4,5,4,3]", "[0,bad,-4,5]"),
+        ("binary", "[bad,<<>>,<<1>>,<<2>>,<<2,3>>]", "[bad,<<>>,<<1>>]"),
+        ("alternatives", "[{},bad,{tag,wrong},fallback,{tag,wanted}]", "[{},bad,{tag,wrong}]"),
+    ]:
+        for messages in [mixed, rejected, "[]"]:
+            for timeout in ["0", "1"]:
+                probe(p, ["guard_errors_and_false_preserve_messages", "zero_timeout_preserves_unmatched"],
+                      f"differential:receive_guards({kind},{timeout},{messages})")
     for value in ["child", "#{a=>1}", "-0.0"]:
         probe(p, ["successive_references_are_distinct", "references_are_unique_across_processes",
                   "dictionary_preserves_reference_counter", "dictionary_preserves_mailbox",

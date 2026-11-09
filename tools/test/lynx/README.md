@@ -105,7 +105,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **2,357 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **2,393 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -127,6 +127,13 @@ sender exercise exception/cleanup scopes after suspension; no elapsed duration
 or cross-sender message ordering is compared. Linked crashes are contained in
 monitored workers. Queued-DOWN flush recipes requeue a received real DOWN so
 mailbox presence is deterministic rather than inferred from a delay.
+Thirty-six selective-receive cases check boolean, tuple, map, division, binary,
+and alternative guard sequences against mixed, entirely rejected, and empty
+mailboxes. Errors inside guards must reject rather than consume messages or
+escape the receive. A second receive checks that retained candidates are scanned
+again in order before a newly appended match, preserving all rejected messages.
+Zero-timeout controls and positive waits with no matching sender cover both
+immediate scans and timer suspension without asserting an elapsed duration.
 Monitor target-type cases compare both arities, all three alias options, and
 self/live/dead PIDs versus registered process names for process and port monitors.
 They distinguish direct wrong-type `badarg` from a registered name's `noproc` DOWN,
