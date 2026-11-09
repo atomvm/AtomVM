@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed `binary:match/3` accepting an invalid scope when a later scope replaces it
 - Fixed `lists:keyfind/3` and `lists:keymember/3` not matching OTP's rounded
   comparison of immediate integer keys against float fields
 - Fixed `erlang:demonitor/2` ignoring `flush` when called by the monitored process

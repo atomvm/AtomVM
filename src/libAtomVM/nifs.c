@@ -4306,36 +4306,37 @@ static term nif_binary_replace(Context *ctx, int argc, term argv[])
 
 static bool get_binary_scope_slice(term binary, term options, BinaryPosLen *scope_slice)
 {
-    term scope_opt = term_invalid_term();
+    size_t size = term_binary_size(binary);
+    if (UNLIKELY(!term_normalize_binary_pos_len(binary, 0, (avm_int_t) size, scope_slice))) {
+        return false;
+    }
+
     while (term_is_nonempty_list(options)) {
         term head = term_get_list_head(options);
         // BEAM ignores improper lists so we don't check for it
-        if (LIKELY(term_is_tuple(head) && term_get_tuple_arity(head) == 2 && term_get_tuple_element(head, 0) == SCOPE_ATOM)) {
-            scope_opt = term_get_tuple_element(head, 1);
-        } else {
+        if (UNLIKELY(!term_is_tuple(head) || term_get_tuple_arity(head) != 2 || term_get_tuple_element(head, 0) != SCOPE_ATOM)) {
+            return false;
+        }
+
+        term scope_opt = term_get_tuple_element(head, 1);
+        if (UNLIKELY(!term_is_tuple(scope_opt) || term_get_tuple_arity(scope_opt) != 2)) {
+            return false;
+        }
+
+        term pos_term = term_get_tuple_element(scope_opt, 0);
+        term len_term = term_get_tuple_element(scope_opt, 1);
+        if (UNLIKELY(!term_is_integer(pos_term) || !term_is_integer(len_term))) {
+            return false;
+        }
+
+        avm_int_t pos = term_to_int(pos_term);
+        avm_int_t len = term_to_int(len_term);
+        if (UNLIKELY(!term_normalize_binary_pos_len(binary, pos, len, scope_slice))) {
             return false;
         }
         options = term_get_list_tail(options);
     }
-
-    if (term_is_invalid_term(scope_opt)) {
-        size_t size = term_binary_size(binary);
-        return term_normalize_binary_pos_len(binary, 0, (avm_int_t) size, scope_slice);
-    }
-
-    if (UNLIKELY(!term_is_tuple(scope_opt) || term_get_tuple_arity(scope_opt) != 2)) {
-        return false;
-    }
-
-    term pos_term = term_get_tuple_element(scope_opt, 0);
-    term len_term = term_get_tuple_element(scope_opt, 1);
-    if (UNLIKELY(!term_is_integer(pos_term) || !term_is_integer(len_term))) {
-        return false;
-    }
-
-    avm_int_t pos = term_to_int(pos_term);
-    avm_int_t len = term_to_int(len_term);
-    return term_normalize_binary_pos_len(binary, pos, len, scope_slice);
+    return true;
 }
 
 static bool is_valid_pattern(term t)
