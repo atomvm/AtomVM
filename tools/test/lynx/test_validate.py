@@ -244,6 +244,58 @@ class ValidationTests(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_map_callbacks_preserve_arguments_effects_and_exceptions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            expressions = [
+                "differential:map_callback(merge_with,[#{a=>3},#{a=>11,b=>7}],valid)",
+                "differential:map_callback(merge_with,[#{1=>left},#{1.0=>right}],valid)",
+                "differential:map_callback(merge_with,[#{a=>3},#{b=>11}],throw)",
+                "differential:map_callback(merge_with,[#{a=>3},#{a=>11}],error)",
+                "differential:map_callback(filter,[#{keep=>ordinary,drop=>selected,skip=>ordinary}],valid)",
+                "differential:map_callback(filter,[#{1=>selected,1.0=>ordinary}],valid)",
+                "differential:map_callback(filter,[#{}],wrong_arity)",
+                "differential:map_callback(filter,[#{keep=>selected}],exit)",
+                "differential:map_callback(intersect_with,[#{a=>3},#{a=>11,b=>7}],valid)",
+                "differential:map_callback(filtermap,[#{keep=>7,drop=>11,change=>9}],transform)",
+                "differential:map_callback(update_with,[missing,initial,#{a=>3}],throw)",
+                "differential:map_callback(update_with,[a,#{a=>3}],error)",
+                "differential:map_callback(filter,[#{keep=>selected}],nonboolean)",
+                "differential:map_callback(merge_with,[#{},#{}],wrong_arity)",
+            ]
+            source.write_text(json.dumps([{"expression": e} for e in expressions]))
+            output = work / "results"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 14, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                actual = JSON.decode!(File.read!(path))["expected"]
+                         |> Enum.map(&:erlang.binary_to_term(Base.decode64!(&1)))
+                [
+                  {:ok, {{:ok, %{a: {:a, 3, 11}, b: 7}}, [[:a, 3, 11]]}},
+                  {:ok, {{:ok, %{1 => :left, 1.0 => :right}}, []}},
+                  {:ok, {{:ok, %{a: 3, b: 11}}, []}},
+                  {:ok, {{:exception, :error, :callback_failed}, [[:a, 3, 11]]}},
+                  {:ok, {{:ok, %{keep: :ordinary, drop: :selected}},
+                         [[:drop, :selected], [:keep, :ordinary], [:skip, :ordinary]]}},
+                  {:ok, {{:ok, %{1 => :selected}}, [[1.0, :ordinary], [1, :selected]]}},
+                  {:ok, {{:exception, :error, :badarg}, []}},
+                  {:ok, {{:exception, :exit, :callback_failed}, [[:keep, :selected]]}},
+                  {:ok, {{:ok, %{a: {:a, 3, 11}}}, [[:a, 3, 11]]}},
+                  {:ok, {{:ok, %{keep: 7, change: {:change, 9}}},
+                         [[:change, 9], [:drop, 11], [:keep, 7]]}},
+                  {:ok, {{:ok, %{a: 3, missing: :initial}}, []}},
+                  {:ok, {{:exception, :error, :callback_failed}, [[3]]}},
+                  {:ok, {{:exception, :error, {:case_clause, :not_boolean}}, [[:keep, :selected]]}},
+                  {:ok, {{:exception, :error, :badarg}, []}}
+                ] = actual
+                """, str(output / "manifest.json")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     def test_function_recipes_have_independent_result_oracles(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)

@@ -5,6 +5,8 @@ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 
 # Host-driven differential testing
 
+See [PLAN.md](PLAN.md) for the coverage baseline, remaining gaps, and next batches.
+
 From the AtomVM checkout, use a freshly built native AtomVM:
 
 ```sh
@@ -105,7 +107,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **2,946 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **3,277 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, process dictionaries, comparison, effectful short circuit,
 timeout validation with retained mailboxes, monitored process/reference/dictionary
@@ -117,6 +119,13 @@ Missing functions and differing error precedence remain failures, not skips.
 OTP is the execution oracle, not the Lean model: for example, tested OTP 29
 accepts an already queued receive match before checking an invalid timeout.
 That differs from the model test named `timeout_validation_precedes_scan`.
+
+Before adding the 70 map-callback cases below, the 2026-11-10 host-interpreter
+rebaseline matched 2,942 cases and retained four `[short]` float-formatting
+mismatches, with zero unverified references. Short
+formatting remains outside the planned fixes; those cases are still failures,
+so the full runtime corpus exits nonzero. New hashing/sets model sites do not
+yet have selected recipes; the inventory must not be read as complete coverage.
 
 An additional 116 integer-text recipes extend decimal model samples to binary
 and list parsing/formatting in bases 2, 10, 16, and 36. They check signs, leading
@@ -140,6 +149,46 @@ must not invoke callbacks; non-functions must still be rejected. Single-entry,
 three-entry, and 40-entry maps exercise dispatch without asserting traversal
 order, alongside invalid-map controls. These are public-API extensions, not
 additional Lean proofs.
+
+Seventy map-combination callback cases extend the newer model's `combine_inputs`
+samples to `maps:merge_with/3` and `maps:filter/2`. They check empty, disjoint,
+and overlapping maps; asymmetric callback arguments; exact numeric keys and
+partial-bitstring keys; boxed values; sizes 31, 32, 33, and 40; callback
+throw/error/exit; nonboolean predicates; invalid callbacks and operands.
+Results include every callback's arguments, sorted without removing duplicates,
+so unspecified traversal order is ignored but argument order, skipped entries,
+extra calls, and effects before exceptions remain observable. Exceptional
+callbacks have at most one eligible entry, avoiding an unspecified first key.
+These are model-inspired public-API extensions, not fresh theorem checks.
+
+The initial focused interpreter run matched 51 of these 70 cases and reported 19
+mismatches: missing combiner validation in `merge_with/3` (including error
+precedence), silently accepting a nonboolean filter result, and filter callback
+validation taking lower precedence than a bad map. Importing PR #2355 resolved
+the three filter failures and supplied `intersect_with/3` and other map helpers.
+A separate combiner-validation fix rejects invalid functions before map operands,
+including when there are no overlapping keys. No failures were allowlisted.
+
+Another 261 recipes exercise the imported APIs: `intersect/2`, `intersect_with/3`,
+`filtermap/2`, `take/2`, `update_with/3,4`, `with/2`, `without/2`,
+`groups_from_list/2,3`, and exported iterator validation. They include exact keys,
+duplicate requested/grouped keys, the stored atom `error` versus a missing key,
+callback-free insertion of an initial value, callback exceptions, improper
+lists, and error precedence. Group callback effects preserve their actual order.
+Iterator observations cover default/ordered/reversed iteration, returned
+key/value triples, partially consumed ordered iterators, exhaustion, and malformed
+inputs. Results observe entries and specified order, not cross-VM iterator
+layouts. These additions bring the map-attributed selection to 512 cases; they
+remain finite public-behavior extensions, not new proved laws or exhaustive
+map/comprehension coverage.
+
+After integration and the combiner fix, all 512 map cases match OTP. The full
+3,277-case interpreter run matches 3,273 cases and retains only the four known
+`[short]` formatting failures; it checks zero fresh laws. The full fixture run
+still checks four fresh laws, matches 2,127 calls, and reports four unresolved
+OTP generator references with no differential failures. The ordinary map suite,
+483 core test modules, and nine CLI tests pass; one optional fixture integration
+test is skipped (the full fixture corpus is run separately).
 
 Another 44 key-search cases check interior tuple positions, skipped short tuples,
 first matches before improper tails, nested numeric equality, and exact map keys
@@ -321,7 +370,7 @@ Permanent dictionary-query and scoped-split GC-pressure regressions also live in
 the ordinary Erlang library/runtime test suites; they are not Lean proof samples.
 
 `lean-coverage.json` inventories unindented theorem/private-theorem declarations
-and `#guard ` sites in all 23 test files, recording source hashes, lines, sample
+and `#guard ` sites in all 25 test files, recording source hashes, lines, sample
 counts, and matched/failed/unverified counts. It is a lexical inventory, not a
 Lean parser: `#check`, examples, and other macros are not counted. `lean_origins`
 links samples to their inspiration, **not exact theorem instantiations**; some
@@ -355,7 +404,14 @@ python3 tools/test/lynx/validate.py --lynx ../lynx --build build --generated 0 \
 
 With `--lynx`, `mix` and `lake` must also be on PATH with the Elixir/Lean versions
 required by that checkout. Mix/Lake may build their normal caches. The fixture
-API currently targets Lynx revision `e3d8c68281058d21a31aa5ac8e6a7e0b83db4aeb`.
+API currently targets Lynx revision `b9be5b8e6e4a1330685ef60ff150903e90670d4c`
+(rebaselined from `e3d8c68281058d21a31aa5ac8e6a7e0b83db4aeb`). On OTP 29
+(ERTS 17.1.1), Elixir 1.20.5, and Lean 4.35.0, fresh fixture verification checks
+four laws; the 2,131-call interpreter run matches 2,127 references, with zero
+differential failures, four unresolved OTP references, and no uncovered exports.
+Lynx's own `mix test.all` also passes. This supports the fixture integration,
+not every public API in the expanded model: see [the inventory review](PLAN.md#inventory-review)
+for confirmed API gaps and unrepresented behavior.
 
 This additional mode:
 

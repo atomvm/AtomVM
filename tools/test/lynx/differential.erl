@@ -11,6 +11,7 @@
     call/3,
     map_entries/1,
     map_fold/2,
+    map_callback/3,
     dictionary/2,
     float_text/2,
     short_circuit/3,
@@ -105,6 +106,62 @@ map_fold(Map, exit) ->
     maps:fold(fun(_, _, _) -> exit(folded) end, initial, Map);
 map_fold(Map, non_function) ->
     call(maps, fold, [not_fun, initial, Map]).
+
+%% Keep every callback's arguments, including duplicates, but not traversal order.
+%% Exceptional cases use at most one eligible entry: the first visited key is
+%% otherwise unspecified. No function identities escape in badarity reasons.
+map_callback(Operation, Args, Mode) ->
+    put(map_calls, []),
+    Callback =
+        case {Operation, Mode} of
+            {_, non_function} -> not_fun;
+            {_, wrong_arity} -> fun() -> wrong end;
+            {merge_with, _} -> fun(K, A, B) -> map_callback_value(Mode, [K, A, B]) end;
+            {intersect_with, _} -> fun(K, A, B) -> map_callback_value(Mode, [K, A, B]) end;
+            {update_with, _} -> fun(V) -> map_callback_value(Mode, [V]) end;
+            {filter, _} -> fun(K, V) -> map_callback_value(Mode, [K, V]) end;
+            {filtermap, _} -> fun(K, V) -> map_callback_value(Mode, [K, V]) end
+        end,
+    CallArgs =
+        case {Operation, Args} of
+            {update_with, [Key | Rest]} -> [Key, Callback | Rest];
+            _ -> [Callback | Args]
+        end,
+    Outcome =
+        try call(maps, Operation, CallArgs) of
+            Result -> {ok, Result}
+        catch
+            error:{badarity, {BadFun, BadArgs}} ->
+                {exception, error, {badarity, BadFun =:= Callback, BadArgs}};
+            Class:Reason ->
+                {exception, Class, Reason}
+        end,
+    {Outcome, lists:sort(erase(map_calls))}.
+
+map_callback_value(Mode, Args) ->
+    put(map_calls, [Args | get(map_calls)]),
+    case Mode of
+        throw ->
+            throw(callback_failed);
+        error ->
+            error(callback_failed);
+        exit ->
+            exit(callback_failed);
+        nonboolean ->
+            not_boolean;
+        transform ->
+            case Args of
+                [keep, _V] -> true;
+                [drop, _V] -> false;
+                [K, V] -> {true, {K, V}}
+            end;
+        valid ->
+            case Args of
+                [V] -> {updated, V};
+                [K, A, B] -> {K, A, B};
+                [K, V] -> K =:= keep orelse V =:= selected
+            end
+    end.
 
 dictionary(A, B) ->
     erase(),

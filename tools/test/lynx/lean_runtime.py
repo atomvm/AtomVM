@@ -235,6 +235,101 @@ def cases():
                   "maps:from_list([{I,I*3-7} || I <- lists:seq(1,40)])", "none", "1"]:
         for mode in ["counted", "throw", "error", "exit", "non_function"]:
             probe(m, "fold_inputs", f"differential:map_fold({value},{mode})")
+    # Public extensions of combine_inputs, not theorem instantiations. Record
+    # callback arguments/multiplicity without asserting map traversal order.
+    for left, right in [("#{}", "#{}"), ("#{a=>3}", "#{}"), ("#{}", "#{a=>11}"),
+                        ("#{a=>3}", "#{b=>11}"), ("#{a=>3}", "#{a=>11,b=>7}"),
+                        ("#{a=>11,b=>7}", "#{a=>3}"),
+                        ("#{1=>integer,1.0=>float}", "#{1.0=>right,2=>only}"),
+                        ("#{1=>left}", "#{1.0=>right}"),
+                        ("#{<<5:3>>=>{boxed,[1,2]}}", "#{<<5:3>>=>{other,<<7:3>>}}")]:
+        probe(m, "combine_inputs", f"differential:map_callback(merge_with,[{left},{right}],valid)")
+    for size in [31, 32, 33, 40]:
+        left = f"maps:from_list([{{I,{{left,I,list_to_binary([I,17])}}}} || I <- lists:seq(1,{size})])"
+        right = f"maps:from_list([{{I,{{right,I,list_to_binary([I,29])}}}} || I <- lists:seq(2,{size+1})])"
+        probe(m, "combine_inputs", f"differential:map_callback(merge_with,[{left},{right}],valid)")
+        probe(m, "combine_inputs", f"differential:map_callback(filter,[{left}],valid)")
+    for mode in ["throw", "error", "exit", "non_function", "wrong_arity"]:
+        for left, right in [("#{}", "#{}"), ("#{a=>3}", "#{}"),
+                            ("#{}", "#{a=>11}"), ("#{a=>3}", "#{b=>11}"),
+                            ("#{a=>3}", "#{a=>11,b=>7}")]:
+            probe(m, "combine_inputs", f"differential:map_callback(merge_with,[{left},{right}],{mode})")
+    for left, right in [("bad_left", "#{}"), ("#{}", "bad_right"), ("bad_left", "bad_right")]:
+        for mode in ["valid", "non_function", "wrong_arity"]:
+            probe(m, "combine_inputs", f"differential:map_callback(merge_with,[{left},{right}],{mode})")
+    for value in ["#{}", "#{keep=>ordinary,drop=>selected,skip=>ordinary}",
+                  "#{1=>selected,1.0=>ordinary}", "#{keep=>{boxed,<<5:3>>}}"]:
+        probe(m, "combine_inputs", f"differential:map_callback(filter,[{value}],valid)")
+    for mode in ["throw", "error", "exit", "nonboolean", "non_function", "wrong_arity"]:
+        for value in ["#{}", "#{keep=>selected}"]:
+            probe(m, "combine_inputs", f"differential:map_callback(filter,[{value}],{mode})")
+    for mode in ["valid", "non_function", "wrong_arity"]:
+        probe(m, "combine_inputs", f"differential:map_callback(filter,[bad_map],{mode})")
+    # PR #2355 adds intersection and filtermap. Reuse the same boundary/control
+    # inputs, including both map-size branches, rather than just successful calls.
+    for entry in list(selected):
+        expression = entry["expression"]
+        for old, new in [("merge_with", "intersect_with"), ("filter", "filtermap")]:
+            prefix = f"differential:map_callback({old},"
+            if expression.startswith(prefix):
+                probe(m, "combine_inputs", expression.replace(prefix, f"differential:map_callback({new},", 1))
+    for value in ["#{}", "#{keep=>7,drop=>11,change=>{boxed,<<5:3>>}}",
+                  "#{1=>integer,1.0=>float}"]:
+        probe(m, "combine_inputs", f"differential:map_callback(filtermap,[{value}],transform)")
+    for left, right in [("#{}", "#{a=>11}"), ("#{a=>3}", "#{}"),
+                        ("#{a=>3}", "#{a=>11,b=>7}"), ("#{a=>11,b=>7}", "#{a=>3}"),
+                        ("#{1=>left}", "#{1.0=>right}"), ("bad_left", "bad_right")]:
+        call(m, "combine_inputs", "intersect", left, right, module="maps")
+    for value in ["#{}", "#{a=>error,1=>integer,1.0=>{boxed,<<5:3>>}}", "bad_map"]:
+        for key in ["a", "missing", "1", "1.0"]:
+            call(m, "new_and_get", "take", key, value, module="maps")
+    for size in [31, 32, 33, 40]:
+        value = f"maps:from_list([{{I,{{I,list_to_binary([I,17])}}}} || I <- lists:seq(1,{size})])"
+        for key in ["1", str(size // 2), str(size), str(size + 1)]:
+            call(m, "new_and_get", "take", key, value, module="maps")
+    for keys in ["[]", "[a,a,missing]", "[1]", "[1.0,1]", "bad", "[a|bad]"]:
+        for value in ["#{a=>error,1=>integer,1.0=>float}", "bad_map"]:
+            for operation in ["with", "without"]:
+                call(m, "enumeration_lookup", operation, keys, value, module="maps")
+    for args in ["[a,#{a=>3}]", "[missing,#{a=>3}]", "[1,#{1.0=>float}]",
+                 "[a,{initial,<<5:3>>},#{a=>3}]", "[missing,{initial,<<5:3>>},#{a=>3}]",
+                 "[a,bad_map]", "[a,initial,bad_map]"]:
+        for mode in ["valid", "throw", "error", "exit", "non_function", "wrong_arity"]:
+            probe(m, "get_after_put", f"differential:map_callback(update_with,{args},{mode})")
+    key_fun = "fun({K,_V})->K end"
+    value_fun = "fun({_K,V})->{mapped,V} end"
+    for values in ["[]", "[{b,3},{a,7},{b,11}]", "[{1,a},{1.0,b},{1,c}]", "bad", "[{a,3}|bad]"]:
+        call(m, "from_list_pairs", "groups_from_list", key_fun, values, module="maps")
+        call(m, "from_list_pairs", "groups_from_list", key_fun, value_fun, values, module="maps")
+    for callback in ["bad", "fun()->wrong end", "fun(_)->throw(callback_failed) end",
+                     "fun(_)->error(callback_failed) end", "fun(_)->exit(callback_failed) end"]:
+        for values in ["[]", "[{a,3}]"]:
+            call(m, "from_list_pairs", "groups_from_list", callback, values, module="maps")
+            call(m, "from_list_pairs", "groups_from_list", key_fun, callback, values, module="maps")
+    # Group callbacks have specified order; retain it rather than sorting effects.
+    for operation in ["key_only", "key_and_value"]:
+        args = "KeyFun,Values" if operation == "key_only" else "KeyFun,ValueFun,Values"
+        probe(m, "from_list_pairs", "put(group_calls,[]), Values=[{b,3},{a,7},{b,11}], "
+              "KeyFun=fun({K,_}=E)->put(group_calls,[{key,E}|get(group_calls)]),K end, "
+              "ValueFun=fun({_,V}=E)->put(group_calls,[{value,E}|get(group_calls)]),{mapped,V} end, "
+              f"Result=maps:groups_from_list({args}), {{Result,lists:reverse(erase(group_calls))}}")
+    for order in ["undefined", "ordered", "reversed"]:
+        for value in ["#{}", "#{a=>3,b=>7,c=>11}"]:
+            iterator = f"maps:iterator({value},{order})"
+            states = [iterator, f"maps:next({iterator})"]
+            # Only ordered iteration has a portable next key after consumption.
+            if value != "#{}" and order != "undefined":
+                states.append(f"element(3,maps:next({iterator}))")
+            for state in states:
+                probe(m, "iterator_steps", f"differential:map_entries({state})")
+                call(m, "iterator_steps", "is_iterator_valid", state, module="maps")
+            if order != "undefined":
+                probe(m, "iterator_steps", "maps:fold(fun(K,V,A)->[{K,V}|A] end,[]," + iterator + ")")
+    for value in ["none", "bad", "[]", "#{a=>1}", "{a,3,none}", "{a,3,bad}"]:
+        call(m, "iterator_steps", "is_iterator_valid", value, module="maps")
+        probe(m, "iterator_steps", f"differential:map_entries({value})")
+        for mode in ["valid", "wrong_arity"]:
+            probe(m, "iterator_steps", f"differential:map_callback(filter,[{value}],{mode})")
     for value in ["#{}", "#{a=>1,b=>2}", "#{1=>one,1.0=>float}"]:
         for key in ["a", "1", "1.0"]:
             put = f"differential:call(maps,put,[{key},new,{value}])"
