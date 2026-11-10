@@ -640,18 +640,23 @@ merge(_Map1, Map2) when not is_map(Map2) ->
 %%
 %% If `Map1' and `Map2' contain the same key, then the value from `Combiner(Key, Value1, Value2)' will be used.
 %%
-%% This function raises a `badmap' error if neither `Map1' nor `Map2' is a map.
+%% This function raises a `badarg' error if `Combiner' is not a function of
+%% arity 3. Otherwise, it raises a `badmap' error if either map is not a map.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec merge_with(
     Combiner :: fun((Key, Value, Value) -> Value), Map1 :: #{Key => Value}, Map2 :: #{Key => Value}
 ) -> #{Key => Value}.
-merge_with(Combiner, Map1, Map2) when is_map(Map1) andalso is_map(Map2) ->
+merge_with(Combiner, Map1, Map2) when
+    is_function(Combiner, 3) andalso is_map(Map1) andalso is_map(Map2)
+->
     iterate_merge_with(Combiner, maps:next(maps:iterator(Map1)), Map2);
-merge_with(_Combiner, Map1, _Map2) when not is_map(Map1) ->
+merge_with(Combiner, Map1, _Map2) when is_function(Combiner, 3) andalso not is_map(Map1) ->
     error({badmap, Map1});
-merge_with(_Combiner, _Map1, Map2) when not is_map(Map2) ->
-    error({badmap, Map2}).
+merge_with(Combiner, _Map1, Map2) when is_function(Combiner, 3) andalso not is_map(Map2) ->
+    error({badmap, Map2});
+merge_with(_Combiner, _Map1, _Map2) ->
+    error(badarg).
 
 %%-----------------------------------------------------------------------------
 %% @param   Key     the key to remove
