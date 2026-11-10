@@ -59,6 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   retaining version-2-only support
 - Fixed `sets:subtract/2` and `sets:is_subset/2` rejecting an invalid right
   operand when the left set is empty, unlike OTP
+- Fixed shutdown freeing platform polling state before socket monitor callbacks
+  unregister pending select events
 - Fixed `maps:merge_with/3` accepting invalid combiners without overlapping keys
   and reporting callback or map errors instead of `badarg` for invalid combiners
 - Fixed missing modules aborting Emscripten builds on Node with an unavailable

@@ -254,8 +254,6 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
     smp_scheduler_join_all();
 #endif
 
-    sys_free_platform(glb);
-
     struct ListHead *item;
     struct ListHead *tmp;
 
@@ -270,6 +268,10 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
         synclist_unlock(&glb->processes_table);
         context_destroy(ctx);
     }
+
+    // Resource down callbacks can unregister select events while contexts
+    // are destroyed, so platform polling state must remain alive until then.
+    sys_free_platform(glb);
 
     int module_index = glb->loaded_modules_count;
     for (int i = 0; i < module_index; i++) {
