@@ -3549,12 +3549,14 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
     }
     if (key == SYSTEM_VERSION_ATOM) {
         char system_version[256];
-        int len;
 #ifndef AVM_NO_SMP
-        len = snprintf(system_version, sizeof(system_version), "AtomVM %s [%d-bit] [smp:%d:%d]\n", ATOMVM_VERSION, TERM_BYTES * 8, ctx->global->online_schedulers, smp_get_online_processors());
+        snprintf(system_version, sizeof(system_version), "AtomVM %s [%d-bit] [smp:%d:%d]\n", ATOMVM_VERSION, TERM_BYTES * 8, ctx->global->online_schedulers, smp_get_online_processors());
 #else
-        len = snprintf(system_version, sizeof(system_version), "AtomVM %s [%d-bit] [nosmp]\n", ATOMVM_VERSION, TERM_BYTES * 8);
+        snprintf(system_version, sizeof(system_version), "AtomVM %s [%d-bit] [nosmp]\n", ATOMVM_VERSION, TERM_BYTES * 8);
 #endif
+        // snprintf returns the length the string would have had: past the
+        // buffer, for a long version
+        size_t len = strlen(system_version);
         if (UNLIKELY(memory_ensure_free_opt(ctx, len * CONS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
