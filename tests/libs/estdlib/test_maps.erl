@@ -433,6 +433,18 @@ test_merge_with() ->
     ok = check_bad_map(fun() ->
         maps:merge_with(fun(_K, V1, V2) -> V1 + V2 end, id(not_a_map), maps:new())
     end),
+    %% Validate the combiner even without overlapping keys, and before maps.
+    lists:foreach(
+        fun(Invalid) ->
+            lists:foreach(
+                fun({Left, Right}) ->
+                    ?ASSERT_ERROR(maps:merge_with(id(Invalid), Left, Right), badarg)
+                end,
+                [{#{}, #{}}, {#{a => 1}, #{a => 2}}, {not_a_map, #{}}, {#{}, not_a_map}]
+            )
+        end,
+        [not_a_function, fun(_K, _V) -> ignored end]
+    ),
     ok.
 
 test_remove() ->
