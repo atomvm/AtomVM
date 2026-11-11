@@ -172,6 +172,86 @@ def cases():
     add("named_locals", "map_to_map", "#{a=>same,b=>same}",
         observe="fun(M)->{map_size(M),maps:is_key(same,M)} end")
 
+    # Map comprehension results use exact key equality. Nonadjacent duplicates
+    # must keep the last list-generated value, not the first or a sorted value.
+    for value in [
+        "[{a,first},{b,middle},{a,last}]",
+        "[skip,{a,first},{a},{b,other},{a,last},#{ignored=>entry}]",
+        "[{1,integer},{1.0,float},{1,replaced}]",
+        "[{0.0,positive},{-0.0,negative},{0.0,replaced}]",
+        "[{#{key=>1},first},{#{key=>1.0},other},{#{key=>1},last}]",
+        "[{<<5:3>>,first},{<<5>>,byte},{<<5:3>>,last}]",
+        "[{[a|tail],first},{[a],proper},{[a|tail],last}]",
+        "[{{tag,1 bsl 100},{boxed,[1,2]}},{{tag,1 bsl 100},{last,<<7:3>>}}]",
+        "[skip,{a,1}|bad]", "[skip|bad]", "[{a,1},skip|bad]",
+    ]:
+        add("named_locals", "map_comprehension", value)
+
+    # Keep enumeration order unspecified without hiding missing/duplicate items
+    # or conflating numeric keys that compare equal but are not exactly equal.
+    entries = "fun(L)->{length(L),maps:from_list(L)} end"
+    keys = "fun(L)->{length(L),maps:from_list([{K,present} || K<-L])} end"
+    for value in [
+        "#{1=>integer,1.0=>float,0.0=>positive,-0.0=>negative}",
+        "#{#{key=>1}=>nested_integer,#{key=>1.0}=>nested_float}",
+        "#{<<5:3>>=>bits,<<5>>=>byte,[a|tail]=>improper}",
+    ]:
+        add("named_locals", "map_generator", value, observe=entries)
+        add("named_locals", "comprehension_map_list", value, "[red,blue,red]")
+    add("named_locals", "map_generator_strict",
+        "#{1=>ok,1.0=>ok,0.0=>ok,-0.0=>ok}", observe=keys)
+
+    # An empty outer generator or a failing guard must suppress evaluation of
+    # the inner generator; an improper outer list must still be rejected.
+    for function, inputs in {
+        "comprehension_list_map": [("[]", "bad"), ("[x|tail]", "#{}"), ("[x|tail]", "#{a=>7}")],
+        "comprehension_map_list": [("#{}", "bad"), ("#{a=>7}", "[x|tail]"), ("bad", "[]")],
+        "comprehension_filtered_maps": [
+            ("[]", "bad"), ("[bad,1.0]", "bad"), ("[bad,1]", "bad"),
+            ("[bad|tail]", "#{}"), ("[1,1.0,1,2]", "#{1=>integer,1.0=>float,2=>second}"),
+        ],
+    }.items():
+        for args in inputs:
+            observe = "fun lists:sort/1" if function != "comprehension_map_list" else None
+            add("named_locals", function, *args, observe=observe)
+    for value in ["[]", "[a]", "{a,1}", "1", "1.0", "<<>>"]:
+        for function in ["map_generator", "map_generator_strict", "map_to_map"]:
+            add("named_locals", function, value)
+        add("named_locals", "comprehension_map_list", value, "[]")
+        add("named_locals", "comprehension_list_map", "[x]", value)
+
+    # Map-generator collisions have no portable winning source key. Observe the
+    # exact output key set and verify every chosen binding against its source.
+    collision = (
+        "fun(M)->{map_size(M),maps:map(fun(_,_) -> present end,M),"
+        "lists:all(fun({V,K})->maps:find(K,Input)=:={ok,V} end,maps:to_list(M))} end"
+    )
+    for value in [
+        "#{a=>same,b=>same,c=>other}",
+        "#{a=>1,b=>1.0,c=>0.0,d=>-0.0}",
+        "#{a=>#{key=>1},b=>#{key=>1.0},c=>#{key=>1}}",
+        "#{a=><<5:3>>,b=><<5>>,c=><<5:3>>}",
+    ]:
+        add("named_locals", "map_to_map", "Input", setup=f"Input={value},", observe=collision)
+
+    for size in [0, 1, 2, 31, 32, 33, 63, 64, 65]:
+        setup = f"Pairs=[{{I,{{payload,I,<<I:16>>}}}} || I<-lists:seq(1,{size})],Input=maps:from_list(Pairs),"
+        add("named_locals", "map_comprehension", "Pairs", setup=setup)
+        if size:
+            add("named_locals", "map_comprehension", f"Pairs++[{{1,first_update}},{{{size},last_update}}]", setup=setup)
+        add("named_locals", "map_generator", "Input", setup=setup, observe=entries)
+        add("named_locals", "map_to_map", "Input", setup=setup)
+        add("named_locals", "comprehension_map_list", "Input", "[red,blue,red]", setup=setup)
+        add("named_locals", "comprehension_filtered_maps", f"[1,1.0,{size},-1,{size}]", "Input",
+            setup=setup, observe="fun lists:sort/1")
+        add("named_locals", "map_generator_strict",
+            f"maps:from_list([{{I,ok}} || I<-lists:seq(1,{size})])", observe=keys)
+        if size:
+            add("named_locals", "map_generator_strict",
+                f"maps:from_list([{{I,case I of {size}->bad; _->ok end}} || I<-lists:seq(1,{size})])")
+        add("named_locals", "map_to_map", "Input",
+            setup=f"Input=maps:from_list([{{I,I rem 3}} || I<-lists:seq(1,{size})]),", observe=collision)
+
     add("binary_construction", "empty")
     for function in ["integer_default", "integer_mixed", "integer_invalid_size"]:
         for value in ["0", "255", "256", "-257", "1 bsl 100", "1.5", "bad"]:
