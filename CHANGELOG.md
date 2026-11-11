@@ -191,6 +191,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `XMLHttpRequest` instead of raising `undef`
 - Fixed `maps:merge_with/3` accepting invalid combiners without overlapping keys
   and reporting callback or map errors instead of `badarg` for invalid combiners
+- Fixed `sets:new/1` and `sets:from_list/2` option parsing to match OTP while
+  retaining version-2-only support
+- Fixed `sets:subtract/2` and `sets:is_subset/2` rejecting an invalid right
+  operand when the left set is empty, unlike OTP
 
 ## [0.7.0-beta.0] - 2026-09-28
 

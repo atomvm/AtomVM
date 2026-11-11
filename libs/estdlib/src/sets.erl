@@ -69,14 +69,19 @@
 new() -> #{}.
 
 %%-----------------------------------------------------------------------------
-%% @param Version must be `{version, 2}'
+%% @param Version options selecting version 2 (the default); unrelated options are ignored
 %% @returns Returns a new empty set.
 %% @doc     Returns a new empty set (only v2 format is supported).
 %% @end
 %%-----------------------------------------------------------------------------
 -spec new([{version, 2}]) -> set(none()).
 new([{version, 2}] = _Version) ->
-    new().
+    new();
+new(Options) ->
+    case proplists:get_value(version, Options, 2) of
+        1 -> error(function_clause);
+        2 -> new()
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   Set the term that will be checked
@@ -126,7 +131,7 @@ from_list(Ls) ->
 
 %%-----------------------------------------------------------------------------
 %% @param List the list to be converted to a set
-%% @param Version only version 2 is supported
+%% @param Version options selecting version 2 (the default); unrelated options are ignored
 %% @returns Returns a set of the elements in `List' at the given version.
 %% @doc     Builds a set from the elements in `List' using the specified version. Only `v2'
 %%          format is supported.
@@ -136,7 +141,12 @@ from_list(Ls) ->
     List :: [Element],
     Set :: set(Element).
 from_list(Ls, [{version, 2}]) ->
-    from_list(Ls).
+    from_list(Ls);
+from_list(Ls, Options) ->
+    case proplists:get_value(version, Options, 2) of
+        1 -> error(function_clause);
+        2 -> from_list(Ls)
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   Set1 first set to be checked for equality
@@ -382,7 +392,9 @@ subtract(#{} = LHS, #{} = RHS) ->
             KeepThreshold = (LSize * 3) div 4,
             Next = maps:next(maps:iterator(LHS)),
             subtract_heuristic(Next, [], [], KeepThreshold, LHS, RHS)
-    end.
+    end;
+subtract(LHS, RHS) ->
+    filter(fun(E) -> not is_element(E, RHS) end, LHS).
 
 subtract_heuristic(Next, _Keep, Delete, 0, Acc, Reference) ->
     %% We've kept more than 75% of the keys, transition to removing them
@@ -452,7 +464,9 @@ is_subset(#{} = S1, #{} = S2) ->
             false;
         true ->
             is_subset_1(S2, maps:iterator(S1))
-    end.
+    end;
+is_subset(S1, S2) ->
+    fold(fun(E, Sub) -> Sub andalso is_element(E, S2) end, true, S1).
 
 is_subset_1(Set, Iter) ->
     case maps:next(Iter) of
