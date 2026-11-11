@@ -22,9 +22,9 @@ runtime error/timeout, or a failed prerequisite/reference/proof check.
 
 ## Generated inputs
 
-The default is 1,000 cases, reproducible with `--seed`. Twenty-four boundary cases
+The default is 1,000 cases, reproducible with `--seed`. Twenty-eight boundary cases
 precede seeded exploration so short runs still exercise known dangerous edges.
-This generates inputs to seven operation families, not arbitrary Erlang programs:
+This generates inputs to eight operation families, not arbitrary Erlang programs:
 
 - Numeric comparison: all eight equality/order operators, signed zeros,
   subnormal/extreme finite floats, and integer/float pairs around precision and
@@ -42,6 +42,16 @@ This generates inputs to seven operation families, not arbitrary Erlang programs
   and signed-zero pairs, compound terms, and seeded partial bitstrings. Map
   sequences also exercise successful/rejected updates and takes. Enumeration
   order is ignored, but exact-key bindings and counts are retained.
+- Selective-receive sequences: empty or mixed initial mailboxes, self-sends,
+  exact/tuple-tag matches, guarded receives, multiple clauses, and catch-all
+  receives. Include misses followed by new sends, duplicates, exact numeric and
+  compound terms, guard errors/false results, and competing clause matches.
+  Each sequence has at most 30 operations; all receives use timeout zero.
+  Each prefix runs uninterrupted in a fresh monitored worker, then returns its
+  last result and drains the remaining messages in order. This observes every
+  intermediate mailbox without a drain/requeue snapshot resetting receive
+  scanning between operations. Only the worker sends to itself; no cross-sender
+  ordering, wall-clock timing, or scheduler outcome is used as an oracle.
 - Bitstrings: signed big/little-endian construction and matching at varied bit
   offsets and widths through 255 bits, including zero-width and invalid-size
   controls. Full bitstrings and decoded results are compared.
@@ -103,9 +113,10 @@ including `--float-encoding`.
 writes `minimized.json`. It simplifies numbers and nested keys and reruns each
 candidate against both real runtimes; compilation/oracle errors are not accepted
 as reductions. Sequence reduction deletes chunks of operations while keeping
-initial bindings, remaining operation payloads, seed, and index unchanged.
+initial bindings/mailbox, remaining operation payloads, seed, and index unchanged.
 Keys/values are literal terms, not references to previous operation results;
 an operation rejected after deletion is still observed, and execution continues.
+Deleting a send may turn a later receive into an observed zero-timeout miss.
 It preserves the distinction between value mismatches and target
 errors. This is a bounded greedy reduction, **not a guarantee of a globally
 minimal case or the same underlying root cause**. Original failures remain intact.

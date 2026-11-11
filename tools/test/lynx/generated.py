@@ -126,6 +126,33 @@ def generate(seed, count, float_encoding=False):
                   step("selected", "undefined"), step("erase", b)]
         return [setup, steps]
 
+    def receives(a, b, empty=False):
+        def step(*items):
+            return {"tuple": list(items)}
+
+        setup = [] if empty else [
+            "sentinel", b, a, step("tag", a), step("tag", b), 0, "bad",
+            step(), {"map": []}, {"map": [["key", "wanted"]]},
+            {"bits": [2, 8]}, "false", "fallback", step("last", "wanted"),
+        ]
+        steps = [step("exact", "missing"), step("exact", a), step("exact", a),
+                 step("send", a), step("exact", a), step("tag", "tag"), step("tag", "tag")]
+        guards = ["division", "tuple", "map", "binary", "boolean", "alternatives"]
+        steps += [step("guard", kind) for kind in guards]
+        steps += [step("send", step("tag", a)), step("tag", "tag"),
+                  step("clauses", a), step("any")]
+        messages = [a, b, step("tag", a), step("tag", b), "fallback", "sentinel", key()]
+        for _ in range(rng.randint(4, 12)):
+            op = rng.choice(["send", "exact", "tag", "guard", "clauses", "any"])
+            if op == "any":
+                steps.append(step(op))
+            else:
+                value = rng.choice(guards) if op == "guard" else (
+                    rng.choice(["tag", a, b]) if op == "tag" else rng.choice(messages))
+                steps.append(step(op, value))
+        steps.append(step("any"))
+        return [setup, steps]
+
     # Guarantee the important asymmetric boundaries before random exploration.
     boundaries = [
         ("compare", [0.0, -0.0]),
@@ -147,28 +174,32 @@ def generate(seed, count, float_encoding=False):
         for size, (a, b) in zip([0, 30, 31, 32], pairs):
             for kind in ["map_sequence", "dictionary_sequence"]:
                 boundaries.append((kind, sequence(kind, size, a, b)))
+        for index, (a, b) in enumerate(pairs):
+            boundaries.append(("receive_sequence", receives(a, b, empty=index == 3)))
     if float_encoding:
         boundaries = [("float_bits", args) for args in encodings]
     result = []
     for index in range(count):
         if index < len(boundaries):
             operation, args = boundaries[index]
-        elif float_encoding or index % 7 == 4:
+        elif float_encoding or index % 8 == 4:
             value, width = rng.choice(encodings[:-3])[:2]
             operation, args = "float_bits", [value, width, rng.choice([0, 1, 3, 7]), rng.choice(["big", "little"])]
-        elif index % 7 == 0:
+        elif index % 8 == 0:
             operation, args = "compare", [number(), number()]
-        elif index % 7 == 1:
+        elif index % 8 == 1:
             a = key()
             b = rng.choice([a, key(), 0.0, -0.0, 1, 1.0])
             operation, args = "maps", [a, b, rng.choice([0, 1, 2, 30, 31, 32, 33, 34])]
-        elif index % 7 == 2:
+        elif index % 8 == 2:
             value = rng.choice([-1, 0, 1, -257, 2**64 - 1, rng.getrandbits(120)])
             operation, args = "bits", [value, rng.choice([0, 1, 7, 8, 9, 31, 32, 63, 64, 65, 127, 128, 129, 255, -1]),
                                        rng.choice([0, 1, 3, 7, 8]), rng.choice(["big", "little"])]
-        elif index % 7 in [5, 6]:
-            operation = "map_sequence" if index % 7 == 5 else "dictionary_sequence"
+        elif index % 8 in [5, 6]:
+            operation = "map_sequence" if index % 8 == 5 else "dictionary_sequence"
             args = sequence(operation, rng.choice([0, 30, 31, 32, 33]), key(), key())
+        elif index % 8 == 7:
+            operation, args = "receive_sequence", receives(key(), key(), empty=rng.randrange(4) == 0)
         else:
             op = rng.choice(["add", "sub", "mul", "idiv", "mod", "shl", "shr", "band_op", "bxor_op", "fdiv"])
             a = rng.choice([0, -1, 2**63 - 1, -(2**63), rng.randint(-(2**119), 2**119)])
@@ -210,10 +241,10 @@ def reductions(value):
 
 
 def candidates(case):
-    if case["operation"] in ["map_sequence", "dictionary_sequence"]:
+    if case["operation"] in ["map_sequence", "dictionary_sequence", "receive_sequence"]:
         setup, steps = case["args"]
-        # Literal keys need no producer step. Keep setup and operation payloads
-        # intact, reducing only the trace; exceptions are caught per operation.
+        # Literal inputs need no producer step. Preserve initial bindings or
+        # mailbox and operation payloads; a deleted send can expose a timeout.
         width = max(1, len(steps) // 2)
         while width:
             for start in range(0, len(steps) - width + 1, width):

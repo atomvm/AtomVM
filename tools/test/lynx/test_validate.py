@@ -63,8 +63,75 @@ class ValidationTests(unittest.TestCase):
             selected = json.loads((first / "cases.json").read_text())
             self.assertEqual({entry["operation"] for entry in selected},
                              {"compare", "maps", "bits", "arithmetic", "float_bits",
-                              "map_sequence", "dictionary_sequence"})
+                              "map_sequence", "dictionary_sequence", "receive_sequence"})
             self.assertEqual(summary["passed"], 32)
+
+    def test_receive_sequences_preserve_order_and_resume_after_misses(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            tag_float = {"tuple": ["tag", 1.0]}
+            tag_int = {"tuple": ["tag", 1]}
+            tag_wrong = {"tuple": ["tag", "wrong"]}
+            tag_wanted = {"tuple": ["tag", "wanted"]}
+            empty_tuple, empty_map = {"tuple": []}, {"map": []}
+            bits = {"bits": [5, 3]}
+            inputs = [
+                (["sentinel", 1.0, 1, tag_float, tag_int], [
+                    ["exact", 1], ["exact", 1], ["send", 1], ["tag", "tag"],
+                    ["exact", 1.0], ["exact", 1], ["any"],
+                ]),
+                ([0, "bad", empty_tuple, empty_map, tag_wrong, tag_wanted,
+                  5, 4, "fallback", "wanted"], [
+                    ["guard", "tuple"], ["guard", "division"],
+                    ["clauses", "wanted"], ["clauses", "wanted"],
+                    ["guard", "map"], ["any"],
+                ]),
+                ([], [["any"], ["exact", "missing"], ["send", bits],
+                      ["exact", bits], ["any"]]),
+            ]
+            source.write_text(json.dumps([
+                {"operation": "receive_sequence",
+                 "args": [setup, [{"tuple": step} for step in steps]]}
+                for setup, steps in inputs
+            ]))
+            output = work / "receives"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 3, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                values = JSON.decode!(File.read!(path))["expected"]
+                  |> Enum.map(fn s -> :erlang.binary_to_term(Base.decode64!(s)) end)
+                wrap = fn rows -> {:ok, Enum.map(rows, &{:ok, &1})} end
+                a = [:sentinel, 1.0, {:tag, 1.0}, {:tag, 1}]
+                b = a ++ [1]
+                c = [:sentinel, 1.0, {:tag, 1}, 1]
+                d = [:sentinel, {:tag, 1}, 1]
+                e = [:sentinel, {:tag, 1}]
+                first = wrap.([
+                  {:none, [:sentinel, 1.0, 1, {:tag, 1.0}, {:tag, 1}]},
+                  {{:matched, 1}, a}, {:timeout, a}, {{:sent, 1}, b},
+                  {{:matched, {:tag, 1.0}}, c}, {{:matched, 1.0}, d},
+                  {{:matched, 1}, e}, {{:matched, :sentinel}, [{:tag, 1}]}])
+                f = [0, :bad, {}, %{}, {:tag, :wrong}, 5, 4, :fallback, :wanted]
+                g = [0, :bad, {}, %{}, {:tag, :wrong}, 5, :fallback, :wanted]
+                h = [0, :bad, {}, %{}, {:tag, :wrong}, 5, :wanted]
+                i = [0, :bad, {}, %{}, {:tag, :wrong}, 5]
+                second = wrap.([
+                  {:none, [0, :bad, {}, %{}, {:tag, :wrong}, {:tag, :wanted},
+                           5, 4, :fallback, :wanted]},
+                  {{:matched, {:tag, :wanted}}, f}, {{:matched, 4}, g},
+                  {{:matched, :fallback}, h}, {{:matched, :wanted}, i},
+                  {:timeout, i}, {{:matched, 0}, [:bad, {}, %{}, {:tag, :wrong}, 5]}])
+                bits = <<5::3>>
+                third = wrap.([{:none, []}, {:timeout, []}, {:timeout, []},
+                               {{:sent, bits}, [bits]}, {{:matched, bits}, []}, {:timeout, []}])
+                true = values === [first, second, third]
+                """, str(output / "manifest.json")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_sequences_return_intermediate_results_and_exact_state(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -522,7 +589,12 @@ class ValidationTests(unittest.TestCase):
                 ["put", 1, "first"], ["put", 1, "replaced"],
                 ["erase", 1], ["get", 1.0], ["put", 1, "reinserted"],
             ]]
-            for operation in ["map_sequence", "dictionary_sequence"]:
+            for operation in ["map_sequence", "dictionary_sequence", "receive_sequence"]:
+                if operation == "receive_sequence":
+                    setup = ["sentinel", 1.0, {"tuple": ["tag", 1]}]
+                    steps = [{"tuple": s} for s in [
+                        ["exact", 1], ["send", 1], ["tag", "tag"], ["exact", 1], ["any"],
+                    ]]
                 source.write_text(json.dumps([
                     {"seed": 123, "index": 7, "operation": operation, "args": [setup, steps]}
                 ]))
