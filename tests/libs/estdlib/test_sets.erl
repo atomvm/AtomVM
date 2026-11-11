@@ -25,7 +25,9 @@
 -include("etest.hrl").
 
 test() ->
+    ok = test_new(),
     ok = test_from_list(),
+    ok = test_constructor_options(),
     ok = test_is_set(),
     ok = test_size(),
     ok = test_is_equal(),
@@ -42,8 +44,44 @@ test() ->
     ok = test_filtermap(),
     ok.
 
+test_new() ->
+    ?ASSERT_MATCH(sets:is_empty(sets:new()), true),
+    ?ASSERT_MATCH(sets:is_empty(sets:new([])), true),
+    ?ASSERT_MATCH(sets:is_empty(sets:new([{version, 2}])), true),
+    ok.
+
 test_from_list() ->
     ?ASSERT_MATCH(sets:from_list([ok, <<"hello">>], [{version, 2}]), #{ok => [], <<"hello">> => []}),
+    ?ASSERT_MATCH(sets:is_empty(sets:from_list([], [])), true),
+    Set = sets:from_list([1, 1.0, 1, <<"hello">>], []),
+    ?ASSERT_MATCH(sets:size(Set), 3),
+    ?ASSERT_MATCH(sets:is_element(1, Set), true),
+    ?ASSERT_MATCH(sets:is_element(1.0, Set), true),
+    ?ASSERT_MATCH(sets:is_element(<<"hello">>, Set), true),
+    ?ASSERT_ERROR(sets:from_list([a | bad], []), badarg),
+    ok.
+
+test_constructor_options() ->
+    lists:foreach(
+        fun(Options) ->
+            ?ASSERT_MATCH(sets:is_empty(sets:new(Options)), true),
+            Set = sets:from_list([a, a, b], Options),
+            ?ASSERT_MATCH(sets:is_equal(Set, sets:from_list([a, b])), true)
+        end,
+        [[{ignored, true}], [{version, 2} | bad], [{version, 2}, {version, bad}]]
+    ),
+    lists:foreach(
+        fun({Options, Reason}) ->
+            ?ASSERT_ERROR(sets:new(Options), Reason),
+            ?ASSERT_ERROR(sets:from_list([a], Options), Reason)
+        end,
+        [
+            {[version], {case_clause, true}},
+            {[{version, 3}], {case_clause, 3}},
+            {[{version, bad}], {case_clause, bad}},
+            {[{version, 3}, {version, 2}], {case_clause, 3}}
+        ]
+    ),
     ok.
 
 test_is_set() ->
@@ -133,6 +171,13 @@ test_subtract() ->
         ),
         true
     ),
+    lists:foreach(
+        fun(Invalid) ->
+            ?ASSERT_MATCH(sets:is_empty(sets:subtract(sets:new(), Invalid)), true),
+            ?ASSERT_ERROR(sets:subtract(sets:from_list([a]), Invalid), function_clause)
+        end,
+        [bad, [], {set}]
+    ),
     ok.
 
 test_is_disjoint() ->
@@ -145,6 +190,13 @@ test_is_subset() ->
     ?ASSERT_MATCH(sets:is_subset(sets:from_list([2, 3]), sets:from_list([1, 2, 3, 4])), true),
     ?ASSERT_MATCH(sets:is_subset(sets:from_list([2.0, 3]), sets:from_list([1, 2, 3, 4])), false),
     ?ASSERT_MATCH(sets:is_subset(sets:from_list([-1]), sets:from_list([1, 2, 3, 4])), false),
+    lists:foreach(
+        fun(Invalid) ->
+            ?ASSERT_MATCH(sets:is_subset(sets:new(), Invalid), true),
+            ?ASSERT_ERROR(sets:is_subset(sets:from_list([a]), Invalid), function_clause)
+        end,
+        [bad, [], {set}]
+    ),
     ok.
 
 test_filter() ->
