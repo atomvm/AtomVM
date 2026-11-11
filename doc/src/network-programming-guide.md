@@ -556,8 +556,9 @@ The `network` driver owns the WiFi radio, and ESP-NOW borrows it:
 - `espnow:close/1` turns WiFi off, unless the network uses it.
 - An AP-only network (`ap` without `sta`) runs the radio in AP mode, where ESP-NOW frames, which go
   out on the STA, cannot be sent: `espnow:open/1` returns `{error, ap_only}` while one runs, and
-  `network:start/1` returns `{error, ap_only_held}` for one while ESP-NOW is open. A network with
-  both `sta` and `ap` works.
+  one started while ESP-NOW is open does not start: `network:start/1` returns before the driver
+  starts WiFi, and the network process then stops with `{start_port_failed, ap_only_held}`. A
+  network with both `sta` and `ap` works.
 
 Only one port can be open (`{error, already_open}`), linked to the process that opened it: when
 that process dies the port closes, and ESP-NOW can be opened again.

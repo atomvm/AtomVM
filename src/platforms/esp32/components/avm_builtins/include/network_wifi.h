@@ -21,6 +21,8 @@
 #ifndef _NETWORK_WIFI_H_
 #define _NETWORK_WIFI_H_
 
+#include <stdbool.h>
+
 #include <esp_err.h>
 
 /*
@@ -28,10 +30,13 @@
  * radio without a network (ESP-NOW) holds it: the network driver turns
  * Wi-Fi on as a bare STA if no network uses it, and network:stop/0 then
  * leaves it on instead of turning it off. `restarted' is called (from the
- * network driver, in the scheduler) each time the radio comes back up as a
- * bare STA after a network used it, so the holder can set its channel again.
+ * network driver, in the scheduler) each time the radio is stopped and
+ * started again while held: when a network starts (`bare_sta' false), and
+ * when it stops and the radio comes back as a bare STA (`bare_sta' true).
+ * Stopping the radio clears what the holder installed in it (ESP-NOW's
+ * keys), and a bare STA is on the holder's channel again.
  */
-esp_err_t network_wifi_hold(void (*restarted)(void));
+esp_err_t network_wifi_hold(void (*restarted)(bool bare_sta));
 void network_wifi_release(void);
 
 #endif

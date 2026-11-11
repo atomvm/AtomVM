@@ -127,6 +127,21 @@ static _Atomic uint32_t espnow_in_callback;
 // network driver brings the radio back as a bare STA.
 static _Atomic uint8_t espnow_channel;
 
+// The keys, installed again each time the radio restarts (a network starting
+// or stopping), which clears them: the PMK given at open, and the encrypted
+// peers' LMKs. Written by the port, read by the network driver's callback,
+// both under `espnow_keys_lock'.
+struct EspNowKey
+{
+    uint8_t mac[MAC_LEN];
+    uint8_t lmk[ESP_NOW_KEY_LEN];
+};
+static portMUX_TYPE espnow_keys_lock = portMUX_INITIALIZER_UNLOCKED;
+static bool espnow_has_pmk;
+static uint8_t espnow_pmk[ESP_NOW_KEY_LEN];
+static struct EspNowKey espnow_lmks[ESP_NOW_MAX_ENCRYPT_PEER_NUM];
+static size_t espnow_lmk_count;
+
 static NativeHandlerResult espnow_consume_mailbox(Context *ctx);
 static bool sta_associated(void);
 
@@ -235,12 +250,66 @@ static void espnow_send_cb(const uint8_t *mac, esp_now_send_status_t status)
     callback_leave();
 }
 
-// The network driver brought the radio back as a bare STA (network:stop/0):
-// the channel is ours again. Reads nothing that teardown frees.
-static void espnow_wifi_restarted(void)
+static void forget_lmk(const uint8_t mac[MAC_LEN])
 {
+    taskENTER_CRITICAL(&espnow_keys_lock);
+    for (size_t i = 0; i < espnow_lmk_count; i++) {
+        if (memcmp(espnow_lmks[i].mac, mac, MAC_LEN) == 0) {
+            espnow_lmks[i] = espnow_lmks[--espnow_lmk_count];
+            break;
+        }
+    }
+    taskEXIT_CRITICAL(&espnow_keys_lock);
+}
+
+static void remember_lmk(const uint8_t mac[MAC_LEN], const uint8_t lmk[ESP_NOW_KEY_LEN])
+{
+    forget_lmk(mac);
+    taskENTER_CRITICAL(&espnow_keys_lock);
+    if (espnow_lmk_count < ESP_NOW_MAX_ENCRYPT_PEER_NUM) {
+        memcpy(espnow_lmks[espnow_lmk_count].mac, mac, MAC_LEN);
+        memcpy(espnow_lmks[espnow_lmk_count].lmk, lmk, ESP_NOW_KEY_LEN);
+        espnow_lmk_count++;
+    }
+    taskEXIT_CRITICAL(&espnow_keys_lock);
+}
+
+static void forget_keys(void)
+{
+    taskENTER_CRITICAL(&espnow_keys_lock);
+    espnow_has_pmk = false;
+    espnow_lmk_count = 0;
+    taskEXIT_CRITICAL(&espnow_keys_lock);
+}
+
+// The network driver stopped and started the radio, which cleared the keys
+// ESP-NOW installed in it: encrypted frames went out with no key and were
+// dropped by the peer. The keys go back; on a bare STA (network:stop/0) the
+// channel is ours again too. Reads nothing that teardown frees.
+static void espnow_wifi_restarted(bool bare_sta)
+{
+    taskENTER_CRITICAL(&espnow_keys_lock);
+    bool has_pmk = espnow_has_pmk;
+    uint8_t pmk[ESP_NOW_KEY_LEN];
+    memcpy(pmk, espnow_pmk, ESP_NOW_KEY_LEN);
+    size_t count = espnow_lmk_count;
+    struct EspNowKey lmks[ESP_NOW_MAX_ENCRYPT_PEER_NUM];
+    memcpy(lmks, espnow_lmks, sizeof(lmks));
+    taskEXIT_CRITICAL(&espnow_keys_lock);
+
+    if (has_pmk) {
+        esp_now_set_pmk(pmk);
+    }
+    for (size_t i = 0; i < count; i++) {
+        esp_now_peer_info_t peer;
+        if (esp_now_get_peer(lmks[i].mac, &peer) == ESP_OK) {
+            peer.encrypt = true;
+            memcpy(peer.lmk, lmks[i].lmk, ESP_NOW_KEY_LEN);
+            esp_now_mod_peer(&peer);
+        }
+    }
     uint8_t channel = atomic_load(&espnow_channel);
-    if (channel != 0) {
+    if (bare_sta && channel != 0) {
         esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
     }
 }
@@ -354,6 +423,7 @@ static void teardown(struct EspNowData *data)
         vTaskDelay(1);
     }
     atomic_store(&espnow_channel, 0);
+    forget_keys();
     sys_unregister_listener(glb, &data->listener);
     struct EspNowEvent event;
     while (xQueueReceive(data->queue, &event, 0) == pdTRUE) {
@@ -493,6 +563,12 @@ static term do_open(Heap *heap, Context *ctx, term req)
     // Before the callbacks are registered: they find the state from here.
     atomic_store(&espnow_data, data);
 
+    if (!term_is_invalid_term(pmk)) {
+        taskENTER_CRITICAL(&espnow_keys_lock);
+        memcpy(espnow_pmk, term_binary_data(pmk), ESP_NOW_KEY_LEN);
+        espnow_has_pmk = true;
+        taskEXIT_CRITICAL(&espnow_keys_lock);
+    }
     if ((err = esp_now_init()) != ESP_OK
         || (!term_is_invalid_term(pmk) && (err = esp_now_set_pmk((const uint8_t *) term_binary_data(pmk))) != ESP_OK)
         || (err = esp_now_register_recv_cb(espnow_recv_cb)) != ESP_OK
@@ -532,8 +608,15 @@ static term do_add_peer(Heap *heap, GlobalContext *glb, term req)
     if (channel < 0 || (!term_is_invalid_term(lmk) && (!term_is_binary(lmk) || term_binary_size(lmk) != ESP_NOW_KEY_LEN))) {
         return badarg(heap);
     }
-    esp_err_t err = add_peer(mac, channel, term_is_invalid_term(lmk) ? NULL : (const uint8_t *) term_binary_data(lmk));
-    return err == ESP_OK ? OK_ATOM : error_tuple(heap, glb, err);
+    const uint8_t *key = term_is_invalid_term(lmk) ? NULL : (const uint8_t *) term_binary_data(lmk);
+    esp_err_t err = add_peer(mac, channel, key);
+    if (err != ESP_OK) {
+        return error_tuple(heap, glb, err);
+    }
+    if (key != NULL) {
+        remember_lmk(mac, key);
+    }
+    return OK_ATOM;
 }
 
 static term do_del_peer(Heap *heap, GlobalContext *glb, term req)
@@ -543,7 +626,11 @@ static term do_del_peer(Heap *heap, GlobalContext *glb, term req)
         return badarg(heap);
     }
     esp_err_t err = esp_now_del_peer(mac);
-    return err == ESP_OK ? OK_ATOM : error_tuple(heap, glb, err);
+    if (err != ESP_OK) {
+        return error_tuple(heap, glb, err);
+    }
+    forget_lmk(mac);
+    return OK_ATOM;
 }
 
 // Gives the radio the first waiting frame, unless one is out. A frame the
