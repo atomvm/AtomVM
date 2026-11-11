@@ -30,6 +30,7 @@
 #include "external_term.h"
 #include "globalcontext.h"
 #include "iff.h"
+#include "intn.h"
 #include "jit.h"
 #include "list.h"
 #include "nifs.h"
@@ -934,6 +935,31 @@ static inline size_t record_value32_byte_len(uint8_t first_byte)
     }
 }
 
+// Decode a small compact-encoded literal (as used for the length of extended
+// integers). Returns false if it doesn't fit the 1 or 2 bytes forms.
+static inline bool record_decode_small_literal(const uint8_t *pc, const uint8_t *pc_end, uint32_t *value, size_t *byte_len)
+{
+    if (UNLIKELY(pc >= pc_end)) {
+        return false;
+    }
+    switch ((pc[0] >> 3) & 0x3) {
+        case 0:
+        case 2:
+            *value = pc[0] >> 4;
+            *byte_len = 1;
+            return true;
+        case 1:
+            if (UNLIKELY(pc_end - pc < 2)) {
+                return false;
+            }
+            *value = ((uint32_t) (pc[0] & 0xE0) << 3) | pc[1];
+            *byte_len = 2;
+            return true;
+        default:
+            return false;
+    }
+}
+
 static inline size_t record_compact_term_byte_len(const uint8_t *pc, const uint8_t *pc_end)
 {
     if (UNLIKELY(pc >= pc_end)) {
@@ -982,10 +1008,17 @@ static inline size_t record_compact_term_byte_len(const uint8_t *pc, const uint8
                 case COMPACT_NBITS_VALUE: {
                     int sz = (first_byte >> 5) + 2;
                     if (sz > 8) {
-                        // Larger bigints would fall into decode_nbits_integer
-                        // which itself does an unchecked DECODE_LITERAL; reject
-                        // here rather than chasing bounds inside.
-                        return 0;
+                        // Extended integer: 9 + N bytes, N as a compact literal
+                        // following the first byte.
+                        if ((first_byte & 0xF) != COMPACT_LARGE_INTEGER) {
+                            return 0;
+                        }
+                        uint32_t extra;
+                        size_t len_bytes;
+                        if (!record_decode_small_literal(pc + 1, pc_end, &extra, &len_bytes)) {
+                            return 0;
+                        }
+                        return 1u + len_bytes + 9u + extra;
                     }
                     return (size_t) (1u + sz);
                 }
@@ -1162,6 +1195,53 @@ const struct RecordDef *module_find_record_def_global(
     return module_find_record_def(mod, record_name);
 }
 
+// Decode an extended (more than 8 bytes) integer default. The encoding was
+// validated by record_compact_term_byte_len when loading the table.
+static term module_decode_record_default_bigint(Context *ctx, const uint8_t *pc)
+{
+    uint32_t extra;
+    size_t len_bytes;
+    // Bounds were checked at load time, any end pointer large enough does.
+    if (UNLIKELY(!record_decode_small_literal(pc + 1, pc + 3, &extra, &len_bytes))) {
+        return term_invalid_term();
+    }
+    size_t bytes_size = 9u + extra;
+    const uint8_t *bytes = pc + 1 + len_bytes;
+
+    intn_integer_sign_t sign;
+    intn_digit_t bigint[INTN_MAX_RES_LEN];
+    int count = intn_from_integer_bytes(bytes, bytes_size, IntnSigned, bigint, &sign);
+    if (UNLIKELY(count < 0)) {
+        return term_invalid_term();
+    }
+    count = (int) intn_count_digits(bigint, (size_t) count);
+
+    Heap heap;
+    if (intn_fits_int64(bigint, (size_t) count, sign)) {
+        int64_t value = intn_to_int64(bigint, (size_t) count, sign);
+        size_t boxed_size = term_boxed_integer_size(value);
+        if (boxed_size == 0) {
+            return term_from_int((avm_int_t) value);
+        }
+        if (UNLIKELY(memory_init_heap(&heap, boxed_size) != MEMORY_GC_OK)) {
+            return term_invalid_term();
+        }
+        memory_heap_append_heap(&ctx->heap, &heap);
+        return term_make_maybe_boxed_int64(value, &heap);
+    }
+
+    size_t intn_data_size;
+    size_t rounded_res_len;
+    term_bigint_size_requirements((size_t) count, &intn_data_size, &rounded_res_len);
+    if (UNLIKELY(memory_init_heap(&heap, BOXED_BIGINT_HEAP_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
+        return term_invalid_term();
+    }
+    term bigint_term = term_create_uninitialized_bigint(intn_data_size, (term_integer_sign_t) sign, &heap);
+    term_initialize_bigint(bigint_term, bigint, (size_t) count, rounded_res_len);
+    memory_heap_append_heap(&ctx->heap, &heap);
+    return bigint_term;
+}
+
 // Allocates via heap fragments (memory_heap_append_heap), not GC. Callers
 // (OP_PUT_RECORD, bif_records_get_definition_2, jit_put_record) rely on this
 // so terms already produced in the same loop remain valid across iterations.
@@ -1217,7 +1297,7 @@ term module_decode_record_default(Module *mod, Context *ctx, const uint8_t *pc)
             if ((b0 & COMPACT_LARGE_IMM_MASK) == COMPACT_NBITS_VALUE) {
                 size_t sz = (size_t) ((b0 >> 5) + 2);
                 if (sz > 8) {
-                    return term_invalid_term();
+                    return module_decode_record_default_bigint(ctx, pc);
                 }
                 // Big-endian signed: sign-extend from MSB.
                 avm_int64_t value = (int8_t) pc[1];

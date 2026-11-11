@@ -27,6 +27,10 @@
 -record(#point{x = 0, y = 0, z = 0}).
 -record(#empty{}).
 -record(#with_list_default{items = [a, b, c]}).
+-record(#with_bigint_default{
+    pos = 16#FFFFFFFFFFFFFFFFFF,
+    neg = -16#FFFFFFFFFFFFFFFFFF
+}).
 -record(#with_complex_defaults{
     tuple_val = {alpha, {beta, gamma}},
     list_val = [one, two, {three, four}],
@@ -45,6 +49,7 @@ start() ->
     ok = test_is_record_1_runtime(),
     ok = test_is_record_2_runtime(),
     ok = test_is_record_3(),
+    ok = test_bigint_default(),
     ok = test_get_record_field_anonymous_id(),
     ok = test_get_record_field_remote_checks(),
     ok = test_is_record_opcodes(),
@@ -191,6 +196,18 @@ test_is_record_3() ->
     false = erlang:is_record(T, PairName, ?MODULE:id(2)),
     false = erlang:is_record(P, PairName, ?MODULE:id(3)),
     ok = expect_badarg(fun() -> erlang:is_record(P, ?MODULE:id(1), PairName) end),
+    ok.
+
+%% Defaults that don't fit in 64 bits use the extended integer encoding.
+test_bigint_default() ->
+    R = ?MODULE:id(#with_bigint_default{}),
+    Pos = ?MODULE:id(16#FFFFFFFFFFFFFFFFFF),
+    Pos = R#with_bigint_default.pos,
+    Neg = -Pos,
+    Neg = R#with_bigint_default.neg,
+    R2 = R#with_bigint_default{pos = 1},
+    1 = R2#with_bigint_default.pos,
+    Neg = R2#with_bigint_default.neg,
     ok.
 
 %% X#_.a doesn't check the record name.

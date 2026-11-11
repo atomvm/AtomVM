@@ -6597,7 +6597,7 @@ schedule_in:
                         Module *owning_mod = globalcontext_get_module(
                             ctx->global, term_to_atom_index(def->module));
                         if (UNLIKELY(owning_mod == NULL)) {
-                            (void) raise_badrecord(ctx, id);
+                            (void) raise_badrecord(ctx, def->name);
                             HANDLE_ERROR();
                         }
                         for (size_t i = 0; i < num_fields; i++) {
@@ -6607,7 +6607,7 @@ schedule_in:
                             term default_val = module_decode_record_default(
                                 owning_mod, ctx, def->fields[i].default_encoded);
                             if (UNLIKELY(term_is_invalid_term(default_val))) {
-                                (void) raise_badrecord(ctx, id);
+                                (void) raise_badrecord(ctx, def->name);
                                 HANDLE_ERROR();
                             }
                             term_put_record_value(dst_record, i, default_val);
