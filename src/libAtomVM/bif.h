@@ -66,6 +66,7 @@ term bif_erlang_is_reference_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_tuple_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_record_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_record_2(Context *ctx, uint32_t fail_label, term arg1, term record_tag);
+term bif_erlang_is_record_3(Context *ctx, uint32_t fail_label, term arg1, term arg2, term arg3);
 term bif_erlang_get_record_field_3(Context *ctx, uint32_t fail_label, term src, term id, term field);
 
 term bif_records_get_2(Context *ctx, uint32_t fail_label, term key, term record);

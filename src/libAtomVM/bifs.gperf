@@ -66,6 +66,7 @@ erlang:is_reference/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_er
 erlang:is_tuple/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_tuple_1}
 erlang:is_record/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_record_1}
 erlang:is_record/2,{.bif.base.type = BIFFunctionType, .bif.bif2_ptr = bif_erlang_is_record_2}
+erlang:is_record/3,{.bif.base.type = BIFFunctionType, .bif.bif3_ptr = bif_erlang_is_record_3}
 erlang:get_record_field/3, {.bif.base.type = BIFFunctionType, .bif.bif3_ptr = bif_erlang_get_record_field_3}
 records:get/2, {.bif.base.type = BIFFunctionType, .bif.bif2_ptr = bif_records_get_2}
 records:get_module/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_records_get_module_1}

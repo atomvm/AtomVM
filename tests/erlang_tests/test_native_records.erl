@@ -44,6 +44,7 @@ start() ->
     ok = test_term_to_binary_roundtrip(),
     ok = test_is_record_1_runtime(),
     ok = test_is_record_2_runtime(),
+    ok = test_is_record_3(),
     ok = test_is_record_opcodes(),
     ok = test_is_tuple_disjoint_from_record(),
     ok = test_get_record_field_runtime(),
@@ -170,6 +171,32 @@ test_is_record_2_runtime() ->
 
     false = is_record(?MODULE:id(42), PairName),
     ok.
+
+test_is_record_3() ->
+    P = ?MODULE:id(#pair{a = 1, b = 2}),
+    T = ?MODULE:id({pair, 1, 2}),
+    Mod = ?MODULE:id(?MODULE),
+    PairName = ?MODULE:id(pair),
+    PointName = ?MODULE:id(point),
+    true = erlang:is_record(P, ?MODULE, pair),
+    false = erlang:is_record(P, ?MODULE, point),
+    false = erlang:is_record(P, other_module, pair),
+    false = erlang:is_record(T, ?MODULE, pair),
+    false = erlang:is_record(?MODULE:id(42), ?MODULE, pair),
+    true = erlang:is_record(P, Mod, PairName),
+    false = erlang:is_record(P, Mod, PointName),
+    true = erlang:is_record(T, PairName, ?MODULE:id(3)),
+    false = erlang:is_record(T, PairName, ?MODULE:id(2)),
+    false = erlang:is_record(P, PairName, ?MODULE:id(3)),
+    ok = expect_badarg(fun() -> erlang:is_record(P, ?MODULE:id(1), PairName) end),
+    ok.
+
+expect_badarg(F) ->
+    try F() of
+        _ -> unexpected_return
+    catch
+        error:badarg -> ok
+    end.
 
 %% Exercise the runtime type-test opcodes emitted by the OTP 29 compiler:
 %% OP_IS_NATIVE_RECORD (function-head patterns and is_record/2 guards with a

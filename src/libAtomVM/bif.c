@@ -661,6 +661,31 @@ term bif_erlang_is_record_2(Context *ctx, uint32_t fail_label, term arg1, term a
     return FALSE_ATOM;
 }
 
+term bif_erlang_is_record_3(Context *ctx, uint32_t fail_label, term arg1, term arg2, term arg3)
+{
+    UNUSED(ctx);
+    VALIDATE_VALUE_BIF(fail_label, arg2, term_is_atom);
+
+    if (term_is_atom(arg3)) {
+        // is_record(Term, Module, Name) on a native record
+        if (term_is_record(arg1)) {
+            const struct RecordDef *def = term_get_record_def(arg1);
+            return (def->module == arg2 && def->name == arg3) ? TRUE_ATOM : FALSE_ATOM;
+        }
+        return FALSE_ATOM;
+    }
+    // is_record(Term, Tag, Size) on a tuple
+    VALIDATE_VALUE_BIF(fail_label, arg3, term_is_integer);
+    if (term_is_tuple(arg1)) {
+        size_t arity = term_get_tuple_arity(arg1);
+        if (arity >= 1 && term_to_int(arg3) == (avm_int_t) arity
+            && term_get_tuple_element(arg1, 0) == arg2) {
+            return TRUE_ATOM;
+        }
+    }
+    return FALSE_ATOM;
+}
+
 term bif_erlang_is_map_1(Context *ctx, uint32_t fail_label, term arg1)
 {
     UNUSED(ctx);

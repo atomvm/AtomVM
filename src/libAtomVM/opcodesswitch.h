@@ -1444,6 +1444,10 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
                     *return_value = bif->bif2_ptr(ctx, 0, ctx->x[0], ctx->x[1]);
                     return true;
                 }
+                case 3: {
+                    *return_value = bif->bif3_ptr(ctx, 0, ctx->x[0], ctx->x[1], ctx->x[2]);
+                    return true;
+                }
             }
         }
     }
@@ -1983,6 +1987,9 @@ schedule_in:
                             case 2:
                                 return_value = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
                                 break;
+                            case 3:
+                                return_value = bif->bif3_ptr(ctx, 0, x_regs[0], x_regs[1], x_regs[2]);
+                                break;
                             default:
                                 fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
                                 AVM_ABORT();
@@ -2119,6 +2126,9 @@ schedule_in:
                                 break;
                             case 2:
                                 return_value = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
+                                break;
+                            case 3:
+                                return_value = bif->bif3_ptr(ctx, 0, x_regs[0], x_regs[1], x_regs[2]);
                                 break;
                             default:
                                 fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
@@ -3163,6 +3173,9 @@ schedule_in:
                                 break;
                             case 2:
                                 return_value = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
+                                break;
+                            case 3:
+                                return_value = bif->bif3_ptr(ctx, 0, x_regs[0], x_regs[1], x_regs[2]);
                                 break;
                             default:
                                 fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
