@@ -49,6 +49,8 @@ each target case runs in a separate AtomVM process with a timeout. Serialized
 results are compared **on OTP**, so AtomVM's own comparator cannot hide a bug.
 Exceptions compare class/reason, not stack frames. Standalone generated tests
 use AtomVM's bundled standard library, without packaging OTP's `lists.beam`.
+Byte-list output is emitted in bounded chunks, retaining the same wire format
+without formatting the entire serialized trace as one giant list.
 
 ## Focused float encoding checks
 

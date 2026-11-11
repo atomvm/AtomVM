@@ -97,8 +97,7 @@ def validate(args, work):
             f"-module({module}).\n-export([actual/0,start/0]).\n"
             f"actual() -> try {{ok,begin {entry['expression']} end}} "
             "catch Class:Reason -> {exception,Class,Reason} end.\n"
-            'start() -> io:format("LYNX_RESULT ~w~n",'
-            "[binary_to_list(term_to_binary(actual()))]), ok.\n"
+            "start() -> differential:print_result(actual()), ok.\n"
         )
     if args.lean_runtime:
         report = lean_runtime.inventory(args.lean_runtime.resolve(), entries)

@@ -9,6 +9,7 @@
     bits/4,
     float_bits/4,
     call/3,
+    print_result/1,
     map_entries/1,
     map_fold/2,
     map_callback/3,
@@ -65,6 +66,21 @@
 
 %% Inputs cross a module boundary to prevent constant-folded operations.
 call(Module, Function, Args) -> apply(Module, Function, Args).
+
+%% Keep the byte-list wire format, but bound temporary formatting allocations.
+print_result(Value) ->
+    <<First, Rest/binary>> = term_to_binary(Value),
+    io:put_chars(["LYNX_RESULT [", integer_to_list(First)]),
+    print_bytes(Rest),
+    io:put_chars("]\n").
+
+print_bytes(<<>>) ->
+    ok;
+print_bytes(Binary) ->
+    Size = min(256, byte_size(Binary)),
+    <<Chunk:Size/binary, Rest/binary>> = Binary,
+    io:put_chars([[$,, integer_to_list(B)] || B <- binary_to_list(Chunk)]),
+    print_bytes(Rest).
 
 compare(A, B) ->
     {A == B, A /= B, A =:= B, A =/= B, A < B, A =< B, A > B, A >= B}.
