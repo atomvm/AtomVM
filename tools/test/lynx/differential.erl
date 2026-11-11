@@ -22,6 +22,7 @@
     short_circuit/3,
     receive_timeout/2,
     receive_guards/3,
+    receive_sequence/2,
     send_destination/3,
     process_exchange/1,
     monitor_exit/1,
@@ -344,6 +345,51 @@ receive_timeout(Timeout, Messages) ->
             C:R -> {exception, C, R}
         end,
     {Result, drain()}.
+
+receive_sequence(Setup, Steps) ->
+    receive_prefixes(Setup, Steps, []).
+
+%% Drain only at the end of each fresh prefix, never between its operations.
+%% Requeueing snapshots would reset the receive scan and could hide defects.
+receive_prefixes(Setup, Steps, Reversed) ->
+    Snapshot = isolated(fun() ->
+        lists:foreach(fun(M) -> self() ! M end, Setup),
+        Result = lists:foldl(
+            fun(Step, _Previous) -> receive_step(Step) end, none, lists:reverse(Reversed)
+        ),
+        {Result, drain()}
+    end),
+    case Steps of
+        [] -> [Snapshot];
+        [Step | Rest] -> [Snapshot | receive_prefixes(Setup, Rest, [Step | Reversed])]
+    end.
+
+receive_step({send, Message}) ->
+    self() ! Message,
+    {sent, Message};
+receive_step({exact, Wanted}) ->
+    receive
+        Wanted -> {matched, Wanted}
+    after 0 -> timeout
+    end;
+receive_step({tag, Tag}) ->
+    receive
+        {Tag, Value} -> {matched, {Tag, Value}}
+    after 0 -> timeout
+    end;
+receive_step({guard, Kind}) ->
+    receive_guard(Kind, 0);
+receive_step({clauses, Wanted}) ->
+    receive
+        Wanted -> {matched, Wanted};
+        fallback -> {matched, fallback}
+    after 0 -> timeout
+    end;
+receive_step({any}) ->
+    receive
+        Message -> {matched, Message}
+    after 0 -> timeout
+    end.
 
 receive_guards(Kind, Timeout, Messages) ->
     isolated(fun() ->
