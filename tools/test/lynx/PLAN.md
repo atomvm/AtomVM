@@ -471,11 +471,25 @@ direct float-register division versus guard GC-BIF division, and map-pattern
 the two runs; all 467 transformed native probe/helper files contain `avmN` and no
 `Code` chunk. The matching precompiled library is used with on-demand JIT disabled;
 not every bundled library module is native. Recheck instruction selection on a
-new OTP compiler. The full 4,072-case corpus was not rerun for this addition.
+new OTP compiler.
 Evidence is under `.amp/in/artifacts/lynx-execution-paths-interpreter/`,
 `lynx-execution-paths-native/`, `lynx-execution-paths-tests.log`,
 `lynx-execution-paths-disassembly.txt`, `lynx-execution-paths-instruction-check.txt`,
 and `lynx-execution-paths-observations.json` (including runtime/library hashes).
+
+The subsequent full 4,072-case runtime recheck on 2026-11-11 matches 4,068 cases
+in each mode, retaining exactly the four known short-float formatting mismatches
+(`12300.0`, `0.00012`, `1.0e23`, `9.999999999999999e22`, all with `[short]`).
+There are zero new mismatches, target errors/timeouts, or unverified references.
+All 4,072 decoded target results agree across interpreter and aarch64 precompiled
+execution; the original 3,606 results also equal the saved interpreter baseline.
+All 4,073 native probe/helper files have `avmN` and no `Code` chunk. Both CLI runs
+exit nonzero for the four mismatches; none are skipped or allowlisted. No runtime
+changes were needed. Evidence is under `.amp/in/artifacts/lynx-paths-full-interpreter/`
+and `lynx-paths-full-native/`, with `lynx-paths-full-mode-comparison.txt`,
+`lynx-paths-full-native-chunks.txt`, and `lynx-paths-full-validation.json` recording
+the comparisons, configuration, source revision, runtime/library hashes, and
+failure expressions. This remains precompiled validation, not on-demand JIT.
 
 ## Rules for each batch
 

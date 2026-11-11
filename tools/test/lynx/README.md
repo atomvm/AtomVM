@@ -175,8 +175,12 @@ lookup BIFs. Compiler rewrites mean different source operators are not necessari
 different instructions; recheck disassembly when changing OTP versions.
 All 466 added cases match OTP in both interpreter and aarch64 precompiled modes,
 with zero failures or unverified references. Fourteen enabled CLI tests pass
-(one optional fixture test skipped). The expanded full corpus was not rerun for
-this addition; earlier full-run results below remain historical baselines.
+(one optional fixture test skipped). The subsequent full 4,072-case run in each
+mode matches 4,068 cases, retaining exactly the four known short-float formatting
+mismatches, with zero unverified references or target timeouts. All decoded
+results agree across modes, and the original 3,606 cases retain their saved
+interpreter results. Both full runs exit nonzero for the four mismatches; no
+failures are allowlisted. Earlier full-run results below are historical baselines.
 Evidence and execution-mode limitations are in [PLAN.md](PLAN.md).
 
 Before adding the 70 map-callback cases below, the 2026-11-10 host-interpreter
