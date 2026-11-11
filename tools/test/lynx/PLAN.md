@@ -398,8 +398,8 @@ Evidence is under `.amp/in/artifacts/lynx-receive-sequences-seed-20261112/`,
 - [ ] Exercise fixed boundary cases through the BIF and opcode paths where both
   exist. Inspect representative BEAM disassembly: equivalent source expressions
   need not exercise the same path across OTP versions.
-- [ ] Run interpreter and native/precompiled modes with matching runtime libraries.
-  Extend to on-demand JIT and representative 32-bit/embedded/emulated execution
+- [x] Run interpreter and native/precompiled modes with matching runtime libraries.
+- [ ] Extend to on-demand JIT and representative 32-bit/embedded/emulated execution
   in separate runner work; those modes are not supported by the current CLI.
 - [ ] Use a matching-word-size OTP oracle for representation-dependent recipes,
   especially numeric key-search compatibility. Define float32 expectations
@@ -419,6 +419,21 @@ Evidence is under `.amp/in/artifacts/lynx-receive-sequences-seed-20261112/`,
 Done when results identify the actual execution mode, target configuration,
 runtime/library hashes, and whether a timeout was semantic, oracle, or transport
 work. Cross-compilation alone does not count as target execution.
+
+Precompiled replay validated on 2026-11-11 against 64-bit OTP 29: a fresh
+Release aarch64 build uses `AVM_ENABLE_PRECOMPILED=ON`, `AVM_DISABLE_JIT=ON`,
+and the matching `atomvmlib-aarch64.avm`. All 1,000 saved cases from each of
+seeds `20261111` and `20261112` match OTP. The saved 3,606-case runtime corpus
+matches 3,602 cases, retaining exactly the four known short-float formatting
+mismatches, with zero unverified references. All 5,606 decoded native results
+also equal their saved interpreter results; the replay inputs are unchanged.
+Every probe/helper has an `avmN` chunk and no `Code` chunk, excluding bytecode
+fallback for those modules. Some bundled library modules remain interpreted;
+this does not validate on-demand JIT, scheduler interleavings, or other targets.
+No runtime changes were needed. Configuration, runtime/library SHA-256 hashes,
+counts, and evidence paths are in `.amp/in/artifacts/lynx-native-validation.json`;
+the three replay directories are `lynx-native-runtime/`, `lynx-native-map-dict/`,
+and `lynx-native-receive/` beneath `.amp/in/artifacts/`.
 
 ## Rules for each batch
 
