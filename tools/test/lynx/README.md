@@ -22,9 +22,9 @@ runtime error/timeout, or a failed prerequisite/reference/proof check.
 
 ## Generated inputs
 
-The default is 1,000 cases, reproducible with `--seed`. Sixteen fixed boundary cases
+The default is 1,000 cases, reproducible with `--seed`. Twenty-four boundary cases
 precede seeded exploration so short runs still exercise known dangerous edges.
-This generates inputs to five operation families, not arbitrary Erlang programs:
+This generates inputs to seven operation families, not arbitrary Erlang programs:
 
 - Numeric comparison: all eight equality/order operators, signed zeros,
   subnormal/extreme finite floats, and integer/float pairs around precision and
@@ -34,6 +34,14 @@ This generates inputs to five operation families, not arbitrary Erlang programs:
   magnitude; divide-by-zero errors are compared, not silently discarded.
 - Maps: scalar, tuple, map, and partial-bitstring keys; duplicate and signed-zero
   keys; insertion, lookup, removal, update, and comparison; sizes near 32 entries.
+- Map and process-dictionary sequences: an explicit initial binding list and
+  at most 72 operations, with every returned value/exception and intermediate
+  state compared. Include overwrites, missing entries, deletion/reinsertion,
+  clearing, stored `undefined`, exact-value key selection, unrelated sentinels,
+  and repeated growth/shrinkage across 32 entries. Keys include integer/float
+  and signed-zero pairs, compound terms, and seeded partial bitstrings. Map
+  sequences also exercise successful/rejected updates and takes. Enumeration
+  order is ignored, but exact-key bindings and counts are retained.
 - Bitstrings: signed big/little-endian construction and matching at varied bit
   offsets and widths through 255 bits, including zero-width and invalid-size
   controls. Full bitstrings and decoded results are compared.
@@ -94,7 +102,11 @@ including `--float-encoding`.
 `--shrink` attempts at most 30 reductions of the first generated failure and
 writes `minimized.json`. It simplifies numbers and nested keys and reruns each
 candidate against both real runtimes; compilation/oracle errors are not accepted
-as reductions. It preserves the distinction between value mismatches and target
+as reductions. Sequence reduction deletes chunks of operations while keeping
+initial bindings, remaining operation payloads, seed, and index unchanged.
+Keys/values are literal terms, not references to previous operation results;
+an operation rejected after deletion is still observed, and execution continues.
+It preserves the distinction between value mismatches and target
 errors. This is a bounded greedy reduction, **not a guarantee of a globally
 minimal case or the same underlying root cause**. Original failures remain intact.
 Replay files are trusted local input: they contain Erlang expressions to execute.
@@ -245,8 +257,9 @@ option precedence and invalid operands on both sides of empty/nonempty sets.
 All 329 set cases match OTP, with zero failures or unverified references.
 The expanded ordinary set suite passes on AtomVM and OTP; ten CLI integration
 tests pass, with one optional fixture test skipped. Formatting checks pass.
-The earlier full-corpus results predate these fixes; the current 3,606-case
-full corpus has not been run.
+A subsequent full 3,606-case interpreter run matches 3,602 cases, with only
+the four unchanged short-float formatting mismatches and zero unverified
+references. Evidence is under `.amp/in/artifacts/lynx-set-final-full/`.
 
 Another 44 key-search cases check interior tuple positions, skipped short tuples,
 first matches before improper tails, nested numeric equality, and exact map keys

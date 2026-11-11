@@ -9,6 +9,8 @@ import random
 
 
 def erlang(term):
+    if isinstance(term, list):
+        return "[" + ",".join(map(erlang, term)) + "]"
     if isinstance(term, dict):
         kind, values = next(iter(term.items()))
         if kind == "tuple":
@@ -83,6 +85,47 @@ def generate(seed, count, float_encoding=False):
             return {"bits": [rng.randrange(256), rng.choice([1, 3, 8, 9])]}
         return value
 
+    def sequence(kind, size, a, b):
+        def step(*items):
+            return {"tuple": list(items)}
+
+        # Setup is immutable during reduction. Filler keys cannot alias probes.
+        def filler(n):
+            return {"tuple": ["filler", n]}
+
+        setup = [step("sentinel", "untouched")]
+        setup += [step(filler(n), n) for n in range(size)]
+        steps = [step("get", a), step("put", a, "first"),
+                 step("put", a, "replaced"), step("put", b, "second"),
+                 step("get", a), step("get", b), step("selected", "second"),
+                 step("erase", a), step("get", a), step("get", b),
+                 step("erase", a), step("put", a, "reinserted")]
+        steps += [step("put", a, 0), step("put", b, 0.0),
+                  step("selected", 0), step("selected", 0.0)]
+        if kind == "map_sequence":
+            steps += [step("update", "missing", "bad"), step("update", a, "updated"),
+                      step("take", a), step("take", a), step("put", a, "reinserted")]
+        # Near-boundary setups grow through 32, shrink back, and regrow.
+        steps += [step("put", filler(n), n) for n in range(size, size + 4)]
+        steps += [step("erase", filler(n)) for n in range(max(0, size - 4), size + 4)]
+        steps += [step("put", filler(n), -n) for n in range(max(0, size - 4), size + 4)]
+        keys = [a, b, "missing", filler(0), filler(size + 3)]
+        operations = ["put", "get", "erase", "selected"]
+        if kind == "map_sequence":
+            operations += ["update", "take"]
+        for _ in range(rng.randint(8, 24)):
+            op, k = rng.choice(operations), rng.choice(keys)
+            if op in ["put", "update"]:
+                steps.append(step(op, k, number()))
+            elif op == "selected":
+                steps.append(step(op, rng.choice(["second", "undefined", 0, 0.0])))
+            else:
+                steps.append(step(op, k))
+        steps += [step("get", "sentinel"), step("clear"), step("get", a),
+                  step("put", b, "undefined"), step("get", b),
+                  step("selected", "undefined"), step("erase", b)]
+        return [setup, steps]
+
     # Guarantee the important asymmetric boundaries before random exploration.
     boundaries = [
         ("compare", [0.0, -0.0]),
@@ -97,25 +140,35 @@ def generate(seed, count, float_encoding=False):
         ("arithmetic", ["idiv", -(2**63), -1]),
     ]
     boundaries += [("float_bits", args) for args in encodings[:6]]
+    pairs = [(1, 1.0), (0.0, -0.0),
+             ({"tuple": ["key", 1]}, {"tuple": ["key", 1.0]}),
+             ({"map": [["v", 0.0]]}, {"map": [["v", -0.0]]})]
+    if not float_encoding:
+        for size, (a, b) in zip([0, 30, 31, 32], pairs):
+            for kind in ["map_sequence", "dictionary_sequence"]:
+                boundaries.append((kind, sequence(kind, size, a, b)))
     if float_encoding:
         boundaries = [("float_bits", args) for args in encodings]
     result = []
     for index in range(count):
         if index < len(boundaries):
             operation, args = boundaries[index]
-        elif float_encoding or index % 5 == 4:
+        elif float_encoding or index % 7 == 4:
             value, width = rng.choice(encodings[:-3])[:2]
             operation, args = "float_bits", [value, width, rng.choice([0, 1, 3, 7]), rng.choice(["big", "little"])]
-        elif index % 5 == 0:
+        elif index % 7 == 0:
             operation, args = "compare", [number(), number()]
-        elif index % 5 == 1:
+        elif index % 7 == 1:
             a = key()
             b = rng.choice([a, key(), 0.0, -0.0, 1, 1.0])
             operation, args = "maps", [a, b, rng.choice([0, 1, 2, 30, 31, 32, 33, 34])]
-        elif index % 5 == 2:
+        elif index % 7 == 2:
             value = rng.choice([-1, 0, 1, -257, 2**64 - 1, rng.getrandbits(120)])
             operation, args = "bits", [value, rng.choice([0, 1, 7, 8, 9, 31, 32, 63, 64, 65, 127, 128, 129, 255, -1]),
                                        rng.choice([0, 1, 3, 7, 8]), rng.choice(["big", "little"])]
+        elif index % 7 in [5, 6]:
+            operation = "map_sequence" if index % 7 == 5 else "dictionary_sequence"
+            args = sequence(operation, rng.choice([0, 30, 31, 32, 33]), key(), key())
         else:
             op = rng.choice(["add", "sub", "mul", "idiv", "mod", "shl", "shr", "band_op", "bxor_op", "fdiv"])
             a = rng.choice([0, -1, 2**63 - 1, -(2**63), rng.randint(-(2**119), 2**119)])
@@ -157,6 +210,21 @@ def reductions(value):
 
 
 def candidates(case):
+    if case["operation"] in ["map_sequence", "dictionary_sequence"]:
+        setup, steps = case["args"]
+        # Literal keys need no producer step. Keep setup and operation payloads
+        # intact, reducing only the trace; exceptions are caught per operation.
+        width = max(1, len(steps) // 2)
+        while width:
+            for start in range(0, len(steps) - width + 1, width):
+                remaining = steps[:start] + steps[start + width:]
+                if not remaining:
+                    continue
+                candidate = {**case, "args": [setup, remaining]}
+                candidate["expression"] = expression(candidate)
+                yield candidate
+            width //= 2
+        return
     seen = {json.dumps(case["args"], sort_keys=True)}
     for index, value in enumerate(case["args"]):
         if case["operation"] == "float_bits" and index != 0:

@@ -38,6 +38,9 @@ class ValidationTests(unittest.TestCase):
             work = Path(directory)
             first = work / "first"
             summary = self.invoke(first, "--seed", 42, "--generated", 32)
+            again = work / "again"
+            self.assertEqual(self.invoke(again, "--seed", 42, "--generated", 32), summary)
+            self.assertEqual((first / "cases.json").read_text(), (again / "cases.json").read_text())
             replay = work / "replay"
             self.assertEqual(self.invoke(replay, "--replay", first / "cases.json"), summary)
             self.assertEqual((first / "cases.json").read_text(), (replay / "cases.json").read_text())
@@ -59,7 +62,73 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(summary["laws"], 0)
             selected = json.loads((first / "cases.json").read_text())
             self.assertEqual({entry["operation"] for entry in selected},
-                             {"compare", "maps", "bits", "arithmetic", "float_bits"})
+                             {"compare", "maps", "bits", "arithmetic", "float_bits",
+                              "map_sequence", "dictionary_sequence"})
+            self.assertEqual(summary["passed"], 32)
+
+    def test_sequences_return_intermediate_results_and_exact_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            setup = [{"tuple": ["sentinel", "safe"]}]
+            steps = [{"tuple": s} for s in [
+                ["put", 1, "first"], ["put", 1.0, "second"],
+                ["put", 1, "replaced"], ["erase", 1], ["get", 1.0],
+                ["put", 1, "undefined"], ["selected", "undefined"],
+                ["clear"], ["get", 1],
+            ]]
+            map_steps = steps[:7] + [{"tuple": s} for s in [
+                ["update", "missing", "bad"], ["take", 1.0],
+                ["take", 1.0], ["update", 1, "updated"],
+            ]] + steps[7:]
+            source.write_text(json.dumps([
+                {"operation": "dictionary_sequence", "args": [setup, steps]},
+                {"operation": "map_sequence", "args": [setup, map_steps]},
+            ]))
+            output = work / "sequences"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 2, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            # Hand-written expectations catch tracing mistakes even if both
+            # runtimes agree on an incorrectly implemented probe.
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                [dictionary, map] = JSON.decode!(File.read!(path))["expected"]
+                  |> Enum.map(fn s -> :erlang.binary_to_term(Base.decode64!(s)) end)
+                s0 = %{sentinel: :safe}
+                s1 = %{1 => :first, :sentinel => :safe}
+                s2 = Map.put(s1, 1.0, :second)
+                s3 = %{s2 | 1 => :replaced}
+                s4 = %{1.0 => :second, :sentinel => :safe}
+                s5 = Map.put(s4, 1, :undefined)
+                ds = fn m -> {map_size(m), m, map_size(m),
+                              Map.new(Map.keys(m), &{&1, :present})} end
+                ms = fn m -> {map_size(m), m} end
+                expected_d = {{:ok, :undefined}, ds.(s1)}
+                {:ok, {initial_d, trace_d}} = dictionary
+                true = initial_d === ds.(s0)
+                true = trace_d === [expected_d,
+                  {{:ok, :undefined}, ds.(s2)}, {{:ok, :first}, ds.(s3)},
+                  {{:ok, :replaced}, ds.(s4)}, {{:ok, :second}, ds.(s4)},
+                  {{:ok, :undefined}, ds.(s5)},
+                  {{:ok, {1, %{1 => :present}}}, ds.(s5)},
+                  {{:ok, {3, s5}}, ds.(%{})}, {{:ok, :undefined}, ds.(%{})}]
+                s6 = %{1 => :undefined, :sentinel => :safe}
+                s7 = %{s6 | 1 => :updated}
+                {:ok, {initial_m, trace_m}} = map
+                true = initial_m === ms.(s0)
+                true = trace_m === [{{:ok, s1}, ms.(s1)}, {{:ok, s2}, ms.(s2)},
+                  {{:ok, s3}, ms.(s3)}, {{:ok, s4}, ms.(s4)},
+                  {{:ok, {:ok, :second}}, ms.(s4)}, {{:ok, s5}, ms.(s5)},
+                  {{:ok, {1, %{1 => :present}}}, ms.(s5)},
+                  {{:exception, :error, {:badkey, :missing}}, ms.(s5)},
+                  {{:ok, {:second, s6}}, ms.(s6)}, {{:ok, :error}, ms.(s6)},
+                  {{:ok, s7}, ms.(s7)}, {{:ok, s7}, ms.(%{})},
+                  {{:ok, :error}, ms.(%{})}]
+                """, str(output / "manifest.json")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_float_encoding_smoke_cases_have_known_byte_oracles(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -448,6 +517,25 @@ class ValidationTests(unittest.TestCase):
                 self.invoke(work / "replayed", "--build", build, "--replay", output / "minimized.json"),
                 summary,
             )
+            setup = [{"tuple": ["sentinel", 17]}, {"tuple": [1.0, "second"]}]
+            steps = [{"tuple": s} for s in [
+                ["put", 1, "first"], ["put", 1, "replaced"],
+                ["erase", 1], ["get", 1.0], ["put", 1, "reinserted"],
+            ]]
+            for operation in ["map_sequence", "dictionary_sequence"]:
+                source.write_text(json.dumps([
+                    {"seed": 123, "index": 7, "operation": operation, "args": [setup, steps]}
+                ]))
+                output = work / operation
+                self.assertEqual(self.invoke(output, "--build", build, "--replay", source, "--shrink"),
+                                 summary)
+                reduced = json.loads((output / "minimized.json").read_text())[0]
+                self.assertEqual(reduced["args"][0], setup)
+                self.assertEqual(len(reduced["args"][1]), 1)
+                self.assertIn(reduced["args"][1][0], steps)
+                self.assertEqual((reduced["seed"], reduced["index"]), (123, 7))
+                self.assertEqual(self.invoke(work / (operation + "-replay"), "--build", build,
+                                             "--replay", output / "minimized.json"), summary)
             runtime.write_text("#!/bin/sh\necho 'LYNX_RESULT [131]'\n")
             malformed = work / "malformed"
             self.assertEqual(self.invoke(malformed, "--build", build, "--replay", source), summary)

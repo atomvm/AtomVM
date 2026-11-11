@@ -6,6 +6,8 @@
     compare/2,
     arithmetic/3,
     maps/3,
+    map_sequence/2,
+    dictionary_sequence/2,
     bits/4,
     float_bits/4,
     call/3,
@@ -104,6 +106,76 @@ maps(A, B, Size) ->
 
 fill(0, Map) -> Map;
 fill(N, Map) -> fill(N - 1, Map#{N => N * 3}).
+
+map_sequence(Setup, Steps) ->
+    Map = maps:from_list(Setup),
+    {sequence_state(map, Map), sequence(map, Steps, Map)}.
+
+dictionary_sequence(Setup, Steps) ->
+    erase(),
+    try
+        lists:foreach(fun({K, V}) -> put(K, V) end, Setup),
+        {sequence_state(dictionary, unused), sequence(dictionary, Steps, unused)}
+    after
+        erase()
+    end.
+
+sequence(_Kind, [], _State) ->
+    [];
+sequence(Kind, [Step | Steps], State) ->
+    {Result, Next} =
+        try sequence_step(Kind, Step, State) of
+            {Value, Updated} -> {{ok, Value}, Updated}
+        catch
+            Class:Reason -> {{exception, Class, Reason}, State}
+        end,
+    [{Result, sequence_state(Kind, Next)} | sequence(Kind, Steps, Next)].
+
+sequence_state(map, Map) ->
+    map_entries(Map);
+sequence_state(dictionary, _) ->
+    Entries = get(),
+    Keys = get_keys(),
+    {
+        length(Entries),
+        maps:from_list(Entries),
+        length(Keys),
+        maps:from_list([{K, present} || K <- Keys])
+    }.
+
+sequence_step(map, {put, K, V}, Map) ->
+    Next = maps:put(K, V, Map),
+    {Next, Next};
+sequence_step(map, {update, K, V}, Map) ->
+    Next = maps:update(K, V, Map),
+    {Next, Next};
+sequence_step(map, {get, K}, Map) ->
+    {maps:find(K, Map), Map};
+sequence_step(map, {erase, K}, Map) ->
+    Next = maps:remove(K, Map),
+    {Next, Next};
+sequence_step(map, {take, K}, Map) ->
+    case maps:take(K, Map) of
+        error -> {error, Map};
+        {V, Next} -> {{V, Next}, Next}
+    end;
+sequence_step(map, {selected, V}, Map) ->
+    Keys = [K || {K, Value} <- maps:to_list(Map), Value =:= V],
+    {{length(Keys), maps:from_list([{K, present} || K <- Keys])}, Map};
+sequence_step(map, {clear}, Map) ->
+    {Map, #{}};
+sequence_step(dictionary, {put, K, V}, State) ->
+    {put(K, V), State};
+sequence_step(dictionary, {get, K}, State) ->
+    {get(K), State};
+sequence_step(dictionary, {erase, K}, State) ->
+    {erase(K), State};
+sequence_step(dictionary, {selected, V}, State) ->
+    Keys = get_keys(V),
+    {{length(Keys), maps:from_list([{K, present} || K <- Keys])}, State};
+sequence_step(dictionary, {clear}, State) ->
+    Entries = erase(),
+    {{length(Entries), maps:from_list(Entries)}, State}.
 
 %% Enumeration order is unspecified; retain bindings and detect duplicates.
 map_entries(Map) ->
