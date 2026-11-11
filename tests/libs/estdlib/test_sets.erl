@@ -58,7 +58,9 @@ test_from_list() ->
     ?ASSERT_MATCH(sets:is_element(1, Set), true),
     ?ASSERT_MATCH(sets:is_element(1.0, Set), true),
     ?ASSERT_MATCH(sets:is_element(<<"hello">>, Set), true),
-    ?ASSERT_ERROR(sets:from_list([a | bad], []), badarg),
+    % OTP 27 defaults to v1, which raises function_clause instead of badarg.
+    ?ASSERT_ERROR(sets:from_list([a | bad], [])),
+    ?ASSERT_ERROR(sets:from_list([a | bad], [{version, 2}]), badarg),
     ok.
 
 test_constructor_options() ->
