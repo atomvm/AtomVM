@@ -50,6 +50,7 @@ start() ->
     ok = test_is_record_2_runtime(),
     ok = test_is_record_3(),
     ok = test_bigint_default(),
+    ok = test_ets_bag_record_keys(),
     ok = test_get_record_field_anonymous_id(),
     ok = test_get_record_field_remote_checks(),
     ok = test_is_record_opcodes(),
@@ -196,6 +197,22 @@ test_is_record_3() ->
     false = erlang:is_record(T, PairName, ?MODULE:id(2)),
     false = erlang:is_record(P, PairName, ?MODULE:id(3)),
     ok = expect_badarg(fun() -> erlang:is_record(P, ?MODULE:id(1), PairName) end),
+    ok.
+
+test_ets_bag_record_keys() ->
+    T = ets:new(test_native_records_bag, [bag]),
+    K1 = ?MODULE:id(#pair{a = 1, b = [x, y]}),
+    K2 = ?MODULE:id(#pair{a = 2, b = [x, y]}),
+    K3 = ?MODULE:id(#point{x = 1, y = 2, z = 3}),
+    true = ets:insert(T, [{K1, one}, {K1, uno}, {K2, two}, {K3, three}]),
+    case ets:lookup(T, K1) of
+        [{K1, one}, {K1, uno}] -> ok;
+        [{K1, uno}, {K1, one}] -> ok
+    end,
+    [{K2, two}] = ets:lookup(T, K2),
+    [{K3, three}] = ets:lookup(T, K3),
+    [] = ets:lookup(T, ?MODULE:id(#pair{a = 3, b = []})),
+    true = ets:delete(T),
     ok.
 
 %% Defaults that don't fit in 64 bits use the extended integer encoding.
