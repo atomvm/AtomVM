@@ -12,6 +12,8 @@
     map_entries/1,
     map_fold/2,
     map_callback/3,
+    set_elements/1,
+    set_algebra/2,
     dictionary/2,
     float_text/2,
     short_circuit/3,
@@ -91,6 +93,44 @@ fill(N, Map) -> fill(N - 1, Map#{N => N * 3}).
 map_entries(Map) ->
     Entries = maps:to_list(Map),
     {length(Entries), maps:from_list(Entries)}.
+
+%% Observe public elements, not the set representation or enumeration order.
+%% Exact keys distinguish 1 from 1.0; retaining counts detects duplicates.
+set_elements(Set) ->
+    Elements = sets:to_list(Set),
+    {
+        sets:size(Set),
+        sets:is_empty(Set),
+        length(Elements),
+        maps:from_list([{E, present} || E <- Elements])
+    }.
+
+set_algebra(Left, Right) ->
+    A = sets:from_list(Left, [{version, 2}]),
+    B = sets:from_list(Right, [{version, 2}]),
+    Union = sets:union(A, B),
+    Intersection = sets:intersection(A, B),
+    LeftOnly = sets:subtract(A, B),
+    RightOnly = sets:subtract(B, A),
+    #{
+        left => set_elements(A),
+        right => set_elements(B),
+        union => set_elements(Union),
+        intersection => set_elements(Intersection),
+        left_only => set_elements(LeftOnly),
+        right_only => set_elements(RightOnly),
+        subset => {sets:is_subset(A, B), sets:is_subset(B, A)},
+        disjoint => {sets:is_disjoint(A, B), sets:is_disjoint(B, A)},
+        equal => {sets:is_equal(A, B), sets:is_equal(B, A)},
+        relations => {
+            sets:is_equal(Union, sets:union(B, A)),
+            sets:is_equal(Intersection, sets:intersection(B, A)),
+            sets:is_equal(A, sets:union(LeftOnly, Intersection)),
+            sets:is_equal(A, sets:intersection(A, Union)),
+            sets:is_disjoint(LeftOnly, RightOnly),
+            sets:size(Union) + sets:size(Intersection) =:= sets:size(A) + sets:size(B)
+        }
+    }.
 
 map_fold(Map, valid) ->
     maps:fold(fun(K, V, Acc) -> Acc#{K => V} end, #{}, Map);

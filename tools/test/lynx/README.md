@@ -107,11 +107,12 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **3,277 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **3,606 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
-search/split, maps, process dictionaries, comparison, effectful short circuit,
-timeout validation with retained mailboxes, monitored process/reference/dictionary
-handshakes, lifecycle combinations, and UTF-8/16/32 construction/matching. UTF cases
+search/split, maps, version-2 set algebra, process dictionaries, comparison,
+effectful short circuit, timeout validation with retained mailboxes,
+monitored process/reference/dictionary handshakes, lifecycle combinations,
+and UTF-8/16/32 construction/matching. UTF cases
 include malformed, incomplete, unaligned, and valid codepoints with invalid suffixes. Child identities
 are compared within each run, never serialized as cross-runtime expectations.
 This mode uses **AtomVM's bundled standard library**, not OTP's `lists.beam`.
@@ -124,8 +125,9 @@ Before adding the 70 map-callback cases below, the 2026-11-10 host-interpreter
 rebaseline matched 2,942 cases and retained four `[short]` float-formatting
 mismatches, with zero unverified references. Short
 formatting remains outside the planned fixes; those cases are still failures,
-so the full runtime corpus exits nonzero. New hashing/sets model sites do not
-yet have selected recipes; the inventory must not be read as complete coverage.
+so the full runtime corpus exits nonzero. Hashing model sites do not yet have
+selected recipes; the inventory must not be read as complete coverage. The set
+extension below records option/input differences and their fixes.
 
 An additional 116 integer-text recipes extend decimal model samples to binary
 and list parsing/formatting in bases 2, 10, 16, and 36. They check signs, leading
@@ -189,6 +191,60 @@ still checks four fresh laws, matches 2,127 calls, and reports four unresolved
 OTP generator references with no differential failures. The ordinary map suite,
 483 core test modules, and nine CLI tests pass; one optional fixture integration
 test is skipped (the full fixture corpus is run separately).
+
+Another 329 set recipes cover construction/deduplication, exact membership,
+size/emptiness, add/delete, equality, binary and multi-set union/intersection,
+subtraction in both directions, subset, and disjointness. Version 2 is explicit
+in algebra operations. Inputs include integer/float and signed-zero distinctions,
+nested keys, boxed integers, bitstrings, and asymmetric overlaps at sizes
+3/4/5, 31/32/33, and 63/64/65. Public `to_list/1` elements are normalized to
+an exact-key membership map plus size, emptiness, and enumeration count; no
+set layout or unspecified traversal order is compared. Concrete outputs accompany
+bounded commutativity, absorption, partition, disjointness, and cardinality
+observations. Attribution to the model's `membership`, `size`, and `creation`
+sites does not check theorem premises or the deliberately `unmodeled` site.
+
+Before the empty-option fix below, the focused interpreter run on OTP 29
+(ERTS 17.1.1, 64-bit) matches 273 cases,
+reports 18 differences, and leaves zero unverified references. All explicit-v2
+algebra cases match. Twelve differences concern constructor options: OTP accepts
+`[]`, `[{ignored,true}]`, and `[{version,2}|bad]`, while AtomVM rejects them;
+`[version]`, `[{version,3}]`, and `[{version,bad}]` produce different exception
+reasons. Six more differences concern `subtract/2` and `is_subset/2` with an
+empty left set and an invalid right operand (`bad`, `[]`, or `{set}`): OTP
+returns an empty set or `true`, while AtomVM raises `function_clause`. These
+are diagnostics, not newly blessed target behavior; invalid-input results do
+not imply version-1 support is required. No runtime fixes or new proofs are
+part of this extension. Ten CLI tests pass, including independent concrete set
+oracles; one optional full-fixture test is skipped.
+
+Before that fix, the full 3,568-case interpreter run matches 3,546 cases, with the 18 set
+differences above and four unchanged `[short]` float-formatting mismatches.
+There are zero unverified references and zero fresh laws. It still exits
+nonzero; failures remain visible and replayable rather than being allowlisted.
+
+The empty-option follow-up makes `sets:new([])` delegate to `new/0` and
+`sets:from_list(List, [])` delegate to `from_list/1`, preserving default version 2.
+The same 291-case set replay now matches 275 cases, retains the other 16
+differences, and has zero unverified references or new differences. The ordinary
+set tests fail before the fix and pass afterward on AtomVM and OTP, including
+deduplication, exact numeric membership, empty input, and invalid-list rejection.
+Other option handling is unchanged. The full runtime corpus was not rerun after
+this localized fix.
+
+The remaining-option/invalid-operand follow-up resolves the other 16 set
+differences. Constructors use `proplists:get_value/3` for ignored options,
+first-option precedence, improper tails, and OTP-style invalid-version errors.
+Version 1 remains unsupported and still raises `function_clause`. Subtraction
+and subset retain their map fast paths and add OTP's filter/fold fallbacks:
+empty left sets do not inspect the right operand, while nonempty sets still
+reject invalid right operands. Another 38 differential controls check duplicate
+option precedence and invalid operands on both sides of empty/nonempty sets.
+All 329 set cases match OTP, with zero failures or unverified references.
+The expanded ordinary set suite passes on AtomVM and OTP; ten CLI integration
+tests pass, with one optional fixture test skipped. Formatting checks pass.
+The earlier full-corpus results predate these fixes; the current 3,606-case
+full corpus has not been run.
 
 Another 44 key-search cases check interior tuple positions, skipped short tuples,
 first matches before improper tails, nested numeric equality, and exact map keys

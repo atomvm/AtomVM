@@ -296,6 +296,59 @@ class ValidationTests(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_set_recipes_preserve_exact_elements_and_operand_direction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            expressions = [
+                "differential:set_algebra([a,b],[b,c,d])",
+                "differential:set_algebra([1],[1.0])",
+                "differential:set_algebra([a],[a,b,c])",
+                "differential:set_elements(sets:from_list([1,1.0,1],[{version,2}]))",
+                "begin S=sets:from_list([1],[{version,2}]),"
+                "{sets:is_element(1,S),sets:is_element(1.0,S),"
+                "differential:set_elements(sets:del_element(1.0,S))} end",
+                "differential:set_elements(sets:intersection([]))",
+            ]
+            source.write_text(json.dumps([{"expression": e} for e in expressions]))
+            output = work / "results"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 6, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                [overlap, numeric, subset, duplicates, membership, invalid] =
+                  JSON.decode!(File.read!(path))["expected"]
+                  |> Enum.map(&:erlang.binary_to_term(Base.decode64!(&1)))
+                {:ok, %{
+                  left: {2, false, 2, %{a: :present, b: :present}},
+                  right: {3, false, 3, %{b: :present, c: :present, d: :present}},
+                  union: {4, false, 4, %{a: :present, b: :present, c: :present, d: :present}},
+                  intersection: {1, false, 1, %{b: :present}},
+                  left_only: {1, false, 1, %{a: :present}},
+                  right_only: {2, false, 2, %{c: :present, d: :present}},
+                  subset: {false, false}, disjoint: {false, false}, equal: {false, false},
+                  relations: {true, true, true, true, true, true}
+                }} = overlap
+                {:ok, %{
+                  union: {2, false, 2, %{1 => :present, 1.0 => :present}},
+                  intersection: {0, true, 0, empty},
+                  left_only: {1, false, 1, %{1 => :present}},
+                  right_only: {1, false, 1, %{1.0 => :present}},
+                  subset: {false, false}, disjoint: {true, true}, equal: {false, false},
+                  relations: {true, true, true, true, true, true}
+                }} = numeric
+                0 = map_size(empty)
+                {:ok, %{subset: {true, false}, left_only: {0, true, 0, empty},
+                        right_only: {2, false, 2, %{b: :present, c: :present}}}} = subset
+                {:ok, {2, false, 2, %{1 => :present, 1.0 => :present}}} = duplicates
+                {:ok, {true, false, {1, false, 1, %{1 => :present}}}} = membership
+                {:exception, :error, :function_clause} = invalid
+                """, str(output / "manifest.json")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     def test_function_recipes_have_independent_result_oracles(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)

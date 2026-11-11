@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   `e3d8c68281058d21a31aa5ac8e6a7e0b83db4aeb` in batch 1.
 - `fixtures.py` selects 2,273 calls with metadata for all 191 exports in 12
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 3,277 public-behavior recipes inspired by Lean tests.
+- `lean_runtime.py` selects 3,606 public-behavior recipes inspired by Lean tests.
   Source attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks fixture laws. Five integer singleton-sum instances also
   require the proved postcondition to be true on both VMs. Other matching
@@ -31,7 +31,8 @@ runner semantics in [README.md](README.md).
 
 The supported checkout has 25 Lean test files, including newly added
 `Modules/Hashing.lean` and `Modules/Sets.lean`, versus the previous 23-file
-baseline. Both new modules currently have no attributed recipes. Batch 1's
+baseline. Hashing still has no attributed recipes; batch 5 adds finite set
+samples without interpreting the deliberately unmodeled theorem. Batch 1's
 validation establishes fixture integration, not complete runtime-model support.
 
 ## Coverage batches
@@ -255,20 +256,85 @@ not merely a result of the expected type.
 
 ### 5. Add version-2 set algebra
 
-- [ ] Cover construction, duplicate elimination, exact membership, size, union,
+- [x] Cover construction, duplicate elimination, exact membership, size, union,
   intersection, subtraction, subset, and disjointness through supported public
   APIs. Include empty/disjoint/overlapping sets and numeric type distinctions.
-- [ ] Request version 2 explicitly where representation matters. Observe sets by
+- [x] Request version 2 explicitly where representation matters. Observe sets by
   membership, size, and normalized elements rather than incidental map layout.
-- [ ] Check invalid options/inputs against OTP separately from model examples.
+- [x] Check invalid options/inputs against OTP separately from model examples.
   The model intentionally ignores requested version 1 and leaves some inputs
   unmodeled; neither choice is an AtomVM compatibility requirement.
-- [ ] Check algebraic relations on bounded inputs with asymmetric controls, while
+- [x] Check algebraic relations on bounded inputs with asymmetric controls, while
   keeping model-inspired properties distinct from freshly checked fixture laws.
 
 Owners: `lean_runtime.py`, `differential.erl`, `test_validate.py`. Done when tests
 catch loose numeric membership, lost elements, duplicate counts, and reversed
 subtraction, without treating model exhaustion as an Erlang exception.
+
+Added on 2026-11-11: 291 OTP differential recipes attributed to `membership`,
+`size`, and `creation`. The `unmodeled` theorem is deliberately not sampled.
+Cases cover both operand orders; nested numeric keys, signed zeros, boxed
+integers and bitstrings; duplicate additions and deletions; multi-set
+union/intersection; and sizes 3/4/5, 31/32/33, and 63/64/65 with asymmetric
+overlap ratios around the intersection/subtraction heuristics. Observations retain public size,
+emptiness, enumeration count, and exact-key element membership. Concrete
+operation results accompany commutativity, absorption, partition, disjointness,
+and cardinality relations; these are not newly proved fixture laws.
+
+Before the empty-option follow-up below, focused interpreter validation with
+OTP 29 (ERTS 17.1.1, 64-bit) matches 273
+cases, reports 18 differences, and leaves zero unverified references. All
+explicit-v2 algebra cases match. The differences are retained as failures:
+
+- Six option calls succeed on OTP but fail with `function_clause` on AtomVM:
+  `new/1` and `from_list/2` with `[]`, `[{ignored,true}]`, or
+  `[{version,2}|bad]`.
+- Six invalid-option calls report OTP `case_clause` versus AtomVM
+  `function_clause`: `[version]`, `[{version,3}]`, and `[{version,bad}]`
+  for both constructors.
+- Six invalid-right-operand calls return an empty set or `true` on OTP but
+  fail with `function_clause` on AtomVM: `subtract/2` and `is_subset/2` with
+  an empty left set and `bad`, `[]`, or `{set}` on the right.
+
+These results distinguish supported-input gaps from out-of-contract error and
+short-circuit differences; they do not add version-1 support or change runtime
+behavior. Ten CLI integration tests pass, including independent concrete
+oracles for exact elements, duplicate counts, subset direction, and asymmetric
+subtraction; one optional full-fixture test is skipped. Focused evidence and
+replayable failures are under `.amp/in/artifacts/lynx-set-algebra-final/`.
+
+Before that follow-up, the full 3,568-case interpreter run matches 3,546 cases, reports the same 18
+set differences plus the four unchanged short-float-formatting mismatches,
+and leaves zero unverified references. It checks zero fresh laws and exits
+nonzero; no differences are allowlisted or counted as passes. Full evidence is
+under `.amp/in/artifacts/lynx-set-algebra-full/`.
+
+Empty-option follow-up on 2026-11-11: `new([])` and `from_list(List, [])`
+now delegate to the default constructors; other options are unchanged. The
+ordinary `test_sets` regression fails on the original runtime at `new([])` and
+passes after rebuilding the library, on both AtomVM and OTP. It also checks
+empty-list construction, duplicate elimination, integer/float membership, and
+invalid-list rejection with empty options. Replaying all 291 set cases matches
+275, retains 16 differences, and leaves zero unverified references. Comparing
+failure sets confirms exactly the two empty-option failures were resolved and
+none were added. The full runtime corpus was not rerun for this localized fix.
+Evidence is under `.amp/in/artifacts/sets-empty-options-differential/` and
+the sibling `sets-empty-options-*.log` files.
+
+Remaining-difference follow-up on 2026-11-11: constructors now use the shared
+property-list parser; unsupported v1 requests explicitly retain their prior
+`function_clause` rejection. Invalid versions match OTP's `case_clause`
+reasons. `subtract/2` and `is_subset/2` keep the map/map fast paths and add
+OTP's general filter/fold fallbacks, which skip right-operand inspection only
+when the left set is empty. Thirty-eight added recipes check first-option
+precedence and invalid operands against both empty and nonempty valid sets.
+All 329 set cases match OTP with zero failures or unverified references,
+including all 16 previously failing expressions. Expanded `test_sets` cases
+fail before this change and pass afterward on AtomVM and OTP; separate target
+checks confirm v1 constructors still reject. Ten CLI tests pass (one optional
+fixture test skipped), and erlfmt checks pass. The full 3,606-case runtime corpus
+has not been rerun. Evidence is in `.amp/in/artifacts/sets-edge-options-differential/`
+and sibling `sets-edge-options-*.log` files.
 
 ### 6. Generate bounded operation sequences
 

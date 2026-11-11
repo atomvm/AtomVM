@@ -210,6 +210,74 @@ def cases():
         call(l, ["member_found", "member_exact", "member_improper", "member_non_list"],
              "member", value, items, module="lists")
 
+    s = "Modules/Sets"
+    # Model-inspired public v2 behavior, not the model's version-1 coercion or
+    # exhaustion. Normalize to_list results with exact keys, never lists:sort/1.
+    for constructor in ["sets:new()", "sets:new([{version,2}])"]:
+        probe(s, "creation", f"differential:set_elements({constructor})")
+    for items in ["[]", "[a,a,b]", "[1]", "[1.0]", "[0.0]", "[-0.0]",
+                  "[1,1.0,1,0.0,-0.0,0]",
+                  "[{1},{1.0},[1],[1.0],#{1=>a},#{1.0=>a},<<5:3>>,1 bsl 100]"]:
+        for options in ["", ",[{version,2}]"]:
+            probe(s, ["creation", "size"],
+                  f"differential:set_elements(sets:from_list({items}{options}))")
+        for key in ["a", "1", "1.0", "-0.0", "0.0", "0", "{1.0}",
+                    "[1.0]", "#{1.0=>a}", "1 bsl 100", "missing"]:
+            probe(s, "membership",
+                  f"sets:is_element({key},sets:from_list({items},[{{version,2}}]))")
+    pairs = [
+        ("[]", "[]"), ("[]", "[a,b]"), ("[a]", "[b,c]"),
+        ("[a,b]", "[b,c,d]"), ("[a,b,a]", "[b,a]"), ("[a]", "[a,b,c]"),
+        ("[1,0.0,{1},[1],#{1=>a}]", "[1.0,-0.0,{1.0},[1.0],#{1.0=>a}]"),
+        ("[1 bsl 100,<<5:3>>,<<1,2>>]", "[1 bsl 100,<<1:1>>,a]")
+    ]
+    # Small heuristic boundaries and map sizes either side of 32/64. Overlaps
+    # straddle subtraction's quarter-size shortcut and the 75% keep threshold.
+    for size in [3, 4, 5, 31, 32, 33, 63, 64, 65]:
+        left = f"lists:seq(1,{size})"
+        for overlap in sorted({0, size // 4, size // 4 + 1, (size * 3) // 4, size}):
+            right = f"lists:seq({size - overlap + 1},{size + 3})"
+            pairs.append((left, right))
+    for left, right in pairs:
+        for a, b in ([(left, right)] if left == right else [(left, right), (right, left)]):
+            probe(s, ["membership", "size"], f"differential:set_algebra({a},{b})")
+    for items in ["[]", "[a]", "[1,1.0]", "[1 bsl 100,<<5:3>>]"]:
+        for key in ["a", "1.0", "{nested,[1]}"]:
+            probe(s, ["membership", "size"],
+                  f"begin S=sets:from_list({items},[{{version,2}}]),"
+                  f"Added=sets:add_element({key},S),"
+                  f"{{differential:set_elements(Added),"
+                  f"differential:set_elements(sets:add_element({key},Added)),"
+                  f"differential:set_elements(sets:del_element({key},S)),"
+                  f"differential:set_elements(sets:del_element({key},Added))}} end")
+    for lists in ["[]", "[[]]", "[[a,b]]", "[[a,b],[b,c],[b,d]]",
+                  "[[a,b],[],[a]]", "[[1,1.0],[1.0],[1.0,2]]"]:
+        for operation in ["union", "intersection"]:
+            probe(s, "membership",
+                  f"differential:set_elements(sets:{operation}("
+                  f"[sets:from_list(L,[{{version,2}}]) || L <- {lists}]))")
+    # OTP decides input/option outcomes, including differences. No version-1
+    # representation is compared and no model exhaustion is an expected error.
+    for items in ["bad", "{}", "[a|bad]"]:
+        for options in ["", ",[{version,2}]"]:
+            call(s, "creation", "from_list", items + options, module="sets")
+    for options in ["[]", "[{ignored,true}]", "[version]", "bad", "{}",
+                    "[{version,3}]", "[{version,bad}]", "[{version,2}|bad]",
+                    "[{version,2},{version,bad}]", "[{version,3},{version,2}]",
+                    "[{ignored,true},{version,2}]", "[version,{version,2}]"]:
+        for constructor in [f"sets:new({options})", f"sets:from_list([a,a,b],{options})"]:
+            probe(s, "creation", f"differential:set_elements({constructor})")
+    for invalid in ["bad", "[]", "{set}"]:
+        call(s, "membership", "is_element", "a", invalid, module="sets")
+        call(s, "size", "size", invalid, module="sets")
+        for operation in ["union", "intersection", "subtract", "is_subset", "is_disjoint"]:
+            for valid in ["sets:new([{version,2}])", "sets:from_list([a],[{version,2}])"]:
+                for left, right in [(invalid, valid), (valid, invalid)]:
+                    expression = f"differential:call(sets,{operation},[{left},{right}])"
+                    if operation in ["union", "intersection", "subtract"]:
+                        expression = f"differential:set_elements({expression})"
+                    probe(s, "membership", expression)
+
     m = "Modules/Maps"
     for value in ["#{}", "#{a=>1,b=>2}", "#{1=>one,1.0=>float,0.0=>pos,-0.0=>neg}", "1", "[]", "{}"]:
         for key in ["a", "missing", "1", "1.0", "-0.0"]:
