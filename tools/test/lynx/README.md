@@ -406,8 +406,8 @@ With `--lynx`, `mix` and `lake` must also be on PATH with the Elixir/Lean versio
 required by that checkout. Mix/Lake may build their normal caches. The fixture
 API currently targets Lynx revision `b9be5b8e6e4a1330685ef60ff150903e90670d4c`
 (rebaselined from `e3d8c68281058d21a31aa5ac8e6a7e0b83db4aeb`). On OTP 29
-(ERTS 17.1.1), Elixir 1.20.5, and Lean 4.35.0, fresh fixture verification checks
-four laws; the 2,131-call interpreter run matches 2,127 references, with zero
+(ERTS 17.1.1), Elixir 1.20.5, and Lean 4.35.0, the original rebaseline checked
+four laws; its 2,131-call interpreter run matched 2,127 references, with zero
 differential failures, four unresolved OTP references, and no uncovered exports.
 Lynx's own `mix test.all` also passes. This supports the fixture integration,
 not every public API in the expanded model: see [the inventory review](PLAN.md#inventory-review)
@@ -439,7 +439,7 @@ the fixtures and freshly check their laws. The assertion marker alone does not
 invoke Lean or establish a proof. This checks finite runtime instances of a
 proved model property, not correctness of the VM or the translation/compiler.
 
-The corpus contains **2,131 calls covering all 191 exports in 12 fixture modules**
+The corpus contains **2,273 calls covering all 191 exports in 12 fixture modules**
 at the pinned revision. It includes:
 
 - Literal pooling, numeric/map-key boundaries, recursive base/step/error cases,
@@ -459,6 +459,19 @@ at the pinned revision. It includes:
 - Selective receive, guards, aliases, repeated variables, nested receives, and
   valid/invalid timeouts. Queued messages are deterministic; both the selected
   result and remaining mailbox are checked, without asserting elapsed timing.
+
+The map-comprehension extension adds 142 OTP differential recipes across seven
+existing `named_locals` exports, without adding proofs or runtime assertions.
+It checks last-write-wins list collisions, skipped patterns, improper tails,
+exact numeric and boxed keys, strict generators, lazy inner-generator validation,
+and nested/filtered generators. Runtime-created maps span sizes 0, 1, 2, 31, 32,
+33, 63, 64, and 65. Unordered generator results retain exact bindings and item
+counts; colliding map-to-map results check the output key set and validity of
+chosen bindings, without assuming a winning source key or traversal order.
+
+All 142 added cases match OTP 29. The expanded interpreter run matches 2,269 of
+2,273 cases, with zero mismatches and the same four unverified zero-width-generator
+references; those unresolved cases still make the full run exit nonzero.
 
 `coverage.json` inventories the **actual compiled exports**, with selected,
 matched, failed, and unverified call counts per export. A full fixture run exits

@@ -9,12 +9,12 @@ Grow coverage by observable behavior, proof premises, and execution path, not
 just by adding cases. Keep this plan current as batches land; keep commands and
 runner semantics in [README.md](README.md).
 
-## Baseline — 2026-11-10
+## Current baseline
 
 - The supported fixture revision is Lynx
   `b9be5b8e6e4a1330685ef60ff150903e90670d4c`, rebaselined from
   `e3d8c68281058d21a31aa5ac8e6a7e0b83db4aeb` in batch 1.
-- `fixtures.py` selects 2,131 calls with metadata for all 191 exports in 12
+- `fixtures.py` selects 2,273 calls with metadata for all 191 exports in 12
   translation-fixture modules. This is direct-call coverage, not branch coverage.
 - `lean_runtime.py` selects 3,277 public-behavior recipes inspired by Lean tests.
   Source attribution is not an assertion of theorem premises or proof coverage.
@@ -34,7 +34,10 @@ The supported checkout has 25 Lean test files, including newly added
 baseline. Both new modules currently have no attributed recipes. Batch 1's
 validation establishes fixture integration, not complete runtime-model support.
 
-## Next batches, in order
+## Coverage batches
+
+Current priority is more OTP differential coverage of existing fixtures and
+public behavior. New proof-to-runtime integration in batch 2 is deferred.
 
 ### 1. Reconcile the Lynx revision and inventory
 
@@ -152,7 +155,7 @@ including replay, rather than being accepted as matching OTP.
 - [x] Add public iterator observations for empty, partially consumed,
   exhausted, and malformed iterators. Do not compare internal iterator layouts or
   invoke `erts_internal` model adapters as portable VM contracts.
-- [ ] Extend map-comprehension observations beyond the existing fixture recipes.
+- [x] Extend map-comprehension observations beyond the existing fixture recipes.
 - [x] Include map sizes around 32 entries and callbacks retaining boxed values
   across allocation. First check which operations AtomVM exposes; missing APIs
   remain reported failures and get separate implementation decisions.
@@ -197,6 +200,41 @@ execution is claimed for this integration.
 Owners: `lean_runtime.py`, `differential.erl`, `test_validate.py`. Done when tests
 distinguish swapped callback arguments, loose key matching, unwanted callback
 execution, and skipped entries, without assuming traversal order.
+
+#### Map-comprehension extension
+
+Added 142 differential calls to seven existing `named_locals` exports in
+`fixtures.py`, without changing Lynx sources, runtime code, or proof assertions:
+
+- List-to-map comprehensions: nonadjacent duplicate keys retain the last value;
+  mismatching tuple patterns are skipped; improper tails are rejected. Keys
+  include integer/float distinctions, signed zeros, nested maps, improper lists,
+  partial bitstrings, and boxed integers.
+- Map generators and nested map/list comprehensions: observe exact bindings and
+  multiplicity without depending on enumeration order. Empty outer generators
+  and failing guards suppress invalid inner generators; invalid outer generators
+  still fail. Filtered results retain duplicate list contributions.
+- Strict map generators: all-match controls and exactly one nonmatching entry,
+  avoiding dependence on which failing map entry is visited first.
+- Map-to-map collisions: observe the exact output key set and validate each
+  chosen binding against the input, not an unspecified winning source key.
+- Runtime-created maps with boxed values at sizes 0, 1, 2, 31, 32, 33, 63, 64,
+  and 65, including overwrites and collision-heavy outputs.
+
+The focused host-interpreter run matches all 142 OTP references, with zero
+mismatches or unverified references. Its seven selected exports are not a claim
+of full fixture coverage. Evidence is under
+`.amp/in/artifacts/lynx-map-comprehensions-focused-v2/`.
+
+The full 2,273-call interpreter run on OTP 29 (ERTS 17.1.1) matches 2,269 cases,
+with zero mismatches, the same four unverified zero-width-generator references,
+and zero uncovered exports. It still exits nonzero for those unverified cases.
+Nine CLI tests pass; the optional full-fixture test is skipped, with the full run
+executed separately. Seven independently specified result checks and negative
+controls for observation normalization also pass. Full-run evidence is under
+`.amp/in/artifacts/lynx-map-comprehensions-full/`; companion logs use the
+`lynx-map-comprehensions-` prefix. No native/JIT, embedded, or 32-bit execution is
+claimed for this extension.
 
 ### 4. Add portable hashing coverage
 
