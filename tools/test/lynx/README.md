@@ -597,6 +597,15 @@ library. Neither covers on-demand JIT compilation, scheduler interleavings, GC
 stress, or embedded platforms. No CI workflow or Lynx dependency is added to the
 normal AtomVM build/tests. Run `--help` for options.
 
+The 2026-11-11 aarch64 precompiled replay matches OTP 29 for both saved
+1,000-case seeded batches (`20261111` and `20261112`). The saved runtime corpus
+matches 3,602 of 3,606 cases, with exactly the four known short-float formatting
+mismatches and zero unverified references. All 5,606 decoded native results equal
+their interpreter baselines. Probe/helper binaries contain native code and no
+BEAM `Code` chunk; on-demand JIT is disabled. This does not imply native execution
+of every bundled library module. See [PLAN.md](PLAN.md) and
+`.amp/in/artifacts/lynx-native-validation.json` for configuration and evidence.
+
 The runner's CLI integration tests check seeded replay, independent encoding byte
 oracles, deliberately wrong/malformed target output, reduction and replay, and
 continuation after reference timeouts/undefined calls. They also check scoped Lean
