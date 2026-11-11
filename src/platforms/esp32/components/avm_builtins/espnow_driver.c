@@ -79,12 +79,20 @@ struct EspNowData
     EventListener listener;
     GlobalContext *global;
     int32_t receiver;
-    uint8_t channel;
+    // The port that opened it. Its context does not point here: a port
+    // killed (exit/2, or a linked owner that crashed) is destroyed without
+    // its handler running, and must leave nothing freed that the Wi-Fi task
+    // or a listener still reaches. The next open finds the port gone and
+    // tears this down.
+    int32_t port;
     volatile uint32_t dropped;
 };
 
 // ESP-NOW is one per chip: at most one open port.
 static struct EspNowData *espnow_data;
+// The channel ESP-NOW was given (0: follow the current one), read when the
+// network driver brings the radio back as a bare STA.
+static uint8_t espnow_channel;
 
 static NativeHandlerResult espnow_consume_mailbox(Context *ctx);
 static bool sta_associated(void);
@@ -94,6 +102,7 @@ static const uint8_t broadcast_mac[MAC_LEN] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x
 enum espnow_cmd
 {
     EspNowInvalidCmd = 0,
+    EspNowOpenCmd,
     EspNowCloseCmd,
     EspNowAddPeerCmd,
     EspNowDelPeerCmd,
@@ -104,6 +113,7 @@ enum espnow_cmd
 };
 
 static const AtomStringIntPair cmd_table[] = {
+    { ATOM_STR("\x4", "open"), EspNowOpenCmd },
     { ATOM_STR("\x5", "close"), EspNowCloseCmd },
     { ATOM_STR("\x8", "add_peer"), EspNowAddPeerCmd },
     { ATOM_STR("\x8", "del_peer"), EspNowDelPeerCmd },
@@ -166,9 +176,8 @@ static void espnow_send_cb(const uint8_t *mac, esp_now_send_status_t status)
 // the channel is ours again.
 static void espnow_wifi_restarted(void)
 {
-    struct EspNowData *data = espnow_data;
-    if (data != NULL && data->channel != 0) {
-        esp_wifi_set_channel(data->channel, WIFI_SECOND_CHAN_NONE);
+    if (espnow_channel != 0) {
+        esp_wifi_set_channel(espnow_channel, WIFI_SECOND_CHAN_NONE);
     }
 }
 
@@ -249,6 +258,7 @@ static void teardown(struct EspNowData *data)
     esp_now_unregister_send_cb();
     esp_now_deinit();
     espnow_data = NULL;
+    espnow_channel = 0;
     sys_unregister_listener(data->global, &data->listener);
     // xQueueRemoveFromSet fails on a queue that still holds items, and the
     // queue must leave the set before it is deleted.
@@ -271,35 +281,53 @@ static esp_err_t add_peer(const uint8_t mac[MAC_LEN], uint8_t channel, const uin
     return esp_now_add_peer(&peer);
 }
 
-static Context *espnow_create_port(GlobalContext *global, term opts)
+static term error_atom(Heap *heap, GlobalContext *glb, AtomString reason)
 {
+    return port_heap_create_error_tuple(heap, globalcontext_make_atom(glb, reason));
+}
+
+static term error_tuple(Heap *heap, GlobalContext *glb, esp_err_t err);
+static term badarg(Heap *heap);
+
+// {open, Options}, the port's first call: `receiver', `channel' and `pmk'.
+// `{error, already_open}' while another port has ESP-NOW, `{error, ap_only}'
+// while an AP-only network runs the radio, `badarg' for bad options, the
+// ESP-IDF error otherwise. A port that fails to open terminates.
+static term do_open(Heap *heap, Context *ctx, term req)
+{
+    GlobalContext *glb = ctx->global;
     if (espnow_data != NULL) {
-        ESP_LOGE(TAG, "ESP-NOW is already open");
-        return NULL;
+        if (globalcontext_process_exists(glb, espnow_data->port)) {
+            return error_atom(heap, glb, ATOM_STR("\xC", "already_open"));
+        }
+        teardown(espnow_data);
     }
 
-    term receiver = interop_kv_get_value_default(opts, ATOM_STR("\x8", "receiver"), term_invalid_term(), global);
-    term channel_term = interop_kv_get_value_default(opts, ATOM_STR("\x7", "channel"), term_from_int(0), global);
-    term pmk = interop_kv_get_value_default(opts, ATOM_STR("\x3", "pmk"), term_invalid_term(), global);
+    term opts = term_is_tuple(req) && term_get_tuple_arity(req) == 2 ? term_get_tuple_element(req, 1) : term_invalid_term();
+    if (!term_is_list(opts)) {
+        return badarg(heap);
+    }
+    term receiver = interop_kv_get_value_default(opts, ATOM_STR("\x8", "receiver"), term_invalid_term(), glb);
+    term channel_term = interop_kv_get_value_default(opts, ATOM_STR("\x7", "channel"), term_from_int(0), glb);
+    term pmk = interop_kv_get_value_default(opts, ATOM_STR("\x3", "pmk"), term_invalid_term(), glb);
     int channel = get_channel(channel_term);
     if (!term_is_local_pid(receiver) || channel < 0
         || (!term_is_invalid_term(pmk) && (!term_is_binary(pmk) || term_binary_size(pmk) != ESP_NOW_KEY_LEN))) {
-        ESP_LOGE(TAG, "Invalid options");
-        return NULL;
+        return badarg(heap);
     }
 
     struct EspNowData *data = malloc(sizeof(struct EspNowData));
     if (IS_NULL_PTR(data)) {
-        return NULL;
+        return error_atom(heap, glb, ATOM_STR("\x6", "no_mem"));
     }
-    data->global = global;
+    data->global = glb;
     data->receiver = term_to_local_process_id(receiver);
-    data->channel = channel;
+    data->port = ctx->process_id;
     data->dropped = 0;
     data->queue = xQueueCreate(ESPNOW_QUEUE_LEN, sizeof(struct EspNowEvent));
     if (IS_NULL_PTR(data->queue)) {
         free(data);
-        return NULL;
+        return error_atom(heap, glb, ATOM_STR("\x6", "no_mem"));
     }
 
     esp_err_t err = network_wifi_hold(espnow_wifi_restarted);
@@ -307,10 +335,11 @@ static Context *espnow_create_port(GlobalContext *global, term opts)
         ESP_LOGE(TAG, "No Wi-Fi radio for ESP-NOW: %s", esp_err_to_name(err));
         vQueueDelete(data->queue);
         free(data);
-        return NULL;
+        return err == ESP_ERR_NOT_SUPPORTED ? error_atom(heap, glb, ATOM_STR("\x7", "ap_only")) : error_tuple(heap, glb, err);
     }
     // On an associated STA the channel is the access point's, and ESP-NOW
     // follows it.
+    espnow_channel = channel;
     if (channel != 0 && !sta_associated()) {
         esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
     }
@@ -318,15 +347,16 @@ static Context *espnow_create_port(GlobalContext *global, term opts)
     espnow_data = data;
     data->listener.handler = espnow_event_callback;
     data->listener.sender = data->queue;
-    sys_register_listener(global, &data->listener);
+    sys_register_listener(glb, &data->listener);
     if (xQueueAddToSet(data->queue, event_set) != pdPASS) {
         ESP_LOGE(TAG, "Failed to add the ESP-NOW queue to the event set");
-        sys_unregister_listener(global, &data->listener);
+        sys_unregister_listener(glb, &data->listener);
         espnow_data = NULL;
+        espnow_channel = 0;
         vQueueDelete(data->queue);
         network_wifi_release();
         free(data);
-        return NULL;
+        return error_atom(heap, glb, ATOM_STR("\x6", "no_mem"));
     }
 
     if ((err = esp_now_init()) != ESP_OK
@@ -336,16 +366,21 @@ static Context *espnow_create_port(GlobalContext *global, term opts)
         || (err = add_peer(broadcast_mac, 0, NULL)) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to start ESP-NOW: %s", esp_err_to_name(err));
         teardown(data);
-        return NULL;
+        return error_tuple(heap, glb, err);
     }
+    return OK_ATOM;
+}
 
+// Cheap: the radio and ESP-NOW start in the first call, {open, Options}
+// (espnow:open/1), whose reply can say why they did not.
+static Context *espnow_create_port(GlobalContext *global, term opts)
+{
+    UNUSED(opts);
     Context *ctx = context_new(global);
     if (IS_NULL_PTR(ctx)) {
-        teardown(data);
         return NULL;
     }
     ctx->native_handler = espnow_consume_mailbox;
-    ctx->platform_data = data;
     return ctx;
 }
 
@@ -437,7 +472,7 @@ static bool sta_associated(void)
     return esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
 }
 
-static term do_set_channel(Heap *heap, GlobalContext *glb, struct EspNowData *data, term req)
+static term do_set_channel(Heap *heap, GlobalContext *glb, term req)
 {
     int channel = term_is_tuple(req) && term_get_tuple_arity(req) == 2 ? get_channel(term_get_tuple_element(req, 1)) : -1;
     if (channel <= 0) {
@@ -450,7 +485,7 @@ static term do_set_channel(Heap *heap, GlobalContext *glb, struct EspNowData *da
     if (err != ESP_OK) {
         return error_tuple(heap, glb, err);
     }
-    data->channel = channel;
+    espnow_channel = channel;
     return OK_ATOM;
 }
 
@@ -475,7 +510,6 @@ static term do_stats(Heap *heap, GlobalContext *glb, struct EspNowData *data)
 
 static NativeHandlerResult espnow_consume_mailbox(Context *ctx)
 {
-    struct EspNowData *data = ctx->platform_data;
     GlobalContext *glb = ctx->global;
     bool closed = false;
     while (!closed && mailbox_has_next(&ctx->mailbox)) {
@@ -495,8 +529,18 @@ static NativeHandlerResult espnow_consume_mailbox(Context *ctx)
         // {Ref, {ok, #{dropped => N}}}.
         BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + term_map_size_in_terms(1), heap);
         {
+            // Only the port that opened ESP-NOW drives it.
+            struct EspNowData *data = espnow_data;
+            bool owner = data != NULL && data->port == ctx->process_id;
+            if (!owner && cmd != EspNowOpenCmd && cmd != EspNowInvalidCmd) {
+                cmd = cmd == EspNowCloseCmd ? EspNowCloseCmd : EspNowInvalidCmd;
+            }
             term reply;
             switch (cmd) {
+                case EspNowOpenCmd:
+                    reply = owner ? error_atom(&heap, glb, ATOM_STR("\xC", "already_open")) : do_open(&heap, ctx, req);
+                    closed = reply != OK_ATOM && !owner;
+                    break;
                 case EspNowAddPeerCmd:
                     reply = do_add_peer(&heap, glb, req);
                     break;
@@ -507,7 +551,7 @@ static NativeHandlerResult espnow_consume_mailbox(Context *ctx)
                     reply = do_send(&heap, glb, req);
                     break;
                 case EspNowSetChannelCmd:
-                    reply = do_set_channel(&heap, glb, data, req);
+                    reply = do_set_channel(&heap, glb, req);
                     break;
                 case EspNowGetChannelCmd:
                     reply = do_get_channel(&heap, glb);
@@ -516,13 +560,14 @@ static NativeHandlerResult espnow_consume_mailbox(Context *ctx)
                     reply = do_stats(&heap, glb, data);
                     break;
                 case EspNowCloseCmd:
-                    teardown(data);
-                    ctx->platform_data = NULL;
+                    if (owner) {
+                        teardown(data);
+                    }
                     closed = true;
                     reply = OK_ATOM;
                     break;
                 default:
-                    reply = badarg(&heap);
+                    reply = owner ? badarg(&heap) : error_atom(&heap, glb, ATOM_STR("\x8", "not_open"));
                     break;
             }
             port_send_message(glb, gen_message.pid, port_heap_create_reply(&heap, gen_message.ref, reply));

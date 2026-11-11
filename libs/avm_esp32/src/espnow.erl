@@ -71,14 +71,25 @@ open() ->
     open([]).
 
 %% @doc Starts ESP-NOW, turning the Wi-Fi radio on if no network has it.
-%% Only one port can be open.
+%% Only one port can be open: `{error, already_open}' while another is. An
+%% AP-only network cannot carry ESP-NOW (its frames go out on the STA):
+%% `{error, ap_only}'. `{error, badarg}' is a bad option. The port is linked
+%% to the caller: if the caller dies the port closes, and ESP-NOW can be
+%% opened again.
 -spec open([open_option()]) -> {ok, port()} | {error, term()}.
 open(Options) ->
     Receiver = proplists:get_value(receiver, Options, self()),
-    try
-        open_port({spawn, "espnow"}, [{receiver, Receiver} | proplists:delete(receiver, Options)])
-    of
-        Port -> {ok, Port}
+    try open_port({spawn, "espnow"}, []) of
+        Port ->
+            case port:call(Port, {open, [{receiver, Receiver} | proplists:delete(receiver, Options)]}) of
+                ok ->
+                    % The caller owns the port: if it dies, the port goes with
+                    % it, and the next open/1 can open ESP-NOW again.
+                    link(Port),
+                    {ok, Port};
+                {error, _} = Error ->
+                    Error
+            end
     catch
         error:Reason -> {error, Reason}
     end.

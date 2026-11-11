@@ -553,8 +553,13 @@ The `network` driver owns the WiFi radio, and ESP-NOW borrows it:
 - While the STA is connected, frames go on the access point's channel, so the peers must be on it
   too; `espnow:set_channel/2` returns `{error, sta_connected}` until the STA disconnects.
 - `espnow:close/1` turns WiFi off, unless the network uses it.
+- An AP-only network (`ap` without `sta`) runs the radio in AP mode, where ESP-NOW frames, which go
+  out on the STA, cannot be sent: `espnow:open/1` returns `{error, ap_only}` while one runs, and
+  `network:start/1` returns `{error, ap_only_held}` for one while ESP-NOW is open. A network with
+  both `sta` and `ap` works.
 
-Only one port can be open. The receiver (the caller of `espnow:open/1`, or `{receiver, Pid}`) gets
+Only one port can be open (`{error, already_open}`), linked to the process that opened it: when
+that process dies the port closes, and ESP-NOW can be opened again. The receiver (the caller of `espnow:open/1`, or `{receiver, Pid}`) gets
 `{espnow, rx, Mac, Data, #{rssi := Rssi}}` for each frame, and `{espnow, sent, Mac, ok | fail}` for
 each `espnow:send/3`: for a unicast frame `ok` means the peer acknowledged it, for a broadcast only
 that it went out. Between the Wi-Fi task and the scheduler the driver queues 8 events: when a burst
