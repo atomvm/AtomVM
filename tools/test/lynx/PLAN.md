@@ -352,7 +352,9 @@ and zero unverified cases. Evidence is in `.amp/in/artifacts/lynx-set-final-full
   isolated worker and draining only at its end; never drain/requeue between
   operations. Bound each sequence to 30 operations and preserve initial queued
   messages and surviving operation payloads during shrinking.
-- [ ] Extend to binary scope combinations.
+- [x] Extend to binary scope combinations: nested parts, appends, overlapping
+  patterns, signed/duplicate scopes, and split trimming. Compare every result,
+  exception, and intermediate binary; preserve setup and literal steps in reduction.
 - [ ] For lifecycle extensions, use same-sender fences and explicit handshakes.
   Sample documented allowed outcomes for races; do not compare cross-sender
   arrival order, elapsed time, or outcome frequencies as correctness requirements.
@@ -392,6 +394,23 @@ Erlang tools used `ERL_FLAGS='+S 2:2'`; no schedule-exhaustion claim is implied.
 erlfmt and whitespace checks pass. No runtime changes were needed.
 Evidence is under `.amp/in/artifacts/lynx-receive-sequences-seed-20261112/`,
 `lynx-receive-sequences-observations.json`, and `lynx-receive-sequences-tests.log`.
+
+Binary scope batch validated on 2026-11-11 against OTP 29: seed `20261113`
+matches all 1,000 mixed cases in both the host interpreter and aarch64 precompiled
+execution, including 112 binary sequences with 3,497 operations. Inputs and decoded
+target results agree across both modes, with zero failures or unverified cases.
+Each sequence has at most 32 operations; setup sizes include 0, 7, 31, 32, 63, 64,
+65, and 96 bytes. Decoded traces show 1,078 successful matches, 378 misses, 1,344
+successful splits, and 249 expected rejections. Thirteen enabled CLI tests pass
+(one optional fixture test skipped), including hand-written scope/split/state
+oracles, seed/replay checks, and injected failures reduced and replayed with
+unchanged initial bytes, seed, and surviving operation payloads. All 1,001 native
+probe/helper binaries have `avmN` and no `Code` chunk. This uses the matching native
+library and disables on-demand JIT; it is not a GC/lifetime or schedule stress test.
+No runtime changes were needed. erlfmt and whitespace checks pass. Evidence is
+under `.amp/in/artifacts/lynx-binary-sequences-seed-20261113/`,
+`lynx-binary-sequences-native/`, and the sibling `lynx-binary-sequences-*.log`,
+`lynx-binary-sequences-observations.json`, and mode/chunk comparison files.
 
 ### 7. Expand execution-path coverage and separate transport cost
 

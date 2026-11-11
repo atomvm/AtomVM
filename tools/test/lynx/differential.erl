@@ -8,6 +8,7 @@
     maps/3,
     map_sequence/2,
     dictionary_sequence/2,
+    binary_sequence/2,
     bits/4,
     float_bits/4,
     call/3,
@@ -121,6 +122,10 @@ dictionary_sequence(Setup, Steps) ->
         erase()
     end.
 
+binary_sequence(Setup, Steps) ->
+    Binary = list_to_binary(Setup),
+    {sequence_state(binary, Binary), sequence(binary, Steps, Binary)}.
+
 sequence(_Kind, [], _State) ->
     [];
 sequence(Kind, [Step | Steps], State) ->
@@ -134,6 +139,8 @@ sequence(Kind, [Step | Steps], State) ->
 
 sequence_state(map, Map) ->
     map_entries(Map);
+sequence_state(binary, Binary) ->
+    {byte_size(Binary), Binary};
 sequence_state(dictionary, _) ->
     Entries = get(),
     Keys = get_keys(),
@@ -165,6 +172,16 @@ sequence_step(map, {selected, V}, Map) ->
     {{length(Keys), maps:from_list([{K, present} || K <- Keys])}, Map};
 sequence_step(map, {clear}, Map) ->
     {Map, #{}};
+sequence_step(binary, {part, Start, Length}, Binary) ->
+    Next = binary:part(Binary, Start, Length),
+    {Next, Next};
+sequence_step(binary, {append, Bytes}, Binary) ->
+    Next = <<Binary/binary, (list_to_binary(Bytes))/binary>>,
+    {Next, Next};
+sequence_step(binary, {match, Patterns, Options}, Binary) ->
+    {binary:match(Binary, Patterns, Options), Binary};
+sequence_step(binary, {split, Patterns, Options}, Binary) ->
+    {binary:split(Binary, Patterns, Options), Binary};
 sequence_step(dictionary, {put, K, V}, State) ->
     {put(K, V), State};
 sequence_step(dictionary, {get, K}, State) ->
