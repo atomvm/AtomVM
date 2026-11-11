@@ -551,14 +551,16 @@ The `network` driver owns the WiFi radio, and ESP-NOW borrows it:
 - `network:start/1` and `network:stop/0` can be called while ESP-NOW is open: `network:stop/0`
   leaves the radio on, back on the ESP-NOW channel, and ESP-NOW keeps working.
 - While the STA is connected, frames go on the access point's channel, so the peers must be on it
-  too; `espnow:set_channel/2` fails until the STA disconnects.
+  too; `espnow:set_channel/2` returns `{error, sta_connected}` until the STA disconnects.
 - `espnow:close/1` turns WiFi off, unless the network uses it.
 
 Only one port can be open. The receiver (the caller of `espnow:open/1`, or `{receiver, Pid}`) gets
 `{espnow, rx, Mac, Data, #{rssi := Rssi}}` for each frame, and `{espnow, sent, Mac, ok | fail}` for
 each `espnow:send/3`: for a unicast frame `ok` means the peer acknowledged it, for a broadcast only
-that it went out. The driver queues 8 events: when the receiver does not keep up, further events
-are dropped and counted in `espnow:stats/1`.
+that it went out. Between the Wi-Fi task and the scheduler the driver queues 8 events: when a burst
+fills that queue, further events are dropped and counted in `espnow:stats/1` (the receiver's
+mailbox itself is not bounded). A frame longer than 250 bytes (ESP-NOW v2, from a newer peer) is
+dropped and counted too.
 
 A unicast peer must be added first, optionally with an `lmk` key to encrypt the traffic with it
 (the `pmk` given to `espnow:open/1` encrypts the `lmk` keys); broadcast needs no peer.

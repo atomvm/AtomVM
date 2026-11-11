@@ -93,7 +93,10 @@ close(Port) ->
 add_peer(Port, Mac) ->
     add_peer(Port, Mac, []).
 
-%% @doc Adds a unicast peer. Broadcast needs no peer.
+%% @doc Adds a unicast peer. Broadcast needs no peer: `broadcast' is
+%% `badarg' here and in `del_peer/2'. ESP-NOW errors come as
+%% `{error, not_found | peer_exists | peer_list_full | interface_mismatch |
+%% channel_mismatch | no_mem}', others as the ESP-IDF error.
 -spec add_peer(port(), mac(), [peer_option()]) -> ok | {error, term()}.
 add_peer(Port, Mac, Options) ->
     port:call(Port, {add_peer, Mac, Options}).
@@ -108,8 +111,9 @@ del_peer(Port, Mac) ->
 send(Port, Mac, Data) ->
     port:call(Port, {send, Mac, Data}).
 
-%% @doc Moves to `Channel' (1 to 14). Fails while the STA is connected, whose
-%% channel is the access point's.
+%% @doc Moves to `Channel' (1 to 14). Refused with `{error, sta_connected}'
+%% while the STA is associated: its channel is the access point's, and moving
+%% the radio would take the STA off it.
 -spec set_channel(port(), 1..14) -> ok | {error, term()}.
 set_channel(Port, Channel) ->
     port:call(Port, {set_channel, Channel}).
@@ -118,8 +122,10 @@ set_channel(Port, Channel) ->
 get_channel(Port) ->
     port:call(Port, get_channel).
 
-%% @doc `dropped': frames and send results lost because the receiver did not
-%% keep up (the driver queues 8).
+%% @doc `dropped': frames and send results lost before reaching the
+%% receiver: the driver's queue between the Wi-Fi task and the scheduler (8
+%% events) was full, or a frame was longer than 250 bytes (ESP-NOW v2). The
+%% receiver's mailbox is not bounded.
 -spec stats(port()) -> {ok, #{dropped := non_neg_integer()}}.
 stats(Port) ->
     port:call(Port, stats).
