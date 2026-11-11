@@ -81,7 +81,8 @@ open(Options) ->
     Receiver = proplists:get_value(receiver, Options, self()),
     try open_port({spawn, "espnow"}, []) of
         Port ->
-            case port:call(Port, {open, [{receiver, Receiver} | proplists:delete(receiver, Options)]}) of
+            Opts = [{receiver, Receiver} | proplists:delete(receiver, Options)],
+            case port:call(Port, {open, Opts}) of
                 ok ->
                     % The caller owns the port: if it dies, the port goes with
                     % it, and the next open/1 can open ESP-NOW again.
