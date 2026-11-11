@@ -21,9 +21,10 @@ runner semantics in [README.md](README.md).
 - `--lynx` freshly checks fixture laws. Five integer singleton-sum instances also
   require the proved postcondition to be true on both VMs. Other matching
   differential results alone do not establish a property.
-- Generated testing currently covers five operation families: comparisons,
-  arithmetic, maps, integer bitstrings, and float encoding. It does not generate
-  arbitrary Erlang programs or enumerate scheduler interleavings.
+- Generated testing currently covers seven operation families: comparisons,
+  arithmetic, maps, integer bitstrings, float encoding, and map/dictionary
+  sequences. It does not generate arbitrary Erlang programs or enumerate
+  scheduler interleavings.
 - Dictionary queries, invalid receive timeouts, suspended receives, signal and
   alias combinations, and dictionary/scoped-split GC regressions already have
   coverage. Expand specific missing combinations rather than restarting these
@@ -332,26 +333,44 @@ All 329 set cases match OTP with zero failures or unverified references,
 including all 16 previously failing expressions. Expanded `test_sets` cases
 fail before this change and pass afterward on AtomVM and OTP; separate target
 checks confirm v1 constructors still reject. Ten CLI tests pass (one optional
-fixture test skipped), and erlfmt checks pass. The full 3,606-case runtime corpus
-has not been rerun. Evidence is in `.amp/in/artifacts/sets-edge-options-differential/`
-and sibling `sets-edge-options-*.log` files.
+fixture test skipped), and erlfmt checks pass. A subsequent full interpreter
+run matched 3,602 of 3,606 cases, with only the four known short-float failures
+and zero unverified cases. Evidence is in `.amp/in/artifacts/lynx-set-final-full/`,
+`.amp/in/artifacts/sets-edge-options-differential/`, and sibling logs.
 
 ### 6. Generate bounded operation sequences
 
-- [ ] Extend beyond independent scalar calls to reproducible dictionary/map
-  updates and queries, binary scope combinations, and selective-receive sequences.
-  Save the complete sequence as replay input and shrink without breaking setup.
-- [ ] Use observed mailbox/dictionary state and returned values as the oracle.
-  Include rejected messages, overwrites, missing entries, and unrelated sentinels.
+- [x] Generate reproducible dictionary/map updates and queries, saving complete
+  initial bindings and operations as replay input. Shrink by deleting operations
+  without modifying setup, literal keys/values, seed, or index.
+- [x] Observe every map/dictionary return value or exception and intermediate
+  state, including overwrites, missing entries, unrelated sentinels, exact keys,
+  stored `undefined`, and growth/shrinkage across 32 entries.
+- [ ] Extend to binary scope combinations and selective-receive sequences,
+  observing rejected messages and mailbox state.
 - [ ] For lifecycle extensions, use same-sender fences and explicit handshakes.
   Sample documented allowed outcomes for races; do not compare cross-sender
   arrival order, elapsed time, or outcome frequencies as correctness requirements.
-- [ ] Bound sequence length, allocations, and integer magnitude. Retain failing
-  seeds and reduced cases; do not claim exhaustive schedules or general programs.
+- [x] Bound map/dictionary sequences to 72 operations and at most 41 bindings,
+  reusing bounded numeric/key generation. Retain failing seeds and reduced cases;
+  do not claim exhaustive schedules or general programs.
 
 Owners: `generated.py`, `differential.erl`, `validate.py`, `test_validate.py`.
 Done when a saved failure replays unchanged and shrinking preserves the tested
 contract rather than producing a different setup or oracle failure.
+
+Map/dictionary batch validated on 2026-11-11 with OTP 29 and the host
+interpreter: seed `20261111` matches all 1,000 mixed cases, including 144 map
+and 143 dictionary sequences with 17,036 operations, zero failures, and zero
+unverified references. Decoded traces confirm sentinel preservation and both
+32- and 33-entry states for near-boundary setups. Eleven enabled CLI tests
+pass (one optional fixture test skipped), including same-seed regeneration,
+replay, independent intermediate-state oracles, and injected failures reduced
+and replayed with unchanged setup. erlfmt and whitespace checks pass.
+Evidence is under `.amp/in/artifacts/lynx-sequences-seed-20261111/`,
+`lynx-sequences-observations.json`, and `lynx-sequences-tests-confirmed.log`.
+The full 3,606-case runtime recheck with chunked output is still running under
+`.amp/in/artifacts/lynx-sequences-runtime/`; no new full-corpus result is claimed.
 
 ### 7. Expand execution-path coverage and separate transport cost
 
