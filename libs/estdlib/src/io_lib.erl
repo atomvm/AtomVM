@@ -352,7 +352,27 @@ format_spw(#format{mod = Mod} = Format, T) when is_map(T) ->
          || {K, V} <- maps:to_list(maps:iterator(T, Order))
         ]),
         $}
-    ].
+    ];
+format_spw(Format, T) ->
+    % Native records (OTP 29) are neither tuples nor maps.
+    case erlang:is_record(T) of
+        true ->
+            Fields = [
+                [write_atom(F), " = ", format_spw(Format, records:get(F, T))]
+             || F <- records:get_field_names(T)
+            ],
+            [
+                $#,
+                write_atom(records:get_module(T)),
+                $:,
+                write_atom(records:get_name(T)),
+                ${,
+                lists:join($,, Fields),
+                $}
+            ];
+        false ->
+            error(function_clause, [Format, T])
+    end.
 
 -define(RESERVED_KEYWORDS, [
     'after',

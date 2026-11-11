@@ -40,6 +40,7 @@ X(ALL_ATOM, "\x3", "all")
 X(LOWERCASE_EXIT_ATOM, "\x4", "exit")
 X(BADRECORD_ATOM, "\x9", "badrecord")
 X(SYSTEM_LIMIT_ATOM, "\xC", "system_limit")
+X(EXTERNAL_ATOM, "\x8", "external")
 // End of atoms used in jit compiler
 
 X(UNDEFINED_ATOM, "\x9", "undefined")
@@ -172,7 +173,6 @@ X(TRIM_ALL_ATOM, "\x8", "trim_all")
 X(TYPE_ATOM, "\x4", "type")
 X(NAME_ATOM, "\x4", "name")
 X(ARITY_ATOM, "\x5", "arity")
-X(EXTERNAL_ATOM, "\x8", "external")
 X(LOCAL_ATOM, "\x5", "local")
 X(ENV_ATOM, "\x3", "env")
 
@@ -230,5 +230,7 @@ X(REPLY_DEMONITOR_ATOM, "\xF", "reply_demonitor")
 X(REPLY_ATOM, "\x5", "reply")
 X(TAG_ATOM, "\x3", "tag")
 X(PRIORITY_ATOM, "\x8", "priority")
+X(BADFIELD_ATOM, "\x8", "badfield")
+X(UNDERSCORE_ATOM, "\x1", "_")
 
 X(INVALID_AVM_ATOM, "\xB", "invalid_avm")

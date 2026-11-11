@@ -31,6 +31,11 @@
 %%
 %% The tracked information includes:
 %% - `contents`: maps cpu_reg -> what the register holds
+%% - `vm_types`: maps VM x/y reg -> opaque type info (e.g. record layout) that
+%%   the front-end has proven about that VM register's current value. Cleared
+%%   alongside `contents` by the same invalidation hooks, so any opcode that
+%%   writes to the VM register or clobbers x regs across a C call automatically
+%%   drops the corresponding type info.
 
 -module(jit_regs).
 
@@ -62,7 +67,9 @@
     vm_dest_to_contents/2,
     regs_to_mask/2,
     first_set/3,
-    mask_to_reg_list/3
+    mask_to_reg_list/3,
+    set_vm_type/3,
+    get_vm_type/2
 ]).
 
 -export_type([regs/0, contents/0]).
@@ -89,7 +96,8 @@
     stack = [] :: [atom() | contents()],
     unreachable = false :: boolean(),
     available_regs = 0 :: non_neg_integer(),
-    used_regs = 0 :: non_neg_integer()
+    used_regs = 0 :: non_neg_integer(),
+    vm_types = #{} :: #{vm_loc() => term()}
 }).
 
 -opaque regs() :: #regs{}.
@@ -162,7 +170,7 @@ set_contents(#regs{contents = C} = Regs, Reg, Contents) ->
 %% @doc Mark register tracking as unreachable after terminal control flow.
 -spec unreachable(regs()) -> regs().
 unreachable(Regs) ->
-    Regs#regs{contents = #{}, stack = [], unreachable = true}.
+    Regs#regs{contents = #{}, stack = [], unreachable = true, vm_types = #{}}.
 
 %% @doc Invalidate tracking for a single CPU register (e.g. it was clobbered).
 -spec invalidate_reg(regs(), atom()) -> regs().
@@ -172,25 +180,37 @@ invalidate_reg(#regs{contents = C} = Regs, Reg) ->
 %% @doc Invalidate all register tracking (e.g. at a label or unknown branch target).
 -spec invalidate_all(regs()) -> regs().
 invalidate_all(Regs) ->
-    Regs#regs{contents = #{}, stack = [], unreachable = false}.
+    Regs#regs{contents = #{}, stack = [], unreachable = false, vm_types = #{}}.
 
 %% @doc Invalidate registers that are volatile across a C function call.
 %% On x86-64 System V ABI, all our scratch registers (rax, rcx, rdx, rsi, rdi,
 %% r8, r9, r10, r11) are caller-saved, so after a C call they're all clobbered.
 %% However, the special registers (rdi=ctx, rsi=jit_state, rdx=native_interface)
 %% are restored by the JIT after the call via push/pop, so we keep their tracking.
+%% Type info for VM x regs is also cleared: a called primitive may modify
+%% `ctx->x[*]'. Y regs live on the VM stack and are preserved.
 -spec invalidate_volatile(regs(), [atom()]) -> regs().
-invalidate_volatile(#regs{contents = C0} = Regs, PreservedRegs) ->
+invalidate_volatile(#regs{contents = C0, vm_types = T0} = Regs, PreservedRegs) ->
     C1 = maps:filter(fun(Reg, _) -> lists:member(Reg, PreservedRegs) end, C0),
-    Regs#regs{contents = C1}.
+    T1 = maps:filter(
+        fun
+            ({x_reg, _}, _) -> false;
+            (_, _) -> true
+        end,
+        T0
+    ),
+    Regs#regs{contents = C1, vm_types = T1}.
 
 %% @doc Invalidate all CPU registers that reference a given VM location.
 %% Call this when a VM register is written to, so that any CPU register
-%% that was caching its old value is invalidated.
+%% that was caching its old value is invalidated. Also clears any tracked
+%% type info for the same VM register, since the write may store a value of
+%% a different type.
 -spec invalidate_vm_loc(regs(), vm_loc()) -> regs().
-invalidate_vm_loc(#regs{contents = C} = Regs, VmLoc) ->
+invalidate_vm_loc(#regs{contents = C, vm_types = T} = Regs, VmLoc) ->
     C1 = maps:filter(fun(_Reg, Val) -> Val =/= VmLoc end, C),
-    Regs#regs{contents = C1}.
+    T1 = maps:remove(VmLoc, T),
+    Regs#regs{contents = C1, vm_types = T1}.
 
 %% @doc Find a CPU register that holds the given contents.
 %% Returns `{ok, Reg}` or `none`.
@@ -214,13 +234,17 @@ merge(#regs{unreachable = true}, #regs{} = Regs) ->
     Regs#regs{stack = []};
 merge(#regs{} = Regs, #regs{unreachable = true}) ->
     Regs#regs{stack = []};
-merge(#regs{contents = C1}, #regs{contents = C2}) ->
+merge(#regs{contents = C1, vm_types = T1}, #regs{contents = C2, vm_types = T2}) ->
     %% Keep only entries that match in both maps
     MergedContents = maps:filter(
         fun(Reg, Val) -> maps:get(Reg, C2, undefined) =:= Val end,
         C1
     ),
-    #regs{contents = MergedContents, stack = []}.
+    MergedTypes = maps:filter(
+        fun(VmLoc, Val) -> maps:get(VmLoc, T2, undefined) =:= Val end,
+        T1
+    ),
+    #regs{contents = MergedContents, stack = [], vm_types = MergedTypes}.
 
 %% @doc Record a push to the C stack.
 -spec stack_push(regs(), atom() | contents()) -> regs().
@@ -261,6 +285,17 @@ vm_dest_to_contents({x_reg, X}, MaxReg) when is_integer(X), X < MaxReg -> {x_reg
 vm_dest_to_contents({x_reg, extra}, MaxReg) -> {x_reg, MaxReg};
 vm_dest_to_contents({y_reg, Y}, _MaxReg) -> {y_reg, Y};
 vm_dest_to_contents(_, _MaxReg) -> unknown.
+
+%% @doc Record an opaque type assertion for a VM x/y register.
+-spec set_vm_type(regs(), vm_loc(), term()) -> regs().
+set_vm_type(#regs{vm_types = T} = Regs, VmLoc, Type) ->
+    Regs#regs{vm_types = T#{VmLoc => Type}}.
+
+%% @doc Look up the type assertion previously recorded for a VM x/y register.
+%% Returns `undefined' if none is tracked (or it was invalidated).
+-spec get_vm_type(regs(), vm_loc()) -> term() | undefined.
+get_vm_type(#regs{vm_types = T}, VmLoc) ->
+    maps:get(VmLoc, T, undefined).
 
 %% @doc Convert a list of register atoms to a bitmask.
 %% Skips non-register entries like `imm`, `jit_state`, and `stack`.
