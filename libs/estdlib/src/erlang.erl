@@ -630,12 +630,13 @@ is_record(_Term, _RecordTag) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Record  native record (OTP 29)
-%% @param   Id      record name, or `{Module, Name}'
+%% @param   Id      record name, `'_'' or `{Module, Name}'
 %% @param   Field   field name
 %% @returns the value of Field in Record
 %% @doc     Get a field of a native record. Raises `{badrecord, Record}' if
-%%          Record is not a native record named Id, and `badarg' if the record
-%%          has no field named Field.
+%%          Record is not a native record named Id (or, with a `{Module, Name}'
+%%          Id, if the record is not exported), and `{badfield, {{Module, Name}, Field}}'
+%%          if the record has no field named Field.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec get_record_field(Record :: term(), Id :: atom() | {module(), atom()}, Field :: atom()) ->

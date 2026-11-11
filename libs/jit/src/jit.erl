@@ -2845,12 +2845,16 @@ first_pass(
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {FailLabel, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
+    IdAtom = peek_record_id_atom(Rest2, AtomResolver),
     case MMod:get_vm_record_type(MSt1, Src) of
-        #{fields := FieldAtoms} ->
-            %% Flow-proven type — skip the runtime record check and the
-            %% per-field name lookup. Discard Id and FailLabel (the
-            %% record-type guard is statically satisfied; no field can be
-            %% missing because the JIT verified the layout at compile time).
+        #{fields := FieldAtoms, name := IdAtom} when IdAtom =/= undefined ->
+            %% Flow-proven type, and Id is the tracked record's name — skip the
+            %% runtime record check and the per-field name lookup. Discard Id
+            %% and FailLabel (the record-type guard is statically satisfied; no
+            %% field can be missing because the JIT verified the layout at
+            %% compile time). Any other Id (e.g. is_native_record(other)
+            %% followed by get_record_field on this record) must go through
+            %% the generic path, which raises badrecord.
             Rest3 = skip_compact_term(Rest2),
             {FieldAtomIndex, Rest4} = decode_atom(Rest3),
             {MSt2, Dest, Rest5} = decode_dest(Rest4, MMod, MSt1),
@@ -2875,6 +2879,16 @@ first_pass(
         undefined ->
             get_record_field_generic(FailLabel, Src, Rest2, MMod, MSt1, State0)
     end.
+
+%% @doc Resolve the Id operand of OP_GET_RECORD_FIELD to an atom when it is
+%% an atom literal, `undefined' otherwise (nil, `{Module, Name}', register).
+peek_record_id_atom(<<0:4, ?COMPACT_ATOM:4, _/binary>>, _AtomResolver) ->
+    undefined;
+peek_record_id_atom(<<_:4, ?COMPACT_ATOM:4, _/binary>> = Bin, AtomResolver) ->
+    {AtomIndex, _} = decode_value64(Bin),
+    AtomResolver(AtomIndex);
+peek_record_id_atom(_Bin, _AtomResolver) ->
+    undefined.
 
 %% @doc Generic OP_GET_RECORD_FIELD path: src isn't tracked (or tracking was
 %% stale), so the runtime PRIM_GET_RECORD_FIELD primitive does its own type
@@ -2903,7 +2917,7 @@ get_record_field_generic(
                 {MSt3, FieldVal}
         end,
     {MSt5, ResultReg} = MMod:call_primitive(MSt4, ?PRIM_GET_RECORD_FIELD, [
-        ctx, FailLabel, {free, Src}, {free, Id}, {free, FieldAtom}
+        ctx, jit_state, FailLabel, {free, Src}, {free, Id}, {free, FieldAtom}
     ]),
     MSt6 = bif_faillabel_test(FailLabel, MMod, MSt5, {free, ResultReg}, {free, Dest}),
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
@@ -4889,7 +4903,7 @@ put_record_resolved(Fail, Rest2, #{index := RecIdx, fields := FieldAtoms}, MMod,
         lists:seq(0, NumPairs - 1)
     ),
     {MSt9, ResultReg} = MMod:call_primitive(MSt8, ?PRIM_PUT_RECORD_RESOLVED, [
-        ctx, jit_state, RecIdx, {free, NewSrc}, NumPairs, KVReg
+        ctx, jit_state, RecIdx, {free, NewSrc}, (NumPairs bsl 1) bor fail_flag(Fail), KVReg
     ]),
     MSt10 =
         if
@@ -5078,7 +5092,7 @@ track_if_local(Src, ModAtomIndex, NameAtomIndex, AR, RR, MMod, MSt) ->
                 undefined ->
                     MSt;
                 Info ->
-                    MMod:set_vm_record_type(MSt, Src, Info)
+                    MMod:set_vm_record_type(MSt, Src, Info#{name => AR(NameAtomIndex)})
             end;
         _ ->
             MSt
@@ -5098,6 +5112,9 @@ field_position_map(FieldAtoms) ->
 %% @doc Generic OP_PUT_RECORD path (cross-module records or records not
 %% resolvable at JIT compile time). Falls back to runtime def lookup via
 %% PRIM_RECORD_DEF_ARITY + PRIM_PUT_RECORD.
+fail_flag(0) -> 0;
+fail_flag(_) -> 1.
+
 put_record_generic(Fail, Rest1, MMod, MSt0, State0) ->
     {MSt1, Id, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
     {MSt2, Src, Rest3} = decode_compact_term(Rest2, MMod, MSt1, State0),
@@ -5141,7 +5158,7 @@ put_record_generic(Fail, Rest1, MMod, MSt0, State0) ->
         lists:seq(0, NumPairs - 1)
     ),
     {MSt13, ResultReg} = MMod:call_primitive(MSt12, ?PRIM_PUT_RECORD, [
-        ctx, jit_state, {free, NewId}, {free, NewSrc}, NumPairs, KVReg
+        ctx, jit_state, {free, NewId}, {free, NewSrc}, (NumPairs bsl 1) bor fail_flag(Fail), KVReg
     ]),
     MSt14 =
         if

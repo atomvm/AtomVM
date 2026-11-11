@@ -23,6 +23,7 @@
 -export([start/0, id/1]).
 
 -record #pair{a, b}.
+-record #other{a, c}.
 
 start() ->
     ok = test_local_alloc(),
@@ -32,6 +33,7 @@ start() ->
     ok = test_anonymous_update(),
     ok = test_badfield(),
     ok = test_fail_label(),
+    ok = test_tracked_type_other_name(),
     0.
 
 id(X) -> X.
@@ -128,3 +130,17 @@ ext_update(R) ->
             _:_ -> true
         end
     ].
+
+%% After is_native_record(other), a get_record_field with another record name
+%% must raise badrecord rather than use the tracked layout.
+test_tracked_type_other_name() ->
+    O = id(#other{a = 7, c = 1}),
+    {badrecord, O} =
+        try
+            wrong_name(O)
+        catch
+            error:Reason -> Reason
+        end,
+    ok.
+
+wrong_name(X) when is_record(X, other) -> X#pair.a.

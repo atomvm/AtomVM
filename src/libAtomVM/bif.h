@@ -93,6 +93,21 @@ term raise_badrecord(Context *ctx, term src);
  */
 term raise_badfield(Context *ctx, const struct RecordDef *def, atom_index_t field);
 
+/**
+ * @brief Get a field of a native record, like OP_GET_RECORD_FIELD.
+ *
+ * @param ctx the context
+ * @param fail_label non-zero if the caller handles failure itself, in which
+ * case term_invalid_term() is returned without raising
+ * @param current_module name of the module being executed, allowing access to
+ * its unexported records with a `{Module, Name}` id (or term_invalid_term())
+ * @param src the record
+ * @param id record name, `'_'` or `{Module, Name}`
+ * @param field the field name
+ * @return the value or term_invalid_term()
+ */
+term record_get_field(Context *ctx, uint32_t fail_label, term current_module, term src, term id, term field);
+
 term bif_erlang_is_map_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_map_key_2(Context *ctx, uint32_t fail_label, term arg1, term arg2);
 

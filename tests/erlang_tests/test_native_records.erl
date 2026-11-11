@@ -45,6 +45,8 @@ start() ->
     ok = test_is_record_1_runtime(),
     ok = test_is_record_2_runtime(),
     ok = test_is_record_3(),
+    ok = test_get_record_field_anonymous_id(),
+    ok = test_get_record_field_remote_checks(),
     ok = test_is_record_opcodes(),
     ok = test_is_tuple_disjoint_from_record(),
     ok = test_get_record_field_runtime(),
@@ -189,6 +191,28 @@ test_is_record_3() ->
     false = erlang:is_record(T, PairName, ?MODULE:id(2)),
     false = erlang:is_record(P, PairName, ?MODULE:id(3)),
     ok = expect_badarg(fun() -> erlang:is_record(P, ?MODULE:id(1), PairName) end),
+    ok.
+
+%% X#_.a doesn't check the record name.
+test_get_record_field_anonymous_id() ->
+    P = ?MODULE:id(#pair{a = 1, b = 2}),
+    V = ?MODULE:id(test_native_records_ext:make_vector(4, 5, 6)),
+    1 = P#_.a,
+    2 = P#_.b,
+    5 = V#_.y,
+    {badfield, {{?MODULE, pair}, zz}} = catch_error(fun() -> P#_.zz end),
+    {badrecord, 42} = catch_error(fun() -> (?MODULE:id(42))#_.a end),
+    ok.
+
+%% R#mod:name.field on exported/unexported records and on unknown fields.
+test_get_record_field_remote_checks() ->
+    V = ?MODULE:id(test_native_records_ext:make_vector(4, 5, 6)),
+    U = ?MODULE:id(test_native_records_ext:make_unexported(1, 2)),
+    4 = V#test_native_records_ext:vector.x,
+    {badfield, {{test_native_records_ext, vector}, w}} = catch_error(fun() ->
+        V#test_native_records_ext:vector.w
+    end),
+    {badrecord, U} = catch_error(fun() -> U#test_native_records_ext:unexported.a end),
     ok.
 
 expect_badarg(F) ->

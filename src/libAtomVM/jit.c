@@ -470,41 +470,9 @@ static uint32_t jit_is_record_accessible(Context *ctx, JITState *jit_state, term
     return 0;
 }
 
-static term jit_get_record_field(Context *ctx, uint32_t fail_label, term src, term id, term field)
+static term jit_get_record_field(Context *ctx, JITState *jit_state, uint32_t fail_label, term src, term id, term field)
 {
-    if (UNLIKELY(!term_is_record(src))) {
-        if (fail_label == 0) {
-            return raise_badrecord(ctx, src);
-        }
-        return term_invalid_term();
-    }
-
-    const struct RecordDef *def = term_get_record_def(src);
-    bool id_matches = false;
-    if (term_is_atom(id)) {
-        id_matches = (id == def->name);
-    } else if (term_is_tuple(id) && term_get_tuple_arity(id) == 2) {
-        id_matches = (def->module == term_get_tuple_element(id, 0))
-            && (def->name == term_get_tuple_element(id, 1));
-    }
-    if (UNLIKELY(!id_matches)) {
-        if (fail_label == 0) {
-            return raise_badrecord(ctx, src);
-        }
-        return term_invalid_term();
-    }
-
-    for (size_t k = 0; k < def->num_fields; k++) {
-        if (def->fields[k].name == field) {
-            return term_get_record_value(src, k);
-        }
-    }
-
-    if (fail_label == 0) {
-        context_set_exception_class(ctx, ERROR_ATOM);
-        ctx->exception_reason = BADARG_ATOM;
-    }
-    return term_invalid_term();
+    return record_get_field(ctx, fail_label, module_get_name(jit_state->module), src, id, field);
 }
 
 /**
@@ -519,16 +487,30 @@ static term jit_get_record_field(Context *ctx, uint32_t fail_label, term src, te
  * position as a raw integer (written directly by the JIT via
  * move_to_array_element, not a small-int term), kv[2j+1] is the term value.
  */
-static term jit_put_record_resolved(Context *ctx, JITState *jit_state, uint32_t record_index, term src, uint32_t num_pairs, term *kv)
+/*
+ * num_pairs_and_fail packs the number of key/value pairs in bits 1.. and, in
+ * bit 0, whether the instruction has a fail label. With a fail label, errors
+ * return term_invalid_term() without raising, as the generated code jumps to
+ * the fail label and x registers are not GC roots here.
+ */
+static term jit_put_record_resolved(Context *ctx, JITState *jit_state, uint32_t record_index, term src, uint32_t num_pairs_and_fail, term *kv)
 {
+    uint32_t num_pairs = num_pairs_and_fail >> 1;
+    bool has_fail_label = (num_pairs_and_fail & 1) != 0;
     Module *current_mod = jit_state->module;
     TERM_DEBUG_ASSERT(record_index < current_mod->records_count);
     const struct RecordDef *def = &current_mod->records_table[record_index];
 
     if (UNLIKELY(!term_is_nil(src) && !term_is_record(src))) {
+        if (has_fail_label) {
+            return term_invalid_term();
+        }
         return raise_badrecord(ctx, src);
     }
     if (!term_is_nil(src) && term_get_record_def(src) != def) {
+        if (has_fail_label) {
+            return term_invalid_term();
+        }
         return raise_badrecord(ctx, src);
     }
 
@@ -546,6 +528,9 @@ static term jit_put_record_resolved(Context *ctx, JITState *jit_state, uint32_t 
             term default_val = module_decode_record_default(
                 current_mod, ctx, def->fields[i].default_encoded);
             if (UNLIKELY(term_is_invalid_term(default_val))) {
+                if (has_fail_label) {
+                    return term_invalid_term();
+                }
                 return raise_badrecord(ctx, def->name);
             }
             term_put_record_value(dst, i, default_val);
@@ -566,16 +551,24 @@ static term jit_put_record_resolved(Context *ctx, JITState *jit_state, uint32_t 
     return dst;
 }
 
-static term jit_put_record(Context *ctx, JITState *jit_state, term id, term src, uint32_t num_pairs, term *kv)
+static term jit_put_record(Context *ctx, JITState *jit_state, term id, term src, uint32_t num_pairs_and_fail, term *kv)
 {
+    uint32_t num_pairs = num_pairs_and_fail >> 1;
+    bool has_fail_label = (num_pairs_and_fail & 1) != 0;
     const struct RecordDef *def = jit_resolve_record_id(ctx, jit_state, id, src);
     if (UNLIKELY(def == NULL)) {
+        if (has_fail_label) {
+            return term_invalid_term();
+        }
         return raise_badrecord(ctx, term_is_nil(src) ? id : src);
     }
 
     Module *owning_mod = globalcontext_get_module(
         ctx->global, term_to_atom_index(def->module));
     if (UNLIKELY(owning_mod == NULL)) {
+        if (has_fail_label) {
+            return term_invalid_term();
+        }
         return raise_badrecord(ctx, id);
     }
 
@@ -593,6 +586,9 @@ static term jit_put_record(Context *ctx, JITState *jit_state, term id, term src,
             term default_val = module_decode_record_default(
                 owning_mod, ctx, def->fields[i].default_encoded);
             if (UNLIKELY(term_is_invalid_term(default_val))) {
+                if (has_fail_label) {
+                    return term_invalid_term();
+                }
                 return raise_badrecord(ctx, id);
             }
             term_put_record_value(dst, i, default_val);
@@ -611,6 +607,9 @@ static term jit_put_record(Context *ctx, JITState *jit_state, term id, term src,
             k++;
         }
         if (UNLIKELY(k == num_fields)) {
+            if (has_fail_label) {
+                return term_invalid_term();
+            }
             return raise_badfield(ctx, def, term_to_atom_index(field_name));
         }
         term_put_record_value(dst, k, value);

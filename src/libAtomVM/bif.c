@@ -414,7 +414,7 @@ term raise_badfield(Context *ctx, const struct RecordDef *def, atom_index_t fiel
     return term_invalid_term();
 }
 
-term bif_erlang_get_record_field_3(Context *ctx, uint32_t fail_label, term src, term id, term field)
+term record_get_field(Context *ctx, uint32_t fail_label, term current_module, term src, term id, term field)
 {
     if (UNLIKELY(!term_is_record(src))) {
         if (fail_label == 0) {
@@ -426,10 +426,11 @@ term bif_erlang_get_record_field_3(Context *ctx, uint32_t fail_label, term src, 
     const struct RecordDef *def = term_get_record_def(src);
     bool id_matches = false;
     if (term_is_atom(id)) {
-        id_matches = (id == def->name);
+        id_matches = (id == UNDERSCORE_ATOM) || (id == def->name);
     } else if (term_is_tuple(id) && term_get_tuple_arity(id) == 2) {
         id_matches = (def->module == term_get_tuple_element(id, 0))
-            && (def->name == term_get_tuple_element(id, 1));
+            && (def->name == term_get_tuple_element(id, 1))
+            && (def->is_exported || def->module == current_module);
     }
     if (UNLIKELY(!id_matches)) {
         if (fail_label == 0) {
@@ -444,8 +445,15 @@ term bif_erlang_get_record_field_3(Context *ctx, uint32_t fail_label, term src, 
         }
     }
 
-    // Field not found in the record's definition.
-    RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+    if (fail_label == 0 && term_is_atom(field)) {
+        return raise_badfield(ctx, def, term_to_atom_index(field));
+    }
+    return term_invalid_term();
+}
+
+term bif_erlang_get_record_field_3(Context *ctx, uint32_t fail_label, term src, term id, term field)
+{
+    return record_get_field(ctx, fail_label, term_invalid_term(), src, id, field);
 }
 
 term bif_records_get_2(Context *ctx, uint32_t fail_label, term key, term record)

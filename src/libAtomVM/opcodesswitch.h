@@ -6687,45 +6687,13 @@ schedule_in:
                     TRACE("get_record_field/5 fail=%u, field=0x%" TERM_X_FMT "\n",
                         (unsigned) fail_label, field);
 
-                    if (UNLIKELY(!term_is_record(src))) {
-                        if (fail_label) {
-                            pc = mod->labels[fail_label];
-                            break;
-                        }
-                        (void) raise_badrecord(ctx, src);
-                        HANDLE_ERROR();
-                    }
-
-                    const struct RecordDef *def = term_get_record_def(src);
-                    bool id_matches = false;
-                    if (term_is_atom(id)) {
-                        id_matches = (id == def->name);
-                    } else if (term_is_tuple(id) && term_get_tuple_arity(id) == 2) {
-                        id_matches = (def->module == term_get_tuple_element(id, 0))
-                            && (def->name == term_get_tuple_element(id, 1));
-                    }
-                    if (UNLIKELY(!id_matches)) {
-                        if (fail_label) {
-                            pc = mod->labels[fail_label];
-                            break;
-                        }
-                        (void) raise_badrecord(ctx, src);
-                        HANDLE_ERROR();
-                    }
-
-                    term value = term_invalid_term();
-                    for (size_t k = 0; k < def->num_fields; k++) {
-                        if (def->fields[k].name == field) {
-                            value = term_get_record_value(src, k);
-                            break;
-                        }
-                    }
+                    term value = record_get_field(ctx, fail_label, module_get_name(mod), src, id, field);
                     if (UNLIKELY(term_is_invalid_term(value))) {
                         if (fail_label) {
                             pc = mod->labels[fail_label];
                             break;
                         }
-                        RAISE_ERROR(BADARG_ATOM);
+                        HANDLE_ERROR();
                     }
 
                     WRITE_REGISTER(dreg, value);
