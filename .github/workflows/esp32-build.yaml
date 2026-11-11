@@ -54,6 +54,12 @@ jobs:
         jit: [false]
 
         include:
+        # ESP-NOW on a pre-5.5 ESP-IDF, whose send callback takes the MAC
+        # (merged into the esp32c3 v5.2.8 build).
+        - esp-idf-target: "esp32c3"
+          idf-version: 'v5.2.8'
+          espnow: 'ON'
+          jit: false
         - esp-idf-target: "esp32p4"
           idf-version: 'v5.4.4'
           jit: false

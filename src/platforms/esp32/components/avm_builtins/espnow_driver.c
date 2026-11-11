@@ -87,6 +87,7 @@ struct EspNowData
 static struct EspNowData *espnow_data;
 
 static NativeHandlerResult espnow_consume_mailbox(Context *ctx);
+static bool sta_associated(void);
 
 static const uint8_t broadcast_mac[MAC_LEN] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 
@@ -127,11 +128,20 @@ static void queue_event(const struct EspNowEvent *event)
 // Wi-Fi task.
 static void espnow_recv_cb(const esp_now_recv_info_t *info, const uint8_t *payload, int len)
 {
+    // A longer frame (ESP-NOW v2, ESP-IDF 5.4 or newer) would be truncated:
+    // dropped and counted instead.
+    if (len <= 0 || len > ESP_NOW_MAX_DATA_LEN) {
+        struct EspNowData *data = espnow_data;
+        if (data != NULL) {
+            data->dropped++;
+        }
+        return;
+    }
     struct EspNowEvent event = { .kind = EspNowReceived };
     memcpy(event.mac, info->src_addr, MAC_LEN);
     event.rssi = info->rx_ctrl->rssi;
-    event.len = len < ESP_NOW_MAX_DATA_LEN ? len : ESP_NOW_MAX_DATA_LEN;
-    memcpy(event.data, payload, event.len);
+    event.len = len;
+    memcpy(event.data, payload, len);
     queue_event(&event);
 }
 
@@ -207,10 +217,12 @@ static EventListener *espnow_event_callback(GlobalContext *glb, EventListener *l
     return listener;
 }
 
-// A 6-byte MAC binary, or `broadcast'.
-static bool get_mac(term t, GlobalContext *glb, uint8_t mac[MAC_LEN])
+// A 6-byte MAC binary, or `broadcast' where `broadcast' is allowed: send/3.
+// The broadcast peer is the driver's, added at open; adding it again can
+// only fail, and deleting it would break every later broadcast.
+static bool get_mac(term t, GlobalContext *glb, bool broadcast, uint8_t mac[MAC_LEN])
 {
-    if (t == globalcontext_make_atom(glb, ATOM_STR("\x9", "broadcast"))) {
+    if (broadcast && t == globalcontext_make_atom(glb, ATOM_STR("\x9", "broadcast"))) {
         memcpy(mac, broadcast_mac, MAC_LEN);
         return true;
     }
@@ -238,7 +250,12 @@ static void teardown(struct EspNowData *data)
     esp_now_deinit();
     espnow_data = NULL;
     sys_unregister_listener(data->global, &data->listener);
-    xQueueRemoveFromSet(data->queue, event_set);
+    // xQueueRemoveFromSet fails on a queue that still holds items, and the
+    // queue must leave the set before it is deleted.
+    xQueueReset(data->queue);
+    if (UNLIKELY(xQueueRemoveFromSet(data->queue, event_set) != pdPASS)) {
+        ESP_LOGE(TAG, "Failed to remove the ESP-NOW queue from the event set");
+    }
     vQueueDelete(data->queue);
     network_wifi_release();
     free(data);
@@ -292,9 +309,9 @@ static Context *espnow_create_port(GlobalContext *global, term opts)
         free(data);
         return NULL;
     }
-    // On a connected STA the channel is the access point's: set_channel fails
-    // and ESP-NOW follows it.
-    if (channel != 0) {
+    // On an associated STA the channel is the access point's, and ESP-NOW
+    // follows it.
+    if (channel != 0 && !sta_associated()) {
         esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
     }
 
@@ -323,103 +340,143 @@ static Context *espnow_create_port(GlobalContext *global, term opts)
     }
 
     Context *ctx = context_new(global);
+    if (IS_NULL_PTR(ctx)) {
+        teardown(data);
+        return NULL;
+    }
     ctx->native_handler = espnow_consume_mailbox;
     ctx->platform_data = data;
     return ctx;
 }
 
-static term error_tuple(Context *ctx, esp_err_t err)
+// The ESP-NOW errors a caller can act on, as atoms; anything else as
+// esp_err_to_term/2 gives it.
+static term error_tuple(Heap *heap, GlobalContext *glb, esp_err_t err)
 {
-    return port_create_error_tuple(ctx, term_from_int(err));
+    term reason;
+    switch (err) {
+        case ESP_ERR_ESPNOW_NOT_FOUND:
+            reason = globalcontext_make_atom(glb, ATOM_STR("\x9", "not_found"));
+            break;
+        case ESP_ERR_ESPNOW_EXIST:
+            reason = globalcontext_make_atom(glb, ATOM_STR("\xB", "peer_exists"));
+            break;
+        case ESP_ERR_ESPNOW_FULL:
+            reason = globalcontext_make_atom(glb, ATOM_STR("\xE", "peer_list_full"));
+            break;
+        case ESP_ERR_ESPNOW_IF:
+            reason = globalcontext_make_atom(glb, ATOM_STR("\x12", "interface_mismatch"));
+            break;
+        case ESP_ERR_ESPNOW_CHAN:
+            reason = globalcontext_make_atom(glb, ATOM_STR("\x10", "channel_mismatch"));
+            break;
+        case ESP_ERR_ESPNOW_NO_MEM:
+            reason = globalcontext_make_atom(glb, ATOM_STR("\x6", "no_mem"));
+            break;
+        default:
+            reason = esp_err_to_term(glb, err);
+            break;
+    }
+    return port_heap_create_error_tuple(heap, reason);
+}
+
+static term badarg(Heap *heap)
+{
+    return port_heap_create_error_tuple(heap, BADARG_ATOM);
 }
 
 // {add_peer, Mac, Options}: `channel' (0, the current one) and `lmk', a 16-byte
 // key that encrypts the traffic with this peer (the PMK must be set at open).
-static term do_add_peer(Context *ctx, term req)
+static term do_add_peer(Heap *heap, GlobalContext *glb, term req)
 {
-    GlobalContext *glb = ctx->global;
     uint8_t mac[MAC_LEN];
-    if (!term_is_tuple(req) || term_get_tuple_arity(req) != 3 || !get_mac(term_get_tuple_element(req, 1), glb, mac)) {
-        return port_create_error_tuple(ctx, BADARG_ATOM);
+    if (!term_is_tuple(req) || term_get_tuple_arity(req) != 3 || !get_mac(term_get_tuple_element(req, 1), glb, false, mac)) {
+        return badarg(heap);
     }
     term peer_opts = term_get_tuple_element(req, 2);
     int channel = get_channel(interop_kv_get_value_default(peer_opts, ATOM_STR("\x7", "channel"), term_from_int(0), glb));
     term lmk = interop_kv_get_value_default(peer_opts, ATOM_STR("\x3", "lmk"), term_invalid_term(), glb);
     if (channel < 0 || (!term_is_invalid_term(lmk) && (!term_is_binary(lmk) || term_binary_size(lmk) != ESP_NOW_KEY_LEN))) {
-        return port_create_error_tuple(ctx, BADARG_ATOM);
+        return badarg(heap);
     }
     esp_err_t err = add_peer(mac, channel, term_is_invalid_term(lmk) ? NULL : (const uint8_t *) term_binary_data(lmk));
-    return err == ESP_OK ? OK_ATOM : error_tuple(ctx, err);
+    return err == ESP_OK ? OK_ATOM : error_tuple(heap, glb, err);
 }
 
-static term do_del_peer(Context *ctx, term req)
+static term do_del_peer(Heap *heap, GlobalContext *glb, term req)
 {
     uint8_t mac[MAC_LEN];
-    if (!term_is_tuple(req) || term_get_tuple_arity(req) != 2 || !get_mac(term_get_tuple_element(req, 1), ctx->global, mac)) {
-        return port_create_error_tuple(ctx, BADARG_ATOM);
+    if (!term_is_tuple(req) || term_get_tuple_arity(req) != 2 || !get_mac(term_get_tuple_element(req, 1), glb, false, mac)) {
+        return badarg(heap);
     }
     esp_err_t err = esp_now_del_peer(mac);
-    return err == ESP_OK ? OK_ATOM : error_tuple(ctx, err);
+    return err == ESP_OK ? OK_ATOM : error_tuple(heap, glb, err);
 }
 
 // {send, Mac | broadcast, Data}: queued for the radio; the result comes as
 // {espnow, sent, Mac, ok | fail}.
-static term do_send(Context *ctx, term req)
+static term do_send(Heap *heap, GlobalContext *glb, term req)
 {
     uint8_t mac[MAC_LEN];
-    if (!term_is_tuple(req) || term_get_tuple_arity(req) != 3 || !get_mac(term_get_tuple_element(req, 1), ctx->global, mac)) {
-        return port_create_error_tuple(ctx, BADARG_ATOM);
+    if (!term_is_tuple(req) || term_get_tuple_arity(req) != 3 || !get_mac(term_get_tuple_element(req, 1), glb, true, mac)) {
+        return badarg(heap);
     }
     term payload = term_get_tuple_element(req, 2);
     if (!term_is_binary(payload) || term_binary_size(payload) == 0 || term_binary_size(payload) > ESP_NOW_MAX_DATA_LEN) {
-        return port_create_error_tuple(ctx, BADARG_ATOM);
+        return badarg(heap);
     }
     esp_err_t err = esp_now_send(mac, (const uint8_t *) term_binary_data(payload), term_binary_size(payload));
-    return err == ESP_OK ? OK_ATOM : error_tuple(ctx, err);
+    return err == ESP_OK ? OK_ATOM : error_tuple(heap, glb, err);
 }
 
-static term do_set_channel(Context *ctx, struct EspNowData *data, term req)
+// While the STA is associated the channel is the access point's: moving the
+// radio would take the STA off it, so it is refused.
+static bool sta_associated(void)
+{
+    wifi_ap_record_t ap;
+    return esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
+}
+
+static term do_set_channel(Heap *heap, GlobalContext *glb, struct EspNowData *data, term req)
 {
     int channel = term_is_tuple(req) && term_get_tuple_arity(req) == 2 ? get_channel(term_get_tuple_element(req, 1)) : -1;
     if (channel <= 0) {
-        return port_create_error_tuple(ctx, BADARG_ATOM);
+        return badarg(heap);
+    }
+    if (sta_associated()) {
+        return port_heap_create_error_tuple(heap, globalcontext_make_atom(glb, ATOM_STR("\xD", "sta_connected")));
     }
     esp_err_t err = esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
     if (err != ESP_OK) {
-        return error_tuple(ctx, err);
+        return error_tuple(heap, glb, err);
     }
     data->channel = channel;
     return OK_ATOM;
 }
 
-static term do_get_channel(Context *ctx)
+static term do_get_channel(Heap *heap, GlobalContext *glb)
 {
     uint8_t primary;
     wifi_second_chan_t second;
     esp_err_t err = esp_wifi_get_channel(&primary, &second);
     if (err != ESP_OK) {
-        return error_tuple(ctx, err);
+        return error_tuple(heap, glb, err);
     }
-    term ok = term_alloc_tuple(2, &ctx->heap);
-    term_put_tuple_element(ok, 0, OK_ATOM);
-    term_put_tuple_element(ok, 1, term_from_int(primary));
-    return ok;
+    return port_heap_create_ok_tuple(heap, term_from_int(primary));
 }
 
-// {ok, #{dropped => N}}: events lost because the queue was full.
-static term do_stats(Context *ctx, struct EspNowData *data)
+// {ok, #{dropped => N}}: frames lost before reaching the receiver.
+static term do_stats(Heap *heap, GlobalContext *glb, struct EspNowData *data)
 {
-    term map = term_alloc_map(1, &ctx->heap);
-    term_set_map_assoc(map, 0, globalcontext_make_atom(ctx->global, ATOM_STR("\x7", "dropped")), term_from_int(data->dropped));
-    term ok = term_alloc_tuple(2, &ctx->heap);
-    term_put_tuple_element(ok, 0, OK_ATOM);
-    term_put_tuple_element(ok, 1, map);
-    return ok;
+    term map = term_alloc_map(1, heap);
+    term_set_map_assoc(map, 0, globalcontext_make_atom(glb, ATOM_STR("\x7", "dropped")), term_from_int(data->dropped));
+    return port_heap_create_ok_tuple(heap, map);
 }
 
 static NativeHandlerResult espnow_consume_mailbox(Context *ctx)
 {
     struct EspNowData *data = ctx->platform_data;
+    GlobalContext *glb = ctx->global;
     bool closed = false;
     while (!closed && mailbox_has_next(&ctx->mailbox)) {
         Message *message = mailbox_first(&ctx->mailbox);
@@ -431,46 +488,46 @@ static NativeHandlerResult espnow_consume_mailbox(Context *ctx)
         }
         term req = gen_message.req;
         term cmd_term = term_is_atom(req) ? req : (term_is_tuple(req) && term_get_tuple_arity(req) > 0 ? term_get_tuple_element(req, 0) : req);
-        enum espnow_cmd cmd = term_is_atom(cmd_term) ? interop_atom_term_select_int(cmd_table, cmd_term, ctx->global) : EspNowInvalidCmd;
+        enum espnow_cmd cmd = term_is_atom(cmd_term) ? interop_atom_term_select_int(cmd_table, cmd_term, glb) : EspNowInvalidCmd;
 
-        // The largest reply: {Ref, {ok, #{dropped => N}}}, or an error tuple.
-        if (UNLIKELY(memory_ensure_free(ctx, PORT_REPLY_SIZE + TUPLE_SIZE(2) + term_map_size_in_terms(1)) != MEMORY_GC_OK)) {
-            ESP_LOGE(TAG, "No memory for a reply");
-            mailbox_remove_message(&ctx->mailbox, &ctx->heap);
-            continue;
+        // The reply is built on the stack, so it can always be sent: a caller
+        // of port:call/2 waits for it without a timeout. The largest is
+        // {Ref, {ok, #{dropped => N}}}.
+        BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + term_map_size_in_terms(1), heap);
+        {
+            term reply;
+            switch (cmd) {
+                case EspNowAddPeerCmd:
+                    reply = do_add_peer(&heap, glb, req);
+                    break;
+                case EspNowDelPeerCmd:
+                    reply = do_del_peer(&heap, glb, req);
+                    break;
+                case EspNowSendCmd:
+                    reply = do_send(&heap, glb, req);
+                    break;
+                case EspNowSetChannelCmd:
+                    reply = do_set_channel(&heap, glb, data, req);
+                    break;
+                case EspNowGetChannelCmd:
+                    reply = do_get_channel(&heap, glb);
+                    break;
+                case EspNowStatsCmd:
+                    reply = do_stats(&heap, glb, data);
+                    break;
+                case EspNowCloseCmd:
+                    teardown(data);
+                    ctx->platform_data = NULL;
+                    closed = true;
+                    reply = OK_ATOM;
+                    break;
+                default:
+                    reply = badarg(&heap);
+                    break;
+            }
+            port_send_message(glb, gen_message.pid, port_heap_create_reply(&heap, gen_message.ref, reply));
         }
-
-        term reply;
-        switch (cmd) {
-            case EspNowAddPeerCmd:
-                reply = do_add_peer(ctx, req);
-                break;
-            case EspNowDelPeerCmd:
-                reply = do_del_peer(ctx, req);
-                break;
-            case EspNowSendCmd:
-                reply = do_send(ctx, req);
-                break;
-            case EspNowSetChannelCmd:
-                reply = do_set_channel(ctx, data, req);
-                break;
-            case EspNowGetChannelCmd:
-                reply = do_get_channel(ctx);
-                break;
-            case EspNowStatsCmd:
-                reply = do_stats(ctx, data);
-                break;
-            case EspNowCloseCmd:
-                teardown(data);
-                ctx->platform_data = NULL;
-                closed = true;
-                reply = OK_ATOM;
-                break;
-            default:
-                reply = port_create_error_tuple(ctx, BADARG_ATOM);
-                break;
-        }
-        port_send_reply(ctx, gen_message.pid, gen_message.ref, reply);
+        END_WITH_STACK_HEAP(heap, glb);
         mailbox_remove_message(&ctx->mailbox, &ctx->heap);
     }
     return closed ? NativeTerminate : NativeContinue;
