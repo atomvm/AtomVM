@@ -336,6 +336,12 @@ else()
     set(ATOMVM_VERSION ${ATOMVM_BASE_VERSION})
 endif()
 
+# A build that differs from another only in its configuration (sdkconfig,
+# partition table) can tell itself apart, e.g. -DATOMVM_VERSION_SUFFIX=.cfg.1a2b3c4d
+if (ATOMVM_VERSION_SUFFIX)
+    string(APPEND ATOMVM_VERSION "${ATOMVM_VERSION_SUFFIX}")
+endif()
+
 set(AVM_SYSTEM_ARCHITECTURE_FALLBACK_ARCH "${CMAKE_SYSTEM_PROCESSOR}")
 if (AVM_SYSTEM_ARCHITECTURE_FALLBACK_ARCH STREQUAL "")
     set(AVM_SYSTEM_ARCHITECTURE_FALLBACK_ARCH "unknown")

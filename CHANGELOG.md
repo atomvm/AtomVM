@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `gen:start/5,6`, used by Elixir's `GenServer`
 - Added ML-KEM-768 (FIPS 203) key encapsulation to `crypto`, requiring libsodium >= 1.0.22
 - Added `AVM_STATIC_LIBSODIUM` CMake option to statically link libsodium
+- Added `ATOMVM_VERSION_SUFFIX` CMake option, appended to the version, to tell apart builds of the
+  same commit with a different configuration
 - Added support for non-byte-aligned bitstrings
 - Added `ap_authmode` to the network AP configuration: on the ESP32, WPA2 only, WPA2/WPA3 or WPA3
   instead of the fixed WPA/WPA2; on the Pico W, only `wpa_wpa2_psk`, as its driver cannot enforce
