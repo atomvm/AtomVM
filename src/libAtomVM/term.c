@@ -1277,6 +1277,20 @@ term term_alloc_refc_binary(size_t size, bool is_const, Heap *heap, GlobalContex
     return ret;
 }
 
+term term_from_refc_binary(struct RefcBinary *refc, Heap *heap, GlobalContext *glb)
+{
+    term *boxed_value = memory_heap_alloc(heap, TERM_BOXED_REFC_BINARY_SIZE);
+    boxed_value[0] = ((TERM_BOXED_REFC_BINARY_SIZE - 1) << 6) | TERM_BOXED_REFC_BINARY;
+    boxed_value[1] = (term) refc->size;
+    boxed_value[2] = RefcNoFlags;
+    boxed_value[3] = (term) refc;
+    term ret = ((term) boxed_value) | TERM_PRIMARY_BOXED;
+    refc->ref_count = 1; // this heap's MSO list owns it from here
+    heap->root->mso_list = term_list_init_prepend(boxed_value + REFC_BINARY_CONS_OFFSET, ret, heap->root->mso_list);
+    synclist_append(&glb->refc_binaries, &refc->head);
+    return ret;
+}
+
 term term_reuse_binary(term src, size_t size, Heap *heap, GlobalContext *glb)
 {
     if (term_is_sub_binary(src)) {
