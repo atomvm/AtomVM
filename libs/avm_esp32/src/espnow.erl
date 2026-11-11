@@ -21,8 +21,9 @@
 %
 
 %%-----------------------------------------------------------------------------
-%% @doc ESP-NOW: connectionless frames of up to 250 bytes between ESP32
-%% devices, on the Wi-Fi radio, with no access point.
+%% @doc ESP-NOW: connectionless frames between ESP32 devices, on the Wi-Fi
+%% radio, with no access point: up to 1470 bytes on ESP-IDF 5.4 or newer
+%% (ESP-NOW v2, which peers on an older ESP-IDF cannot receive), 250 before.
 %%
 %% Needs `CONFIG_AVM_ENABLE_ESPNOW'. The network driver owns the radio: ESP-NOW
 %% works with or without a network, and survives `network:stop/0' and
@@ -30,9 +31,8 @@
 %% channel; otherwise on the channel given to `open/1' or `set_channel/2'.
 %%
 %% The receiver (the caller of `open/1' unless `{receiver, Pid}') gets
-%% `{espnow, rx, Mac, Data, #{rssi := Rssi}}' for each frame, and
-%% `{espnow, sent, Mac, ok | fail}' for each `send/3': for a unicast frame
-%% `ok' means the peer acknowledged it, for a broadcast only that it went out.
+%% `{espnow, rx, Mac, Data, #{rssi := Rssi}}' for each frame. `send/3'
+%% returns once the frame is out.
 %% @end
 %%-----------------------------------------------------------------------------
 -module(espnow).
@@ -116,8 +116,13 @@ add_peer(Port, Mac, Options) ->
 del_peer(Port, Mac) ->
     port:call(Port, {del_peer, Mac}).
 
-%% @doc Queues `Data' (1 to 250 bytes) for `Mac', a peer, or `broadcast'. The
-%% result comes to the receiver as `{espnow, sent, Mac, ok | fail}'.
+%% @doc Sends `Data' (1 to 1470 bytes on ESP-IDF 5.4 or newer, 250 before)
+%% to `Mac', a peer, or `broadcast', and waits for the result: `ok' (for a
+%% unicast frame the peer acknowledged it, for a broadcast it went out) or
+%% `{error, fail}'. The driver gives the radio one frame at a time, the next
+%% once the previous one has its result, as the ESP-NOW guide recommends;
+%% concurrent callers wait their turn. `{error, closed}' if the port closes
+%% first.
 -spec send(port(), mac() | broadcast, binary()) -> ok | {error, term()}.
 send(Port, Mac, Data) ->
     port:call(Port, {send, Mac, Data}).
@@ -133,10 +138,10 @@ set_channel(Port, Channel) ->
 get_channel(Port) ->
     port:call(Port, get_channel).
 
-%% @doc `dropped': frames and send results lost before reaching the
-%% receiver: the driver's queue between the Wi-Fi task and the scheduler (8
-%% events) was full, or a frame was longer than 250 bytes (ESP-NOW v2). The
-%% receiver's mailbox is not bounded.
+%% @doc `dropped': received frames lost before reaching the receiver: the
+%% frames waiting between the Wi-Fi task and the scheduler already held
+%% `CONFIG_AVM_ESPNOW_RX_BUDGET' bytes (8192 by default), their queue was
+%% full, or there was no memory. The receiver's mailbox is not bounded.
 -spec stats(port()) -> {ok, #{dropped := non_neg_integer()}}.
 stats(Port) ->
     port:call(Port, stats).

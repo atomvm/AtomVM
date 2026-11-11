@@ -128,6 +128,17 @@ config AVM_ENABLE_ESPNOW
         driver owns the Wi-Fi radio: ESP-NOW holds it, and network:stop/0
         leaves it on while ESP-NOW is open.
 
+config AVM_ESPNOW_RX_BUDGET
+    int "Bytes of received ESP-NOW frames waiting for the scheduler"
+    depends on AVM_ENABLE_ESPNOW
+    range 1470 65536
+    default 8192
+    help
+        The Wi-Fi task copies each received frame into a binary the receiver
+        will get, which waits there until the scheduler delivers it. Past
+        this many bytes waiting, further frames are dropped and counted
+        (espnow:stats/1) instead of taking more memory in a burst.
+
 config AVM_ENABLE_SOCKET_PORT_DRIVER
     bool "Enable socket port driver"
 	depends on ESP_WIFI_ENABLED || ESP_HOST_WIFI_ENABLED || ESP32_WIFI_ENABLED || ETH_ENABLED || ESP_WIFI_REMOTE_ENABLED

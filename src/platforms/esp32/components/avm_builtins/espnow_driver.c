@@ -23,6 +23,7 @@
 #include <sdkconfig.h>
 #ifdef CONFIG_AVM_ENABLE_ESPNOW
 
+#include <stdatomic.h>
 #include <string.h>
 
 #include <esp_idf_version.h>
@@ -39,6 +40,7 @@
 #include "interop.h"
 #include "mailbox.h"
 #include "port.h"
+#include "refc_binary.h"
 #include "term.h"
 #include "utils.h"
 
@@ -49,10 +51,17 @@
 
 #define TAG "espnow_driver"
 
-// Events wait here between the Wi-Fi task and the scheduler. A fixed queue of
-// fixed-size items, so a burst costs no allocation: when it is full the packet
-// is dropped and counted (`stats'), never queued in more memory.
-#define ESPNOW_QUEUE_LEN 8
+// The longest frame this ESP-IDF sends and receives: 1470 bytes with ESP-NOW
+// v2 (ESP-IDF 5.4 or newer), 250 before.
+#ifdef ESP_NOW_MAX_DATA_LEN_V2
+#define ESPNOW_MAX_FRAME ESP_NOW_MAX_DATA_LEN_V2
+#else
+#define ESPNOW_MAX_FRAME ESP_NOW_MAX_DATA_LEN
+#endif
+// Events wait here between the Wi-Fi task and the scheduler: small items, a
+// received frame being a pointer to a binary the Wi-Fi task already filled.
+// The bytes those binaries hold are bounded by CONFIG_AVM_ESPNOW_RX_BUDGET.
+#define ESPNOW_QUEUE_LEN 16
 #define MAC_LEN 6
 // {Ref, Reply}
 #define PORT_REPLY_SIZE (TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_SHORT_SIZE)
@@ -69,8 +78,22 @@ struct EspNowEvent
     uint8_t mac[MAC_LEN];
     int8_t rssi;
     uint8_t ok;
-    uint8_t len;
-    uint8_t data[ESP_NOW_MAX_DATA_LEN];
+    // EspNowReceived only: created and filled in the Wi-Fi task, neither
+    // listed nor counted until the listener turns it into a term.
+    struct RefcBinary *frame;
+};
+
+// A send/3 waiting for the radio: ESP-NOW is given one frame at a time, the
+// next once the send callback of the previous one has come, and its caller is
+// answered from that callback.
+struct EspNowSend
+{
+    struct EspNowSend *next;
+    int32_t pid;
+    uint64_t ref;
+    uint8_t mac[MAC_LEN];
+    uint16_t len;
+    uint8_t data[];
 };
 
 struct EspNowData
@@ -85,14 +108,24 @@ struct EspNowData
     // or a listener still reaches. The next open finds the port gone and
     // tears this down.
     int32_t port;
-    volatile uint32_t dropped;
+    // Bytes of received frames between the Wi-Fi task and their delivery.
+    _Atomic uint32_t rx_bytes;
+    _Atomic uint32_t dropped;
+    // The sends, the first one with the radio when `sending'. Only the
+    // port's handler (and teardown) touches them.
+    struct EspNowSend *sends;
+    struct EspNowSend *last_send;
+    bool sending;
 };
 
-// ESP-NOW is one per chip: at most one open port.
-static struct EspNowData *espnow_data;
+// ESP-NOW is one per chip: at most one open port. Stored before the
+// callbacks are registered, cleared before teardown frees it.
+static _Atomic(struct EspNowData *) espnow_data;
+// Callbacks running now, so that teardown waits for them.
+static _Atomic uint32_t espnow_in_callback;
 // The channel ESP-NOW was given (0: follow the current one), read when the
 // network driver brings the radio back as a bare STA.
-static uint8_t espnow_channel;
+static _Atomic uint8_t espnow_channel;
 
 static NativeHandlerResult espnow_consume_mailbox(Context *ctx);
 static bool sta_associated(void);
@@ -124,35 +157,59 @@ static const AtomStringIntPair cmd_table[] = {
     SELECT_INT_DEFAULT(EspNowInvalidCmd)
 };
 
-static void queue_event(const struct EspNowEvent *event)
+// The callbacks run in the Wi-Fi task and take no VM lock: malloc, memcpy,
+// atomics and a queue send that does not wait. NULL means the driver is
+// gone: do nothing.
+static struct EspNowData *callback_enter(void)
 {
-    struct EspNowData *data = espnow_data;
-    if (UNLIKELY(data == NULL)) {
-        return;
+    atomic_fetch_add(&espnow_in_callback, 1); // ordered before the load
+    struct EspNowData *data = atomic_load(&espnow_data);
+    if (data == NULL) {
+        atomic_fetch_sub(&espnow_in_callback, 1);
     }
-    if (xQueueSend(data->queue, event, 0) != pdTRUE) {
-        data->dropped++;
-    }
+    return data;
 }
 
-// Wi-Fi task.
+static void callback_leave(void)
+{
+    atomic_fetch_sub(&espnow_in_callback, 1);
+}
+
+// Wi-Fi task: the payload is copied once, into the binary the receiver will
+// get.
 static void espnow_recv_cb(const esp_now_recv_info_t *info, const uint8_t *payload, int len)
 {
-    // A longer frame (ESP-NOW v2, ESP-IDF 5.4 or newer) would be truncated:
-    // dropped and counted instead.
-    if (len <= 0 || len > ESP_NOW_MAX_DATA_LEN) {
-        struct EspNowData *data = espnow_data;
-        if (data != NULL) {
-            data->dropped++;
-        }
+    struct EspNowData *data = callback_enter();
+    if (data == NULL) {
         return;
     }
-    struct EspNowEvent event = { .kind = EspNowReceived };
+    if (len <= 0 || len > ESPNOW_MAX_FRAME) {
+        atomic_fetch_add(&data->dropped, 1);
+        goto leave;
+    }
+    // The last slot is the send result's: with one frame out at a time
+    // there is at most one, and a send/3 waits for it. Both callbacks run in
+    // the Wi-Fi task, one after the other.
+    if (atomic_fetch_add(&data->rx_bytes, len) + len > CONFIG_AVM_ESPNOW_RX_BUDGET
+        || uxQueueSpacesAvailable(data->queue) <= 1) {
+        goto drop;
+    }
+    struct RefcBinary *frame = refc_binary_create_refc(len);
+    if (UNLIKELY(frame == NULL)) {
+        goto drop;
+    }
+    memcpy(frame->data, payload, len);
+    struct EspNowEvent event = { .kind = EspNowReceived, .rssi = info->rx_ctrl->rssi, .frame = frame };
     memcpy(event.mac, info->src_addr, MAC_LEN);
-    event.rssi = info->rx_ctrl->rssi;
-    event.len = len;
-    memcpy(event.data, payload, len);
-    queue_event(&event);
+    if (LIKELY(xQueueSend(data->queue, &event, 0) == pdTRUE)) {
+        goto leave;
+    }
+    free(frame); // neither listed nor counted
+drop:
+    atomic_fetch_sub(&data->rx_bytes, len);
+    atomic_fetch_add(&data->dropped, 1);
+leave:
+    callback_leave();
 }
 
 // Wi-Fi task. ESP-IDF 5.5 hands the send result with the frame's info, older
@@ -165,24 +222,33 @@ static void espnow_send_cb(const esp_now_send_info_t *tx_info, esp_now_send_stat
 static void espnow_send_cb(const uint8_t *mac, esp_now_send_status_t status)
 {
 #endif
+    struct EspNowData *data = callback_enter();
+    if (data == NULL) {
+        return;
+    }
     struct EspNowEvent event = { .kind = EspNowSent, .ok = status == ESP_NOW_SEND_SUCCESS };
     if (mac != NULL) {
         memcpy(event.mac, mac, MAC_LEN);
     }
-    queue_event(&event);
+    // A slot is kept for it (espnow_recv_cb).
+    xQueueSend(data->queue, &event, 0);
+    callback_leave();
 }
 
 // The network driver brought the radio back as a bare STA (network:stop/0):
-// the channel is ours again.
+// the channel is ours again. Reads nothing that teardown frees.
 static void espnow_wifi_restarted(void)
 {
-    if (espnow_channel != 0) {
-        esp_wifi_set_channel(espnow_channel, WIFI_SECOND_CHAN_NONE);
+    uint8_t channel = atomic_load(&espnow_channel);
+    if (channel != 0) {
+        esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
     }
 }
 
-// Scheduler: one event to the receiver, as
-// {espnow, rx, Mac, Data, #{rssi => Rssi}} or {espnow, sent, Mac, ok | fail}.
+// Scheduler. A received frame goes to the receiver as
+// {espnow, rx, Mac, Data, #{rssi => Rssi}}, its binary the one the Wi-Fi task
+// filled; a send result goes to the port, as {espnow_sent, ok | fail}, which
+// answers the waiting send/3 and gives the radio the next frame.
 static EventListener *espnow_event_callback(GlobalContext *glb, EventListener *listener)
 {
     struct EspNowData *data = GET_LIST_ENTRY(listener, struct EspNowData, listener);
@@ -191,38 +257,45 @@ static EventListener *espnow_event_callback(GlobalContext *glb, EventListener *l
         return listener;
     }
 
-    bool received = event.kind == EspNowReceived;
-    size_t size = term_binary_heap_size(MAC_LEN)
-        + (received ? TUPLE_SIZE(5) + term_binary_heap_size(event.len) + term_map_size_in_terms(1) : TUPLE_SIZE(4));
-    Heap heap;
-    if (UNLIKELY(memory_init_heap(&heap, size) != MEMORY_GC_OK)) {
-        ESP_LOGE(TAG, "No memory for an event, dropped");
-        data->dropped++;
+    if (event.kind == EspNowSent) {
+        // On the stack: a send/3 waits for it, it cannot be lost.
+        BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(2), heap);
+        {
+            term message = term_alloc_tuple(2, &heap);
+            term_put_tuple_element(message, 0, globalcontext_make_atom(glb, ATOM_STR("\xB", "espnow_sent")));
+            term_put_tuple_element(message, 1, event.ok ? OK_ATOM : globalcontext_make_atom(glb, ATOM_STR("\x4", "fail")));
+            globalcontext_send_message(glb, data->port, message);
+        }
+        END_WITH_STACK_HEAP(heap, glb);
         return listener;
     }
 
-    term mac = term_from_literal_binary(event.mac, MAC_LEN, &heap, glb);
-    term espnow = globalcontext_make_atom(glb, ATOM_STR("\x6", "espnow"));
-    term message;
-    if (received) {
+    size_t staged = event.frame->size; // read now: the frame may be freed below
+    Heap heap;
+    if (UNLIKELY(memory_init_heap(&heap, TUPLE_SIZE(5) + term_binary_heap_size(MAC_LEN) + TERM_BOXED_REFC_BINARY_SIZE + term_map_size_in_terms(1)) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "No memory for a frame, dropped");
+        free(event.frame); // still neither listed nor counted
+        atomic_fetch_sub(&data->rx_bytes, staged);
+        atomic_fetch_add(&data->dropped, 1);
+        return listener;
+    }
+
+    {
         term map = term_alloc_map(1, &heap);
         term_set_map_assoc(map, 0, globalcontext_make_atom(glb, ATOM_STR("\x4", "rssi")), term_from_int(event.rssi));
-        message = term_alloc_tuple(5, &heap);
-        term_put_tuple_element(message, 0, espnow);
+        term message = term_alloc_tuple(5, &heap);
+        term_put_tuple_element(message, 0, globalcontext_make_atom(glb, ATOM_STR("\x6", "espnow")));
         term_put_tuple_element(message, 1, globalcontext_make_atom(glb, ATOM_STR("\x2", "rx")));
-        term_put_tuple_element(message, 2, mac);
-        term_put_tuple_element(message, 3, term_from_literal_binary(event.data, event.len, &heap, glb));
+        term_put_tuple_element(message, 2, term_from_literal_binary(event.mac, MAC_LEN, &heap, glb));
+        // Listed with a count of 1 here; the receiver's copy of the message
+        // takes it to 2, and destroying this heap back to 1, the receiver's.
+        // A receiver that is gone copies nothing, and the binary is freed.
+        term_put_tuple_element(message, 3, term_from_refc_binary(event.frame, &heap, glb));
         term_put_tuple_element(message, 4, map);
-    } else {
-        message = term_alloc_tuple(4, &heap);
-        term_put_tuple_element(message, 0, espnow);
-        term_put_tuple_element(message, 1, globalcontext_make_atom(glb, ATOM_STR("\x4", "sent")));
-        term_put_tuple_element(message, 2, mac);
-        term_put_tuple_element(message, 3, event.ok ? OK_ATOM : globalcontext_make_atom(glb, ATOM_STR("\x4", "fail")));
+        globalcontext_send_message(glb, data->receiver, message);
     }
-    globalcontext_send_message(glb, data->receiver, message);
     memory_destroy_heap(&heap, glb);
-
+    atomic_fetch_sub(&data->rx_bytes, staged);
     return listener;
 }
 
@@ -252,22 +325,54 @@ static int get_channel(term t)
     return channel >= 0 && channel <= 14 ? channel : -1;
 }
 
+// Answers a send/3 that is no longer waiting in the port's handler.
+static void reply_send(GlobalContext *glb, const struct EspNowSend *send, term result_atom, bool ok)
+{
+    BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2), heap);
+    {
+        term result = ok ? OK_ATOM : port_heap_create_error_tuple(&heap, result_atom);
+        term reply = port_heap_create_reply(&heap, term_from_ref_ticks(send->ref, &heap), result);
+        port_send_message(glb, term_from_local_process_id(send->pid), reply);
+    }
+    END_WITH_STACK_HEAP(heap, glb);
+}
+
+// The callbacks first: once espnow_data is NULL no new callback touches
+// `data', and one already running finishes before it goes (a callback never
+// blocks, and on a single core the scheduler cannot preempt one). Then the
+// listener, whose dispatch unregistering waits for, and the queue, emptied
+// of the frames still staged: xQueueRemoveFromSet fails on a non-empty
+// queue. The sends still waiting are answered {error, closed}.
 static void teardown(struct EspNowData *data)
 {
+    GlobalContext *glb = data->global;
     esp_now_unregister_recv_cb();
     esp_now_unregister_send_cb();
     esp_now_deinit();
-    espnow_data = NULL;
-    espnow_channel = 0;
-    sys_unregister_listener(data->global, &data->listener);
-    // xQueueRemoveFromSet fails on a queue that still holds items, and the
-    // queue must leave the set before it is deleted.
-    xQueueReset(data->queue);
+    atomic_store(&espnow_data, NULL);
+    while (atomic_load(&espnow_in_callback) != 0) {
+        vTaskDelay(1);
+    }
+    atomic_store(&espnow_channel, 0);
+    sys_unregister_listener(glb, &data->listener);
+    struct EspNowEvent event;
+    while (xQueueReceive(data->queue, &event, 0) == pdTRUE) {
+        if (event.kind == EspNowReceived) {
+            free(event.frame);
+        }
+    }
     if (UNLIKELY(xQueueRemoveFromSet(data->queue, event_set) != pdPASS)) {
         ESP_LOGE(TAG, "Failed to remove the ESP-NOW queue from the event set");
     }
     vQueueDelete(data->queue);
     network_wifi_release();
+    term closed = globalcontext_make_atom(glb, ATOM_STR("\x6", "closed"));
+    while (data->sends != NULL) {
+        struct EspNowSend *send = data->sends;
+        data->sends = send->next;
+        reply_send(glb, send, closed, false);
+        free(send);
+    }
     free(data);
 }
 
@@ -286,8 +391,37 @@ static term error_atom(Heap *heap, GlobalContext *glb, AtomString reason)
     return port_heap_create_error_tuple(heap, globalcontext_make_atom(glb, reason));
 }
 
-static term error_tuple(Heap *heap, GlobalContext *glb, esp_err_t err);
-static term badarg(Heap *heap);
+// The ESP-NOW errors a caller can act on, as atoms; anything else as
+// esp_err_to_term/2 gives it.
+static term error_reason(GlobalContext *glb, esp_err_t err)
+{
+    switch (err) {
+        case ESP_ERR_ESPNOW_NOT_FOUND:
+            return globalcontext_make_atom(glb, ATOM_STR("\x9", "not_found"));
+        case ESP_ERR_ESPNOW_EXIST:
+            return globalcontext_make_atom(glb, ATOM_STR("\xB", "peer_exists"));
+        case ESP_ERR_ESPNOW_FULL:
+            return globalcontext_make_atom(glb, ATOM_STR("\xE", "peer_list_full"));
+        case ESP_ERR_ESPNOW_IF:
+            return globalcontext_make_atom(glb, ATOM_STR("\x12", "interface_mismatch"));
+        case ESP_ERR_ESPNOW_CHAN:
+            return globalcontext_make_atom(glb, ATOM_STR("\x10", "channel_mismatch"));
+        case ESP_ERR_ESPNOW_NO_MEM:
+            return globalcontext_make_atom(glb, ATOM_STR("\x6", "no_mem"));
+        default:
+            return esp_err_to_term(glb, err);
+    }
+}
+
+static term error_tuple(Heap *heap, GlobalContext *glb, esp_err_t err)
+{
+    return port_heap_create_error_tuple(heap, error_reason(glb, err));
+}
+
+static term badarg(Heap *heap)
+{
+    return port_heap_create_error_tuple(heap, BADARG_ATOM);
+}
 
 // {open, Options}, the port's first call: `receiver', `channel' and `pmk'.
 // `{error, already_open}' while another port has ESP-NOW, `{error, ap_only}'
@@ -296,11 +430,12 @@ static term badarg(Heap *heap);
 static term do_open(Heap *heap, Context *ctx, term req)
 {
     GlobalContext *glb = ctx->global;
-    if (espnow_data != NULL) {
-        if (globalcontext_process_exists(glb, espnow_data->port)) {
+    struct EspNowData *old = atomic_load(&espnow_data);
+    if (old != NULL) {
+        if (globalcontext_process_exists(glb, old->port)) {
             return error_atom(heap, glb, ATOM_STR("\xC", "already_open"));
         }
-        teardown(espnow_data);
+        teardown(old);
     }
 
     term opts = term_is_tuple(req) && term_get_tuple_arity(req) == 2 ? term_get_tuple_element(req, 1) : term_invalid_term();
@@ -316,14 +451,13 @@ static term do_open(Heap *heap, Context *ctx, term req)
         return badarg(heap);
     }
 
-    struct EspNowData *data = malloc(sizeof(struct EspNowData));
+    struct EspNowData *data = calloc(1, sizeof(struct EspNowData));
     if (IS_NULL_PTR(data)) {
         return error_atom(heap, glb, ATOM_STR("\x6", "no_mem"));
     }
     data->global = glb;
     data->receiver = term_to_local_process_id(receiver);
     data->port = ctx->process_id;
-    data->dropped = 0;
     data->queue = xQueueCreate(ESPNOW_QUEUE_LEN, sizeof(struct EspNowEvent));
     if (IS_NULL_PTR(data->queue)) {
         free(data);
@@ -339,25 +473,25 @@ static term do_open(Heap *heap, Context *ctx, term req)
     }
     // On an associated STA the channel is the access point's, and ESP-NOW
     // follows it.
-    espnow_channel = channel;
+    atomic_store(&espnow_channel, channel);
     if (channel != 0 && !sta_associated()) {
         esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
     }
 
-    espnow_data = data;
     data->listener.handler = espnow_event_callback;
     data->listener.sender = data->queue;
     sys_register_listener(glb, &data->listener);
     if (xQueueAddToSet(data->queue, event_set) != pdPASS) {
         ESP_LOGE(TAG, "Failed to add the ESP-NOW queue to the event set");
         sys_unregister_listener(glb, &data->listener);
-        espnow_data = NULL;
-        espnow_channel = 0;
+        atomic_store(&espnow_channel, 0);
         vQueueDelete(data->queue);
         network_wifi_release();
         free(data);
         return error_atom(heap, glb, ATOM_STR("\x6", "no_mem"));
     }
+    // Before the callbacks are registered: they find the state from here.
+    atomic_store(&espnow_data, data);
 
     if ((err = esp_now_init()) != ESP_OK
         || (!term_is_invalid_term(pmk) && (err = esp_now_set_pmk((const uint8_t *) term_binary_data(pmk))) != ESP_OK)
@@ -382,42 +516,6 @@ static Context *espnow_create_port(GlobalContext *global, term opts)
     }
     ctx->native_handler = espnow_consume_mailbox;
     return ctx;
-}
-
-// The ESP-NOW errors a caller can act on, as atoms; anything else as
-// esp_err_to_term/2 gives it.
-static term error_tuple(Heap *heap, GlobalContext *glb, esp_err_t err)
-{
-    term reason;
-    switch (err) {
-        case ESP_ERR_ESPNOW_NOT_FOUND:
-            reason = globalcontext_make_atom(glb, ATOM_STR("\x9", "not_found"));
-            break;
-        case ESP_ERR_ESPNOW_EXIST:
-            reason = globalcontext_make_atom(glb, ATOM_STR("\xB", "peer_exists"));
-            break;
-        case ESP_ERR_ESPNOW_FULL:
-            reason = globalcontext_make_atom(glb, ATOM_STR("\xE", "peer_list_full"));
-            break;
-        case ESP_ERR_ESPNOW_IF:
-            reason = globalcontext_make_atom(glb, ATOM_STR("\x12", "interface_mismatch"));
-            break;
-        case ESP_ERR_ESPNOW_CHAN:
-            reason = globalcontext_make_atom(glb, ATOM_STR("\x10", "channel_mismatch"));
-            break;
-        case ESP_ERR_ESPNOW_NO_MEM:
-            reason = globalcontext_make_atom(glb, ATOM_STR("\x6", "no_mem"));
-            break;
-        default:
-            reason = esp_err_to_term(glb, err);
-            break;
-    }
-    return port_heap_create_error_tuple(heap, reason);
-}
-
-static term badarg(Heap *heap)
-{
-    return port_heap_create_error_tuple(heap, BADARG_ATOM);
 }
 
 // {add_peer, Mac, Options}: `channel' (0, the current one) and `lmk', a 16-byte
@@ -448,20 +546,73 @@ static term do_del_peer(Heap *heap, GlobalContext *glb, term req)
     return err == ESP_OK ? OK_ATOM : error_tuple(heap, glb, err);
 }
 
-// {send, Mac | broadcast, Data}: queued for the radio; the result comes as
-// {espnow, sent, Mac, ok | fail}.
-static term do_send(Heap *heap, GlobalContext *glb, term req)
+// Gives the radio the first waiting frame, unless one is out. A frame the
+// radio refuses is answered at once with the error, and the next one tried.
+static void next_send(GlobalContext *glb, struct EspNowData *data)
+{
+    while (!data->sending && data->sends != NULL) {
+        struct EspNowSend *send = data->sends;
+        esp_err_t err = esp_now_send(send->mac, send->data, send->len);
+        if (err == ESP_OK) {
+            data->sending = true;
+            return;
+        }
+        data->sends = send->next;
+        reply_send(glb, send, error_reason(glb, err), false);
+        free(send);
+    }
+}
+
+// {espnow_sent, ok | fail}, from the listener: the frame out has its result.
+static void sent(GlobalContext *glb, struct EspNowData *data, term result)
+{
+    struct EspNowSend *send = data->sends;
+    if (!data->sending || send == NULL) {
+        return;
+    }
+    data->sending = false;
+    data->sends = send->next;
+    reply_send(glb, send, result, result == OK_ATOM);
+    free(send);
+    next_send(glb, data);
+}
+
+// {send, Mac | broadcast, Data}: waits, with the frame, until the radio has
+// sent it and the send callback has come; the reply is then `ok' (for a
+// unicast frame, the peer acknowledged it) or `{error, fail}'. Frames go to
+// the radio one at a time, as the ESP-NOW guide recommends: nothing in the
+// callback says which frame it is about. term_invalid_term() means no reply
+// now.
+static term do_send(Heap *heap, GlobalContext *glb, struct EspNowData *data, term req, term pid, term ref)
 {
     uint8_t mac[MAC_LEN];
-    if (!term_is_tuple(req) || term_get_tuple_arity(req) != 3 || !get_mac(term_get_tuple_element(req, 1), glb, true, mac)) {
+    if (!term_is_tuple(req) || term_get_tuple_arity(req) != 3 || !get_mac(term_get_tuple_element(req, 1), glb, true, mac)
+        || !term_is_local_reference(ref) || !term_is_local_pid(pid)) {
         return badarg(heap);
     }
     term payload = term_get_tuple_element(req, 2);
-    if (!term_is_binary(payload) || term_binary_size(payload) == 0 || term_binary_size(payload) > ESP_NOW_MAX_DATA_LEN) {
+    if (!term_is_binary(payload) || term_binary_size(payload) == 0 || term_binary_size(payload) > ESPNOW_MAX_FRAME) {
         return badarg(heap);
     }
-    esp_err_t err = esp_now_send(mac, (const uint8_t *) term_binary_data(payload), term_binary_size(payload));
-    return err == ESP_OK ? OK_ATOM : error_tuple(heap, glb, err);
+    size_t len = term_binary_size(payload);
+    struct EspNowSend *send = malloc(sizeof(struct EspNowSend) + len);
+    if (IS_NULL_PTR(send)) {
+        return error_atom(heap, glb, ATOM_STR("\x6", "no_mem"));
+    }
+    send->next = NULL;
+    send->pid = term_to_local_process_id(pid);
+    send->ref = term_to_ref_ticks(ref);
+    memcpy(send->mac, mac, MAC_LEN);
+    send->len = len;
+    memcpy(send->data, term_binary_data(payload), len);
+    if (data->sends == NULL) {
+        data->sends = send;
+    } else {
+        data->last_send->next = send;
+    }
+    data->last_send = send;
+    next_send(glb, data);
+    return term_invalid_term();
 }
 
 // While the STA is associated the channel is the access point's: moving the
@@ -479,13 +630,13 @@ static term do_set_channel(Heap *heap, GlobalContext *glb, term req)
         return badarg(heap);
     }
     if (sta_associated()) {
-        return port_heap_create_error_tuple(heap, globalcontext_make_atom(glb, ATOM_STR("\xD", "sta_connected")));
+        return error_atom(heap, glb, ATOM_STR("\xD", "sta_connected"));
     }
     esp_err_t err = esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
     if (err != ESP_OK) {
         return error_tuple(heap, glb, err);
     }
-    espnow_channel = channel;
+    atomic_store(&espnow_channel, channel);
     return OK_ATOM;
 }
 
@@ -504,8 +655,19 @@ static term do_get_channel(Heap *heap, GlobalContext *glb)
 static term do_stats(Heap *heap, GlobalContext *glb, struct EspNowData *data)
 {
     term map = term_alloc_map(1, heap);
-    term_set_map_assoc(map, 0, globalcontext_make_atom(glb, ATOM_STR("\x7", "dropped")), term_from_int(data->dropped));
+    term_set_map_assoc(map, 0, globalcontext_make_atom(glb, ATOM_STR("\x7", "dropped")), term_from_int(atomic_load(&data->dropped)));
     return port_heap_create_ok_tuple(heap, map);
+}
+
+// {espnow_sent, Result}, which the listener sends to the port.
+static bool is_sent(GlobalContext *glb, term message, term *result)
+{
+    if (!term_is_tuple(message) || term_get_tuple_arity(message) != 2
+        || term_get_tuple_element(message, 0) != globalcontext_make_atom(glb, ATOM_STR("\xB", "espnow_sent"))) {
+        return false;
+    }
+    *result = term_get_tuple_element(message, 1);
+    return true;
 }
 
 static NativeHandlerResult espnow_consume_mailbox(Context *ctx)
@@ -514,6 +676,18 @@ static NativeHandlerResult espnow_consume_mailbox(Context *ctx)
     bool closed = false;
     while (!closed && mailbox_has_next(&ctx->mailbox)) {
         Message *message = mailbox_first(&ctx->mailbox);
+        // Only the port that opened ESP-NOW drives it.
+        struct EspNowData *data = atomic_load(&espnow_data);
+        bool owner = data != NULL && data->port == ctx->process_id;
+
+        term result;
+        if (is_sent(glb, message->message, &result)) {
+            if (owner) {
+                sent(glb, data, result);
+            }
+            mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+            continue;
+        }
         GenMessage gen_message;
         if (UNLIKELY(port_parse_gen_message(message->message, &gen_message) != GenCallMessage)) {
             ESP_LOGW(TAG, "Received invalid message.");
@@ -523,18 +697,15 @@ static NativeHandlerResult espnow_consume_mailbox(Context *ctx)
         term req = gen_message.req;
         term cmd_term = term_is_atom(req) ? req : (term_is_tuple(req) && term_get_tuple_arity(req) > 0 ? term_get_tuple_element(req, 0) : req);
         enum espnow_cmd cmd = term_is_atom(cmd_term) ? interop_atom_term_select_int(cmd_table, cmd_term, glb) : EspNowInvalidCmd;
+        if (!owner && cmd != EspNowOpenCmd && cmd != EspNowCloseCmd) {
+            cmd = EspNowInvalidCmd;
+        }
 
         // The reply is built on the stack, so it can always be sent: a caller
         // of port:call/2 waits for it without a timeout. The largest is
         // {Ref, {ok, #{dropped => N}}}.
         BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + term_map_size_in_terms(1), heap);
         {
-            // Only the port that opened ESP-NOW drives it.
-            struct EspNowData *data = espnow_data;
-            bool owner = data != NULL && data->port == ctx->process_id;
-            if (!owner && cmd != EspNowOpenCmd && cmd != EspNowInvalidCmd) {
-                cmd = cmd == EspNowCloseCmd ? EspNowCloseCmd : EspNowInvalidCmd;
-            }
             term reply;
             switch (cmd) {
                 case EspNowOpenCmd:
@@ -548,7 +719,7 @@ static NativeHandlerResult espnow_consume_mailbox(Context *ctx)
                     reply = do_del_peer(&heap, glb, req);
                     break;
                 case EspNowSendCmd:
-                    reply = do_send(&heap, glb, req);
+                    reply = do_send(&heap, glb, data, req, gen_message.pid, gen_message.ref);
                     break;
                 case EspNowSetChannelCmd:
                     reply = do_set_channel(&heap, glb, req);
@@ -570,7 +741,9 @@ static NativeHandlerResult espnow_consume_mailbox(Context *ctx)
                     reply = owner ? badarg(&heap) : error_atom(&heap, glb, ATOM_STR("\x8", "not_open"));
                     break;
             }
-            port_send_message(glb, gen_message.pid, port_heap_create_reply(&heap, gen_message.ref, reply));
+            if (!term_is_invalid_term(reply)) {
+                port_send_message(glb, gen_message.pid, port_heap_create_reply(&heap, gen_message.ref, reply));
+            }
         }
         END_WITH_STACK_HEAP(heap, glb);
         mailbox_remove_message(&ctx->mailbox, &ctx->heap);
