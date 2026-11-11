@@ -63,8 +63,77 @@ class ValidationTests(unittest.TestCase):
             selected = json.loads((first / "cases.json").read_text())
             self.assertEqual({entry["operation"] for entry in selected},
                              {"compare", "maps", "bits", "arithmetic", "float_bits",
-                              "map_sequence", "dictionary_sequence", "receive_sequence"})
+                              "map_sequence", "dictionary_sequence", "receive_sequence",
+                              "binary_sequence"})
             self.assertEqual(summary["passed"], 32)
+
+    def test_binary_sequences_rebase_scopes_and_preserve_split_edges(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            short = {"bits": [0x6162, 16]}
+            long = {"bits": [0x616263, 24]}
+            patterns = [short, long]
+            scope = {"tuple": ["scope", {"tuple": [3, 3]}]}
+            negative = {"tuple": ["scope", {"tuple": [6, -3]}]}
+            zero = {"tuple": ["scope", {"tuple": [0, 0]}]}
+            steps = [
+                ["match", patterns, []], ["match", patterns[::-1], [negative]],
+                ["split", patterns, ["global", scope]],
+                ["split", patterns, [negative, "global"]],
+                ["match", patterns, [zero, scope]],
+                ["match", patterns, [scope, zero]],
+                ["match", patterns, [{"tuple": ["scope", {"tuple": [3, 2]}]}]],
+                ["part", 1, 5], ["match", long, []],
+                ["part", 5, -3], ["match", patterns, []],
+                ["append", [97, 98]], ["split", patterns, ["global"]],
+                ["split", patterns, ["global", "trim"]],
+                ["part", -1, 1],
+                ["match", patterns, [{"tuple": ["scope", {"tuple": [0, 6]}]}]],
+                ["part", 5, 0], ["match", short, [zero]],
+                ["split", short, ["global"]],
+                ["split", short, ["global", "trim_all"]],
+            ]
+            trims = [
+                ["split", {"bits": [124, 8]}, ["global", "trim"]],
+                ["split", {"bits": [124, 8]}, ["global", "trim_all"]],
+                ["split", {"bits": [124, 8]},
+                 ["global", {"tuple": ["scope", {"tuple": [1, 4]}]}]],
+            ]
+            source.write_text(json.dumps([
+                {"operation": "binary_sequence", "args": [list(subject),
+                    [{"tuple": step} for step in operations]]}
+                for subject, operations in [(b"zababcab", steps), (b"|a||b|", trims)]
+            ]))
+            output = work / "binary"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 2, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                [first, second] = JSON.decode!(File.read!(path))["expected"]
+                  |> Enum.map(fn s -> :erlang.binary_to_term(Base.decode64!(s)) end)
+                state = fn b -> {byte_size(b), b} end
+                row = fn value, b -> {{:ok, value}, state.(b)} end
+                original = "zababcab"
+                expected = [row.({1,2}, original), row.({3,3}, original),
+                  row.(["zab", "ab"], original), row.(["zab", "ab"], original),
+                  row.({3,3}, original), row.(:nomatch, original), row.({3,2}, original),
+                  row.("ababc", "ababc"), row.({2,3}, "ababc"),
+                  row.("abc", "abc"), row.({0,3}, "abc"),
+                  row.("abcab", "abcab"), row.(["", "", ""], "abcab"),
+                  row.([], "abcab"),
+                  {{:exception, :error, :badarg}, state.("abcab")},
+                  {{:exception, :error, :badarg}, state.("abcab")},
+                  row.("", ""), row.(:nomatch, ""), row.([""], ""), row.([], "")]
+                true = first === {:ok, {state.(original), expected}}
+                expected_trims = [row.(["", "a", "", "b"], "|a||b|"),
+                  row.(["a", "b"], "|a||b|"), row.(["|a", "", "b|"], "|a||b|")]
+                true = second === {:ok, {state.("|a||b|"), expected_trims}}
+                """, str(output / "manifest.json")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_receive_sequences_preserve_order_and_resume_after_misses(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -589,11 +658,17 @@ class ValidationTests(unittest.TestCase):
                 ["put", 1, "first"], ["put", 1, "replaced"],
                 ["erase", 1], ["get", 1.0], ["put", 1, "reinserted"],
             ]]
-            for operation in ["map_sequence", "dictionary_sequence", "receive_sequence"]:
+            for operation in ["map_sequence", "dictionary_sequence", "receive_sequence", "binary_sequence"]:
                 if operation == "receive_sequence":
                     setup = ["sentinel", 1.0, {"tuple": ["tag", 1]}]
                     steps = [{"tuple": s} for s in [
                         ["exact", 1], ["send", 1], ["tag", "tag"], ["exact", 1], ["any"],
+                    ]]
+                elif operation == "binary_sequence":
+                    setup = list(b"zababcab")
+                    steps = [{"tuple": s} for s in [
+                        ["part", 1, 5], ["part", 5, -3], ["append", [97, 98]],
+                        ["match", {"bits": [0x6162, 16]}, []],
                     ]]
                 source.write_text(json.dumps([
                     {"seed": 123, "index": 7, "operation": operation, "args": [setup, steps]}

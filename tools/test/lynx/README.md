@@ -22,9 +22,9 @@ runtime error/timeout, or a failed prerequisite/reference/proof check.
 
 ## Generated inputs
 
-The default is 1,000 cases, reproducible with `--seed`. Twenty-eight boundary cases
+The default is 1,000 cases, reproducible with `--seed`. Thirty-two boundary cases
 precede seeded exploration so short runs still exercise known dangerous edges.
-This generates inputs to eight operation families, not arbitrary Erlang programs:
+This generates inputs to nine operation families, not arbitrary Erlang programs:
 
 - Numeric comparison: all eight equality/order operators, signed zeros,
   subnormal/extreme finite floats, and integer/float pairs around precision and
@@ -52,6 +52,13 @@ This generates inputs to eight operation families, not arbitrary Erlang programs
   intermediate mailbox without a drain/requeue snapshot resetting receive
   scanning between operations. Only the worker sends to itself; no cross-sender
   ordering, wall-clock timing, or scheduler outcome is used as an oracle.
+- Binary scope sequences: at most 32 operations starting from explicit byte lists
+  of up to 96 bytes. Search/split overlapping patterns in both orders, with paired
+  positive/negative scopes, duplicate scopes, zero-width ranges, and optional
+  global/trim/trim-all flags. Nested parts and appends change the subject so later
+  coordinates must be relative to the current binary. Every result/exception and
+  intermediate binary is compared; failed operations retain the previous state.
+  Shrinking deletes operations without changing setup or literal payloads.
 - Bitstrings: signed big/little-endian construction and matching at varied bit
   offsets and widths through 255 bits, including zero-width and invalid-size
   controls. Full bitstrings and decoded results are compared.
@@ -69,6 +76,13 @@ Exceptions compare class/reason, not stack frames. Standalone generated tests
 use AtomVM's bundled standard library, without packaging OTP's `lists.beam`.
 Byte-list output is emitted in bounded chunks, retaining the same wire format
 without formatting the entire serialized trace as one giant list.
+
+Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
+interpreter and aarch64 precompiled execution, including 112 binary sequences
+with 3,497 operations. There are zero failures or unverified references. Thirteen
+enabled CLI tests pass (one optional fixture test skipped), including independent
+scope/split/state oracles and shrinking/replay with unchanged binary setup.
+See [PLAN.md](PLAN.md) for evidence and execution-mode limitations.
 
 ## Focused float encoding checks
 
