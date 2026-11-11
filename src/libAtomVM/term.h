@@ -376,6 +376,21 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
 term term_alloc_refc_binary(size_t size, bool is_const, Heap *heap, GlobalContext *glb);
 
 /**
+ * @brief Wrap a reference-counted binary created outside of the VM into a term
+ *
+ * @details The non-const case of `term_alloc_refc_binary` without the
+ * allocation: `refc' was created with `refc_binary_create_refc` and filled
+ * elsewhere (for example in a driver's callback, outside of the scheduler),
+ * and is not yet listed nor counted. The heap's MSO list takes it, with a
+ * reference count of 1.
+ * @param refc the reference-counted binary, unlisted, with a count of 0
+ * @param heap the heap to allocate the binary term in
+ * @param glb the global context, which lists refc binaries
+ * @return a term pointing to the binary, in the heap
+ */
+term term_from_refc_binary(struct RefcBinary *refc, Heap *heap, GlobalContext *glb);
+
+/**
  * @brief Create a sub-binary
  *
  * @details This function will create a sub-binary on the heap, using the supplied binary,
