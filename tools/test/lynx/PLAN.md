@@ -367,11 +367,14 @@ contract rather than producing a different setup or oracle failure.
 - [ ] Keep permanent GC/lifecycle regressions in ordinary AtomVM test suites and
   run them under instrumentation. Do not add short internal deadlines to tests
   intended to check correctness rather than speed.
-- [ ] Resolve the large-result transport bottleneck separately from split
+- [x] Resolve the large-result transport bottleneck separately from split
   semantics. The 2,560-result probe computed the correct result; decimal byte-list
-  formatting dominated its timeout. Measure computation, serialization,
-  formatting, and output separately before changing the protocol or heap policy.
-  Any transport change must preserve malformed-output detection and replay.
+  formatting dominated its timeout. Sequence diagnostics reproduced the issue:
+  a 70,796-byte serialized trace took 26.13 seconds with a whole-list decimal
+  writer, versus 0.15 seconds with 256-byte chunks, including computation and
+  serialization. Chunking preserves the byte-list wire format and decoded OTP
+  reference term; no runtime heap policy changes. CLI regression checks retain
+  malformed-output detection and replay.
 
 Done when results identify the actual execution mode, target configuration,
 runtime/library hashes, and whether a timeout was semantic, oracle, or transport
