@@ -61,6 +61,53 @@ def cases():
         for a, b in [("1", "1.0"), ("1.0", "1"), ("0.0", "-0.0"),
                      ("-0.0", "0.0"), ("a", "1"), ("1", "a")]:
             call(e, "min_max_equal_returns_first", fn, a, b)
+
+    # Source forms are paired with dynamic apply and guard observations. Inspect
+    # compiled instructions before claiming distinct paths on a new OTP release.
+    for op in ["+", "-", "*", "/"]:
+        for a, b in [("0", "0"), ("0", "7"), ("-7", "3"), ("3", "-7"),
+                     ("-7", "-3"), ("1", "1.0"),
+                     ("9007199254740993", "1.0"), ("1.0", "9007199254740993"),
+                     ("-(1 bsl 63)", "-1"), ("(1 bsl 127)-1", "1"),
+                     ("(1 bsl 255)-1", "0"), ("-0.0", "0.0"),
+                     ("0.0", "-0.0"), ("-0.0", "-0.0"), ("5.0e-324", "0.5"),
+                     ("1.7976931348623157e308", "2.0"), ("bad", "1"), ("1", "[]")]:
+            probe(e, "arithmetic_boundaries", f"differential:execution_paths('{op}',{a},{b})")
+    for op in ["div", "rem", "band", "bor", "bxor", "bsl", "bsr"]:
+        for a, b in [("0", "0"), ("0", "7"), ("-7", "3"), ("3", "-7"),
+                     ("-7", "-3"), ("1.0", "2"), ("bad", "1"), ("1", "[]"),
+                     ("(1 bsl 100)+3", "63"), ("-(1 bsl 63)", "-1"),
+                     ("(1 bsl 255)-1", "0"), ("(1 bsl 127)+1", "127")]:
+            probe(e, "arithmetic_boundaries", f"differential:execution_paths('{op}',{a},{b})")
+    for op in ["==", "/=", "=:=", "=/=", "<", "=<", ">", ">="]:
+        for a, b in [("1", "1.0"), ("0.0", "-0.0"),
+                     ("9007199254740993", "9007199254740992.0"),
+                     ("-(1 bsl 63)-1", "-9223372036854775808.0"),
+                     ("(1 bsl 255)-1", "1.0e77"), ("5.0e-324", "0"),
+                     ("{1}", "{1.0}"), ("{z}", "{a,b}"),
+                     ("#{1=>wanted}", "#{1.0=>wanted}"),
+                     ("#{a=>1}", "#{a=>1.0}"), ("[1|a]", "[1|b]"),
+                     ("[1]", "[1.0]"), ("<<5:3>>", "<<5:4>>"),
+                     ("<<128>>", "<<1:1>>"), ("[]", "<<>>"),
+                     ("a", "1"), ("{}", "{}"), ("#{a=>1,b=>2}", "#{a=>1,b=>3}")]:
+            for left, right in ([(a, b)] if a == b else [(a, b), (b, a)]):
+                probe("Term/Compare", "numeric_and_exact_comparison",
+                      f"differential:execution_paths('{op}',{left},{right})")
+    for key, value in [
+        ("key", "#{key=>wanted}"), ("key", "#{key=>other}"), ("missing", "#{key=>wanted}"),
+        ("1", "#{1=>wanted,1.0=>other}"), ("1.0", "#{1=>wanted,1.0=>other}"),
+        ("1", "#{1.0=>wanted}"), ("1.0", "#{1=>wanted}"),
+        ("0.0", "#{-0.0=>wanted}"), ("-0.0", "#{0.0=>wanted}"),
+        ("{key,1}", "#{{key,1}=>wanted}"), ("{key,1}", "#{{key,1.0}=>wanted}"),
+        ("#{v=>1}", "#{#{v=>1}=>wanted}"), ("#{v=>1}", "#{#{v=>1.0}=>wanted}"),
+        ("<<5:3>>", "#{<<5:3>>=>wanted}"), ("<<5:4>>", "#{<<5:3>>=>wanted}"),
+        ("key", "#{key=>-0.0}"), ("key", "bad"), ("key", "[]"),
+    ]:
+        probe("Modules/Maps", "update_lookup", f"differential:execution_paths(map_get,{key},{value})")
+    for size in [0, 31, 32, 33]:
+        value = f"maps:from_list([{{I,I}} || I <- lists:seq(1,{size})])"
+        for key in ["1", "1.0", "missing"]:
+            probe("Modules/Maps", "update_lookup", f"differential:execution_paths(map_get,{key},{value})")
     for a in ["true", "false", "0"]:
         for b in ["true", "false", "bad"]:
             call(e, "xor/2_booleans", "xor", a, b)

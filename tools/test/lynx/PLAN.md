@@ -16,15 +16,15 @@ runner semantics in [README.md](README.md).
   `e3d8c68281058d21a31aa5ac8e6a7e0b83db4aeb` in batch 1.
 - `fixtures.py` selects 2,273 calls with metadata for all 191 exports in 12
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 3,606 public-behavior recipes inspired by Lean tests.
+- `lean_runtime.py` selects 4,072 public-behavior recipes inspired by Lean tests.
   Source attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks fixture laws. Five integer singleton-sum instances also
   require the proved postcondition to be true on both VMs. Other matching
   differential results alone do not establish a property.
-- Generated testing currently covers eight operation families: comparisons,
+- Generated testing currently covers nine operation families: comparisons,
   arithmetic, maps, integer bitstrings, float encoding, map/dictionary
-  sequences, and selective-receive sequences. It does not generate arbitrary
-  Erlang programs or enumerate scheduler interleavings.
+  sequences, selective-receive sequences, and binary scope sequences. It does
+  not generate arbitrary Erlang programs or enumerate scheduler interleavings.
 - Dictionary queries, invalid receive timeouts, suspended receives, signal and
   alias combinations, and dictionary/scoped-split GC regressions already have
   coverage. Expand specific missing combinations rather than restarting these
@@ -414,9 +414,9 @@ under `.amp/in/artifacts/lynx-binary-sequences-seed-20261113/`,
 
 ### 7. Expand execution-path coverage and separate transport cost
 
-- [ ] Exercise fixed boundary cases through the BIF and opcode paths where both
-  exist. Inspect representative BEAM disassembly: equivalent source expressions
-  need not exercise the same path across OTP versions.
+- [x] Exercise arithmetic, comparison, and map-lookup boundary cases through
+  direct, dynamic, guard, and applicable pattern paths. Inspect representative
+  BEAM disassembly: source forms need not take distinct paths across OTP versions.
 - [x] Run interpreter and native/precompiled modes with matching runtime libraries.
 - [ ] Extend to on-demand JIT and representative 32-bit/embedded/emulated execution
   in separate runner work; those modes are not supported by the current CLI.
@@ -453,6 +453,29 @@ No runtime changes were needed. Configuration, runtime/library SHA-256 hashes,
 counts, and evidence paths are in `.amp/in/artifacts/lynx-native-validation.json`;
 the three replay directories are `lynx-native-runtime/`, `lynx-native-map-dict/`,
 and `lynx-native-receive/` beneath `.amp/in/artifacts/`.
+
+Execution-path batch validated on 2026-11-11 with 64-bit OTP 29: all 466 added
+cases match OTP in interpreter and aarch64 precompiled modes, with zero failures
+or unverified references. Eleven arithmetic operators, eight comparisons, and
+map lookup each exercise both matching and rejected guards. Body/dynamic results
+include float bits and exception class/reason; map patterns separately report
+matched values or no match. This preserves the different contracts of each path.
+Fourteen enabled CLI tests pass (one optional fixture test skipped), including
+independent precision-boundary, signed-zero, arithmetic-error, and map-key oracles.
+erlfmt and whitespace checks pass. No runtime changes were needed.
+
+Disassembly of the actual helper confirms dynamic `erlang:apply/3`, comparison
+BIFs versus guard tests, arithmetic GC-BIF failure labels of zero versus nonzero,
+direct float-register division versus guard GC-BIF division, and map-pattern
+`get_map_elements` versus lookup BIFs. Original helper `Code` chunks agree across
+the two runs; all 467 transformed native probe/helper files contain `avmN` and no
+`Code` chunk. The matching precompiled library is used with on-demand JIT disabled;
+not every bundled library module is native. Recheck instruction selection on a
+new OTP compiler. The full 4,072-case corpus was not rerun for this addition.
+Evidence is under `.amp/in/artifacts/lynx-execution-paths-interpreter/`,
+`lynx-execution-paths-native/`, `lynx-execution-paths-tests.log`,
+`lynx-execution-paths-disassembly.txt`, `lynx-execution-paths-instruction-check.txt`,
+and `lynx-execution-paths-observations.json` (including runtime/library hashes).
 
 ## Rules for each batch
 

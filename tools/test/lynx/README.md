@@ -146,7 +146,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **3,606 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **4,072 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, process dictionaries, comparison,
 effectful short circuit, timeout validation with retained mailboxes,
@@ -159,6 +159,25 @@ Missing functions and differing error precedence remain failures, not skips.
 OTP is the execution oracle, not the Lean model: for example, tested OTP 29
 accepts an already queued receive match before checking an invalid timeout.
 That differs from the model test named `timeout_validation_precedes_scan`.
+
+The execution-path extension adds 466 cases for 20 arithmetic, comparison, and
+map-lookup operations. Each captures direct-body and dynamic `apply/3` outcomes
+separately, plus guard match/rejection; map lookups also observe a map pattern.
+Arithmetic guards match a zero result, comparison guards test the relation, and
+map guards match the value `wanted`. Errors in guards reject the clause rather
+than escaping as body exceptions. Floating results include their encoded bits
+so signed zero and rounding differences cannot hide behind numeric equality.
+
+OTP 29 disassembly confirms dynamic `erlang:apply/3`, comparison BIFs versus
+guard test instructions, body/guard arithmetic failure labels, float-register
+division versus guard GC-BIF division, and map-pattern `get_map_elements` versus
+lookup BIFs. Compiler rewrites mean different source operators are not necessarily
+different instructions; recheck disassembly when changing OTP versions.
+All 466 added cases match OTP in both interpreter and aarch64 precompiled modes,
+with zero failures or unverified references. Fourteen enabled CLI tests pass
+(one optional fixture test skipped). The expanded full corpus was not rerun for
+this addition; earlier full-run results below remain historical baselines.
+Evidence and execution-mode limitations are in [PLAN.md](PLAN.md).
 
 Before adding the 70 map-callback cases below, the 2026-11-10 host-interpreter
 rebaseline matched 2,942 cases and retained four `[short]` float-formatting

@@ -12,6 +12,7 @@
     bits/4,
     float_bits/4,
     call/3,
+    execution_paths/3,
     print_result/1,
     map_entries/1,
     map_fold/2,
@@ -70,6 +71,79 @@
 
 %% Inputs cross a module boundary to prevent constant-folded operations.
 call(Module, Function, Args) -> apply(Module, Function, Args).
+
+%% Compare observations, not equality between paths: guards reject errors and
+%% map patterns fail to match where body/dynamic lookups raise exceptions.
+execution_paths(Op, A, B) ->
+    Pattern =
+        case Op of
+            map_get -> [{pattern, path_map_pattern(A, B)}];
+            _ -> []
+        end,
+    [
+        {body, path_result(fun() -> path_body(Op, A, B) end)},
+        {dynamic, path_result(fun() -> call(erlang, Op, [A, B]) end)},
+        {guard, path_guard(Op, A, B)}
+        | Pattern
+    ].
+
+path_result(Fun) ->
+    try Fun() of
+        Value when is_float(Value) -> {ok, Value, <<Value/float>>};
+        Value -> {ok, Value}
+    catch
+        Class:Reason -> {exception, Class, Reason}
+    end.
+
+path_body('+', A, B) -> A + B;
+path_body('-', A, B) -> A - B;
+path_body('*', A, B) -> A * B;
+path_body('/', A, B) -> A / B;
+path_body('div', A, B) -> A div B;
+path_body('rem', A, B) -> A rem B;
+path_body('band', A, B) -> A band B;
+path_body('bor', A, B) -> A bor B;
+path_body('bxor', A, B) -> A bxor B;
+path_body('bsl', A, B) -> A bsl B;
+path_body('bsr', A, B) -> A bsr B;
+path_body('==', A, B) -> A == B;
+path_body('/=', A, B) -> A /= B;
+path_body('=:=', A, B) -> A =:= B;
+path_body('=/=', A, B) -> A =/= B;
+path_body('<', A, B) -> A < B;
+path_body('=<', A, B) -> A =< B;
+path_body('>', A, B) -> A > B;
+path_body('>=', A, B) -> A >= B;
+path_body(map_get, A, B) -> map_get(A, B).
+
+%% Arithmetic guards match numeric zero, retaining success and rejection paths.
+path_guard('+', A, B) when A + B == 0 -> matched;
+path_guard('-', A, B) when A - B == 0 -> matched;
+path_guard('*', A, B) when A * B == 0 -> matched;
+path_guard('/', A, B) when A / B == 0 -> matched;
+path_guard('div', A, B) when A div B == 0 -> matched;
+path_guard('rem', A, B) when A rem B == 0 -> matched;
+path_guard('band', A, B) when A band B == 0 -> matched;
+path_guard('bor', A, B) when A bor B == 0 -> matched;
+path_guard('bxor', A, B) when A bxor B == 0 -> matched;
+path_guard('bsl', A, B) when A bsl B == 0 -> matched;
+path_guard('bsr', A, B) when A bsr B == 0 -> matched;
+path_guard('==', A, B) when A == B -> matched;
+path_guard('/=', A, B) when A /= B -> matched;
+path_guard('=:=', A, B) when A =:= B -> matched;
+path_guard('=/=', A, B) when A =/= B -> matched;
+path_guard('<', A, B) when A < B -> matched;
+path_guard('=<', A, B) when A =< B -> matched;
+path_guard('>', A, B) when A > B -> matched;
+path_guard('>=', A, B) when A >= B -> matched;
+path_guard(map_get, A, B) when map_get(A, B) =:= wanted -> matched;
+path_guard(_, _, _) -> rejected.
+
+path_map_pattern(Key, Map) ->
+    case Map of
+        #{Key := Value} -> {matched, Value};
+        _ -> no_match
+    end.
 
 %% Keep the byte-list wire format, but bound temporary formatting allocations.
 print_result(Value) ->

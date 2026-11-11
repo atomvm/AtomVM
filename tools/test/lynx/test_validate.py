@@ -289,6 +289,56 @@ class ValidationTests(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_execution_paths_preserve_results_errors_and_guard_rejection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            expressions = [
+                "differential:execution_paths('+',-7,3)",
+                "differential:execution_paths('+',-7,7)",
+                "differential:execution_paths('div',-7,3)",
+                "differential:execution_paths('rem',-7,3)",
+                "differential:execution_paths('/',0,0)",
+                "differential:execution_paths('+',bad,1)",
+                "differential:execution_paths('<',9007199254740993,9007199254740992.0)",
+                "differential:execution_paths('<',9007199254740992.0,9007199254740993)",
+                "differential:execution_paths('=:=',1,1.0)",
+                "differential:execution_paths('+',-0.0,-0.0)",
+                "differential:execution_paths(map_get,1,#{1=>wanted,1.0=>other})",
+                "differential:execution_paths(map_get,1.0,#{1=>wanted,1.0=>other})",
+                "differential:execution_paths(map_get,1.0,#{1=>wanted})",
+                "differential:execution_paths(map_get,key,bad)",
+            ]
+            source.write_text(json.dumps([{"expression": e} for e in expressions]))
+            output = work / "paths"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 14, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                values = JSON.decode!(File.read!(path))["expected"]
+                  |> Enum.map(fn s -> :erlang.binary_to_term(Base.decode64!(s)) end)
+                paths = fn value, guard -> {:ok,
+                  [body: value, dynamic: value, guard: guard]} end
+                map_paths = fn value, guard, pattern -> {:ok,
+                  [body: value, dynamic: value, guard: guard, pattern: pattern]} end
+                negative_zero = {:ok, -0.0, Base.decode16!("8000000000000000")}
+                expected = [paths.({:ok, -4}, :rejected), paths.({:ok, 0}, :matched),
+                  paths.({:ok, -2}, :rejected), paths.({:ok, -1}, :rejected),
+                  paths.({:exception, :error, :badarith}, :rejected),
+                  paths.({:exception, :error, :badarith}, :rejected),
+                  paths.({:ok, false}, :rejected), paths.({:ok, true}, :matched),
+                  paths.({:ok, false}, :rejected), paths.(negative_zero, :matched),
+                  map_paths.({:ok, :wanted}, :matched, {:matched, :wanted}),
+                  map_paths.({:ok, :other}, :rejected, {:matched, :other}),
+                  map_paths.({:exception, :error, {:badkey, 1.0}}, :rejected, :no_match),
+                  map_paths.({:exception, :error, {:badmap, :bad}}, :rejected, :no_match)]
+                true = values === expected
+                """, str(output / "manifest.json")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     def test_reference_failures_are_reported_without_stopping_other_cases(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
