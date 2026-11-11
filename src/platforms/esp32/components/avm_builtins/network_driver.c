@@ -1880,7 +1880,7 @@ static Mutex *wifi_mutex;
 static bool wifi_initialized;
 static bool wifi_started;
 static bool wifi_used_by_network;
-static void (*wifi_holder_restarted)(void);
+static void (*wifi_holder_restarted)(bool bare_sta);
 
 static esp_err_t wifi_init_once(void)
 {
@@ -1934,7 +1934,7 @@ static bool wifi_ap_only(void)
     return wifi_used_by_network && esp_wifi_get_mode(&mode) == ESP_OK && mode == WIFI_MODE_AP;
 }
 
-esp_err_t network_wifi_hold(void (*restarted)(void))
+esp_err_t network_wifi_hold(void (*restarted)(bool bare_sta))
 {
     SMP_MUTEX_LOCK(wifi_mutex);
     esp_err_t err;
@@ -2096,6 +2096,11 @@ static bool start_wifi(Context *ctx, term pid, term ref, struct ClientData *data
     }
     wifi_started = true;
     wifi_used_by_network = true;
+    // The held bare STA was stopped above, and with it what the holder
+    // installed in the radio.
+    if (wifi_holder_restarted != NULL) {
+        wifi_holder_restarted(false);
+    }
 
     return true;
 }
@@ -2290,7 +2295,7 @@ static void stop_network(GlobalContext *global)
     // in between leaves it off.
     if (wifi_holder_restarted != NULL) {
         if (!wifi_started && wifi_start_bare_sta() == ESP_OK) {
-            wifi_holder_restarted();
+            wifi_holder_restarted(true);
         }
     } else {
         wifi_off();
