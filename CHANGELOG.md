@@ -144,6 +144,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sends are queued and completed as the socket becomes writable, so `gen_tcp:recv/2,3`,
   `gen_tcp:close/1` and `gen_tcp:controlling_process/2` keep working meanwhile, and a pending send
   fails with `{error, closed}` when the socket is closed
+- `gen_udp:send/4` no longer blocks the process serving the socket while the send buffer is full
+  on BSD sockets: datagrams are queued and sent as the socket becomes writable, so
+  `gen_udp:recv/2,3` and `gen_udp:close/1` keep working meanwhile, and a pending send fails with
+  `{error, closed}` when the socket is closed
 - Fixed `socket:send/2` reporting any error other than backpressure as `closed` on BSD sockets:
   the actual error (e.g. `epipe`, `enobufs`) is now returned
 - `socket:send/2,3` and `socket:sendto/3,4` on a socket that was closed now return

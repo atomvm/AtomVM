@@ -138,8 +138,18 @@ sockname(Socket) ->
     monitor_ref = undefined,
     active,
     options,
-    pending_selects = #{}
+    pending_selects = #{},
+    %% {Ref, From, Packet, Dest} of the send waiting for the socket to be writable
+    pending_send = undefined,
+    %% {From, Packet, Dest} of the sends queued behind the pending one
+    send_queue = queue:new()
 }).
+
+%% gen_udp:send/4 on a socket whose send buffer is full must not block the
+%% process serving the socket: recv, close and controlling_process from other
+%% processes would wait too. Sends are therefore asynchronous, one at a time
+%% and in order: when the socket is not writable, the datagram waits for the
+%% write select and the following ones wait in a queue.
 
 init({Socket, ControllingProcess, Options}) ->
     case maps:get(active, Options, true) of
@@ -169,13 +179,19 @@ init({Socket, ControllingProcess, Options}) ->
     end.
 
 %% @hidden
-handle_call({sendto, Address, Port, Packet}, _From, State) ->
+handle_call({sendto, Address, Port, Packet}, From, State) ->
     Dest = #{
         family => inet,
         port => Port,
         addr => Address
     },
-    {reply, socket:sendto(State#state.socket, Packet, Dest), State};
+    case State#state.pending_send of
+        undefined ->
+            {noreply, start_sendto(Packet, Dest, From, State)};
+        _ ->
+            SendQueue = queue:in({From, Packet, Dest}, State#state.send_queue),
+            {noreply, State#state{send_queue = SendQueue}}
+    end;
 handle_call({recvfrom, Length, Timeout}, From, State) ->
     case State#state.active of
         true ->
@@ -219,7 +235,8 @@ handle_call(sockname, _From, State) ->
         end,
     {reply, Reply, State};
 handle_call(close, _From, State) ->
-    {stop, normal, socket:close(State#state.socket), State};
+    Reply = socket:close(State#state.socket),
+    {stop, normal, Reply, fail_pending_sends(closed, State)};
 handle_call({controlling_process, Pid, Caller}, _From, State) ->
     case State#state.active of
         false ->
@@ -242,6 +259,16 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 %% @hidden
+handle_info(
+    {'$socket', _Socket, select, Ref}, #state{pending_send = {Ref, From, Packet, Dest}} = State
+) ->
+    {noreply, start_sendto(Packet, Dest, From, State#state{pending_send = undefined})};
+handle_info(
+    {'$socket', _Socket, abort, {Ref, Reason}},
+    #state{pending_send = {Ref, _From, _Packet, _Dest}} = State
+) ->
+    ?LOG_INFO("Send aborted: ~p", [Reason]),
+    {noreply, fail_pending_sends(Reason, State)};
 handle_info({'$socket', _Socket, select, Ref}, State) ->
     case maps:get(Ref, State#state.pending_selects, undefined) of
         undefined ->
@@ -272,7 +299,7 @@ handle_info({'DOWN', MonitorRef, process, ControllingProcess, _Info}, State) ->
             ?LOG_INFO("Controlling process ~p has terminated.  Stopping ~p.", [
                 ControllingProcess, ?MODULE
             ]),
-            {stop, normal, State};
+            {stop, normal, fail_pending_sends(closed, State)};
         _ ->
             {noreply, State}
     end;
@@ -299,6 +326,52 @@ proplist_to_map([Atom | T], Accum) when is_atom(Atom) ->
     proplist_to_map(T, Accum#{Atom => true});
 proplist_to_map([{K, V} | T], Accum) ->
     proplist_to_map(T, Accum#{K => V}).
+
+%% @private
+%% Send Packet to Dest, replying to From once the datagram has been accepted
+%% by the stack. If the socket is not writable, keep it for the write select
+%% notification. Then start the next queued send, if any.
+start_sendto(Packet, Dest, From, State) ->
+    case socket:sendto(State#state.socket, Packet, Dest, nowait) of
+        ok ->
+            gen_server:reply(From, ok),
+            next_sendto(State);
+        {select, {select_info, sendto, Ref}} ->
+            State#state{pending_send = {Ref, From, Packet, Dest}};
+        {select, {{select_info, sendto, Ref}, RestData}} ->
+            State#state{pending_send = {Ref, From, RestData, Dest}};
+        {error, {Reason, _RestData}} ->
+            gen_server:reply(From, {error, Reason}),
+            next_sendto(State);
+        {error, _Reason} = Error ->
+            gen_server:reply(From, Error),
+            next_sendto(State)
+    end.
+
+%% @private
+next_sendto(State) ->
+    case queue:out(State#state.send_queue) of
+        {{value, {From, Packet, Dest}}, SendQueue} ->
+            NewState = State#state{pending_send = undefined, send_queue = SendQueue},
+            start_sendto(Packet, Dest, From, NewState);
+        {empty, _SendQueue} ->
+            State#state{pending_send = undefined}
+    end.
+
+%% @private
+%% Reply {error, Reason} to the pending send, if any, and to the queued ones.
+fail_pending_sends(Reason, State) ->
+    case State#state.pending_send of
+        {_Ref, From, _Packet, _Dest} ->
+            gen_server:reply(From, {error, Reason});
+        undefined ->
+            ok
+    end,
+    lists:foreach(
+        fun({From, _Packet, _Dest}) -> gen_server:reply(From, {error, Reason}) end,
+        queue:to_list(State#state.send_queue)
+    ),
+    State#state{pending_send = undefined, send_queue = queue:new()}.
 
 %% @private
 handle_active_recvfrom(State) ->
