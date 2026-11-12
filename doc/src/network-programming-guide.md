@@ -537,6 +537,58 @@ Config = [
 {ok, _Pid} = network:start(Config).
 ```
 
+## ESP-NOW (ESP32)
+
+The `espnow` module sends and receives ESP-NOW frames: connectionless frames of up to 1470 bytes
+on ESP-IDF 5.4 or newer (ESP-NOW v2, which peers on an older ESP-IDF cannot receive), 250 before,
+between ESP32 devices, on the WiFi radio, with no access point. It is opt-in, with
+`CONFIG_AVM_ENABLE_ESPNOW=y` (`idf.py menuconfig`, or a line in `sdkconfig.defaults`); without it
+`espnow:open/1` returns an error.
+
+The `network` driver owns the WiFi radio, and ESP-NOW borrows it:
+
+- With no network started, `espnow:open/1` turns WiFi on as a station that does not connect, on
+  the channel given with `{channel, 1..14}` (or the current one).
+- `network:start/1` and `network:stop/0` can be called while ESP-NOW is open: `network:stop/0`
+  leaves the radio on, back on the ESP-NOW channel, and ESP-NOW keeps working.
+- While the STA is connected, frames go on the access point's channel, so the peers must be on it
+  too; `espnow:set_channel/2` returns `{error, sta_connected}` until the STA disconnects.
+- `espnow:close/1` turns WiFi off, unless the network uses it.
+- An AP-only network (`ap` without `sta`) runs the radio in AP mode, where ESP-NOW frames, which go
+  out on the STA, cannot be sent: `espnow:open/1` returns `{error, ap_only}` while one runs, and
+  one started while ESP-NOW is open does not start: `network:start/1` returns before the driver
+  starts WiFi, and the network process then stops with `{start_port_failed, ap_only_held}`. A
+  network with both `sta` and `ap` works.
+
+Only one port can be open (`{error, already_open}`), linked to the process that opened it: when
+that process dies the port closes, and ESP-NOW can be opened again.
+
+`espnow:send/3` waits until the frame is out and returns `ok` (for a unicast frame, the peer
+acknowledged it; for a broadcast, it went out) or `{error, fail}`. The driver gives the radio one
+frame at a time, as the ESP-NOW guide recommends, so concurrent senders wait their turn.
+
+The receiver (the caller of `espnow:open/1`, or `{receiver, Pid}`) gets
+`{espnow, rx, Mac, Data, #{rssi := Rssi}}` for each frame. The Wi-Fi task copies each frame once,
+into the binary the receiver gets; while those waiting for the scheduler hold
+`CONFIG_AVM_ESPNOW_RX_BUDGET` bytes (8192 by default), further frames are dropped and counted in
+`espnow:stats/1` (the receiver's mailbox itself is not bounded).
+
+A unicast peer must be added first, optionally with an `lmk` key to encrypt the traffic with it
+(the `pmk` given to `espnow:open/1` encrypts the `lmk` keys); broadcast needs no peer.
+
+```erlang
+{ok, Port} = espnow:open([{channel, 1}]),
+Peer = <<16#94, 16#E6, 16#86, 16#DB, 16#02, 16#00>>,
+ok = espnow:add_peer(Port, Peer),
+ok = espnow:send(Port, Peer, <<"ping">>),
+receive
+    {espnow, rx, From, Data, #{rssi := Rssi}} ->
+        io:format("~p from ~p at ~p dBm~n", [Data, From, Rssi])
+after 1000 -> no_reply
+end,
+ok = espnow:close(Port).
+```
+
 ## SNTP Support
 
 You may configure the networking layer to automatically synchronize time on the ESP32 with an NTP server accessible on the network.

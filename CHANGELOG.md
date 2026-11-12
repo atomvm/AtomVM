@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added PPP over a UART to the `network` module on ESP32 (opt-in with `CONFIG_AVM_ENABLE_PPP=y`,
   which needs `CONFIG_LWIP_PPP_SUPPORT=y`): `{ppp, [...]}` in `network:start/1` runs the link on a
   UART whose other end is ready for it, such as a cellular modem the application has dialed
+- Added the `espnow` module on ESP32 (opt-in with `CONFIG_AVM_ENABLE_ESPNOW=y`): ESP-NOW frames to
+  a peer or broadcast, on the WiFi radio owned by the `network` driver, so ESP-NOW keeps working
+  across `network:start/1` and `network:stop/0`
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.

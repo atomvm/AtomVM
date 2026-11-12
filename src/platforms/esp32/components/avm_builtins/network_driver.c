@@ -33,6 +33,7 @@
 #include <platform_defaultatoms.h>
 #include <port.h>
 #include <sdkconfig.h>
+#include <smp.h>
 #include <term.h>
 #include <utils.h>
 
@@ -51,6 +52,7 @@
 #include <esp_sntp.h>
 #include <esp_wifi.h>
 #include <lwip/inet.h>
+#include <network_wifi.h>
 #if defined(CONFIG_AVM_ENABLE_ETHERNET) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
 #include <driver/gpio.h>
 #include <esp_eth.h>
@@ -97,6 +99,7 @@
 #define PORT_REPLY_SIZE (TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_SHORT_SIZE)
 
 static const char *const ap_atom = ATOM_STR("\x2", "ap");
+static const char *const ap_only_held_atom = ATOM_STR("\xC", "ap_only_held");
 static const char *const ap_authmode_atom = ATOM_STR("\xB", "ap_authmode");
 static const char *const ap_channel_atom = ATOM_STR("\xA", "ap_channel");
 static const char *const ap_sta_connected_atom = ATOM_STR("\x10", "ap_sta_connected");
@@ -1879,6 +1882,111 @@ static void stop_ppp(struct ClientData *data)
 }
 #endif
 
+// The Wi-Fi radio has one owner, this driver. It is on while the network
+// uses the STA or the AP, or while another driver holds it
+// (network_wifi_hold/1, ESP-NOW), and network:stop/0 only turns it off when
+// nothing holds it. A held radio with no network is a bare STA, not
+// connected. Everything here runs in the scheduler, on SMP builds on any of
+// its threads: `wifi_mutex' serializes the holders and the network's start
+// and stop around the radio.
+#ifndef AVM_NO_SMP
+static Mutex *wifi_mutex;
+#endif
+static bool wifi_initialized;
+static bool wifi_started;
+static bool wifi_used_by_network;
+static void (*wifi_holder_restarted)(bool bare_sta);
+
+static esp_err_t wifi_init_once(void)
+{
+    if (wifi_initialized) {
+        return ESP_OK;
+    }
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    esp_err_t err = esp_wifi_init(&cfg);
+    if (UNLIKELY(err != ESP_OK)) {
+        ESP_LOGE(TAG, "Failed to initialize ESP WiFi, reason: %s", esp_err_to_name(err));
+        return err;
+    }
+    if (UNLIKELY((err = esp_wifi_set_storage(WIFI_STORAGE_FLASH)) != ESP_OK)) {
+        ESP_LOGE(TAG, "Failed to set ESP WiFi storage, reason: %s", esp_err_to_name(err));
+        esp_wifi_deinit();
+        return err;
+    }
+    wifi_initialized = true;
+    return ESP_OK;
+}
+
+// These only return OK or a not-initialized error, fine to ignore.
+static void wifi_off(void)
+{
+    esp_wifi_stop();
+    esp_wifi_deinit();
+    wifi_started = false;
+    wifi_initialized = false;
+}
+
+static esp_err_t wifi_start_bare_sta(void)
+{
+    esp_err_t err = esp_wifi_set_mode(WIFI_MODE_STA);
+    if (err == ESP_OK) {
+        err = esp_wifi_start();
+    }
+    if (UNLIKELY(err != ESP_OK)) {
+        ESP_LOGE(TAG, "Failed to start WiFi for a holder, reason: %s", esp_err_to_name(err));
+        return err;
+    }
+    wifi_started = true;
+    return ESP_OK;
+}
+
+// An AP-only network runs the radio in WIFI_MODE_AP, where a holder's STA
+// frames cannot go out: refused (ESP_ERR_NOT_SUPPORTED), as start_wifi
+// refuses an AP-only network while the radio is held.
+static bool wifi_ap_only(void)
+{
+    wifi_mode_t mode;
+    return wifi_used_by_network && esp_wifi_get_mode(&mode) == ESP_OK && mode == WIFI_MODE_AP;
+}
+
+esp_err_t network_wifi_hold(void (*restarted)(bool bare_sta))
+{
+    SMP_MUTEX_LOCK(wifi_mutex);
+    esp_err_t err;
+    if (wifi_holder_restarted != NULL) {
+        err = ESP_ERR_INVALID_STATE;
+        goto unlock;
+    }
+    if (wifi_ap_only()) {
+        err = ESP_ERR_NOT_SUPPORTED;
+        goto unlock;
+    }
+    err = wifi_init_once();
+    if (err == ESP_OK && !wifi_started) {
+        err = wifi_start_bare_sta();
+    }
+    if (UNLIKELY(err != ESP_OK)) {
+        if (!wifi_used_by_network) {
+            wifi_off();
+        }
+        goto unlock;
+    }
+    wifi_holder_restarted = restarted;
+unlock:
+    SMP_MUTEX_UNLOCK(wifi_mutex);
+    return err;
+}
+
+void network_wifi_release(void)
+{
+    SMP_MUTEX_LOCK(wifi_mutex);
+    wifi_holder_restarted = NULL;
+    if (!wifi_used_by_network) {
+        wifi_off();
+    }
+    SMP_MUTEX_UNLOCK(wifi_mutex);
+}
+
 static bool start_wifi(Context *ctx, term pid, term ref, struct ClientData *data,
     wifi_config_t *sta_wifi_config, wifi_config_t *ap_wifi_config, bool roaming,
     esp_netif_t **sta_wifi_interface, esp_netif_t **ap_wifi_interface)
@@ -1903,18 +2011,22 @@ static bool start_wifi(Context *ctx, term pid, term ref, struct ClientData *data
     }
 
     esp_err_t err;
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    if (UNLIKELY_NOT_ESP_OK(err = esp_wifi_init(&cfg))) {
-        ESP_LOGE(TAG, "Failed to initialize ESP WiFi, reason: %s", esp_err_to_name(err));
+    if (UNLIKELY(sta_wifi_config == NULL && !roaming && wifi_holder_restarted != NULL)) {
+        ESP_LOGE(TAG, "An AP-only network cannot start while ESP-NOW holds the radio");
+        term error = port_create_error_tuple(ctx, make_atom(ctx->global, ap_only_held_atom));
+        port_send_reply(ctx, pid, ref, error);
+        return false;
+    }
+    if (UNLIKELY((err = wifi_init_once()) != ESP_OK)) {
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
         return false;
     }
-    if (UNLIKELY((err = esp_wifi_set_storage(WIFI_STORAGE_FLASH)) != ESP_OK)) {
-        ESP_LOGE(TAG, "Failed to set ESP WiFi storage, reason: %s", esp_err_to_name(err));
-        term error = port_create_error_tuple(ctx, term_from_int(err));
-        port_send_reply(ctx, pid, ref, error);
-        return false;
+    // A held radio is already on as a bare STA: stopped and started again
+    // below, so that WIFI_EVENT_STA_START connects and the netifs start.
+    if (wifi_started) {
+        esp_wifi_stop();
+        wifi_started = false;
     }
 
     if ((err = esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, data)) != ESP_OK) {
@@ -1996,6 +2108,13 @@ static bool start_wifi(Context *ctx, term pid, term ref, struct ClientData *data
         return false;
     } else {
         ESP_LOGI(TAG, "WIFI started");
+    }
+    wifi_started = true;
+    wifi_used_by_network = true;
+    // The held bare STA was stopped above, and with it what the holder
+    // installed in the radio.
+    if (wifi_holder_restarted != NULL) {
+        wifi_holder_restarted(false);
     }
 
     return true;
@@ -2084,7 +2203,10 @@ static void start_network(Context *ctx, term pid, term ref, term config)
 
     esp_netif_t *sta_wifi_interface = NULL;
     esp_netif_t *ap_wifi_interface = NULL;
-    if (want_wifi && !start_wifi(ctx, pid, ref, data, sta_wifi_config, ap_wifi_config, roaming, &sta_wifi_interface, &ap_wifi_interface)) {
+    SMP_MUTEX_LOCK(wifi_mutex);
+    bool wifi_ok = !want_wifi || start_wifi(ctx, pid, ref, data, sta_wifi_config, ap_wifi_config, roaming, &sta_wifi_interface, &ap_wifi_interface);
+    SMP_MUTEX_UNLOCK(wifi_mutex);
+    if (!wifi_ok) {
         goto cleanup;
     }
 
@@ -2164,9 +2286,15 @@ static void stop_network(GlobalContext *global)
         }
     }
 
-    // Stop and deinit the WiFi driver, these only return OK, or not init error (fine to ignore).
-    esp_wifi_stop();
-    esp_wifi_deinit();
+    // Stop the WiFi driver if the network used it (a holder may have it on
+    // for itself), these only return OK, or not init error (fine to ignore).
+    SMP_MUTEX_LOCK(wifi_mutex);
+    bool network_had_wifi = wifi_used_by_network;
+    if (network_had_wifi) {
+        esp_wifi_stop();
+        wifi_started = false;
+    }
+    wifi_used_by_network = false;
 
     // Destroy existing netif interfaces
     if (ap_wifi_interface != NULL) {
@@ -2175,6 +2303,19 @@ static void stop_network(GlobalContext *global)
     if (sta_wifi_interface != NULL) {
         esp_netif_destroy_default_wifi(sta_wifi_interface);
     }
+
+    // A holder (ESP-NOW) keeps the radio on, as a bare STA again. Whether
+    // the radio is on, not whether the network used it: start_wifi stops a
+    // held bare STA before it marks the radio as the network's, and a failure
+    // in between leaves it off.
+    if (wifi_holder_restarted != NULL) {
+        if (!wifi_started && wifi_start_bare_sta() == ESP_OK) {
+            wifi_holder_restarted(true);
+        }
+    } else {
+        wifi_off();
+    }
+    SMP_MUTEX_UNLOCK(wifi_mutex);
 
     free(platform->network_driver_data);
     platform->network_driver_data = NULL;
@@ -2732,6 +2873,14 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
 void network_driver_init(GlobalContext *global)
 {
     esp_err_t err;
+
+#ifndef AVM_NO_SMP
+    wifi_mutex = smp_mutex_create();
+    if (IS_NULL_PTR(wifi_mutex)) {
+        ESP_LOGE(TAG, "Failed to create the WiFi radio mutex");
+        AVM_ABORT();
+    }
+#endif
 
     if ((err = esp_netif_init()) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize network interface %d", err);
