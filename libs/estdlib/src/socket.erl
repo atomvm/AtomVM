@@ -36,7 +36,9 @@
     recvfrom/2,
     recvfrom/3,
     send/2,
+    send/3,
     sendto/3,
+    sendto/4,
     setopt/3,
     getopt/2,
     connect/2,
@@ -52,6 +54,7 @@
     nif_recvfrom/2,
     nif_select_stop/1,
     nif_select_read_stop/1,
+    nif_select_write_stop/1,
     nif_send/2,
     nif_sendto/3
 ]).
@@ -571,63 +574,128 @@ recvfrom0_nowait(Socket, Length, Ref) ->
     end.
 
 %%-----------------------------------------------------------------------------
-%% @param   Socket the socket
-%% @param   Data the data to send
-%% @returns `ok' if successful; `{error, Reason}', otherwise, or
-%%          `{error, {Reason, RestData}}' if an error occurred after some of
-%%          the data was already sent, `RestData' being the data that was not
-%%          sent.
-%% @doc     Send data on the specified socket.
-%%
-%%          Note that this function will block until data is sent
-%%          on the socket.  The data may not have been received by the
-%%          intended recipient, and the data may not even have been sent
-%%          over the network.
-%%
-%%          Partial sends and transient send backpressure (e.g. a full TCP
-%%          send buffer) are retried internally, waiting for the socket to
-%%          become writable again, until all data has been accepted by the
-%%          stack or an error occurs. Callers therefore do not need to
-%%          implement their own retry logic for `eagain'-like conditions.
-%%
-%% Example:
-%%
-%%          `ok = socket:send(ConnectedSocket, Data)'
+%% @equiv socket:send(Socket, Data, infinity)
 %% @end
 %%-----------------------------------------------------------------------------
 -spec send(Socket :: socket(), Data :: iodata()) ->
     ok | {error, Reason :: term()} | {error, {Reason :: term(), RestData :: binary()}}.
-send(Socket, Data) when is_binary(Data) ->
-    send_all(Socket, Data);
 send(Socket, Data) ->
-    send_all(Socket, erlang:iolist_to_binary(Data)).
+    send(Socket, Data, infinity).
+
+%%-----------------------------------------------------------------------------
+%% @param   Socket the socket
+%% @param   Data the data to send
+%% @param   Timeout timeout (in milliseconds), `infinity', `nowait' or a
+%%          select handle (a reference)
+%% @returns `ok' if all data was accepted by the stack; `{error, Reason}' if
+%%          an error occurred before any data was accepted, or
+%%          `{error, {Reason, RestData}}' if an error occurred after some of
+%%          the data was accepted, `RestData' being the data that was not
+%%          sent; `{select, SelectInfo}' or `{select, {SelectInfo, RestData}}'
+%%          if `Timeout' is `nowait' or a select handle and the data could not
+%%          be sent (completely) without blocking.
+%% @doc     Send data on the specified socket.
+%%
+%%          This function blocks until all of `Data' has been accepted by the
+%%          stack, until an error occurs or until `Timeout' milliseconds have
+%%          elapsed, in which case `Reason' is `timeout'. The data may not
+%%          have been received by the intended recipient, and may not even
+%%          have been sent over the network. Partial sends and transient send
+%%          backpressure (e.g. a full TCP send buffer) are retried internally,
+%%          waiting for the socket to become writable again, so callers do not
+%%          need to implement their own retry logic for `eagain'-like
+%%          conditions.
+%%
+%%          If `Timeout' is `nowait' or a select handle, this function never
+%%          blocks. If the data cannot be sent (completely) right away, it
+%%          returns `{select, SelectInfo}' when no data was accepted or
+%%          `{select, {SelectInfo, RestData}}' when some data was accepted,
+%%          `SelectInfo' being `{select_info, send, SelectHandle}'. The calling
+%%          process then receives `{'$socket', Socket, select, SelectHandle}'
+%%          when the socket is writable again, and should call this function
+%%          again with `RestData', or `{'$socket', Socket, abort,
+%%          {SelectHandle, Reason}}' if the socket was closed meanwhile.
+%%
+%%          A process that waited for the socket to become writable stays the
+%%          owner of the write direction of the socket, as a process that
+%%          called `recv/1,2,3' stays the owner of its read direction: the
+%%          socket is monitored by the process and the ownership is released
+%%          when the socket is closed, when another process selects on the
+%%          same direction or when the process terminates.
+%%
+%% Example:
+%%
+%%          `ok = socket:send(ConnectedSocket, Data, 5000)'
+%% @end
+%%-----------------------------------------------------------------------------
+-spec send(Socket :: socket(), Data :: iodata(), Timeout :: timeout() | nowait | reference()) ->
+    ok
+    | {select, {select_info, send, reference()}}
+    | {select, {{select_info, send, reference()}, RestData :: binary()}}
+    | {error, Reason :: term()}
+    | {error, {Reason :: term(), RestData :: binary()}}.
+send(Socket, Data, nowait) ->
+    send_nowait(Socket, iodata_to_binary(Data), undefined, erlang:make_ref(), false);
+send(Socket, Data, Ref) when is_reference(Ref) ->
+    send_nowait(Socket, iodata_to_binary(Data), undefined, Ref, false);
+send(Socket, Data, Timeout) ->
+    send_all(Socket, iodata_to_binary(Data), undefined, false, deadline(Timeout)).
+
+%%-----------------------------------------------------------------------------
+%% @equiv socket:sendto(Socket, Data, Dest, infinity)
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sendto(Socket :: socket(), Data :: iodata(), Dest :: sockaddr()) ->
+    ok | {error, Reason :: term()} | {error, {Reason :: term(), RestData :: binary()}}.
+sendto(Socket, Data, Dest) ->
+    sendto(Socket, Data, Dest, infinity).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
 %% @param   Data the data to send
 %% @param   Dest the destination to which to send the data
-%% @returns `ok' if successful; `{error, Reason}', otherwise.
+%% @param   Timeout timeout (in milliseconds), `infinity', `nowait' or a
+%%          select handle (a reference)
+%% @returns `ok' if successful; `{error, Reason}', otherwise;
+%%          `{select, SelectInfo}' if `Timeout' is `nowait' or a select
+%%          handle and the data could not be sent without blocking.
 %% @doc     Send data on the specified socket to the specified destination.
 %%
-%%          Note that this function will block until data is sent
-%%          on the socket.  The data may not have been received by the
-%%          intended recipient, and the data may not even have been sent
-%%          over the network.
+%%          This function blocks until the data has been accepted by the
+%%          stack, until an error occurs or until `Timeout' milliseconds have
+%%          elapsed, in which case `Reason' is `timeout'. The data may not
+%%          have been received by the intended recipient, and may not even
+%%          have been sent over the network. Transient send backpressure is
+%%          retried internally, waiting for the socket to become writable
+%%          again, as with `send/2,3'.
 %%
-%%          Transient send backpressure is retried internally, waiting for
-%%          the socket to become writable again, as with `send/2'.
+%%          If `Timeout' is `nowait' or a select handle, this function never
+%%          blocks and returns `{select, SelectInfo}' if the data cannot be
+%%          sent right away, `SelectInfo' being
+%%          `{select_info, sendto, SelectHandle}'; see `send/3'.
 %%
 %% Example:
 %%
-%%          `ok = socket:sendto(ConnectedSocket, Data, Dest)'
+%%          `ok = socket:sendto(Socket, Data, Dest, 5000)'
 %% @end
 %%-----------------------------------------------------------------------------
--spec sendto(Socket :: socket(), Data :: iodata(), Dest :: sockaddr()) ->
-    ok | {error, Reason :: term()}.
-sendto(Socket, Data, Dest) when is_binary(Data) ->
-    sendto_all(Socket, Data, Dest);
-sendto(Socket, Data, Dest) ->
-    sendto_all(Socket, erlang:iolist_to_binary(Data), Dest).
+-spec sendto(
+    Socket :: socket(),
+    Data :: iodata(),
+    Dest :: sockaddr(),
+    Timeout :: timeout() | nowait | reference()
+) ->
+    ok
+    | {select, {select_info, sendto, reference()}}
+    | {select, {{select_info, sendto, reference()}, RestData :: binary()}}
+    | {error, Reason :: term()}
+    | {error, {Reason :: term(), RestData :: binary()}}.
+sendto(Socket, Data, Dest, nowait) ->
+    send_nowait(Socket, iodata_to_binary(Data), Dest, erlang:make_ref(), false);
+sendto(Socket, Data, Dest, Ref) when is_reference(Ref) ->
+    send_nowait(Socket, iodata_to_binary(Data), Dest, Ref, false);
+sendto(Socket, Data, Dest, Timeout) ->
+    send_all(Socket, iodata_to_binary(Data), Dest, false, deadline(Timeout)).
 
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
@@ -749,6 +817,12 @@ nif_select_read_stop(_Socket) ->
     erlang:nif_error(undefined).
 
 %% @private
+%% Like nif_select_stop/1, but if another process is selecting for read on the
+%% socket, only the write direction is stopped.
+nif_select_write_stop(_Socket) ->
+    erlang:nif_error(undefined).
+
+%% @private
 nif_send(_Socket, _Data) ->
     erlang:nif_error(undefined).
 
@@ -757,25 +831,77 @@ nif_sendto(_Socket, _Data, _Dest) ->
     erlang:nif_error(undefined).
 
 %% @private
-%% Send all of Data on Socket, retrying partial sends and transient send
-%% backpressure ({error, eagain}) by waiting for the socket to become
-%% writable again, until all data has been accepted or a real error occurs.
-%% As in OTP, an error that follows a partial send is reported as
-%% {error, {Reason, RestData}}, and as {error, Reason} if nothing was accepted.
-send_all(Socket, Data) ->
-    send_all(Socket, Data, false).
+iodata_to_binary(Data) when is_binary(Data) ->
+    Data;
+iodata_to_binary(Data) ->
+    erlang:iolist_to_binary(Data).
 
 %% @private
-send_all(Socket, Data, Partial) ->
-    case ?MODULE:nif_send(Socket, Data) of
+deadline(infinity) ->
+    infinity;
+deadline(Timeout) when is_integer(Timeout) andalso Timeout >= 0 ->
+    erlang:monotonic_time(millisecond) + Timeout.
+
+%% @private
+remaining(infinity) ->
+    infinity;
+remaining(Deadline) ->
+    max(0, Deadline - erlang:monotonic_time(millisecond)).
+
+%% @private
+nif_send_dest(Socket, Data, undefined) ->
+    ?MODULE:nif_send(Socket, Data);
+nif_send_dest(Socket, Data, Dest) ->
+    ?MODULE:nif_sendto(Socket, Data, Dest).
+
+%% @private
+select_tag(undefined) ->
+    send;
+select_tag(_Dest) ->
+    sendto.
+
+%% @private
+%% Send all of Data on Socket (to Dest, unless it is undefined), retrying
+%% partial sends and transient send backpressure ({error, eagain}) by waiting
+%% for the socket to become writable again, until all data has been accepted,
+%% a real error occurs or Deadline is reached.
+%% As in OTP, an error that follows a partial send is reported as
+%% {error, {Reason, RestData}}, and as {error, Reason} if nothing was accepted.
+send_all(Socket, Data, Dest, Partial, Deadline) ->
+    case nif_send_dest(Socket, Data, Dest) of
         ok ->
             ok;
         {ok, Rest} ->
-            send_all(Socket, Rest, true);
+            send_all(Socket, Rest, Dest, true, Deadline);
         {error, eagain} ->
-            case wait_write(Socket) of
+            case wait_write(Socket, Deadline) of
                 ok ->
-                    send_all(Socket, Data, Partial);
+                    send_all(Socket, Data, Dest, Partial, Deadline);
+                {error, Reason} ->
+                    send_error(Reason, Data, Partial)
+            end;
+        {error, Reason} ->
+            send_error(Reason, Data, Partial)
+    end.
+
+%% @private
+%% Like send_all/5, but instead of waiting for the socket to become writable,
+%% select for write with Ref and return {select, SelectInfo} or
+%% {select, {SelectInfo, RestData}}.
+send_nowait(Socket, Data, Dest, Ref, Partial) ->
+    case nif_send_dest(Socket, Data, Dest) of
+        ok ->
+            ok;
+        {ok, Rest} ->
+            send_nowait(Socket, Rest, Dest, Ref, true);
+        {error, eagain} ->
+            case ?MODULE:nif_select_write(Socket, Ref) of
+                ok ->
+                    SelectInfo = {select_info, select_tag(Dest), Ref},
+                    case Partial of
+                        true -> {select, {SelectInfo, Data}};
+                        false -> {select, SelectInfo}
+                    end;
                 {error, Reason} ->
                     send_error(Reason, Data, Partial)
             end;
@@ -790,26 +916,9 @@ send_error(Reason, _RestData, false) ->
     {error, Reason}.
 
 %% @private
-sendto_all(Socket, Data, Dest) ->
-    case ?MODULE:nif_sendto(Socket, Data, Dest) of
-        ok ->
-            ok;
-        {ok, Rest} ->
-            sendto_all(Socket, Rest, Dest);
-        {error, eagain} ->
-            case wait_write(Socket) of
-                ok ->
-                    sendto_all(Socket, Data, Dest);
-                {error, _Reason} = Error ->
-                    Error
-            end;
-        {error, _Reason} = Error ->
-            Error
-    end.
-
-%% @private
-%% Block the calling process until Socket is writable (or closed).
-wait_write(Socket) ->
+%% Block the calling process until Socket is writable (or closed), or until
+%% Deadline is reached.
+wait_write(Socket, Deadline) ->
     Ref = erlang:make_ref(),
     case ?MODULE:nif_select_write(Socket, Ref) of
         ok ->
@@ -818,6 +927,17 @@ wait_write(Socket) ->
                     ok;
                 {'$socket', Socket, abort, {Ref, Reason}} ->
                     {error, Reason}
+            after remaining(Deadline) ->
+                %% Stop selecting; a notification may have been sent meanwhile.
+                ?MODULE:nif_select_write_stop(Socket),
+                receive
+                    {'$socket', Socket, select, Ref} ->
+                        ok;
+                    {'$socket', Socket, abort, {Ref, Reason}} ->
+                        {error, Reason}
+                after 0 ->
+                    {error, timeout}
+                end
             end;
         {error, _Reason} = Error ->
             Error

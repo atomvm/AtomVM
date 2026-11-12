@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   same event at the same time
 - Added `socket:nif_select_write/2`; sockets now keep one selecting process per direction, so a
   process blocked in `socket:send/2` no longer disturbs another process blocked in `socket:recv/2,3`
+- Added `socket:send/3` and `socket:sendto/4`, taking a timeout, `nowait` or a select handle, so
+  that a send on a socket whose peer does not read can be bounded in time (`{error, timeout}` or
+  `{error, {timeout, RestData}}`) or made asynchronous (`{select, SelectInfo}` or
+  `{select, {SelectInfo, RestData}}`, followed by a `{'$socket', Socket, select, SelectHandle}`
+  message when the socket is writable again)
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.

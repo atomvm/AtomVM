@@ -1543,10 +1543,13 @@ static term nif_socket_select_write(Context *ctx, int argc, term argv[])
     return nif_socket_select(ctx, argc, argv, ERL_NIF_SELECT_WRITE);
 }
 
-// Stop selecting on a socket. When read_only is true and another process is
-// selecting for write on the same socket, only the read direction is stopped,
-// so that cleaning up after a failed read does not disown a blocked writer.
-static term nif_socket_select_stop_internal(Context *ctx, term socket, bool read_only)
+// Stop selecting on a socket. When direction is ERL_NIF_SELECT_READ (resp.
+// ERL_NIF_SELECT_WRITE) and another process is selecting for write (resp.
+// read) on the same socket, only that direction is stopped, so that cleaning
+// up after a failed read (resp. a send that timed out) does not disown the
+// other process. Otherwise, or when direction is 0, both directions are
+// stopped.
+static term nif_socket_select_stop_internal(Context *ctx, term socket, enum ErlNifSelectFlags direction)
 {
     VALIDATE_VALUE(socket, term_is_otp_socket);
 
@@ -1557,18 +1560,38 @@ static term nif_socket_select_stop_internal(Context *ctx, term socket, bool read
     ErlNifEnv *env = erl_nif_env_from_context(ctx);
     // Avoid the race condition with select object here.
     SMP_RWLOCK_WRLOCK(rsrc_obj->socket_lock);
-    if (read_only && rsrc_obj->write_select.process_id != INVALID_PROCESS_ID) {
-        // The write direction has an owner: stop the read direction only.
-        socket_select_disown(env, rsrc_obj, &rsrc_obj->read_select);
-        rsrc_obj->read_select.ref_ticks = 0;
 #if OTP_SOCKET_BSD
-        if (UNLIKELY(enif_select(env, rsrc_obj->fd, ERL_NIF_SELECT_READ | ERL_NIF_SELECT_CANCEL, rsrc_obj, NULL, term_nil()) < 0)) {
+    if (rsrc_obj->fd == CLOSED_FD) {
+        // Closing the socket already stopped the select event. It can still
+        // have owners, armed by a select on the already closed socket, which
+        // no event will ever answer: drop them here.
+        socket_select_disown(env, rsrc_obj, &rsrc_obj->read_select);
+        socket_select_disown(env, rsrc_obj, &rsrc_obj->write_select);
+        rsrc_obj->read_select.ref_ticks = 0;
+        rsrc_obj->write_select.ref_ticks = 0;
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        return OK_ATOM;
+    }
+#endif
+    struct SocketSelect *other_select = NULL;
+    if (direction == ERL_NIF_SELECT_READ) {
+        other_select = &rsrc_obj->write_select;
+    } else if (direction == ERL_NIF_SELECT_WRITE) {
+        other_select = &rsrc_obj->read_select;
+    }
+    if (other_select != NULL && other_select->process_id != INVALID_PROCESS_ID) {
+        // The other direction has an owner: stop the requested direction only.
+        struct SocketSelect *select = socket_get_select(rsrc_obj, direction);
+        socket_select_disown(env, rsrc_obj, select);
+        select->ref_ticks = 0;
+#if OTP_SOCKET_BSD
+        if (UNLIKELY(enif_select(env, rsrc_obj->fd, direction | ERL_NIF_SELECT_CANCEL, rsrc_obj, NULL, term_nil()) < 0)) {
             SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
             RAISE_ERROR(BADARG_ATOM);
         }
 #elif OTP_SOCKET_LWIP
         LWIP_BEGIN();
-        rsrc_obj->socket_state &= ~SocketStateSelectingRead;
+        rsrc_obj->socket_state &= (direction == ERL_NIF_SELECT_WRITE) ? ~SocketStateSelectingWrite : ~SocketStateSelectingRead;
         LWIP_END();
 #endif
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
@@ -1600,7 +1623,7 @@ static term nif_socket_select_stop(Context *ctx, int argc, term argv[])
     TRACE("nif_socket_select_stop\n");
     UNUSED(argc);
 
-    return nif_socket_select_stop_internal(ctx, argv[0], false);
+    return nif_socket_select_stop_internal(ctx, argv[0], 0);
 }
 
 static term nif_socket_select_read_stop(Context *ctx, int argc, term argv[])
@@ -1608,7 +1631,15 @@ static term nif_socket_select_read_stop(Context *ctx, int argc, term argv[])
     TRACE("nif_socket_select_read_stop\n");
     UNUSED(argc);
 
-    return nif_socket_select_stop_internal(ctx, argv[0], true);
+    return nif_socket_select_stop_internal(ctx, argv[0], ERL_NIF_SELECT_READ);
+}
+
+static term nif_socket_select_write_stop(Context *ctx, int argc, term argv[])
+{
+    TRACE("nif_socket_select_write_stop\n");
+    UNUSED(argc);
+
+    return nif_socket_select_stop_internal(ctx, argv[0], ERL_NIF_SELECT_WRITE);
 }
 
 //
@@ -3450,6 +3481,10 @@ static const struct Nif socket_select_read_stop_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_socket_select_read_stop
 };
+static const struct Nif socket_select_write_stop_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_socket_select_write_stop
+};
 static const struct Nif socket_getopt_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_socket_getopt
@@ -3531,6 +3566,10 @@ const struct Nif *otp_socket_nif_get_nif(const char *nifname)
         if (strcmp("nif_select_read_stop/1", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &socket_select_read_stop_nif;
+        }
+        if (strcmp("nif_select_write_stop/1", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &socket_select_write_stop_nif;
         }
         if (strcmp("getopt/2", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);

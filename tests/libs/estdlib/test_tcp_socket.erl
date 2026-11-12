@@ -40,7 +40,9 @@ test() ->
             ok = test_close_with_reader_and_writer(),
             ok = test_writer_killed_reader_survives(),
             ok = test_reader_cleanup_keeps_writer(),
-            ok = test_send_error_after_partial_send();
+            ok = test_send_error_after_partial_send(),
+            ok = test_send_timeout(),
+            ok = test_send_nowait();
         "BEAM" ->
             ok
     end,
@@ -885,6 +887,96 @@ test_send_error_after_partial_send() ->
             teardown_full_send_buffer(Setup);
         no_backpressure ->
             ok
+    end.
+
+%%
+%% test_send_timeout
+%%
+%% socket:send/3 with a timeout returns {error, timeout}, or
+%% {error, {timeout, RestData}} after a partial send, when the peer does not
+%% read, and leaves the socket usable: a send completes once the peer reads.
+%%
+
+test_send_timeout() ->
+    etest:flush_msg_queue(),
+    case setup_full_send_buffer() of
+        {ok, Setup = #{client := Client, acceptor := Acceptor}} ->
+            Data = binary:copy(<<0>>, ?LARGE_PAYLOAD_SIZE),
+            ok =
+                case socket:send(Client, Data, 200) of
+                    {error, timeout} ->
+                        ok;
+                    {error, {timeout, Rest}} when
+                        is_binary(Rest), byte_size(Rest) > 0, byte_size(Rest) < ?LARGE_PAYLOAD_SIZE
+                    ->
+                        ok;
+                    Other ->
+                        error({unexpected_send_result, Other})
+                end,
+            Acceptor ! {drain_all, self()},
+            ok = socket:send(Client, <<"after timeout">>, 30000),
+            ok = socket:close(Client),
+            teardown_full_send_buffer(Setup);
+        no_backpressure ->
+            ok
+    end.
+
+%%
+%% test_send_nowait
+%%
+%% socket:send/3 with nowait returns {select, SelectInfo}, or
+%% {select, {SelectInfo, RestData}} after a partial send, when the peer does
+%% not read, and the caller is notified when the socket is writable again.
+%%
+
+test_send_nowait() ->
+    etest:flush_msg_queue(),
+    case setup_full_send_buffer() of
+        {ok, Setup = #{client := Client, acceptor := Acceptor}} ->
+            Data = binary:copy(<<1>>, ?LARGE_PAYLOAD_SIZE),
+            {Ref, Rest} =
+                case socket:send(Client, Data, nowait) of
+                    {select, {select_info, send, Ref0}} when is_reference(Ref0) ->
+                        {Ref0, Data};
+                    {select, {{select_info, send, Ref0}, Rest0}} when
+                        is_reference(Ref0),
+                        is_binary(Rest0),
+                        byte_size(Rest0) > 0,
+                        byte_size(Rest0) < byte_size(Data)
+                    ->
+                        {Ref0, Rest0};
+                    Other ->
+                        error({unexpected_send_result, Other})
+                end,
+            Acceptor ! {drain_all, self()},
+            ok = wait_select_write(Client, Ref),
+            ok = send_nowait_until_sent(Client, binary:part(Rest, 0, 1024 * 1024)),
+            ok = socket:close(Client),
+            teardown_full_send_buffer(Setup);
+        no_backpressure ->
+            ok
+    end.
+
+%% @private
+send_nowait_until_sent(Socket, Data) ->
+    case socket:send(Socket, Data, nowait) of
+        ok ->
+            ok;
+        {select, {select_info, send, Ref}} ->
+            ok = wait_select_write(Socket, Ref),
+            send_nowait_until_sent(Socket, Data);
+        {select, {{select_info, send, Ref}, Rest}} ->
+            ok = wait_select_write(Socket, Ref),
+            send_nowait_until_sent(Socket, Rest)
+    end.
+
+%% @private
+wait_select_write(Socket, Ref) ->
+    receive
+        {'$socket', Socket, select, Ref} -> ok;
+        {'$socket', Socket, abort, {Ref, Reason}} -> error({aborted, Reason})
+    after 30000 ->
+        error({timeout, waiting_for_select_write})
     end.
 
 %% @private
