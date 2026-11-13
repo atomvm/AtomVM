@@ -96,6 +96,54 @@ def cases():
     for pairs in ["[{a,1},bad]", "[{a,1}|tail]", "[{a,1,extra}]", "bad"]:
         selected.append({"upstream_example": "examples/otp/lists.exs#zip_unzip",
                          "expression": f"differential:call(lists,unzip,[{pairs}])"})
+    # Upstream sort and seq example laws; finite OTP observations, not proof provenance.
+    for xs, ys, probes in [
+        ("[]", "[]", "[a,1]"),
+        ("[1]", "[]", "[1,1.0,2]"),
+        ("[3,1,2,1,1.0,-1]", "[1,4,2,2]", "[1,1.0,2,3,4,99]"),
+        ("[0.0,-0.0,1,1.0,a]", "[1.0,0.0]", "[0.0,-0.0,1,1.0,a,b]"),
+        ("[{b,[2,1]},#{k=>1},<<5:3>>,{a,[]},#{k=>1.0},[1,2]]",
+         "[#{k=>1},{b,[2,1]}]",
+         "[{b,[2,1]},#{k=>1},#{k=>1.0},<<5:3>>,missing]"),
+        ("[1 bsl 100,-(1 bsl 100),(1 bsl 255)-1,1 bsl 60,0,-(1 bsl 60),1 bsl 100]",
+         "[1 bsl 100,42,-(1 bsl 255)+1]",
+         "[1 bsl 100,-(1 bsl 100),(1 bsl 255)-1,42,99]"),
+        ("lists:reverse(lists:seq(1,33))", "[0,34]", "[1,17,33,34,99]"),
+    ]:
+        selected.append({"upstream_example": "examples/otp/lists.exs#sort_contract_holds",
+                         "expression": f"differential:list_relations({xs},{ys},[],{probes})"})
+    for bad in ["bad", "[1|2]", "[3,2,1|tail]"]:
+        selected.append({"upstream_example": "examples/otp/lists.exs#sort_contract_holds",
+                         "expression": f"differential:call(lists,sort,[{bad}])"})
+    for first, last, step, probes in [
+        ("1", "10", "1", "[0,1,4,9,10]"),
+        ("-5", "5", "3", "[0,1,2,3,4]"),
+        ("10", "1", "-2", "[0,1,2,4,5]"),
+        ("5", "-5", "-3", "[0,1,2,3,4]"),
+        ("7", "7", "1", "[0,1]"),
+        ("7", "7", "-3", "[0,1]"),
+        ("7", "7", "0", "[0,1]"),
+        ("5", "4", "1", "[0]"),
+        ("5", "3", "2", "[0]"),
+        ("5", "4", "2", "[0]"),
+        ("10", "7", "5", "[0]"),
+        ("3", "5", "-2", "[0]"),
+        ("4", "5", "-2", "[0]"),
+        ("7", "10", "-5", "[0]"),
+        ("(1 bsl 100)-3", "(1 bsl 100)+3", "2", "[0,1,2,3,4]"),
+        ("-(1 bsl 100)+4", "-(1 bsl 100)-2", "-3", "[0,1,2,3]"),
+    ]:
+        selected.append({"upstream_example": "examples/otp/lists.exs#sequence_formula",
+                         "expression": f"differential:seq_contract({first},{last},{step},{probes})"})
+    for args in [
+        ["5", "3"], ["a", "5"], ["1", "b"],
+        ["5", "2", "1"], ["5", "2", "2"],
+        ["2", "5", "-1"], ["2", "5", "-2"],
+        ["1", "5", "0"], ["a", "5", "1"],
+        ["1", "5", "a"], ["1", "5", "1.0"],
+    ]:
+        selected.append({"upstream_example": "examples/otp/lists.exs#sequence_formula",
+                         "expression": f"differential:call(lists,seq,[{','.join(args)}])"})
 
     t = "Modules/Timers"
     for payload in ["tick", "{nested,#{1=>one,1.0=>float},<<5:3>>}"]:
@@ -343,6 +391,47 @@ def cases():
                          ("c", "[a|b]"), ("a", "foo"), ("b", "[a,b]"), ("b", "[]")]:
         call(l, ["member_found", "member_exact", "member_improper", "member_non_list"],
              "member", value, items, module="lists")
+    for value in ["[]", "[a,b]", "[a|improper]", "[a,b|improper]", "bad"]:
+        call(l, ["reverse_improper", "reverse_non_list"], "reverse", value, module="lists")
+    for left, right in [
+        ("[]", "tail"), ("[a,b]", "tail"), ("[1,1 bsl 100]", "[2,#{k=>v}]"),
+        ("[a|improper]", "[]"), ("bad", "[1]"),
+    ]:
+        call(e, "append_reduces", "++", left, right)
+    for value, items in [("a", "[a|improper]"), ("1", "[1.0,2]"), ("1", "[1,2|improper]")]:
+        selected.append({"lean_origins": ["Modules/Lists.lean#member_found",
+                                          "Modules/Lists.lean#member_improper",
+                                          "Term/ShortCircuit.lean#isMember_exact",
+                                          "Term/ShortCircuit.lean#isMember_agrees_with_chain"],
+                         "expression": f"differential:call(lists,member,[{value},{items}])"})
+    list_relation_origins = [
+        "Modules/Lists.lean#reverse_empty",
+        "Modules/Lists.lean#reverse_onto_tail",
+        "Modules/Lists.lean#member_found",
+        "Modules/Lists.lean#member_exact",
+        "Modules/Erlang.lean#append_reduces",
+        "Modules/Erlang.lean#list_subtraction",
+        "Term/ShortCircuit.lean#isMember_exact",
+        "Term/ShortCircuit.lean#isMember_agrees_with_chain",
+        "Term/Compare.lean#exact_comparison_heads_first",
+    ]
+    for xs, ys, tail, probes in [
+        ("[]", "[]", "[]", "[a,1]"),
+        ("[]", "[1,2]", "[tail]", "[1,2,3]"),
+        ("[1]", "[]", "improper_tail", "[1,1.0,2]"),
+        ("[3,1,2,1,1.0,-1]", "[1,4,2,2]", "[9,8]", "[1,1.0,2,3,4,99]"),
+        ("[0.0,-0.0,1,1.0,a]", "[1.0,0.0]", "[]", "[0.0,-0.0,1,1.0,a,b]"),
+        ("[{b,[2,1]},#{k=>1},<<5:3>>,{a,[]},#{k=>1.0},[1,2]]",
+         "[#{k=>1},{b,[2,1]}]",
+         "{improper,tail}",
+         "[{b,[2,1]},#{k=>1},#{k=>1.0},<<5:3>>,missing]"),
+        ("[1 bsl 100,-(1 bsl 100),(1 bsl 255)-1,1 bsl 60,0,-(1 bsl 60),1 bsl 100]",
+         "[1 bsl 100,42,-(1 bsl 255)+1]",
+         "[0]",
+         "[1 bsl 100,-(1 bsl 100),(1 bsl 255)-1,42,99]"),
+    ]:
+        selected.append({"lean_origins": list_relation_origins,
+                         "expression": f"differential:list_relations({xs},{ys},{tail},{probes})"})
 
     s = "Modules/Sets"
     # Model-inspired public v2 behavior, not the model's version-1 coercion or
@@ -543,6 +632,72 @@ def cases():
         left = f"differential:call(maps,merge,[differential:call(maps,merge,[{a},{b}]),{c}])"
         right = f"differential:call(maps,merge,[{a},differential:call(maps,merge,[{b},{c}])])"
         probe(m, "merge_associative", f"{{{left},{right}}}")
+    map_relation_origins = [
+        "Modules/Maps.lean#mixed_same_key",
+        "Modules/Maps.lean#enumeration_shadowed",
+        "Modules/Maps.lean#from_literal_pairs",
+        "Modules/Maps.lean#nonempty_map_equality",
+        "Modules/Maps.lean#get_after_put",
+        "Modules/Maps.lean#update_lookup",
+        "Modules/Maps.lean#update_other_lookup",
+        "Modules/Maps.lean#merge_bindings",
+        "Modules/Erlang.lean#map_get/2_after_put",
+        "Modules/Erlang.lean#map_size/1_shadowed_and_exact_keys",
+        "Modules/Erlang.lean#semantic_comparison_operators",
+        "Term/Compare.lean#association_list_order",
+        "Term/Compare.lean#exact_map_equality_by_lookup",
+        "Term/Compare.lean#exact_map_equality_lookup",
+        "Term/Compare.lean#map_equality_lookup",
+    ]
+    for left_pairs, right_pairs, queries in [
+        ("[]", "[]", "[a,1,1.0]"),
+        ("[{a,1}]", "[]", "[a,b,1]"),
+        ("[]", "[{a,1}]", "[a,b,1]"),
+        ("[{a,1},{b,2},{a,3},{1,int},{1.0,float},{1,int_override}]",
+         "[{b,2},{a,3},{1.0,float},{1,int_override}]",
+         "[a,b,c,1,1.0]"),
+        ("[{b,[]},{a,1},{a,99}]", "[{a,99},{b,[]}]", "[a,b,c]"),
+        ("[{1,10},{2,20.0}]", "[{1,10.0},{2,20}]", "[1,1.0,2,2.0,3]"),
+        ("[{1,a}]", "[{1.0,a}]", "[1,1.0,a]"),
+        ("[{0.0,pos_zero}]", "[{-0.0,neg_zero}]", "[0.0,-0.0,0]"),
+        ("[{a,0.0},{b,1}]", "[{a,-0.0},{b,1.0}]", "[a,b,c]"),
+        ("[{a,1},{b,2},{c,3}]", "[{b,20},{d,4},{e,5}]", "[a,b,c,d,e,missing]"),
+        ("[{b,0},{a,99}]", "[{c,0},{a,0}]", "[a,b,c]"),
+        ("[{{k,[1,<<5:3>>]},#{inner=>[a,b]}},{[1,2],{tuple,1 bsl 60}}]",
+         "[{{k,[1,<<5:3>>]},#{inner=>[a,b]}},{[1,2.0],{tuple,1 bsl 60}}]",
+         "[{k,[1,<<5:3>>]},[1,2],[1,2.0],missing]"),
+        ("[{1 bsl 60,-(1 bsl 60)},{1 bsl 100,(1 bsl 255)-1},{-(1 bsl 100),0}]",
+         "[{1 bsl 60,-(1 bsl 60)},{1 bsl 100,(1 bsl 255)-2},{42,1 bsl 100}]",
+         "[1 bsl 60,1 bsl 100,-(1 bsl 100),42,0]"),
+    ]:
+        selected.append({"lean_origins": map_relation_origins,
+                         "expression": f"differential:map_relations({left_pairs},{right_pairs},{queries})"})
+    for size in [31, 32, 33]:
+        left_pairs = f"[{{I,I*2}} || I <- lists:seq(1,{size})]"
+        right_same = f"[{{I,I*2}} || I <- lists:seq({size},1,-1)]"
+        right_float = f"[{{I,case I of 17 -> 34.0; _ -> I*2 end}} || I <- lists:seq({size},1,-1)]"
+        queries = f"[1,17,17.0,{size},{size + 1}]"
+        selected.append({"lean_origins": map_relation_origins,
+                         "expression": f"differential:map_relations({left_pairs},{right_same},{queries})"})
+        selected.append({"lean_origins": map_relation_origins,
+                         "expression": f"differential:map_relations({left_pairs},{right_float},{queries})"})
+    for key, value in [
+        ("k", "42"),
+        ("{nested,[1,<<3:2>>]}", "#{inner=>1 bsl 100}"),
+        ("1 bsl 100", "-(1 bsl 100)"),
+    ]:
+        probe(m, ["singleton_iteration", "from_literal_pairs"],
+              f"differential:map_singleton_iteration({key},{value})")
+    map_guard_origins = [
+        "Modules/Maps.lean#is_map_guard",
+        "Modules/Erlang.lean#map_guards_errors",
+        "Modules/Erlang.lean#map_size/1_shadowed_and_exact_keys",
+    ]
+    for key in ["a", "1", "1.0", "1 bsl 100"]:
+        for value in ["#{}", "#{a=>wanted,b=>2}", "#{1=>wanted,1.0=>other}",
+                      "#{(1 bsl 100)=>wanted}", "[]", "1", "{a,wanted}"]:
+            selected.append({"lean_origins": map_guard_origins,
+                             "expression": f"differential:map_guards({key},{value})"})
 
     for source, names, pairs in [
         ("Term/Compare", ["numeric_and_exact_comparison", "signed_zero_comparison"],
@@ -551,11 +706,15 @@ def cases():
          [("{a,b}", "{z}"), ("#{a=>99,b=>0}", "#{a=>0,c=>0}"),
           ("#{1=>[]}", "#{1.0=>[]}"), ("[0|a]", "[0]"),
           ("#{#{a=>1}=>2}", "#{#{a=>2}=>1}")]),
-        ("Term/Compare", ["binary_exact_kinds", "list_exact_kinds", "binary_exact_bytes"],
-         [("<<>>", "[]"), ("<<128>>", "<<1:1>>"), ("[1|a]", "[1|b]"), ("<<1,2>>", "<<1,3>>")]),
-        (e, ["tuple_equality", "map_equality", "float_equality_guards", "reflexive_operators"],
+        ("Term/Compare", ["binary_exact_kinds", "list_exact_kinds", "binary_exact_bytes",
+                          "exact_comparison_heads_first"],
+         [("<<>>", "[]"), ("<<128>>", "<<1:1>>"), ("[1|a]", "[1|b]"), ("<<1,2>>", "<<1,3>>"),
+          ("[1,a]", "[2,b]")]),
+        (e, ["tuple_equality", "map_equality", "float_equality_guards", "reflexive_operators",
+             "bitstring_comparison", "ordered_operators"],
          [("{}", "{}"), ("{1}", "{1,[]}"), ("{1,a}", "{a,1}"),
-          ("#{a=>1,b=>2}", "#{b=>2,a=>1}"), ("#{a=>1}", "#{a=>2}"), ("1.0", "1.0")]),
+          ("#{a=>1,b=>2}", "#{b=>2,a=>1}"), ("#{a=>1}", "#{a=>2}"), ("1.0", "1.0"),
+          ("<<1,2>>", "<<1,3>>"), ("<<1:1>>", "<<1:2>>")]),
     ]:
         for a, b in pairs:
             probe(source, names, f"differential:compare({a},{b})")

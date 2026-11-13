@@ -68,7 +68,12 @@
     function_child_throw/0,
     function_child_exit/0,
     utf/3,
-    utf_construct/3
+    utf_construct/3,
+    map_relations/3,
+    map_singleton_iteration/2,
+    map_guards/2,
+    list_relations/4,
+    seq_contract/4
 ]).
 
 %% Timer observations use delivery/monitor handshakes, not elapsed-time
@@ -399,6 +404,295 @@ sequence_step(dictionary, {clear}, State) ->
 map_entries(Map) ->
     Entries = maps:to_list(Map),
     {length(Entries), maps:from_list(Entries)}.
+
+map_relations(LeftPairs, RightPairs, QueryKeys) ->
+    A = maps:from_list(LeftPairs),
+    B = maps:from_list(RightPairs),
+    PutFoldA = lists:foldl(fun({K, V}, Acc) -> maps:put(K, V, Acc) end, #{}, LeftPairs),
+    PutFoldB = lists:foldl(fun({K, V}, Acc) -> maps:put(K, V, Acc) end, #{}, RightPairs),
+    Merged = maps:merge(A, B),
+    Combine = fun(K, VA, VB) -> {combined, K, VA, VB} end,
+    MergedWith = maps:merge_with(Combine, A, B),
+    Intersected = maps:intersect(A, B),
+    IntersectCombine = fun(K, VA, VB) -> {shared, K, VA, VB} end,
+    IntersectedWith = maps:intersect_with(IntersectCombine, A, B),
+    Pred = fun(K, V) -> is_integer(K) orelse is_tuple(K) orelse is_map(V) end,
+    Filtered = maps:filter(Pred, A),
+    AllKeys = maps:keys(A) ++ maps:keys(B) ++ QueryKeys,
+    ExactLookupEq = map_exact_lookup_eq(A, B, AllKeys),
+    SemanticLookupEq = map_semantic_lookup_eq(A, B, AllKeys),
+    {
+        {from_list_eq_fold_put, A =:= PutFoldA, B =:= PutFoldB},
+        {sizes, map_size(A), map_size(B), map_size(Merged), map_size(Intersected),
+            map_size(Filtered)},
+        {equality_vs_lookup, {
+            A =:= B,
+            ExactLookupEq,
+            (A =:= B) =:= ExactLookupEq,
+            A == B,
+            SemanticLookupEq,
+            (A == B) =:= SemanticLookupEq
+        }},
+        {compare, compare(A, B)},
+        {entries, map_entries(A), map_entries(B)},
+        {per_key, [
+            map_key_relation(
+                A,
+                B,
+                K,
+                QueryKeys,
+                Merged,
+                MergedWith,
+                Intersected,
+                IntersectedWith,
+                Filtered,
+                Pred
+            )
+         || K <- QueryKeys
+        ]}
+    }.
+
+map_exact_lookup_eq(A, B, Keys) ->
+    map_size(A) =:= map_size(B) andalso
+        lists:all(fun(K) -> maps:find(K, A) =:= maps:find(K, B) end, Keys).
+
+map_semantic_lookup_eq(A, B, Keys) ->
+    map_size(A) =:= map_size(B) andalso
+        lists:all(
+            fun(K) ->
+                case {maps:find(K, A), maps:find(K, B)} of
+                    {{ok, VA}, {ok, VB}} -> VA == VB;
+                    {error, error} -> true;
+                    _ -> false
+                end
+            end,
+            Keys
+        ).
+
+map_key_relation(
+    A, B, K, QueryKeys, Merged, MergedWith, Intersected, IntersectedWith, Filtered, Pred
+) ->
+    FindA = maps:find(K, A),
+    FindB = maps:find(K, B),
+    GetA = path_result(fun() -> maps:get(K, A) end),
+    MapGetA = path_result(fun() -> erlang:map_get(K, A) end),
+    GetDefaultA = maps:get(K, A, '$default'),
+    IsKeyA = maps:is_key(K, A),
+    IsMapKeyA = erlang:is_map_key(K, A),
+    PutVal = {put_val, K},
+    PutA = maps:put(K, PutVal, A),
+    PutPreservesOthers = lists:all(
+        fun(Q) ->
+            case Q =:= K of
+                true -> maps:find(Q, PutA) =:= {ok, PutVal};
+                false -> maps:find(Q, PutA) =:= maps:find(Q, A)
+            end
+        end,
+        QueryKeys
+    ),
+    UpdVal = {upd_val, K},
+    UpdateOutcome =
+        case IsKeyA of
+            true ->
+                UpdatedA = maps:update(K, UpdVal, A),
+                {ok, UpdatedA =:= maps:put(K, UpdVal, A), maps:find(K, UpdatedA) =:= {ok, UpdVal}};
+            false ->
+                path_result(fun() -> maps:update(K, UpdVal, A) end)
+        end,
+    RemovedA = maps:remove(K, A),
+    RemovePreservesOthers = lists:all(
+        fun(Q) ->
+            case Q =:= K of
+                true -> maps:find(Q, RemovedA) =:= error;
+                false -> maps:find(Q, RemovedA) =:= maps:find(Q, A)
+            end
+        end,
+        QueryKeys
+    ),
+    TakeComparison =
+        case maps:take(K, A) of
+            error -> {error, FindA =:= error};
+            {TakenV, TakenMap} -> {ok, FindA =:= {ok, TakenV}, TakenMap =:= RemovedA}
+        end,
+    ExpectedMergeFind =
+        case FindB of
+            {ok, _} = Hit -> Hit;
+            error -> FindA
+        end,
+    ExpectedMergeWithFind =
+        case {FindA, FindB} of
+            {{ok, VA1}, {ok, VB1}} -> {ok, {combined, K, VA1, VB1}};
+            {{ok, VA1}, error} -> {ok, VA1};
+            {error, {ok, VB1}} -> {ok, VB1};
+            {error, error} -> error
+        end,
+    ExpectedIntersectFind =
+        case {FindA, FindB} of
+            {{ok, _}, {ok, VB2}} -> {ok, VB2};
+            _ -> error
+        end,
+    ExpectedIntersectWithFind =
+        case {FindA, FindB} of
+            {{ok, VA3}, {ok, VB3}} -> {ok, {shared, K, VA3, VB3}};
+            _ -> error
+        end,
+    ExpectedFilterFind =
+        case FindA of
+            {ok, VF} ->
+                case Pred(K, VF) of
+                    true -> {ok, VF};
+                    false -> error
+                end;
+            error ->
+                error
+        end,
+    {
+        K,
+        {lookup, FindA, GetA, MapGetA, GetDefaultA, IsKeyA, IsMapKeyA},
+        {put_rel, maps:find(K, PutA) =:= {ok, PutVal}, PutPreservesOthers},
+        {update_rel, UpdateOutcome},
+        {remove_take_rel, RemovePreservesOthers, TakeComparison},
+        {merge_rel, maps:find(K, Merged) =:= ExpectedMergeFind,
+            maps:find(K, MergedWith) =:= ExpectedMergeWithFind,
+            maps:find(K, Intersected) =:= ExpectedIntersectFind,
+            maps:find(K, IntersectedWith) =:= ExpectedIntersectWithFind,
+            maps:find(K, Filtered) =:= ExpectedFilterFind}
+    }.
+
+map_singleton_iteration(Key, Value) ->
+    M = #{Key => Value},
+    Iter = maps:iterator(M),
+    IsValid0 = maps:is_iterator_valid(Iter),
+    case maps:next(Iter) of
+        {K1, V1, NextIter} ->
+            {
+                IsValid0,
+                K1 =:= Key,
+                V1 =:= Value,
+                maps:is_iterator_valid(NextIter),
+                maps:next(NextIter),
+                map_entries(NextIter),
+                maps:to_list(M)
+            };
+        Other ->
+            {unexpected, IsValid0, Other}
+    end.
+
+map_guards(Key, Input) ->
+    {
+        case Input of
+            M1 when is_map(M1) -> {map, map_size(M1)};
+            _ -> not_map
+        end,
+        case Input of
+            M2 when is_map_key(Key, M2) -> has_key;
+            _ -> no_key
+        end,
+        case Input of
+            M3 when map_size(M3) > 0 -> nonempty;
+            _ -> empty_or_not_map
+        end,
+        case Input of
+            M4 when map_get(Key, M4) =:= wanted -> matched_wanted;
+            _ -> rejected
+        end,
+        path_result(fun() -> call(erlang, is_map, [Input]) end),
+        path_result(fun() -> call(erlang, map_size, [Input]) end),
+        path_result(fun() -> call(erlang, is_map_key, [Key, Input]) end),
+        path_result(fun() -> call(erlang, map_get, [Key, Input]) end)
+    }.
+
+list_relations(Xs, Ys, Tail, Probes) ->
+    RevXs = lists:reverse(Xs),
+    RevYs = lists:reverse(Ys),
+    RevXsTail = lists:reverse(Xs, Tail),
+    AppendRevTail = RevXs ++ Tail,
+    Appended = Xs ++ Ys,
+    DiffAfterAppend = Appended -- Xs,
+    AsymDiff = (Ys ++ Xs) -- Xs,
+    SortedXs = lists:sort(Xs),
+    SortedAppended = lists:sort(Appended),
+    {
+        {lengths, length(Xs), length(Ys), length(Appended), length(SortedXs)},
+        {reverse_laws, lists:reverse(RevXs) =:= Xs, RevXsTail =:= AppendRevTail,
+            lists:reverse(Appended) =:= (RevYs ++ RevXs)},
+        {subtract_laws, DiffAfterAppend =:= Ys, (Xs -- []) =:= Xs, ([] -- Xs) =:= [],
+            (Xs -- Xs) =:= [], AsymDiff},
+        {sort_laws, SortedXs, is_nondecreasing(SortedXs), lists:sort(SortedXs) =:= SortedXs,
+            is_nondecreasing(SortedAppended), lists:sort(RevXs) == SortedXs},
+        {probes, [
+            {
+                P,
+                lists:member(P, Xs),
+                lists:any(fun(X) -> X =:= P end, Xs),
+                lists:member(P, Appended) =:= (lists:member(P, Xs) orelse lists:member(P, Ys)),
+                count_exact(P, Xs),
+                count_exact(P, RevXs) =:= count_exact(P, Xs),
+                count_exact(P, SortedXs) =:= count_exact(P, Xs),
+                count_exact(P, Appended) =:= count_exact(P, Xs) + count_exact(P, Ys),
+                count_exact(P, Xs -- Ys) =:= erlang:max(0, count_exact(P, Xs) - count_exact(P, Ys)),
+                count_semantic(P, Xs),
+                count_semantic(P, SortedXs) =:= count_semantic(P, Xs)
+            }
+         || P <- Probes
+        ]}
+    }.
+
+is_nondecreasing([]) ->
+    true;
+is_nondecreasing([_]) ->
+    true;
+is_nondecreasing([A, B | Rest]) ->
+    (A =< B) andalso is_nondecreasing([B | Rest]).
+
+count_exact(Target, List) ->
+    lists:foldl(
+        fun(Elem, Acc) ->
+            case Elem =:= Target of
+                true -> Acc + 1;
+                false -> Acc
+            end
+        end,
+        0,
+        List
+    ).
+
+count_semantic(Target, List) ->
+    lists:foldl(
+        fun(Elem, Acc) ->
+            case Elem == Target of
+                true -> Acc + 1;
+                false -> Acc
+            end
+        end,
+        0,
+        List
+    ).
+
+seq_contract(First, Last, Step, ProbeIndices) ->
+    Values = lists:seq(First, Last, Step),
+    Seq2Matches =
+        case Step of
+            1 -> path_result(fun() -> lists:seq(First, Last) end) =:= {ok, Values};
+            _ -> not_applicable
+        end,
+    ExpectedCount =
+        if
+            Step =:= 0 -> 1;
+            true -> (Last - First + Step) div Step
+        end,
+    ProbeChecks = [
+        case I >= 0 andalso I < length(Values) of
+            true ->
+                Nth = lists:nth(I + 1, Values),
+                {I, Nth, Nth =:= First + (I * Step)};
+            false ->
+                {I, out_of_range, path_result(fun() -> lists:nth(I + 1, Values) end)}
+        end
+     || I <- ProbeIndices
+    ],
+    {Values, length(Values), ExpectedCount, length(Values) =:= ExpectedCount, Seq2Matches,
+        ProbeChecks}.
 
 %% Observe public elements, not the set representation or enumeration order.
 %% Exact keys distinguish 1 from 1.0; retaining counts detects duplicates.

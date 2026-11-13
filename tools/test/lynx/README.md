@@ -146,7 +146,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **4,141 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **4,301 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, process dictionaries, comparison,
 effectful short circuit, timeout validation with retained mailboxes,
@@ -192,6 +192,30 @@ The expanded focused replay matches 52 of 116 cases in both execution modes,
 with 64 failures (52 missing `/4`, twelve missing unzip) and zero unverified
 references. This is coverage only: no runtime API implementation is included,
 and the full 4,188-case corpus has not been rerun.
+
+Subsequent runtime fixes in `dbab35d88` (`send_after/4`) and `541596657`
+(`lists:unzip/1`) resolve all 64 focused failures: both host-interpreter and
+aarch64 precompiled replays match 116 of 116 cases against OTP 29.
+
+The subsequent Batch 2 model-inspired map and list relation expansion adds 113
+net new recipes (**4,301** runtime cases total; 133 updated or added entries in
+the focused replay). Thirty-seven new `upstream_example` cases cover
+`examples/otp/lists.exs#sort_contract_holds` and `sequence_formula`, and 96
+Lean-attributed cases cover lookup/equality/merge/filter/guard relations,
+singleton map iteration, list reversal/subtraction/sorting/membership
+multiplicities, short-circuit improper-tail membership, map sizes 31/32/33,
+nested terms, large integers through `(1 bsl 255) - 1`, and invalid-operand
+error paths without fabricating proof provenance. Lean source attribution checks
+validate 193 of 426 test sites across all 26 files. Seventeen enabled CLI tests
+pass (one optional fixture test skipped), including handwritten OTP oracles for
+the new relational probes. Focused 133-case replays match 127 cases with 6
+failures and zero unverified references in both host-interpreter and aarch64
+precompiled modes: four empty-step-range `lists:seq/3` divergences
+(`seq_contract(5,4,2,[0])`, `(10,7,5,[0])`, `(4,5,-2,[0])`, `(7,10,-5,[0])`)
+where AtomVM returns `[First]` instead of `[]`, and two `lists:reverse/1`
+invalid-input exception differences (`badarg` vs OTP `function_clause`). The
+full 4,301-case corpus has not been rerun; failures remain visible and
+replayable under `.amp/in/artifacts/batch2-relations/`.
 
 The execution-path extension adds 466 cases for 20 arithmetic, comparison, and
 map-lookup operations. Each captures direct-body and dynamic `apply/3` outcomes

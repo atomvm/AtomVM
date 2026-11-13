@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   `b9be5b8e6e4a1330685ef60ff150903e90670d4c` in the latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 4,141 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 4,301 public-behavior recipes inspired by Lean tests
   and upstream examples. Source attribution is not an assertion of theorem
   premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -205,6 +205,14 @@ failures remain. No runtime implementation changed and no failures are skipped.
 The full 4,188-case corpus was not rerun. Evidence is retained under
 `.amp/in/artifacts/timer-options/focused-{interpreter,native}`.
 
+### `send_after/4` and `lists:unzip/1` follow-ups
+
+Subsequent runtime fixes in `dbab35d88` (`send_after/4` with monotonic
+deadlines) and `541596657` (`lists:unzip/1`) closed all 64 failures from the
+116-case focused replay above. Both host-interpreter and aarch64 precompiled
+replays matched all 116 OTP references, with zero failures and zero unverified
+cases (`.amp/in/artifacts/unzip-{interpreter,native}`).
+
 ## Coverage batches
 
 Current priority is more OTP differential coverage of existing fixtures and
@@ -304,16 +312,50 @@ compatibility requirement; public invalid-input behavior must use OTP as oracle.
   actually satisfy its requires predicate. Check the predicate on each VM before
   asserting the postcondition. A newly constructed identity closure is not
   automatically the same function value as a callback permitted by the law.
-- [ ] Add model-inspired map lookup/equality and list properties where the
+- [x] Add model-inspired map lookup/equality and list properties where the
   observable relation is useful. Label them separately from freshly checked
   fixture laws; do not fabricate proof provenance for a runtime assertion.
-- [ ] Cover empty, asymmetric multi-element, nested, and representable large
+- [x] Cover empty, asymmetric multi-element, nested, and representable large
   integer inputs. Keep invalid inputs outside law premises as error-path tests.
 
 Owners: `fixtures.py`, `validate.exs`, `test_validate.py`; small upstream Lynx
 fixture changes may be needed to expose valid law inputs. Done when proof errors,
 false preconditions, and false/nonboolean/exceptional postconditions fail clearly,
 including replay, rather than being accepted as matching OTP.
+
+Batch 2 model-inspired map/list relation expansion added 113 net new recipes
+(`4,188 -> 4,301`, with 133 updated or added entries in the focused replay):
+
+- Provenance remains split explicitly: 37 new `upstream_example` cases cover
+  `examples/otp/lists.exs#sort_contract_holds` and
+  `examples/otp/lists.exs#sequence_formula` (`sequence_formula` empty/ascending/descending/singleton/large-integer
+  contracts and out-of-premise error paths), while 96 Lean-attributed map,
+  list, guard, short-circuit membership, and comparison cases point strictly to
+  verified `Lean/LynxTest` declarations. None fabricate `assert_true` proof
+  provenance.
+- Lean inventory validation covers 193 of 426 test sites across all 26 files
+  (`Modules/Maps.lean` 26/26, `Modules/Lists.lean` 8/8, `Modules/Erlang.lean`
+  60/76, `Term/Compare.lean` 15/16, `Term/ShortCircuit.lean` 9/13).
+- Observations span empty, singleton, shadowed duplicate-binding, numeric exact
+  vs semantic (`1`/`1.0`, `0.0`/`-0.0`), asymmetric multi-element, nested
+  composite, representable large integers up to `(1 bsl 255) - 1`, map size
+  boundaries (31, 32, 33), improper tails, and invalid-operand error paths.
+- Focused 133-case replays on OTP 29 match 127 cases with 6 failures and zero
+  unverified references in both host-interpreter and aarch64 precompiled
+  execution:
+  - Four `lists:seq/3` empty-step-range divergences (`seq_contract(5,4,2,[0])`,
+    `seq_contract(10,7,5,[0])`, `seq_contract(4,5,-2,[0])`, and
+    `seq_contract(7,10,-5,[0])`), where `libs/estdlib/src/lists.erl` returns
+    `[First]` instead of `[]` when `abs(Step) > 1` and
+    `0 < abs(Last - First) < abs(Step)`.
+  - Two `lists:reverse/1` invalid-input exception differences (`[a|improper]`
+    and `bad`), where AtomVM raises `badarg` and OTP 29 raises
+    `function_clause`.
+- Seventeen enabled CLI integration tests pass (18 total, with the optional
+  `LYNX_CHECKOUT` fixture test skipped), including handwritten OTP oracles for
+  `map_relations`, `map_singleton_iteration`, `map_guards`, `list_relations`,
+  `seq_contract`, and error paths. No runtime code was modified; exposed
+  failures remain visible and replayable under `.amp/in/artifacts/batch2-relations/`.
 
 ### 3. Expand public map combination and iterator behavior
 

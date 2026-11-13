@@ -146,6 +146,108 @@ class ValidationTests(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_map_and_list_relation_observations_have_independent_oracles(self):
+        all_cases = lean_runtime.cases()
+        upstream_sort = [c for c in all_cases
+                         if c.get("upstream_example") == "examples/otp/lists.exs#sort_contract_holds"]
+        upstream_seq = [c for c in all_cases
+                        if c.get("upstream_example") == "examples/otp/lists.exs#sequence_formula"]
+        self.assertGreater(len(upstream_sort), 0)
+        self.assertGreater(len(upstream_seq), 0)
+        self.assertTrue(all("lean_origins" not in c and not c.get("assert_true")
+                            for c in upstream_sort + upstream_seq))
+        model_relations = [c for c in all_cases
+                           if any(c["expression"].startswith(prefix) for prefix in (
+                               "differential:map_relations(",
+                               "differential:map_singleton_iteration(",
+                               "differential:map_guards(",
+                               "differential:list_relations(",
+                           )) and "upstream_example" not in c]
+        self.assertGreater(len(model_relations), 0)
+        self.assertTrue(all(c.get("lean_origins") and not c.get("assert_true")
+                            for c in model_relations))
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            expressions = [
+                "differential:map_relations([{a,1},{a,2},{1,10}],[{a,2},{1,10.0}],[a,1,1.0,missing])",
+                "differential:map_singleton_iteration(k,42)",
+                "differential:map_guards(a,#{a=>wanted,b=>2})",
+                "differential:map_guards(a,[])",
+                "differential:list_relations([3,1,2,1],[1,4],tail,[1,2,3,4,9])",
+                "differential:seq_contract(1,7,3,[0,1,2,3])",
+                "differential:seq_contract(5,4,1,[0])",
+                "differential:call(lists,seq,[5,2,2])",
+                "differential:call(lists,member,[a,[a|improper]])",
+            ]
+            source.write_text(json.dumps([{"expression": e} for e in expressions]))
+            output = work / "relations"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 9, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                values = JSON.decode!(File.read!(path))["expected"]
+                         |> Enum.map(&:erlang.binary_to_term(Base.decode64!(&1)))
+                hit = fn k, v ->
+                  {k, {:lookup, {:ok, v}, {:ok, v}, {:ok, v}, v, true, true},
+                   {:put_rel, true, true}, {:update_rel, {:ok, true, true}},
+                   {:remove_take_rel, true, {:ok, true, true}},
+                   {:merge_rel, true, true, true, true, true}}
+                end
+                miss = fn k ->
+                  {k, {:lookup, :error, {:exception, :error, {:badkey, k}},
+                       {:exception, :error, {:badkey, k}}, :"$default", false, false},
+                   {:put_rel, true, true},
+                   {:update_rel, {:exception, :error, {:badkey, k}}},
+                   {:remove_take_rel, true, {:error, true}},
+                   {:merge_rel, true, true, true, true, true}}
+                end
+                expected_map = {:ok, {
+                  {:from_list_eq_fold_put, true, true},
+                  {:sizes, 2, 2, 2, 2, 1},
+                  {:equality_vs_lookup, {false, false, true, true, true, true}},
+                  {:compare, {true, false, false, true, false, true, false, true}},
+                  {:entries, {2, %{:a => 2, 1 => 10}}, {2, %{:a => 2, 1 => 10.0}}},
+                  {:per_key, [hit.(:a, 2), hit.(1, 10), miss.(1.0), miss.(:missing)]}
+                }}
+                expected_list = {:ok, {
+                  {:lengths, 4, 2, 6, 4},
+                  {:reverse_laws, true, true, true},
+                  {:subtract_laws, true, true, true, true, [4, 1]},
+                  {:sort_laws, [1, 1, 2, 3], true, true, true, true},
+                  {:probes, [
+                    {1, true, true, true, 2, true, true, true, true, 2, true},
+                    {2, true, true, true, 1, true, true, true, true, 1, true},
+                    {3, true, true, true, 1, true, true, true, true, 1, true},
+                    {4, false, false, true, 0, true, true, true, true, 0, true},
+                    {9, false, false, true, 0, true, true, true, true, 0, true}
+                  ]}
+                }}
+                expected = [
+                  expected_map,
+                  {:ok, {true, true, true, true, :none, {0, %{}}, [k: 42]}},
+                  {:ok, {{:map, 2}, :has_key, :nonempty, :matched_wanted,
+                         {:ok, true}, {:ok, 2}, {:ok, true}, {:ok, :wanted}}},
+                  {:ok, {:not_map, :no_key, :empty_or_not_map, :rejected,
+                         {:ok, false}, {:exception, :error, {:badmap, []}},
+                         {:exception, :error, {:badmap, []}},
+                         {:exception, :error, {:badmap, []}}}},
+                  expected_list,
+                  {:ok, {[1, 4, 7], 3, 3, true, :not_applicable,
+                         [{0, 1, true}, {1, 4, true}, {2, 7, true},
+                          {3, :out_of_range, {:exception, :error, :function_clause}}]}},
+                  {:ok, {[], 0, 0, true, true,
+                         [{0, :out_of_range, {:exception, :error, :function_clause}}]}},
+                  {:exception, :error, :badarg},
+                  {:ok, true}
+                ]
+                true = values === expected
+                """, str(output / "manifest.json")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     def test_binary_sequences_rebase_scopes_and_preserve_split_edges(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
