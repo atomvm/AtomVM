@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `erlang:send_after/4` with relative and absolute monotonic deadlines,
   `{abs, boolean()}` option validation, and last-option-wins precedence;
   future delays remain limited to 4294967295 milliseconds
+- Added `lists:unzip/1` to split a list of pairs into two order-preserving lists
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
