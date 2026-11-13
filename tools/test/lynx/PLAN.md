@@ -12,14 +12,16 @@ runner semantics in [README.md](README.md).
 ## Current baseline
 
 - The supported fixture revision is Lynx
-  `b9be5b8e6e4a1330685ef60ff150903e90670d4c`, rebaselined from
-  `e3d8c68281058d21a31aa5ac8e6a7e0b83db4aeb` in batch 1.
-- `fixtures.py` selects 2,273 calls with metadata for all 191 exports in 12
+  `2aa1467d4c28c4bffd5f5d205ebb197e261f85a4`, updated from
+  `b9be5b8e6e4a1330685ef60ff150903e90670d4c` in the latest upstream refresh below.
+- `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 4,072 public-behavior recipes inspired by Lean tests.
-  Source attribution is not an assertion of theorem premises or proof coverage.
-- `--lynx` freshly checks fixture laws. Five integer singleton-sum instances also
-  require the proved postcondition to be true on both VMs. Other matching
+- `lean_runtime.py` selects 4,141 public-behavior recipes inspired by Lean tests
+  and upstream examples. Source attribution is not an assertion of theorem
+  premises or proof coverage.
+- `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
+  the proved postcondition to be true on both VMs: five integer singleton sums,
+  the empty sum, and thirteen protocol postconditions. Other matching
   differential results alone do not establish a property.
 - Generated testing currently covers nine operation families: comparisons,
   arithmetic, maps, integer bitstrings, float encoding, map/dictionary
@@ -30,11 +32,86 @@ runner semantics in [README.md](README.md).
   coverage. Expand specific missing combinations rather than restarting these
   families. Short float formatting is outside the planned fixes.
 
-The supported checkout has 25 Lean test files, including newly added
-`Modules/Hashing.lean` and `Modules/Sets.lean`, versus the previous 23-file
-baseline. Hashing still has no attributed recipes; batch 5 adds finite set
-samples without interpreting the deliberately unmodeled theorem. Batch 1's
-validation establishes fixture integration, not complete runtime-model support.
+The supported checkout has 26 Lean test files, now including
+`Modules/Timers.lean`. Hashing still has no attributed recipes; batch 5 adds
+finite set samples without interpreting the deliberately unmodeled theorem.
+Fixture validation does not establish complete runtime-model support.
+
+## Latest upstream refresh
+
+The clean sibling Lynx checkout was fast-forwarded through 60 commits from
+`b9be5b8` to `2aa1467`. Useful executable changes and their coverage are:
+
+- `3e5a28a`, `bbbe752`, `11a34d2`: consolidated protocol dispatch, recursive
+  implementation calls, and cutoff handling. Add 78 calls covering all twelve
+  exports of the new `protocols` fixture, including structs versus maps,
+  fallback, undefined protocols, improper inputs, and thirteen law instances.
+  Package Lynx's fourteen executable `Elixir.Lynx.Support.*` modules, using the
+  consolidated modules loaded by Mix. Standard-library dependencies still come
+  from AtomVM's bundled `exavmlib`, never host Elixir library beams.
+- `5b681d8`: exact list subtraction. Add 25 observations covering first-match
+  deletion, duplicates, integer/float distinctions, signed zeros, nested values,
+  large integers, swapped operands, and improper-list/error paths.
+- `46921a2`: zip/unzip round-trip example. Add sixteen observations with
+  asymmetric lists, preserved order and duplicates, nested terms, length 33,
+  and invalid inputs. These are labeled `upstream_example`, not attributed to
+  nonexistent Lean runtime-test sites or freshly checked fixture laws.
+- `17e3b47`, `02f2368`, `0883352`: timer semantics and remaining-time reporting.
+  Add 28 public observations: delivery, cancellation races, repeated/expired
+  cancellation, unknown references, destination death before/after creation,
+  invalid arguments, and `send_after/4` options. Reference-tagged messages and
+  monitor handshakes avoid short timing deadlines; remaining times are checked
+  for range, not exact millisecond equality. A successful cancellation remains
+  distinct from `false`. No scheduler interleavings or all-run proofs transfer.
+- The empty-sum postcondition now joins singleton sums as a true assertion.
+  Higher-order callbacks still need a valid exposed law input and remain deferred.
+
+Type-descriptor proofs, symbolic environment/purity lemmas, protocol cutoffs,
+partial-order scheduler reductions, and the new all-run statement of concurrent
+laws are model/proof tooling, not additional AtomVM compatibility requirements.
+The new exact-equality hashing lemma is useful future coverage, but `phash2`
+remains a public API gap rather than an allowlisted success.
+
+Lynx's own `mix test.all` passes: 165 checks (two laws and 163 tests), plus the
+Lean test build. Source attribution validates against all 26 Lean test files.
+Validation uses OTP 29 / Elixir 1.20.5 / Lean 4.35.0 and rebuilt host runtimes:
+
+- Full fixtures: nine freshly checked laws, 2,347 matched, zero failures, four
+  unverified zero-width-generator references, and zero uncovered exports. The
+  four unresolved references still make this run exit nonzero.
+- Protocol-only replay: all 78 match in both interpreter and aarch64 precompiled
+  execution. The 191 unselected exports are reported, as expected for a replay.
+- Full runtime interpreter corpus: 4,108 matched, 33 failed, zero unverified.
+  All 4,072 original observations retain their previous decoded results,
+  including the four known `[short]` float-format mismatches. The remaining
+  29 failures come from the 69 new observations; 40 new cases match OTP.
+- New runtime observations in aarch64 precompiled execution: 40 matched,
+  29 failed, zero unverified. Both modes flag the same 29 new expressions.
+  The full expanded native corpus was not rerun. All 25 subtraction cases match.
+  Twelve zip/unzip failures expose missing `lists:unzip/1`. Seventeen timer differences comprise
+  four destination-death cleanup cases, three nonreference cancellation cases,
+  five invalid `send_after/3` arguments, and five missing `send_after/4` cases.
+  Successful delivery/cancellation and expiry cases match. These are retained
+  compatibility failures, not an all-green result or runtime fixes.
+
+Native validation must search native eavmlib and transformed exavmlib before
+`atomvmlib-<arch>.avm`: that aggregate still embeds bytecode copies of these
+modules. The runner now loads the matching built eavmlib archive first and
+precompiles the bundled exavmlib into the evidence directory when protocols are
+selected. Library hashes are recorded. Initial runs without this packaging
+aborted on timer calls and protocol exceptions; corrected runs above replace
+those setup failures. No host standard-library modules are substituted.
+This covers native-only precompiled code, not on-demand JIT or embedded targets.
+
+All sixteen CLI integration tests pass: fifteen enabled by default and the
+optional full-fixture/partial-replay test run separately with `LYNX_CHECKOUT`.
+The new handwritten oracle checks cover subtraction results and timer mailbox,
+cancellation, and expiry observations. Erlfmt 1.7.0, Mix formatting, Python syntax,
+and `git diff --check` pass. Evidence is retained under
+`.amp/in/artifacts/lynx-latest-*`: upstream tests, full interpreter corpora,
+focused native replays, CLI tests, baseline comparisons, manifests and hashes.
+No failures were hidden and no AtomVM runtime implementation was changed in
+that upstream refresh.
 
 ## Coverage batches
 
@@ -129,7 +206,7 @@ compatibility requirement; public invalid-input behavior must use OTP as oracle.
 
 ### 2. Connect more proved properties to runtime assertions
 
-- [ ] Make the existing empty-sum postcondition an `assert_true` case, in addition
+- [x] Make the existing empty-sum postcondition an `assert_true` case, in addition
   to the five singleton instances. Test rejection when both VMs agree on false.
 - [ ] Sample the higher-order map law with proper lists and callbacks that
   actually satisfy its requires predicate. Check the predicate on each VM before

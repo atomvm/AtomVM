@@ -146,7 +146,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **4,072 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **4,141 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, process dictionaries, comparison,
 effectful short circuit, timeout validation with retained mailboxes,
@@ -159,6 +159,19 @@ Missing functions and differing error precedence remain failures, not skips.
 OTP is the execution oracle, not the Lean model: for example, tested OTP 29
 accepts an already queued receive match before checking an invalid timeout.
 That differs from the model test named `timeout_validation_precedes_scan`.
+
+The latest upstream refresh adds 69 cases: 25 exact list-subtraction samples,
+16 example-inspired zip/unzip observations, and 28 timer observations. Timers use
+message/monitor handshakes and validate remaining-time ranges rather than exact
+elapsed milliseconds. Invalid arguments and missing APIs remain failures, not
+skips. Zip/unzip examples are labeled separately from Lean test attribution.
+See [the upstream refresh](PLAN.md#latest-upstream-refresh) for commit selection,
+results, and model-only changes deliberately not transferred to VM requirements.
+The full expanded interpreter corpus matches 4,108 cases, with 33 failures and
+zero unverified references. The failures are four existing short-float mismatches
+plus 29 new timer/unzip differences; all 4,072 old decoded results are unchanged.
+A focused aarch64 precompiled replay flags the same 29 new cases (40 matches).
+The expanded full native corpus was not rerun. No failures are allowlisted.
 
 The execution-path extension adds 466 cases for 20 arithmetic, comparison, and
 map-lookup operations. Each captures direct-body and dynamic `apply/3` outcomes
@@ -523,8 +536,15 @@ python3 tools/test/lynx/validate.py --lynx ../lynx --build build --generated 0 \
 
 With `--lynx`, `mix` and `lake` must also be on PATH with the Elixir/Lean versions
 required by that checkout. Mix/Lake may build their normal caches. The fixture
-API currently targets Lynx revision `b9be5b8e6e4a1330685ef60ff150903e90670d4c`
-(rebaselined from `e3d8c68281058d21a31aa5ac8e6a7e0b83db4aeb`). On OTP 29
+API currently targets Lynx revision `2aa1467d4c28c4bffd5f5d205ebb197e261f85a4`,
+updated from `b9be5b8e6e4a1330685ef60ff150903e90670d4c`; see
+[the latest refresh](PLAN.md#latest-upstream-refresh) for current results.
+The current full fixture run checks nine laws and matches 2,347 calls, with no
+differential failures or uncovered exports and the same four unverified OTP
+references. All 78 protocol calls match in interpreter and aarch64 precompiled
+execution. Lynx's own suite reports 165 passed checks plus its Lean test build.
+
+The following rebaseline results are historical. On OTP 29
 (ERTS 17.1.1), Elixir 1.20.5, and Lean 4.35.0, the original rebaseline checked
 four laws; its 2,131-call interpreter run matched 2,127 references, with zero
 differential failures, four unresolved OTP references, and no uncovered exports.
@@ -548,8 +568,11 @@ This additional mode:
 Five existing `sum_singleton` samples additionally require the proved
 postcondition to return **true on both OTP and AtomVM**, not just equal results.
 Inputs are 0, −1, 1, 2^60, and 2^100; each first checks the law's integer
-precondition. Noninteger inputs remain differential/error-path samples, outside
-the law's premise. The law already exists in Lynx; no new theorem is added.
+precondition. The empty-sum postcondition and thirteen protocol postconditions
+are also asserted true, for nineteen runtime assertions total. Protocol samples
+check applicable premises before invoking their postconditions. Noninteger sum
+inputs remain differential/error-path samples outside the law's premise. These
+laws already exist in Lynx; no new theorem is added.
 
 These cases carry `"assert_true": true` in `cases.json`. False, nonboolean, or
 exception results fail even if both runtimes agree; the marker survives failure
@@ -558,7 +581,7 @@ the fixtures and freshly check their laws. The assertion marker alone does not
 invoke Lean or establish a proof. This checks finite runtime instances of a
 proved model property, not correctness of the VM or the translation/compiler.
 
-The corpus contains **2,273 calls covering all 191 exports in 12 fixture modules**
+The corpus contains **2,351 calls covering all 203 exports in 13 fixture modules**
 at the pinned revision. It includes:
 
 - Literal pooling, numeric/map-key boundaries, recursive base/step/error cases,
@@ -578,6 +601,8 @@ at the pinned revision. It includes:
 - Selective receive, guards, aliases, repeated variables, nested receives, and
   valid/invalid timeouts. Queued messages are deterministic; both the selected
   result and remaining mailbox are checked, without asserting elapsed timing.
+- Consolidated Elixir protocols: list/map/struct dispatch, Any fallback,
+  recursive implementation calls, unsupported types, and law postconditions.
 
 The map-comprehension extension adds 142 OTP differential recipes across seven
 existing `named_locals` exports, without adding proofs or runtime assertions.
@@ -588,7 +613,7 @@ and nested/filtered generators. Runtime-created maps span sizes 0, 1, 2, 31, 32,
 counts; colliding map-to-map results check the output key set and validity of
 chosen bindings, without assuming a winning source key or traversal order.
 
-All 142 added cases match OTP 29. The expanded interpreter run matches 2,269 of
+All 142 added cases match OTP 29. That historical interpreter run matched 2,269 of
 2,273 cases, with zero mismatches and the same four unverified zero-width-generator
 references; those unresolved cases still make the full run exit nonzero.
 
@@ -622,10 +647,18 @@ replayable. Host executable-process ports are not part of this corpus.
 
 **Lynx-mode dependencies:** fixtures use AtomVM's bundled standard library,
 including `lists:sum/1`; no OTP library modules are substituted into the target.
+The protocol fixture packages Lynx's executable `Elixir.Lynx.Support.*` modules
+(including consolidated protocols) and additionally loads AtomVM's bundled
+`exavmlib.avm`. Build that library before running `--lynx`. Its path and hash are
+recorded in `run.json`; host Elixir standard-library beams are not packaged.
 Interpreter execution uses the exact proof-input fixture binaries. For a
 JIT/precompiled build, the script transforms those same binaries
-to native-only code using that build's JIT compiler. It selects the matching
-native runtime library automatically. Cross-target/emulator runs are not supported.
+to native-only code using that build's JIT compiler, including the bundled
+exavmlib when protocols are selected. It selects the matching native runtime
+library and eavmlib archive automatically, loading native libraries before
+bytecode copies embedded in the aggregate archive. Build the matching eavmlib
+target too (for example, `eavmlib_aarch64`); extra library hashes are recorded.
+Cross-target/emulator runs are not supported.
 
 Use `--timeout` to adjust the default five-second bound per runtime call. Host
 compile/proof/compare commands have a ten-minute bound. Both modes support

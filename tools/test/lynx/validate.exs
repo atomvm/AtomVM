@@ -49,6 +49,22 @@ case System.argv() do
       true = laws > 0
     end
 
+    # The protocol fixture calls consolidated support modules compiled by Lynx.
+    # Copy their executable beams, not model translations or OTP library modules.
+    support =
+      if Enum.any?(modules, &(&1.name == "protocols")) do
+        Path.wildcard("_build/#{Mix.env()}/lib/lynx/ebin/Elixir.Lynx.Support.*.beam")
+        |> Enum.map(fn path ->
+          module = path |> Path.basename(".beam") |> String.to_atom()
+          {^module, beam, _file} = :code.get_object_code(module)
+          name = Atom.to_string(module)
+          File.write!(Path.join(work, "#{name}.beam"), beam)
+          name
+        end)
+      else
+        []
+      end
+
     true = :code.add_patha(String.to_charlist(work))
 
     references =
@@ -73,6 +89,7 @@ case System.argv() do
       Path.join(work, "manifest.json"),
       JSON.encode!(%{
         fixtures: Enum.map(modules, & &1.name),
+        support: support,
         exports: Enum.flat_map(modules, & &1.exports),
         laws: laws,
         expected: Enum.map(references, & &1.value),

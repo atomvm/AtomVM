@@ -117,19 +117,61 @@ def validate(args, work):
                     str(int(args.timeout * 1000))], lynx or work, work / "proofs.log")
     manifest = json.loads((work / "manifest.json").read_text())
     print(f"Checked {manifest['laws']} laws; running {len(entries)} cases ({arch or 'interpreter'}).", flush=True)
-    fixture_beams = [work / "differential.beam"] + [work / f"{name}.beam" for name in manifest["fixtures"]]
+    support = manifest.get("support", [])
+    fixture_beams = [work / "differential.beam"] + [
+        work / f"{name}.beam" for name in manifest["fixtures"] + support]
+    libraries = [library]
+    if native:
+        # The aggregate native archive still embeds bytecode eavmlib modules.
+        # Prefer its matching native archive before the aggregate is searched.
+        eavmlib = build / "libs/eavmlib/src" / f"eavmlib-{arch}.avm"
+        if not eavmlib.is_file():
+            raise RuntimeError(f"Build the matching eavmlib library first: {eavmlib}")
+        libraries.insert(0, eavmlib)
+        run = json.loads((work / "run.json").read_text())
+        run.update(eavmlib=str(eavmlib),
+                   eavmlib_sha256=hashlib.sha256(eavmlib.read_bytes()).hexdigest())
+        (work / "run.json").write_text(json.dumps(run))
+    if support:
+        # Protocol implementations are fixture code; Elixir runtime dependencies
+        # must still come from AtomVM's library rather than the host Elixir.
+        elixir_library = build / "libs/exavmlib/lib/exavmlib.avm"
+        if not elixir_library.is_file():
+            raise RuntimeError(f"Build the bundled Elixir library first: {elixir_library}")
+        libraries.append(elixir_library)
+        run = json.loads((work / "run.json").read_text())
+        run.update(elixir_library=str(elixir_library),
+                   elixir_library_sha256=hashlib.sha256(elixir_library.read_bytes()).hexdigest())
+        (work / "run.json").write_text(json.dumps(run))
     drivers = [work / f"{entry['module']}.beam" for entry in entries]
     if native:
         native_dir = work / "native"
         native_dir.mkdir()
+        elixir_beams = []
+        if support:
+            elixir_dir = work / "elixir"
+            elixir_dir.mkdir()
+            command([str(build / "tools/packbeam/PackBEAM"), "extract", "--out",
+                     str(elixir_dir), str(elixir_library)], work, work / "extract-elixir.log")
+            elixir_beams = sorted(elixir_dir.glob("*.beam"))
         command(
             ["erl", "-pa", str(build / "libs/jit/src/beams"), "-noshell",
              "-s", "jit_precompile", "-s", "init", "stop", "--", arch, str(native_dir) + "/"]
-            + [str(p) for p in fixture_beams + drivers],
+            + [str(p) for p in fixture_beams + drivers + elixir_beams],
             work, work / "precompile.log",
         )
         fixture_beams = [native_dir / p.name for p in fixture_beams]
         drivers = [native_dir / p.name for p in drivers]
+        if support:
+            native_elixir = work / f"exavmlib-{arch}.avm"
+            command([str(build / "tools/packbeam/PackBEAM"), "create", "--lib", str(native_elixir)]
+                    + [str(native_dir / p.name) for p in elixir_beams],
+                    work, work / "pack-elixir.log")
+            libraries.pop()  # Replace the bytecode-only exavmlib added above.
+            libraries.insert(0, native_elixir)
+            run.update(native_elixir_library=str(native_elixir),
+                       native_elixir_library_sha256=hashlib.sha256(native_elixir.read_bytes()).hexdigest())
+            (work / "run.json").write_text(json.dumps(run))
     actuals = []
     for entry, driver in zip(entries, drivers):
         pack = work / "case.avm"
@@ -140,7 +182,7 @@ def validate(args, work):
         )
         try:
             output = command(
-                [str(build / "src/AtomVM"), str(pack), str(library)],
+                [str(build / "src/AtomVM"), str(pack)] + [str(p) for p in libraries],
                 work, work / f"{entry['module']}.log", timeout=args.timeout,
             )
             lines = [line[len("LYNX_RESULT "):] for line in output.splitlines() if line.startswith("LYNX_RESULT ")]

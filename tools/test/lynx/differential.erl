@@ -25,6 +25,7 @@
     receive_timeout/2,
     receive_guards/3,
     receive_sequence/2,
+    timer/3,
     send_destination/3,
     process_exchange/1,
     monitor_exit/1,
@@ -68,6 +69,72 @@
     utf/3,
     utf_construct/3
 ]).
+
+%% Timer observations use delivery/monitor handshakes, not elapsed-time
+%% comparisons. The outer runner bounds hangs; no short internal deadline
+%% turns scheduler latency into a semantic mismatch.
+timer(deliver, Delay, Payload) ->
+    Token = make_ref(),
+    self() ! retained,
+    Ref = erlang:send_after(Delay, self(), {Token, Payload}),
+    Received =
+        receive
+            {Token, Value} -> Value
+        end,
+    {is_reference(Ref), Received, drain()};
+timer(cancel, Delay, Payload) ->
+    Token = make_ref(),
+    self() ! retained,
+    Ref = erlang:send_after(Delay, self(), {Token, Payload}),
+    Canceled = erlang:cancel_timer(Ref),
+    Valid =
+        case Canceled of
+            false ->
+                receive
+                    {Token, Payload} -> true
+                end;
+            Remaining when is_integer(Remaining), Remaining >= 0, Remaining =< Delay -> true;
+            _ ->
+                false
+        end,
+    {is_reference(Ref), Valid, erlang:cancel_timer(Ref), drain()};
+timer(expired, Delay, Payload) ->
+    Token = make_ref(),
+    Ref = erlang:send_after(Delay, self(), {Token, Payload}),
+    Received =
+        receive
+            {Token, Value} -> Value
+        end,
+    {Received, erlang:cancel_timer(Ref), erlang:cancel_timer(Ref)};
+timer(Mode, Delay, Payload) when Mode =:= dead_before; Mode =:= dead_after ->
+    {Child, Monitor} = spawn_monitor(fun() ->
+        receive
+            stop -> ok
+        end
+    end),
+    case Mode of
+        dead_before ->
+            Child ! stop,
+            receive
+                {'DOWN', Monitor, process, Child, normal} -> ok
+            end,
+            Ref = erlang:send_after(Delay, Child, Payload);
+        dead_after ->
+            Ref = erlang:send_after(Delay, Child, Payload),
+            Child ! stop,
+            receive
+                {'DOWN', Monitor, process, Child, normal} -> ok
+            end
+    end,
+    Canceled = erlang:cancel_timer(Ref),
+    %% Remaining time varies with scheduling; keep false distinct from a
+    %% successful cancellation and validate rather than compare milliseconds.
+    Result =
+        case Canceled of
+            N when is_integer(N) -> {remaining, N >= 0 andalso N =< Delay};
+            Other -> Other
+        end,
+    {is_reference(Ref), Result, erlang:cancel_timer(Ref), drain()}.
 
 %% Inputs cross a module boundary to prevent constant-folded operations.
 call(Module, Function, Args) -> apply(Module, Function, Args).

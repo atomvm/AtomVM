@@ -62,6 +62,66 @@ def cases():
                      ("-0.0", "0.0"), ("a", "1"), ("1", "a")]:
             call(e, "min_max_equal_returns_first", fn, a, b)
 
+    # New upstream exact list-subtraction model: duplicates remove only the
+    # first exact match. Invalid tails remain OTP error-path observations.
+    for left, right in [
+        ("[]", "[]"), ("[1,2,1,3]", "[1,3]"), ("[1,2]", "[3,2,2]"),
+        ("[1]", "[1.0]"), ("[1.0,1]", "[1]"), ("[1,1.0,1]", "[1.0,1]"),
+        ("[0.0,-0.0,0]", "[-0.0]"), ("[{1},#{a=>1},<<5:3>>]", "[{1.0},#{a=>1.0}]"),
+        ("[1 bsl 100,7,1 bsl 100]", "[1 bsl 100]"),
+        ("[a|tail]", "[]"), ("bad", "[]"),
+        ("[a,b|tail]", "[a]"), ("[a]", "[a|tail]"),
+    ]:
+        call(e, "list_subtraction", "--", left, right)
+        if left != right:
+            call(e, "list_subtraction", "--", right, left)
+
+    # The new upstream zip/unzip example proves list/pair premises. These
+    # finite runtime observations are example-inspired, not freshly proved laws.
+    for left, right in [("[]", "[]"), ("[a]", "[7]"),
+                        ("[1,1.0,{nested,<<5:3>>}]", "[z,-7,#{a=>9}]"),
+                        ("lists:seq(1,33)", "lists:seq(101,133)")]:
+        selected.append({"upstream_example": "examples/otp/lists.exs#unzip_zip",
+                         "expression": f"A={left},B={right},Z=lists:zip(A,B),"
+                                       "{Z,lists:unzip(Z),lists:unzip(Z)=:={A,B}}"})
+    for pairs in ["[]", "[{a,7}]", "[{1,a},{1.0,b},{#{x=>7},<<5:3>>}]",
+                  "[{a,1},{a,2},{b,3},{a,1}]"]:
+        selected.append({"upstream_example": "examples/otp/lists.exs#zip_unzip",
+                         "expression": f"P={pairs},{{A,B}}=lists:unzip(P),"
+                                       "{A,B,lists:zip(A,B),lists:zip(A,B)=:=P}"})
+    for left, right in [("[]", "[a]"), ("[a,b]", "[7]"), ("[a|tail]", "[7]"),
+                        ("bad", "[]")]:
+        selected.append({"upstream_example": "examples/otp/lists.exs#unzip_zip",
+                         "expression": f"differential:call(lists,zip,[{left},{right}])"})
+    for pairs in ["[{a,1},bad]", "[{a,1}|tail]", "[{a,1,extra}]", "bad"]:
+        selected.append({"upstream_example": "examples/otp/lists.exs#zip_unzip",
+                         "expression": f"differential:call(lists,unzip,[{pairs}])"})
+
+    t = "Modules/Timers"
+    for payload in ["tick", "{nested,#{1=>one,1.0=>float},<<5:3>>}"]:
+        for mode, label, delay in [
+            ("deliver", "timer_delivers", 0), ("deliver", "timer_delivers", 1),
+            ("cancel", "cancel_twice", 60000), ("cancel", "cancel_stops_or_message_arrives", 0),
+            ("expired", "cancel_twice", 0),
+            ("dead_before", "cancel_after_destination_exits", 60000),
+            ("dead_after", "cancel_after_destination_exits_later", 60000),
+        ]:
+            probe(t, label, f"differential:timer({mode},{delay},{payload})")
+    call(t, "cancel_other_reference", "cancel_timer", "make_ref()")
+    for value in ["timer", "0", "[]"]:
+        call(t, "cancel_badarg", "cancel_timer", value)
+    for time, destination in [("-1", "self()"), ("1.0", "self()"),
+                              ("bad", "self()"), ("1 bsl 63", "self()"), ("10", "make_ref()")]:
+        # Observe acceptance without comparing VM-specific references. Clean up
+        # a timer if the target incorrectly accepts the invalid arguments.
+        probe(t, "send_after_negative_time" if time == "-1" else "send_after_long_times",
+              f"R=erlang:send_after({time},{destination},tick),"
+              "{is_reference(R),erlang:cancel_timer(R)=/=false}")
+    for options in ["[]", "[{abs,false}]", "[{abs,true},{abs,false}]", "[abs]", "[{info,true}]"]:
+        # send_after/4 is a public API gap on AtomVM, not a skipped pass.
+        probe(t, "send_after_options", f"R=erlang:send_after(60000,self(),tick,{options}),"
+                                      "{is_reference(R),erlang:cancel_timer(R)=/=false}")
+
     # Source forms are paired with dynamic apply and guard observations. Inspect
     # compiled instructions before claiming distinct paths on a new OTP release.
     for op in ["+", "-", "*", "/"]:
@@ -845,6 +905,7 @@ def inventory(checkout, selected, failures=None, unverified=()):
             "Purity.lean": "Symbolic purity, termination and execution-budget properties are not runtime tests.",
             "Modules/ErtsInternal.lean": "Compiler/model iterator adapters are not portable ERTS contracts.",
             "Modules/Process.lean": "Samples observe public process behavior, not all schedules, model PID paths, deadlock or exhaustion.",
+            "Modules/Timers.lean": "Delivery/cancellation handshakes and OTP error paths; elapsed milliseconds and all-run model proofs are not cross-VM expectations.",
             "Modules/Signals.lean": "Samples normalize identities and error stack contents; signal/link/alias combinations remain incomplete.",
             "Term/Dispatch.lean": "Synthetic function tables, dispatcher fuel and missing-entry exhaustion have no direct VM equivalent.",
             "Term/Order.lean": "Fixed-point/admissibility proofs and divergence are not sampled as bounded successes.",
