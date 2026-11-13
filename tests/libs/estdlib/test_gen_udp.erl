@@ -32,7 +32,40 @@ test() ->
         Mode <- [binary, list],
         BackendOption <- [[{inet_backend, inet}], [{inet_backend, socket}]]
     ],
+    ok = test_datagram_send_errors(),
     ok.
+
+%% Exercise the public socket backend: a permanent send error must not wedge
+%% its server or poison the following datagrams. UDP EAGAIN cannot be induced
+%% portably on loopback, so no backpressure claim is made by this test.
+test_datagram_send_errors() ->
+    Options = [{inet_backend, socket}, binary, {active, false}],
+    {ok, Receiver} = gen_udp:open(0, Options),
+    {ok, Port} = inet:port(Receiver),
+    {ok, Sender} = gen_udp:open(0, Options),
+    {error, emsgsize} = gen_udp:send(Sender, {127, 0, 0, 1}, Port, <<0:(65508 * 8)>>),
+    {error, timeout} = gen_udp:recv(Receiver, 0, 0),
+    Packets = [<<>>, <<91, 7>>, <<42, 0, 255>>, <<73>>],
+    lists:foreach(
+        fun(Packet) ->
+            ok = gen_udp:send(Sender, {127, 0, 0, 1}, Port, Packet)
+        end,
+        Packets
+    ),
+    lists:foreach(
+        fun(Packet) ->
+            {ok, {{127, 0, 0, 1}, _, Packet}} = gen_udp:recv(Receiver, 0, 60000)
+        end,
+        Packets
+    ),
+    {error, timeout} = gen_udp:recv(Receiver, 0, 0),
+    %% Also receive on the sender after its failed send, not just on its peer.
+    {ok, SenderPort} = inet:port(Sender),
+    ok = gen_udp:send(Receiver, {127, 0, 0, 1}, SenderPort, <<19>>),
+    {ok, {{127, 0, 0, 1}, Port, <<19>>}} = gen_udp:recv(Sender, 0, 60000),
+    ok = gen_udp:close(Sender),
+    {error, closed} = gen_udp:send(Sender, {127, 0, 0, 1}, Port, <<42>>),
+    ok = gen_udp:close(Receiver).
 
 test_send_receive(SpawnControllingProcess, IsActive, Mode, BackendOption) ->
     io:format("GEN_UDP-TEST> SpawnControllingProcess=~p IsActive=~p Mode=~p Backendoption=~p~n", [

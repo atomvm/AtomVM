@@ -149,6 +149,7 @@ void context_destroy(Context *ctx)
     // is a no-op. A process destroyed before it was ever scheduled (e.g. a spawn_opt option error)
     // is still on the waiting queue, and dequeuing it here avoids leaving a dangling entry.
     SMP_SPINLOCK_LOCK(&ctx->global->processes_spinlock);
+    context_update_flags(ctx, ~NoFlags, Killed);
     list_remove(&ctx->processes_list_head);
     SMP_SPINLOCK_UNLOCK(&ctx->global->processes_spinlock);
 

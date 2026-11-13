@@ -22,6 +22,9 @@
 
 -export([test/0, start/0]).
 
+-include_lib("kernel/include/dist.hrl").
+-include_lib("kernel/include/dist_util.hrl").
+
 %% Generate unique node name for each test using line number
 -define(OTP_SNAME, "otp_" ++ integer_to_list(?LINE)).
 
@@ -47,10 +50,227 @@ test() ->
             ok = test_alias_send_from_beam(Platform),
             ok = test_is_alive(),
             ok = test_ping_with_avm_dist_opts(Platform),
+            ok = test_tick_timeout(Platform),
             ok;
         false ->
             io:format("~s: skipped\n", [?MODULE]),
             ok
+    end.
+
+test_tick_timeout("BEAM") ->
+    ok;
+test_tick_timeout("ATOM") ->
+    {ok, _} = net_kernel:start(atomvm, #{name_domain => shortnames}),
+    erlang:set_cookie('AtomVM'),
+    try
+        lists:foreach(fun test_tick_timeout_case/1, [blocked, writing, responsive])
+    after
+        net_kernel:stop()
+    end,
+    ok.
+
+test_tick_timeout_case(Mode) ->
+    {ok, Listen} = socket:open(inet, stream, tcp),
+    ok = socket:bind(Listen, #{family => inet, addr => loopback, port => 0}),
+    ok = socket:listen(Listen),
+    {ok, #{port := Port}} = socket:sockname(Listen),
+    {ok, Peer} = socket:open(inet, stream, tcp),
+    ok = socket:connect(Peer, #{family => inet, addr => loopback, port => Port}),
+    {ok, Socket} = socket:accept(Listen),
+    ok = socket:close(Listen),
+    {ok, Controller} = socket_dist_controller:start(Socket),
+    Parent = self(),
+    {Connection, Monitor} = spawn_opt(
+        fun() ->
+            HSData = #hs_data{
+                kernel_pid = Parent,
+                this_node = node(),
+                socket = Controller,
+                timer = dist_util:start_timer(5000),
+                f_send = fun socket_dist_controller:send/2,
+                f_recv = fun socket_dist_controller:recv/3,
+                f_setopts_pre_nodeup = fun socket_dist_controller:setopts_pre_nodeup/1,
+                f_setopts_post_nodeup = fun socket_dist_controller:setopts_post_nodeup/1,
+                f_getll = fun socket_dist_controller:getll/1,
+                f_address = fun socket_dist_controller:address/2,
+                f_handshake_complete = fun(Ctrl, Node, Handle) ->
+                    ok = socket_dist_controller:handshake_complete(Ctrl, Node, Handle),
+                    Parent ! {self(), ready},
+                    ok
+                end,
+                mf_tick = fun socket_dist_controller:tick/1,
+                mf_getstat = fun(Ctrl) ->
+                    Stats = socket_dist_controller:getstat(Ctrl),
+                    Parent ! {self(), stats, Stats},
+                    Stats
+                end
+            },
+            dist_util:handshake_other_started(HSData)
+        end,
+        [monitor]
+    ),
+    try
+        true = socket_dist_controller:supervisor(Controller, Connection),
+        %% Complete a real distribution handshake, but drive the kernel's
+        %% tick notifications ourselves instead of waiting 15 seconds each.
+        Name = <<"tick_peer@localhost">>,
+        Flags =
+            ?DFLAGS_MANDATORY bor ?DFLAG_DIST_MONITOR bor ?DFLAG_DIST_MONITOR_NAME bor
+                ?DFLAG_UNICODE_IO bor ?DFLAG_SMALL_ATOM_TAGS bor ?DFLAG_SEND_SENDER bor
+                ?DFLAG_BIG_SEQTRACE_LABELS bor ?DFLAG_EXIT_PAYLOAD bor ?DFLAG_SPAWN bor
+                ?DFLAG_ALIAS,
+        ok = send_tick_handshake(Peer, <<$N, Flags:64, 1:32, (byte_size(Name)):16, Name/binary>>),
+        receive
+            {'$gen_call', From1, {mark_pending, _, _, Connection}} ->
+                gen_server:reply(From1, ok)
+        after 5000 -> error(mark_pending_timeout)
+        end,
+        <<$s, "ok">> = recv_tick_handshake(Peer),
+        <<$N, _Flags:64, Challenge:32, _/binary>> = recv_tick_handshake(Peer),
+        Digest = crypto:hash(md5, [<<"AtomVM">>, integer_to_list(Challenge)]),
+        ok = send_tick_handshake(Peer, <<$r, 71:32, Digest/binary>>),
+        Ack = crypto:hash(md5, [<<"AtomVM">>, "71"]),
+        <<$a, Ack/binary>> = recv_tick_handshake(Peer),
+        receive
+            {'$gen_call', From2, {mark_nodeup, _, _, Connection}} ->
+                gen_server:reply(From2, {ok, 4})
+        after 5000 -> error(mark_nodeup_timeout)
+        end,
+        receive
+            {Connection, ready} -> ok
+        after 5000 -> error(handshake_timeout)
+        end,
+        InitialSent =
+            case Mode of
+                writing ->
+                    0;
+                _ ->
+                    BlockedSent = block_tick_output(Socket, Controller, 32),
+                    {ok, 0, BlockedSent, QueuedBytes} = socket_dist_controller:getstat(Controller),
+                    true = QueuedBytes > 0 andalso QueuedBytes =< 4,
+                    BlockedSent
+            end,
+        case Mode of
+            responsive ->
+                lists:foreach(
+                    fun(N) ->
+                        %% A tick arriving at the deadline must renew liveness.
+                        case N rem 4 of
+                            0 -> ok = socket:send(Peer, <<0:32>>);
+                            _ -> ok
+                        end,
+                        ExpectedRead = N div 4,
+                        ok = wait_tick_received(Controller, ExpectedRead, 100),
+                        Connection ! {Parent, tick},
+                        {ok, ExpectedRead, _Sent, PendingBytes} = tick_stats(Connection),
+                        %% Incoming packets can acknowledge earlier output and
+                        %% allow a queued tick to drain. Neither case grows the queue.
+                        true = PendingBytes =< 4
+                    end,
+                    lists:seq(1, 12)
+                ),
+                true = is_process_alive(Connection);
+            _ ->
+                ok
+        end,
+        lists:foreach(
+            fun(N) ->
+                case Mode of
+                    writing ->
+                        %% Outgoing traffic must not keep a silent peer alive.
+                        ok = socket_dist_controller:tick(Controller),
+                        ok = socket_dist_controller:tick(Controller),
+                        {ok, 0, _, 0} = socket_dist_controller:getstat(Controller);
+                    _ ->
+                        ok
+                end,
+                Connection ! {Parent, tick},
+                {ok, Received, Sent, Pending} = tick_stats(Connection),
+                case Mode of
+                    writing ->
+                        0 = Received,
+                        true = Sent =:= 2 * N,
+                        0 = Pending;
+                    blocked ->
+                        InitialSent = Sent,
+                        0 = Received;
+                    responsive ->
+                        3 = Received,
+                        true = Pending =< 4
+                end
+            end,
+            lists:seq(1, 4)
+        ),
+        receive
+            {'DOWN', Monitor, process, Connection, net_tick_timeout} -> ok
+        after 5000 -> error({missing_tick_timeout, Mode})
+        end
+    after
+        exit(Connection, shutdown),
+        socket:close(Socket),
+        socket:close(Peer)
+    end,
+    ok.
+
+send_tick_handshake(Socket, Packet) ->
+    socket:send(Socket, <<(byte_size(Packet)):16, Packet/binary>>).
+
+recv_tick_handshake(Socket) ->
+    {ok, <<Size:16>>} = socket:recv(Socket, 2, 5000),
+    {ok, Packet} = socket:recv(Socket, Size, 5000),
+    Packet.
+
+tick_stats(Connection) ->
+    receive
+        {Connection, stats, Stats} -> Stats
+    after 5000 -> error(tick_stats_timeout)
+    end.
+
+block_tick_output(_Socket, _Controller, 0) ->
+    error(tick_output_did_not_block);
+block_tick_output(Socket, Controller, Attempts) ->
+    ok = fill_tick_socket(Socket, <<0:65536>>, 8192),
+    {ok, _, Before, _} = socket_dist_controller:getstat(Controller),
+    ok = socket_dist_controller:tick(Controller),
+    %% A tiny tick may still fit after a large send returns EAGAIN, or become
+    %% writable as delayed ACKs arrive. Confirm sustained controller backpressure.
+    receive
+    after 250 -> ok
+    end,
+    case socket_dist_controller:getstat(Controller) of
+        {ok, _, Before, _} -> Before;
+        _ -> block_tick_output(Socket, Controller, Attempts - 1)
+    end.
+
+fill_tick_socket(_Socket, _Packet, 0) ->
+    error(send_buffer_did_not_block);
+fill_tick_socket(Socket, Packet, Attempts) ->
+    case socket:nif_send(Socket, Packet) of
+        ok ->
+            fill_tick_socket(Socket, <<0:65536>>, Attempts - 1);
+        {ok, Rest} ->
+            fill_tick_socket(Socket, Rest, Attempts - 1);
+        {error, eagain} ->
+            Ref = make_ref(),
+            ok = socket:nif_select_write(Socket, Ref),
+            receive
+                {'$socket', Socket, select, Ref} ->
+                    fill_tick_socket(Socket, Packet, Attempts - 1)
+            after 250 -> ok
+            end
+    end.
+
+wait_tick_received(_Controller, _Expected, 0) ->
+    error(tick_receive_timeout);
+wait_tick_received(Controller, Expected, Attempts) ->
+    case socket_dist_controller:getstat(Controller) of
+        {ok, Expected, _, _} ->
+            ok;
+        _ ->
+            receive
+            after 10 -> ok
+            end,
+            wait_tick_received(Controller, Expected, Attempts - 1)
     end.
 
 has_epmd(Platform) ->

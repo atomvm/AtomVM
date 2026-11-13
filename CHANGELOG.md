@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0-beta.1] - Unreleased
 
 ### Added
+- Added `socket:send/3` and `socket:sendto/4` with timeout, `nowait` and select-reference
+  forms; send timeouts preserve independent read selections
 - Added `gen:start/5,6`, used by Elixir's `GenServer`
 - Added ML-KEM-768 (FIPS 203) key encapsulation to `crypto`, requiring libsodium >= 1.0.22
 - Added `AVM_STATIC_LIBSODIUM` CMake option to statically link libsodium
@@ -47,6 +49,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed module teardown leaking unresolved and resolved imported function descriptors,
+  including native-code imports, without reading BEAM data already released by another module
+- Fixed TCP socket backend operations retaining completed receive and accept timers;
+  infinite receives no longer create a 30-second timeout
+- Fixed use-after-free during VM shutdown when live socket owners still have
+  pending read or write selections
+- TCP and UDP socket backend servers remain responsive to receive and close requests
+  while sends wait for write readiness; queued sends retain packet order
+- Send errors preserve the underlying reason, and stream errors after partial progress
+  return the unsent binary as `{error, {Reason, Rest}}`
+- Fixed lwIP write retries spinning after allocation failure, closed-socket selection
+  and buffered receive handling after reset or shutdown, and ESP32 select poll-count
+  publication losing concurrent registrations
+- Fixed epmd crashing when sending an ALIVE2 response to a disconnected node
+- `socket:send/2` now waits for write-readiness and retries partial stream sends under
+  transient backpressure (lwIP `ERR_MEM` / BSD `EAGAIN`|`EWOULDBLOCK`), so higher-level TCP
+  send paths no longer leak `{ok, Rest}` or `{error, eagain}` on normal backpressure;
+  closed peers now return `{error, closed}` instead of being reported as a partial send.
+  Read-side EOF/error cleanup preserves a concurrent blocked writer, allowing TCP
+  half-close followed by draining the remaining data
+- `socket:sendto/3` now waits for write-readiness and retries the same datagram under
+  transient backpressure, without splitting partial results into additional packets.
+  Empty datagrams are transmitted, oversized IPv4 UDP payloads return `{error, emsgsize}`,
+  and BSD send errors are preserved rather than reported as a closed socket
+- Distribution tick timeouts now depend on incoming traffic, so blocked or outgoing-only
+  socket traffic cannot hide a silent peer. Pending output no longer accumulates ticks
 - Fixed maps decoded by `binary_to_term/1,2` and received over distribution keeping the
   encoder's key order, which broke `==` and made `=>` updates on an existing key produce
   duplicate keys

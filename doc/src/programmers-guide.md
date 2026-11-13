@@ -2495,8 +2495,8 @@ case socket:recv(ConnectedSocket) of
         case socket:send(ConnectedSocket, Data) of
             ok ->
                 io:format("All data was sent~n");
-            {ok, Rest} ->
-                io:format("Some data was sent.  Remaining: ~p~n", [Rest]);
+            {error, {Reason, Rest}} ->
+                io:format("Send failed: ~p. Not sent: ~p~n", [Reason, Rest]);
             {error, Reason} ->
                 io:format("An error occurred sending data: ~p~n", [Reason])
         end;
@@ -2509,7 +2509,15 @@ end.
 
 The `socket:recv/1` function will block the current process until a packet has arrived or until the local or remote socket has been closed, or some other error occurs.
 
-Note that the `socket:send/2` function may return `ok` if all of the data has been sent, or `{ok, Rest}`, where `Rest` is the remaining part of the data that was not sent to the operating system.  If the supplied input to `socket:send/2` is an io-list, then the `Rest` will be a binary containing the rest of the data in the io-list.
+The `socket:send/2` function retries partial sends and transient backpressure internally and returns `ok` once all data has been accepted by the network stack. An error before any data was accepted returns `{error, Reason}`; after a partial send it returns `{error, {Reason, Rest}}`, where `Rest` is the unsent binary, including when the input was an io-list.
+
+Use `socket:send(Socket, Data, Timeout)` to bound the entire send by a timeout in milliseconds. A timeout returns `{error, timeout}` or `{error, {timeout, Rest}}` after partial progress. `infinity` is the default. A timed-out write selection is canceled without disturbing an independent reader.
+
+With `nowait` or a reference instead of a timeout, a send that cannot complete immediately returns `{select, {select_info, send, Ref}}` if nothing was accepted, or `{select, {{select_info, send, Ref}, Rest}}` after a partial send. Wait for `{'$socket', Socket, select, Ref}` before retrying the unsent data; `{'$socket', Socket, abort, {Ref, Reason}}` reports failure. When a reference is supplied, that reference is used in the notification.
+
+`socket:sendto/4` accepts the same timeout, `nowait` or reference, with `sendto` as its select tag. Datagram boundaries are preserved: a partial datagram result is returned to the caller, never sent as another packet. The `gen_tcp` and `gen_udp` socket backends queue sends while waiting for write readiness, so other processes can still receive or close the socket while a sender waits.
+
+On raw-lwIP platforms, UDP allocation failures return the underlying lwIP error (`{error, -1}` for `ERR_MEM`), rather than retrying through an immediately-ready write selection. TCP allocation failures wait for a sent or poll callback before retrying.
 
 ### Getting Information about Connected Sockets
 

@@ -123,6 +123,9 @@ term posix_errno_to_term(int err, GlobalContext *glb)
         case EMLINK:
             result = globalcontext_make_atom(glb, ATOM_STR("\x6", "emlink"));
             break;
+        case EMSGSIZE:
+            result = globalcontext_make_atom(glb, ATOM_STR("\x8", "emsgsize"));
+            break;
         case ENAMETOOLONG:
             result = globalcontext_make_atom(glb, ATOM_STR("\xC", "enametoolong"));
             break;
