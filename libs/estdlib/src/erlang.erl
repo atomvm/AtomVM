@@ -30,7 +30,7 @@
     apply/3,
     start_timer/3, start_timer/4,
     cancel_timer/1,
-    send_after/3,
+    send_after/3, send_after/4,
     process_info/1,
     process_info/2,
     system_info/1,
@@ -379,7 +379,29 @@ cancel_timer(TimerRef) ->
 %%-----------------------------------------------------------------------------
 -spec send_after(Time :: 0..16#FFFFFFFF, Dest :: pid() | atom(), Msg :: term()) -> reference().
 send_after(Time, Dest, Msg) ->
-    timer_manager:send_after(Time, Dest, Msg).
+    send_after(Time, Dest, Msg, []).
+
+%%-----------------------------------------------------------------------------
+%% @param   Time relative delay or absolute monotonic timestamp in milliseconds.
+%% @param   Dest local Pid or registered process name.
+%% @param   Msg message to send when the timer expires.
+%% @param   Options list of `{abs, boolean()}' options (default `{abs, false}').
+%% @returns a reference that can be used to cancel the timer.
+%% @doc     Send Msg to Dest at a relative or absolute monotonic deadline.
+%%          With `{abs, true}', Time uses the same nonnegative platform epoch
+%%          as erlang:monotonic_time(millisecond). Past deadlines expire
+%%          immediately. Relative delays and future absolute deadlines are
+%%          limited to 4294967295 milliseconds from the time of this call.
+%%          For duplicate options the last value wins, but every option must
+%%          be valid. Invalid arguments raise badarg before creating a timer.
+%%          Destination monitoring and message format are as in send_after/3.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec send_after(
+    Time :: non_neg_integer(), Dest :: pid() | atom(), Msg :: term(), Options :: [{abs, boolean()}]
+) -> reference().
+send_after(Time, Dest, Msg, Options) ->
+    timer_manager:send_after(Time, Dest, Msg, Options).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pid the process pid.
