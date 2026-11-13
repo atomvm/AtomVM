@@ -33,7 +33,7 @@ def cases():
     for value in ["[]", "[5,-12,19]", "[1.5,2]", "[bad]", "[1|2]", "bad",
                   "[1 bsl 60, -(1 bsl 60), 7]", "[1 bsl 100,3,-(1 bsl 100)]"]:
         add("sum", "sum", value)
-    add("sum", "sum_empty_ensures")
+    add("sum", "sum_empty_ensures", assert_true=True)
     for function in ["sum_singleton_requires", "sum_singleton_ensures"]:
         for value in numbers:
             law_sample = function == "sum_singleton_ensures" and value in [
@@ -381,6 +381,35 @@ def cases():
             for timeout in ["0", "infinity", "bad"]:
                 # computed(infinity) raises badarith rather than blocking.
                 add("receives", function, timeout, setup=f"self()!{message}, ")
+
+    # Upstream's consolidated Elixir protocols: dispatch, fallback, structs,
+    # recursive calls through implementations, and undefined-protocol errors.
+    point = "#{'__struct__'=>'Elixir.Lynx.Support.Point',x=>7,y=>11}"
+    tagged = "#{'__struct__'=>'Elixir.Lynx.Support.Tagged',tag=>payload}"
+    for value in ["[]", "[a]", "[a,7,{nested}]", "[a|tail]", "7", "1 bsl 100",
+                  "1.5", "atom", "#{}", "#{a=>1,b=>2,c=>3}", point, tagged,
+                  "<<1,2>>", "{a,b}"]:
+        add("protocols", "size", value)
+        add("protocols", "describe", value, "{prefix,17}")
+        add("protocols", "depth", value)
+    for value in ["[]", "[7]", "[[7],[11,[]]]", "[7|tail]", "bad"]:
+        add("protocols", "depth", value)
+    for value in ["[]", "[a]", "[1,1.0,{nested,<<5:3>>}]", "[a|tail]", "bad"]:
+        add("protocols", "size_list_requires", value)
+        valid = value not in ["[a|tail]", "bad"]
+        add("protocols", "size_list_ensures", value, assert_true=valid,
+            setup=f"true=protocols:size_list_requires({value})," if valid else "")
+    add("protocols", "size_struct_ensures", assert_true=True)
+    for law, values in [
+        ("size_undefined", ["0.0", "-0.0", "1.5"]),
+        ("describe_fallback", ["0", "-7", "1 bsl 100"]),
+        ("depth_nested", ["0", "-7", "1 bsl 100"]),
+    ]:
+        for value in values:
+            add("protocols", law + "_requires", value)
+            add("protocols", law + "_ensures", value, assert_true=True,
+                setup=f"true=protocols:{law}_requires({value}),")
+        add("protocols", law + "_requires", "bad")
 
     # Compare zeros that crossed a module boundary, not compiler-folded terms.
     selected.append({
