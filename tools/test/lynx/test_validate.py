@@ -67,6 +67,48 @@ class ValidationTests(unittest.TestCase):
                               "binary_sequence"})
             self.assertEqual(summary["passed"], 32)
 
+    def test_timer_and_subtraction_observations_have_independent_oracles(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            source.write_text(json.dumps([{"expression": e} for e in [
+                "differential:call(erlang,'--',[[1,2,1,3],[1,3]])",
+                "differential:call(erlang,'--',[[1,1.0,1],[1.0,1]])",
+                "differential:call(erlang,'--',[[{1},#{a=>1}],[{1.0},#{a=>1.0}]])",
+                "differential:call(erlang,'--',[[a|tail],[]])",
+                "differential:timer(deliver,0,{nested,7})",
+                "differential:timer(deliver,1,<<5:3>>)",
+                "differential:timer(cancel,60000,tick)",
+                "differential:timer(cancel,0,tick)",
+                "differential:timer(expired,0,tick)",
+            ]]))
+            output = work / "results"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 9, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            # Expectations are handwritten, not derived from the helper. Both
+            # cancel outcomes must preserve unrelated mailbox contents, while
+            # a completed timer must be absent on repeated cancellation.
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                values = JSON.decode!(File.read!(path))["expected"]
+                         |> Enum.map(&:erlang.binary_to_term(Base.decode64!(&1)))
+                [
+                  {:ok, [2, 1]},
+                  {:ok, [1]},
+                  {:ok, [{1}, %{a: 1}]},
+                  {:exception, :error, :badarg},
+                  {:ok, {true, {:nested, 7}, [:retained]}},
+                  {:ok, {true, <<5::3>>, [:retained]}},
+                  {:ok, {true, true, false, [:retained]}},
+                  {:ok, {true, true, false, [:retained]}},
+                  {:ok, {:tick, false, false}}
+                ] = values
+                """, str(output / "manifest.json")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     def test_binary_sequences_rebase_scopes_and_preserve_split_edges(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
@@ -658,9 +700,20 @@ class ValidationTests(unittest.TestCase):
             self.assertTrue(all(row["cases"] > 0 for row in coverage))
             selected = json.loads((full / "cases.json").read_text())
             law_samples = [c for c in selected if c.get("assert_true")]
-            self.assertEqual(len(law_samples), 5)
-            self.assertTrue(all(c["fixture"] == ["sum", "sum_singleton_ensures", 1]
-                                for c in law_samples))
+            self.assertEqual(len(law_samples), 19)
+            self.assertEqual(sum(c["fixture"] == ["sum", "sum_singleton_ensures", 1]
+                                 for c in law_samples), 5)
+            self.assertEqual(sum(c["fixture"] == ["sum", "sum_empty_ensures", 0]
+                                 for c in law_samples), 1)
+            self.assertEqual(sum(c["fixture"][0] == "protocols" for c in law_samples), 13)
+            manifest = json.loads((full / "manifest.json").read_text())
+            self.assertTrue(manifest["support"])
+            self.assertTrue(all(name.startswith("Elixir.Lynx.Support.")
+                                for name in manifest["support"]))
+            self.assertTrue(all((full / f"{name}.beam").is_file()
+                                for name in manifest["support"]))
+            protocol_calls = [c for c in selected if c["fixture"][0] == "protocols"]
+            self.assertEqual(len(protocol_calls), 78)
             failures = json.loads((full / "failures.json").read_text())
             self.assertFalse(any(f["case"].get("assert_true") for f in failures))
             # A partial replay must not claim full fixture coverage merely
