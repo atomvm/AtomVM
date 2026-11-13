@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0-beta.1] - Unreleased
 
 ### Added
+- Added `erlang:send_after/4` with relative and absolute monotonic deadlines,
+  `{abs, boolean()}` option validation, and last-option-wins precedence;
+  future delays remain limited to 4294967295 milliseconds
 - Added more OTP-compatible functions to the estdlib `maps` module, including
   `maps:take/2`, `maps:update_with/3,4`, `maps:with/2`, `maps:without/2`,
   `maps:filtermap/2`, `maps:intersect/2`, `maps:intersect_with/3`,
