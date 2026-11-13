@@ -74,6 +74,7 @@
     append/1,
     append/2,
     zip/2,
+    unzip/1,
     zipwith/3,
     min/1,
     max/1,
@@ -945,6 +946,28 @@ append(L1, L2) -> L1 ++ L2.
 
 zip([A | As], [B | Bs]) -> [{A, B} | zip(As, Bs)];
 zip([], []) -> [].
+
+%%-----------------------------------------------------------------------------
+%% @param   Pairs a proper list of two-tuples
+%% @returns two lists containing the first and second elements of each tuple
+%% @doc     Split a list of two-tuples into two lists, preserving their order.
+%%          Invalid elements or an improper outer list raise function_clause.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec unzip(Pairs) -> {List1, List2} when
+    Pairs :: [{A, B}],
+    List1 :: [A],
+    List2 :: [B],
+    A :: term(),
+    B :: term().
+
+unzip(Pairs) ->
+    unzip(Pairs, [], []).
+
+unzip([{A, B} | Rest], As, Bs) ->
+    unzip(Rest, [A | As], [B | Bs]);
+unzip([], As, Bs) ->
+    {?MODULE:reverse(As), ?MODULE:reverse(Bs)}.
 
 %%-----------------------------------------------------------------------------
 %% @param   Combine a function that takes elements from each list

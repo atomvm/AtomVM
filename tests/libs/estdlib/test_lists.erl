@@ -61,6 +61,7 @@ test() ->
     ok = test_sublist3(),
     ok = test_droplast(),
     ok = test_zip(),
+    ok = test_unzip(),
     ok = test_zipwith(),
     ok = test_sum(),
     ok.
@@ -549,6 +550,20 @@ test_zip() ->
     ?ASSERT_MATCH(lists:zip([a], [1]), [{a, 1}]),
     ?ASSERT_ERROR(lists:zip([a, b], [1]), function_clause),
     ?ASSERT_ERROR(lists:zip([a], [1, 2]), function_clause),
+    ok.
+
+test_unzip() ->
+    ?ASSERT_MATCH(lists:unzip(id([])), {[], []}),
+    ?ASSERT_MATCH(lists:unzip(id([{a, 7}])), {[a], [7]}),
+    Pairs = id([{1, one}, {1.0, <<5:3>>}, {1, {nested, #{x => 7}}}, {a, [1 | tail]}]),
+    ?ASSERT_MATCH(
+        lists:unzip(Pairs),
+        {[1, 1.0, 1, a], [one, <<5:3>>, {nested, #{x => 7}}, [1 | tail]]}
+    ),
+    ?ASSERT_ERROR(lists:unzip(id(bad)), function_clause),
+    ?ASSERT_ERROR(lists:unzip(id([{a, 1}, bad])), function_clause),
+    ?ASSERT_ERROR(lists:unzip(id([{a, 1} | tail])), function_clause),
+    ?ASSERT_ERROR(lists:unzip(id([{a, 1, extra}])), function_clause),
     ok.
 
 test_zipwith() ->

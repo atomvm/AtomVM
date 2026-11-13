@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `maps:filtermap/2`, `maps:intersect/2`, `maps:intersect_with/3`,
   `maps:groups_from_list/2,3`, and `maps:is_iterator_valid/1`
 - Added `lists:sum/1`
+- Added `lists:unzip/1` to split a list of pairs into two order-preserving lists
 - Added the `{scope, {Start, Length}}` option to `binary:split/3`
 - Added `erlang:get_keys/0,1` to query process dictionary keys
 - Added `erlang:binary_part/2`, including use in guards
