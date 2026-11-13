@@ -29,6 +29,7 @@ test() ->
     ok = test_erlang_cancel_timer(),
     ok = test_timer_badargs(),
     ok = test_send_after_boundaries(),
+    ok = test_send_after_options(),
     lists:foreach(
         fun(Function) ->
             lists:foreach(
@@ -40,7 +41,18 @@ test() ->
             ),
             ok = test_named_destination_death(Function)
         end,
-        [send_after, start_timer]
+        [
+            fun erlang:send_after/3,
+            fun erlang:start_timer/3,
+            fun(Time, Dest, Msg) ->
+                erlang:send_after(Time, Dest, Msg, [{abs, false}])
+            end,
+            fun(Time, Dest, Msg) ->
+                erlang:send_after(
+                    erlang:monotonic_time(millisecond) + Time, Dest, Msg, [{abs, true}]
+                )
+            end
+        ]
     ),
     pong = test_send_after(),
     ok = test_cancel_send_after(),
@@ -127,6 +139,58 @@ test_send_after_boundaries() ->
     true = unregister(test_timer_destination),
     ok.
 
+test_send_after_options() ->
+    %% Opposite orders must select different modes; neither first-wins nor
+    %% ignoring options can satisfy both delivery observations.
+    Payload = {nested, #{1 => one, 1.0 => float}, <<5:3>>},
+    Deadline = erlang:monotonic_time(millisecond) + 20,
+    Ref = erlang:send_after(Deadline, self(), Payload, [{abs, false}, {abs, true}]),
+    ?ASSERT_TRUE(is_reference(Ref)),
+    receive
+        Payload -> ?ASSERT_TRUE(erlang:monotonic_time(millisecond) >= Deadline)
+    after 5000 -> throw(timeout)
+    end,
+    ?ASSERT_EQUALS(false, erlang:cancel_timer(Ref)),
+    %% The observed deadline is now in the past but still inside this VM's
+    %% lifetime. It must deliver rather than reject a negative relative delay.
+    PastRef = erlang:send_after(Deadline, self(), past, [{abs, true}]),
+    receive
+        past -> ok
+    after 5000 -> throw(timeout)
+    end,
+    ?ASSERT_EQUALS(false, erlang:cancel_timer(PastRef)),
+    RelativeRef = erlang:send_after(0, self(), relative, [{abs, true}, {abs, false}]),
+    receive
+        relative -> ok
+    after 5000 -> throw(timeout)
+    end,
+    ?ASSERT_EQUALS(false, erlang:cancel_timer(RelativeRef)),
+    FutureRef = erlang:send_after(
+        erlang:monotonic_time(millisecond) + 60000, self(), canceled, [{abs, true}]
+    ),
+    Remaining = erlang:cancel_timer(FutureRef),
+    ?ASSERT_TRUE(is_integer(Remaining) andalso Remaining > 0 andalso Remaining =< 60000),
+    ?ASSERT_EQUALS(false, erlang:cancel_timer(FutureRef)),
+    %% The cap applies to the future delay, not the absolute timestamp itself.
+    Max = 16#FFFFFFFF,
+    MaxRef = erlang:send_after(
+        erlang:monotonic_time(millisecond) + Max, self(), long_absolute, [{abs, true}]
+    ),
+    MaxRemaining = erlang:cancel_timer(MaxRef),
+    ?ASSERT_TRUE(is_integer(MaxRemaining) andalso MaxRemaining > 0 andalso MaxRemaining =< Max),
+    lists:foreach(
+        fun(Options) ->
+            ?ASSERT_ERROR(erlang:send_after(60000, self(), ignored, Options), badarg)
+        end,
+        [bad, [{abs, false} | tail], [{abs, invalid}, {abs, false}], [{abs, false}, unknown]]
+    ),
+    ?ASSERT_ERROR(erlang:send_after(-1, self(), ignored, [{abs, true}]), badarg),
+    ?ASSERT_ERROR(erlang:send_after(16#100000000, self(), ignored, []), badarg),
+    TooFar = erlang:monotonic_time(millisecond) + 16#FFFFFFFF + 60000,
+    ?ASSERT_ERROR(erlang:send_after(TooFar, self(), ignored, [{abs, true}]), badarg),
+    ?ASSERT_MATCH(timer_manager:get_timer_refs(), []),
+    ok.
+
 test_destination_death(Function, When, Time) ->
     {Dest, Monitor} = spawn_monitor(fun() ->
         receive
@@ -137,8 +201,8 @@ test_destination_death(Function, When, Time) ->
         before_creation -> stop_destination(Dest, Monitor);
         after_creation -> ok
     end,
-    Ref = apply(erlang, Function, [Time, Dest, ignored]),
-    AutoRef = apply(erlang, Function, [Time, Dest, ignored]),
+    Ref = Function(Time, Dest, ignored),
+    AutoRef = Function(Time, Dest, ignored),
     case When of
         before_creation -> ok;
         after_creation -> stop_destination(Dest, Monitor)
@@ -157,7 +221,7 @@ test_named_destination_death(Function) ->
         end
     end),
     true = register(test_timer_destination, Dest),
-    Ref = apply(erlang, Function, [60000, test_timer_destination, ignored]),
+    Ref = Function(60000, test_timer_destination, ignored),
     stop_destination(Dest, Monitor),
     Remaining = erlang:cancel_timer(Ref),
     ?ASSERT_TRUE(is_integer(Remaining) andalso Remaining > 0 andalso Remaining =< 60000),
