@@ -22,9 +22,10 @@ runtime error/timeout, or a failed prerequisite/reference/proof check.
 
 ## Generated inputs
 
-The default is 1,000 cases, reproducible with `--seed`. Thirty-two boundary cases
-precede seeded exploration so short runs still exercise known dangerous edges.
-This generates inputs to nine operation families, not arbitrary Erlang programs:
+The default is 1,000 cases, reproducible with `--seed`. Thirty-six boundary
+cases precede seeded exploration (arranged so the first 32 cover all ten
+operation families) so short runs still exercise known dangerous edges. This
+generates inputs to ten operation families, not arbitrary Erlang programs:
 
 - Numeric comparison: all eight equality/order operators, signed zeros,
   subnormal/extreme finite floats, and integer/float pairs around precision and
@@ -59,6 +60,18 @@ This generates inputs to nine operation families, not arbitrary Erlang programs:
   coordinates must be relative to the current binary. Every result/exception and
   intermediate binary is compared; failed operations retain the previous state.
   Shrinking deletes operations without changing setup or literal payloads.
+- Process-lifecycle sequences: stateful setups and sequences of 6 to 24
+  operations (four deterministic boundary sequences up to 21 steps) across two
+  worker slots, two registered-name slots, two monitor slots, and two alias slots.
+  Steps cover `register/2`, `unregister/1`, `whereis/1`, local and peer links and
+  unlinks, dead-process links under both `trap_exit` settings, fenced queued
+  `'EXIT'` signals preserved across `trap_exit = false` transitions, monitor and
+  demonitor options (`default`, `flush`, `info`, `flush_info`, and invalid
+  options), standalone and monitor aliases, fenced cross-process/self alias
+  sends, controlled child exits and respawns, and bounded unlink/exit and
+  demonitor/exit race steps validating documented allowed-outcome predicates.
+  Every step summary and intermediate snapshot is compared using symbolic slot
+  labels rather than raw PIDs or references.
 - Bitstrings: signed big/little-endian construction and matching at varied bit
   offsets and widths through 255 bits, including zero-width and invalid-size
   controls. Full bitstrings and decoded results are compared.
@@ -82,6 +95,15 @@ interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen
 enabled CLI tests pass (one optional fixture test skipped), including independent
 scope/split/state oracles and shrinking/replay with unchanged binary setup.
+
+Seed `20261114` (after fixing `erlang:register/2` to reject processes and ports
+already registered under another name) matches all 1,000 mixed cases against OTP 29
+in both host interpreter and aarch64 precompiled execution, including 101
+`lifecycle_sequence` cases with 1,561 operations. There are zero failures or
+unverified references, with pre-fix boundary failure and minimized 2-step reproducer
+artifacts preserved. Eighteen enabled CLI tests pass (one optional fixture test
+skipped), including independent fenced lifecycle/race oracles and contract-preserving
+shrinking/replay.
 See [PLAN.md](PLAN.md) for evidence and execution-mode limitations.
 
 ## Focused float encoding checks
@@ -216,6 +238,12 @@ where AtomVM returns `[First]` instead of `[]`, and two `lists:reverse/1`
 invalid-input exception differences (`badarg` vs OTP `function_clause`). The
 full 4,301-case corpus has not been rerun; failures remain visible and
 replayable under `.amp/in/artifacts/batch2-relations/`.
+
+A subsequent `lists:seq/3` fix in `libs/estdlib/src/lists.erl` resolves all
+four empty-step-range `seq_contract` failures: focused 133-case interpreter and
+aarch64 precompiled replays now match 131 of 133 cases against OTP 29
+(`.amp/in/artifacts/batch2-relations/seq-fix-{interpreter,native}`), retaining
+only the two documented `lists:reverse/1` invalid-input exception differences.
 
 The execution-path extension adds 466 cases for 20 arithmetic, comparison, and
 map-lookup operations. Each captures direct-body and dynamic `apply/3` outcomes

@@ -357,6 +357,17 @@ Batch 2 model-inspired map/list relation expansion added 113 net new recipes
   `seq_contract`, and error paths. No runtime code was modified; exposed
   failures remain visible and replayable under `.amp/in/artifacts/batch2-relations/`.
 
+Subsequent `lists:seq/3` empty-step-range follow-up: `libs/estdlib/src/lists.erl`
+now returns `[]` whenever `Incr > 0 andalso To < From` or
+`Incr < 0 andalso To > From` after `badarg` range validation, instead of only
+when `From =:= To + Incr`. The expanded `test_lists` regression fails before
+the change and passes afterward on OTP 29, the host interpreter, and aarch64
+precompiled execution. Replaying the 133 focused Batch 2 cases now matches 131
+OTP references with 2 failures and zero unverified cases in both modes
+(`.amp/in/artifacts/batch2-relations/seq-fix-{interpreter,native}`), leaving
+only the two documented `lists:reverse/1` NIF `badarg` versus OTP
+`function_clause` differences.
+
 ### 3. Expand public map combination and iterator behavior
 
 - [x] Cover `maps:merge_with/3` and `filter/2`:
@@ -566,7 +577,7 @@ and zero unverified cases. Evidence is in `.amp/in/artifacts/lynx-set-final-full
 - [x] Extend to binary scope combinations: nested parts, appends, overlapping
   patterns, signed/duplicate scopes, and split trimming. Compare every result,
   exception, and intermediate binary; preserve setup and literal steps in reduction.
-- [ ] For lifecycle extensions, use same-sender fences and explicit handshakes.
+- [x] For lifecycle extensions, use same-sender fences and explicit handshakes.
   Sample documented allowed outcomes for races; do not compare cross-sender
   arrival order, elapsed time, or outcome frequencies as correctness requirements.
 - [x] Bound map/dictionary sequences to 72 operations and at most 41 bindings,
@@ -622,6 +633,33 @@ No runtime changes were needed. erlfmt and whitespace checks pass. Evidence is
 under `.amp/in/artifacts/lynx-binary-sequences-seed-20261113/`,
 `lynx-binary-sequences-native/`, and the sibling `lynx-binary-sequences-*.log`,
 `lynx-binary-sequences-observations.json`, and mode/chunk comparison files.
+
+Lifecycle sequence batch validated on 2026-11-13 against OTP 29: generated
+coverage now spans ten operation families, adding stateful `lifecycle_sequence`
+runs with same-sender fences, explicit worker handshakes, sanitized symbolic
+identities (no raw PIDs or references serialized), and allowed-outcome predicates
+for unlink/exit and demonitor/exit races. Boundary 0 immediately exposed an
+AtomVM runtime defect where `erlang:register/2` allowed an already-registered
+PID or port to be registered under additional names (`{ok, true}` instead of
+OTP's `error:badarg`); `--shrink` reduced the 15-step failing sequence in 12
+trials to `[{register_slot, reg_a, alpha}, {register_slot, reg_b, alpha}]`,
+replaying unchanged with `same_failure_contract` checking both OTP and AtomVM
+contract preservation. Fixing `globalcontext_register_process` and
+`nif_erlang_register_2` (with an added check in `tests/erlang_tests/test_process_info.erl`)
+resolved all failures.
+
+After the fix, seed `20261114` matches all 1,000 mixed cases in both host
+interpreter and `aarch64` precompiled execution (`0` failures, `0` unverified
+references), including 101 `lifecycle_sequence` cases spanning 1,561 operations
+across all 19 step kinds (including 208 expected exceptions, 77 unlink-exit
+race checks with 58 live races and 19 `already_dead` slots, and 95 demonitor-exit
+race checks). All 1,000 decoded native results equal their interpreter
+baselines, and all 1,001 native probe/helper `.beam` files contain `avmN` and no
+`Code` chunk. Eighteen enabled CLI tests pass (one optional fixture test
+skipped), `test-erlang` passes, and `erlfmt` checks pass. Evidence is under
+`.amp/in/artifacts/batch6-lifecycle-sequences/` (`smoke-42-before-fix/`,
+`register-duplicate-pid-shrink/`, `register-duplicate-pid-shrink-replay/`,
+`interpreter-1000/`, and `native-1000/`).
 
 ### 7. Expand execution-path coverage and separate transport cost
 

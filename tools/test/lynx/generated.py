@@ -63,6 +63,202 @@ def float_boundaries():
     return cases
 
 
+def lifecycle_sequence_boundaries():
+    def step(*items):
+        return {"tuple": list(items)}
+
+    return [
+        [
+            step("false", "false", "none", "none"),
+            [
+                step("whereis_slot", "reg_a"),
+                step("register_slot", "reg_a", "alpha"),
+                step("register_slot", "reg_b", "alpha"),
+                step("register_slot", "reg_a", "beta"),
+                step("register_slot", "reg_b", "bad_pid"),
+                step("register_slot", "reg_b", "self"),
+                step("whereis_slot", "reg_a"),
+                step("whereis_slot", "reg_b"),
+                step("unregister_slot", "reg_b"),
+                step("unregister_slot", "reg_b"),
+                step("kill_child", "alpha", "shutdown"),
+                step("whereis_slot", "reg_a"),
+                step("register_slot", "reg_b", "alpha"),
+                step("spawn_slot", "alpha"),
+                step("register_slot", "reg_a", "alpha"),
+            ],
+        ],
+        [
+            step("false", "true", "none", "none"),
+            [
+                step("link_slot", "self"),
+                step("unlink_slot", "self"),
+                step("peer_link_action", "alpha", "unlink"),
+                step("peer_link_action", "alpha", "link"),
+                step("peer_link_action", "beta", "relink"),
+                step("unlink_slot", "beta"),
+                step("link_slot", "missing"),
+                step("trap_exit", "invalid"),
+                step("trap_exit", "true"),
+                step("link_slot", "missing"),
+                step("fenced_exit_signal", "custom_signal"),
+                step("trap_exit", "false"),
+                step("fenced_exit_signal", "normal"),
+                step("drain_mailbox"),
+            ],
+        ],
+        [
+            step("false", "false", "reg_a", "explicit_unalias"),
+            [
+                step("alias_send", "a1", "alpha", "hello_a1"),
+                step("alias_create", "a2", "reply"),
+                step("alias_send", "a2", "beta", "one_shot"),
+                step("alias_send", "a2", "self", "dropped_after_reply"),
+                step("alias_create", "a2", "bad_opt"),
+                step("monitor_slot", "m1", "alpha", "plain"),
+                step("alias_send", "m1", "self", "plain_dropped"),
+                step("monitor_slot", "m1", "reg_a", "reply_demonitor"),
+                step("alias_send", "m1", "alpha", "reply_cancels_m1"),
+                step("demonitor_slot", "m1", "info"),
+                step("monitor_slot", "m2", "beta", "explicit_unalias"),
+                step("monitor_slot", "m1", "missing_name", "bad_opt"),
+                step("demonitor_slot", "m2", "bad_opt"),
+                step("kill_child", "beta", "normal"),
+                step("alias_send", "m2", "self", "still_alive_after_down"),
+                step("alias_unalias", "m2"),
+                step("alias_unalias", "non_ref"),
+                step("monitor_dead_queued", "m1", "demonitor"),
+                step("demonitor_slot", "m1", "info"),
+                step("demonitor_slot", "m1", "flush_info"),
+                step("drain_mailbox"),
+            ],
+        ],
+        [
+            step("true", "true", "none", "none"),
+            [
+                step("monitor_slot", "m1", "alpha", "demonitor"),
+                step("kill_child", "alpha", "shutdown"),
+                step("spawn_slot", "alpha"),
+                step("link_slot", "alpha"),
+                step("monitor_slot", "m2", "alpha", "explicit_unalias"),
+                step("trap_exit", "false"),
+                step("kill_child", "alpha", "boom"),
+                step("spawn_slot", "alpha"),
+                step("kill_child", "alpha", step("shutdown", "tag")),
+                step("race_unlink_exit", "beta", "boom"),
+                step("spawn_slot", "beta"),
+                step("race_unlink_exit", "beta", "normal"),
+                step("race_demonitor_exit", "plain", "default", "normal"),
+                step("race_demonitor_exit", "explicit_unalias", "flush", "shutdown"),
+                step("race_demonitor_exit", "reply_demonitor", "info", "normal"),
+                step("race_demonitor_exit", "reply_demonitor", "flush_info", "shutdown"),
+                step("drain_mailbox"),
+            ],
+        ],
+    ]
+
+
+def random_lifecycle_setup(rng):
+    return {
+        "tuple": [
+            rng.choice(["true", "false"]),
+            rng.choice(["true", "false"]),
+            rng.choice(["reg_a", "none"]),
+            rng.choice(["none", "explicit_unalias", "reply_demonitor"]),
+        ]
+    }
+
+
+def random_lifecycle_step(rng, number_fn):
+    def step(*items):
+        return {"tuple": list(items)}
+
+    kind = rng.choice([
+        "trap_exit",
+        "register_slot",
+        "unregister_slot",
+        "whereis_slot",
+        "link_slot",
+        "unlink_slot",
+        "peer_link_action",
+        "monitor_slot",
+        "monitor_dead_queued",
+        "demonitor_slot",
+        "alias_create",
+        "alias_unalias",
+        "alias_send",
+        "fenced_exit_signal",
+        "kill_child",
+        "spawn_slot",
+        "drain_mailbox",
+        "race_unlink_exit",
+        "race_demonitor_exit",
+    ])
+    if kind == "trap_exit":
+        return step(kind, rng.choice(["true", "false", "true", "false", "invalid"]))
+    if kind == "register_slot":
+        return step(kind, rng.choice(["reg_a", "reg_b"]), rng.choice(["alpha", "beta", "self", "bad_pid"]))
+    if kind in ["unregister_slot", "whereis_slot"]:
+        return step(kind, rng.choice(["reg_a", "reg_b"]))
+    if kind in ["link_slot", "unlink_slot"]:
+        return step(kind, rng.choice(["alpha", "beta", "self", "missing"]))
+    if kind == "peer_link_action":
+        return step(kind, rng.choice(["alpha", "beta"]), rng.choice(["link", "unlink", "relink"]))
+    if kind == "monitor_slot":
+        return step(
+            kind,
+            rng.choice(["m1", "m2"]),
+            rng.choice(["alpha", "beta", "self", "reg_a", "reg_b", "missing_name"]),
+            rng.choice(["plain", "demonitor", "explicit_unalias", "reply_demonitor", "bad_opt"]),
+        )
+    if kind == "monitor_dead_queued":
+        return step(
+            kind,
+            rng.choice(["m1", "m2"]),
+            rng.choice(["plain", "demonitor", "explicit_unalias", "reply_demonitor"]),
+        )
+    if kind == "demonitor_slot":
+        return step(
+            kind,
+            rng.choice(["m1", "m2"]),
+            rng.choice(["default", "flush", "info", "flush_info", "bad_opt"]),
+        )
+    if kind == "alias_create":
+        return step(kind, rng.choice(["a1", "a2"]), rng.choice(["default", "explicit_unalias", "reply", "bad_opt"]))
+    if kind == "alias_unalias":
+        return step(kind, rng.choice(["a1", "a2", "m1", "m2", "non_ref"]))
+    if kind == "alias_send":
+        payload = rng.choice(["payload", 0, 1, {"tuple": ["tag", number_fn()]}, {"map": [["k", 1]]}])
+        return step(kind, rng.choice(["a1", "a2", "m1", "m2"]), rng.choice(["self", "alpha", "beta"]), payload)
+    if kind == "fenced_exit_signal":
+        return step(kind, rng.choice(["normal", "shutdown", "custom_signal"]))
+    if kind == "kill_child":
+        return step(
+            kind,
+            rng.choice(["alpha", "beta"]),
+            rng.choice(["normal", "shutdown", step("shutdown", "tag"), "boom", "kill"]),
+        )
+    if kind == "spawn_slot":
+        return step(kind, rng.choice(["alpha", "beta"]))
+    if kind == "drain_mailbox":
+        return step(kind)
+    if kind == "race_unlink_exit":
+        return step(kind, rng.choice(["alpha", "beta"]), rng.choice(["normal", "shutdown", "boom"]))
+    return step(
+        "race_demonitor_exit",
+        rng.choice(["plain", "explicit_unalias", "reply_demonitor"]),
+        rng.choice(["default", "flush", "info", "flush_info"]),
+        rng.choice(["normal", "shutdown"]),
+    )
+
+
+def random_lifecycle_sequence(rng, number_fn):
+    return [
+        random_lifecycle_setup(rng),
+        [random_lifecycle_step(rng, number_fn) for _ in range(rng.randint(6, 24))],
+    ]
+
+
 def generate(seed, count, float_encoding=False):
     rng = random.Random(seed)
     encodings = float_boundaries()
@@ -217,39 +413,47 @@ def generate(seed, count, float_encoding=False):
              ({"tuple": ["key", 1]}, {"tuple": ["key", 1.0]}),
              ({"map": [["v", 0.0]]}, {"map": [["v", -0.0]]})]
     if not float_encoding:
-        for size, (a, b) in zip([0, 30, 31, 32], pairs):
+        for size, (a, b) in zip([0, 30, 31], pairs[:3]):
             for kind in ["map_sequence", "dictionary_sequence"]:
                 boundaries.append((kind, sequence(kind, size, a, b)))
-        for index, (a, b) in enumerate(pairs):
-            boundaries.append(("receive_sequence", receives(a, b, empty=index == 3)))
-        for size in [0, 7, 64, 65]:
+        for a, b in pairs[:3]:
+            boundaries.append(("receive_sequence", receives(a, b, empty=False)))
+        for size in [0, 7, 64]:
             boundaries.append(("binary_sequence", binary_scopes(size)))
+        for entry in lifecycle_sequence_boundaries():
+            boundaries.append(("lifecycle_sequence", entry))
+        for kind in ["map_sequence", "dictionary_sequence"]:
+            boundaries.append((kind, sequence(kind, 32, *pairs[3])))
+        boundaries.append(("receive_sequence", receives(*pairs[3], empty=True)))
+        boundaries.append(("binary_sequence", binary_scopes(65)))
     if float_encoding:
         boundaries = [("float_bits", args) for args in encodings]
     result = []
     for index in range(count):
         if index < len(boundaries):
             operation, args = boundaries[index]
-        elif float_encoding or index % 9 == 4:
+        elif float_encoding or index % 10 == 4:
             value, width = rng.choice(encodings[:-3])[:2]
             operation, args = "float_bits", [value, width, rng.choice([0, 1, 3, 7]), rng.choice(["big", "little"])]
-        elif index % 9 == 0:
+        elif index % 10 == 0:
             operation, args = "compare", [number(), number()]
-        elif index % 9 == 1:
+        elif index % 10 == 1:
             a = key()
             b = rng.choice([a, key(), 0.0, -0.0, 1, 1.0])
             operation, args = "maps", [a, b, rng.choice([0, 1, 2, 30, 31, 32, 33, 34])]
-        elif index % 9 == 2:
+        elif index % 10 == 2:
             value = rng.choice([-1, 0, 1, -257, 2**64 - 1, rng.getrandbits(120)])
             operation, args = "bits", [value, rng.choice([0, 1, 7, 8, 9, 31, 32, 63, 64, 65, 127, 128, 129, 255, -1]),
                                        rng.choice([0, 1, 3, 7, 8]), rng.choice(["big", "little"])]
-        elif index % 9 in [5, 6]:
-            operation = "map_sequence" if index % 9 == 5 else "dictionary_sequence"
+        elif index % 10 in [5, 6]:
+            operation = "map_sequence" if index % 10 == 5 else "dictionary_sequence"
             args = sequence(operation, rng.choice([0, 30, 31, 32, 33]), key(), key())
-        elif index % 9 == 7:
+        elif index % 10 == 7:
             operation, args = "receive_sequence", receives(key(), key(), empty=rng.randrange(4) == 0)
-        elif index % 9 == 8:
+        elif index % 10 == 8:
             operation, args = "binary_sequence", binary_scopes(rng.choice([7, 31, 32, 63, 64, 65, 96]))
+        elif index % 10 == 9:
+            operation, args = "lifecycle_sequence", random_lifecycle_sequence(rng, number)
         else:
             op = rng.choice(["add", "sub", "mul", "idiv", "mod", "shl", "shr", "band_op", "bxor_op", "fdiv"])
             a = rng.choice([0, -1, 2**63 - 1, -(2**63), rng.randint(-(2**119), 2**119)])
@@ -291,7 +495,7 @@ def reductions(value):
 
 
 def candidates(case):
-    if case["operation"] in ["map_sequence", "dictionary_sequence", "receive_sequence", "binary_sequence"]:
+    if case["operation"] in ["map_sequence", "dictionary_sequence", "receive_sequence", "binary_sequence", "lifecycle_sequence"]:
         setup, steps = case["args"]
         # Preserve setup and literal operation payloads. Deleting a state change
         # can expose a timeout or range error, but needs no result reference repair.

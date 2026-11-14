@@ -73,7 +73,8 @@
     map_singleton_iteration/2,
     map_guards/2,
     list_relations/4,
-    seq_contract/4
+    seq_contract/4,
+    lifecycle_sequence/2
 ]).
 
 %% Timer observations use delivery/monitor handshakes, not elapsed-time
@@ -2274,6 +2275,926 @@ process_liveness() ->
         Dead = {is_process_alive(Child), process_info(Child, registered_name)},
         {Alive, Unnamed, Named, Unregistered, Dead}
     end).
+
+lifecycle_sequence(Setup, Steps) ->
+    isolated(fun() ->
+        {InitialTrap, InitialLinkAlpha, InitialRegAlpha, InitialAliasMode} = Setup,
+        false = process_flag(trap_exit, InitialTrap),
+        Parent = self(),
+        {AlphaPid, AlphaFence} = spawn_lifecycle_worker(Parent),
+        {BetaPid, BetaFence} = spawn_lifecycle_worker(Parent),
+        case InitialLinkAlpha of
+            true ->
+                true = link(AlphaPid),
+                true = lifecycle_check_linked(AlphaPid),
+                true = lifecycle_check_linked(AlphaPid);
+            false ->
+                ok
+        end,
+        case InitialRegAlpha of
+            reg_a -> true = register(lynx_lifecycle_reg_a, AlphaPid);
+            none -> ok
+        end,
+        {A1, RefLabels, NextId} = init_lifecycle_alias(InitialAliasMode),
+        InitialState = #{
+            trap => InitialTrap,
+            alpha => #{pid => AlphaPid, fence => AlphaFence, status => alive, id => 1},
+            beta => #{pid => BetaPid, fence => BetaFence, status => alive, id => 1},
+            next_id => NextId,
+            pid_labels => #{AlphaPid => {alpha, 1}, BetaPid => {beta, 1}},
+            reg_a => lynx_lifecycle_reg_a,
+            reg_b => lynx_lifecycle_reg_b,
+            m1 => none,
+            m2 => none,
+            a1 => A1,
+            a2 => none,
+            ref_labels => RefLabels
+        },
+        InitSnapshot = lifecycle_snapshot(InitialState),
+        try
+            {TraceRev, FinalState} = lists:foldl(
+                fun(Step, {Acc, State}) ->
+                    {Summary, NextState} = lifecycle_step(Step, State),
+                    Snapshot = lifecycle_snapshot(NextState),
+                    {[{Summary, Snapshot} | Acc], NextState}
+                end,
+                {[], InitialState},
+                Steps
+            ),
+            cleanup_lifecycle_state(FinalState),
+            {InitSnapshot, lists:reverse(TraceRev)}
+        catch
+            Class:Reason ->
+                cleanup_lifecycle_state(InitialState),
+                erlang:raise(Class, Reason, [])
+        end
+    end).
+
+init_lifecycle_alias(none) ->
+    {none, #{}, 2};
+init_lifecycle_alias(explicit_unalias) ->
+    Ref = erlang:alias([explicit_unalias]),
+    {#{ref => Ref, mode => explicit_unalias, active => true, id => 1}, #{Ref => {a1, 1}}, 2};
+init_lifecycle_alias(reply_demonitor) ->
+    Ref = erlang:alias([reply]),
+    {#{ref => Ref, mode => reply, active => true, id => 1}, #{Ref => {a1, 1}}, 2};
+init_lifecycle_alias(reply) ->
+    Ref = erlang:alias([reply]),
+    {#{ref => Ref, mode => reply, active => true, id => 1}, #{Ref => {a1, 1}}, 2}.
+
+spawn_lifecycle_worker(Parent) ->
+    spawn_monitor(fun() -> lifecycle_worker(Parent) end).
+
+lifecycle_worker(Parent) ->
+    receive
+        {ping, Ref, Tag} ->
+            Parent ! {pong, Ref, Tag},
+            lifecycle_worker(Parent);
+        {check_linked, Ref} ->
+            {links, Links} = process_info(self(), links),
+            Parent ! {linked, Ref, lists:member(Parent, Links)},
+            lifecycle_worker(Parent);
+        {peer_action, Ref, Action} ->
+            Res =
+                case Action of
+                    link ->
+                        link(Parent);
+                    unlink ->
+                        unlink(Parent);
+                    relink ->
+                        true = unlink(Parent),
+                        link(Parent)
+                end,
+            Parent ! {peer_done, Ref, Res},
+            lifecycle_worker(Parent);
+        {send_alias, Ref, AliasRef, Msg} ->
+            AliasRef ! Msg,
+            Parent ! {alias_fenced, Ref},
+            lifecycle_worker(Parent);
+        {exit_now, Reason} ->
+            exit(Reason);
+        stop ->
+            ok
+    end.
+
+lifecycle_check_linked(ChildPid) ->
+    Ref = make_ref(),
+    ChildPid ! {check_linked, Ref},
+    receive
+        {linked, Ref, Linked} -> Linked
+    after 1000 -> timeout
+    end.
+
+ignore_error(Fun) ->
+    try
+        _ = Fun(),
+        ok
+    catch
+        _:_ -> ok
+    end.
+
+cleanup_lifecycle_state(State) ->
+    ignore_error(fun() -> unregister(lynx_lifecycle_reg_a) end),
+    ignore_error(fun() -> unregister(lynx_lifecycle_reg_b) end),
+    _ = [retire_monitor_slot(Slot, State) || Slot <- [m1, m2]],
+    _ = [retire_alias_slot(Slot, State) || Slot <- [a1, a2]],
+    lists:foreach(
+        fun(Slot) ->
+            case maps:get(Slot, State) of
+                #{pid := Pid, fence := Fence, status := alive} ->
+                    ignore_error(fun() -> unlink(Pid) end),
+                    Pid ! stop,
+                    receive
+                        {'DOWN', Fence, process, Pid, _} -> ok
+                    after 1000 -> ok
+                    end;
+                _ ->
+                    ok
+            end
+        end,
+        [alpha, beta]
+    ),
+    _ = drain(),
+    ok.
+
+lifecycle_step({trap_exit, FlagSpec}, State) ->
+    Outcome =
+        try call(erlang, process_flag, [trap_exit, FlagSpec]) of
+            Prev -> {ok, Prev}
+        catch
+            C:R -> {exception, C, R}
+        end,
+    NewState =
+        case Outcome of
+            {ok, _} when is_boolean(FlagSpec) -> State#{trap => FlagSpec};
+            _ -> State
+        end,
+    {{trap_exit, FlagSpec, Outcome, maps:get(trap, NewState)}, NewState};
+lifecycle_step({register_slot, NameSlot, TargetSpec}, State) ->
+    NameAtom = maps:get(NameSlot, State),
+    TargetTerm = resolve_register_target(TargetSpec, State),
+    Outcome =
+        try call(erlang, register, [NameAtom, TargetTerm]) of
+            Res -> {ok, Res}
+        catch
+            C:R -> {exception, C, R}
+        end,
+    {{register_slot, NameSlot, TargetSpec, Outcome, whereis_reg(NameSlot, State)}, State};
+lifecycle_step({unregister_slot, NameSlot}, State) ->
+    NameAtom = maps:get(NameSlot, State),
+    Outcome =
+        try call(erlang, unregister, [NameAtom]) of
+            Res -> {ok, Res}
+        catch
+            C:R -> {exception, C, R}
+        end,
+    {{unregister_slot, NameSlot, Outcome, whereis_reg(NameSlot, State)}, State};
+lifecycle_step({whereis_slot, NameSlot}, State) ->
+    {{whereis_slot, NameSlot, whereis_reg(NameSlot, State)}, State};
+lifecycle_step({link_slot, self}, State) ->
+    Res =
+        try call(erlang, link, [self()]) of
+            R -> {ok, R}
+        catch
+            C:Reas -> {exception, C, Reas}
+        end,
+    {{link_slot, self, Res, is_self_linked()}, State};
+lifecycle_step({link_slot, missing}, State) ->
+    {DeadPid, DeadFence} = spawn_monitor(fun() -> ok end),
+    receive
+        {'DOWN', DeadFence, process, DeadPid, normal} -> ok
+    end,
+    {{link_slot, missing, link_dead_pid(DeadPid)}, State};
+lifecycle_step({link_slot, Slot}, State) ->
+    #{pid := ChildPid, status := Status} = maps:get(Slot, State),
+    case Status of
+        dead ->
+            {{link_slot, Slot, link_dead_pid(ChildPid)}, State};
+        alive ->
+            Res =
+                try call(erlang, link, [ChildPid]) of
+                    R -> {ok, R}
+                catch
+                    C:Reas -> {exception, C, Reas}
+                end,
+            Peer1 = lifecycle_check_linked(ChildPid),
+            Peer2 = lifecycle_check_linked(ChildPid),
+            {{link_slot, Slot, Res, is_locally_linked(Slot, State), Peer1, Peer2}, State}
+    end;
+lifecycle_step({unlink_slot, self}, State) ->
+    Res = call(erlang, unlink, [self()]),
+    {{unlink_slot, self, Res, is_self_linked()}, State};
+lifecycle_step({unlink_slot, missing}, State) ->
+    {DeadPid, DeadFence} = spawn_monitor(fun() -> ok end),
+    receive
+        {'DOWN', DeadFence, process, DeadPid, normal} -> ok
+    end,
+    {{unlink_slot, missing, call(erlang, unlink, [DeadPid])}, State};
+lifecycle_step({unlink_slot, Slot}, State) ->
+    #{pid := ChildPid, status := Status} = maps:get(Slot, State),
+    Res = call(erlang, unlink, [ChildPid]),
+    case Status of
+        dead ->
+            {{unlink_slot, Slot, Res, dead}, State};
+        alive ->
+            Peer1 = lifecycle_check_linked(ChildPid),
+            Peer2 = lifecycle_check_linked(ChildPid),
+            {{unlink_slot, Slot, Res, is_locally_linked(Slot, State), Peer1, Peer2}, State}
+    end;
+lifecycle_step({peer_link_action, Slot, Action}, State) ->
+    #{pid := ChildPid, status := Status} = maps:get(Slot, State),
+    case Status of
+        dead ->
+            {{peer_link_action, Slot, Action, dead}, State};
+        alive ->
+            Tok = make_ref(),
+            ChildPid ! {peer_action, Tok, Action},
+            Res =
+                receive
+                    {peer_done, Tok, PeerRes} -> PeerRes
+                after 1000 -> timeout
+                end,
+            Peer1 = lifecycle_check_linked(ChildPid),
+            Peer2 = lifecycle_check_linked(ChildPid),
+            {
+                {peer_link_action, Slot, Action, Res, is_locally_linked(Slot, State), Peer1, Peer2},
+                State
+            }
+    end;
+lifecycle_step({monitor_slot, RefSlot, TargetSpec, Mode}, State) ->
+    State1 = retire_monitor_slot(RefSlot, State),
+    {TargetArg, TargetPid, TargetStatus, ExpectedObj} = resolve_monitor_target(TargetSpec, State1),
+    Outcome =
+        try
+            case Mode of
+                plain -> monitor(process, TargetArg);
+                demonitor -> monitor(process, TargetArg, [{alias, demonitor}]);
+                explicit_unalias -> monitor(process, TargetArg, [{alias, explicit_unalias}]);
+                reply_demonitor -> monitor(process, TargetArg, [{alias, reply_demonitor}]);
+                bad_opt -> call(erlang, monitor, [process, TargetArg, [bad_opt]])
+            end
+        catch
+            C:R -> {exception, C, R}
+        end,
+    case Outcome of
+        Ref when is_reference(Ref) ->
+            NextId = maps:get(next_id, State1),
+            RefLabels = maps:put(Ref, {RefSlot, NextId}, maps:get(ref_labels, State1)),
+            ExpectDown = TargetStatus =:= dead orelse TargetStatus =:= missing,
+            case ExpectDown of
+                true ->
+                    receive
+                        {'DOWN', Ref, process, ActualObj, DownReason} ->
+                            Entry = #{
+                                ref => Ref,
+                                obj => ExpectedObj,
+                                target_pid => TargetPid,
+                                mode => Mode,
+                                mon_active => false,
+                                alias_active => Mode =:= explicit_unalias,
+                                id => NextId
+                            },
+                            {
+                                {monitor_slot, RefSlot, TargetSpec, Mode,
+                                    {immediate_down, ActualObj =:= ExpectedObj, DownReason}},
+                                State1#{
+                                    RefSlot => Entry,
+                                    next_id => NextId + 1,
+                                    ref_labels => RefLabels
+                                }
+                            }
+                    after 1000 ->
+                        {{monitor_slot, RefSlot, TargetSpec, Mode, missing_immediate_down}, State1}
+                    end;
+                false ->
+                    Entry = #{
+                        ref => Ref,
+                        obj => ExpectedObj,
+                        target_pid => TargetPid,
+                        mode => Mode,
+                        mon_active => true,
+                        alias_active => Mode =/= plain,
+                        id => NextId
+                    },
+                    {{monitor_slot, RefSlot, TargetSpec, Mode, ok}, State1#{
+                        RefSlot => Entry,
+                        next_id => NextId + 1,
+                        ref_labels => RefLabels
+                    }}
+            end;
+        Exception ->
+            {{monitor_slot, RefSlot, TargetSpec, Mode, Exception}, State1}
+    end;
+lifecycle_step({monitor_dead_queued, RefSlot, Mode}, State) ->
+    State1 = retire_monitor_slot(RefSlot, State),
+    {DeadPid, DeadFence} = spawn_monitor(fun() -> ok end),
+    receive
+        {'DOWN', DeadFence, process, DeadPid, normal} -> ok
+    end,
+    NextId = maps:get(next_id, State1),
+    PidLabels = maps:put(DeadPid, {dead_worker, NextId}, maps:get(pid_labels, State1)),
+    Ref =
+        case Mode of
+            plain -> monitor(process, DeadPid);
+            demonitor -> monitor(process, DeadPid, [{alias, demonitor}]);
+            explicit_unalias -> monitor(process, DeadPid, [{alias, explicit_unalias}]);
+            reply_demonitor -> monitor(process, DeadPid, [{alias, reply_demonitor}])
+        end,
+    receive
+        {'DOWN', Ref, process, DeadPid, noproc} = DownMsg ->
+            self() ! DownMsg,
+            RefLabels = maps:put(Ref, {RefSlot, NextId}, maps:get(ref_labels, State1)),
+            Entry = #{
+                ref => Ref,
+                obj => DeadPid,
+                target_pid => DeadPid,
+                mode => Mode,
+                mon_active => false,
+                alias_active => Mode =:= explicit_unalias,
+                id => NextId
+            },
+            {{monitor_dead_queued, RefSlot, Mode, queued}, State1#{
+                RefSlot => Entry,
+                next_id => NextId + 1,
+                pid_labels => PidLabels,
+                ref_labels => RefLabels
+            }}
+    after 1000 ->
+        {{monitor_dead_queued, RefSlot, Mode, missing_down}, State1}
+    end;
+lifecycle_step({demonitor_slot, RefSlot, OptsMode}, State) ->
+    Entry = maps:get(RefSlot, State),
+    TargetRef =
+        case Entry of
+            none -> make_ref();
+            #{ref := Ref} -> Ref
+        end,
+    Outcome =
+        try
+            case OptsMode of
+                default -> demonitor(TargetRef);
+                flush -> demonitor(TargetRef, [flush]);
+                info -> demonitor(TargetRef, [info]);
+                flush_info -> demonitor(TargetRef, [flush, info]);
+                bad_opt -> call(erlang, demonitor, [TargetRef, [bad_opt]])
+            end
+        of
+            Res -> {ok, Res}
+        catch
+            C:R -> {exception, C, R}
+        end,
+    NewState =
+        case {Entry, Outcome} of
+            {none, _} ->
+                State;
+            {#{mode := Mode, alias_active := AliasActive}, {ok, _}} ->
+                NewAlias = AliasActive andalso (Mode =:= explicit_unalias),
+                State#{RefSlot => Entry#{mon_active => false, alias_active => NewAlias}};
+            _ ->
+                State
+        end,
+    {{demonitor_slot, RefSlot, OptsMode, Outcome}, NewState};
+lifecycle_step({alias_create, AliasSlot, Mode}, State) ->
+    State1 = retire_alias_slot(AliasSlot, State),
+    Outcome =
+        try
+            case Mode of
+                default -> erlang:alias();
+                explicit_unalias -> call(erlang, alias, [[explicit_unalias]]);
+                reply -> call(erlang, alias, [[reply]]);
+                bad_opt -> call(erlang, alias, [[bad_opt]])
+            end
+        catch
+            C:R -> {exception, C, R}
+        end,
+    case Outcome of
+        Ref when is_reference(Ref) ->
+            NextId = maps:get(next_id, State1),
+            RefLabels = maps:put(Ref, {AliasSlot, NextId}, maps:get(ref_labels, State1)),
+            NormMode =
+                case Mode of
+                    default -> explicit_unalias;
+                    _ -> Mode
+                end,
+            Entry = #{ref => Ref, mode => NormMode, active => true, id => NextId},
+            {{alias_create, AliasSlot, Mode, ok}, State1#{
+                AliasSlot => Entry,
+                next_id => NextId + 1,
+                ref_labels => RefLabels
+            }};
+        Exception ->
+            {{alias_create, AliasSlot, Mode, Exception}, State1}
+    end;
+lifecycle_step({alias_unalias, non_ref}, State) ->
+    Outcome =
+        try call(erlang, unalias, [not_a_ref]) of
+            Res -> {ok, Res}
+        catch
+            C:R -> {exception, C, R}
+        end,
+    {{alias_unalias, non_ref, Outcome}, State};
+lifecycle_step({alias_unalias, AnyRefSlot}, State) ->
+    Entry = maps:get(AnyRefSlot, State),
+    TargetRef =
+        case Entry of
+            none -> make_ref();
+            #{ref := Ref} -> Ref
+        end,
+    Outcome =
+        try call(erlang, unalias, [TargetRef]) of
+            Res -> {ok, Res}
+        catch
+            C:R -> {exception, C, R}
+        end,
+    NewState =
+        case {Entry, AnyRefSlot} of
+            {none, _} ->
+                State;
+            {_, Slot} when Slot =:= a1; Slot =:= a2 ->
+                State#{Slot => Entry#{active => false}};
+            {_, Slot} when Slot =:= m1; Slot =:= m2 ->
+                State#{Slot => Entry#{alias_active => false}}
+        end,
+    {{alias_unalias, AnyRefSlot, Outcome}, NewState};
+lifecycle_step({alias_send, AnyRefSlot, Via, Payload}, State) ->
+    case maps:get(AnyRefSlot, State) of
+        none ->
+            {{alias_send, AnyRefSlot, Via, no_ref}, State};
+        #{ref := Ref} = Entry ->
+            ViaPid =
+                case Via of
+                    self ->
+                        {ok, self()};
+                    _ ->
+                        case maps:get(Via, State) of
+                            #{pid := Pid, status := alive} -> {ok, Pid};
+                            _ -> dead
+                        end
+                end,
+            case ViaPid of
+                dead ->
+                    {{alias_send, AnyRefSlot, Via, via_dead}, State};
+                {ok, SenderPid} ->
+                    Tok = make_ref(),
+                    Msg = {alias_msg, Tok, AnyRefSlot, Payload},
+                    case Via of
+                        self ->
+                            Ref ! Msg,
+                            self() ! {alias_fence, Tok},
+                            receive
+                                {alias_fence, Tok} -> ok
+                            end;
+                        _ ->
+                            SenderPid ! {send_alias, Tok, Ref, Msg},
+                            receive
+                                {alias_fenced, Tok} -> ok
+                            after 1000 -> ok
+                            end
+                    end,
+                    Delivery =
+                        receive
+                            {alias_msg, Tok, AnyRefSlot, Payload} -> {delivered, Payload}
+                        after 0 -> dropped
+                        end,
+                    NewState = update_state_after_alias_send(AnyRefSlot, Entry, Delivery, State),
+                    {{alias_send, AnyRefSlot, Via, Delivery}, NewState}
+            end
+    end;
+lifecycle_step({fenced_exit_signal, Reason}, State) ->
+    Trap = maps:get(trap, State),
+    SentReason =
+        case Trap of
+            true -> Reason;
+            false -> normal
+        end,
+    Parent = self(),
+    Tok = make_ref(),
+    {Helper, HelperFence} = spawn_monitor(fun() ->
+        true = exit(Parent, SentReason),
+        Parent ! {self(), exit_fenced, Tok}
+    end),
+    receive
+        {Helper, exit_fenced, Tok} -> ok
+    after 1000 -> ok
+    end,
+    receive
+        {'DOWN', HelperFence, process, Helper, normal} -> ok
+    after 1000 -> ok
+    end,
+    NextId = maps:get(next_id, State),
+    PidLabels = maps:put(Helper, {helper, NextId}, maps:get(pid_labels, State)),
+    StatusTag =
+        case Trap of
+            true -> queued;
+            false -> ignored_untrapped_normal
+        end,
+    {{fenced_exit_signal, Reason, StatusTag}, State#{
+        next_id => NextId + 1,
+        pid_labels => PidLabels
+    }};
+lifecycle_step({kill_child, Slot, Reason}, State) ->
+    case maps:get(Slot, State) of
+        #{status := dead} ->
+            {{kill_child, Slot, Reason, already_dead}, State};
+        #{pid := ChildPid, fence := FenceRef} = ChildEntry ->
+            Trap = maps:get(trap, State),
+            WasLinked = is_locally_linked(Slot, State),
+            {Result, State1} = kill_child_process(
+                Slot, ChildPid, FenceRef, Reason, Trap, WasLinked, State
+            ),
+            {{kill_child, Slot, Reason, Result}, State1#{Slot => ChildEntry#{status => dead}}}
+    end;
+lifecycle_step({spawn_slot, Slot}, State) ->
+    Parent = self(),
+    {RetiredDowns, State1} =
+        case maps:get(Slot, State) of
+            #{pid := OldPid, fence := OldFence, status := alive} ->
+                true = unlink(OldPid),
+                _ = lifecycle_check_linked(OldPid),
+                _ = lifecycle_check_linked(OldPid),
+                OldPid ! stop,
+                receive
+                    {'DOWN', OldFence, process, OldPid, _} -> ok
+                after 1000 -> ok
+                end,
+                consume_target_monitors(OldPid, State);
+            _ ->
+                {[], State}
+        end,
+    {NewPid, NewFence} = spawn_lifecycle_worker(Parent),
+    NextId = maps:get(next_id, State1),
+    PidLabels = maps:put(NewPid, {Slot, NextId}, maps:get(pid_labels, State1)),
+    NewEntry = #{pid => NewPid, fence => NewFence, status => alive, id => NextId},
+    {{spawn_slot, Slot, spawned, RetiredDowns}, State1#{
+        Slot => NewEntry,
+        next_id => NextId + 1,
+        pid_labels => PidLabels
+    }};
+lifecycle_step({drain_mailbox}, State) ->
+    Messages = [normalize_mailbox_message(M, State) || M <- drain()],
+    {{drain_mailbox, Messages}, State};
+lifecycle_step({race_unlink_exit, Slot, Reason}, State) ->
+    case maps:get(Slot, State) of
+        #{status := dead} ->
+            {{race_unlink_exit, Slot, Reason, already_dead}, State};
+        #{pid := ChildPid, fence := FenceRef} = ChildEntry ->
+            Trap = maps:get(trap, State),
+            WasLinked = is_locally_linked(Slot, State),
+            {ObsInfo, UnlinkedSelf} = prepare_untrapped_link_observer(
+                ChildPid, Trap, WasLinked, Reason
+            ),
+            Parent = self(),
+            {Worker, WorkerRef} = spawn_monitor(fun() ->
+                true = link(ChildPid),
+                Parent ! {self(), ready},
+                unlink_wait_dead(ChildPid),
+                true = unlink(ChildPid),
+                Parent ! {self(), unlinked},
+                receive
+                    stop -> ok
+                end
+            end),
+            receive
+                {Worker, ready} -> ok
+            end,
+            ChildPid ! {exit_now, Reason},
+            receive
+                {'DOWN', FenceRef, process, ChildPid, ChildDownR} -> ok
+            end,
+            Worker ! stop,
+            WorkerDown =
+                receive
+                    {'DOWN', WorkerRef, process, Worker, R} -> R
+                end,
+            RaceValid =
+                receive
+                    {Worker, unlinked} -> WorkerDown =:= normal
+                after 0 -> Reason =/= normal andalso WorkerDown =:= Reason
+                end,
+            ObsValid = verify_link_observer(ObsInfo, ChildDownR),
+            _ = consume_trapped_link_exit(ChildPid, Trap, WasLinked andalso not UnlinkedSelf),
+            {_MonDowns, State1} = consume_target_monitors(ChildPid, State),
+            Valid = RaceValid andalso ObsValid andalso (ChildDownR =:= Reason),
+            {{race_unlink_exit, Slot, Reason, Valid}, State1#{Slot => ChildEntry#{status => dead}}}
+    end;
+lifecycle_step({race_demonitor_exit, Mode, OptsMode, Reason}, State) ->
+    Parent = self(),
+    {Child, Fence} = spawn_lifecycle_worker(Parent),
+    Opts =
+        case Mode of
+            plain -> [];
+            demonitor -> [{alias, demonitor}];
+            explicit_unalias -> [{alias, explicit_unalias}];
+            reply_demonitor -> [{alias, reply_demonitor}]
+        end,
+    Ref = monitor(process, Child, Opts),
+    Child ! {exit_now, Reason},
+    Ret =
+        case OptsMode of
+            default -> demonitor(Ref);
+            flush -> demonitor(Ref, [flush]);
+            info -> demonitor(Ref, [info]);
+            flush_info -> demonitor(Ref, [flush, info])
+        end,
+    receive
+        {'DOWN', Fence, process, Child, FenceR} -> ok
+    end,
+    DownPresent =
+        case {OptsMode, Ret} of
+            {info, false} ->
+                receive
+                    {'DOWN', Ref, process, Child, DownR} -> {down, DownR =:= Reason}
+                after 1000 -> missing_down
+                end;
+            _ ->
+                receive
+                    {'DOWN', Ref, process, Child, DownR} -> {down, DownR =:= Reason}
+                after 0 -> none
+                end
+        end,
+    case OptsMode of
+        default -> demonitor(Ref, [flush]);
+        _ -> true
+    end,
+    RetAndDownValid =
+        case OptsMode of
+            default ->
+                Ret =:= true andalso (DownPresent =:= none orelse DownPresent =:= {down, true});
+            flush ->
+                Ret =:= true andalso DownPresent =:= none;
+            info ->
+                (Ret =:= true andalso DownPresent =:= none) orelse
+                    (Ret =:= false andalso DownPresent =:= {down, true});
+            flush_info ->
+                (Ret =:= true orelse Ret =:= false) andalso DownPresent =:= none
+        end,
+    Unaliased = erlang:unalias(Ref),
+    AliasValid =
+        case Mode of
+            plain -> Unaliased =:= false;
+            explicit_unalias -> Unaliased =:= true;
+            _ -> Unaliased =:= false
+        end,
+    Valid = (FenceR =:= Reason) andalso RetAndDownValid andalso AliasValid,
+    {{race_demonitor_exit, Mode, OptsMode, Reason, Valid}, State}.
+
+resolve_register_target(self, _State) ->
+    self();
+resolve_register_target(bad_pid, _State) ->
+    not_a_pid;
+resolve_register_target(Slot, State) ->
+    maps:get(pid, maps:get(Slot, State)).
+
+resolve_monitor_target(self, _State) ->
+    {self(), self(), alive, self()};
+resolve_monitor_target(missing_name, _State) ->
+    {lynx_lifecycle_missing, none, missing, {lynx_lifecycle_missing, node()}};
+resolve_monitor_target(Slot, State) when Slot =:= alpha; Slot =:= beta ->
+    #{pid := Pid, status := Status} = maps:get(Slot, State),
+    {Pid, Pid, Status, Pid};
+resolve_monitor_target(NameSlot, State) when NameSlot =:= reg_a; NameSlot =:= reg_b ->
+    NameAtom = maps:get(NameSlot, State),
+    case whereis(NameAtom) of
+        undefined ->
+            {NameAtom, none, missing, {NameAtom, node()}};
+        Pid ->
+            {NameAtom, Pid, alive, {NameAtom, node()}}
+    end.
+
+link_dead_pid(DeadPid) ->
+    try call(erlang, link, [DeadPid]) of
+        true ->
+            receive
+                {'EXIT', DeadPid, ExitR} -> {ok, ExitR}
+            after 1000 -> missing_dead_exit
+            end
+    catch
+        C:R -> {exception, C, R}
+    end.
+
+retire_monitor_slot(RefSlot, State) ->
+    case maps:get(RefSlot, State) of
+        none ->
+            State;
+        #{ref := OldRef} ->
+            ignore_error(fun() -> demonitor(OldRef, [flush]) end),
+            ignore_error(fun() -> erlang:unalias(OldRef) end),
+            State#{RefSlot => none}
+    end.
+
+retire_alias_slot(AliasSlot, State) ->
+    case maps:get(AliasSlot, State) of
+        none ->
+            State;
+        #{ref := OldRef} ->
+            ignore_error(fun() -> erlang:unalias(OldRef) end),
+            State#{AliasSlot => none}
+    end.
+
+update_state_after_alias_send(AnyRefSlot, Entry, {delivered, _}, State) when
+    AnyRefSlot =:= a1; AnyRefSlot =:= a2
+->
+    case maps:get(mode, Entry) of
+        reply -> State#{AnyRefSlot => Entry#{active => false}};
+        _ -> State
+    end;
+update_state_after_alias_send(AnyRefSlot, Entry, {delivered, _}, State) when
+    AnyRefSlot =:= m1; AnyRefSlot =:= m2
+->
+    case maps:get(mode, Entry) of
+        reply_demonitor ->
+            State#{AnyRefSlot => Entry#{mon_active => false, alias_active => false}};
+        _ ->
+            State
+    end;
+update_state_after_alias_send(_AnyRefSlot, _Entry, _Delivery, State) ->
+    State.
+
+prepare_untrapped_link_observer(ChildPid, false, true, Reason) when Reason =/= normal ->
+    Parent = self(),
+    ObsTok = make_ref(),
+    {ObsPid, ObsMon} = spawn_monitor(fun() ->
+        true = link(ChildPid),
+        Parent ! {self(), obs_ready, ObsTok},
+        receive
+            stop -> ok
+        end
+    end),
+    receive
+        {ObsPid, obs_ready, ObsTok} -> ok
+    end,
+    true = lifecycle_check_linked(ChildPid),
+    true = lifecycle_check_linked(ChildPid),
+    true = unlink(ChildPid),
+    _ = lifecycle_check_linked(ChildPid),
+    false = lifecycle_check_linked(ChildPid),
+    {{ObsPid, ObsMon}, true};
+prepare_untrapped_link_observer(_ChildPid, _Trap, _WasLinked, _Reason) ->
+    {none, false}.
+
+verify_link_observer(none, _Expected) ->
+    true;
+verify_link_observer({ObsPid, ObsMon}, Expected) ->
+    ObsDown =
+        receive
+            {'DOWN', ObsMon, process, ObsPid, R} -> R
+        after 1000 -> missing_observer_down
+        end,
+    ObsDown =:= Expected.
+
+consume_trapped_link_exit(ChildPid, true, true) ->
+    receive
+        {'EXIT', ChildPid, LinkExitR} -> {trapped_exit, LinkExitR}
+    after 1000 -> missing_link_exit
+    end;
+consume_trapped_link_exit(_ChildPid, _Trap, _WasLinked) ->
+    none.
+
+kill_child_process(_Slot, ChildPid, FenceRef, Reason, Trap, WasLinked, State) ->
+    {ObsInfo, UnlinkedSelf} = prepare_untrapped_link_observer(ChildPid, Trap, WasLinked, Reason),
+    case Reason of
+        kill -> true = exit(ChildPid, kill);
+        _ -> ChildPid ! {exit_now, Reason}
+    end,
+    ChildDownR =
+        receive
+            {'DOWN', FenceRef, process, ChildPid, DownR} -> DownR
+        after 1000 -> missing_fence_down
+        end,
+    LinkOutcome =
+        case ObsInfo of
+            {ObsPid, ObsMon} ->
+                ObsDown =
+                    receive
+                        {'DOWN', ObsMon, process, ObsPid, R} -> R
+                    after 1000 -> missing_observer_down
+                    end,
+                {observer_linked_exit, ObsDown};
+            none ->
+                consume_trapped_link_exit(ChildPid, Trap, WasLinked andalso not UnlinkedSelf)
+        end,
+    {MonDowns, State1} = consume_target_monitors(ChildPid, State),
+    {{ok, ChildDownR, LinkOutcome, MonDowns}, State1}.
+
+consume_target_monitors(TargetPid, State) ->
+    lists:foldl(
+        fun(RefSlot, {Acc, CurState}) ->
+            case maps:get(RefSlot, CurState) of
+                #{
+                    ref := Ref,
+                    obj := ExpectedObj,
+                    target_pid := TargetPid,
+                    mon_active := true,
+                    mode := Mode,
+                    alias_active := AliasActive
+                } = Entry ->
+                    DownOutcome =
+                        receive
+                            {'DOWN', Ref, process, ActualObj, R} ->
+                                {ActualObj =:= ExpectedObj, R}
+                        after 1000 -> missing_down
+                        end,
+                    NewAliasActive = AliasActive andalso (Mode =:= explicit_unalias),
+                    NextEntry = Entry#{mon_active => false, alias_active => NewAliasActive},
+                    {Acc ++ [{RefSlot, DownOutcome}], CurState#{RefSlot => NextEntry}};
+                _ ->
+                    {Acc, CurState}
+            end
+        end,
+        {[], State},
+        [m1, m2]
+    ).
+
+lifecycle_snapshot(State) ->
+    Trap = maps:get(trap, State),
+    Links =
+        [Slot || Slot <- [alpha, beta], is_locally_linked(Slot, State)] ++
+            [self || is_self_linked()],
+    {
+        Trap,
+        Links,
+        {whereis_reg(reg_a, State), whereis_reg(reg_b, State)},
+        {slot_status(alpha, State), slot_status(beta, State)},
+        {monitor_summary(m1, State), monitor_summary(m2, State)},
+        {alias_summary(a1, State), alias_summary(a2, State)}
+    }.
+
+is_locally_linked(Slot, State) ->
+    #{pid := Pid} = maps:get(Slot, State),
+    {links, Links} = process_info(self(), links),
+    lists:member(Pid, Links).
+
+is_self_linked() ->
+    {links, Links} = process_info(self(), links),
+    lists:member(self(), Links).
+
+whereis_reg(NameSlot, State) ->
+    NameAtom = maps:get(NameSlot, State),
+    case whereis(NameAtom) of
+        undefined ->
+            undefined;
+        Pid when Pid =:= self() ->
+            self;
+        Pid ->
+            case maps:find(Pid, maps:get(pid_labels, State)) of
+                {ok, {Slot, _Id}} when Slot =:= alpha; Slot =:= beta -> Slot;
+                {ok, Label} -> Label;
+                error -> other_pid
+            end
+    end.
+
+slot_status(Slot, State) ->
+    #{pid := Pid, status := Status} = maps:get(Slot, State),
+    {Status, is_process_alive(Pid)}.
+
+monitor_summary(RefSlot, State) ->
+    case maps:get(RefSlot, State) of
+        none ->
+            none;
+        #{mode := Mode, mon_active := MonActive, alias_active := AliasActive} ->
+            {Mode, MonActive, AliasActive}
+    end.
+
+alias_summary(AliasSlot, State) ->
+    case maps:get(AliasSlot, State) of
+        none -> none;
+        #{mode := Mode, active := Active} -> {Mode, Active}
+    end.
+
+normalize_mailbox_message({'EXIT', Pid, Reason}, State) ->
+    Label =
+        case Pid =:= self() of
+            true -> self;
+            false -> maps:get(Pid, maps:get(pid_labels, State), unknown_pid)
+        end,
+    {exit_msg, Label, sanitize_term(Reason)};
+normalize_mailbox_message({'DOWN', Ref, process, Obj, Reason}, State) ->
+    RefLabel = maps:get(Ref, maps:get(ref_labels, State), unknown_ref),
+    ObjLabel =
+        case Obj of
+            {NameAtom, Node} when Node =:= node() -> {reg_name, NameAtom};
+            _ when Obj =:= self() -> self;
+            _ when is_pid(Obj) -> maps:get(Obj, maps:get(pid_labels, State), unknown_pid);
+            _ -> sanitize_term(Obj)
+        end,
+    {down_msg, RefLabel, ObjLabel, sanitize_term(Reason)};
+normalize_mailbox_message({alias_msg, _Tok, AnyRefSlot, Payload}, _State) ->
+    {alias_msg, AnyRefSlot, sanitize_term(Payload)};
+normalize_mailbox_message(Other, _State) ->
+    {unexpected, sanitize_term(Other)}.
+
+sanitize_term(Term) when is_pid(Term) ->
+    raw_pid;
+sanitize_term(Term) when is_reference(Term) ->
+    raw_ref;
+sanitize_term(Term) when is_tuple(Term) ->
+    list_to_tuple([sanitize_term(E) || E <- tuple_to_list(Term)]);
+sanitize_term([H | T]) ->
+    [sanitize_term(H) | sanitize_term(T)];
+sanitize_term([]) ->
+    [];
+sanitize_term(Term) ->
+    Term.
 
 raise_exception(Class, Reason, Stack) ->
     try erlang:raise(Class, Reason, Stack) of
