@@ -629,7 +629,7 @@ seq(From, To, Incr) when
     error(badarg);
 seq(To, To, 0) ->
     [To];
-seq(From, To, Incr) when From =:= To + Incr ->
+seq(From, To, Incr) when (Incr > 0 andalso To < From) orelse (Incr < 0 andalso To > From) ->
     [];
 seq(From, To, Incr) ->
     Last = From + ((To - From) div Incr) * Incr,
