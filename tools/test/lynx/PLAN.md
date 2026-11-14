@@ -16,16 +16,17 @@ runner semantics in [README.md](README.md).
   `b9be5b8e6e4a1330685ef60ff150903e90670d4c` in the latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 4,301 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 4,413 public-behavior recipes inspired by Lean tests
   and upstream examples. Source attribution is not an assertion of theorem
   premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
   the proved postcondition to be true on both VMs: five integer singleton sums,
   the empty sum, and thirteen protocol postconditions. Other matching
   differential results alone do not establish a property.
-- Generated testing currently covers nine operation families: comparisons,
+- Generated testing currently covers ten operation families: comparisons,
   arithmetic, maps, integer bitstrings, float encoding, map/dictionary
-  sequences, selective-receive sequences, and binary scope sequences. It does
+  sequences, selective-receive sequences, binary scope sequences, and
+  process-lifecycle sequences. It does
   not generate arbitrary Erlang programs or enumerate scheduler interleavings.
 - Dictionary queries, invalid receive timeouts, suspended receives, signal and
   alias combinations, and dictionary/scoped-split GC regressions already have
@@ -33,8 +34,9 @@ runner semantics in [README.md](README.md).
   families. Short float formatting is outside the planned fixes.
 
 The supported checkout has 26 Lean test files, now including
-`Modules/Timers.lean`. Hashing still has no attributed recipes; batch 5 adds
-finite set samples without interpreting the deliberately unmodeled theorem.
+`Modules/Timers.lean` and `Modules/Hashing.lean` (batch 4 retains absent
+`erlang:phash2/1,2` support as an explicit API gap, while batch 5 adds finite
+set samples without interpreting the deliberately unmodeled theorem).
 Fixture validation does not establish complete runtime-model support.
 
 ## Latest upstream refresh
@@ -462,20 +464,48 @@ claimed for this extension.
 
 ### 4. Add portable hashing coverage
 
-- [ ] Inventory AtomVM support for `erlang:phash2/1,2` before implementing recipes.
+- [x] Inventory AtomVM support for `erlang:phash2/1,2` before implementing recipes.
   Treat absent support as an API gap, not a skipped successful case.
-- [ ] Translate observable examples from `Modules/Hashing.lean`: signed and large
+- [x] Translate observable examples from `Modules/Hashing.lean`: signed and large
   integers, signed zeros, Unicode atoms, proper/improper lists, nested tuples/maps,
   byte binaries, partial bitstrings, and larger maps.
-- [ ] Exercise default range, 1, non-power-of-two ranges, 2^32, and invalid ranges.
+- [x] Exercise default range, 1, non-power-of-two ranges, 2^32, and invalid ranges.
   Compare actual OTP results and independently check selected fixed vectors.
-- [ ] Normalize model duplicate-binding maps to their effective public contents.
+- [x] Normalize model duplicate-binding maps to their effective public contents.
   Do not copy synthetic PID/reference/function identities into cross-VM hash
   expectations. Verify any live-identity hash properties within each run.
 
 Owners: `lean_runtime.py`, `differential.erl`, `test_validate.py`; runtime support,
 if needed, is separate. Done when a wrong hash or range reduction is detected,
 not merely a result of the expected type.
+
+Batch 4 added on 2026-11-14 against OTP 29: 112 portable hashing recipes
+(`4,301 -> 4,413` runtime cases total), covering all 78 unique vectors from
+`Modules/Hashing.lean` (signed and large integers up to 128-bit/decimal bignums,
+positive/negative zero and subnormal floats, ASCII/Latin-1/Unicode atoms, byte
+binaries and partial bitstrings, proper/improper lists, nested tuples/maps, and
+the 40-entry map), valid range reductions (`1`, `2`, `7`, `13`, `97`, `98`,
+`255`, `256`, `65537`, `1000003`, `2^27 - 1`, `2^27`, `2^32 - 1`, `2^32`),
+invalid range rejections (`0`, negative, `> 2^32`, float, atom, list), shadowed
+and reordered duplicate-binding maps across size boundaries (`31/32/33`, `40`)
+and exact numeric/partial-bitstring keys, and within-run closure/PID/reference
+identity checks (without serializing runtime-specific hash numbers).
+
+Source attribution validates all 7 `Modules/Hashing.lean` sites (`guard:1..5`,
+`shadowed_bindings_hash`, and `capture_hash`), bringing inventory site coverage
+to 200 of 426 across all 26 files. Both host-interpreter (`build`) and `aarch64`
+precompiled (`.amp/in/build-native`) 112-case replays match 0 and report 112
+failures with 0 unverified references: OTP verifies 102 `{ok, ...}` results and
+10 `error:badarg` exceptions, while AtomVM reports `{exception, error, undef}` on
+every case because `erlang:phash2/1,2` is unimplemented (`TODO` in
+`src/libAtomVM/ets_multimap.c`). Decoded expected and target results agree across
+modes, and all 113 native probe/helper `.beam` files contain `avmN` and no `Code`
+chunk. Nineteen enabled CLI tests pass (20 total, with one optional
+`LYNX_CHECKOUT` fixture test skipped), including handwritten Elixir/OTP vector,
+range-reduction, and identity oracles in
+`test_portable_hashing_observations_have_independent_oracles`. No AtomVM runtime
+code was modified. Evidence is under `.amp/in/artifacts/batch4-hashing/`
+(`hashing-cases.json`, `focused-interpreter/`, and `focused-native/`).
 
 ### 5. Add version-2 set algebra
 
