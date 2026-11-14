@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   `2aa1467d4c28c4bffd5f5d205ebb197e261f85a4` in the latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 4,413 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 4,449 public-behavior recipes inspired by Lean tests
   and upstream examples. Source attribution is not an assertion of theorem
   premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -247,6 +247,18 @@ to `b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de`:
   with Lean `4.35.0` and `LYNX_CHECKOUT=/Users/petermm/OSScontrib/lynx`), and
   `lean_runtime.inventory()` reports `200/428` sampled sites with zero missing
   attributions.
+- Follow-up coverage expansion for `0956a05` / `97b8177` / `5f1ff5a`: adds 36
+  cases (`4,413 -> 4,449`) across `differential:await_many_drain/1,2` (6
+  `examples/elixir/task.exs#await_many_drains_replies` multi-worker drain
+  scenarios plus 18 `Modules/Signals` variants across `reply_demonitor`,
+  `explicit_unalias`, and `demonitor`) and `differential:many_sends/2` (12 cases
+  for `0`, `1`, and `30` sends to `dead`, `live`, `self`, and `stale_alias`),
+  bringing `lean_runtime.inventory()` coverage to `204/428` sites
+  (`Modules/Process.lean` `15/49`, `Modules/Signals.lean` `18/20`). All 36
+  cases match OTP 29 across interpreter (`build`), `aarch64` precompiled
+  (`.amp/in/build-native`), and `aarch64` on-demand JIT
+  (`.amp/in/build-on-demand`), and `test_validate.py` adds
+  `test_await_many_and_many_sends_observations_have_independent_oracles`.
 
 ## Coverage batches
 
