@@ -742,20 +742,44 @@ The protocol fixture packages Lynx's executable `Elixir.Lynx.Support.*` modules
 `exavmlib.avm`. Build that library before running `--lynx`. Its path and hash are
 recorded in `run.json`; host Elixir standard-library beams are not packaged.
 Interpreter execution uses the exact proof-input fixture binaries. For a
-JIT/precompiled build, the script transforms those same binaries
+precompiled build (`AVM_ENABLE_PRECOMPILED=ON`, `AVM_DISABLE_JIT=ON`), the script
+transforms those same binaries
 to native-only code using that build's JIT compiler, including the bundled
 exavmlib when protocols are selected. It selects the matching native runtime
 library and eavmlib archive automatically, loading native libraries before
 bytecode copies embedded in the aggregate archive. Build the matching eavmlib
 target too (for example, `eavmlib_aarch64`); extra library hashes are recorded.
-Cross-target/emulator runs are not supported.
+Emscripten/Node (`wasm32`) is supported with `--host-build`; bare-metal boards
+remain unsupported.
 
 Use `--timeout` to adjust the default five-second bound per runtime call. Host
-compile/proof/compare commands have a ten-minute bound. Both modes support
-interpreter and native-only JIT/precompiled execution with the matching runtime
-library. Neither covers on-demand JIT compilation, scheduler interleavings, GC
-stress, or embedded platforms. No CI workflow or Lynx dependency is added to the
-normal AtomVM build/tests. Run `--help` for options.
+compile/proof/compare commands have a ten-minute bound. `run.json` records the
+resolved `execution_mode` (`interpreter`, `on_demand_jit`, `precompiled`, or
+`jit+precompiled`), `target` (`platform`, `arch`, `word_size`, `float_bits`, and
+CMake feature flags), and SHA-256 hashes for the runtime, optional `.wasm`
+module, and libraries. `failures.json`, `unverified.json`, and `actuals.json`
+classify errors and timeouts by stage (`oracle`, `semantic`, or `transport`,
+separated by `LYNX_SEMANTIC_DONE\n` after `actual()` completes).
+
+Additional target and representation modes:
+
+- On-demand JIT (`AVM_DISABLE_JIT=OFF`, `AVM_ENABLE_PRECOMPILED=OFF`): keep
+  probe/helper BEAMs in bytecode form (`--timeout 30` recommended for cold JIT
+  compilation) so `code_server` compiles them on demand at runtime.
+- Emscripten / `wasm32` (`src/platforms/emscripten` with `-DAVM_EMSCRIPTEN_ENV=node`):
+  pass `--build <wasm-build> --host-build <host-build>` so `node` executes
+  `AtomVM.mjs` while `<host-build>` supplies `PackBEAM` and
+  `atomvmlib-emscripten.avm`; 64-bit-immediate `word_size_dependent` recipes
+  (`lists:keyfind/3` / `lists:keymember/3` at `±9007199254740993`) are marked
+  `unverified` (`stage: "oracle"`) against a 64-bit host OTP oracle.
+- Single-precision floats (`AVM_USE_32BIT_FLOAT=ON`): pass `--float32` to add
+  10 IEEE-754 `binary32` runtime arithmetic/rounding/overflow/underflow cases
+  with explicit `float32_expected` ETF oracles; unannotated `binary64` float
+  results are marked `unverified` (`stage: "oracle"`).
+
+Scheduler interleavings, GC stress, and bare-metal embedded boards remain outside
+the CLI runner. No CI workflow or Lynx dependency is added to the normal AtomVM
+build/tests. Run `--help` for options.
 
 The 2026-11-11 aarch64 precompiled replay matches OTP 29 for both saved
 1,000-case seeded batches (`20261111` and `20261112`). The saved runtime corpus
@@ -769,13 +793,17 @@ of every bundled library module. See [PLAN.md](PLAN.md) and
 The runner's CLI integration tests check seeded replay, independent encoding byte
 oracles, deliberately wrong/malformed target output, reduction and replay, and
 continuation after reference timeouts/undefined calls. They also check scoped Lean
-sample inventories, unverified counts, stale source attribution rejection, and
-independent Unicode/short-circuit/process/receive result oracles:
+sample inventories, unverified counts, stale source attribution rejection,
+on-demand JIT compilation, `oracle`/`semantic`/`transport` stage classification,
+32-bit word-size / `--float32` representation guards, and independent
+Unicode/short-circuit/process/receive/hashing result oracles:
 
 ```sh
 python3 -B -m unittest discover -s tools/test/lynx -p test_validate.py -v
 ```
 
-Set `LYNX_CHECKOUT=/path/to/lynx` to enable the additional full-fixture/export
-inventory and partial-replay integration test. It requires Mix/Lean on PATH and
-takes several minutes; ordinary integration tests do not require Lynx.
+Twenty-two enabled CLI tests pass under `ATOMVM_JIT_BUILD=.amp/in/build-on-demand`
+(1 optional `LYNX_CHECKOUT` fixture test skipped). Set `LYNX_CHECKOUT=/path/to/lynx`
+to enable the additional full-fixture/export inventory and partial-replay integration
+test. It requires Mix/Lean on PATH and takes several minutes; ordinary integration
+tests do not require Lynx.

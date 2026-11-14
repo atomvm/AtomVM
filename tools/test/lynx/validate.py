@@ -25,6 +25,13 @@ from generated import candidates, expression, generate
 import lean_runtime
 
 
+class CommandTimeoutError(RuntimeError):
+    def __init__(self, executable, timeout, output):
+        super().__init__(f"Timed out after {timeout}s: {executable}\n{output}")
+        self.output = output
+        self.timeout = timeout
+
+
 def command(argv, cwd, log, timeout=600):
     # Kill the whole group on timeout, including children started by Mix/Lake.
     with subprocess.Popen(argv, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -37,43 +44,149 @@ def command(argv, cwd, log, timeout=600):
             except ProcessLookupError:
                 pass
             output, _ = process.communicate()
+            output = output or ""
             log.write_text(output)
-            raise RuntimeError(f"Timed out after {timeout}s: {argv[0]}\n{output}") from None
+            raise CommandTimeoutError(argv[0], timeout, output) from None
     log.write_text(output)
     if process.returncode:
         raise RuntimeError(f"{argv[0]} failed ({process.returncode}):\n{output}")
     return output
 
 
-def validate(args, work):
-    build = args.build.resolve()
-    lynx = args.lynx.resolve() if args.lynx else None
-    for executable in ["erl", "erlc", "elixir"] + (["mix", "lake"] if lynx else []):
-        if not shutil.which(executable):
-            raise RuntimeError(f"Required executable not on PATH: {executable}")
-    if lynx and not (lynx / "mix.exs").is_file():
-        raise RuntimeError(f"Not a Lynx checkout: {lynx}")
-    for path in [build / "src/AtomVM", build / "tools/packbeam/PackBEAM", build / "CMakeCache.txt"]:
-        if not path.is_file():
-            raise RuntimeError(f"Build AtomVM first; missing {path}")
+def parse_cmake_cache(cache_path):
     config = {}
-    for line in (build / "CMakeCache.txt").read_text().splitlines():
+    for line in cache_path.read_text().splitlines():
         if "=" in line and ":" in line.split("=", 1)[0]:
             key, value = line.split("=", 1)
             config[key.split(":", 1)[0]] = value
-    native = config.get("AVM_DISABLE_JIT") == "OFF" or config.get("AVM_ENABLE_PRECOMPILED") == "ON"
+    return config
+
+
+def resolve_target(build, host_build_arg):
+    cache_path = build / "CMakeCache.txt"
+    if not cache_path.is_file():
+        raise RuntimeError(f"Build AtomVM first; missing {cache_path}")
+    config = parse_cmake_cache(cache_path)
+    is_emscripten = (
+        (build / "src/AtomVM.mjs").is_file()
+        or config.get("CMAKE_SYSTEM_NAME") == "Emscripten"
+    )
+    if is_emscripten:
+        platform_name = "emscripten"
+        runtime_path = build / "src/AtomVM.mjs"
+        wasm_path = build / "src/AtomVM.wasm"
+        runtime_argv = ["node", str(runtime_path)]
+        host_build = (host_build_arg or (Path(__file__).resolve().parents[3] / "build")).resolve()
+        packbeam = host_build / "tools/packbeam/PackBEAM"
+        word_size = 4
+        for required in [runtime_path, wasm_path, packbeam]:
+            if not required.is_file():
+                raise RuntimeError(f"Build AtomVM first; missing {required}")
+    else:
+        platform_name = "generic_unix"
+        runtime_path = build / "src/AtomVM"
+        wasm_path = None
+        runtime_argv = [str(runtime_path)]
+        host_build = (host_build_arg or build).resolve()
+        packbeam = (
+            build / "tools/packbeam/PackBEAM"
+            if (build / "tools/packbeam/PackBEAM").is_file()
+            else host_build / "tools/packbeam/PackBEAM"
+        )
+        word_size = int(config.get("CMAKE_SIZEOF_VOID_P") or 8)
+        for required in [runtime_path, packbeam]:
+            if not required.is_file():
+                raise RuntimeError(f"Build AtomVM first; missing {required}")
+
+    jit = config.get("AVM_DISABLE_JIT", "ON") == "OFF"
+    precompiled = config.get("AVM_ENABLE_PRECOMPILED", "OFF") == "ON"
+    float32_mode = config.get("AVM_USE_32BIT_FLOAT", "OFF") == "ON"
+    float_bits = 32 if float32_mode else 64
+    if jit and precompiled:
+        execution_mode = "jit+precompiled"
+    elif jit:
+        execution_mode = "on_demand_jit"
+    elif precompiled:
+        execution_mode = "precompiled"
+    else:
+        execution_mode = "interpreter"
+
+    native = jit or precompiled
     host_arch = {"arm64": "aarch64"}.get(platform.machine(), platform.machine())
-    arch = config.get("AVM_JIT_TARGET_ARCH", host_arch) if native else ""
-    library = build / "libs" / (f"atomvmlib-{arch}.avm" if native else "atomvmlib.avm")
-    if not library.is_file():
-        raise RuntimeError(f"Build the matching runtime library first: {library}")
-    (work / "run.json").write_text(json.dumps({
+    arch = (
+        "wasm32" if platform_name == "emscripten"
+        else (config.get("AVM_JIT_TARGET_ARCH", host_arch) if native else "")
+    )
+    if platform_name == "emscripten":
+        candidates = [
+            build / "libs/atomvmlib-emscripten.avm",
+            host_build / "libs/atomvmlib-emscripten.avm",
+            host_build / "libs/atomvmlib.avm",
+        ]
+        library = next((path for path in candidates if path.is_file()), None)
+        if library is None:
+            raise RuntimeError(f"Build the matching Emscripten runtime library first: {candidates[1]}")
+    else:
+        library = build / "libs" / (f"atomvmlib-{arch}.avm" if native else "atomvmlib.avm")
+        if not library.is_file():
+            raise RuntimeError(f"Build the matching runtime library first: {library}")
+
+    return {
+        "platform": platform_name,
+        "runtime_path": runtime_path,
+        "wasm_path": wasm_path,
+        "runtime_argv": runtime_argv,
+        "host_build": host_build,
+        "packbeam": packbeam,
+        "word_size": word_size,
+        "float_bits": float_bits,
+        "jit": jit,
+        "precompiled": precompiled,
+        "float32_mode": float32_mode,
+        "execution_mode": execution_mode,
+        "native": native,
+        "arch": arch,
+        "target_arch": arch or config.get("CMAKE_SYSTEM_PROCESSOR", host_arch),
+        "library": library,
+    }
+
+
+def validate(args, work):
+    build = args.build.resolve()
+    lynx = args.lynx.resolve() if args.lynx else None
+    if lynx and not (lynx / "mix.exs").is_file():
+        raise RuntimeError(f"Not a Lynx checkout: {lynx}")
+    target = resolve_target(build, args.host_build)
+    required_tools = ["erl", "erlc", "elixir"] + (["mix", "lake"] if lynx else [])
+    if target["platform"] == "emscripten":
+        required_tools.append("node")
+    for executable in required_tools:
+        if not shutil.which(executable):
+            raise RuntimeError(f"Required executable not on PATH: {executable}")
+
+    library = target["library"]
+    run_info = {
         "seed": args.seed,
-        "runtime": str(build / "src/AtomVM"),
-        "runtime_sha256": hashlib.sha256((build / "src/AtomVM").read_bytes()).hexdigest(),
+        "execution_mode": target["execution_mode"],
+        "target": {
+            "execution_mode": target["execution_mode"],
+            "platform": target["platform"],
+            "arch": target["target_arch"],
+            "word_size": target["word_size"],
+            "float_bits": target["float_bits"],
+            "avm_disable_jit": not target["jit"],
+            "avm_enable_precompiled": target["precompiled"],
+            "avm_use_32bit_float": target["float32_mode"],
+        },
+        "runtime": str(target["runtime_path"]),
+        "runtime_sha256": hashlib.sha256(target["runtime_path"].read_bytes()).hexdigest(),
         "library": str(library),
         "library_sha256": hashlib.sha256(library.read_bytes()).hexdigest(),
-    }))
+    }
+    if target["wasm_path"] is not None:
+        run_info["wasm"] = str(target["wasm_path"])
+        run_info["wasm_sha256"] = hashlib.sha256(target["wasm_path"].read_bytes()).hexdigest()
+    (work / "run.json").write_text(json.dumps(run_info))
     if args.replay:
         selected = json.loads(args.replay.read_text())
         # Accept either cases.json/minimized.json or the richer failures.json.
@@ -85,9 +198,11 @@ def validate(args, work):
         selected = cases() if lynx else []
         if args.lean_runtime:
             selected += lean_runtime.cases()
+        if args.float32:
+            selected += lean_runtime.float32_cases()
         selected += generate(args.seed, args.generated, args.float_encoding)
     if not selected:
-        raise RuntimeError("No cases selected; use --generated, --replay, --lynx, or --lean-runtime")
+        raise RuntimeError("No cases selected; use --generated, --replay, --lynx, --lean-runtime, or --float32")
     print(f"Seed {args.seed}; {len(selected)} cases; build {build}", flush=True)
     entries = []
     for index, entry in enumerate(selected):
@@ -97,7 +212,9 @@ def validate(args, work):
             f"-module({module}).\n-export([actual/0,start/0]).\n"
             f"actual() -> try {{ok,begin {entry['expression']} end}} "
             "catch Class:Reason -> {exception,Class,Reason} end.\n"
-            "start() -> differential:print_result(actual()), ok.\n"
+            "start() -> Result = actual(), "
+            "erlang:display_string(stdout, <<\"LYNX_SEMANTIC_DONE\\n\">>), "
+            "differential:print_result(Result), ok.\n"
         )
     if args.lean_runtime:
         report = lean_runtime.inventory(args.lean_runtime.resolve(), entries)
@@ -116,42 +233,45 @@ def validate(args, work):
     command(host + [helper, "prepare" if lynx else "prepare_generated", str(work),
                     str(int(args.timeout * 1000))], lynx or work, work / "proofs.log")
     manifest = json.loads((work / "manifest.json").read_text())
-    print(f"Checked {manifest['laws']} laws; running {len(entries)} cases ({arch or 'interpreter'}).", flush=True)
+    arch = target["arch"]
+    mode_label = f"{target['execution_mode']}/{arch}" if arch else target["execution_mode"]
+    print(f"Checked {manifest['laws']} laws; running {len(entries)} cases ({mode_label}).", flush=True)
     support = manifest.get("support", [])
     fixture_beams = [work / "differential.beam"] + [
         work / f"{name}.beam" for name in manifest["fixtures"] + support]
     libraries = [library]
-    if native:
+    precompile_only = target["precompiled"] and not target["jit"]
+    if precompile_only:
         # The aggregate native archive still embeds bytecode eavmlib modules.
         # Prefer its matching native archive before the aggregate is searched.
         eavmlib = build / "libs/eavmlib/src" / f"eavmlib-{arch}.avm"
         if not eavmlib.is_file():
             raise RuntimeError(f"Build the matching eavmlib library first: {eavmlib}")
         libraries.insert(0, eavmlib)
-        run = json.loads((work / "run.json").read_text())
-        run.update(eavmlib=str(eavmlib),
-                   eavmlib_sha256=hashlib.sha256(eavmlib.read_bytes()).hexdigest())
-        (work / "run.json").write_text(json.dumps(run))
+        run_info.update(eavmlib=str(eavmlib),
+                        eavmlib_sha256=hashlib.sha256(eavmlib.read_bytes()).hexdigest())
+        (work / "run.json").write_text(json.dumps(run_info))
     if support:
         # Protocol implementations are fixture code; Elixir runtime dependencies
         # must still come from AtomVM's library rather than the host Elixir.
         elixir_library = build / "libs/exavmlib/lib/exavmlib.avm"
         if not elixir_library.is_file():
+            elixir_library = target["host_build"] / "libs/exavmlib/lib/exavmlib.avm"
+        if not elixir_library.is_file():
             raise RuntimeError(f"Build the bundled Elixir library first: {elixir_library}")
         libraries.append(elixir_library)
-        run = json.loads((work / "run.json").read_text())
-        run.update(elixir_library=str(elixir_library),
-                   elixir_library_sha256=hashlib.sha256(elixir_library.read_bytes()).hexdigest())
-        (work / "run.json").write_text(json.dumps(run))
+        run_info.update(elixir_library=str(elixir_library),
+                        elixir_library_sha256=hashlib.sha256(elixir_library.read_bytes()).hexdigest())
+        (work / "run.json").write_text(json.dumps(run_info))
     drivers = [work / f"{entry['module']}.beam" for entry in entries]
-    if native:
+    if precompile_only:
         native_dir = work / "native"
         native_dir.mkdir()
         elixir_beams = []
         if support:
             elixir_dir = work / "elixir"
             elixir_dir.mkdir()
-            command([str(build / "tools/packbeam/PackBEAM"), "extract", "--out",
+            command([str(target["packbeam"]), "extract", "--out",
                      str(elixir_dir), str(elixir_library)], work, work / "extract-elixir.log")
             elixir_beams = sorted(elixir_dir.glob("*.beam"))
         command(
@@ -164,34 +284,45 @@ def validate(args, work):
         drivers = [native_dir / p.name for p in drivers]
         if support:
             native_elixir = work / f"exavmlib-{arch}.avm"
-            command([str(build / "tools/packbeam/PackBEAM"), "create", "--lib", str(native_elixir)]
+            command([str(target["packbeam"]), "create", "--lib", str(native_elixir)]
                     + [str(native_dir / p.name) for p in elixir_beams],
                     work, work / "pack-elixir.log")
             libraries.pop()  # Replace the bytecode-only exavmlib added above.
             libraries.insert(0, native_elixir)
-            run.update(native_elixir_library=str(native_elixir),
-                       native_elixir_library_sha256=hashlib.sha256(native_elixir.read_bytes()).hexdigest())
-            (work / "run.json").write_text(json.dumps(run))
+            run_info.update(native_elixir_library=str(native_elixir),
+                            native_elixir_library_sha256=hashlib.sha256(native_elixir.read_bytes()).hexdigest())
+            (work / "run.json").write_text(json.dumps(run_info))
     actuals = []
     for entry, driver in zip(entries, drivers):
         pack = work / "case.avm"
+        log_path = work / f"{entry['module']}.log"
         command(
-            [str(build / "tools/packbeam/PackBEAM"), "create", str(pack), str(driver)]
+            [str(target["packbeam"]), "create", str(pack), str(driver)]
             + [str(p) for p in fixture_beams],
             work, work / "pack.log",
         )
         try:
             output = command(
-                [str(build / "src/AtomVM"), str(pack)] + [str(p) for p in libraries],
-                work, work / f"{entry['module']}.log", timeout=args.timeout,
+                target["runtime_argv"] + [str(pack)] + [str(p) for p in libraries],
+                work, log_path, timeout=args.timeout,
             )
             lines = [line[len("LYNX_RESULT "):] for line in output.splitlines() if line.startswith("LYNX_RESULT ")]
             if len(lines) != 1:
                 raise RuntimeError(f"Expected one result, got {len(lines)}: {output}")
             encoded = bytes(json.loads(lines[0]))
-            actuals.append({"status": "ok", "value": base64.b64encode(encoded).decode()})
+            actuals.append({
+                "status": "ok",
+                "stage": "complete",
+                "timeout": False,
+                "value": base64.b64encode(encoded).decode(),
+            })
+        except CommandTimeoutError as error:
+            stage = "transport" if "LYNX_SEMANTIC_DONE" in error.output.splitlines() else "semantic"
+            actuals.append({"status": "error", "stage": stage, "timeout": True, "message": str(error)})
         except (RuntimeError, ValueError, TypeError) as error:
-            actuals.append({"status": "error", "message": str(error)})
+            log_text = log_path.read_text() if log_path.is_file() else ""
+            stage = "transport" if "LYNX_SEMANTIC_DONE" in log_text.splitlines() else "semantic"
+            actuals.append({"status": "error", "stage": stage, "timeout": False, "message": str(error)})
         if len(actuals) % 20 == 0:
             print(f"Executed {len(actuals)}/{len(entries)} cases", flush=True)
     (work / "actuals.json").write_text(json.dumps(actuals))
@@ -261,6 +392,10 @@ def same_failure_contract(original, reduced):
     red_actual = reduced.get("actual", {})
     if orig_actual.get("status") != red_actual.get("status"):
         return False
+    if orig_actual.get("stage") != red_actual.get("stage"):
+        return False
+    if orig_actual.get("timeout") != red_actual.get("timeout"):
+        return False
     if orig_actual.get("status") == "ok":
         if etf_result_contract(orig_actual.get("value")) != etf_result_contract(red_actual.get("value")):
             return False
@@ -285,6 +420,10 @@ def shrink(args, work, failure):
             source.write_text(json.dumps([candidate]))
             command_line = [sys.executable, str(Path(__file__).resolve()), "--build", str(args.build.resolve()),
                             "--replay", str(source), "--timeout", str(args.timeout), "--output", str(trial)]
+            if args.host_build:
+                command_line.extend(["--host-build", str(args.host_build.resolve())])
+            if args.float32:
+                command_line.append("--float32")
             try:
                 command(command_line, work, work / "shrink.log")
             except RuntimeError:
@@ -314,11 +453,16 @@ def main():
     parser.add_argument("--seed", type=int, default=1, help="Reproducible generator seed (default: 1)")
     parser.add_argument("--generated", type=int, default=1000, help="Generated cases (default: 1000; 0 disables generation)")
     parser.add_argument("--float-encoding", action="store_true", help="Focus generated cases on float16/32 encoding boundaries")
+    parser.add_argument("--float32", action="store_true", help="Include IEEE-754 binary32 cases with float32 expectations")
     parser.add_argument("--replay", type=Path, help="Replay cases.json, failures.json, or minimized.json instead of generating")
     parser.add_argument("--shrink", action="store_true", help="Try up to 30 reductions of the first generated failure")
     parser.add_argument(
         "--build", type=Path, default=Path(__file__).resolve().parents[3] / "build",
-        help="Existing native AtomVM CMake build",
+        help="Existing AtomVM CMake build (generic_unix or emscripten)",
+    )
+    parser.add_argument(
+        "--host-build", type=Path, default=None,
+        help="Host AtomVM build providing PackBEAM and pre-built target libraries for cross targets",
     )
     parser.add_argument("--output", type=Path, help="Keep logs/binaries in a new or empty directory")
     parser.add_argument("--timeout", type=float, default=5, help="Seconds per OTP/AtomVM case (default: 5)")

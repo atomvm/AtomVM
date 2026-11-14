@@ -697,12 +697,12 @@ skipped), `test-erlang` passes, and `erlfmt` checks pass. Evidence is under
   direct, dynamic, guard, and applicable pattern paths. Inspect representative
   BEAM disassembly: source forms need not take distinct paths across OTP versions.
 - [x] Run interpreter and native/precompiled modes with matching runtime libraries.
-- [ ] Extend to on-demand JIT and representative 32-bit/embedded/emulated execution
+- [x] Extend to on-demand JIT and representative 32-bit/embedded/emulated execution
   in separate runner work; those modes are not supported by the current CLI.
-- [ ] Use a matching-word-size OTP oracle for representation-dependent recipes,
+- [x] Use a matching-word-size OTP oracle for representation-dependent recipes,
   especially numeric key-search compatibility. Define float32 expectations
   separately rather than treating host binary64 output as universally applicable.
-- [ ] Keep permanent GC/lifecycle regressions in ordinary AtomVM test suites and
+- [x] Keep permanent GC/lifecycle regressions in ordinary AtomVM test suites and
   run them under instrumentation. Do not add short internal deadlines to tests
   intended to check correctness rather than speed.
 - [x] Resolve the large-result transport bottleneck separately from split
@@ -769,6 +769,68 @@ and `lynx-paths-full-native/`, with `lynx-paths-full-mode-comparison.txt`,
 `lynx-paths-full-native-chunks.txt`, and `lynx-paths-full-validation.json` recording
 the comparisons, configuration, source revision, runtime/library hashes, and
 failure expressions. This remains precompiled validation, not on-demand JIT.
+
+Batch 7 execution-path, representation, and ASan verification (2026-11-14):
+
+- Runner & oracle classification (`validate.py`, `validate.exs`, `lean_runtime.py`):
+  `run.json` now records `execution_mode` (`interpreter`, `on_demand_jit`,
+  `precompiled`, or `jit+precompiled`), `target` (`platform`, `arch`, `word_size`,
+  `float_bits`, `avm_disable_jit`, `avm_enable_precompiled`, `avm_use_32bit_float`),
+  and SHA-256 hashes for the runtime, optional `.wasm` module, and runtime
+  libraries. Generated `lynx_probe_*.erl` drivers emit `LYNX_SEMANTIC_DONE\n`
+  via `erlang:display_string/2` after `actual()` completes so `failures.json`,
+  `unverified.json`, and `actuals.json` distinguish `oracle`, `semantic`, and
+  `transport` failures/timeouts.
+- On-demand JIT (`AVM_DISABLE_JIT=OFF`, `AVM_ENABLE_PRECOMPILED=OFF`,
+  `.amp/in/build-on-demand`): `validate.py` preserves bytecode `Code`-only probes
+  and helpers (no `avmN` chunk, no `native/` dir) when precompilation is off so
+  `code_server` compiles them at runtime via `jit_trap_and_load` (`Compilation of ...`
+  logged). All 24 multi-family cases pass against OTP 29 (`failed: 0`,
+  `unverified: 0`), `runtime_sha256` `852c95ada7ab0d356edf869d8988d266c4725a5b17f370f9730dd46967b5c5eb`,
+  `library_sha256` `c6bc067cdac52e52da5207a87fbded22fe1e17edf993fddc8ac424fcf3950355`;
+  evidence in `.amp/in/artifacts/batch7-execution/on-demand-jit/`.
+- 32-bit Emscripten / Node.js execution (`wasm32`, `.amp/in/build-wasm32`,
+  `--host-build build`, `word_size = 4`): standalone Erlang tests
+  `test_lists_keyfind` (`0`) and `test_bigintegers_ordering` (`7`) pass on Node.js
+  (`.amp/in/artifacts/batch7-execution/wasm32-erlang-tests.log`). In the 116-case
+  32-bit slice (`.amp/in/artifacts/batch7-execution/wasm32/`), all 96 portable cases
+  (including 84 numeric/position `lists:keyfind/3` & `lists:keymember/3` boundary
+  cases) match OTP (`failed: 0`), while the 20 64-bit-immediate `lists:keyfind/3`
+  & `lists:keymember/3` precision-boundary cases (`word_size_dependent: true`) are
+  marked `unverified` with `stage: "oracle"` because host OTP runs with
+  `otp_word_size = 8`. Runtime `AtomVM.mjs` SHA-256
+  `e744bba1d2fcc5dc66dbf819caed6f7542545ab10e1b475d008eab2b2cf1a93c`, `AtomVM.wasm`
+  `6ed25c80477b733b4cc31fe53b6a5219607fd868d567cb63a747247102985006`, library
+  `atomvmlib-emscripten.avm` `0803c224114dec9b41501f9304664a25fe4ffe2bfdeb830f05364501c8802b3a`.
+- Single-precision floats (`AVM_USE_32BIT_FLOAT=ON`, `.amp/in/build-float32`,
+  `float_bits = 32`): `--float32` supplies 10 IEEE-754 `binary32` boundary cases
+  across `differential:call/3` and `differential:arithmetic/3` (covering binary32
+  rounding ties, overflow to `badarith`, and subnormal underflow to `0.0`), all
+  10/10 passing (`.amp/in/artifacts/batch7-execution/float32/`, `runtime_sha256`
+  `ace335bf6655cb58655d667d7d45823814e468b174d201e88f6ca91d49c37e81`,
+  `library_sha256` `acd81e90e925b0b296058ca066f42b0985e06a1feaecc6d4f3825d2ca6377418`).
+  Unannotated `binary64` float results are marked `unverified` (`stage: "oracle"`,
+  verified in `.amp/in/artifacts/batch7-execution/float32-oracle-guard/`, 2 passed,
+  3 unverified, 0 failed). Note: constant-folded `binary64` literals in BEAM `LitT`
+  chunks exceeding `binary32` max (`> 3.4028235e38`) currently convert to `+Inf` in
+  `src/libAtomVM/external_term.c:780` (`NEW_FLOAT_EXT`) on `AVM_USE_32BIT_FLOAT=ON`,
+  so runtime `float32` probes cross module boundaries (`differential:call/3`,
+  `differential:arithmetic/3`).
+- Permanent GC/lifecycle regressions and ASan instrumentation: verified
+  existing ordinary test suites without adding short internal deadlines. Under
+  both `build` and Debug + AddressSanitizer (`.amp/in/build-ci-no-stack`), `test-erlang` (`test_monitor`, `test_dict`,
+  `test_process_info`, `test_is_process_alive`, `test_lists_keyfind`,
+  `test_bigintegers_ordering`, `test_binary_split`, `test_binary_match`,
+  `test_binary_part`) passed (`Success.`), `test_eavmlib.avm` passed all 10 modules
+  (including `test_timer_manager`), and `test_estdlib.avm` passed 37/38 modules
+  (including `test_spawn`, `test_timer`, `test_serial_dist_socat`) with zero ASan
+  findings; `test_net_kernel` failed `test_autoconnect_to_beam` (`nxdomain`
+  resolving host shortname `otp_188@localsome` in this environment).
+- CLI integration suite: all 22 enabled tests in `test_validate.py` pass under
+  `ATOMVM_JIT_BUILD=.amp/in/build-on-demand` (1 optional `LYNX_CHECKOUT` fixture
+  test skipped), covering on-demand JIT bytecode preservation, `oracle`/`semantic`/
+  `transport` stage & timeout classification, 32-bit word-size guards, `--float32`
+  expectations, and `wasm32`/`--host-build` target resolution.
 
 ## Rules for each batch
 

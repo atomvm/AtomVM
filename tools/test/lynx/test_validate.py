@@ -1164,6 +1164,209 @@ class ValidationTests(unittest.TestCase):
             self.assertFalse(validate.same_failure_contract(orig, {**orig, "expected": exc_encoded}))
             self.assertFalse(validate.same_failure_contract(orig, {**orig, "case": {"operation": "compare"}}))
 
+    @unittest.skipUnless(os.getenv("ATOMVM_JIT_BUILD"), "Set ATOMVM_JIT_BUILD to test on-demand JIT compilation")
+    def test_jit_build_compiles_bytecode_probes_on_demand(self):
+        jit_build = Path(os.environ["ATOMVM_JIT_BUILD"]).resolve()
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            source.write_text(json.dumps([
+                {"expression": "1 + 2"},
+                {"expression": "differential:execution_paths('<',9007199254740993,9007199254740992.0)"},
+                {"expression": "lists:keyfind(b,2,[{a,1},{prefix,b,ok}])"},
+            ]))
+            output = work / "jit"
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--build", str(jit_build),
+                 "--replay", str(source), "--timeout", "30", "--output", str(output)],
+                capture_output=True, text=True, timeout=300,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            summary = json.loads((output / "summary.json").read_text())
+            self.assertEqual(summary, {"laws": 0, "passed": 3, "failed": 0,
+                                       "unverified": 0, "uncovered": 0})
+            run = json.loads((output / "run.json").read_text())
+            self.assertEqual(run["execution_mode"], "on_demand_jit")
+            self.assertFalse(run["target"]["avm_disable_jit"])
+            self.assertFalse(run["target"]["avm_enable_precompiled"])
+            self.assertEqual(len(run["runtime_sha256"]), 64)
+            self.assertEqual(len(run["library_sha256"]), 64)
+            self.assertFalse((output / "native").exists())
+            check = subprocess.run([
+                "elixir", "-e", """
+                [beam] = System.argv()
+                {:ok, _, chunks} = :beam_lib.all_chunks(String.to_charlist(beam))
+                names = Enum.map(chunks, fn {name, _} -> List.to_string(name) end)
+                true = "Code" in names
+                false = Enum.any?(names, &String.starts_with?(&1, "avm"))
+                """, str(output / "lynx_probe_0.beam")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+            self.assertIn("Compilation of ", (output / "lynx_probe_0.log").read_text())
+
+    def test_timeout_and_failure_stages_distinguish_oracle_semantic_and_transport(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            # 1. Oracle timeout (OTP times out before AtomVM executes).
+            oracle_src = work / "oracle.json"
+            oracle_src.write_text(json.dumps([{"expression": "timer:sleep(1500), ok"}]))
+            oracle_out = work / "oracle"
+            summary = self.invoke(oracle_out, "--replay", oracle_src, "--timeout", "0.2")
+            self.assertEqual(summary, {"laws": 0, "passed": 0, "failed": 0,
+                                       "unverified": 1, "uncovered": 0})
+            unverified = json.loads((oracle_out / "unverified.json").read_text())
+            self.assertEqual(unverified[0]["stage"], "oracle")
+            self.assertTrue(unverified[0]["timeout"])
+
+            # Fake build to test semantic/transport timeout and error classification deterministically.
+            build = work / "build"
+            (build / "src").mkdir(parents=True)
+            (build / "tools/packbeam").mkdir(parents=True)
+            (build / "libs").mkdir()
+            (build / "CMakeCache.txt").write_text("AVM_DISABLE_JIT:BOOL=ON\nAVM_ENABLE_PRECOMPILED:BOOL=OFF\n")
+            (build / "libs/atomvmlib.avm").touch()
+            (build / "tools/packbeam/PackBEAM").symlink_to(ROOT / "build/tools/packbeam/PackBEAM")
+            runtime = build / "src/AtomVM"
+            source = work / "expr.json"
+            source.write_text(json.dumps([{"expression": "1 + 2"}]))
+
+            # 2. Semantic timeout (no LYNX_SEMANTIC_DONE emitted before deadline).
+            runtime.write_text("#!/bin/sh\nexec sleep 2\n")
+            runtime.chmod(0o755)
+            sem_to = work / "sem-timeout"
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--build", str(build),
+                 "--replay", str(source), "--timeout", "0.2", "--output", str(sem_to)],
+                capture_output=True, text=True, timeout=60,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            failures = json.loads((sem_to / "failures.json").read_text())
+            self.assertEqual(failures[0]["stage"], "semantic")
+            self.assertTrue(failures[0]["timeout"])
+
+            # 3. Transport timeout (LYNX_SEMANTIC_DONE emitted before deadline).
+            runtime.write_text("#!/bin/sh\necho 'LYNX_SEMANTIC_DONE'\nexec sleep 2\n")
+            runtime.chmod(0o755)
+            trans_to = work / "trans-timeout"
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--build", str(build),
+                 "--replay", str(source), "--timeout", "0.2", "--output", str(trans_to)],
+                capture_output=True, text=True, timeout=60,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            failures = json.loads((trans_to / "failures.json").read_text())
+            self.assertEqual(failures[0]["stage"], "transport")
+            self.assertTrue(failures[0]["timeout"])
+
+            # 4. Semantic mismatch (cleanly decoded wrong value).
+            runtime.write_text("#!/bin/sh\necho 'LYNX_SEMANTIC_DONE'\necho 'LYNX_RESULT [131,100,0,4,110,111,112,101]'\n")
+            runtime.chmod(0o755)
+            sem_val = work / "sem-value"
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--build", str(build),
+                 "--replay", str(source), "--output", str(sem_val)],
+                capture_output=True, text=True, timeout=60,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            failures = json.loads((sem_val / "failures.json").read_text())
+            self.assertEqual(failures[0]["stage"], "semantic")
+            self.assertFalse(failures[0]["timeout"])
+
+            # 5. Transport malformed ETF.
+            runtime.write_text("#!/bin/sh\necho 'LYNX_SEMANTIC_DONE'\necho 'LYNX_RESULT [131]'\n")
+            runtime.chmod(0o755)
+            trans_bad = work / "trans-bad"
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--build", str(build),
+                 "--replay", str(source), "--output", str(trans_bad)],
+                capture_output=True, text=True, timeout=60,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            failures = json.loads((trans_bad / "failures.json").read_text())
+            self.assertEqual(failures[0]["stage"], "transport")
+            self.assertFalse(failures[0]["timeout"])
+
+    def test_word_size_and_float32_expectations_are_representation_aware(self):
+        word_cases = [c for c in lean_runtime.cases() if c.get("word_size_dependent")]
+        self.assertEqual(len(word_cases), 20)
+        self.assertGreaterEqual(len(lean_runtime.float32_cases()), 8)
+
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            build32 = work / "build32"
+            (build32 / "src").mkdir(parents=True)
+            (build32 / "tools/packbeam").mkdir(parents=True)
+            (build32 / "libs").mkdir()
+            (build32 / "CMakeCache.txt").write_text(
+                "AVM_DISABLE_JIT:BOOL=ON\n"
+                "AVM_ENABLE_PRECOMPILED:BOOL=OFF\n"
+                "AVM_USE_32BIT_FLOAT:BOOL=ON\n"
+                "CMAKE_SIZEOF_VOID_P:INTERNAL=4\n"
+            )
+            (build32 / "libs/atomvmlib.avm").touch()
+            (build32 / "tools/packbeam/PackBEAM").symlink_to(ROOT / "build/tools/packbeam/PackBEAM")
+            runtime = build32 / "src/AtomVM"
+
+            # Unannotated float64 expectation and word-size-dependent keyfind on 32-bit/float32 target -> oracle unverified.
+            import base64
+            import struct
+            f32_16777216 = bytes([131, 104, 2, 119, 2, *b"ok", 70]) + struct.pack(">d", 16777216.0)
+            runtime.write_text(f"#!/bin/sh\necho 'LYNX_SEMANTIC_DONE'\necho 'LYNX_RESULT {list(f32_16777216)}'\n")
+            runtime.chmod(0o755)
+            mixed = work / "mixed.json"
+            mixed.write_text(json.dumps([
+                {"expression": "differential:call(erlang,'+',[16777216.0,1.0])"},
+                word_cases[0],
+                {"expression": "differential:call(erlang,'+',[16777216.0,1.0])",
+                 "float32_expected": base64.b64encode(f32_16777216).decode("ascii")},
+            ]))
+            out = work / "out32"
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--build", str(build32),
+                 "--replay", str(mixed), "--output", str(out)],
+                capture_output=True, text=True, timeout=60,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            summary = json.loads((out / "summary.json").read_text())
+            self.assertEqual(summary, {"laws": 0, "passed": 1, "failed": 0,
+                                       "unverified": 2, "uncovered": 0})
+            unverified = json.loads((out / "unverified.json").read_text())
+            self.assertTrue(all(item["stage"] == "oracle" and not item["timeout"] for item in unverified))
+
+            # Annotated float32 expectation passes when AtomVM returns binary32 result.
+            f32_only = work / "f32.json"
+            f32_only.write_text(json.dumps([
+                {"expression": "differential:call(erlang,'+',[16777216.0,1.0])",
+                 "float32_expected": base64.b64encode(f32_16777216).decode("ascii")},
+            ]))
+            f32_out = work / "out-f32"
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--build", str(build32),
+                 "--replay", str(f32_only), "--output", str(f32_out)],
+                capture_output=True, text=True, timeout=60,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(json.loads((f32_out / "summary.json").read_text())["passed"], 1)
+
+            # Emscripten target metadata resolves --host-build PackBEAM/library and records wasm hash.
+            wasm_build = work / "wasm"
+            (wasm_build / "src").mkdir(parents=True)
+            (wasm_build / "CMakeCache.txt").write_text(
+                "CMAKE_SYSTEM_NAME:STRING=Emscripten\n"
+                "AVM_DISABLE_JIT:BOOL=ON\n"
+                "AVM_ENABLE_PRECOMPILED:BOOL=OFF\n"
+                "AVM_USE_32BIT_FLOAT:BOOL=OFF\n"
+            )
+            (wasm_build / "src/AtomVM.wasm").write_bytes(b"wasm-bytes")
+            (wasm_build / "src/AtomVM.mjs").write_text("// fake module")
+            import validate as vmod
+            target = vmod.resolve_target(wasm_build, ROOT / "build")
+            self.assertEqual(target["platform"], "emscripten")
+            self.assertEqual(target["arch"], "wasm32")
+            self.assertEqual(target["word_size"], 4)
+            self.assertEqual(target["execution_mode"], "interpreter")
+            self.assertEqual(target["packbeam"], (ROOT / "build/tools/packbeam/PackBEAM").resolve())
+
 
 if __name__ == "__main__":
     unittest.main()
