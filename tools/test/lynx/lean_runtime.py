@@ -785,6 +785,17 @@ def cases():
             for payload in ["ok", "{nested,[1,<<5:3>>],1 bsl 100}", "#{value=>[1,2,3],bytes=><<1,2,3>>}"]:
                 probe(p, ["send_to_self", "send_to_missing_pid", "send_rejects_non_pid"],
                       f"differential:send_destination({operation},{destination},{payload})")
+    for mode, origins in [
+        ("dead", ["Modules/Process.lean#many_sends", "Modules/Process.lean#send_to_missing_pid",
+                  "Modules/Signals.lean#ended_process_is_forced"]),
+        ("live", ["Modules/Process.lean#many_sends", "Modules/Process.lean#send_to_self"]),
+        ("self", ["Modules/Process.lean#many_sends", "Modules/Process.lean#send_to_self"]),
+        ("stale_alias", ["Modules/Process.lean#many_sends",
+                         "Modules/Signals.lean#inactive_reference_is_forced"]),
+    ]:
+        for count in [0, 1, 30]:
+            selected.append({"lean_origins": origins,
+                             "expression": f"differential:many_sends({mode},{count})"})
     for value in ["child", "#{a=>1}", "-0.0"]:
         probe(p, ["successive_references_are_distinct", "references_are_unique_across_processes",
                   "dictionary_preserves_reference_counter", "dictionary_preserves_mailbox",
@@ -910,7 +921,8 @@ def cases():
             for action in ["unalias", "demonitor", "{demonitor,[]}", "{demonitor,[flush]}",
                            "{demonitor,[info]}", "{demonitor,[flush,info]}", "{demonitor,[info,flush]}"]:
                 probe("Modules/Signals", ["alias_ends_with_demonitor", "demonitor_flushes_down",
-                                          "monitor_reports_normal_exit"],
+                                          "monitor_reports_normal_exit",
+                                          "inactive_reference_is_forced", "active_reference_is_not_forced"],
                       f"differential:target_cancel({mode},{state},{action})")
     for first in ["plain", "demonitor", "explicit_unalias", "reply_demonitor"]:
         for second in ["plain", "demonitor", "explicit_unalias", "reply_demonitor"]:
@@ -925,11 +937,36 @@ def cases():
         for order in ["target_first", "observer_first"]:
             probe("Modules/Signals", "kill_cannot_be_trapped",
                   f"differential:termination_cascade({count},{order})")
+    await_many_scenarios = [
+        "both_in_order",
+        "both_reverse_order",
+        "both_expired_timer_race",
+        "first_replies_second_times_out",
+        "timeout_with_queued_and_late_replies",
+        "first_crashes_second_late",
+    ]
+    for scenario in await_many_scenarios:
+        selected.append({
+            "upstream_example": "examples/elixir/task.exs#await_many_drains_replies",
+            "expression": f"differential:await_many_drain({scenario})",
+        })
+        for alias_mode in ["reply_demonitor", "explicit_unalias", "demonitor"]:
+            probe(
+                "Modules/Signals",
+                [
+                    "inactive_reference_is_forced",
+                    "active_reference_is_not_forced",
+                    "alias_ends_with_demonitor",
+                    "demonitor_flushes_down",
+                ],
+                f"differential:await_many_drain({scenario},{alias_mode})",
+            )
     for mode in ["timeout", "message", "nested"]:
         probe(p, "timeout_handler_scope", f"differential:suspended_receive({mode})")
 
     for trap in ["true", "false"]:
-        probe("Modules/Signals", "link_to_missing_process", f"differential:missing_link({trap})")
+        probe("Modules/Signals", ["link_to_missing_process", "ended_process_is_forced"],
+              f"differential:missing_link({trap})")
     probe("Modules/Signals", "liveness", "differential:process_liveness()")
     for value in ["bad", "1", "[]", "{}", "make_ref()", "fun()->ok end"]:
         call("Modules/Signals", "liveness", "is_process_alive", value)
