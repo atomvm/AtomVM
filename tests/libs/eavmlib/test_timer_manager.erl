@@ -29,6 +29,19 @@ test() ->
     ok = test_erlang_cancel_timer(),
     ok = test_timer_badargs(),
     ok = test_send_after_boundaries(),
+    lists:foreach(
+        fun(Function) ->
+            lists:foreach(
+                fun(Time) ->
+                    ok = test_destination_death(Function, before_creation, Time),
+                    ok = test_destination_death(Function, after_creation, Time)
+                end,
+                [0, 1, 60000]
+            ),
+            ok = test_named_destination_death(Function)
+        end,
+        [send_after, start_timer]
+    ),
     pong = test_send_after(),
     ok = test_cancel_send_after(),
     ok = test_cancel_send_after_suppresses_message(),
@@ -113,6 +126,62 @@ test_send_after_boundaries() ->
     end,
     true = unregister(test_timer_destination),
     ok.
+
+test_destination_death(Function, When, Time) ->
+    {Dest, Monitor} = spawn_monitor(fun() ->
+        receive
+            stop -> ok
+        end
+    end),
+    case When of
+        before_creation -> stop_destination(Dest, Monitor);
+        after_creation -> ok
+    end,
+    Ref = apply(erlang, Function, [Time, Dest, ignored]),
+    AutoRef = apply(erlang, Function, [Time, Dest, ignored]),
+    case When of
+        before_creation -> ok;
+        after_creation -> stop_destination(Dest, Monitor)
+    end,
+    %% Cancel immediately after DOWN: the worker may not have observed the
+    %% destination's death yet. It must still report that the timer is gone.
+    ?ASSERT_EQUALS(false, erlang:cancel_timer(Ref)),
+    ?ASSERT_EQUALS(false, erlang:cancel_timer(Ref)),
+    %% The other timer must disappear without any explicit cancellation.
+    wait_for_timer_removal(AutoRef, erlang:monotonic_time(millisecond) + 5000).
+
+test_named_destination_death(Function) ->
+    {Dest, Monitor} = spawn_monitor(fun() ->
+        receive
+            stop -> ok
+        end
+    end),
+    true = register(test_timer_destination, Dest),
+    Ref = apply(erlang, Function, [60000, test_timer_destination, ignored]),
+    stop_destination(Dest, Monitor),
+    Remaining = erlang:cancel_timer(Ref),
+    ?ASSERT_TRUE(is_integer(Remaining) andalso Remaining > 0 andalso Remaining =< 60000),
+    ?ASSERT_EQUALS(false, erlang:cancel_timer(Ref)),
+    ok.
+
+stop_destination(Dest, Monitor) ->
+    Dest ! stop,
+    receive
+        {'DOWN', Monitor, process, Dest, normal} -> ok
+    after 5000 -> throw(timeout)
+    end.
+
+wait_for_timer_removal(Ref, Deadline) ->
+    case lists:member(Ref, timer_manager:get_timer_refs()) of
+        false ->
+            ok;
+        true ->
+            ?ASSERT_TRUE(erlang:monotonic_time(millisecond) < Deadline),
+            receive
+            after 1 -> ok
+            end,
+            wait_for_timer_removal(Ref, Deadline)
+    end.
 
 test_send_after() ->
     timer_manager:send_after(100, self(), ping),

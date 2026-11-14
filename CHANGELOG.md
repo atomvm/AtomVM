@@ -55,6 +55,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed timers created by `erlang:send_after/3` and `erlang:start_timer/3,4`
+  remaining active after their PID destination exits; registered-name timers
+  remain active until expiry or explicit cancellation
 - Fixed `erlang:send_after/3` and `timer:send_after/2,3` accepting invalid arguments
   and failing in timer workers instead of raising `badarg` (`erlang:send_after/3`) or
   returning `{error, badarg}` (`timer:send_after/2,3`) in the caller;
