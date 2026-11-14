@@ -330,6 +330,14 @@ test_seq() ->
     ?ASSERT_MATCH(lists:seq(1, 1), [1]),
     ?ASSERT_MATCH(lists:seq(1, 0), []),
     ?ASSERT_MATCH(lists:seq(1, 0, 1), []),
+    ?ASSERT_MATCH(lists:seq(id(5), id(4), id(2)), []),
+    ?ASSERT_MATCH(lists:seq(id(5), id(3), id(2)), []),
+    ?ASSERT_MATCH(lists:seq(id(10), id(7), id(5)), []),
+    ?ASSERT_MATCH(lists:seq(id(10), id(5), id(5)), []),
+    ?ASSERT_MATCH(lists:seq(id(4), id(5), id(-2)), []),
+    ?ASSERT_MATCH(lists:seq(id(3), id(5), id(-2)), []),
+    ?ASSERT_MATCH(lists:seq(id(7), id(10), id(-5)), []),
+    ?ASSERT_MATCH(lists:seq(id(5), id(10), id(-5)), []),
 
     ?ASSERT_ERROR(lists:seq(foo, 1)),
     ?ASSERT_ERROR(lists:seq(1, bar)),
@@ -339,6 +347,10 @@ test_seq() ->
     ?ASSERT_ERROR(lists:seq(-1, 1, -1)),
     ?ASSERT_ERROR(lists:seq(1, -1, 1)),
     ?ASSERT_ERROR(lists:seq(1, 2, 0)),
+    ?ASSERT_ERROR(lists:seq(id(5), id(2), id(2)), badarg),
+    ?ASSERT_ERROR(lists:seq(id(10), id(4), id(5)), badarg),
+    ?ASSERT_ERROR(lists:seq(id(2), id(5), id(-2)), badarg),
+    ?ASSERT_ERROR(lists:seq(id(4), id(10), id(-5)), badarg),
     ok.
 
 test_sort() ->

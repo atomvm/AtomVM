@@ -286,6 +286,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed timers created by `erlang:send_after/3` and `erlang:start_timer/3,4`
   remaining active after their PID destination exits; registered-name timers
   remain active until expiry or explicit cancellation
+- Fixed `lists:seq/3` returning `[From]` instead of `[]` for empty ranges with
+  `abs(Incr) > 1`
 
 ## [0.7.0-beta.0] - 2026-09-28
 
