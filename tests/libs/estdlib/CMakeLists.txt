@@ -40,6 +40,7 @@ set(ERLANG_MODULES
     test_logger
     test_maps
     test_net
+    test_native_records_io_lib
     test_net_kernel
     test_os
     test_serial_dist
