@@ -40,6 +40,7 @@
     literal_resolver/2,
     type_resolver/2,
     import_resolver/2,
+    record_resolver/2,
     set_native_code/3
 ]).
 
@@ -145,6 +146,21 @@ type_resolver(_Module, _Index) ->
 import_resolver(_Module, _Index) ->
     erlang:nif_error(undefined).
 
+%% @doc Get the definition of a module-local record by name.
+%% @return A map describing the record, or `undefined' if the record is not
+%% defined in the given module.
+%% @param Module module to look up
+%% @param Name record name atom
+-spec record_resolver(Module :: module(), Name :: atom()) ->
+    #{
+        index := non_neg_integer(),
+        fields := [atom()],
+        is_exported := boolean()
+    }
+    | undefined.
+record_resolver(_Module, _Name) ->
+    erlang:nif_error(undefined).
+
 %% @doc Associate a native code stream with a module
 %% @return ok
 %% @param Module module to set the native code of
@@ -178,6 +194,9 @@ load(Module) ->
                             code_server:import_resolver(Module, Index)
                         end,
                         DebugInfoResolver = fun(_Index) -> false end,
+                        RecordResolver = fun(Name) ->
+                            code_server:record_resolver(Module, Name)
+                        end,
                         {StreamModule, Stream0} = jit:stream(jit_mmap_size(byte_size(Code))),
                         {BackendModule, BackendState0} = jit:backend(StreamModule, Stream0),
                         {LabelsCount, BackendState1} = jit:compile(
@@ -187,6 +206,7 @@ load(Module) ->
                             TypeResolver,
                             ImportResolver,
                             DebugInfoResolver,
+                            RecordResolver,
                             BackendModule,
                             BackendState0
                         ),

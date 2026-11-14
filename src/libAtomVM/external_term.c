@@ -59,6 +59,7 @@
 #define SMALL_BIG_EXT 110
 #define NEW_FUN_EXT 112
 #define EXPORT_EXT 113
+#define RECORD_EXT 67
 #define MAP_EXT 116
 #define ATOM_UTF8_EXT 118
 #define SMALL_ATOM_UTF8_EXT 119
@@ -592,7 +593,26 @@ static size_t serialize_term(uint8_t *buf, term t, GlobalContext *glb)
             continue;
         }
 
-        if (term_is_tuple(cur)) {
+        if (term_is_record(cur)) {
+            const struct RecordDef *def = term_get_record_def(cur);
+            size_t num_fields = def->num_fields;
+            if (!IS_NULL_PTR(buf)) {
+                buf[k] = RECORD_EXT;
+                WRITE_32_UNALIGNED(buf + k + 1, (int32_t) num_fields);
+                buf[k + 5] = def->is_exported ? 1 : 0;
+            }
+            k += 6;
+            // Encoding order: module, name, field names, field values. Push in
+            // reverse so they pop in that order.
+            for (size_t i = num_fields; i >= 1; i--) {
+                serialize_push(&temp_stack, term_get_record_value(cur, i - 1));
+            }
+            for (size_t i = num_fields; i >= 1; i--) {
+                serialize_push(&temp_stack, def->fields[i - 1].name);
+            }
+            serialize_push(&temp_stack, def->name);
+            serialize_push(&temp_stack, def->module);
+        } else if (term_is_tuple(cur)) {
             size_t arity = term_get_tuple_arity(cur);
             if (!IS_NULL_PTR(buf)) {
                 if (arity < 256) {
@@ -1157,6 +1177,63 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
                 break;
             }
 
+            case RECORD_EXT: {
+                uint32_t num_fields = READ_32_UNALIGNED(p + 1);
+                uint8_t exported_byte = p[5];
+                if (UNLIKELY(exported_byte > 1)) {
+                    failed = true;
+                    break;
+                }
+                bool is_exported = exported_byte != 0;
+                buf_pos += 6;
+
+                // module, name and the field-name keys are shallow atoms; decode
+                // and validate them here so only the field values go on the stack.
+                size_t element_size = 0;
+                term module_atom = parse_simple_term(external_term_buf + buf_pos, &element_size, copy, heap, glb, opts);
+                if (UNLIKELY(term_is_invalid_term(module_atom)) || !term_is_atom(module_atom)) {
+                    failed = true;
+                    break;
+                }
+                buf_pos += element_size;
+
+                term name_atom = parse_simple_term(external_term_buf + buf_pos, &element_size, copy, heap, glb, opts);
+                if (UNLIKELY(term_is_invalid_term(name_atom)) || !term_is_atom(name_atom)) {
+                    failed = true;
+                    break;
+                }
+                buf_pos += element_size;
+
+                const struct RecordDef *def
+                    = module_find_record_def_global(glb, module_atom, name_atom);
+                if (UNLIKELY(def == NULL || def->num_fields != num_fields
+                        || def->is_exported != is_exported)) {
+                    failed = true;
+                    break;
+                }
+
+                for (uint32_t i = 0; i < num_fields; i++) {
+                    term key = parse_simple_term(external_term_buf + buf_pos, &element_size, copy, heap, glb, opts);
+                    if (UNLIKELY(term_is_invalid_term(key)) || key != def->fields[i].name) {
+                        failed = true;
+                        break;
+                    }
+                    buf_pos += element_size;
+                }
+                if (failed) {
+                    break;
+                }
+
+                term record = term_alloc_record(def, num_fields, heap);
+                *dest = record;
+                term *rbase = term_to_term_ptr(record);
+                // Field values are stored at rbase[2 .. 2 + num_fields - 1].
+                for (size_t i = num_fields; i >= 1 && !failed; i--) {
+                    parse_push_slot(&temp_stack, &rbase[1 + i], &failed);
+                }
+                break;
+            }
+
             case NEW_FUN_EXT: {
                 uint8_t arity = p[5];
                 uint32_t index = READ_32_UNALIGNED(p + 22);
@@ -1647,6 +1724,44 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
                 term_heap = (int) term_map_size_in_terms(size);
                 children = 2 * (size_t) size; // key/value pairs
                 maps++;
+                break;
+            }
+
+            case RECORD_EXT: {
+                if (UNLIKELY(remaining < 6)) {
+                    return INVALID_TERM_SIZE;
+                }
+                uint32_t num_fields = READ_32_UNALIGNED(p + 1);
+                buf_pos += 6;
+                remaining -= 6;
+                if (UNLIKELY(num_fields > (uint32_t) (INT_MAX / 4))) {
+                    return INVALID_TERM_SIZE;
+                }
+                // module, name and the field-name keys are shallow atoms; decode
+                // them inline so only the field values become pending.
+                size_t inline_count = 2 + (size_t) num_fields;
+                if (UNLIKELY(remaining < inline_count + num_fields)) {
+                    return INVALID_TERM_SIZE;
+                }
+                int rec_heap = (int) (num_fields + 2); // record instance words
+                for (size_t i = 0; i < inline_count; i++) {
+                    size_t element_size = 0;
+                    int u = calculate_simple_heap_usage(external_term_buf + buf_pos, remaining, &element_size, copy, opts, glb);
+                    if (UNLIKELY(u == INVALID_TERM_SIZE)) {
+                        return INVALID_TERM_SIZE;
+                    }
+                    if (UNLIKELY(remaining < element_size)) {
+                        return INVALID_TERM_SIZE;
+                    }
+                    if (UNLIKELY(u > INT_MAX - rec_heap)) {
+                        return INVALID_TERM_SIZE;
+                    }
+                    rec_heap += u;
+                    buf_pos += element_size;
+                    remaining -= element_size;
+                }
+                term_heap = rec_heap;
+                children = num_fields; // field values
                 break;
             }
 

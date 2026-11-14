@@ -67,7 +67,11 @@ jobs:
         cd erlfmt
         rebar3 as release escriptize
         cd ../AtomVM
-        find . -name *.erl | xargs ../erlfmt/_build/release/bin/erlfmt -c
+        # test_native_records* use the native-record syntax extension, which
+        # stock erlfmt cannot parse.
+        find . -name *.erl \
+          -not -name 'test_native_records*.erl' \
+          | xargs ../erlfmt/_build/release/bin/erlfmt -c
 
   mix-format-check:
     runs-on: ubuntu-24.04
