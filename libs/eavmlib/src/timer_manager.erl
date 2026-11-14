@@ -175,11 +175,25 @@ do_start_timer(Time, Dest, Msg, Mode) ->
 
 %% @private
 run_timer(MgrPid, Time, TimerRef, Dest, Msg, Mode) ->
+    DestMonitor =
+        case is_pid(Dest) of
+            true -> erlang:monitor(process, Dest);
+            false -> undefined
+        end,
     Start = erlang:system_time(millisecond),
     receive
+        {'DOWN', DestMonitor, process, Dest, _Reason} ->
+            %% Like expiry, destination death makes cancellation return false,
+            %% including a cancellation already queued in the manager.
+            MgrPid ! {fired, self()};
         {cancel, From} ->
+            Remaining =
+                case is_pid(Dest) andalso not erlang:is_process_alive(Dest) of
+                    true -> false;
+                    false -> Time - (erlang:system_time(millisecond) - Start)
+                end,
             MgrPid ! {canceled, self()},
-            gen_server:reply(From, Time - (erlang:system_time(millisecond) - Start))
+            gen_server:reply(From, Remaining)
     after Time ->
         MgrPid ! {fired, self()},
         case Mode of

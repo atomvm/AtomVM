@@ -317,6 +317,8 @@
 %% @returns a reference that can be used to cancel the timer, if desired.
 %% @doc     Start a timer, and send {timeout, TimerRef, Msg} to Dest after
 %%          Time ms, where TimerRef is the reference returned from this function.
+%%          A PID destination's death automatically cancels the timer. An atom
+%%          destination is resolved when the timer expires and is not monitored.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec start_timer(Time :: non_neg_integer(), Dest :: pid() | atom(), Msg :: term()) -> reference().
@@ -371,6 +373,8 @@ cancel_timer(TimerRef) ->
 %%          receive timeout supported by AtomVM. Dest must be a local pid or
 %%          an atom naming a local process. Invalid arguments raise badarg
 %%          in the caller before a timer is created.
+%%          A PID destination's death automatically cancels the timer. An atom
+%%          destination is resolved when the timer expires and is not monitored.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec send_after(Time :: 0..16#FFFFFFFF, Dest :: pid() | atom(), Msg :: term()) -> reference().
