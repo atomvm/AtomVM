@@ -142,6 +142,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed a use-after-free in `socket:shutdown/2` with `read_write` on lwIP (Raspberry Pi Pico W):
   lwIP can free the pcb right away, e.g. when there is unread data, and its callbacks were
   detached afterwards
+- Fixed lwIP sockets after a connection error (e.g. a reset from the peer): the freed pcb was
+  still used by `socket:send/2`, `socket:close/1` and others, and processes blocked in
+  `socket:recv/2,3` or `socket:send/2` were never woken up; they now get `{error, closed}`.
+  Accepted sockets did not even register the error callback
 - Fixed `socket:send/2` busy looping on lwIP when `tcp_write` fails for lack of memory while the
   send buffer has room (Raspberry Pi Pico W)
 - Fixed a race on the write select flag between the `tcp_sent` callback and
