@@ -1351,6 +1351,8 @@ class ValidationTests(unittest.TestCase):
     def test_word_size_and_float32_expectations_are_representation_aware(self):
         word_cases = [c for c in lean_runtime.cases() if c.get("word_size_dependent")]
         self.assertEqual(len(word_cases), 20)
+        stack_cases = [c for c in lean_runtime.cases() if c.get("stacktrace_dependent")]
+        self.assertEqual(len(stack_cases), 169)
         self.assertGreaterEqual(len(lean_runtime.float32_cases()), 8)
 
         with tempfile.TemporaryDirectory() as directory:
@@ -1363,13 +1365,15 @@ class ValidationTests(unittest.TestCase):
                 "AVM_DISABLE_JIT:BOOL=ON\n"
                 "AVM_ENABLE_PRECOMPILED:BOOL=OFF\n"
                 "AVM_USE_32BIT_FLOAT:BOOL=ON\n"
+                "AVM_CREATE_STACKTRACES:BOOL=OFF\n"
                 "CMAKE_SIZEOF_VOID_P:INTERNAL=4\n"
             )
             (build32 / "libs/atomvmlib.avm").touch()
             (build32 / "tools/packbeam/PackBEAM").symlink_to(ROOT / "build/tools/packbeam/PackBEAM")
             runtime = build32 / "src/AtomVM"
 
-            # Unannotated float64 expectation and word-size-dependent keyfind on 32-bit/float32 target -> oracle unverified.
+            # Unannotated float64 expectation, word-size-dependent keyfind, and
+            # stacktrace-dependent probe on 32-bit/float32/no-stacktraces -> oracle unverified.
             import base64
             import struct
             f32_16777216 = bytes([131, 104, 2, 119, 2, *b"ok", 70]) + struct.pack(">d", 16777216.0)
@@ -1379,6 +1383,7 @@ class ValidationTests(unittest.TestCase):
             mixed.write_text(json.dumps([
                 {"expression": "differential:call(erlang,'+',[16777216.0,1.0])"},
                 word_cases[0],
+                stack_cases[0],
                 {"expression": "differential:call(erlang,'+',[16777216.0,1.0])",
                  "float32_expected": base64.b64encode(f32_16777216).decode("ascii")},
             ]))
@@ -1389,11 +1394,13 @@ class ValidationTests(unittest.TestCase):
                 capture_output=True, text=True, timeout=60,
             )
             self.assertNotEqual(result.returncode, 0)
+            self.assertIs(json.loads((out / "run.json").read_text())["target"]["avm_create_stacktraces"], False)
             summary = json.loads((out / "summary.json").read_text())
             self.assertEqual(summary, {"laws": 0, "passed": 1, "failed": 0,
-                                       "unverified": 2, "uncovered": 0})
+                                       "unverified": 3, "uncovered": 0})
             unverified = json.loads((out / "unverified.json").read_text())
             self.assertTrue(all(item["stage"] == "oracle" and not item["timeout"] for item in unverified))
+            self.assertTrue(any("AVM_CREATE_STACKTRACES=OFF" in item["message"] for item in unverified))
 
             # Annotated float32 expectation passes when AtomVM returns binary32 result.
             f32_only = work / "f32.json"
@@ -1426,6 +1433,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(target["platform"], "emscripten")
             self.assertEqual(target["arch"], "wasm32")
             self.assertEqual(target["word_size"], 4)
+            self.assertIs(target["stacktraces"], True)
             self.assertEqual(target["execution_mode"], "interpreter")
             self.assertEqual(target["packbeam"], (ROOT / "build/tools/packbeam/PackBEAM").resolve())
 

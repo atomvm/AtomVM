@@ -101,6 +101,7 @@ def resolve_target(build, host_build_arg):
     jit = config.get("AVM_DISABLE_JIT", "ON") == "OFF"
     precompiled = config.get("AVM_ENABLE_PRECOMPILED", "OFF") == "ON"
     float32_mode = config.get("AVM_USE_32BIT_FLOAT", "OFF") == "ON"
+    stacktraces = config.get("AVM_CREATE_STACKTRACES", "ON") == "ON"
     float_bits = 32 if float32_mode else 64
     if jit and precompiled:
         execution_mode = "jit+precompiled"
@@ -143,6 +144,7 @@ def resolve_target(build, host_build_arg):
         "jit": jit,
         "precompiled": precompiled,
         "float32_mode": float32_mode,
+        "stacktraces": stacktraces,
         "execution_mode": execution_mode,
         "native": native,
         "arch": arch,
@@ -177,6 +179,7 @@ def validate(args, work):
             "avm_disable_jit": not target["jit"],
             "avm_enable_precompiled": target["precompiled"],
             "avm_use_32bit_float": target["float32_mode"],
+            "avm_create_stacktraces": target["stacktraces"],
         },
         "runtime": str(target["runtime_path"]),
         "runtime_sha256": hashlib.sha256(target["runtime_path"].read_bytes()).hexdigest(),

@@ -110,6 +110,7 @@ case System.argv() do
     otp_word_size = Map.get(manifest, "otp_word_size", :erlang.system_info(:wordsize))
     target_word_size = Map.get(target, "word_size", otp_word_size)
     target_float_bits = Map.get(target, "float_bits", 64)
+    target_stacktraces = Map.get(target, "avm_create_stacktraces", true)
     true = length(cases) == length(actuals) and length(cases) == length(manifest["expected"])
     decode = fn value -> value |> Base.decode64!() |> :erlang.binary_to_term() end
 
@@ -169,6 +170,21 @@ case System.argv() do
                 (entry["float32_unverified"] == true or
                    contains_float?.(expected, contains_float?)) ->
               message = "Target uses float32; host binary64 OTP expectation is not applicable"
+              IO.puts("UNVERIFIED #{entry["expression"]}: #{message}")
+
+              %{
+                status: :unverified,
+                stage: "oracle",
+                timeout: false,
+                case: entry,
+                message: message,
+                actual: actual
+              }
+
+            entry["stacktrace_dependent"] == true and target_stacktraces == false ->
+              message =
+                "Target disables stacktraces (AVM_CREATE_STACKTRACES=OFF); OTP stacktrace expectation is not applicable"
+
               IO.puts("UNVERIFIED #{entry["expression"]}: #{message}")
 
               %{

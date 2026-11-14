@@ -81,6 +81,14 @@ jobs:
             run_jit_test: false
             checkout_lynx: false
             validate_args: --float32 --generated 0
+          - name: linux-x86_64-no-stacktraces
+            os: ubuntu-24.04
+            cmake_opts: -DAVM_DISABLE_JIT=ON -DAVM_ENABLE_PRECOMPILED=OFF -DAVM_CREATE_STACKTRACES=OFF -DAVM_WARNINGS_ARE_ERRORS=ON
+            build_targets: AtomVM PackBEAM atomvmlib exavmlib
+            run_unit_tests: false
+            run_jit_test: false
+            checkout_lynx: false
+            validate_args: --seed 20261114 --generated 32
     steps:
       - name: Checkout AtomVM
         uses: actions/checkout@v4

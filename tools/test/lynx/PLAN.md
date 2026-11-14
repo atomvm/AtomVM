@@ -820,7 +820,8 @@ Batch 7 execution-path, representation, and ASan verification (2026-11-14):
 - Runner & oracle classification (`validate.py`, `validate.exs`, `lean_runtime.py`):
   `run.json` now records `execution_mode` (`interpreter`, `on_demand_jit`,
   `precompiled`, or `jit+precompiled`), `target` (`platform`, `arch`, `word_size`,
-  `float_bits`, `avm_disable_jit`, `avm_enable_precompiled`, `avm_use_32bit_float`),
+  `float_bits`, `avm_disable_jit`, `avm_enable_precompiled`, `avm_use_32bit_float`,
+  `avm_create_stacktraces`),
   and SHA-256 hashes for the runtime, optional `.wasm` module, and runtime
   libraries. Generated `lynx_probe_*.erl` drivers emit `LYNX_SEMANTIC_DONE\n`
   via `erlang:display_string/2` after `actual()` completes so `failures.json`,
@@ -871,11 +872,23 @@ Batch 7 execution-path, representation, and ASan verification (2026-11-14):
   (including `test_spawn`, `test_timer`, `test_serial_dist_socat`) with zero ASan
   findings; `test_net_kernel` failed `test_autoconnect_to_beam` (`nxdomain`
   resolving host shortname `otp_188@localsome` in this environment).
-- CLI integration suite: all 22 enabled tests in `test_validate.py` pass under
+- Disabled stacktraces (`AVM_CREATE_STACKTRACES=OFF`, `.amp/in/build-ci-no-stack`):
+  `validate.py` records `"avm_create_stacktraces": false` in `run.json`, and
+  `validate.exs` classifies the 169 `stacktrace_dependent` recipes (`monitor_exit(raised)`,
+  valid-stack `raise_exception/3`, valid-raise/generated `trace_depth/3`, and
+  uncaught-error `function_spawn/3` cases where `catch C:R:S` / exit reasons
+  yield `undefined` instead of a stack list) as `unverified` (`stage: "oracle"`).
+  Re-comparing the 555-case exception/signal/spawn slice against `.amp/in/build-ci-no-stack`
+  gave 386 passed, 0 failed, and 169 unverified (`stage: "oracle"`), and
+  `--seed 20261114 --generated 32` passed 32/32 (`0` failed, `0` unverified);
+  `.github/workflows/lynx-differential.yaml` adds the `linux-x86_64-no-stacktraces`
+  matrix leg for CI coverage.
+- CLI integration suite: all 23 enabled tests in `test_validate.py` pass under
   `ATOMVM_JIT_BUILD=.amp/in/build-on-demand` (1 optional `LYNX_CHECKOUT` fixture
   test skipped), covering on-demand JIT bytecode preservation, `oracle`/`semantic`/
-  `transport` stage & timeout classification, 32-bit word-size guards, `--float32`
-  expectations, and `wasm32`/`--host-build` target resolution.
+  `transport` stage & timeout classification, 32-bit word-size / `--float32` /
+  `AVM_CREATE_STACKTRACES=OFF` oracle guards, and `wasm32`/`--host-build` target
+  resolution.
 
 ## Rules for each batch
 
