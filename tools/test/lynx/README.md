@@ -791,6 +791,13 @@ Additional target and representation modes:
   10 IEEE-754 `binary32` runtime arithmetic/rounding/overflow/underflow cases
   with explicit `float32_expected` ETF oracles; unannotated `binary64` float
   results are marked `unverified` (`stage: "oracle"`).
+- Stacktraces disabled (`AVM_CREATE_STACKTRACES=OFF`): `run.json` records
+  `"avm_create_stacktraces": false`, and the 169 `stacktrace_dependent`
+  recipes (`monitor_exit(raised)`, valid-stack `raise_exception/3`, valid-raise/generated
+  `trace_depth/3`, and uncaught-error `function_spawn/3` cases) are marked
+  `unverified` (`stage: "oracle"`). `.github/workflows/lynx-differential.yaml`
+  exercises this build via `linux-x86_64-no-stacktraces`
+  (`--seed 20261114 --generated 32`).
 
 Scheduler interleavings, GC stress, and bare-metal embedded boards remain outside
 the CLI runner. `.github/workflows/lynx-differential.yaml` pins upstream Lynx
@@ -812,7 +819,7 @@ oracles, deliberately wrong/malformed target output, reduction and replay, and
 continuation after reference timeouts/undefined calls. They also check scoped Lean
 sample inventories, unverified counts, stale source attribution rejection,
 on-demand JIT compilation, `oracle`/`semantic`/`transport` stage classification,
-32-bit word-size / `--float32` representation guards, and independent
+32-bit word-size / `--float32` / `AVM_CREATE_STACKTRACES=OFF` representation guards, and independent
 Unicode/short-circuit/process/receive/hashing/`await_many`/burst-send result
 oracles:
 

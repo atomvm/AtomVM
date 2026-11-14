@@ -802,7 +802,8 @@ def cases():
                   "suspended_processes_keep_their_dictionaries"], f"differential:process_exchange({value})")
     for mode, name in [("normal", "monitor_reports_normal_exit"), ("raised", "monitor_reports_raised_reason"),
                        ("noproc", "monitor_missing_process"), ("flush", "demonitor_flushes_down")]:
-        probe("Modules/Signals", name, f"differential:monitor_exit({mode})")
+        extra = {"stacktrace_dependent": True} if mode == "raised" else {}
+        probe("Modules/Signals", name, f"differential:monitor_exit({mode})", **extra)
     for kind in ["process", "port"]:
         for state in ["self", "live", "dead", "named_self", "named_live", "missing"]:
             for options in ["two", "[]", "[{alias,demonitor}]", "[{alias,explicit_unalias}]",
@@ -974,8 +975,15 @@ def cases():
     for cls in ["error", "exit", "throw", "bad", "1"]:
         for stack in ["[]", "[{differential,call,3,[]}]", "[{differential,call,[a,b,c],[]}]",
                       "bad", "[bad]", "[{differential,call,3,[]}|bad]", "[{1,call,3,[]}]"]:
+            extra = (
+                {"stacktrace_dependent": True}
+                if cls in ("error", "exit", "throw")
+                and stack in ("[]", "[{differential,call,3,[]}]", "[{differential,call,[a,b,c],[]}]")
+                else {}
+            )
             probe("Modules/Signals", "raise_classes",
-                  f"differential:raise_exception({cls},#{{reason=>[1,2,3]}},{stack})")
+                  f"differential:raise_exception({cls},#{{reason=>[1,2,3]}},{stack})",
+                  **extra)
     for cls in ["error", "exit", "throw"]:
         for stack in ["[{differential,call,3}]", "[{differential,call,[a,b,c]}]",
                       "[{differential,call,bad}]", "[{fun erlang:abs/1,[-7]}]",
@@ -983,18 +991,26 @@ def cases():
                       "[{differential,call,3},{fun erlang:abs/1,[-7]},"
                       "{differential,call,3,[{line,17}]}]",
                       "[{fun erlang:abs/1,[-7],[{line,17}|tail]}]"]:
+            extra = {"stacktrace_dependent": True} if stack != "[{differential,call,bad}]" else {}
             probe("Modules/Signals", "raise_classes",
-                  f"differential:raise_exception({cls},#{{reason=>[1,2,3]}},{stack})")
+                  f"differential:raise_exception({cls},#{{reason=>[1,2,3]}},{stack})",
+                  **extra)
     # Extend raise recipes to VM depth controls, which the model does not expose.
     for depth in ["default", "0", "1", "3", "8", "64", "65", "1 bsl 40"]:
         for count in [0, 1, 7, 8, 9, 65]:
             for style in ["{modern,error}", "{legacy,throw}"]:
                 probe("Modules/Signals", "raise_classes",
-                      f"differential:trace_depth({depth},{count},{style})")
+                      f"differential:trace_depth({depth},{count},{style})",
+                      stacktrace_dependent=True)
         for style in ["generated", "{modern,exit}", "{invalid_suffix,error}",
                       "{improper,throw}", "{child,{legacy,exit}}"]:
+            extra = (
+                {"stacktrace_dependent": True}
+                if style not in ("{invalid_suffix,error}", "{improper,throw}")
+                else {}
+            )
             probe("Modules/Signals", "raise_classes",
-                  f"differential:trace_depth({depth},80,{style})")
+                  f"differential:trace_depth({depth},80,{style})", **extra)
     for depth in ["-1", "1.0", "bad", "[]", "1 bsl 100"]:
         probe("Modules/Signals", "raise_classes",
               f"differential:trace_depth({depth},9,{{modern,error}})")
@@ -1058,9 +1074,17 @@ def cases():
     for kind in ["local", "external", "external_error", "external_throw", "external_exit",
                  "local_zero", "local_one", "external_one", "bif_zero", "bif_one",
                  "missing_export", "missing_module", "not_fun"]:
+        extra = (
+            {"stacktrace_dependent": True}
+            if kind in ("external_error", "external_throw", "local_one",
+                        "external_one", "bif_one", "missing_export",
+                        "missing_module")
+            else {}
+        )
         for mode in ["monitored", "linked", "small_heap"]:
             probe("Term/Dispatch", ["spawned_dispatch", "spawn_exception_boundaries"],
-                  f"differential:function_spawn({kind},{mode},#{{capture=>[1,2,3]}})")
+                  f"differential:function_spawn({kind},{mode},#{{capture=>[1,2,3]}})",
+                  **extra)
 
     construction = "Term/Bitstring/Construction"
     matching = "Term/Bitstring/Matching"
