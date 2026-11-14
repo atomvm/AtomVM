@@ -12,8 +12,8 @@ runner semantics in [README.md](README.md).
 ## Current baseline
 
 - The supported fixture revision is Lynx
-  `2aa1467d4c28c4bffd5f5d205ebb197e261f85a4`, updated from
-  `b9be5b8e6e4a1330685ef60ff150903e90670d4c` in the latest upstream refresh below.
+  `b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de`, updated from
+  `2aa1467d4c28c4bffd5f5d205ebb197e261f85a4` in the latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
 - `lean_runtime.py` selects 4,413 public-behavior recipes inspired by Lean tests
@@ -214,6 +214,39 @@ deadlines) and `541596657` (`lists:unzip/1`) closed all 64 failures from the
 116-case focused replay above. Both host-interpreter and aarch64 precompiled
 replays matched all 116 OTP references, with zero failures and zero unverified
 cases (`.amp/in/artifacts/unzip-{interpreter,native}`).
+
+### Upstream fast-forward to `b6ac6ea`
+
+Reviewed all 33 upstream commits from `2aa1467d4c28c4bffd5f5d205ebb197e261f85a4`
+to `b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de`:
+
+- `protocols.erl` (and its generated `.json` and `.laws.lean`) only renamed
+  `Lynx.Term.exactCompare_atoms` to `Lynx.Term.compareExact_atoms` inside the
+  Lean proof string of `size_undefined` (`a882793`). No Erlang fixture clauses,
+  exports (`203` exports across `13` modules), or `@law` preconditions/postconditions
+  (`9` freshly checked laws, `19` `assert_true` cases) changed; `higher_order.erl`
+  is unchanged.
+- `Lean/LynxTest` site inventory across the 26 files changed from `426` to `428`
+  sites (`200` sampled, zero stale attributions): `Modules/Process.lean` (`51 -> 49`)
+  removed `handshake_every_schedule` and `sends_execute` and replaced
+  `arbitrarily_many_sends` with `many_sends`; `Modules/Signals.lean` (`16 -> 20`)
+  added four Lean model/partial-order-reduction theorems (`killed_root_keeps_environment`,
+  `inactive_reference_is_forced`, `active_reference_is_not_forced`,
+  `ended_process_is_forced`) whose public Erlang behaviors remain covered by the
+  existing `Modules/Signals` and `Modules/Process` recipes.
+- Remaining commits (`b839c75`..`b6ac6ea`) are Lean model/proof/translation updates
+  (`signals in transit`, sleep-set/`forced` partial-order reduction, `lynx_kernel`
+  replacing `lynx_cbv`, explicit fuel on `Term.compare`/`Term.compareExact`,
+  extracted `prelude`/`postlude` files in `examples/elixir/descr/*.lean`, and an
+  Elixir `Task.await_many/2` drain example in `examples/elixir/task.exs` where
+  AtomVM `exavmlib` has no `Task` module).
+- Verification: all 23 CLI integration tests in `test_validate.py` pass against
+  `/Users/petermm/OSScontrib/lynx` at `b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de`
+  with `ATOMVM_JIT_BUILD=.amp/in/build-on-demand` (the 22 non-Lynx tests ran in
+  one pass and `test_lynx_exports_have_cases_and_partial_replay_is_scoped` passed
+  with Lean `4.35.0` and `LYNX_CHECKOUT=/Users/petermm/OSScontrib/lynx`), and
+  `lean_runtime.inventory()` reports `200/428` sampled sites with zero missing
+  attributions.
 
 ## Coverage batches
 
@@ -493,7 +526,7 @@ identity checks (without serializing runtime-specific hash numbers).
 
 Source attribution validates all 7 `Modules/Hashing.lean` sites (`guard:1..5`,
 `shadowed_bindings_hash`, and `capture_hash`), bringing inventory site coverage
-to 200 of 426 across all 26 files. Both host-interpreter (`build`) and `aarch64`
+to 200 of 426 across all 26 files (200 of 428 at `b6ac6ea`). Both host-interpreter (`build`) and `aarch64`
 precompiled (`.amp/in/build-native`) 112-case replays match 0 and report 112
 failures with 0 unverified references: OTP verifies 102 `{ok, ...}` results and
 10 `error:badarg` exceptions, while AtomVM reports `{exception, error, undef}` on
