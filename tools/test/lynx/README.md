@@ -247,7 +247,7 @@ aarch64 precompiled replays now match 131 of 133 cases against OTP 29
 only the two documented `lists:reverse/1` invalid-input exception differences.
 
 Batch 4 adds 112 portable hashing recipes (`4,301 -> 4,413` runtime cases total)
-attributed to all seven sites in `Modules/Hashing.lean` (200 of 426 Lean test
+attributed to all seven sites in `Modules/Hashing.lean` (200 of 428 Lean test
 sites covered across all 26 files): all 78 unique vectors from
 `Modules/Hashing.lean` (signed/large integers, signed zeros, subnormal float,
 ASCII/Latin-1/Unicode atoms, byte binaries, partial bitstrings, proper/improper
@@ -626,8 +626,8 @@ python3 tools/test/lynx/validate.py --lynx ../lynx --build build --generated 0 \
 
 With `--lynx`, `mix` and `lake` must also be on PATH with the Elixir/Lean versions
 required by that checkout. Mix/Lake may build their normal caches. The fixture
-API currently targets Lynx revision `2aa1467d4c28c4bffd5f5d205ebb197e261f85a4`,
-updated from `b9be5b8e6e4a1330685ef60ff150903e90670d4c`; see
+API currently targets Lynx revision `b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de`,
+updated from `2aa1467d4c28c4bffd5f5d205ebb197e261f85a4`; see
 [the latest refresh](PLAN.md#latest-upstream-refresh) for current results.
 The current full fixture run checks nine laws and matches 2,347 calls, with no
 differential failures or uncovered exports and the same four unverified OTP
@@ -778,8 +778,10 @@ Additional target and representation modes:
   results are marked `unverified` (`stage: "oracle"`).
 
 Scheduler interleavings, GC stress, and bare-metal embedded boards remain outside
-the CLI runner. No CI workflow or Lynx dependency is added to the normal AtomVM
-build/tests. Run `--help` for options.
+the CLI runner. `.github/workflows/lynx-differential.yaml` pins upstream Lynx
+`b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de` in a dedicated workflow without adding
+a Lynx dependency to the normal AtomVM build/test workflows. Run `--help` for
+options.
 
 The 2026-11-11 aarch64 precompiled replay matches OTP 29 for both saved
 1,000-case seeded batches (`20261111` and `20261112`). The saved runtime corpus
