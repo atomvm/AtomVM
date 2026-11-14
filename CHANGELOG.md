@@ -55,6 +55,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed `erlang:send_after/3` and `timer:send_after/2,3` accepting invalid arguments
+  and failing in timer workers instead of raising `badarg` (`erlang:send_after/3`) or
+  returning `{error, badarg}` (`timer:send_after/2,3`) in the caller;
+  supported delays are `0..4294967295` milliseconds
+- Fixed `erlang:cancel_timer/1` returning `false` for nonreference arguments
+  instead of raising `badarg`
 - Fixed `sets:new/1` and `sets:from_list/2` option parsing to match OTP while
   retaining version-2-only support
 - Fixed `sets:subtract/2` and `sets:is_subset/2` rejecting an invalid right

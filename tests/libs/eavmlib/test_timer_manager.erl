@@ -27,6 +27,8 @@ test() ->
     ok = test_cancel_timer(),
     ok = test_cancel_timer_after_expiry(),
     ok = test_erlang_cancel_timer(),
+    ok = test_timer_badargs(),
+    ok = test_send_after_boundaries(),
     pong = test_send_after(),
     ok = test_cancel_send_after(),
     ok = test_cancel_send_after_suppresses_message(),
@@ -69,6 +71,47 @@ test_erlang_cancel_timer() ->
     ?ASSERT_TRUE(R > 0),
     R2 = erlang:cancel_timer(TimerRef),
     ?ASSERT_EQUALS(false, R2),
+    ok.
+
+test_timer_badargs() ->
+    lists:foreach(
+        fun(Time) -> ?ASSERT_ERROR(erlang:send_after(Time, self(), ignored), badarg) end,
+        [-1, 1.0, bad, [], infinity, 1 bsl 63]
+    ),
+    Remote = binary_to_term(<<131, 88, 119, 14, "remote@invalid", 1:32, 0:32, 0:32>>),
+    lists:foreach(
+        fun(Dest) -> ?ASSERT_ERROR(erlang:send_after(60000, Dest, ignored), badarg) end,
+        [make_ref(), 0, [], {name, node()}, Remote]
+    ),
+    lists:foreach(
+        fun(Ref) -> ?ASSERT_ERROR(erlang:cancel_timer(Ref), badarg) end,
+        [timer, 0, [], self()]
+    ),
+    ?ASSERT_EQUALS(false, erlang:cancel_timer(make_ref())),
+    ok.
+
+test_send_after_boundaries() ->
+    Ref = erlang:send_after(0, self(), immediate),
+    ?ASSERT_TRUE(is_reference(Ref)),
+    receive
+        immediate -> ok
+    after 5000 -> throw(timeout)
+    end,
+    ?ASSERT_EQUALS(false, erlang:cancel_timer(Ref)),
+    Max = 16#FFFFFFFF,
+    LongRef = erlang:send_after(Max, self(), long_timer),
+    Remaining = erlang:cancel_timer(LongRef),
+    ?ASSERT_TRUE(is_integer(Remaining) andalso Remaining >= 0 andalso Remaining =< Max),
+    %% AtomVM's receive timeout, used by the timer worker, is limited to uint32.
+    ?ASSERT_ERROR(erlang:send_after(Max + 1, self(), ignored), badarg),
+    true = register(test_timer_destination, self()),
+    NamedRef = erlang:send_after(0, test_timer_destination, named_timer),
+    ?ASSERT_TRUE(is_reference(NamedRef)),
+    receive
+        named_timer -> ok
+    after 5000 -> throw(timeout)
+    end,
+    true = unregister(test_timer_destination),
     ok.
 
 test_send_after() ->

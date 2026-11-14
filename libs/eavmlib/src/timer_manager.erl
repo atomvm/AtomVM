@@ -68,9 +68,11 @@ start_timer(Time, Dest, Msg) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec cancel_timer(TimerRef :: reference()) -> false | non_neg_integer().
-cancel_timer(TimerRef) ->
+cancel_timer(TimerRef) when is_reference(TimerRef) ->
     maybe_start(),
-    gen_server:call(?SERVER_NAME, {cancel, TimerRef}).
+    gen_server:call(?SERVER_NAME, {cancel, TimerRef});
+cancel_timer(_TimerRef) ->
+    erlang:error(badarg).
 
 -spec get_timer_refs() -> [reference()].
 get_timer_refs() ->
@@ -88,10 +90,17 @@ get_timer_refs() ->
 %%          manager and can be cancelled with {@link cancel_timer/1}.
 %% @end
 %%-----------------------------------------------------------------------------
--spec send_after(non_neg_integer(), pid() | atom(), term()) -> reference().
-send_after(Time, Dest, Msg) ->
+-spec send_after(0..16#FFFFFFFF, pid() | atom(), term()) -> reference().
+send_after(Time, Dest, Msg) when
+    is_integer(Time),
+    Time >= 0,
+    Time =< 16#FFFFFFFF,
+    is_atom(Dest) orelse (is_pid(Dest) andalso node(Dest) =:= node())
+->
     maybe_start(),
-    gen_server:call(?SERVER_NAME, {send_after, Time, Dest, Msg}).
+    gen_server:call(?SERVER_NAME, {send_after, Time, Dest, Msg});
+send_after(_Time, _Dest, _Msg) ->
+    erlang:error(badarg).
 
 %%
 %% ?GEN_SERVER callbacks
