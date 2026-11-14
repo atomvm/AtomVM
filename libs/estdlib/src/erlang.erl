@@ -351,7 +351,7 @@ start_timer(Time, Dest, Msg, _Options) ->
 %%
 %%          If the timer is found and has not yet fired, it is cancelled and the
 %%          remaining time is returned.  If the timer has already expired or does
-%%          not exist, `false' is returned.
+%%          not exist, `false' is returned. A nonreference TimerRef raises badarg.
 %%
 %%          <em><b>Note.</b>  Even if `false' is returned, a timeout message may
 %%          already have been placed in the caller's message queue.</em>
@@ -367,9 +367,13 @@ cancel_timer(TimerRef) ->
 %% @param   Msg Message to send to Dest after Time ms.
 %% @returns a reference that can be used to cancel the timer, if desired.
 %% @doc     Send Msg to Dest after Time ms.
+%%          Time must be an integer from 0 through 4294967295, the maximum
+%%          receive timeout supported by AtomVM. Dest must be a local pid or
+%%          an atom naming a local process. Invalid arguments raise badarg
+%%          in the caller before a timer is created.
 %% @end
 %%-----------------------------------------------------------------------------
--spec send_after(Time :: non_neg_integer(), Dest :: pid() | atom(), Msg :: term()) -> reference().
+-spec send_after(Time :: 0..16#FFFFFFFF, Dest :: pid() | atom(), Msg :: term()) -> reference().
 send_after(Time, Dest, Msg) ->
     timer_manager:send_after(Time, Dest, Msg).
 

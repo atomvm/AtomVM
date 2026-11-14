@@ -71,6 +71,10 @@ timer_loop(I) ->
 test_timer_badargs() ->
     {'EXIT', {timeout_value, _}} = (catch timer:sleep(-1)),
     {'EXIT', {timeout_value, _}} = (catch timer:sleep(not_infinity)),
+    {error, badarg} = timer:send_after(-1, ignored),
+    {error, badarg} = timer:send_after(60000, make_ref(), ignored),
+    {'EXIT', {badarg, _}} = (catch erlang:send_after(-1, self(), ignored)),
+    {'EXIT', {badarg, _}} = (catch erlang:send_after(60000, make_ref(), ignored)),
     ok.
 
 test_infinity() ->

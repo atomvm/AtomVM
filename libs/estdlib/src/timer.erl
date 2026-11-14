@@ -47,30 +47,34 @@ sleep(Timeout) ->
 %%-----------------------------------------------------------------------------
 %% @param Time time in milliseconds after which to send the message.
 %% @param Message the message to send to the calling process.
-%% @returns `{ok, TRef}' where `TRef' is a reference to the timer.
+%% @returns `{ok, TRef}' where `TRef' is a reference to the timer, or `{error, badarg}'.
 %%
 %% @doc Sends `Message' to the calling process after `Time' milliseconds.
 %% @end
 %%-----------------------------------------------------------------------------
--spec send_after(Time :: non_neg_integer(), Message :: term()) -> {ok, reference()}.
+-spec send_after(Time :: non_neg_integer(), Message :: term()) ->
+    {ok, reference()} | {error, badarg}.
 send_after(Time, Message) ->
-    TRef = timer_manager:send_after(Time, self(), Message),
-    {ok, TRef}.
+    send_after(Time, self(), Message).
 
 %%-----------------------------------------------------------------------------
 %% @param Time time in milliseconds after which to send the message.
 %% @param Pid the process to which to send the message.
 %% @param Message the message to send.
-%% @returns `{ok, TRef}' where `TRef' is a reference to the timer.
+%% @returns `{ok, TRef}' where `TRef' is a reference to the timer, or `{error, badarg}'.
 %%
 %% @doc Sends `Message' to `Pid' after `Time' milliseconds.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec send_after(Time :: non_neg_integer(), Pid :: pid() | atom(), Message :: term()) ->
-    {ok, reference()}.
+    {ok, reference()} | {error, badarg}.
 send_after(Time, Pid, Message) ->
-    TRef = timer_manager:send_after(Time, Pid, Message),
-    {ok, TRef}.
+    try
+        {ok, timer_manager:send_after(Time, Pid, Message)}
+    catch
+        error:badarg ->
+            {error, badarg}
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param Time time in milliseconds after which to apply the function.

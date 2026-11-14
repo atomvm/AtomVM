@@ -273,6 +273,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   operand when the left set is empty, unlike OTP
 - Fixed shutdown freeing platform polling state before socket monitor callbacks
   unregister pending select events
+- Fixed `erlang:send_after/3` and `timer:send_after/2,3` accepting invalid arguments
+  and failing in timer workers instead of raising `badarg` (`erlang:send_after/3`) or
+  returning `{error, badarg}` (`timer:send_after/2,3`) in the caller;
+  supported delays are `0..4294967295` milliseconds
+- Fixed `erlang:cancel_timer/1` returning `false` for nonreference arguments
+  instead of raising `badarg`
 
 ## [0.7.0-beta.0] - 2026-09-28
 
