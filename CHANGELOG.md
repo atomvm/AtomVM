@@ -288,6 +288,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remain active until expiry or explicit cancellation
 - Fixed `lists:seq/3` returning `[From]` instead of `[]` for empty ranges with
   `abs(Incr) > 1`
+- Fixed `erlang:register/2` allowing a process or port that is already
+  registered to be registered under additional names
 
 ## [0.7.0-beta.0] - 2026-09-28
 

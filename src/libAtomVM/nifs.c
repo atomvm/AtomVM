@@ -1293,12 +1293,10 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[])
 
     // pid must be existing, not already registered, and not the atom undefined.
     if (UNLIKELY(!globalcontext_process_exists(ctx->global, pid))
-        || globalcontext_get_registered_process(ctx->global, atom_index) != UNDEFINED_ATOM
-        || reg_name_term == UNDEFINED_ATOM) {
+        || reg_name_term == UNDEFINED_ATOM
+        || !globalcontext_register_process(ctx->global, atom_index, pid_or_port_term)) {
         RAISE_ERROR(BADARG_ATOM);
     }
-
-    globalcontext_register_process(ctx->global, atom_index, pid_or_port_term);
 
     return TRUE_ATOM;
 }
