@@ -31,6 +31,12 @@ test() ->
     ok = test_connect_parameters(),
     ok = test_connect_bad_address(),
     ok = test_tcp_double_close(),
+    case erlang:system_info(machine) of
+        "ATOM" ->
+            ok = test_send_backpressure();
+        "BEAM" ->
+            ok
+    end,
     ok.
 
 test_echo_server() ->
@@ -504,4 +510,43 @@ test_tcp_double_close() ->
     ok = gen_tcp:close(Socket),
     ok = gen_tcp:close(Socket),
     {error, closed} = gen_tcp:recv(Socket, 512, 5000),
+    ok.
+
+%% gen_tcp:send/2 on a socket whose peer does not read blocks the sender, but
+%% not the process serving the socket: another process can still use the
+%% socket, and closing it unblocks the sender with {error, closed}.
+test_send_backpressure() ->
+    etest:flush_msg_queue(),
+    Options = [{inet_backend, socket}, {active, false}],
+    {ok, ListenSocket} = gen_tcp:listen(0, Options),
+    {ok, {_Address, Port}} = inet:sockname(ListenSocket),
+    Self = self(),
+    Acceptor = spawn_link(fun() ->
+        {ok, ServerSocket} = gen_tcp:accept(ListenSocket),
+        Self ! {accepted, self()},
+        receive
+            close_server -> ok = gen_tcp:close(ServerSocket)
+        end
+    end),
+    {ok, Socket} = gen_tcp:connect({127, 0, 0, 1}, Port, Options),
+    receive
+        {accepted, Acceptor} -> ok
+    after 5000 -> throw({timeout, test_send_backpressure, ?LINE})
+    end,
+    %% Much more than the socket buffers can hold: the sender blocks.
+    Data = binary:copy(<<0>>, 64 * 1024 * 1024),
+    Sender = spawn(fun() ->
+        Self ! {send_result, self(), gen_tcp:send(Socket, Data)}
+    end),
+    {error, timeout} = gen_tcp:recv(Socket, 0, 500),
+    {error, timeout} = gen_tcp:recv(Socket, 0, 500),
+    ok = gen_tcp:close(Socket),
+    ok =
+        receive
+            {send_result, Sender, {error, closed}} -> ok;
+            {send_result, Sender, Other} -> {unexpected_send_result, Other}
+        after 5000 -> throw({timeout, test_send_backpressure, ?LINE})
+        end,
+    Acceptor ! close_server,
+    ok = gen_tcp:close(ListenSocket),
     ok.

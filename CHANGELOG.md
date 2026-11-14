@@ -25,6 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added PPP over a UART to the `network` module on ESP32 (opt-in with `CONFIG_AVM_ENABLE_PPP=y`,
   which needs `CONFIG_LWIP_PPP_SUPPORT=y`): `{ppp, [...]}` in `network:start/1` runs the link on a
   UART whose other end is ready for it, such as a cellular modem the application has dialed
+- Added `enif_select_write` and `ERL_NIF_SELECT_CANCEL` (both previously declared but not
+  implemented), and reworked `enif_select`/`enif_select_read`/`enif_select_write` so a resource
+  can hold independent pending read and write selects (each with its own ref/message/pid) on the
+  same event at the same time
+- Added `socket:nif_select_write/2`; sockets now keep one selecting process per direction, so a
+  process blocked in `socket:send/2` no longer disturbs another process blocked in `socket:recv/2,3`
+- Added `socket:send/3` and `socket:sendto/4`, taking a timeout, `nowait` or a select handle, so
+  that a send on a socket whose peer does not read can be bounded in time (`{error, timeout}` or
+  `{error, {timeout, RestData}}`) or made asynchronous (`{select, SelectInfo}` or
+  `{select, {SelectInfo, RestData}}`, followed by a `{'$socket', Socket, select, SelectHandle}`
+  message when the socket is writable again)
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
@@ -129,6 +140,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `unicode:characters_to_list/1,2` and `unicode:characters_to_binary/1,2,3` returning an
   error tuple with an uninitialized value in place of the rest for a top-level argument that is
   not chardata, such as `unicode:characters_to_list(foo)`; they now raise `badarg`
+- `socket:send/2,3` now correctly distinguishes transient send backpressure (lwIP `ERR_MEM` / BSD
+  `EAGAIN`|`EWOULDBLOCK`) from a closed connection at the NIF level, returning `{error, closed}`
+  (rather than `{ok, Data}`) when the peer has closed the connection, and waits for the socket to
+  become writable again and retries internally, so callers get `ok | {error, Reason}` (or
+  `{error, {Reason, RestData}}` when an error follows a partial send, as in OTP) and no longer
+  need to implement their own retry/backoff for partial sends or backpressure; `ssl:send/2`,
+  `ssl:recv/2` and the TLS handshake/close-notify loops likewise wait for write-readiness instead
+  of busy-looping on `want_write`
+- Fixed Erlang distribution over sockets (`socket_dist_controller`) silently ignoring
+  `socket:send/2` errors on `tick` and outgoing distribution data; the connection is now
+  terminated instead of continuing to run against a broken socket
+- `gen_tcp:send/2` no longer blocks the process serving the socket when the peer does not read:
+  sends are queued and completed as the socket becomes writable, so `gen_tcp:recv/2,3`,
+  `gen_tcp:close/1` and `gen_tcp:controlling_process/2` keep working meanwhile, and a pending send
+  fails with `{error, closed}` when the socket is closed
+- `gen_udp:send/4` no longer blocks the process serving the socket while the send buffer is full
+  on BSD sockets: datagrams are queued and sent as the socket becomes writable, so
+  `gen_udp:recv/2,3` and `gen_udp:close/1` keep working meanwhile, and a pending send fails with
+  `{error, closed}` when the socket is closed
+- Fixed `socket:send/2` reporting any error other than backpressure as `closed` on BSD sockets:
+  the actual error (e.g. `epipe`, `enobufs`) is now returned
+- `socket:send/2,3` and `socket:sendto/3,4` on a socket that was closed now return
+  `{error, closed}`, as in OTP, instead of `{error, ebadf}`
+- Fixed a use-after-free in `socket:shutdown/2` with `read_write` on lwIP (Raspberry Pi Pico W):
+  lwIP can free the pcb right away, e.g. when there is unread data, and its callbacks were
+  detached afterwards
+- Fixed lwIP sockets after a connection error (e.g. a reset from the peer): the freed pcb was
+  still used by `socket:send/2`, `socket:close/1` and others, and processes blocked in
+  `socket:recv/2,3` or `socket:send/2` were never woken up; they now get `{error, closed}`.
+  Accepted sockets did not even register the error callback
+- Fixed `socket:send/2` busy looping on lwIP when `tcp_write` fails for lack of memory while the
+  send buffer has room (Raspberry Pi Pico W)
+- Fixed a race on the write select flag between the `tcp_sent` callback and
+  `socket:nif_select_write/2` on SMP builds (Raspberry Pi Pico W)
+- Fixed selecting for read or write on a socket closed by another process raising `badarg` on
+  lwIP, instead of delivering the closed notification as on BSD sockets, and a write select on a
+  connecting socket silently dropping the process trapped in `socket:connect/2`
+- Fixed selecting on a socket that is already closed leaving the caller as the select owner with
+  a monitor that no event would ever release
+- Fixed a lost wake up in the ESP32 select thread: a select event registered while the thread was
+  rebuilding its poll set was not polled until another one was registered or unregistered
 
 ## [0.7.0-beta.0] - 2026-09-28
 

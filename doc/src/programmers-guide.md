@@ -2495,8 +2495,8 @@ case socket:recv(ConnectedSocket) of
         case socket:send(ConnectedSocket, Data) of
             ok ->
                 io:format("All data was sent~n");
-            {ok, Rest} ->
-                io:format("Some data was sent.  Remaining: ~p~n", [Rest]);
+            {error, {Reason, Rest}} ->
+                io:format("An error occurred after some data was sent: ~p.  Not sent: ~p~n", [Reason, Rest]);
             {error, Reason} ->
                 io:format("An error occurred sending data: ~p~n", [Reason])
         end;
@@ -2509,7 +2509,9 @@ end.
 
 The `socket:recv/1` function will block the current process until a packet has arrived or until the local or remote socket has been closed, or some other error occurs.
 
-Note that the `socket:send/2` function may return `ok` if all of the data has been sent, or `{ok, Rest}`, where `Rest` is the remaining part of the data that was not sent to the operating system.  If the supplied input to `socket:send/2` is an io-list, then the `Rest` will be a binary containing the rest of the data in the io-list.
+The `socket:send/2` function blocks until all of the data has been accepted by the operating system (or by the network stack), retrying internally while the socket send buffer is full, and then returns `ok`.  If an error occurs before any data was accepted, it returns `{error, Reason}`; if an error occurs after some of the data was accepted, it returns `{error, {Reason, Rest}}`, where `Rest` is the remaining part of the data that was not sent.  If the supplied input to `socket:send/2` is an io-list, then `Rest` will be a binary containing the rest of the data in the io-list.
+
+Use [`socket:send/3`](./apidocs/erlang/estdlib/socket.md#send3) to bound the time spent waiting for the socket to become writable, in which case `{error, timeout}` or `{error, {timeout, Rest}}` is returned when the timeout expires, or to send without blocking at all by passing `nowait`, in which case `{select, SelectInfo}` or `{select, {SelectInfo, Rest}}` is returned when the data cannot be sent right away and a `{'$socket', Socket, select, SelectHandle}` message is delivered to the calling process when the socket becomes writable.
 
 ### Getting Information about Connected Sockets
 
@@ -2611,8 +2613,6 @@ Dest = #{family => inet, addr => loopback, port => 512},
 case socket:sendto(Socket, Data, Dest) of
     ok ->
         io:format("Send packet ~p to ~p.~n", [Data, Dest]);
-    {ok, Rest} ->
-        io:format("Send packet ~p to ~p.  Remaining: ~p~n", [Data, Dest, Rest]);
     {error, Reason} ->
         io:format("An error occurred sending a packet: ~p~n", [Reason])
 end

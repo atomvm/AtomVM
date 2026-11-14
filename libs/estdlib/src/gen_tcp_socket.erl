@@ -194,8 +194,18 @@ peername(Socket) ->
     monitor_ref = undefined,
     active,
     options,
-    pending_selects = #{}
+    pending_selects = #{},
+    %% {Ref, From, RestData} of the send waiting for the socket to be writable
+    pending_send = undefined,
+    %% {From, Data} of the sends queued behind the pending one
+    send_queue = queue:new()
 }).
+
+%% gen_tcp:send/2 on a socket whose peer does not read must not block the
+%% process serving the socket: recv, close and controlling_process from other
+%% processes would hang. Sends are therefore asynchronous, one at a time and
+%% in order: when the socket is not writable, the rest of the packet waits for
+%% the write select and the following packets wait in a queue.
 
 init({Socket, ControllingProcess, Mode, Options}) ->
     case (Mode =:= connect orelse Mode =:= accept) andalso maps:get(active, Options, true) of
@@ -263,7 +273,14 @@ handle_call({send, Packet}, From, State) ->
         {send, Packet}, From, State
     ]),
     ?LOG_INFO("Sending packet"),
-    {reply, socket:send(State#state.socket, Packet), State};
+    Data = erlang:iolist_to_binary(Packet),
+    case State#state.pending_send of
+        undefined ->
+            {noreply, start_send(Data, From, State)};
+        _ ->
+            SendQueue = queue:in({From, Data}, State#state.send_queue),
+            {noreply, State#state{send_queue = SendQueue}}
+    end;
 handle_call({recv, Length, Timeout}, From, State) ->
     ?LOG_DEBUG("handle_call [~p], ~p, ~p]", [
         {recv, Length, Timeout}, From, State
@@ -341,7 +358,8 @@ handle_call({controlling_process, Pid, Caller}, _From, State) ->
             end
     end;
 handle_call(close, _From, State) ->
-    {stop, normal, socket:close(State#state.socket), State};
+    Reply = socket:close(State#state.socket),
+    {stop, normal, Reply, fail_pending_sends(closed, State)};
 handle_call(Request, _From, State) ->
     {reply, {unknown_request, Request}, State}.
 
@@ -350,6 +368,16 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 %% @hidden
+handle_info(
+    {'$socket', _Socket, select, Ref}, #state{pending_send = {Ref, From, RestData}} = State
+) ->
+    ?LOG_INFO("Select ready for write on send"),
+    {noreply, start_send(RestData, From, State#state{pending_send = undefined})};
+handle_info(
+    {'$socket', _Socket, abort, {Ref, Reason}}, #state{pending_send = {Ref, _From, _Rest}} = State
+) ->
+    ?LOG_INFO("Send aborted: ~p", [Reason]),
+    {noreply, fail_pending_sends(Reason, State)};
 handle_info({'$socket', _Socket, select, Ref}, State) ->
     %% TODO cancel timer
     case maps:get(Ref, State#state.pending_selects, undefined) of
@@ -379,10 +407,10 @@ handle_info({'$socket', Socket, abort, {Ref, closed}}, State) ->
     case maps:get(Ref, State#state.pending_selects, undefined) of
         undefined ->
             ?LOG_WARNING("Unable to find select ref ~p in pending selects", [Ref]),
-            socket:nif_select_stop(Socket),
+            socket:nif_select_read_stop(Socket),
             {noreply, State};
         {accept, From, _AcceptingProc, _Timeout} ->
-            socket:nif_select_stop(Socket),
+            socket:nif_select_read_stop(Socket),
             gen_server:reply(From, {error, closed}),
             {noreply, State};
         active ->
@@ -390,7 +418,7 @@ handle_info({'$socket', Socket, abort, {Ref, closed}}, State) ->
             State#state.controlling_process ! {tcp_closed, WrappedSocket},
             {noreply, State};
         {passive, From, _Length, _Timeout} ->
-            socket:nif_select_stop(Socket),
+            socket:nif_select_read_stop(Socket),
             gen_server:reply(From, {error, closed}),
             {noreply, State#state{
                 pending_selects = maps:remove(Ref, State#state.pending_selects)
@@ -418,7 +446,7 @@ handle_info({'DOWN', MonitorRef, process, ControllingProcess, Info}, State) ->
             ?LOG_INFO("Controlling process ~p has terminated.  Stopping ~p.", [
                 ControllingProcess, ?MODULE
             ]),
-            {stop, normal, State};
+            {stop, normal, fail_pending_sends(closed, State)};
         _ ->
             {noreply, State}
     end;
@@ -448,6 +476,51 @@ proplist_to_map([{K, V} | T], Accum) ->
     proplist_to_map(T, Accum#{K => V}).
 
 %% @private
+%% Send Data, replying to From once it has all been accepted by the stack. If
+%% the socket is not writable, keep the rest of the data for the write select
+%% notification. Then start the next queued send, if any.
+start_send(Data, From, State) ->
+    case socket:send(State#state.socket, Data, nowait) of
+        ok ->
+            gen_server:reply(From, ok),
+            next_send(State);
+        {select, {{select_info, send, Ref}, RestData}} ->
+            State#state{pending_send = {Ref, From, RestData}};
+        {select, {select_info, send, Ref}} ->
+            State#state{pending_send = {Ref, From, Data}};
+        {error, {Reason, _RestData}} ->
+            gen_server:reply(From, {error, Reason}),
+            next_send(State);
+        {error, _Reason} = Error ->
+            gen_server:reply(From, Error),
+            next_send(State)
+    end.
+
+%% @private
+next_send(State) ->
+    case queue:out(State#state.send_queue) of
+        {{value, {From, Data}}, SendQueue} ->
+            start_send(Data, From, State#state{pending_send = undefined, send_queue = SendQueue});
+        {empty, _SendQueue} ->
+            State#state{pending_send = undefined}
+    end.
+
+%% @private
+%% Reply {error, Reason} to the pending send, if any, and to the queued ones.
+fail_pending_sends(Reason, State) ->
+    case State#state.pending_send of
+        {_Ref, From, _RestData} ->
+            gen_server:reply(From, {error, Reason});
+        undefined ->
+            ok
+    end,
+    lists:foreach(
+        fun({From, _Data}) -> gen_server:reply(From, {error, Reason}) end,
+        queue:to_list(State#state.send_queue)
+    ),
+    State#state{pending_send = undefined, send_queue = queue:new()}.
+
+%% @private
 handle_accept(State, From, AcceptingProc) ->
     Socket = State#state.socket,
     ControllingProcess = AcceptingProc,
@@ -465,7 +538,7 @@ handle_accept(State, From, AcceptingProc) ->
         {error, _Reason} = Error ->
             ?LOG_ERROR("Failed to accept connection: ~p", [Error]),
             %% CAUTION: internal API
-            socket:nif_select_stop(Socket),
+            socket:nif_select_read_stop(Socket),
             gen_server:reply(From, Error),
             State
     end.
@@ -510,7 +583,7 @@ handle_active_recv(State) ->
         {error, closed} ->
             ?LOG_INFO("Socket was closed by peer"),
             %% CAUTION: internal API
-            socket:nif_select_stop(Socket),
+            socket:nif_select_read_stop(Socket),
             %% peer has closed the connection
             WrappedSocket = {?GEN_TCP_MONIKER, self(), ?MODULE},
             State#state.controlling_process ! {tcp_closed, WrappedSocket},
@@ -518,7 +591,7 @@ handle_active_recv(State) ->
         {error, _} = Error ->
             ?LOG_ERROR("Error on receive on pending select Error=~p", [Error]),
             %% CAUTION: internal API
-            socket:nif_select_stop(Socket),
+            socket:nif_select_read_stop(Socket),
             %% TODO is this right?  I don't think active receivers would know
             %% what to do with this message.  Maybe log it instead?
             State#state.controlling_process ! {tcp_error, WrappedSocket, Error},
@@ -547,7 +620,7 @@ handle_passive_recv(State, From, Length, _Timeout) ->
             State;
         {error, _} = Error ->
             ?LOG_ERROR("Error on receive from socket:nif_recv Error=~p", [Error]),
-            socket:nif_select_stop(Socket),
+            socket:nif_select_read_stop(Socket),
             ?LOG_INFO("unable to receive on pending select~n"),
             gen_server:reply(From, Error),
             State

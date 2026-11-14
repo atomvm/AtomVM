@@ -113,6 +113,14 @@ struct LWIPEvent
         struct
         {
             struct SocketResource *rsrc_obj;
+        } tcp_sent;
+        struct
+        {
+            struct SocketResource *rsrc_obj;
+        } tcp_err;
+        struct
+        {
+            struct SocketResource *rsrc_obj;
             struct pbuf *buf;
             uint32_t addr;
             uint16_t port;

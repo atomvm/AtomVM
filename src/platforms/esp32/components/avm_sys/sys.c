@@ -709,13 +709,13 @@ static void *select_thread_loop(void *arg)
         int fd_index;
         if (fds == NULL || select_events_poll_count < 0) {
             // Means it is dirty and should be rebuilt.
+            // Select events are always counted again: enif_select sets
+            // read/write under this lock but marks the count dirty only after
+            // releasing it, so a cached count can be smaller than the number
+            // of entries the loop below writes.
             struct ListHead *select_events = synclist_wrlock(&glb->select_events);
             size_t select_events_new_count;
-            if (select_events_poll_count < 0) {
-                select_event_count_and_destroy_closed(select_events, NULL, NULL, &select_events_new_count, glb);
-            } else {
-                select_events_new_count = select_events_poll_count;
-            }
+            select_event_count_and_destroy_closed(select_events, NULL, NULL, &select_events_new_count, glb);
 
             if (fds) {
                 fds = realloc(fds, sizeof(struct pollfd) * (poll_count + select_events_new_count));
@@ -740,10 +740,13 @@ static void *select_thread_loop(void *arg)
                     fd_index++;
                 }
             }
+            // Store the count before releasing the lock: a select event
+            // registered in between would mark the count dirty only to have
+            // it overwritten here, and its fd would not be polled.
+            platform->select_events_poll_count = select_events_new_count;
             synclist_unlock(&glb->select_events);
 
             select_events_poll_count = select_events_new_count;
-            platform->select_events_poll_count = select_events_new_count;
         }
 
         poll_count += select_events_poll_count;
