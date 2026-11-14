@@ -882,7 +882,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                 case MonitorSignal: {                                                           \
                     struct MonitorPointerSignal *monitor_signal                                 \
                         = CONTAINER_OF(signal_message, struct MonitorPointerSignal, base);      \
-                    context_add_monitor(ctx, monitor_signal->monitor);                          \
+                    context_add_monitor(ctx, monitor_signal->monitor, false);                   \
                     break;                                                                      \
                 }                                                                               \
                 case DemonitorSignal: {                                                         \
@@ -1099,6 +1099,10 @@ static inline ModuleNativeEntryPoint do_return_native(Module *mod, Context *ctx)
     if (term_is_atom(index_or_function)) {                              \
         term module = boxed_value[1];                                   \
         fun_arity = term_to_int(boxed_value[3]);                        \
+        if (UNLIKELY(args_count != fun_arity)) {                        \
+            term reason = context_make_badarity(ctx, fun, args_count); \
+            RAISE_ERROR(reason);                                      \
+        }                                                              \
         atom_index_t module_name = term_to_atom_index(module);          \
         atom_index_t function_name = term_to_atom_index(index_or_function); \
         term return_value;                                              \
@@ -1134,9 +1138,10 @@ static inline ModuleNativeEntryPoint do_return_native(Module *mod, Context *ctx)
         module_get_fun(fun_module, fun_index, &label, &fun_arity_and_freeze, &n_freeze); \
         fun_arity = fun_arity_and_freeze - n_freeze;                    \
         TRACE_CALL(ctx, mod, "call_fun", label, args_count);            \
-    }                                                                   \
-    if (UNLIKELY(args_count != fun_arity)) {                            \
-        RAISE_ERROR(BADARITY_ATOM);                                     \
+        if (UNLIKELY(args_count != fun_arity)) {                        \
+            term reason = context_make_badarity(ctx, fun, args_count); \
+            RAISE_ERROR(reason);                                      \
+        }                                                              \
     }                                                                   \
     uint32_t lim_freeze = MINI(fun_arity + n_freeze, MAX_REG);          \
     for (uint32_t i = fun_arity; i < lim_freeze; i++) {                 \
@@ -2458,13 +2463,13 @@ schedule_in:
                 DECODE_COMPACT_TERM(timeout, pc)
 
                 avm_int64_t t = 0;
-                if (term_is_any_integer(timeout)) {
-                    t = term_maybe_unbox_int64(timeout);
-                    if (UNLIKELY(t < 0)) {
+                if (timeout != INFINITY_ATOM) {
+                    if (UNLIKELY(!term_is_uint32(timeout))) {
+                        mailbox_reset(&ctx->mailbox);
+                        ctx->mailbox.receive_has_match_clauses = false;
                         RAISE_ERROR(TIMEOUT_VALUE_ATOM);
                     }
-                } else if (UNLIKELY(timeout != INFINITY_ATOM)) {
-                    RAISE_ERROR(TIMEOUT_VALUE_ATOM);
+                    t = term_to_uint32(timeout);
                 }
                 TRACE("wait_timeout/2, label: %i, timeout: %li\n", label, (long int) t);
 
@@ -3732,23 +3737,21 @@ schedule_in:
                     }
                 }
 
-                avm_int_t signed_size_value = 64;
-                if (size != term_nil()) {
-                    VERIFY_IS_INTEGER(size, "bs_put_float", fail);
-                    signed_size_value = term_to_int(size);
-                    if (UNLIKELY(signed_size_value != 16 && signed_size_value != 32 && signed_size_value != 64)) {
-                        if (fail == 0) {
-                            RAISE_ERROR(BADARG_ATOM);
-                        } else {
-                            JUMP_TO_LABEL(mod, fail);
-                        }
+                size_t size_bits;
+                term size_term = size == term_nil() ? term_from_int(64) : size;
+                if (UNLIKELY(!bs_scaled_size_bits(size_term, unit, 64, &size_bits)
+                        || (size_bits != 16 && size_bits != 32 && size_bits != 64))) {
+                    if (fail == 0) {
+                        RAISE_ERROR(BADARG_ATOM);
+                    } else {
+                        JUMP_TO_LABEL(mod, fail);
                     }
                 }
 
                 bool result;
-                if (signed_size_value == 16) {
+                if (size_bits == 16) {
                     result = bitstring_insert_f16(ctx->bs, ctx->bs_offset, float_value, flags_value);
-                } else if (signed_size_value == 32) {
+                } else if (size_bits == 32) {
                     result = bitstring_insert_f32(ctx->bs, ctx->bs_offset, float_value, flags_value);
                 } else {
                     result = bitstring_insert_f64(ctx->bs, ctx->bs_offset, float_value, flags_value);
@@ -3759,7 +3762,7 @@ schedule_in:
                     RAISE_ERROR(BADARG_ATOM);
                 }
 
-                ctx->bs_offset += signed_size_value * unit;
+                ctx->bs_offset += size_bits;
                 break;
             }
 
@@ -4311,7 +4314,7 @@ schedule_in:
                 DECODE_LITERAL(flags_value, pc)
 
                 VERIFY_IS_MATCH_STATE(src, "bs_skip_bits2", 0);
-                VERIFY_IS_ANY_INTEGER(size, "bs_skip_bits2", 0);
+                VERIFY_IS_ANY_INTEGER(size, "bs_skip_bits2", fail);
                 // Ignore flags value as skipping bits is the same whatever the endianness
                 TRACE("bs_skip_bits2/5, fail=%u src=%p size=0x%lx unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned long) term_to_int(size), (unsigned) unit, (int) flags_value);
 
@@ -4394,7 +4397,7 @@ schedule_in:
                 DECODE_LITERAL(flags_value, pc)
 
                 VERIFY_IS_MATCH_STATE(src, "bs_get_integer", 0);
-                VERIFY_IS_ANY_INTEGER(size, "bs_get_integer", 0);
+                VERIFY_IS_ANY_INTEGER(size, "bs_get_integer", fail);
 
                 TRACE("bs_get_integer2/7, fail=%u src=%p live=%u size=%u unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned) term_to_int(size), (unsigned) live, (unsigned) unit, (int) flags_value);
 
@@ -4471,7 +4474,7 @@ schedule_in:
                 DECODE_LITERAL(flags_value, pc);
 
                 VERIFY_IS_MATCH_STATE(src, "bs_get_float", 0);
-                VERIFY_IS_ANY_INTEGER(size, "bs_get_float", 0);
+                VERIFY_IS_ANY_INTEGER(size, "bs_get_float", fail);
 
                 TRACE("bs_get_float2/7, fail=%u src=%p unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned) unit, (int) flags_value);
 
@@ -4485,11 +4488,14 @@ schedule_in:
                     TRACE("bs_get_float2: size is negative or exceeds the remaining capacity\n");
                     JUMP_TO_ADDRESS(mod->labels[fail]);
                 }
-                // both bounded by the remaining capacity, so they fit in an avm_int_t
-                avm_int_t size_val = term_to_int(size);
+                // bounded by the remaining capacity, so it fits in an avm_int_t
                 avm_int_t increment = (avm_int_t) increment_bits;
                 bool status;
-                switch (size_val) {
+                switch (increment) {
+                    case 0:
+                        value = 0.0;
+                        status = true;
+                        break;
                     case 16:
                         status = bitstring_extract_f16(bs_bin, bs_offset, increment, flags_value, &value);
                         break;
@@ -4572,7 +4578,7 @@ schedule_in:
                     size_bits = remaining_bits;
                 } else {
                     TRACE("bs_get_binary2: size is neither an integer nor the atom `all`\n");
-                    RAISE_ERROR(BADARG_ATOM);
+                    JUMP_TO_ADDRESS(mod->labels[fail]);
                 }
 
                 TRACE("bs_get_binary2/7, fail=%u src=%p live=%u unit=%u\n", (unsigned) fail, (void *) bs_bin, (unsigned) live, (unsigned) unit);
@@ -5698,16 +5704,16 @@ schedule_in:
                                     JUMP_TO_LABEL(mod, fail);
                                 }
                             }
-                            VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
-                            avm_int_t signed_size_value = term_to_int(size);
-                            if (UNLIKELY(signed_size_value != 16 && signed_size_value != 32 && signed_size_value != 64)) {
+                            size_t float_bits;
+                            if (UNLIKELY(!bs_scaled_size_bits(size, segment_unit, 64, &float_bits)
+                                    || (float_bits != 16 && float_bits != 32 && float_bits != 64))) {
                                 if (fail == 0) {
                                     RAISE_ERROR(BADARG_ATOM);
                                 } else {
                                     JUMP_TO_LABEL(mod, fail);
                                 }
                             }
-                            segment_size = signed_size_value;
+                            segment_size = float_bits;
                             segment_unit = 1;
                             break;
                         }
@@ -5869,7 +5875,7 @@ schedule_in:
                             size_value = (size_t) term_to_int(size);
                             break;
                         case FLOAT_ATOM:
-                            size_value = (size_t) term_to_int(size);
+                            size_value = (size_t) term_to_int(size) * segment_unit;
                             break;
                         default:
                             break;

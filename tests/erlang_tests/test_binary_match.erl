@@ -59,6 +59,20 @@ start() ->
     % {scope, {1, -1}}: starts at 0, 1 byte long
     {0, 1} = binary:match(?ID(<<"bab">>), ?ID(<<"b">>), ?ID([{scope, {1, -1}}])),
 
+    % Later scopes replace earlier ones, but every scope must be valid.
+    {3, 2} = binary:match(
+        ?ID(<<"zababcab">>), ?ID(<<"ab">>), ?ID([{scope, {0, 3}}, {scope, {3, 3}}])
+    ),
+    {1, 2} = binary:match(
+        ?ID(<<"zababcab">>), ?ID(<<"ab">>), ?ID([{scope, {3, 3}}, {scope, {0, 3}}])
+    ),
+    [
+        ok = fail_with_badarg(fun() ->
+            binary:match(?ID(<<"zababcab">>), ?ID(<<"ab">>), ?ID([{scope, Bad}, {scope, {3, 3}}]))
+        end)
+     || Bad <- [not_tuple, {0, 99}, {0, -1}, {3, 1.0}]
+    ],
+
     % bad inputs, subjects must be non-empty to not short-circuit
     ok = fail_with_badarg(fun() -> binary:match(?ID(not_binary), ?ID(<<"a">>)) end),
     ok = fail_with_badarg(fun() -> binary:match(?ID(<<"a">>), ?ID(not_binary)) end),

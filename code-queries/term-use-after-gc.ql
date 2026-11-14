@@ -32,11 +32,31 @@ predicate isTermType(Type t) {
     )
 }
 
+/**
+ * Holds if `e` is a compile-time constant equal to MEMORY_NO_GC.
+ * Unknown or dynamic allocation modes must still be treated as potential GC.
+ */
+predicate isNoGCMode(Expr e) {
+    exists(EnumConstant mode |
+        mode.hasName("MEMORY_NO_GC") and
+        mode.getDeclaringEnum().hasName("MemoryAllocMode") and
+        e.getValue() = mode.getValue()
+    )
+}
+
 class GCCall extends FunctionCall {
     GCCall() {
-        this.getTarget().hasName("memory_ensure_free_with_roots")
-        or this.getTarget().hasName("memory_ensure_free_opt")
-        or this.getTarget().hasName("memory_ensure_free")
+        this.getTarget().hasName("memory_ensure_free")
+        or
+        (
+            this.getTarget().hasName("memory_ensure_free_opt") and
+            not isNoGCMode(this.getArgument(2))
+        )
+        or
+        (
+            this.getTarget().hasName("memory_ensure_free_with_roots") and
+            not isNoGCMode(this.getArgument(4))
+        )
     }
 }
 

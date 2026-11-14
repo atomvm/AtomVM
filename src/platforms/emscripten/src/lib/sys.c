@@ -731,6 +731,11 @@ uint64_t sys_monotonic_time_u64_to_ms(uint64_t t)
 
 static emscripten_fetch_t *fetch_file(const char *url)
 {
+    // Node has no XMLHttpRequest; a missing local file must stay a load failure.
+    if (EM_ASM_INT({ return typeof XMLHttpRequest == "undefined"; })) {
+        return NULL;
+    }
+
     emscripten_fetch_attr_t attr;
     emscripten_fetch_attr_init(&attr);
     strcpy(attr.requestMethod, "GET");

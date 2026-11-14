@@ -23,10 +23,27 @@
 -export([start/0, sort/1, insert/2, check/1]).
 
 start() ->
+    ok = ordered([0 | a], [0]),
+    ok = ordered([0 | {}], [0]),
+    ok = ordered([0 | #{a => 1}], [0]),
+    ok = ordered([0], [0, 1]),
+    ok = ordered([0], [0 | <<1>>]),
+    ok = ordered([0, 2 | a], [0, 2]),
+    ok = ordered([[0 | a]], [[0]]),
     Sorted = sort(["Foo", "Bar", "Alice", "Bob", "lowercase"]),
     check(Sorted) +
         bool_to_n(Sorted > ["Aalice"]) * 2 +
         bool_to_n(Sorted < ["Bar"]) * 4.
+
+ordered(A, B) ->
+    true = A < B,
+    true = A =< B,
+    true = B > A,
+    true = B >= A,
+    false = A > B,
+    false = B < A,
+    false = A == B,
+    ok.
 
 sort(L) ->
     sort(L, []).

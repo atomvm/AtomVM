@@ -30,7 +30,7 @@
     apply/3,
     start_timer/3, start_timer/4,
     cancel_timer/1,
-    send_after/3,
+    send_after/3, send_after/4,
     process_info/1,
     process_info/2,
     system_info/1,
@@ -61,6 +61,8 @@
     nif_error/1,
     get/0,
     get/1,
+    get_keys/0,
+    get_keys/1,
     put/2,
     erase/0,
     erase/1,
@@ -184,6 +186,7 @@
     'bnot'/1,
     byte_size/1,
     bit_size/1,
+    binary_part/2,
     binary_part/3,
     element/2,
     error/1,
@@ -314,6 +317,8 @@
 %% @returns a reference that can be used to cancel the timer, if desired.
 %% @doc     Start a timer, and send {timeout, TimerRef, Msg} to Dest after
 %%          Time ms, where TimerRef is the reference returned from this function.
+%%          A PID destination's death automatically cancels the timer. An atom
+%%          destination is resolved when the timer expires and is not monitored.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec start_timer(Time :: non_neg_integer(), Dest :: pid() | atom(), Msg :: term()) -> reference().
@@ -348,7 +353,7 @@ start_timer(Time, Dest, Msg, _Options) ->
 %%
 %%          If the timer is found and has not yet fired, it is cancelled and the
 %%          remaining time is returned.  If the timer has already expired or does
-%%          not exist, `false' is returned.
+%%          not exist, `false' is returned. A nonreference TimerRef raises badarg.
 %%
 %%          <em><b>Note.</b>  Even if `false' is returned, a timeout message may
 %%          already have been placed in the caller's message queue.</em>
@@ -364,11 +369,39 @@ cancel_timer(TimerRef) ->
 %% @param   Msg Message to send to Dest after Time ms.
 %% @returns a reference that can be used to cancel the timer, if desired.
 %% @doc     Send Msg to Dest after Time ms.
+%%          Time must be an integer from 0 through 4294967295, the maximum
+%%          receive timeout supported by AtomVM. Dest must be a local pid or
+%%          an atom naming a local process. Invalid arguments raise badarg
+%%          in the caller before a timer is created.
+%%          A PID destination's death automatically cancels the timer. An atom
+%%          destination is resolved when the timer expires and is not monitored.
 %% @end
 %%-----------------------------------------------------------------------------
--spec send_after(Time :: non_neg_integer(), Dest :: pid() | atom(), Msg :: term()) -> reference().
+-spec send_after(Time :: 0..16#FFFFFFFF, Dest :: pid() | atom(), Msg :: term()) -> reference().
 send_after(Time, Dest, Msg) ->
-    timer_manager:send_after(Time, Dest, Msg).
+    send_after(Time, Dest, Msg, []).
+
+%%-----------------------------------------------------------------------------
+%% @param   Time relative delay or absolute monotonic timestamp in milliseconds.
+%% @param   Dest local Pid or registered process name.
+%% @param   Msg message to send when the timer expires.
+%% @param   Options list of `{abs, boolean()}' options (default `{abs, false}').
+%% @returns a reference that can be used to cancel the timer.
+%% @doc     Send Msg to Dest at a relative or absolute monotonic deadline.
+%%          With `{abs, true}', Time uses the same nonnegative platform epoch
+%%          as erlang:monotonic_time(millisecond). Past deadlines expire
+%%          immediately. Relative delays and future absolute deadlines are
+%%          limited to 4294967295 milliseconds from the time of this call.
+%%          For duplicate options the last value wins, but every option must
+%%          be valid. Invalid arguments raise badarg before creating a timer.
+%%          Destination monitoring and message format are as in send_after/3.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec send_after(
+    Time :: non_neg_integer(), Dest :: pid() | atom(), Msg :: term(), Options :: [{abs, boolean()}]
+) -> reference().
+send_after(Time, Dest, Msg, Options) ->
+    timer_manager:send_after(Time, Dest, Msg, Options).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pid the process pid.
@@ -495,6 +528,10 @@ system_info(_Key) ->
 %% @doc     Update system flags.
 %%
 %% This function allows to modify system flags at runtime.
+%%
+%% <b>backtrace_depth</b> sets the maximum exception stack trace depth. It accepts
+%% nonnegative small integers, capped at 64; the default is 8. A nonempty trace
+%% retains at least one frame even when the depth is zero.
 %%
 %% The following key is supported on SMP builds:
 %% <ul>
@@ -904,6 +941,16 @@ get() ->
 %%-----------------------------------------------------------------------------
 -spec get(Key :: any()) -> any().
 get(_Key) ->
+    erlang:nif_error(undefined).
+
+%% @doc Return all process dictionary keys in unspecified order.
+-spec get_keys() -> [term()].
+get_keys() ->
+    erlang:nif_error(undefined).
+
+%% @doc Return keys whose values exactly match `Value', in unspecified order.
+-spec get_keys(Value :: term()) -> [term()].
+get_keys(_Value) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -2503,6 +2550,13 @@ bit_size(_Bitstring) ->
 -spec binary_part(Subject :: binary(), Start :: non_neg_integer(), Length :: integer()) ->
     binary().
 binary_part(_Subject, _Start, _Length) ->
+    erlang:nif_error(undefined).
+
+%% @doc Extract a binary part using a `{Start, Length}' range.
+%% May be used in guards; negative lengths count backwards from `Start'.
+-spec binary_part(Subject :: binary(), {Start :: non_neg_integer(), Length :: integer()}) ->
+    binary().
+binary_part(_Subject, _Range) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

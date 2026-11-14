@@ -985,7 +985,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
             case MonitorSignal: {
                 struct MonitorPointerSignal *monitor_signal
                     = CONTAINER_OF(signal_message, struct MonitorPointerSignal, base);
-                context_add_monitor(ctx, monitor_signal->monitor);
+                context_add_monitor(ctx, monitor_signal->monitor, false);
                 break;
             }
             case DemonitorSignal: {
@@ -1089,13 +1089,13 @@ static Context *jit_wait_timeout(Context *ctx, JITState *jit_state, term timeout
 {
     TRACE("jit_wait_timeout: timeout=%p label=%d\n", (void *) timeout, label);
     avm_int64_t t = 0;
-    if (term_is_any_integer(timeout)) {
-        t = term_maybe_unbox_int64(timeout);
-        if (UNLIKELY(t < 0)) {
+    if (timeout != INFINITY_ATOM) {
+        if (UNLIKELY(!term_is_uint32(timeout))) {
+            mailbox_reset(&ctx->mailbox);
+            ctx->mailbox.receive_has_match_clauses = false;
             return jit_raise_error(ctx, jit_state, 0, TIMEOUT_VALUE_ATOM);
         }
-    } else if (UNLIKELY(timeout != INFINITY_ATOM)) {
-        return jit_raise_error(ctx, jit_state, 0, TIMEOUT_VALUE_ATOM);
+        t = term_to_uint32(timeout);
     }
 
     Context *r = jit_process_signal_messages(ctx, jit_state);
@@ -1211,6 +1211,9 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term
     if (term_is_atom(index_or_function)) {
         term module = boxed_value[1];
         fun_arity = term_to_int(boxed_value[3]);
+        if (UNLIKELY(args_count != fun_arity)) {
+            return jit_raise_error(ctx, jit_state, 0, context_make_badarity(ctx, fun, args_count));
+        }
         atom_index_t module_name = term_to_atom_index(module);
         atom_index_t function_name = term_to_atom_index(index_or_function);
         term return_value;
@@ -1245,9 +1248,9 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term
         uint32_t fun_arity_and_freeze;
         module_get_fun(fun_module, fun_index, &label, &fun_arity_and_freeze, &n_freeze);
         fun_arity = fun_arity_and_freeze - n_freeze;
-    }
-    if (UNLIKELY(args_count != fun_arity)) {
-        return jit_raise_error(ctx, jit_state, 0, BADARITY_ATOM);
+        if (UNLIKELY(args_count != fun_arity)) {
+            return jit_raise_error(ctx, jit_state, 0, context_make_badarity(ctx, fun, args_count));
+        }
     }
     uint32_t lim_freeze = MINI(fun_arity + n_freeze, MAX_REG);
     for (uint32_t i = fun_arity; i < lim_freeze; i++) {
@@ -1542,6 +1545,10 @@ static term jit_bitstring_extract_float(Context *ctx, JITState *jit_state, term 
     avm_float_t value;
     bool status;
     switch (n) {
+        case 0:
+            value = 0.0;
+            status = true;
+            break;
         case 16:
             status = bitstring_extract_f16(match_state_ptr[1], offset, n, bs_flags, &value);
             break;

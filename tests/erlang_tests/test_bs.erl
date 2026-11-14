@@ -118,6 +118,7 @@ start() ->
     ok = test_bs_variable_size_bitstring(),
     ok = test_negative_dynamic_size(),
     ok = test_oversized_dynamic_size(),
+    ok = test_noninteger_dynamic_size(),
     ok = test_construction_size_overflow(),
     ok = test_wide_integer_construction(),
     ok = test_float(),
@@ -1059,9 +1060,67 @@ test_float() ->
     <<Pi16B:16/float-little, 3, 14>> = <<72, 66, 3, 14>>,
     true = abs(Pi16B - Pi16) < 0.001,
 
+    ok = test_float16_rounding(FloatSize),
     ok = test_integer_outside_float_limits(),
     ok = test_create_with_invalid_float_value(),
     ok = test_create_with_invalid_float_size(),
+    ok = test_create_with_float_unit(),
+    ok.
+
+test_create_with_float_unit() ->
+    V = id(1.5),
+    <<63, 248, 0, 0, 0, 0, 0, 0>> = create_float_unit8(V),
+    <<62, 0>> = create_float_unit2(V, id(8)),
+    <<63, 192, 0, 0>> = create_float_unit2(V, id(16)),
+    <<63, 248, 0, 0, 0, 0, 0, 0>> = create_float_unit2(V, id(32)),
+    <<5:3, 0, 62, 3:2>> = create_float_unit2_mixed(V, id(8)),
+    <<5:3, 0, 0, 192, 63, 3:2>> = create_float_unit2_mixed(V, id(16)),
+    <<5:3, 0, 0, 0, 0, 0, 0, 248, 63, 3:2>> = create_float_unit2_mixed(V, id(32)),
+    <<128, 0, 0, 0, 0, 0, 0, 0>> = create_float_unit2(id(-0.0), id(32)),
+    <<64, 8, 0, 0, 0, 0, 0, 0>> = create_float_unit8(id(3)),
+    [
+        ok = expect_error(fun() -> create_float_unit2(V, id(Size)) end, badarg)
+     || Size <- [0, -1, 1, 12, 64, bad, 1.0]
+    ],
+    ok = expect_construction_error(fun() -> create_float_unit2(V, id(1 bsl 60)) end),
+    ok = expect_construction_error(fun() -> create_float_unit2(V, id(-(1 bsl 60))) end),
+    ok.
+
+create_float_unit8(V) -> <<V:8/float-unit:8>>.
+create_float_unit2(V, N) -> <<V:N/float-unit:2>>.
+create_float_unit2_mixed(V, N) -> <<5:3, V:N/float-little-unit:2, 3:2>>.
+
+test_float16_rounding(FloatSize) ->
+    % The spacing is 4 in [4096, 8192), so 6546.0 is exactly halfway between
+    % two half-precision values and must round to the even mantissa.
+    <<16#6E, 16#64>> = <<(id(6546.0)):16/float>>,
+    <<16#6E, 16#64>> = <<(id(6545.0)):16/float>>,
+    <<16#6E, 16#65>> = <<(id(6547.0)):16/float>>,
+    % Values near a tie must not be rounded through an intermediate float32.
+    <<16#6E, 16#64>> = <<(id(6545.9999)):16/float>>,
+    case FloatSize of
+        8 ->
+            <<16#6E, 16#65>> = <<(id(6546.0001)):16/float>>,
+            <<16#7B, 16#FF>> = <<(id(65519.999)):16/float>>;
+        4 ->
+            % These values have already rounded to ties in float32 terms.
+            <<16#6E, 16#64>> = <<(id(6546.0001)):16/float>>,
+            <<16#7C, 0>> = <<(id(65519.999)):16/float>>
+    end,
+    % Ties round to even for negative values too.
+    <<16#EC, 16#5E>> = <<(id(-4474.0)):16/float>>,
+    <<16#EE, 16#64>> = <<(id(-6546.0)):16/float>>,
+    % Subnormal values are rounded, not truncated.
+    <<0, 17>> = <<(id(1.0e-6)):16/float>>,
+    <<0, 1>> = <<(id(6.0e-8)):16/float>>,
+    % Half of the smallest subnormal is a tie and rounds to even, zero.
+    <<0, 0>> = <<(id(2.9802322387695312e-8)):16/float>>,
+    <<0, 1>> = <<(id(3.0e-8)):16/float>>,
+    % Rounding up the largest subnormal gives the smallest normal number.
+    <<4, 0>> = <<(id(6.103515e-5)):16/float>>,
+    % A tie at the top of the range rounds up to infinity.
+    <<123, 255>> = <<(id(65519.0)):16/float>>,
+    <<124, 0>> = <<(id(65520.0)):16/float>>,
     ok.
 
 test_create_with_invalid_float_value() ->
@@ -1142,6 +1201,22 @@ test_oversized_dynamic_size() ->
     nope = skip_unit64(id(1 bsl 61), B),
     nope = int_unit64(id(1 bsl 61), B),
     nope = bin_unit8(id(1 bsl 61), B),
+    ok.
+
+test_noninteger_dynamic_size() ->
+    B = id(<<63, 248, 0, 0, 0, 0, 0, 0>>),
+    [
+        begin
+            nope = skip_unit8(id(N), B),
+            nope = int_unit64(id(N), B),
+            nope = float_unit64(id(N), B),
+            nope = bin_unit8(id(N), B)
+        end
+     || N <- [bad, 1.0, [], {}, <<>>]
+    ],
+    <<248, 0, 0, 0, 0, 0, 0>> = skip_unit8(id(1), B),
+    16#3FF8000000000000 = int_unit64(id(1), B),
+    {<<63>>, <<248, 0, 0, 0, 0, 0, 0>>} = bin_unit8(id(1), B),
     ok.
 
 % Construction (bs_create_bin) with a size whose scaling by the segment unit

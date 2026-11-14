@@ -1,0 +1,244 @@
+#
+#  Copyright 2026 Peter Madsen-Mygdal <petermm@gmail.com>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: Lynx Differential Tests
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - "release-*"
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  LYNX_REPO: "josevalim/lynx"
+  LYNX_COMMIT: "b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de"
+  OTP_VERSION: "29.1.2"
+  ELIXIR_VERSION: "1.20"
+
+jobs:
+  differential-targets:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64-interpreter
+            os: ubuntu-24.04
+            cmake_opts: -DAVM_DISABLE_JIT=ON -DAVM_ENABLE_PRECOMPILED=OFF -DAVM_WARNINGS_ARE_ERRORS=ON
+            build_targets: AtomVM PackBEAM atomvmlib exavmlib
+            run_unit_tests: true
+            run_jit_test: false
+            checkout_lynx: true
+            validate_args: --lean-runtime lynx --seed 20261114 --generated 32
+          - name: linux-x86_64-on-demand-jit
+            os: ubuntu-24.04
+            cmake_opts: -DAVM_DISABLE_JIT=OFF -DAVM_ENABLE_PRECOMPILED=OFF -DAVM_WARNINGS_ARE_ERRORS=ON
+            build_targets: AtomVM PackBEAM atomvmlib exavmlib
+            run_unit_tests: false
+            run_jit_test: true
+            checkout_lynx: false
+            validate_args: --seed 20261114 --generated 32 --timeout 30
+          - name: linux-x86_64-precompiled
+            os: ubuntu-24.04
+            cmake_opts: -DAVM_DISABLE_JIT=ON -DAVM_ENABLE_PRECOMPILED=ON -DAVM_PRECOMPILED_TARGETS=x86_64 -DAVM_WARNINGS_ARE_ERRORS=ON
+            build_targets: AtomVM PackBEAM atomvmlib eavmlib exavmlib
+            run_unit_tests: false
+            run_jit_test: false
+            checkout_lynx: false
+            validate_args: --seed 20261114 --generated 32
+          - name: linux-arm64-on-demand-jit
+            os: ubuntu-24.04-arm
+            cmake_opts: -DAVM_DISABLE_JIT=OFF -DAVM_ENABLE_PRECOMPILED=OFF -DAVM_WARNINGS_ARE_ERRORS=ON
+            build_targets: AtomVM PackBEAM atomvmlib exavmlib
+            run_unit_tests: false
+            run_jit_test: true
+            checkout_lynx: false
+            validate_args: --seed 20261114 --generated 32 --timeout 30
+          - name: linux-arm64-precompiled
+            os: ubuntu-24.04-arm
+            cmake_opts: -DAVM_DISABLE_JIT=ON -DAVM_ENABLE_PRECOMPILED=ON -DAVM_PRECOMPILED_TARGETS=aarch64 -DAVM_WARNINGS_ARE_ERRORS=ON
+            build_targets: AtomVM PackBEAM atomvmlib eavmlib exavmlib
+            run_unit_tests: false
+            run_jit_test: false
+            checkout_lynx: false
+            validate_args: --seed 20261114 --generated 32
+          - name: linux-x86_64-float32
+            os: ubuntu-24.04
+            cmake_opts: -DAVM_DISABLE_JIT=ON -DAVM_ENABLE_PRECOMPILED=OFF -DAVM_USE_32BIT_FLOAT=ON -DAVM_WARNINGS_ARE_ERRORS=ON
+            build_targets: AtomVM PackBEAM atomvmlib exavmlib
+            run_unit_tests: false
+            run_jit_test: false
+            checkout_lynx: false
+            validate_args: --float32 --generated 0
+          - name: linux-x86_64-no-stacktraces
+            os: ubuntu-24.04
+            cmake_opts: -DAVM_DISABLE_JIT=ON -DAVM_ENABLE_PRECOMPILED=OFF -DAVM_CREATE_STACKTRACES=OFF -DAVM_WARNINGS_ARE_ERRORS=ON
+            build_targets: AtomVM PackBEAM atomvmlib exavmlib
+            run_unit_tests: false
+            run_jit_test: false
+            checkout_lynx: false
+            validate_args: --seed 20261114 --generated 32
+    steps:
+      - name: Checkout AtomVM
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Checkout Lynx
+        if: matrix.checkout_lynx
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.LYNX_REPO }}
+          ref: ${{ env.LYNX_COMMIT }}
+          path: lynx
+
+      - name: Verify pinned Lynx commit
+        if: matrix.checkout_lynx
+        run: test "$(git -C lynx rev-parse HEAD)" = "$LYNX_COMMIT"
+
+      - name: Set up Erlang/OTP and Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build gperf zlib1g-dev libmbedtls-dev
+
+      - name: Configure and build AtomVM
+        run: |
+          cmake -B build -G Ninja ${{ matrix.cmake_opts }}
+          cmake --build build --target ${{ matrix.build_targets }}
+
+      - name: Run Lynx CLI unit tests
+        if: matrix.run_unit_tests
+        run: python3 -B -m unittest discover -s tools/test/lynx -p test_validate.py -v
+
+      - name: Run on-demand JIT probe test
+        if: matrix.run_jit_test
+        run: ATOMVM_JIT_BUILD=build python3 -B -m unittest discover -s tools/test/lynx -p test_validate.py -k test_jit_build_compiles_bytecode_probes_on_demand -v
+
+      - name: Run differential validation
+        run: python3 -B tools/test/lynx/validate.py --build build ${{ matrix.validate_args }} --output /tmp/lynx-diff
+
+      - name: Upload differential failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lynx-diff-${{ matrix.name }}
+          path: /tmp/lynx-diff
+
+  wasm32-differential:
+    name: wasm32-node
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout AtomVM
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Set up Erlang/OTP and Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+
+      - name: Set up Emscripten SDK
+        uses: mymindstorm/setup-emsdk@v14
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build gperf zlib1g-dev libmbedtls-dev
+
+      - name: Build host PackBEAM and Emscripten library
+        run: |
+          cmake -B build -G Ninja -DAVM_DISABLE_JIT=ON -DAVM_ENABLE_PRECOMPILED=OFF -DAVM_WARNINGS_ARE_ERRORS=ON
+          cmake --build build --target PackBEAM atomvmlib-emscripten
+
+      - name: Build Emscripten Node runtime
+        run: |
+          emcmake cmake -S src/platforms/emscripten -B build-wasm32 -G Ninja -DAVM_EMSCRIPTEN_ENV=node
+          cmake --build build-wasm32 --target AtomVM
+
+      - name: Run wasm32 differential validation
+        run: python3 -B tools/test/lynx/validate.py --build build-wasm32 --host-build build --seed 20261114 --generated 32 --output /tmp/lynx-wasm32
+
+      - name: Upload wasm32 differential failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lynx-diff-wasm32
+          path: /tmp/lynx-wasm32
+
+  lynx-fixtures:
+    name: lynx-fixtures
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout AtomVM
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Checkout Lynx
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.LYNX_REPO }}
+          ref: ${{ env.LYNX_COMMIT }}
+          path: lynx
+
+      - name: Verify pinned Lynx commit
+        run: test "$(git -C lynx rev-parse HEAD)" = "$LYNX_COMMIT"
+
+      - name: Set up Erlang/OTP and Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+
+      - name: Set up Lean toolchain
+        uses: leanprover/lean-action@v1
+        with:
+          lake-package-directory: lynx/Lean
+          auto-config: "false"
+          build: "false"
+          test: "false"
+          use-github-cache: "false"
+
+      - name: Cache Lynx build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            lynx/Lean/.lake/build
+            lynx/_build
+          key: lynx-${{ runner.os }}-${{ env.LYNX_COMMIT }}-${{ hashFiles('lynx/Lean/lean-toolchain', 'lynx/Lean/lakefile.toml', 'lynx/mix.exs') }}
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build gperf zlib1g-dev libmbedtls-dev
+
+      - name: Build AtomVM interpreter and exavmlib
+        run: |
+          cmake -B build -G Ninja -DAVM_DISABLE_JIT=ON -DAVM_ENABLE_PRECOMPILED=OFF -DAVM_WARNINGS_ARE_ERRORS=ON
+          cmake --build build --target AtomVM PackBEAM atomvmlib exavmlib
+
+      - name: Compile Lynx and Lean runner
+        working-directory: lynx
+        run: mix compile
+
+      - name: Run full Lynx fixture and replay suite
+        run: LYNX_CHECKOUT="$GITHUB_WORKSPACE/lynx" python3 -B -m unittest discover -s tools/test/lynx -p test_validate.py -k test_lynx_exports_have_cases_and_partial_replay_is_scoped -v

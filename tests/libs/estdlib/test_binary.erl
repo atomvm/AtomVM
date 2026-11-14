@@ -26,6 +26,7 @@
 
 test() ->
     ok = test_split(),
+    ok = test_split_scope_gc(),
     ok = test_hex(),
     ok = test_list_to_bin(),
     ok.
@@ -50,6 +51,52 @@ test_split() ->
     ?ASSERT_MATCH(binary:split(<<":">>, <<":">>, [trim]), []),
     ?ASSERT_MATCH(binary:split(<<":">>, <<":">>, [trim_all]), []),
     ok.
+
+test_split_scope_gc() ->
+    {Pid, Ref} = spawn_opt(
+        fun() -> split_scope_gc(64) end,
+        [monitor, {min_heap_size, 100}]
+    ),
+    %% Check GC correctness, not wall-clock performance under instrumentation.
+    normal =
+        receive
+            {'DOWN', Ref, process, Pid, Reason} -> Reason
+        end,
+    ok.
+
+split_scope_gc(0) ->
+    ok;
+split_scope_gc(N) ->
+    % Build these at runtime: literals would not exercise moving heap binaries.
+    Next = N + 1,
+    Small = list_to_binary([N, $:, $a, $:, $:, $b, $:, Next]),
+    Prefix = list_to_binary(lists:duplicate(80, N)),
+    Suffix = list_to_binary(lists:duplicate(80, N + 1)),
+    Parent = <<0, Prefix/binary, ":a::b:", Suffix/binary, 255>>,
+    % This slice is large enough to remain a subbinary of a refc binary.
+    Large = binary:part(Parent, 1, byte_size(Parent) - 2),
+    Pattern = binary:part(Small, 1, 1),
+    Patterns = [Pattern, list_to_binary([N, $!])],
+    true = erlang:garbage_collect(),
+    SmallParts = binary:split(Small, Pattern, [global, {scope, {1, 6}}]),
+    LargeParts = binary:split(Large, Patterns, [global, {scope, {86, -6}}]),
+    First = binary:split(Small, Patterns, [{scope, {1, 6}}]),
+    Trimmed = binary:split(Small, Pattern, [global, trim_all, {scope, {1, 6}}]),
+    NoMatch = binary:split(Small, Pattern, [global, {scope, {2, 1}}]),
+    % Keep the split results live over allocation pressure and a real GC before
+    % inspecting bytes (including the bytes outside the search scope).
+    Pressure = split_pressure(1024, []),
+    true = erlang:garbage_collect(),
+    1024 = length(Pressure),
+    [<<N>>, <<"a">>, <<>>, <<"b">>, <<Next>>] = SmallParts,
+    [Prefix, <<"a">>, <<>>, <<"b">>, Suffix] = LargeParts,
+    [<<N>>, <<"a::b:", Next>>] = First,
+    [<<N>>, <<"a">>, <<"b">>, <<Next>>] = Trimmed,
+    [Small] = NoMatch,
+    split_scope_gc(N - 1).
+
+split_pressure(0, Acc) -> Acc;
+split_pressure(N, Acc) -> split_pressure(N - 1, [{N, N + 1} | Acc]).
 
 test_list_to_bin() ->
     ?ASSERT_MATCH(binary:list_to_bin([]), <<>>),

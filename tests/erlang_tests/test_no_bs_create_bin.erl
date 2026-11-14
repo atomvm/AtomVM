@@ -93,6 +93,9 @@ test_concat_bins() ->
 %% bs_add + bs_init_bits + bs_put_float.
 test_put_float() ->
     <<64, 89, 16, 0, 0, 0, 0, 0>> = put_float64(100.0 + 1.0 / 4),
+    <<63, 248, 0, 0, 0, 0, 0, 0>> = put_float_unit2(ext_id(1.5), ext_id(32)),
+    <<63, 192, 0, 0>> = put_float_unit2(ext_id(1.5), ext_id(16)),
+    <<62, 0>> = put_float_unit2(ext_id(1.5), ext_id(8)),
     ok.
 
 %% bs_add + bs_init_bits + bs_put_string + bs_put_integer.
@@ -243,6 +246,9 @@ concat_bins(A, B) ->
 
 put_float64(Val) ->
     <<Val:64/float>>.
+
+put_float_unit2(Val, N) ->
+    <<Val:N/float-unit:2>>.
 
 put_string_and_int(Val) ->
     <<"hello", Val:8>>.

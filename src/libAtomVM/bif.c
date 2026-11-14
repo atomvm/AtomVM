@@ -149,6 +149,16 @@ term bif_erlang_bit_size_1(Context *ctx, uint32_t fail_label, int live, term arg
     return term_from_int(len);
 }
 
+term bif_erlang_binary_part_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2)
+{
+    VALIDATE_VALUE_BIF(fail_label, arg2, term_is_tuple);
+    if (UNLIKELY(term_get_tuple_arity(arg2) != 2)) {
+        RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+    }
+    return bif_erlang_binary_part_3(ctx, fail_label, live, arg1,
+        term_get_tuple_element(arg2, 0), term_get_tuple_element(arg2, 1));
+}
+
 term bif_erlang_binary_part_3(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2, term arg3)
 {
     VALIDATE_VALUE_BIF(fail_label, arg1, term_is_binary);
@@ -2099,7 +2109,7 @@ term bif_erlang_min_2(Context *ctx, uint32_t fail_label, term arg1, term arg2)
     if (UNLIKELY(r == TermCompareMemoryAllocFail)) {
         RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
     }
-    return r == TermLessThan ? arg1 : arg2;
+    return r == TermGreaterThan ? arg2 : arg1;
 }
 
 term bif_erlang_max_2(Context *ctx, uint32_t fail_label, term arg1, term arg2)
@@ -2108,7 +2118,7 @@ term bif_erlang_max_2(Context *ctx, uint32_t fail_label, term arg1, term arg2)
     if (UNLIKELY(r == TermCompareMemoryAllocFail)) {
         RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
     }
-    return r == TermGreaterThan ? arg1 : arg2;
+    return r == TermLessThan ? arg2 : arg1;
 }
 
 term bif_erlang_size_1(Context *ctx, uint32_t fail_label, int live, term arg1)

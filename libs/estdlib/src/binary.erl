@@ -217,11 +217,14 @@ split(_Binary, _Pattern) ->
 %% @doc Split a binary according to pattern.
 %% If pattern is not found, returns a singleton list with the passed binary.
 %% Pattern can be a binary or a non-empty list of non-empty binaries.
-%% Implemented options are `global', `trim', and `trim_all'.
+%% Implemented options are `global', `trim', `trim_all', and `{scope, {Start, Length}}'.
+%% Scope restricts delimiter matching, but preserves the subject's prefix and suffix.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec split(
-    Binary :: binary(), Pattern :: binary() | [binary(), ...], Option :: [global | trim | trim_all]
+    Binary :: binary(),
+    Pattern :: binary() | [binary(), ...],
+    Option :: [global | trim | trim_all | {scope, {non_neg_integer(), integer()}}]
 ) -> [binary()].
 split(_Binary, _Pattern, _Option) ->
     erlang:nif_error(undefined).

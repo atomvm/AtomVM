@@ -303,6 +303,12 @@ static inline void context_ensure_fpregs(Context *c)
 int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity);
 
 /**
+ * @brief Build {badarity, {Fun, Args}} from the current argument registers.
+ * @return the exception reason, or out_of_memory if allocation fails.
+ */
+term context_make_badarity(Context *ctx, term fun, unsigned int args_count);
+
+/**
  * @brief Returns 1 if the context is a port driver
  *
  * @details Checks if the given context has a native_handler or not.
@@ -678,15 +684,16 @@ term context_get_monitor_pid(Context *ctx, uint64_t ref_ticks, bool *is_monitori
  * @details Called within the process only. This function is called from
  * MonitorSignal. Monitor is not added if it already exists. Monitors are
  * identified by a reference, but links have no reference and a link can
- * only exist once.
+ * only exist once. Only a direct link/1 call reactivates a pending local unlink.
  *
  * @param ctx the context being executed
  * @param new_monitor monitor object to add (ownership belongs to context
  * afterwards)
- * @return true if the monitor was added, false if it already existed and
- * new_monitor waw freed.
+ * @param reactivate_link whether a direct link/1 call may cancel a pending local unlink
+ * @return true if the monitor was added or a local link was reactivated,
+ * false otherwise. new_monitor is freed when an existing entry is reused.
  */
-bool context_add_monitor(Context *ctx, struct Monitor *new_monitor);
+bool context_add_monitor(Context *ctx, struct Monitor *new_monitor, bool reactivate_link);
 
 /**
  * @brief Get catch label from stack

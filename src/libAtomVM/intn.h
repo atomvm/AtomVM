@@ -772,7 +772,7 @@ int intn_parse(
 /**
  * @brief Convert multi-precision integer to double
  *
- * Converts integer to floating-point representation.
+ * Converts integer to the nearest floating-point representation, ties to even.
  * May lose precision for large integers.
  *
  * @param num Integer magnitude (must be normalized)

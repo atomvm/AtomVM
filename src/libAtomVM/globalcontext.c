@@ -38,6 +38,7 @@
 #include "resources.h"
 #include "scheduler.h"
 #include "smp.h"
+#include "stacktrace.h"
 #include "synclist.h"
 #include "sys.h"
 #include "term.h"
@@ -88,6 +89,7 @@ GlobalContext *globalcontext_new(void)
     ets_init(&glb->ets);
 
     glb->last_process_id = 0;
+    glb->backtrace_depth = DEFAULT_BACKTRACE_DEPTH;
 
     glb->atom_table = atom_table_new();
     if (IS_NULL_PTR(glb->atom_table)) {
@@ -252,8 +254,6 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
     smp_scheduler_join_all();
 #endif
 
-    sys_free_platform(glb);
-
     struct ListHead *item;
     struct ListHead *tmp;
 
@@ -268,6 +268,10 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
         synclist_unlock(&glb->processes_table);
         context_destroy(ctx);
     }
+
+    // Resource down callbacks can unregister select events while contexts
+    // are destroyed, so platform polling state must remain alive until then.
+    sys_free_platform(glb);
 
     int module_index = glb->loaded_modules_count;
     for (int i = 0; i < module_index; i++) {
@@ -610,7 +614,8 @@ bool globalcontext_register_process(GlobalContext *glb, int atom_index, term loc
     struct ListHead *item;
     LIST_FOR_EACH (item, registered_processes_list) {
         const struct RegisteredProcess *registered_process = GET_LIST_ENTRY(item, struct RegisteredProcess, registered_processes_list_head);
-        if (registered_process->atom_index == atom_index) {
+        if (registered_process->atom_index == atom_index
+            || registered_process->local_pid_or_port == local_pid_or_port) {
             synclist_unlock(&glb->registered_processes);
             return false;
         }

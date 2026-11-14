@@ -23,7 +23,95 @@
 -export([start/0]).
 
 start() ->
+    ok = invalid_boundaries(),
+    ok = suspended_handler(),
     test_infinity() + test_float().
+
+invalid_boundaries() ->
+    {Pid, Ref} = spawn_opt(
+        fun() ->
+            retained_messages([
+                -1,
+                1.0,
+                bad,
+                4294967296,
+                4294967297,
+                1 bsl 64,
+                1 bsl 100,
+                -(1 bsl 100)
+            ])
+        end,
+        [monitor]
+    ),
+    receive
+        {'DOWN', Ref, process, Pid, normal} -> ok;
+        {'DOWN', Ref, process, Pid, Reason} -> error(Reason)
+    after 5000 ->
+        exit(Pid, kill),
+        error(invalid_timeout_not_rejected)
+    end.
+
+retained_messages([]) ->
+    ok;
+retained_messages([Timeout | Rest]) ->
+    invalid = timed(Timeout),
+    self() ! first,
+    self() ! second,
+    invalid = timed(Timeout),
+    first = next(),
+    second = next(),
+    empty = next(),
+    %% An already queued match is accepted before checking the timeout.
+    self() ! wanted,
+    matched = timed(Timeout),
+    empty = next(),
+    retained_messages(Rest).
+
+suspended_handler() ->
+    self() ! retained,
+    {throw, after_wait} =
+        try
+            receive
+                never -> unexpected
+            after 1 -> ok
+            end,
+            receive
+                never -> unexpected
+            after 1 -> throw(after_wait)
+            end
+        catch
+            C:R -> {C, R}
+        after
+            self() ! cleanup
+        end,
+    retained = next(),
+    cleanup = next(),
+    empty = next(),
+    %% The largest valid receive timeout must accept a delayed match and cancel
+    %% its timer when the message is consumed; no long wall-clock wait is needed.
+    Parent = self(),
+    _ = spawn_opt(fun() -> receive
+        after 1 -> Parent ! wanted
+        end end, []),
+    matched = timed(4294967295),
+    empty = next(),
+    ok.
+
+timed(Timeout) ->
+    try
+        receive
+            wanted -> matched
+        after Timeout -> timeout
+        end
+    catch
+        error:timeout_value -> invalid
+    end.
+
+next() ->
+    receive
+        Message -> Message
+    after 0 -> empty
+    end.
 
 test_infinity() ->
     Parent = self(),

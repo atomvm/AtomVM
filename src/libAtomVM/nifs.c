@@ -58,6 +58,7 @@
 #include "posix_nifs.h"
 #include "scheduler.h"
 #include "smp.h"
+#include "stacktrace.h"
 #include "synclist.h"
 #include "sys.h"
 #include "tempstack.h"
@@ -218,6 +219,7 @@ static term nif_erlang_processes(Context *ctx, int argc, term argv[]);
 static term nif_erlang_process_info(Context *ctx, int argc, term argv[]);
 static term nif_erlang_fun_info_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_get_0(Context *ctx, int argc, term argv[]);
+static term nif_erlang_get_keys(Context *ctx, int argc, term argv[]);
 static term nif_erlang_put_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_info(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_flag(Context *ctx, int argc, term argv[]);
@@ -294,6 +296,7 @@ static term nif_lists_keymember(Context *ctx, int argc, term argv[]);
 static term nif_lists_member(Context *ctx, int argc, term argv[]);
 static term nif_maps_from_keys(Context *ctx, int argc, term argv[]);
 static term nif_maps_next(Context *ctx, int argc, term argv[]);
+static term nif_maps_take(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_list(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_lists_subtract(Context *ctx, int argc, term argv[]);
@@ -639,6 +642,11 @@ static const struct Nif get_0_nif = {
     .nif_ptr = nif_erlang_get_0
 };
 
+static const struct Nif get_keys_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_get_keys
+};
+
 static const struct Nif put_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_put_2
@@ -961,6 +969,10 @@ static const struct Nif maps_next_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_maps_next
 };
+static const struct Nif maps_take_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_maps_take
+};
 static const struct Nif unicode_characters_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_unicode_characters_to_list
@@ -1281,12 +1293,10 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[])
 
     // pid must be existing, not already registered, and not the atom undefined.
     if (UNLIKELY(!globalcontext_process_exists(ctx->global, pid))
-        || globalcontext_get_registered_process(ctx->global, atom_index) != UNDEFINED_ATOM
-        || reg_name_term == UNDEFINED_ATOM) {
+        || reg_name_term == UNDEFINED_ATOM
+        || !globalcontext_register_process(ctx->global, atom_index, pid_or_port_term)) {
         RAISE_ERROR(BADARG_ATOM);
     }
-
-    globalcontext_register_process(ctx->global, atom_index, pid_or_port_term);
 
     return TRUE_ATOM;
 }
@@ -1653,14 +1663,14 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
     // Nothing can fail from here on. Publish in order so the entries keep their relative position
     // in the monitor lists. context_add_monitor on new_ctx is safe because it is not started yet.
     if (new_link != NULL) {
-        context_add_monitor(new_ctx, new_link);
-        context_add_monitor(ctx, self_link);
+        context_add_monitor(new_ctx, new_link, false);
+        context_add_monitor(ctx, self_link, false);
     }
     if (is_spawn_monitor) {
-        context_add_monitor(new_ctx, new_monitor);
-        context_add_monitor(ctx, self_monitor);
+        context_add_monitor(new_ctx, new_monitor, false);
+        context_add_monitor(ctx, self_monitor, false);
         if (is_alias) {
-            context_add_monitor(ctx, alias_monitor);
+            context_add_monitor(ctx, alias_monitor, false);
         }
     }
 
@@ -1717,30 +1727,44 @@ static term nif_erlang_spawn_fun_opt(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(fun_term, term_is_function);
     VALIDATE_VALUE(opts_term, term_is_list);
 
-    Context *new_ctx = context_new(ctx->global);
-    context_update_flags(new_ctx, ~Spawning, Spawning);
-
     const term *boxed_value = term_to_const_term_ptr(fun_term);
-
-    Module *fun_module = (Module *) boxed_value[1];
-    term index_or_module = boxed_value[2];
-    if (term_is_atom(index_or_module)) {
-        // it is not possible to spawn a function reference except for those having
-        // 0 arity, however right now they are not supported.
-        // TODO: implement for funs having arity 0.
-        AVM_ABORT();
-    }
-    uint32_t fun_index = term_to_int32(index_or_module);
-
+    Module *fun_module;
     uint32_t label;
     uint32_t arity;
     uint32_t n_freeze;
-    module_get_fun(fun_module, fun_index, &label, &arity, &n_freeze);
+    bool apply_fun = term_is_external_fun(fun_term);
+    if (!apply_fun) {
+        fun_module = (Module *) boxed_value[1];
+        uint32_t fun_index = term_to_int32(boxed_value[2]);
+        module_get_fun(fun_module, fun_index, &label, &arity, &n_freeze);
+        apply_fun = arity != n_freeze;
+    }
+    if (apply_fun) {
+        // Apply external and nonzero-arity funs in the child, like OTP. This
+        // also handles BIFs and undefined exports without failing the caller.
+        term erlang = globalcontext_make_atom(ctx->global, ATOM_STR("\x6", "erlang"));
+        term apply = globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "apply"));
+        fun_module = globalcontext_get_module(ctx->global, term_to_atom_index(erlang));
+        if (IS_NULL_PTR(fun_module)) {
+            RAISE_ERROR(UNDEF_ATOM);
+        }
+        label = module_search_exported_function(fun_module, term_to_atom_index(apply), 2);
+        if (UNLIKELY(label == 0)) {
+            RAISE_ERROR(UNDEF_ATOM);
+        }
+        arity = 2;
+        n_freeze = 2;
+    }
 
-    // TODO: new process should fail with badarity if arity != 0
-
-    for (uint32_t i = 0; i < n_freeze; i++) {
-        new_ctx->x[i + arity - n_freeze] = boxed_value[i + 3];
+    Context *new_ctx = context_new(ctx->global);
+    context_update_flags(new_ctx, ~Spawning, Spawning);
+    if (apply_fun) {
+        new_ctx->x[0] = fun_term;
+        new_ctx->x[1] = term_nil();
+    } else {
+        for (uint32_t i = 0; i < n_freeze; i++) {
+            new_ctx->x[i + arity - n_freeze] = boxed_value[i + 3];
+        }
     }
 
     new_ctx->saved_module = fun_module;
@@ -1908,6 +1932,7 @@ static term nif_erlang_is_process_alive_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
+    VALIDATE_VALUE(argv[0], term_is_local_pid);
     int local_process_id = term_to_local_process_id(argv[0]);
     bool process_exists = globalcontext_process_exists(ctx->global, local_process_id);
 
@@ -3096,7 +3121,9 @@ static term nif_erlang_list_to_integer(Context *ctx, int argc, term argv[])
     if (UNLIKELY(!ok)) {
         RAISE_ERROR(BADARG_ATOM);
     }
-    size_t int_as_string_len = strlen(int_as_string);
+    // The validated byte list can contain NUL; the parser must see all bytes.
+    int proper;
+    size_t int_as_string_len = term_list_length(argv[0], &proper);
     term res = parse_integer(ctx, int_as_string, int_as_string_len, base);
     free(int_as_string);
     return res;
@@ -3616,6 +3643,23 @@ static term nif_erlang_system_flag(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
+    if (key == BACKTRACE_DEPTH_ATOM) {
+        VALIDATE_VALUE(value, term_is_int);
+        avm_int_t depth = term_to_int(value);
+        if (depth < 0) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        int new_value = depth > MAX_BACKTRACE_DEPTH ? MAX_BACKTRACE_DEPTH : depth;
+        int old_value = ctx->global->backtrace_depth;
+#ifndef AVM_NO_SMP
+        while (!ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&ctx->global->backtrace_depth, &old_value, new_value)) {
+        }
+#else
+        ctx->global->backtrace_depth = new_value;
+#endif
+        return term_from_int11(old_value);
+    }
+
 #ifndef AVM_NO_SMP
     if (key == SCHEDULERS_ONLINE_ATOM) {
         VALIDATE_VALUE(value, term_is_integer);
@@ -4021,6 +4065,8 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(bin_term, term_is_binary);
     VALIDATE_VALUE(pattern_term, is_valid_pattern);
 
+    size_t bin_size = term_binary_size(bin_term);
+    BinaryPosLen scope = { .pos = 0, .len = bin_size };
     bool global = false;
     bool trim = false;
     bool trim_all = false;
@@ -4043,8 +4089,23 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
                 case TRIM_ALL_ATOM:
                     trim_all = true;
                     break;
-                default:
-                    RAISE_ERROR(BADARG_ATOM);
+                default: {
+                    if (UNLIKELY(!term_is_tuple(head) || term_get_tuple_arity(head) != 2
+                            || term_get_tuple_element(head, 0) != SCOPE_ATOM)) {
+                        RAISE_ERROR(BADARG_ATOM);
+                    }
+                    term range = term_get_tuple_element(head, 1);
+                    if (UNLIKELY(!term_is_tuple(range) || term_get_tuple_arity(range) != 2)) {
+                        RAISE_ERROR(BADARG_ATOM);
+                    }
+                    term pos = term_get_tuple_element(range, 0);
+                    term len = term_get_tuple_element(range, 1);
+                    if (UNLIKELY(!term_is_integer(pos) || !term_is_integer(len)
+                            || !term_normalize_binary_pos_len(bin_term, term_to_int(pos), term_to_int(len), &scope))) {
+                        RAISE_ERROR(BADARG_ATOM);
+                    }
+                    break;
+                }
             }
             options = term_get_list_tail(options);
         }
@@ -4067,13 +4128,13 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
     size_t shortest_pattern_length = 0;
     init_split_patterns(pattern_term, patterns, &shortest_pattern_length);
 
-    size_t bin_size = term_binary_size(bin_term);
     const char *bin_data = term_binary_data(bin_term);
 
     // Count segments first to allocate memory once.
     size_t num_segments = 1;
-    const char *temp_bin_data = bin_data;
-    size_t temp_bin_size = bin_size;
+    const char *temp_bin_data = bin_data + scope.pos;
+    size_t temp_bin_size = scope.len;
+    size_t segment_start = 0;
     size_t heap_size = 0;
     do {
         size_t matched_pattern_index = 0;
@@ -4082,13 +4143,14 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
             break;
         }
         num_segments++;
-        heap_size += CONS_SIZE + term_sub_binary_heap_size(argv[0], found - temp_bin_data);
+        heap_size += CONS_SIZE + term_sub_binary_heap_size(argv[0], (found - bin_data) - segment_start);
         size_t next_search_offset = (found - temp_bin_data) + patterns[matched_pattern_index].size;
         temp_bin_data += next_search_offset;
         temp_bin_size -= next_search_offset;
+        segment_start = temp_bin_data - bin_data;
     } while (global && temp_bin_size >= shortest_pattern_length);
 
-    heap_size += CONS_SIZE + term_sub_binary_heap_size(argv[0], temp_bin_size);
+    heap_size += CONS_SIZE + term_sub_binary_heap_size(argv[0], bin_size - segment_start);
 
     term result_list = term_nil();
 
@@ -4114,15 +4176,16 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
     init_split_patterns(argv[1], patterns, &shortest_pattern_length);
 
     term list_cursor = result_list;
-    temp_bin_data = bin_data;
-    temp_bin_size = bin_size;
+    temp_bin_data = bin_data + scope.pos;
+    temp_bin_size = scope.len;
+    segment_start = 0;
     term *list_ptr = term_get_list_ptr(list_cursor);
     do {
         size_t matched_pattern_index = 0;
         const char *found = find_pattern(temp_bin_data, temp_bin_size, patterns, pattern_count, &matched_pattern_index);
 
         if (found) {
-            term tok = term_maybe_create_sub_binary(argv[0], temp_bin_data - bin_data, found - temp_bin_data, &ctx->heap, ctx->global);
+            term tok = term_maybe_create_sub_binary(argv[0], segment_start, (found - bin_data) - segment_start, &ctx->heap, ctx->global);
             list_ptr[LIST_HEAD_INDEX] = tok;
 
             list_cursor = list_ptr[LIST_TAIL_INDEX];
@@ -4131,10 +4194,11 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
             size_t next_search_offset = (found - temp_bin_data) + patterns[matched_pattern_index].size;
             temp_bin_data += next_search_offset;
             temp_bin_size -= next_search_offset;
+            segment_start = temp_bin_data - bin_data;
         }
 
         if (!found || !global) {
-            term rest = term_maybe_create_sub_binary(argv[0], temp_bin_data - bin_data, temp_bin_size, &ctx->heap, ctx->global);
+            term rest = term_maybe_create_sub_binary(argv[0], segment_start, bin_size - segment_start, &ctx->heap, ctx->global);
             list_ptr[LIST_HEAD_INDEX] = rest;
             break;
         }
@@ -4247,36 +4311,37 @@ static term nif_binary_replace(Context *ctx, int argc, term argv[])
 
 static bool get_binary_scope_slice(term binary, term options, BinaryPosLen *scope_slice)
 {
-    term scope_opt = term_invalid_term();
+    size_t size = term_binary_size(binary);
+    if (UNLIKELY(!term_normalize_binary_pos_len(binary, 0, (avm_int_t) size, scope_slice))) {
+        return false;
+    }
+
     while (term_is_nonempty_list(options)) {
         term head = term_get_list_head(options);
         // BEAM ignores improper lists so we don't check for it
-        if (LIKELY(term_is_tuple(head) && term_get_tuple_arity(head) == 2 && term_get_tuple_element(head, 0) == SCOPE_ATOM)) {
-            scope_opt = term_get_tuple_element(head, 1);
-        } else {
+        if (UNLIKELY(!term_is_tuple(head) || term_get_tuple_arity(head) != 2 || term_get_tuple_element(head, 0) != SCOPE_ATOM)) {
+            return false;
+        }
+
+        term scope_opt = term_get_tuple_element(head, 1);
+        if (UNLIKELY(!term_is_tuple(scope_opt) || term_get_tuple_arity(scope_opt) != 2)) {
+            return false;
+        }
+
+        term pos_term = term_get_tuple_element(scope_opt, 0);
+        term len_term = term_get_tuple_element(scope_opt, 1);
+        if (UNLIKELY(!term_is_integer(pos_term) || !term_is_integer(len_term))) {
+            return false;
+        }
+
+        avm_int_t pos = term_to_int(pos_term);
+        avm_int_t len = term_to_int(len_term);
+        if (UNLIKELY(!term_normalize_binary_pos_len(binary, pos, len, scope_slice))) {
             return false;
         }
         options = term_get_list_tail(options);
     }
-
-    if (term_is_invalid_term(scope_opt)) {
-        size_t size = term_binary_size(binary);
-        return term_normalize_binary_pos_len(binary, 0, (avm_int_t) size, scope_slice);
-    }
-
-    if (UNLIKELY(!term_is_tuple(scope_opt) || term_get_tuple_arity(scope_opt) != 2)) {
-        return false;
-    }
-
-    term pos_term = term_get_tuple_element(scope_opt, 0);
-    term len_term = term_get_tuple_element(scope_opt, 1);
-    if (UNLIKELY(!term_is_integer(pos_term) || !term_is_integer(len_term))) {
-        return false;
-    }
-
-    avm_int_t pos = term_to_int(pos_term);
-    avm_int_t len = term_to_int(len_term);
-    return term_normalize_binary_pos_len(binary, pos, len, scope_slice);
+    return true;
 }
 
 static bool is_valid_pattern(term t)
@@ -4433,6 +4498,96 @@ static term nif_erlang_raise(Context *ctx, int argc, term argv[])
     if (argc == 2) {
         RAISE(ex_class, argv[1]);
     } else {
+#ifndef AVM_CREATE_STACKTRACES
+        // catch supplies undefined when stacktrace creation is disabled.
+        // Keep that value usable for re-raising without accepting other atoms.
+        if (argv[2] == UNDEFINED_ATOM) {
+            RAISE_WITH_STACKTRACE(ex_class, argv[1], argv[2]);
+        }
+#endif
+        // Accept the frame forms allowed by OTP, but reject malformed frames
+        // and improper stack lists before changing exception state.
+        term stack = argv[2];
+        size_t stack_len = 0;
+        size_t heap_needed = 0;
+        size_t depth = ctx->global->backtrace_depth;
+        if (depth == 0) {
+            depth = 1;
+        }
+        while (term_is_nonempty_list(stack)) {
+            term frame = term_get_list_head(stack);
+            if (!term_is_tuple(frame)) {
+                return BADARG_ATOM;
+            }
+            term location = term_nil();
+            switch (term_get_tuple_arity(frame)) {
+                case 2:
+                    if (!term_is_function(term_get_tuple_element(frame, 0))) {
+                        return BADARG_ATOM;
+                    }
+                    if (stack_len < depth) {
+                        heap_needed += TUPLE_SIZE(3);
+                    }
+                    break;
+                case 3:
+                    if (term_is_function(term_get_tuple_element(frame, 0))) {
+                        location = term_get_tuple_element(frame, 2);
+                    } else if (!term_is_atom(term_get_tuple_element(frame, 0)) || !term_is_atom(term_get_tuple_element(frame, 1))) {
+                        return BADARG_ATOM;
+                    } else {
+                        if (stack_len < depth) {
+                            heap_needed += TUPLE_SIZE(4);
+                        }
+                    }
+                    break;
+                case 4:
+                    if (!term_is_atom(term_get_tuple_element(frame, 0)) || !term_is_atom(term_get_tuple_element(frame, 1))) {
+                        return BADARG_ATOM;
+                    }
+                    location = term_get_tuple_element(frame, 3);
+                    break;
+                default:
+                    return BADARG_ATOM;
+            }
+            if (!term_is_list(location)) {
+                return BADARG_ATOM;
+            }
+            stack_len++;
+            stack = term_get_list_tail(stack);
+        }
+        if (!term_is_nil(stack)) {
+            return BADARG_ATOM;
+        }
+        if (heap_needed != 0 || stack_len > depth) {
+            if (stack_len > depth) {
+                stack_len = depth;
+            }
+            heap_needed += stack_len * CONS_SIZE;
+            if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_needed, argc, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            // Add empty locations to legacy frames, preserving order and the
+            // caller's list. Modern frames need no allocation or modification.
+            stack = argv[2];
+            term normalized_stack = term_nil();
+            term *tail = &normalized_stack;
+            for (size_t i = 0; i < stack_len; i++) {
+                term frame = term_get_list_head(stack);
+                int arity = term_get_tuple_arity(frame);
+                if (arity == 2 || (arity == 3 && term_is_atom(term_get_tuple_element(frame, 0)))) {
+                    term normalized_frame = term_alloc_tuple(arity + 1, &ctx->heap);
+                    for (int i = 0; i < arity; i++) {
+                        term_put_tuple_element(normalized_frame, i, term_get_tuple_element(frame, i));
+                    }
+                    term_put_tuple_element(normalized_frame, arity, term_nil());
+                    frame = normalized_frame;
+                }
+                *tail = term_list_prepend(frame, term_nil(), &ctx->heap);
+                tail = &term_get_list_ptr(*tail)[LIST_TAIL_INDEX];
+                stack = term_get_list_tail(stack);
+            }
+            argv[2] = normalized_stack;
+        }
         RAISE_WITH_STACKTRACE(ex_class, argv[1], argv[2]);
     }
 }
@@ -5100,7 +5255,7 @@ static term nif_erlang_make_fun_3(Context *ctx, int argc, term argv[])
 
     VALIDATE_VALUE(module_term, term_is_atom);
     VALIDATE_VALUE(function_term, term_is_atom);
-    VALIDATE_VALUE(arity_term, term_is_integer);
+    VALIDATE_VALUE(arity_term, term_is_uint8);
 
     if (UNLIKELY(memory_ensure_free_opt(ctx, FUNCTION_REFERENCE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -5192,6 +5347,36 @@ static term nif_erlang_get_0(Context *ctx, int argc, term argv[])
     return result;
 }
 
+static term nif_erlang_get_keys(Context *ctx, int argc, term argv[])
+{
+    size_t size = 0;
+    struct ListHead *item;
+    LIST_FOR_EACH (item, &ctx->dictionary) {
+        size++;
+    }
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, LIST_SIZE(size, 0), argc, argv,
+                     MEMORY_CAN_SHRINK)
+            != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term result = term_nil();
+    LIST_FOR_EACH (item, &ctx->dictionary) {
+        struct DictEntry *entry = GET_LIST_ENTRY(item, struct DictEntry, head);
+        if (argc == 1) {
+            TermCompareResult comparison = term_compare(entry->value, argv[0], TermCompareExact, ctx->global);
+            if (UNLIKELY(comparison == TermCompareMemoryAllocFail)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            if (comparison != TermEquals) {
+                continue;
+            }
+        }
+        result = term_list_prepend(entry->key, result, &ctx->heap);
+    }
+    return result;
+}
+
 static term nif_erlang_put_2(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -5271,8 +5456,16 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
         target_pid = globalcontext_get_registered_process(ctx->global, term_to_atom_index(target_proc));
         target_proc_size = TUPLE_SIZE(2);
     } else {
-        VALIDATE_VALUE(target_proc, term_is_local_pid_or_port);
         target_pid = target_proc;
+    }
+
+    // Direct targets must have the requested type even when self or already dead.
+    // A registered name belonging to the other type instead reports noproc.
+    if ((object_type == PROCESS_ATOM && !term_is_local_pid(target_pid)) || (object_type == PORT_ATOM && !term_is_local_port(target_pid))) {
+        if (!term_is_atom(target_proc)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        target_pid = UNDEFINED_ATOM;
     }
 
     Context *target;
@@ -5314,7 +5507,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         if (alias_monitor != NULL) {
-            context_add_monitor(ctx, alias_monitor);
+            context_add_monitor(ctx, alias_monitor, false);
         }
         term ref = term_from_ref_data(&ref_data, &ctx->heap);
         term down_message_tuple = term_alloc_tuple(5, &ctx->heap);
@@ -5332,11 +5525,6 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
         term_put_tuple_element(down_message_tuple, 4, NOPROC_ATOM);
         mailbox_send(ctx, down_message_tuple);
         return ref;
-    }
-
-    if ((object_type == PROCESS_ATOM && target->native_handler != NULL) || (object_type == PORT_ATOM && target->native_handler == NULL)) {
-        globalcontext_get_process_unlock(ctx->global, target);
-        RAISE_ERROR(BADARG_ATOM);
     }
 
     RefData ref_data;
@@ -5386,9 +5574,9 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     mailbox_send_monitor_signal(target, MonitorSignal, other_monitor);
     globalcontext_get_process_unlock(ctx->global, target);
 
-    context_add_monitor(ctx, self_monitor);
+    context_add_monitor(ctx, self_monitor, false);
     if (is_alias) {
-        context_add_monitor(ctx, alias_monitor);
+        context_add_monitor(ctx, alias_monitor, false);
     }
 
     return term_from_ref_data(&ref_data, &ctx->heap);
@@ -5402,9 +5590,18 @@ static term nif_erlang_demonitor(Context *ctx, int argc, term argv[])
 
     if (argc == 2) {
         term options = argv[1];
-        VALIDATE_VALUE(options, term_is_list);
-        flush = interop_proplist_get_value_default(options, FLUSH_ATOM, FALSE_ATOM) == TRUE_ATOM;
-        info = interop_proplist_get_value_default(options, INFO_ATOM, FALSE_ATOM) == TRUE_ATOM;
+        while (term_is_nonempty_list(options)) {
+            term option = term_get_list_head(options);
+            if (option == FLUSH_ATOM) {
+                flush = true;
+            } else if (option == INFO_ATOM) {
+                info = true;
+            } else {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            options = term_get_list_tail(options);
+        }
+        VALIDATE_VALUE(options, term_is_nil);
     }
 
     VALIDATE_VALUE(ref, term_is_local_reference);
@@ -5413,24 +5610,20 @@ static term nif_erlang_demonitor(Context *ctx, int argc, term argv[])
     bool is_monitoring;
     term monitor_pid = context_get_monitor_pid(ctx, ref_ticks, &is_monitoring);
     bool result;
-    if (UNLIKELY(term_is_invalid_term(monitor_pid))) {
+    // An incoming monitor is not ours to remove, but flush still applies to our mailbox.
+    if (UNLIKELY(term_is_invalid_term(monitor_pid) || !is_monitoring)) {
         result = false;
     } else {
-        if (UNLIKELY(!is_monitoring)) {
-            return !info ? TRUE_ATOM : FALSE_ATOM;
-        }
         context_demonitor(ctx, ref_ticks);
         int local_process_id = term_to_local_process_id(monitor_pid);
         Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
         if (target) {
             mailbox_send_ref_signal(target, DemonitorSignal, ref_ticks);
             globalcontext_get_process_unlock(ctx->global, target);
-            result = true;
-        } else {
-            result = false;
         }
+        result = true;
     }
-    if (flush) {
+    if (flush && !result) {
         mailbox_send_ref_signal(ctx, info ? FlushInfoMonitorSignal : FlushMonitorSignal, ref_ticks);
         context_update_flags(ctx, ~NoFlags, Trap);
         return term_invalid_term();
@@ -5445,10 +5638,25 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[])
 
     term target_pid = argv[0];
 
+    if (target_pid == term_from_local_process_id(ctx->process_id)) {
+        return TRUE_ATOM;
+    }
+
     if (term_is_local_pid_or_port(target_pid)) {
         int local_process_id = term_to_local_process_id(target_pid);
         Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
         if (IS_NULL_PTR(target)) {
+            if (ctx->trap_exit) {
+                if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(3), 1, &target_pid, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+                term message = term_alloc_tuple(3, &ctx->heap);
+                term_put_tuple_element(message, 0, EXIT_ATOM);
+                term_put_tuple_element(message, 1, target_pid);
+                term_put_tuple_element(message, 2, NOPROC_ATOM);
+                mailbox_send(ctx, message);
+                return TRUE_ATOM;
+            }
             RAISE_ERROR(NOPROC_ATOM);
         }
 
@@ -5465,7 +5673,7 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[])
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 
-        if (UNLIKELY(!context_add_monitor(ctx, self_link))) {
+        if (UNLIKELY(!context_add_monitor(ctx, self_link, true))) {
             globalcontext_get_process_unlock(ctx->global, target);
             monitor_destroy(other_link);
             return TRUE_ATOM;
@@ -5481,7 +5689,7 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[])
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 
-        if (UNLIKELY(!context_add_monitor(ctx, self_link))) {
+        if (UNLIKELY(!context_add_monitor(ctx, self_link, false))) {
             return TRUE_ATOM;
         }
 
@@ -5499,15 +5707,16 @@ static term nif_erlang_unlink(Context *ctx, int argc, term argv[])
     term target_pid = argv[0];
 
     if (term_is_local_pid_or_port(target_pid)) {
-        int local_process_id = term_to_local_process_id(target_pid);
-        Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
-        if (IS_NULL_PTR(target)) {
+        uint64_t unlink_id;
+        if (UNLIKELY(!context_set_unlink_id(ctx, target_pid, &unlink_id))) {
             return TRUE_ATOM;
         }
 
-        uint64_t unlink_id;
-        if (UNLIKELY(!context_set_unlink_id(ctx, target_pid, &unlink_id))) {
-            globalcontext_get_process_unlock(ctx->global, target);
+        int local_process_id = term_to_local_process_id(target_pid);
+        Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
+        if (IS_NULL_PTR(target)) {
+            // A dead peer may already have queued a linked exit.
+            context_unlink_ack(ctx, target_pid, unlink_id);
             return TRUE_ATOM;
         }
 
@@ -7193,6 +7402,9 @@ static term nif_maps_next(Context *ctx, int argc, term argv[])
     }
 
     term iterator = argv[0];
+    if (term_is_tuple(iterator) && term_get_tuple_arity(iterator) == 3) {
+        return iterator;
+    }
     VALIDATE_VALUE(iterator, term_is_nonempty_list);
 
     term post = term_get_list_head(iterator);
@@ -7206,16 +7418,34 @@ static term nif_maps_next(Context *ctx, int argc, term argv[])
     int pos;
     if (term_is_integer(post)) {
         int size = term_get_map_size(map);
-        pos = term_to_int(post);
-        if (pos >= size) {
+        avm_int_t requested_pos = term_to_int(post);
+        if (UNLIKELY(requested_pos < 0 || requested_pos > size)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        if (requested_pos == size) {
             return NONE_ATOM;
         }
+        pos = (int) requested_pos;
     } else if (term_is_nil(post)) {
         return NONE_ATOM;
     } else {
-        pos = term_find_map_pos(map, term_get_list_head(post), ctx->global);
-        if (pos == TERM_MAP_NOT_FOUND) {
-            return NONE_ATOM;
+        term remaining_keys = post;
+        pos = TERM_MAP_NOT_FOUND;
+        while (term_is_nonempty_list(remaining_keys)) {
+            int key_pos = term_find_map_pos(map, term_get_list_head(remaining_keys), ctx->global);
+            if (UNLIKELY(key_pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            if (UNLIKELY(key_pos == TERM_MAP_NOT_FOUND)) {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            if (pos == TERM_MAP_NOT_FOUND) {
+                pos = key_pos;
+            }
+            remaining_keys = term_get_list_tail(remaining_keys);
+        }
+        if (UNLIKELY(!term_is_nil(remaining_keys))) {
+            RAISE_ERROR(BADARG_ATOM);
         }
     }
 
@@ -7242,6 +7472,66 @@ static term nif_maps_next(Context *ctx, int argc, term argv[])
     term_put_tuple_element(ret, 2, next_iterator);
 
     return ret;
+}
+
+static term nif_maps_take(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term key = argv[0];
+    term map = argv[1];
+
+    if (UNLIKELY(!term_is_map(map))) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &map, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term err = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(err, 0, BADMAP_ATOM);
+        term_put_tuple_element(err, 1, map);
+        RAISE_ERROR(err);
+    }
+
+    int pos = term_find_map_pos(map, key, ctx->global);
+    if (pos == TERM_MAP_MEMORY_ALLOC_FAIL) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    if (pos == TERM_MAP_NOT_FOUND) {
+        return ERROR_ATOM;
+    }
+
+    int old_size = term_get_map_size(map);
+    int new_size = old_size - 1;
+
+    // Allocate space for new map + result tuple {Value, NewMap}
+    size_t heap_needed = term_map_size_in_terms(new_size) + TUPLE_SIZE(2);
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_needed, 2, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    // Recompute after possible GC
+    key = argv[0];
+    map = argv[1];
+    pos = term_find_map_pos(map, key, ctx->global);
+    if (pos == TERM_MAP_MEMORY_ALLOC_FAIL) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term value = term_get_map_value(map, pos);
+
+    // Create new map without the key
+    term new_map = term_alloc_map(new_size, &ctx->heap);
+    for (int i = 0, j = 0; i < old_size; i++) {
+        if (i != pos) {
+            term_set_map_assoc(new_map, j, term_get_map_key(map, i), term_get_map_value(map, i));
+            j++;
+        }
+    }
+
+    // Return {Value, NewMap}
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, value);
+    term_put_tuple_element(result, 1, new_map);
+
+    return result;
 }
 
 static bool encoding_from_atom(term encoding_atom, enum CharDataEncoding *encoding)
@@ -7642,6 +7932,11 @@ static term nif_lists_keyfind(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
+    // OTP's immediate-integer key fast path compares float fields after a
+    // binary64 conversion, even when rounding differs from general equality.
+    bool integer_key = term_is_int(key);
+    double float_key = integer_key ? (double) term_to_int(key) : 0.0;
+
     while (term_is_nonempty_list(tuple_list)) {
         term tuple = term_get_list_head(tuple_list);
 
@@ -7659,13 +7954,18 @@ static term nif_lists_keyfind(Context *ctx, int argc, term argv[])
 
         term nth_element = term_get_tuple_element(tuple, n_pos - 1);
 
-        TermCompareResult cmp_result = term_compare(nth_element, key, TermCompareExact, ctx->global);
-
-        if (cmp_result == TermEquals) {
-            return tuple;
-        }
-        if (UNLIKELY(cmp_result == TermCompareMemoryAllocFail)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        if (integer_key && term_is_float(nth_element)) {
+            if ((double) term_to_float(nth_element) == float_key) {
+                return tuple;
+            }
+        } else {
+            TermCompareResult cmp_result = term_compare(nth_element, key, TermCompareNoOpts, ctx->global);
+            if (cmp_result == TermEquals) {
+                return tuple;
+            }
+            if (UNLIKELY(cmp_result == TermCompareMemoryAllocFail)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
         }
 
         tuple_list = term_get_list_tail(tuple_list);
@@ -8025,7 +8325,7 @@ static term nif_erlang_alias(Context *ctx, int argc, term argv[])
     if (IS_NULL_PTR(monitor)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    context_add_monitor(ctx, monitor);
+    context_add_monitor(ctx, monitor, false);
     return process_ref;
 }
 

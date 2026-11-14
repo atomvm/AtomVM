@@ -5,6 +5,7 @@
 % split/2 function Copyright Ericsson AB 1996-2023.
 % keytake/3 function Copyright Ericsson AB 1996-2024.
 % append/1, append/2 functions Copyright Ericsson AB 1996-2025.
+% sum/1 function Copyright Ericsson AB 1996-2026.
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -73,9 +74,11 @@
     append/1,
     append/2,
     zip/2,
+    unzip/1,
     zipwith/3,
     min/1,
-    max/1
+    max/1,
+    sum/1
 ]).
 
 %%-----------------------------------------------------------------------------
@@ -626,7 +629,7 @@ seq(From, To, Incr) when
     error(badarg);
 seq(To, To, 0) ->
     [To];
-seq(From, To, Incr) when From =:= To + Incr ->
+seq(From, To, Incr) when (Incr > 0 andalso To < From) orelse (Incr < 0 andalso To > From) ->
     [];
 seq(From, To, Incr) ->
     Last = From + ((To - From) div Incr) * Incr,
@@ -945,6 +948,28 @@ zip([A | As], [B | Bs]) -> [{A, B} | zip(As, Bs)];
 zip([], []) -> [].
 
 %%-----------------------------------------------------------------------------
+%% @param   Pairs a proper list of two-tuples
+%% @returns two lists containing the first and second elements of each tuple
+%% @doc     Split a list of two-tuples into two lists, preserving their order.
+%%          Invalid elements or an improper outer list raise function_clause.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec unzip(Pairs) -> {List1, List2} when
+    Pairs :: [{A, B}],
+    List1 :: [A],
+    List2 :: [B],
+    A :: term(),
+    B :: term().
+
+unzip(Pairs) ->
+    unzip(Pairs, [], []).
+
+unzip([{A, B} | Rest], As, Bs) ->
+    unzip(Rest, [A | As], [B | Bs]);
+unzip([], As, Bs) ->
+    {?MODULE:reverse(As), ?MODULE:reverse(Bs)}.
+
+%%-----------------------------------------------------------------------------
 %% @param   Combine a function that takes elements from each list
 %% @param   List1 a list
 %% @param   List2 a list
@@ -1009,4 +1034,21 @@ max_r([H | T], Acc) when H > Acc ->
 max_r([_ | T], Acc) ->
     max_r(T, Acc);
 max_r([], Acc) ->
+    Acc.
+
+%%-----------------------------------------------------------------------------
+%% @param   List a list of numbers
+%% @returns the sum of the elements, or integer zero for an empty list
+%% @doc     Sum the elements of `List' from left to right.
+%% @end
+%%-----------------------------------------------------------------------------
+%% Attribution: https://github.com/erlang/otp/blob/e14591f196d4eacc1946e7073e0ec27f72df2a12/lib/stdlib/src/lists.erl#L570-L573
+-spec sum(List :: [number()]) -> number().
+sum(List) ->
+    sum(List, 0).
+
+%% @private
+sum([H | T], Acc) ->
+    sum(T, Acc + H);
+sum([], Acc) ->
     Acc.

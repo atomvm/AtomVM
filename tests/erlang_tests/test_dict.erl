@@ -23,6 +23,8 @@
 -export([start/0, put_int/1, stringize/1, factorial/1, id/1, the_get/1, the_erase/1]).
 
 start() ->
+    ok = test_get_keys(),
+    ok = test_get_keys_gc(),
     ok = test_get_0_erase_0(),
     put_int(0),
     X = put_int(1),
@@ -81,6 +83,95 @@ test_put_get_erase() ->
     2 = apply(erlang, list_to_atom("erase"), [{any_term}]),
     undefined = erase({any_term}),
     ok.
+
+test_get_keys() ->
+    [] = get_keys(),
+    [] = get_keys(missing),
+    put(1, integer),
+    put(1.0, float),
+    put(a, 1),
+    put(b, 1.0),
+    put(c, 1),
+    Keys = get_keys(),
+    5 = length(Keys),
+    true = has_key(1, Keys),
+    true = has_key(1.0, Keys),
+    true = has_key(a, Keys),
+    true = has_key(b, Keys),
+    true = has_key(c, Keys),
+    [1] = get_keys(integer),
+    [1.0] = get_keys(float),
+    IntegerKeys = get_keys(1),
+    2 = length(IntegerKeys),
+    true = has_key(a, IntegerKeys),
+    true = has_key(c, IntegerKeys),
+    [b] = get_keys(1.0),
+    put(boxed, {<<"value">>, #{x => 1}}),
+    [boxed] = get_keys({<<"value">>, #{x => 1}}),
+    [] = get_keys({<<"value">>, #{x => 1.0}}),
+    6 = length(erase()),
+    [] = get_keys(),
+    ok.
+
+test_get_keys_gc() ->
+    {Pid, Ref} = spawn_opt(
+        fun() ->
+            fill_dictionary(256),
+            get_keys_gc(32)
+        end,
+        [monitor, {min_heap_size, 100}]
+    ),
+    %% Check GC correctness, not wall-clock performance under instrumentation.
+    normal =
+        receive
+            {'DOWN', Ref, process, Pid, Reason} -> Reason
+        end,
+    ok.
+
+fill_dictionary(0) ->
+    ok;
+fill_dictionary(N) ->
+    put({N, list_to_binary([N rem 256, $k])}, {N rem 2, list_to_binary([N rem 2, $v])}),
+    fill_dictionary(N - 1).
+
+get_keys_gc(0) ->
+    256 = length(erase()),
+    [] = get_keys(),
+    ok;
+get_keys_gc(N) ->
+    % Shrink before allocating the result lists.  The boxed search value must
+    % survive any collection inside get_keys/1, not just a collection before it.
+    true = erlang:garbage_collect(),
+    Keys = get_keys(),
+    Value = {N rem 2, list_to_binary([N rem 2, $v])},
+    Matching = get_keys(Value),
+    [] = get_keys({2, list_to_binary([N rem 2, $v])}),
+    % Keep both results live while allocating far beyond the minimum heap.
+    Pressure = dictionary_pressure(1024, []),
+    true = erlang:garbage_collect(),
+    1024 = length(Pressure),
+    256 = length(Keys),
+    128 = length(Matching),
+    ok = check_dictionary_keys(256, Keys, Matching, N rem 2),
+    get_keys_gc(N - 1).
+
+dictionary_pressure(0, Acc) -> Acc;
+dictionary_pressure(N, Acc) -> dictionary_pressure(N - 1, [{N, N + 1} | Acc]).
+
+check_dictionary_keys(0, _Keys, _Matching, _Parity) ->
+    ok;
+check_dictionary_keys(N, Keys, Matching, Parity) ->
+    Key = {N, list_to_binary([N rem 256, $k])},
+    true = has_key(Key, Keys),
+    Expected = N rem 2 =:= Parity,
+    Expected = has_key(Key, Matching),
+    ExpectedValue = {N rem 2, list_to_binary([N rem 2, $v])},
+    ExpectedValue = get(Key),
+    check_dictionary_keys(N - 1, Keys, Matching, Parity).
+
+has_key(_Key, []) -> false;
+has_key(Key, [Key | _]) -> true;
+has_key(Key, [_ | Rest]) -> has_key(Key, Rest).
 
 test_get_0_erase_0() ->
     [] = get(),
