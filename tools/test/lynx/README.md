@@ -168,7 +168,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **4,413 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **4,449 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -262,6 +262,21 @@ unverified) because `erlang:phash2/1,2` is not yet implemented. Nineteen
 enabled CLI integration tests pass (20 total; one optional fixture test skipped),
 including independent handwritten Elixir/OTP hash and identity oracles. Evidence
 is under `.amp/in/artifacts/batch4-hashing/`.
+
+Follow-up coverage for upstream `b6ac6ea` adds 36 multi-worker mailbox-drain
+and burst-send cases (`4,413 -> 4,449` runtime cases total; `204` of `428` Lean
+test sites across all 26 files): 6 `upstream_example` scenarios for
+`examples/elixir/task.exs#await_many_drains_replies` (`both_in_order`,
+`both_reverse_order`, `both_expired_timer_race`, `first_replies_second_times_out`,
+`timeout_with_queued_and_late_replies`, `first_crashes_second_late`), 18
+`Modules/Signals` variants across `reply_demonitor`, `explicit_unalias`, and
+`demonitor` (attributing `inactive_reference_is_forced` and
+`active_reference_is_not_forced`), and 12 `many_sends/2` burst-send cases (`0`,
+`1`, and `30` sends to `dead`, `live`, `self`, and `stale_alias`, attributing
+`Modules/Process.lean#many_sends` and `Modules/Signals.lean#ended_process_is_forced`).
+All 36 cases match OTP 29 (`0` failed, `0` unverified) across host interpreter
+(`build`), `aarch64` precompiled (`.amp/in/build-native`), and `aarch64`
+on-demand JIT (`.amp/in/build-on-demand`).
 
 The execution-path extension adds 466 cases for 20 arithmetic, comparison, and
 map-lookup operations. Each captures direct-body and dynamic `apply/3` outcomes
@@ -798,14 +813,16 @@ continuation after reference timeouts/undefined calls. They also check scoped Le
 sample inventories, unverified counts, stale source attribution rejection,
 on-demand JIT compilation, `oracle`/`semantic`/`transport` stage classification,
 32-bit word-size / `--float32` representation guards, and independent
-Unicode/short-circuit/process/receive/hashing result oracles:
+Unicode/short-circuit/process/receive/hashing/`await_many`/burst-send result
+oracles:
 
 ```sh
 python3 -B -m unittest discover -s tools/test/lynx -p test_validate.py -v
 ```
 
-Twenty-two enabled CLI tests pass under `ATOMVM_JIT_BUILD=.amp/in/build-on-demand`
-(1 optional `LYNX_CHECKOUT` fixture test skipped). Set `LYNX_CHECKOUT=/path/to/lynx`
+Twenty-three enabled CLI tests pass under `ATOMVM_JIT_BUILD=.amp/in/build-on-demand`
+(24 total; 1 optional `LYNX_CHECKOUT` fixture test skipped). Set
+`LYNX_CHECKOUT=/path/to/lynx`
 to enable the additional full-fixture/export inventory and partial-replay integration
 test. It requires Mix/Lean on PATH and takes several minutes; ordinary integration
 tests do not require Lynx.

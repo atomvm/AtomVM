@@ -931,6 +931,68 @@ class ValidationTests(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_await_many_and_many_sends_observations_have_independent_oracles(self):
+        all_cases = lean_runtime.cases()
+        upstream_await_many = [
+            c for c in all_cases
+            if c.get("upstream_example") == "examples/elixir/task.exs#await_many_drains_replies"
+        ]
+        self.assertEqual(len(upstream_await_many), 6)
+        self.assertTrue(all("lean_origins" not in c and not c.get("assert_true")
+                            for c in upstream_await_many))
+        lean_new = [
+            c for c in all_cases
+            if any(o in {
+                "Modules/Process.lean#many_sends",
+                "Modules/Signals.lean#inactive_reference_is_forced",
+                "Modules/Signals.lean#active_reference_is_not_forced",
+                "Modules/Signals.lean#ended_process_is_forced",
+            } for o in c.get("lean_origins", []))
+        ]
+        self.assertTrue(
+            {
+                "Modules/Process.lean#many_sends",
+                "Modules/Signals.lean#inactive_reference_is_forced",
+                "Modules/Signals.lean#active_reference_is_not_forced",
+                "Modules/Signals.lean#ended_process_is_forced",
+            }.issubset({o for c in lean_new for o in c["lean_origins"]})
+        )
+        many_sends_30 = [
+            c for c in all_cases
+            if c["expression"].startswith("differential:many_sends(") and c["expression"].endswith(",30)")
+        ]
+        self.assertEqual(len(many_sends_30), 4)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            source.write_text(json.dumps(upstream_await_many + many_sends_30))
+            output = work / "await_many"
+            summary = self.invoke(output, "--replay", source)
+            self.assertEqual(summary, {"laws": 0, "passed": 10, "failed": 0,
+                                       "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                values = JSON.decode!(File.read!(path))["expected"]
+                         |> Enum.map(&:erlang.binary_to_term(Base.decode64!(&1)))
+                post = {false, false, false, false}
+                expected = [
+                  {:ok, {:ok, {{:ok, [first: 10, second: 20]}, :normal, :normal, post, [:retained]}}},
+                  {:ok, {:ok, {{:ok, [first: 10, second: 20]}, :normal, :normal, post, [:retained]}}},
+                  {:ok, {:ok, {{:ok, [first: 10, second: 20]}, :normal, :normal, post, [:retained]}}},
+                  {:ok, {:ok, {:timeout, :normal, :normal, post, [:retained]}}},
+                  {:ok, {:ok, {:timeout, :normal, :normal, post, [:retained]}}},
+                  {:ok, {:ok, {{:down, :first, :boom}, :boom, :normal, post, [:retained]}}},
+                  {:ok, {:ok, {true, true, 0, [:retained]}}},
+                  {:ok, {:ok, {true, true, 30, [:retained]}}},
+                  {:ok, {:ok, {true, true, 30, [:retained]}}},
+                  {:ok, {:ok, {true, true, 0, [:retained]}}}
+                ]
+                true = values === expected
+                """, str(output / "manifest.json")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     def test_lifecycle_sequences_preserve_fenced_state_and_allowed_races(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)

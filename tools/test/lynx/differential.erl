@@ -79,7 +79,10 @@
     phash2_range/2,
     phash2_ranges/1,
     phash2_map_relations/1,
-    phash2_live_identities/1
+    phash2_live_identities/1,
+    many_sends/2,
+    await_many_drain/1,
+    await_many_drain/2
 ]).
 
 %% Timer observations use delivery/monitor handshakes, not elapsed-time
@@ -3696,3 +3699,258 @@ phash2_live_identities(composite_live_identities) ->
         HT1Short =:= erlang:phash2(T2),
         HT1Full =:= HT2Full
     }.
+
+many_sends(Mode, Count) ->
+    isolated(fun() ->
+        self() ! retained,
+        Parent = self(),
+        {Child, Fence} = spawn_monitor(fun() ->
+            many_sends_worker(Parent, Mode, Count, [])
+        end),
+        Target =
+            case Mode of
+                dead ->
+                    receive
+                        {'DOWN', Fence, process, Child, normal} -> Child
+                    end;
+                live ->
+                    Child;
+                self ->
+                    receive
+                        {'DOWN', Fence, process, Child, normal} -> self()
+                    end;
+                stale_alias ->
+                    receive
+                        {'DOWN', Fence, process, Child, normal} ->
+                            Alias = erlang:alias(),
+                            true = erlang:unalias(Alias),
+                            Alias
+                    end
+            end,
+        Seq = lists:seq(1, Count),
+        Sent = [
+            begin
+                Msg = {seq, I},
+                (Target ! Msg) =:= Msg
+            end
+         || I <- Seq
+        ],
+        AllSent = lists:all(fun(B) -> B end, Sent) andalso length(Sent) =:= Count,
+        Delivered =
+            case Mode of
+                live ->
+                    receive
+                        {Child, Items} ->
+                            receive
+                                {'DOWN', Fence, process, Child, normal} -> Items
+                            end
+                    end;
+                self ->
+                    [
+                        receive
+                            {seq, I} -> I
+                        end
+                     || I <- Seq
+                    ];
+                _ ->
+                    []
+            end,
+        ExpectedDelivered =
+            case Mode of
+                M when M =:= live; M =:= self -> Seq;
+                _ -> []
+            end,
+        {AllSent, Delivered =:= ExpectedDelivered, length(Delivered), drain()}
+    end).
+
+many_sends_worker(_Parent, Mode, _Count, _Acc) when Mode =/= live ->
+    ok;
+many_sends_worker(Parent, live, 0, Acc) ->
+    Parent ! {self(), lists:reverse(Acc)};
+many_sends_worker(Parent, live, Remaining, Acc) ->
+    receive
+        {seq, I} ->
+            many_sends_worker(Parent, live, Remaining - 1, [I | Acc])
+    end.
+
+await_many_drain(Scenario) ->
+    await_many_drain(Scenario, reply_demonitor).
+
+await_many_drain(Scenario, AliasMode) ->
+    isolated(fun() ->
+        self() ! retained,
+        Parent = self(),
+        {First, Fence1} = spawn_monitor(fun() ->
+            await_many_worker()
+        end),
+        {Second, Fence2} = spawn_monitor(fun() ->
+            await_many_worker()
+        end),
+        Ref1 = monitor(process, First, [{alias, AliasMode}]),
+        Ref2 = monitor(process, Second, [{alias, AliasMode}]),
+        Tasks = [{first, First, Ref1}, {second, Second, Ref2}],
+        TimerToken = make_ref(),
+        TimerRef =
+            case Scenario of
+                S when
+                    S =:= both_expired_timer_race;
+                    S =:= first_replies_second_times_out;
+                    S =:= timeout_with_queued_and_late_replies
+                ->
+                    erlang:send_after(0, self(), {timeout, TimerToken});
+                _ ->
+                    erlang:send_after(60000, self(), {timeout, TimerToken})
+            end,
+        case Scenario of
+            both_in_order ->
+                First ! {reply_and_exit, Ref1, {first, 10}, Parent},
+                receive
+                    {ack, First} -> ok
+                end,
+                Second ! {reply_and_exit, Ref2, {second, 20}, Parent},
+                receive
+                    {ack, Second} -> ok
+                end;
+            both_reverse_order ->
+                Second ! {reply_twice_and_exit, Ref2, {second, 20}, extra_after_reply, Parent},
+                receive
+                    {ack, Second} -> ok
+                end,
+                First ! {reply_and_exit, Ref1, {first, 10}, Parent},
+                receive
+                    {ack, First} -> ok
+                end;
+            both_expired_timer_race ->
+                First ! {reply_and_exit, Ref1, {first, 10}, Parent},
+                receive
+                    {ack, First} -> ok
+                end,
+                Second ! {reply_and_exit, Ref2, {second, 20}, Parent},
+                receive
+                    {ack, Second} -> ok
+                end,
+                receive
+                    {timeout, TimerToken} = TimeoutMsg ->
+                        self() ! TimeoutMsg
+                end;
+            first_replies_second_times_out ->
+                First ! {reply_and_exit, Ref1, {first, 10}, Parent},
+                receive
+                    {ack, First} -> ok
+                end,
+                receive
+                    {timeout, TimerToken} = TimeoutMsg ->
+                        self() ! TimeoutMsg
+                end;
+            timeout_with_queued_and_late_replies ->
+                receive
+                    {timeout, TimerToken} = TimeoutMsg ->
+                        self() ! TimeoutMsg
+                end,
+                First ! {reply_and_exit, Ref1, {first, 10}, Parent},
+                receive
+                    {ack, First} -> ok
+                end;
+            first_crashes_second_late ->
+                First ! {crash, boom}
+        end,
+        Outcome = await_many_collect(Tasks, Ref1, Ref2, TimerRef, TimerToken, #{}),
+        case Scenario of
+            S2 when
+                S2 =:= first_replies_second_times_out;
+                S2 =:= timeout_with_queued_and_late_replies;
+                S2 =:= first_crashes_second_late
+            ->
+                Second ! {reply_and_exit, Ref2, late_second, Parent},
+                receive
+                    {ack, Second} -> ok
+                end;
+            _ ->
+                ok
+        end,
+        Reason1 =
+            receive
+                {'DOWN', Fence1, process, First, R1} -> R1
+            end,
+        Reason2 =
+            receive
+                {'DOWN', Fence2, process, Second, R2} -> R2
+            end,
+        PostStatus = {
+            demonitor(Ref1, [info]),
+            demonitor(Ref2, [info]),
+            erlang:unalias(Ref1),
+            erlang:unalias(Ref2)
+        },
+        {Outcome, Reason1, Reason2, PostStatus, drain()}
+    end).
+
+await_many_worker() ->
+    receive
+        {reply_and_exit, AliasRef, Value, AckTo} ->
+            AliasRef ! {AliasRef, Value},
+            AckTo ! {ack, self()};
+        {reply_twice_and_exit, AliasRef, Value1, Value2, AckTo} ->
+            AliasRef ! {AliasRef, Value1},
+            AliasRef ! {AliasRef, Value2},
+            AckTo ! {ack, self()};
+        {crash, Reason} ->
+            exit(Reason)
+    end.
+
+await_many_collect(Tasks, Ref1, Ref2, TimerRef, TimerToken, Replies) ->
+    case maps:size(Replies) =:= length(Tasks) of
+        true ->
+            await_many_cancel_timer(TimerRef, TimerToken),
+            {ok, [maps:get(Ref, Replies) || {_Slot, _Pid, Ref} <- Tasks]};
+        false ->
+            receive
+                {timeout, TimerToken} ->
+                    await_many_cleanup_tasks(Tasks, Replies),
+                    timeout;
+                {Ref, Value} when Ref =:= Ref1; Ref =:= Ref2 ->
+                    {_, _, Ref} = lists:keyfind(Ref, 3, Tasks),
+                    await_many_cleanup_ref(Ref),
+                    await_many_collect(
+                        Tasks, Ref1, Ref2, TimerRef, TimerToken, Replies#{Ref => Value}
+                    );
+                {'DOWN', Ref, process, _Pid, Reason} when Ref =:= Ref1; Ref =:= Ref2 ->
+                    {Slot, _TaskPid, Ref} = lists:keyfind(Ref, 3, Tasks),
+                    await_many_cancel_timer(TimerRef, TimerToken),
+                    await_many_cleanup_tasks(Tasks, Replies#{Ref => down}),
+                    {down, Slot, Reason}
+            end
+    end.
+
+await_many_cancel_timer(TimerRef, TimerToken) ->
+    case erlang:cancel_timer(TimerRef) of
+        false ->
+            receive
+                {timeout, TimerToken} -> ok
+            after 0 -> ok
+            end;
+        Remaining when is_integer(Remaining), Remaining >= 0 ->
+            ok
+    end.
+
+await_many_cleanup_tasks(Tasks, Handled) ->
+    lists:foreach(
+        fun({_Slot, _Pid, Ref}) ->
+            case maps:is_key(Ref, Handled) of
+                true -> ok;
+                false -> await_many_cleanup_ref(Ref)
+            end
+        end,
+        Tasks
+    ).
+
+await_many_cleanup_ref(Ref) ->
+    erlang:unalias(Ref),
+    demonitor(Ref, [flush]),
+    await_many_flush_ref(Ref).
+
+await_many_flush_ref(Ref) ->
+    receive
+        {Ref, _} -> await_many_flush_ref(Ref)
+    after 0 -> ok
+    end.
