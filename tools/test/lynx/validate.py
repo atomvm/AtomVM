@@ -217,6 +217,56 @@ def validate(args, work):
         )
 
 
+def etf_result_contract(encoded):
+    if not encoded:
+        return ("none",)
+    try:
+        data = base64.b64decode(encoded)
+    except Exception:
+        return ("invalid",)
+    if len(data) < 3 or data[0] != 131:
+        return ("invalid",)
+    if data[1] != 104:
+        return ("term",)
+    arity = data[2]
+    pos = 3
+    atoms = []
+    for _ in range(min(arity, 2)):
+        if pos >= len(data):
+            break
+        tag = data[pos]
+        if tag == 119 and pos + 2 <= len(data):
+            length = data[pos + 1]
+            pos += 2
+        elif tag in (100, 118) and pos + 3 <= len(data):
+            length = (data[pos + 1] << 8) | data[pos + 2]
+            pos += 3
+        else:
+            break
+        atoms.append(data[pos:pos + length].decode("utf-8", errors="replace"))
+        pos += length
+    if atoms and atoms[0] == "ok" and arity == 2:
+        return ("ok",)
+    if len(atoms) >= 2 and atoms[0] == "exception" and arity == 3:
+        return ("exception", atoms[1])
+    return ("tuple", arity)
+
+
+def same_failure_contract(original, reduced):
+    if original["case"].get("operation") != reduced["case"].get("operation"):
+        return False
+    if etf_result_contract(original.get("expected")) != etf_result_contract(reduced.get("expected")):
+        return False
+    orig_actual = original.get("actual", {})
+    red_actual = reduced.get("actual", {})
+    if orig_actual.get("status") != red_actual.get("status"):
+        return False
+    if orig_actual.get("status") == "ok":
+        if etf_result_contract(orig_actual.get("value")) != etf_result_contract(red_actual.get("value")):
+            return False
+    return True
+
+
 def shrink(args, work, failure):
     current = failure["case"]
     if "operation" not in current:
@@ -238,10 +288,11 @@ def shrink(args, work, failure):
             try:
                 command(command_line, work, work / "shrink.log")
             except RuntimeError:
-                # Compilation/reference failures are not evidence of a reduced VM mismatch.
-                if (trial / "failures.json").exists():
+                # Compilation/reference/unverified failures are not evidence of the reduced VM mismatch.
+                unverified = json.loads((trial / "unverified.json").read_text()) if (trial / "unverified.json").exists() else []
+                if not unverified and (trial / "failures.json").exists():
                     reduced = json.loads((trial / "failures.json").read_text())
-                    if reduced and reduced[0]["actual"]["status"] == failure["actual"]["status"]:
+                    if reduced and same_failure_contract(failure, reduced[0]):
                         current = candidate
                         improved = True
             finally:

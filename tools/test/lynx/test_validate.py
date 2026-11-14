@@ -66,7 +66,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual({entry["operation"] for entry in selected},
                              {"compare", "maps", "bits", "arithmetic", "float_bits",
                               "map_sequence", "dictionary_sequence", "receive_sequence",
-                              "binary_sequence"})
+                              "binary_sequence", "lifecycle_sequence"})
             self.assertEqual(summary["passed"], 32)
 
     def test_timer_and_subtraction_observations_have_independent_oracles(self):
@@ -824,6 +824,114 @@ class ValidationTests(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_lifecycle_sequences_preserve_fenced_state_and_allowed_races(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            case_a = "differential:lifecycle_sequence(" + ",".join([
+                "{false,true,none,none}",
+                "[" + ",".join([
+                    "{register_slot,reg_a,alpha}",
+                    "{register_slot,reg_b,alpha}",
+                    "{register_slot,reg_a,beta}",
+                    "{whereis_slot,reg_a}",
+                    "{unregister_slot,reg_a}",
+                    "{peer_link_action,alpha,unlink}",
+                    "{link_slot,missing}",
+                    "{trap_exit,true}",
+                    "{link_slot,missing}",
+                    "{fenced_exit_signal,custom_signal}",
+                    "{trap_exit,false}",
+                    "{drain_mailbox}",
+                ]) + "]",
+            ]) + ")"
+            case_b = "differential:lifecycle_sequence(" + ",".join([
+                "{true,false,reg_a,explicit_unalias}",
+                "[" + ",".join([
+                    "{alias_send,a1,alpha,hello_a1}",
+                    "{monitor_slot,m1,reg_a,reply_demonitor}",
+                    "{alias_send,m1,alpha,one_shot}",
+                    "{demonitor_slot,m1,info}",
+                    "{monitor_slot,m2,beta,demonitor}",
+                    "{monitor_slot,m1,alpha,bad_opt}",
+                    "{kill_child,beta,shutdown}",
+                    "{monitor_dead_queued,m1,explicit_unalias}",
+                    "{demonitor_slot,m1,flush_info}",
+                    "{alias_unalias,m1}",
+                    "{spawn_slot,beta}",
+                    "{link_slot,alpha}",
+                    "{trap_exit,false}",
+                    "{kill_child,alpha,boom}",
+                    "{race_unlink_exit,beta,boom}",
+                    "{race_demonitor_exit,explicit_unalias,flush,shutdown}",
+                    "{drain_mailbox}",
+                ]) + "]",
+            ]) + ")"
+            source.write_text(json.dumps([{"expression": case_a}, {"expression": case_b}]))
+            output = work / "results"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 2, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                [a, b] = JSON.decode!(File.read!(path))["expected"]
+                         |> Enum.map(&:erlang.binary_to_term(Base.decode64!(&1)))
+                s_a0 = {false, [:alpha], {:undefined, :undefined}, {{:alive, true}, {:alive, true}}, {:none, :none}, {:none, :none}}
+                s_a1 = {false, [:alpha], {:alpha, :undefined}, {{:alive, true}, {:alive, true}}, {:none, :none}, {:none, :none}}
+                s_a5 = {false, [:alpha], {:undefined, :undefined}, {{:alive, true}, {:alive, true}}, {:none, :none}, {:none, :none}}
+                s_a6 = {false, [], {:undefined, :undefined}, {{:alive, true}, {:alive, true}}, {:none, :none}, {:none, :none}}
+                s_a8 = {true, [], {:undefined, :undefined}, {{:alive, true}, {:alive, true}}, {:none, :none}, {:none, :none}}
+                {:ok, {:ok, {^s_a0, [
+                  {{:register_slot, :reg_a, :alpha, {:ok, true}, :alpha}, ^s_a1},
+                  {{:register_slot, :reg_b, :alpha, {:exception, :error, :badarg}, :undefined}, ^s_a1},
+                  {{:register_slot, :reg_a, :beta, {:exception, :error, :badarg}, :alpha}, ^s_a1},
+                  {{:whereis_slot, :reg_a, :alpha}, ^s_a1},
+                  {{:unregister_slot, :reg_a, {:ok, true}, :undefined}, ^s_a5},
+                  {{:peer_link_action, :alpha, :unlink, true, false, false, false}, ^s_a6},
+                  {{:link_slot, :missing, {:exception, :error, :noproc}}, ^s_a6},
+                  {{:trap_exit, true, {:ok, false}, true}, ^s_a8},
+                  {{:link_slot, :missing, {:ok, :noproc}}, ^s_a8},
+                  {{:fenced_exit_signal, :custom_signal, :queued}, ^s_a8},
+                  {{:trap_exit, false, {:ok, true}, false}, ^s_a6},
+                  {{:drain_mailbox, [{:exit_msg, {:helper, 2}, :custom_signal}]}, ^s_a6}
+                ]}}} = a
+                s_b0 = {true, [], {:alpha, :undefined}, {{:alive, true}, {:alive, true}}, {:none, :none}, {{:explicit_unalias, true}, :none}}
+                s_b2 = {true, [], {:alpha, :undefined}, {{:alive, true}, {:alive, true}}, {{:reply_demonitor, true, true}, :none}, {{:explicit_unalias, true}, :none}}
+                s_b3 = {true, [], {:alpha, :undefined}, {{:alive, true}, {:alive, true}}, {{:reply_demonitor, false, false}, :none}, {{:explicit_unalias, true}, :none}}
+                s_b5 = {true, [], {:alpha, :undefined}, {{:alive, true}, {:alive, true}}, {{:reply_demonitor, false, false}, {:demonitor, true, true}}, {{:explicit_unalias, true}, :none}}
+                s_b6 = {true, [], {:alpha, :undefined}, {{:alive, true}, {:alive, true}}, {:none, {:demonitor, true, true}}, {{:explicit_unalias, true}, :none}}
+                s_b7 = {true, [], {:alpha, :undefined}, {{:alive, true}, {:dead, false}}, {:none, {:demonitor, false, false}}, {{:explicit_unalias, true}, :none}}
+                s_b8 = {true, [], {:alpha, :undefined}, {{:alive, true}, {:dead, false}}, {{:explicit_unalias, false, true}, {:demonitor, false, false}}, {{:explicit_unalias, true}, :none}}
+                s_b10 = {true, [], {:alpha, :undefined}, {{:alive, true}, {:dead, false}}, {{:explicit_unalias, false, false}, {:demonitor, false, false}}, {{:explicit_unalias, true}, :none}}
+                s_b11 = {true, [], {:alpha, :undefined}, {{:alive, true}, {:alive, true}}, {{:explicit_unalias, false, false}, {:demonitor, false, false}}, {{:explicit_unalias, true}, :none}}
+                s_b12 = {true, [:alpha], {:alpha, :undefined}, {{:alive, true}, {:alive, true}}, {{:explicit_unalias, false, false}, {:demonitor, false, false}}, {{:explicit_unalias, true}, :none}}
+                s_b13 = {false, [:alpha], {:alpha, :undefined}, {{:alive, true}, {:alive, true}}, {{:explicit_unalias, false, false}, {:demonitor, false, false}}, {{:explicit_unalias, true}, :none}}
+                s_b14 = {false, [], {:undefined, :undefined}, {{:dead, false}, {:alive, true}}, {{:explicit_unalias, false, false}, {:demonitor, false, false}}, {{:explicit_unalias, true}, :none}}
+                s_b15 = {false, [], {:undefined, :undefined}, {{:dead, false}, {:dead, false}}, {{:explicit_unalias, false, false}, {:demonitor, false, false}}, {{:explicit_unalias, true}, :none}}
+                {:ok, {:ok, {^s_b0, [
+                  {{:alias_send, :a1, :alpha, {:delivered, :hello_a1}}, ^s_b0},
+                  {{:monitor_slot, :m1, :reg_a, :reply_demonitor, :ok}, ^s_b2},
+                  {{:alias_send, :m1, :alpha, {:delivered, :one_shot}}, ^s_b3},
+                  {{:demonitor_slot, :m1, :info, {:ok, false}}, ^s_b3},
+                  {{:monitor_slot, :m2, :beta, :demonitor, :ok}, ^s_b5},
+                  {{:monitor_slot, :m1, :alpha, :bad_opt, {:exception, :error, :badarg}}, ^s_b6},
+                  {{:kill_child, :beta, :shutdown, {:ok, :shutdown, :none, [{:m2, {true, :shutdown}}]}}, ^s_b7},
+                  {{:monitor_dead_queued, :m1, :explicit_unalias, :queued}, ^s_b8},
+                  {{:demonitor_slot, :m1, :flush_info, {:ok, false}}, ^s_b8},
+                  {{:alias_unalias, :m1, {:ok, true}}, ^s_b10},
+                  {{:spawn_slot, :beta, :spawned, []}, ^s_b11},
+                  {{:link_slot, :alpha, {:ok, true}, true, true, true}, ^s_b12},
+                  {{:trap_exit, false, {:ok, true}, false}, ^s_b13},
+                  {{:kill_child, :alpha, :boom, {:ok, :boom, {:observer_linked_exit, :boom}, []}}, ^s_b14},
+                  {{:race_unlink_exit, :beta, :boom, true}, ^s_b15},
+                  {{:race_demonitor_exit, :explicit_unalias, :flush, :shutdown, true}, ^s_b15},
+                  {{:drain_mailbox, []}, ^s_b15}
+                ]}}} = b
+                """, str(output / "manifest.json")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     @unittest.skipUnless(os.getenv("LYNX_CHECKOUT"), "Set LYNX_CHECKOUT to test fixture coverage")
     def test_lynx_exports_have_cases_and_partial_replay_is_scoped(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -900,7 +1008,7 @@ class ValidationTests(unittest.TestCase):
                 ["put", 1, "first"], ["put", 1, "replaced"],
                 ["erase", 1], ["get", 1.0], ["put", 1, "reinserted"],
             ]]
-            for operation in ["map_sequence", "dictionary_sequence", "receive_sequence", "binary_sequence"]:
+            for operation in ["map_sequence", "dictionary_sequence", "receive_sequence", "binary_sequence", "lifecycle_sequence"]:
                 if operation == "receive_sequence":
                     setup = ["sentinel", 1.0, {"tuple": ["tag", 1]}]
                     steps = [{"tuple": s} for s in [
@@ -911,6 +1019,14 @@ class ValidationTests(unittest.TestCase):
                     steps = [{"tuple": s} for s in [
                         ["part", 1, 5], ["part", 5, -3], ["append", [97, 98]],
                         ["match", {"bits": [0x6162, 16]}, []],
+                    ]]
+                elif operation == "lifecycle_sequence":
+                    setup = {"tuple": ["false", "true", "none", "none"]}
+                    steps = [{"tuple": s} for s in [
+                        ["register_slot", "reg_a", "alpha"],
+                        ["whereis_slot", "reg_a"],
+                        ["peer_link_action", "alpha", "unlink"],
+                        ["kill_child", "alpha", "shutdown"],
                     ]]
                 source.write_text(json.dumps([
                     {"seed": 123, "index": 7, "operation": operation, "args": [setup, steps]}
@@ -931,6 +1047,15 @@ class ValidationTests(unittest.TestCase):
             failure = json.loads((malformed / "failures.json").read_text())[0]
             self.assertEqual(failure["actual"]["status"], "error")
             self.assertIn("Invalid serialized result", failure["actual"]["message"])
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import base64
+            import validate
+            ok_encoded = base64.b64encode(bytes([131, 104, 2, 119, 2, *b"ok", 97, 1])).decode("ascii")
+            exc_encoded = base64.b64encode(bytes([131, 104, 3, 119, 9, *b"exception", 119, 5, *b"error", 119, 6, *b"badarg"])).decode("ascii")
+            orig = {"case": {"operation": "lifecycle_sequence"}, "expected": ok_encoded, "actual": {"status": "ok", "value": ok_encoded}}
+            self.assertTrue(validate.same_failure_contract(orig, dict(orig)))
+            self.assertFalse(validate.same_failure_contract(orig, {**orig, "expected": exc_encoded}))
+            self.assertFalse(validate.same_failure_contract(orig, {**orig, "case": {"operation": "compare"}}))
 
 
 if __name__ == "__main__":
