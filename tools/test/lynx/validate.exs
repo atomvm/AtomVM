@@ -94,7 +94,8 @@ case System.argv() do
         laws: laws,
         expected: Enum.map(references, & &1.value),
         oracle_errors: Enum.map(references, & &1.error),
-        otp: :erlang.system_info(:otp_release) |> List.to_string()
+        otp: :erlang.system_info(:otp_release) |> List.to_string(),
+        otp_word_size: :erlang.system_info(:wordsize)
       })
     )
 
@@ -103,44 +104,126 @@ case System.argv() do
     cases = read.("cases.json")
     manifest = read.("manifest.json")
     actuals = read.("actuals.json")
+    run_path = Path.join(work, "run.json")
+    run = if File.exists?(run_path), do: read.("run.json"), else: %{}
+    target = Map.get(run, "target", %{})
+    otp_word_size = Map.get(manifest, "otp_word_size", :erlang.system_info(:wordsize))
+    target_word_size = Map.get(target, "word_size", otp_word_size)
+    target_float_bits = Map.get(target, "float_bits", 64)
     true = length(cases) == length(actuals) and length(cases) == length(manifest["expected"])
     decode = fn value -> value |> Base.decode64!() |> :erlang.binary_to_term() end
+
+    contains_float? = fn
+      val, _self when is_float(val) ->
+        true
+
+      val, self when is_tuple(val) ->
+        val |> Tuple.to_list() |> Enum.any?(&self.(&1, self))
+
+      [h | t], self ->
+        self.(h, self) or self.(t, self)
+
+      val, self when is_map(val) ->
+        Enum.any?(val, fn {k, v} -> self.(k, self) or self.(v, self) end)
+
+      _, _ ->
+        false
+    end
 
     results =
       Enum.zip([cases, manifest["expected"], actuals, manifest["oracle_errors"]])
       |> Enum.map(fn
         {entry, nil, actual, error} ->
+          timeout = error == "OTP reference timed out"
           IO.puts("UNVERIFIED #{entry["expression"]}: #{error}")
-          %{status: :unverified, case: entry, message: error, actual: actual}
+
+          %{
+            status: :unverified,
+            stage: "oracle",
+            timeout: timeout,
+            case: entry,
+            message: error,
+            actual: actual
+          }
 
         {entry, encoded, actual, nil} ->
           expected = decode.(encoded)
 
-          {actual, value} =
-            if actual["status"] == "ok" do
-              try do
-                {actual, decode.(actual["value"])}
-              rescue
-                ArgumentError ->
-                  {%{"status" => "error", "message" => "Invalid serialized result"}, nil}
+          cond do
+            entry["word_size_dependent"] == true and target_word_size != otp_word_size ->
+              message =
+                "Target word size (#{target_word_size} bytes) differs from OTP oracle (#{otp_word_size} bytes)"
+
+              IO.puts("UNVERIFIED #{entry["expression"]}: #{message}")
+
+              %{
+                status: :unverified,
+                stage: "oracle",
+                timeout: false,
+                case: entry,
+                message: message,
+                actual: actual
+              }
+
+            target_float_bits == 32 and not is_binary(entry["float32_expected"]) and
+                (entry["float32_unverified"] == true or
+                   contains_float?.(expected, contains_float?)) ->
+              message = "Target uses float32; host binary64 OTP expectation is not applicable"
+              IO.puts("UNVERIFIED #{entry["expression"]}: #{message}")
+
+              %{
+                status: :unverified,
+                stage: "oracle",
+                timeout: false,
+                case: entry,
+                message: message,
+                actual: actual
+              }
+
+            true ->
+              {expected_encoded, expected} =
+                if target_float_bits == 32 and is_binary(entry["float32_expected"]) do
+                  {entry["float32_expected"], decode.(entry["float32_expected"])}
+                else
+                  {encoded, expected}
+                end
+
+              {actual, value} =
+                if actual["status"] == "ok" do
+                  try do
+                    {actual, decode.(actual["value"])}
+                  rescue
+                    ArgumentError ->
+                      {%{"status" => "error", "stage" => "transport", "timeout" => false, "message" => "Invalid serialized result"}, nil}
+                  end
+                else
+                  {actual, nil}
+                end
+
+              assertion_ok =
+                entry["assert_true"] != true or (expected === {:ok, true} and value === {:ok, true})
+
+              if actual["status"] == "ok" and value === expected and assertion_ok do
+                unless Map.has_key?(entry, "operation"), do: IO.puts("PASS #{entry["expression"]}")
+                %{status: :passed, case: entry}
+              else
+                stage = if actual["status"] == "ok", do: "semantic", else: Map.get(actual, "stage", "semantic")
+                timeout = if actual["status"] == "ok", do: false, else: Map.get(actual, "timeout", false)
+                IO.puts("FAIL #{entry["expression"]}")
+                unless assertion_ok, do: IO.puts("  assertion: OTP and AtomVM must return true")
+                IO.puts("  expected: #{inspect(expected, limit: 30)}")
+                value = if actual["status"] == "ok", do: value, else: actual
+                IO.puts("  actual:   #{inspect(value, limit: 30)}")
+
+                %{
+                  status: :failed,
+                  stage: stage,
+                  timeout: timeout,
+                  case: entry,
+                  expected: expected_encoded,
+                  actual: actual
+                }
               end
-            else
-              {actual, nil}
-            end
-
-          assertion_ok =
-            entry["assert_true"] != true or (expected === {:ok, true} and value === {:ok, true})
-
-          if actual["status"] == "ok" and value === expected and assertion_ok do
-            unless Map.has_key?(entry, "operation"), do: IO.puts("PASS #{entry["expression"]}")
-            %{status: :passed, case: entry}
-          else
-            IO.puts("FAIL #{entry["expression"]}")
-            unless assertion_ok, do: IO.puts("  assertion: OTP and AtomVM must return true")
-            IO.puts("  expected: #{inspect(expected, limit: 30)}")
-            value = if actual["status"] == "ok", do: value, else: actual
-            IO.puts("  actual:   #{inspect(value, limit: 30)}")
-            %{status: :failed, case: entry, expected: encoded, actual: actual}
           end
       end)
 

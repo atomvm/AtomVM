@@ -3,21 +3,23 @@
 
 """Finite public-API samples inspired by LynxTest, not translations of proofs."""
 
+import base64
 import hashlib
 import re
+import struct
 
 
 def cases():
     selected = []
 
-    def probe(source, tests, expression):
+    def probe(source, tests, expression, **extra):
         if isinstance(tests, str):
             tests = [tests]
         selected.append({"lean_origins": [f"{source}.lean#{test}" for test in tests],
-                         "expression": expression})
+                         "expression": expression, **extra})
 
-    def call(source, tests, function, *args, module="erlang"):
-        probe(source, tests, f"differential:call({module},'{function}',[{','.join(args)}])")
+    def call(source, tests, function, *args, module="erlang", **extra):
+        probe(source, tests, f"differential:call({module},'{function}',[{','.join(args)}])", **extra)
 
     e = "Modules/Erlang"
     for value in ["0", "1", "-7", "1 bsl 100", "1.5", "-1.5", "0.0", "-0.0",
@@ -982,11 +984,12 @@ def cases():
         ("#{key=>0.0}", "#{key=>1.0}", "#{key=> -0.0}"),
         ("#{#{1=>a}=>[2]}", "#{#{1.0=>a}=>[2]}", "#{#{1=>a}=>[2.0]}"),
     ]:
+        extra = {"word_size_dependent": True} if "900719925474099" in key else {}
         for tail in ["[]", "improper"]:
             items = (f"[skipped,{{}},{{prefix}},{{prefix,{decoy},decoy}},"
                      f"{{prefix,{stored},first}},{{prefix,{key},second}}|{tail}]")
             for fn in ["keyfind", "keymember"]:
-                call("Modules/Signals", "keyfind_finds_first_match", fn, key, "2", items, module="lists")
+                call("Modules/Signals", "keyfind_finds_first_match", fn, key, "2", items, module="lists", **extra)
     # Without an exact fallback, keymember must expose the same disagreement.
     for key, stored in [("9007199254740993", "9007199254740992.0"),
                         ("9007199254740992.0", "9007199254740993"),
@@ -994,7 +997,8 @@ def cases():
                         ("-9007199254740992.0", "-9007199254740993")]:
         for fn in ["keyfind", "keymember"]:
             call("Modules/Signals", "keyfind_finds_first_match", fn, key, "2",
-                 f"[skipped,{{}},{{prefix}},{{prefix,{stored},only}}]", module="lists")
+                 f"[skipped,{{}},{{prefix}},{{prefix,{stored},only}}]", module="lists",
+                 word_size_dependent=True)
 
     for kind in ["local_zero", "local_one", "local_two", "external_zero", "external_one",
                  "external_two", "bif_zero", "bif_one", "missing_export", "missing_module", "not_fun"]:
@@ -1101,6 +1105,51 @@ def cases():
                     "pids_and_refs", "composite_live_identities"]:
         probe(hashing, "capture_hash", f"differential:phash2_live_identities({variant})")
     return selected
+
+
+def _encode_atom(name):
+    raw = name.encode("utf-8")
+    return bytes([119, len(raw)]) + raw
+
+
+def _encode_float32_ok(value):
+    f32 = struct.unpack(">f", struct.pack(">f", value))[0]
+    etf = bytes([131, 104, 2]) + _encode_atom("ok") + bytes([70]) + struct.pack(">d", f32)
+    return base64.b64encode(etf).decode("ascii")
+
+
+def _encode_exception(exc_class, reason):
+    etf = (bytes([131, 104, 3])
+           + _encode_atom("exception")
+           + _encode_atom(exc_class)
+           + _encode_atom(reason))
+    return base64.b64encode(etf).decode("ascii")
+
+
+def float32_cases():
+    """Representation-aware IEEE-754 binary32 cases for AVM_USE_32BIT_FLOAT=ON builds."""
+    return [
+        {"expression": "differential:call(erlang,'+',[16777216.0,1.0])",
+         "float32_expected": _encode_float32_ok(16777216.0)},
+        {"expression": "differential:arithmetic(add,16777216.0,1.0)",
+         "float32_expected": _encode_float32_ok(16777216.0)},
+        {"expression": "differential:call(erlang,'+',[16777216.0,2.0])",
+         "float32_expected": _encode_float32_ok(16777218.0)},
+        {"expression": "differential:call(erlang,'+',[1.0,1.0e-8])",
+         "float32_expected": _encode_float32_ok(1.0)},
+        {"expression": "differential:call(erlang,'*',[1.5,-2])",
+         "float32_expected": _encode_float32_ok(-3.0)},
+        {"expression": "differential:call(erlang,'/',[1,2])",
+         "float32_expected": _encode_float32_ok(0.5)},
+        {"expression": "differential:call(erlang,abs,[-1.5])",
+         "float32_expected": _encode_float32_ok(1.5)},
+        {"expression": "differential:call(erlang,'*',[3.4e38,2.0])",
+         "float32_expected": _encode_exception("error", "badarith")},
+        {"expression": "differential:arithmetic(mul,3.4e38,2.0)",
+         "float32_expected": _encode_exception("error", "badarith")},
+        {"expression": "differential:call(erlang,'*',[1.0e-45,0.5])",
+         "float32_expected": _encode_float32_ok(0.0)},
+    ]
 
 
 def inventory(checkout, selected, failures=None, unverified=()):
