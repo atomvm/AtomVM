@@ -26,6 +26,7 @@
     receive_guards/3,
     receive_sequence/2,
     timer/3,
+    timer_options/3,
     send_destination/3,
     process_exchange/1,
     monitor_exit/1,
@@ -135,6 +136,64 @@ timer(Mode, Delay, Payload) when Mode =:= dead_before; Mode =:= dead_after ->
             Other -> Other
         end,
     {is_reference(Ref), Result, erlang:cancel_timer(Ref), drain()}.
+
+%% Absolute deadlines are constructed in each VM's own monotonic epoch.
+%% Keep the not-before observation, but never serialize clock values or demand
+%% an upper latency bound. A mistaken relative/absolute interpretation must not
+%% pass just because the message eventually arrived.
+timer_options(Mode, Delay, Options) ->
+    Now = erlang:monotonic_time(millisecond),
+    %% Do not subtract from a fresh VM's clock: that can precede its start_time
+    %% and correctly raise badarg. Age an observed timestamp instead.
+    Deadline = Now + max(0, Delay),
+    case Delay < 0 of
+        true -> receive
+            after -Delay -> ok
+            end;
+        false -> ok
+    end,
+    Time =
+        case Mode of
+            abs_deliver -> Deadline;
+            abs_cancel -> Deadline;
+            _ -> Delay
+        end,
+    Token = make_ref(),
+    Payload = {nested, #{1 => one, 1.0 => float}, <<5:3>>},
+    self() ! retained,
+    Ref = erlang:send_after(Time, self(), {Token, Payload}, Options),
+    case Mode of
+        deliver ->
+            timer_options_delivered(Ref, Token, Deadline);
+        abs_deliver ->
+            timer_options_delivered(Ref, Token, Deadline);
+        _ ->
+            Valid =
+                case erlang:cancel_timer(Ref) of
+                    false ->
+                        receive
+                            {Token, Payload} -> erlang:monotonic_time(millisecond) >= Deadline
+                        end;
+                    N when is_integer(N), N >= 0 -> N =< max(0, Delay);
+                    _ ->
+                        false
+                end,
+            {is_reference(Ref), Valid, erlang:cancel_timer(Ref), drain()}
+    end.
+
+timer_options_delivered(Ref, Token, Deadline) ->
+    receive
+        {Token, Payload} ->
+            NotEarly = erlang:monotonic_time(millisecond) >= Deadline,
+            {
+                is_reference(Ref),
+                Payload,
+                NotEarly,
+                erlang:cancel_timer(Ref),
+                erlang:cancel_timer(Ref),
+                drain()
+            }
+    end.
 
 %% Inputs cross a module boundary to prevent constant-folded operations.
 call(Module, Function, Args) -> apply(Module, Function, Args).

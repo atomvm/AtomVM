@@ -117,10 +117,37 @@ def cases():
         probe(t, "send_after_negative_time" if time == "-1" else "send_after_long_times",
               f"R=erlang:send_after({time},{destination},tick),"
               "{is_reference(R),erlang:cancel_timer(R)=/=false}")
-    for options in ["[]", "[{abs,false}]", "[{abs,true},{abs,false}]", "[abs]", "[{info,true}]"]:
-        # send_after/4 is a public API gap on AtomVM, not a skipped pass.
-        probe(t, "send_after_options", f"R=erlang:send_after(60000,self(),tick,{options}),"
-                                      "{is_reference(R),erlang:cancel_timer(R)=/=false}")
+    # OTP extensions, not instances of Lynx's symbolic timer/options proofs.
+    # Absolute inputs are offsets from each VM's own monotonic clock. Opposite
+    # duplicate orders distinguish last-option-wins from first-option-wins.
+    for options in ["[]", "[{abs,false}]", "[{abs,true},{abs,false}]",
+                    "[{abs,false},{abs,false}]"]:
+        for mode, delay in [("deliver", 0), ("deliver", 20), ("cancel", 60000)]:
+            selected.append({"otp_extension": "send_after/4",
+                             "expression": f"differential:timer_options({mode},{delay},{options})"})
+    for options in ["[{abs,true}]", "[{abs,false},{abs,true}]", "[{abs,true},{abs,true}]"]:
+        for mode, delay in [("abs_deliver", -20), ("abs_deliver", -1),
+                            ("abs_deliver", 0), ("abs_deliver", 20),
+                            ("abs_cancel", -20), ("abs_cancel", 0),
+                            ("abs_cancel", 60000)]:
+            selected.append({"otp_extension": "send_after/4",
+                             "expression": f"differential:timer_options({mode},{delay},{options})"})
+    for time, destination, options in [
+        *(("60000", "self()", opts) for opts in [
+            "bad", "[abs]", "[{info,true}]", "[{abs,0}]", "[{abs,bad}]",
+            "[{abs}]", "[{abs,true,extra}]", "[{abs,false}|tail]",
+            "[{abs,bad},{abs,false}]", "[{abs,false},{abs,bad}]",
+            "[{info,true},{abs,false}]", "[{abs,false},{info,true}]",
+        ]),
+        ("-1", "self()", "[]"), ("-1", "self()", "[{abs,false}]"),
+        ("1.0", "self()", "[]"), ("1.0", "self()", "[{abs,true}]"),
+        ("bad", "self()", "[{abs,true}]"),
+        ("60000", "make_ref()", "[]"), ("60000", "42", "[{abs,true}]"),
+    ]:
+        # An incorrectly accepted timer is canceled before returning a mismatch.
+        selected.append({"otp_extension": "send_after/4",
+                         "expression": f"R=erlang:send_after({time},{destination},tick,{options}),"
+                                       "{is_reference(R),erlang:cancel_timer(R)=/=false}"})
 
     # Source forms are paired with dynamic apply and guard observations. Inspect
     # compiled instructions before claiming distinct paths on a new OTP release.
