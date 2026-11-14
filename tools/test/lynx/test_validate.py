@@ -824,6 +824,113 @@ class ValidationTests(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_portable_hashing_observations_have_independent_oracles(self):
+        all_cases = lean_runtime.cases()
+        hashing_cases = [
+            c for c in all_cases
+            if any(o.startswith("Modules/Hashing.lean#") for o in c.get("lean_origins", []))
+        ]
+        self.assertEqual(len(hashing_cases), 112)
+        self.assertTrue(all(not c.get("assert_true") for c in hashing_cases))
+        origins = {o for c in hashing_cases for o in c["lean_origins"]}
+        self.assertEqual(
+            origins,
+            {
+                "Modules/Hashing.lean#guard:1",
+                "Modules/Hashing.lean#guard:2",
+                "Modules/Hashing.lean#guard:3",
+                "Modules/Hashing.lean#guard:4",
+                "Modules/Hashing.lean#guard:5",
+                "Modules/Hashing.lean#shadowed_bindings_hash",
+                "Modules/Hashing.lean#capture_hash",
+            },
+        )
+        selected_expressions = [
+            "differential:phash2_probe(0)",
+            "differential:phash2_probe(-1)",
+            "differential:phash2_probe(134217728)",
+            "differential:phash2_probe(-1267650600228229401496703205369)",
+            "differential:phash2_probe({float_bits,0,0,0})",
+            "differential:phash2_probe({float_bits,1,0,0})",
+            "differential:phash2_probe({float_bits,0,0,1})",
+            "differential:phash2_probe(a)",
+            "differential:phash2_probe({utf8_atom,<<99,97,102,195,169>>})",
+            "differential:phash2_probe({utf8_atom,<<230,151,165,230,156,172,232,170,158>>})",
+            "differential:phash2_probe(<<>>)",
+            "differential:phash2_probe(<<97,98,99>>)",
+            "differential:phash2_probe(<<1,2,3:4>>)",
+            "differential:phash2_probe([])",
+            "differential:phash2_probe([104,101,108,108,111])",
+            "differential:phash2_probe([1,2|3])",
+            "differential:phash2_probe({a,{b,c},[1,2]})",
+            "differential:phash2_probe(#{1=>a,[x]=>{y}})",
+            "differential:phash2_probe({map_seq_40})",
+            "differential:phash2_ranges(0)",
+            "differential:phash2_range(a,7)",
+            "differential:phash2_range(a,0)",
+            "differential:phash2_range(a,(1 bsl 32)+1)",
+            "differential:phash2_map_relations(shadowed_single)",
+            "differential:phash2_live_identities(closures_shadowed_map)",
+            "differential:phash2_live_identities(pids_and_refs)",
+        ]
+        by_expr = {c["expression"]: c for c in hashing_cases}
+        self.assertTrue(all(expr in by_expr for expr in selected_expressions))
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            source.write_text(json.dumps([by_expr[expr] for expr in selected_expressions]))
+            output = work / "hashing"
+            summary = self.invoke(output, "--replay", source)
+            # Absent phash2/1,2 support stays an explicit target failure, never
+            # allowlisted or marked unverified; remains valid once implemented.
+            self.assertEqual(summary["passed"] + summary["failed"], 26)
+            self.assertEqual(summary["unverified"], 0)
+            check = subprocess.run([
+                "elixir", "-e", """
+                import Bitwise
+                [path] = System.argv()
+                values = JSON.decode!(File.read!(path))["expected"]
+                         |> Enum.map(&:erlang.binary_to_term(Base.decode64!(&1)))
+                probe = fn short, full ->
+                  {:ok, {short, full, true, true, 0, rem(full, 7), true, rem(full, 1_000_003), true}}
+                end
+                full0 = 3_175_731_469
+                ranges0 = Enum.map([1, 2, 7, 13, 255, 256, 65_537,
+                                    (1 <<< 27) - 1, 1 <<< 27, (1 <<< 32) - 1, 1 <<< 32],
+                                   &rem(full0, &1))
+                expected = [
+                  probe.(88_723_725, 3_175_731_469),
+                  probe.(44_071_773, 1_117_813_597),
+                  probe.(12_354_923, 2_562_491_755),
+                  probe.(17_713_402, 3_373_156_602),
+                  probe.(20_875_736, 423_528_920),
+                  probe.(20_875_736, 423_528_920),
+                  probe.(107_647_591, 3_731_526_247),
+                  probe.(97, 97),
+                  probe.(432_201, 432_201),
+                  probe.(67_592_990, 67_592_990),
+                  probe.(13_708_901, 147_926_629),
+                  probe.(98_228_475, 1_306_188_027),
+                  probe.(11_286_013, 2_292_987_389),
+                  probe.(113_427_502, 3_468_870_702),
+                  probe.(81_920_127, 753_008_767),
+                  probe.(8_851_781, 4_169_601_349),
+                  probe.(93_309_890, 1_569_704_898),
+                  probe.(87_590_499, 2_637_727_331),
+                  probe.(55_048_502, 2_202_532_150),
+                  {:ok, {ranges0, true}},
+                  {:ok, 6},
+                  {:exception, :error, :badarg},
+                  {:exception, :error, :badarg},
+                  {:ok, {59_617_982, 1_401_795_262, true, true, true, true, true}},
+                  {:ok, {true, true, true, true, true, true, true}},
+                  {:ok, {true, true, true, true, true, true, true}}
+                ]
+                true = values === expected
+                """, str(output / "manifest.json")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     def test_lifecycle_sequences_preserve_fenced_state_and_allowed_races(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)

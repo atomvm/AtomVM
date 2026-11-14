@@ -1050,6 +1050,56 @@ def cases():
                 probe(construction, ["utf_boundaries", "utf_characters", "utf_invalid_scalars",
                                      "utf_unaligned_concatenation"],
                       f"differential:utf_construct({encoding},{codepoint},{offset})")
+
+    hashing = "Modules/Hashing"
+    hashing_vectors = [
+        "0", "1", "-1", "255", "256", "1000", "-1000", "134217727", "134217728",
+        "-134217728", "-134217729", "4294967296", "576460752303423487",
+        "-576460752303423488", "576460752303423488", "18446744073709551616",
+        "-18446744073709551616", "18446744073709551615",
+        "1267650600228229401496703205376", "-1267650600228229401496703205369",
+        "123456789012345678901234567890",
+        "{float_bits,0,0,0}", "{float_bits,1,0,0}", "{float_bits,0,1023,0}",
+        "{float_bits,1,1023,2251799813685248}",
+        "{float_bits,0,1024,2570632149304942}",
+        "{float_bits,0,2019,2221273467876764}", "{float_bits,0,0,1}",
+        "a", "open", "closed", "term", "bdd_bot", "bdd_top", "'hello world'",
+        "{utf8_atom,<<99,97,102,195,169>>}", "{utf8_atom,<<207,128>>}",
+        "'Elixir.Module.Types.Descr'",
+        "'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'",
+        "{utf8_atom,<<195,131,194,169>>}",
+        "{utf8_atom,<<230,151,165,230,156,172,232,170,158>>}",
+        "<<>>", "<<1>>", "<<97,98,99>>",
+        "<<104,101,108,108,111,32,119,111,114,108,100,33>>",
+        "<<104,101,108,108,111,32,119,111,114,108,100,33,33>>",
+        "<<48,49,50,51,52,53,54,55,56,57,48,49,50,51,52,53,54,55,56,57,48,49,50,51,52>>",
+        "<<1:1>>", "<<5:3>>", "<<1,2,3:4>>",
+        "<<116,119,101,108,118,101,32,98,121,116,101,115,1:1>>",
+        "[]", "[1]", "[1,2,3]", "[1,2,3,4]", "[1,2,3,4,5]",
+        "[104,101,108,108,111]", "[a|b]", "[1|2]", "[1,2|3]", "[256,1,2]",
+        "[1,a,2,3]", "[[1],[2]]", "[open]", "[term|term]",
+        "[[]]", "[1,-1]", "[300,1,2,3,4,5]",
+        "{}", "{a}", "{1,2}", "{a,{b,c},[1,2]}",
+        "#{}", "#{a=>1}", "#{b=>2,a=>1}", "#{1=>a,[x]=>{y}}", "#{#{}=>#{a=>[]}}",
+        "{map_seq_40}",
+    ]
+    for spec in hashing_vectors:
+        probe(hashing, "guard:1", f"differential:phash2_probe({spec})")
+    for size in ["1", "2", "7", "13", "97", "98", "1 bsl 27", "(1 bsl 32)-1", "1 bsl 32"]:
+        probe(hashing, ["guard:1", "guard:3"], f"differential:phash2_range(a,{size})")
+    for spec in ["0", "-1", "{float_bits,0,1024,2570632149304942}", "<<1,2,3:4>>", "{map_seq_40}"]:
+        probe(hashing, ["guard:1", "guard:3"], f"differential:phash2_ranges({spec})")
+    for spec, bad_range in [("a", "0"), ("a", "-1"), ("a", "-(1 bsl 32)"), ("{map_seq_40}", "0")]:
+        probe(hashing, "guard:4", f"differential:phash2_range({spec},{bad_range})")
+    for bad_range in ["(1 bsl 32)+1", "1 bsl 64", "1 bsl 100", "1.0", "bad", "[]"]:
+        probe(hashing, "guard:5", f"differential:phash2_range(a,{bad_range})")
+    for variant in ["shadowed_single", "insertion_order", "numeric_exact_keys",
+                    "boundary_31_32_33", "large_40_history", "nested_maps_and_bitstrings"]:
+        probe(hashing, ["guard:2", "shadowed_bindings_hash"],
+              f"differential:phash2_map_relations({variant})")
+    for variant in ["closures_shadowed_map", "closures_signed_zero_and_external",
+                    "pids_and_refs", "composite_live_identities"]:
+        probe(hashing, "capture_hash", f"differential:phash2_live_identities({variant})")
     return selected
 
 

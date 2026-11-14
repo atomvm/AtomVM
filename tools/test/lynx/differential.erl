@@ -74,7 +74,12 @@
     map_guards/2,
     list_relations/4,
     seq_contract/4,
-    lifecycle_sequence/2
+    lifecycle_sequence/2,
+    phash2_probe/1,
+    phash2_range/2,
+    phash2_ranges/1,
+    phash2_map_relations/1,
+    phash2_live_identities/1
 ]).
 
 %% Timer observations use delivery/monitor handshakes, not elapsed-time
@@ -3413,3 +3418,281 @@ float_bits(Value, Width, Offset, little) ->
     Bits = <<5:Offset, Value:Width/float-little, 3:3>>,
     <<_:Offset, Encoded:Width/bitstring, _:3>> = Bits,
     {Bits, Encoded}.
+
+phash2_term({float_bits, Sign, Exp, Frac}) ->
+    <<F:64/float>> = <<Sign:1, Exp:11, Frac:52>>,
+    F;
+phash2_term({utf8_atom, Bytes}) ->
+    binary_to_atom(Bytes, utf8);
+phash2_term({raw, Term}) ->
+    Term;
+phash2_term({map_seq_40}) ->
+    maps:from_list([
+        {I, I}
+     || I <- [
+            18,
+            4,
+            34,
+            12,
+            19,
+            29,
+            13,
+            2,
+            7,
+            38,
+            31,
+            8,
+            10,
+            23,
+            9,
+            15,
+            35,
+            36,
+            32,
+            1,
+            25,
+            28,
+            20,
+            6,
+            11,
+            17,
+            24,
+            37,
+            40,
+            14,
+            33,
+            3,
+            16,
+            30,
+            21,
+            5,
+            27,
+            26,
+            22,
+            39
+        ]
+    ]);
+phash2_term(Term) ->
+    Term.
+
+phash2_probe(Spec) ->
+    Term = phash2_term(Spec),
+    H1 = erlang:phash2(Term),
+    HFull = erlang:phash2(Term, 1 bsl 32),
+    H27 = erlang:phash2(Term, 1 bsl 27),
+    HOne = erlang:phash2(Term, 1),
+    HSeven = erlang:phash2(Term, 7),
+    HPrime = erlang:phash2(Term, 1000003),
+    {
+        H1,
+        HFull,
+        H27 =:= H1,
+        H1 =:= (HFull band ((1 bsl 27) - 1)),
+        HOne,
+        HSeven,
+        HSeven =:= (HFull rem 7),
+        HPrime,
+        HPrime =:= (HFull rem 1000003)
+    }.
+
+phash2_range(Spec, Range) ->
+    Term = phash2_term(Spec),
+    erlang:phash2(Term, Range).
+
+phash2_ranges(Spec) ->
+    Term = phash2_term(Spec),
+    HFull = erlang:phash2(Term, 1 bsl 32),
+    Ranges = [
+        1, 2, 7, 13, 255, 256, 65537, (1 bsl 27) - 1, 1 bsl 27, (1 bsl 32) - 1, 1 bsl 32
+    ],
+    Values = [erlang:phash2(Term, R) || R <- Ranges],
+    Matches = lists:all(
+        fun({R, V}) -> V =:= (HFull rem R) end,
+        lists:zip(Ranges, Values)
+    ),
+    {Values, Matches}.
+
+phash2_map_relations(shadowed_single) ->
+    M1 = #{a => 1},
+    M2 = maps:put(a, 1, #{a => 2}),
+    M3 = maps:from_list([{a, 2}, {a, 1}]),
+    M4 = maps:remove(b, #{a => 1, b => 2}),
+    MDiff = #{a => 2},
+    {
+        erlang:phash2(M1),
+        erlang:phash2(M1, 1 bsl 32),
+        erlang:phash2(M1) =:= erlang:phash2(M2),
+        erlang:phash2(M1, 1 bsl 32) =:= erlang:phash2(M2, 1 bsl 32),
+        erlang:phash2(M1, 1 bsl 32) =:= erlang:phash2(M3, 1 bsl 32),
+        erlang:phash2(M1, 1 bsl 32) =:= erlang:phash2(M4, 1 bsl 32),
+        erlang:phash2(M1, 1 bsl 32) =/= erlang:phash2(MDiff, 1 bsl 32)
+    };
+phash2_map_relations(insertion_order) ->
+    M1 = maps:from_list([{a, 1}, {b, 2}, {c, 3}, {1, x}, {[k], {v}}]),
+    M2 = maps:from_list([{1, x}, {[k], {v}}, {c, 3}, {b, 2}, {a, 1}]),
+    M3 = maps:from_list([
+        {a, 99}, {c, 0}, {b, 2}, {a, 1}, {[k], old}, {1, x}, {c, 3}, {[k], {v}}
+    ]),
+    MDiff = maps:put(c, 4, M1),
+    {
+        erlang:phash2(M1),
+        erlang:phash2(M1, 1 bsl 32),
+        erlang:phash2(M1, 1 bsl 32) =:= erlang:phash2(M2, 1 bsl 32),
+        erlang:phash2(M1, 1 bsl 32) =:= erlang:phash2(M3, 1 bsl 32),
+        erlang:phash2(M1, 1 bsl 32) =/= erlang:phash2(MDiff, 1 bsl 32)
+    };
+phash2_map_relations(numeric_exact_keys) ->
+    PosZero = phash2_term({float_bits, 0, 0, 0}),
+    NegZero = phash2_term({float_bits, 1, 0, 0}),
+    MInt = #{1 => a},
+    MFloat = #{1.0 => a},
+    MBoth = #{1 => a, 1.0 => a},
+    MPos = #{PosZero => a, b => PosZero},
+    MNeg = #{NegZero => a, b => NegZero},
+    {
+        erlang:phash2(MInt, 1 bsl 32),
+        erlang:phash2(MFloat, 1 bsl 32),
+        erlang:phash2(MBoth, 1 bsl 32),
+        erlang:phash2(MInt, 1 bsl 32) =/= erlang:phash2(MFloat, 1 bsl 32),
+        erlang:phash2(MInt, 1 bsl 32) =/= erlang:phash2(MBoth, 1 bsl 32),
+        erlang:phash2(MPos) =:= erlang:phash2(MNeg),
+        erlang:phash2(MPos, 1 bsl 32) =:= erlang:phash2(MNeg, 1 bsl 32)
+    };
+phash2_map_relations(boundary_31_32_33) ->
+    [
+        begin
+            Fwd = maps:from_list([{I, I * 3} || I <- lists:seq(1, N)]),
+            Rev = maps:from_list([{I, I * 3} || I <- lists:reverse(lists:seq(1, N))]),
+            Expanded = maps:from_list(
+                [{I, 0} || I <- lists:seq(1, N + 5)] ++
+                    [{I, I * 3} || I <- lists:seq(1, N)]
+            ),
+            Cleaned = lists:foldl(
+                fun(K, Acc) -> maps:remove(K, Acc) end, Expanded, lists:seq(N + 1, N + 5)
+            ),
+            {
+                N,
+                erlang:phash2(Fwd),
+                erlang:phash2(Fwd, 1 bsl 32),
+                erlang:phash2(Fwd, 1 bsl 32) =:= erlang:phash2(Rev, 1 bsl 32),
+                erlang:phash2(Fwd, 1 bsl 32) =:= erlang:phash2(Cleaned, 1 bsl 32)
+            }
+        end
+     || N <- [31, 32, 33]
+    ];
+phash2_map_relations(large_40_history) ->
+    MScattered = phash2_term({map_seq_40}),
+    MAsc = maps:from_list([{I, I} || I <- lists:seq(1, 40)]),
+    MDesc = maps:from_list([{I, I} || I <- lists:seq(40, 1, -1)]),
+    Expanded = maps:from_list(
+        [{I, -I} || I <- lists:seq(1, 48)] ++
+            [{I, I} || I <- lists:seq(1, 40)]
+    ),
+    MOverwritten = lists:foldl(fun(K, Acc) -> maps:remove(K, Acc) end, Expanded, lists:seq(41, 48)),
+    {
+        erlang:phash2(MScattered),
+        erlang:phash2(MScattered, 1 bsl 32),
+        erlang:phash2(MScattered, 1 bsl 32) =:= erlang:phash2(MAsc, 1 bsl 32),
+        erlang:phash2(MScattered, 1 bsl 32) =:= erlang:phash2(MDesc, 1 bsl 32),
+        erlang:phash2(MScattered, 1 bsl 32) =:= erlang:phash2(MOverwritten, 1 bsl 32)
+    };
+phash2_map_relations(nested_maps_and_bitstrings) ->
+    K1 = <<5:3>>,
+    K2 = <<1, 2, 3:4>>,
+    InnerA = #{K1 => [a | b], K2 => 1 bsl 100},
+    InnerB = maps:from_list([{K2, -1}, {K1, [a | b]}, {K2, 1 bsl 100}]),
+    OuterA = #{InnerA => #{x => 1, y => 2}, plain => <<97, 98, 99>>},
+    OuterB = maps:remove(
+        tmp,
+        maps:from_list([
+            {plain, <<1, 2>>},
+            {tmp, 0},
+            {InnerB, maps:from_list([{y, 2}, {x, 9}, {x, 1}])},
+            {plain, <<97, 98, 99>>}
+        ])
+    ),
+    {
+        erlang:phash2(OuterA),
+        erlang:phash2(OuterA, 1 bsl 32),
+        erlang:phash2(OuterA) =:= erlang:phash2(OuterB),
+        erlang:phash2(OuterA, 1 bsl 32) =:= erlang:phash2(OuterB, 1 bsl 32),
+        erlang:phash2(OuterA, 1 bsl 32) =/= erlang:phash2(OuterA#{plain => <<>>}, 1 bsl 32)
+    }.
+
+phash2_live_identities(closures_shadowed_map) ->
+    Make = fun(Cap) -> fun(X) -> {Cap, X} end end,
+    F1 = Make(#{a => 1, b => [2, 3]}),
+    F2 = Make(maps:put(a, 1, #{a => 99, b => [2, 3]})),
+    F3 = Make(maps:remove(extra, #{a => 1, b => [2, 3], extra => temp})),
+    FDiff = Make(#{a => 2, b => [2, 3]}),
+    H1 = erlang:phash2(F1),
+    HFull = erlang:phash2(F1, 1 bsl 32),
+    {
+        H1 >= 0 andalso H1 < (1 bsl 27),
+        HFull >= 0 andalso HFull < (1 bsl 32),
+        H1 =:= (HFull band ((1 bsl 27) - 1)),
+        H1 =:= erlang:phash2(F2),
+        HFull =:= erlang:phash2(F2, 1 bsl 32),
+        HFull =:= erlang:phash2(F3, 1 bsl 32),
+        HFull =/= erlang:phash2(FDiff, 1 bsl 32)
+    };
+phash2_live_identities(closures_signed_zero_and_external) ->
+    PosZero = phash2_term({float_bits, 0, 0, 0}),
+    NegZero = phash2_term({float_bits, 1, 0, 0}),
+    Make = fun(Cap) -> fun(X) -> {Cap, X} end end,
+    ExtA = fun erlang:abs/1,
+    ExtB = erlang:make_fun(erlang, abs, 1),
+    {
+        erlang:phash2(Make(PosZero)) =:= erlang:phash2(Make(NegZero)),
+        erlang:phash2(Make(PosZero), 1 bsl 32) =:= erlang:phash2(Make(NegZero), 1 bsl 32),
+        erlang:phash2(Make(1), 1 bsl 32) =/= erlang:phash2(Make(1.0), 1 bsl 32),
+        erlang:phash2(ExtA) =:= erlang:phash2(ExtB),
+        erlang:phash2(ExtA, 1 bsl 32) =:= erlang:phash2(ExtB, 1 bsl 32),
+        erlang:phash2(ExtA, 7) =:= (erlang:phash2(ExtA, 1 bsl 32) rem 7)
+    };
+phash2_live_identities(pids_and_refs) ->
+    {Pid, Mon} = spawn_monitor(fun() ->
+        receive
+            stop -> ok
+        end
+    end),
+    Self = self(),
+    R1 = make_ref(),
+    R2 = make_ref(),
+    HBefore = erlang:phash2(Pid, 1 bsl 32),
+    HBeforeShort = erlang:phash2(Pid),
+    Pid ! stop,
+    receive
+        {'DOWN', Mon, process, Pid, normal} -> ok
+    end,
+    HAfter = erlang:phash2(Pid, 1 bsl 32),
+    HSelf = erlang:phash2(Self, 1 bsl 32),
+    HR1 = erlang:phash2(R1, 1 bsl 32),
+    HR2 = erlang:phash2(R2, 1 bsl 32),
+    {
+        HBefore =:= HAfter,
+        HBeforeShort =:= (HBefore band ((1 bsl 27) - 1)),
+        erlang:phash2(Self) =:= (HSelf band ((1 bsl 27) - 1)),
+        erlang:phash2(R1) =:= (HR1 band ((1 bsl 27) - 1)),
+        HSelf =/= HBefore,
+        HR1 =:= erlang:phash2(R1, 1 bsl 32),
+        HR1 =/= HR2
+    };
+phash2_live_identities(composite_live_identities) ->
+    Make = fun(Cap) -> fun(X) -> {Cap, X} end end,
+    Self = self(),
+    Ref = make_ref(),
+    M1 = #{a => 1, b => [2, 3]},
+    M2 = maps:put(a, 1, #{a => 99, b => [2, 3]}),
+    T1 = {Make(M1), Self, Ref, #{Self => M1, Ref => M2}},
+    T2 = {Make(M2), Self, Ref, #{Ref => M1, Self => M2}},
+    HT1Short = erlang:phash2(T1),
+    HT1Full = erlang:phash2(T1, 1 bsl 32),
+    HT2Full = erlang:phash2(T2, 1 bsl 32),
+    {
+        HT1Short >= 0 andalso HT1Short < (1 bsl 27),
+        HT1Full >= 0 andalso HT1Full < (1 bsl 32),
+        HT1Short =:= (HT1Full band ((1 bsl 27) - 1)),
+        HT1Short =:= erlang:phash2(T2),
+        HT1Full =:= HT2Full
+    }.

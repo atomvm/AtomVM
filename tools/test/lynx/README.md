@@ -168,14 +168,15 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **4,301 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **4,413 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
-search/split, maps, version-2 set algebra, process dictionaries, comparison,
-effectful short circuit, timeout validation with retained mailboxes,
-monitored process/reference/dictionary handshakes, lifecycle combinations,
-and UTF-8/16/32 construction/matching. UTF cases
-include malformed, incomplete, unaligned, and valid codepoints with invalid suffixes. Child identities
-are compared within each run, never serialized as cross-runtime expectations.
+search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
+process dictionaries, comparison, effectful short circuit, timeout validation
+with retained mailboxes, monitored process/reference/dictionary handshakes, lifecycle
+combinations, and UTF-8/16/32 construction/matching. UTF cases include malformed,
+incomplete, unaligned, and valid codepoints with invalid suffixes. Child and
+runtime-specific process/reference/closure hash identities are compared within each
+run, never serialized as cross-runtime expectations.
 This mode uses **AtomVM's bundled standard library**, not OTP's `lists.beam`.
 Missing functions and differing error precedence remain failures, not skips.
 OTP is the execution oracle, not the Lean model: for example, tested OTP 29
@@ -244,6 +245,23 @@ four empty-step-range `seq_contract` failures: focused 133-case interpreter and
 aarch64 precompiled replays now match 131 of 133 cases against OTP 29
 (`.amp/in/artifacts/batch2-relations/seq-fix-{interpreter,native}`), retaining
 only the two documented `lists:reverse/1` invalid-input exception differences.
+
+Batch 4 adds 112 portable hashing recipes (`4,301 -> 4,413` runtime cases total)
+attributed to all seven sites in `Modules/Hashing.lean` (200 of 426 Lean test
+sites covered across all 26 files): all 78 unique vectors from
+`Modules/Hashing.lean` (signed/large integers, signed zeros, subnormal float,
+ASCII/Latin-1/Unicode atoms, byte binaries, partial bitstrings, proper/improper
+lists, nested tuples/maps, and the 40-entry map), range reductions through `2^32`,
+invalid zero/negative/oversized/non-integer ranges, normalized duplicate-binding
+map equivalences across boundaries `31/32/33` and `40`, and within-run
+closure/PID/reference properties. Both host-interpreter (`build`) and aarch64
+precompiled (`.amp/in/build-native`) focused replays verify all 112 OTP 29
+references (102 `{ok, ...}` results, 10 `error:badarg` exceptions) and retain
+all 112 `error:undef` failures on AtomVM (`0` passed, `112` failed, `0`
+unverified) because `erlang:phash2/1,2` is not yet implemented. Nineteen
+enabled CLI integration tests pass (20 total; one optional fixture test skipped),
+including independent handwritten Elixir/OTP hash and identity oracles. Evidence
+is under `.amp/in/artifacts/batch4-hashing/`.
 
 The execution-path extension adds 466 cases for 20 arithmetic, comparison, and
 map-lookup operations. Each captures direct-body and dynamic `apply/3` outcomes
