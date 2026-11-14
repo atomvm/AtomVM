@@ -22,6 +22,7 @@
 #include <stdint.h>
 
 #include "globalcontext.h"
+#include "module.h"
 #include "term.h"
 
 #include "ets_multimap.h"
@@ -721,6 +722,14 @@ static uint32_t hash_term_incr(term t, uint32_t h, GlobalContext *global)
         for (size_t i = 0; i < arity; ++i) {
             term elt = term_get_tuple_element(t, (int) i);
             h = h * LARGE_PRIME_TUPLE + hash_term_incr(elt, h, global);
+        }
+        return h * LARGE_PRIME_TUPLE;
+    } else if (term_is_record(t)) {
+        const struct RecordDef *def = term_get_record_def(t);
+        h = h * LARGE_PRIME_TUPLE + hash_atom(def->module, h, global);
+        h = h * LARGE_PRIME_TUPLE + hash_atom(def->name, h, global);
+        for (size_t i = 0; i < def->num_fields; ++i) {
+            h = h * LARGE_PRIME_TUPLE + hash_term_incr(term_get_record_value(t, i), h, global);
         }
         return h * LARGE_PRIME_TUPLE;
     } else if (term_is_list(t)) {

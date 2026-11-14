@@ -19,13 +19,31 @@
 %
 -module(jit_precompile).
 
--export([start/0, compile/4, atom_resolver/1, type_resolver/1, import_resolver/2]).
+-export([
+    start/0,
+    compile/4,
+    atom_resolver/1,
+    type_resolver/1,
+    import_resolver/2,
+    record_resolver/2
+]).
 
 -include_lib("jit.hrl").
 
 -include("compact_term.hrl").
 
+-type atom_resolver() :: fun((pos_integer()) -> atom()).
+-type type_resolver() :: fun((non_neg_integer()) -> term()).
+-type import_resolver() :: fun((non_neg_integer()) -> {atom(), atom(), non_neg_integer()}).
+-type record_def() :: #{
+    index := non_neg_integer(),
+    fields := [atom()],
+    is_exported := boolean()
+}.
+-type record_resolver() :: fun((atom()) -> record_def() | undefined).
+
 %% @doc Precompile BEAM files on command line
+-spec start() -> ok.
 start() ->
     [Target, Dir | Files0] = init:get_plain_arguments(),
     {Files, Dwarf} =
@@ -60,6 +78,7 @@ parse_target(Target) ->
             {BaseTarget, RequestedVariant}
     end.
 
+-spec compile(string(), file:filename(), boolean(), file:filename()) -> ok.
 compile(Target, Dir, Dwarf, Path) ->
     try
         {ok, InitialBinary} = file:read_file(Path),
@@ -102,6 +121,15 @@ compile(Target, Dir, Dwarf, Path) ->
                     <<>>
             end,
         ImportedFunctionResolver = import_resolver(ImportedFunctionsChunk, AtomResolver),
+
+        RecsChunk =
+            case lists:keyfind("Recs", 1, InitialChunks) of
+                {"Recs", RecsChunk0} ->
+                    RecsChunk0;
+                false ->
+                    <<>>
+            end,
+        RecordResolver = record_resolver(RecsChunk, AtomResolver),
 
         % Parse line table (Line chunk) for DWARF line information
         LineResolver =
@@ -170,6 +198,7 @@ compile(Target, Dir, Dwarf, Path) ->
             TypeResolver,
             ImportedFunctionResolver,
             DebugInfoResolver,
+            RecordResolver,
             Backend,
             Stream2
         ),
@@ -220,6 +249,7 @@ compile(Target, Dir, Dwarf, Path) ->
             erlang:raise(Class, Reason, Stack)
     end.
 
+-spec atom_resolver(binary()) -> atom_resolver().
 atom_resolver(AtomChunk) ->
     Atoms = parse_atom_chunk(AtomChunk),
     fun(Index) -> lists:nth(Index, Atoms) end.
@@ -261,6 +291,7 @@ parse_literals_chunk0(N, <<TermSize:32, TermBin:TermSize/binary, Rest/binary>>, 
     Term = binary_to_term(TermBin),
     parse_literals_chunk0(N - 1, Rest, [Term | Acc]).
 
+-spec import_resolver(binary(), atom_resolver()) -> import_resolver().
 import_resolver(FunctionChunks, AtomResolver) ->
     ImportedFunctions = parse_imported_functions_chunk(FunctionChunks, AtomResolver),
     fun(Index) -> lists:nth(Index + 1, ImportedFunctions) end.
@@ -285,6 +316,144 @@ parse_imported_functions_chunk0(
 -define(BEAM_TYPES_VERSION_V3, 3).
 -define(BEAM_TYPES_VERSION_V4, 4).
 
+%% @doc Parse the "Recs" chunk (OTP29 native records) into a name->info resolver.
+%% Returns a closure that maps a record name atom to
+%%   #{index := non_neg_integer(),
+%%     fields := [atom()],   %% field name atoms in declaration order
+%%     is_exported := boolean()}
+%% or `undefined' if the record is not defined in this module.
+%% Mirrors the byte-walk in src/libAtomVM/module.c:module_load_records_table.
+-spec record_resolver(binary(), atom_resolver()) -> record_resolver().
+record_resolver(<<>>, _AtomResolver) ->
+    fun(_Name) -> undefined end;
+record_resolver(<<_Version:32, NumRecords:32, _TotalFields:32, Rest/binary>>, AtomResolver) ->
+    Map = parse_recs_entries(NumRecords, 0, Rest, AtomResolver, #{}),
+    fun(Name) -> maps:get(Name, Map, undefined) end;
+record_resolver(_, _AtomResolver) ->
+    fun(_Name) -> undefined end.
+
+parse_recs_entries(0, _Idx, _Rest, _AtomResolver, Acc) ->
+    Acc;
+parse_recs_entries(Remaining, Idx, <<5, Rest0/binary>>, AtomResolver, Acc) ->
+    %% Skip the synthetic call_last opcode byte (value 5)
+    {NameIx, Rest1} = recs_decode_value(Rest0),
+    {ExpIx, Rest2} = recs_decode_value(Rest1),
+    <<?COMPACT_EXTENDED_LIST, Rest3/binary>> = Rest2,
+    {ListCount, Rest4} = recs_decode_value(Rest3),
+    NumFields = ListCount div 2,
+    {Fields, Rest5} = parse_recs_fields(NumFields, Rest4, AtomResolver, []),
+    Info = #{
+        index => Idx,
+        fields => Fields,
+        is_exported => AtomResolver(ExpIx) =:= true
+    },
+    parse_recs_entries(
+        Remaining - 1, Idx + 1, Rest5, AtomResolver, Acc#{AtomResolver(NameIx) => Info}
+    ).
+
+parse_recs_fields(0, Bin, _AtomResolver, Acc) ->
+    {lists:reverse(Acc), Bin};
+parse_recs_fields(N, Bin0, AtomResolver, Acc) ->
+    {NameIx, Bin1} = recs_decode_value(Bin0),
+    Bin2 = recs_skip_default(Bin1),
+    parse_recs_fields(N - 1, Bin2, AtomResolver, [AtomResolver(NameIx) | Acc]).
+
+%% Decode the value portion of a compact term (atom or literal index). Tag bits
+%% are not validated here: the caller already knows which encoding it expects.
+recs_decode_value(<<Val:4, 0:1, _Tag:3, Rest/binary>>) ->
+    {Val, Rest};
+recs_decode_value(<<Hi:3, 1:2, _Tag:3, Lo:8, Rest/binary>>) ->
+    {(Hi bsl 8) bor Lo, Rest};
+recs_decode_value(<<Size0:3, 3:2, _Tag:3, Value:(8 * (Size0 + 2)), Rest/binary>>) ->
+    {Value, Rest}.
+
+%% Skip a default term in the Recs encoding: either a single zero byte (no
+%% default) or one compact term. Mirrors record_compact_term_byte_len in
+%% module.c — defaults are atomic compact terms; complex defaults are emitted
+%% as ?COMPACT_EXTENDED_LITERAL references into the literal table.
+recs_skip_default(<<0, Rest/binary>>) ->
+    Rest;
+recs_skip_default(<<First, _/binary>> = Bin) ->
+    case First band 16#F of
+        ?COMPACT_LITERAL ->
+            recs_skip_width_dep(Bin);
+        ?COMPACT_LARGE_LITERAL ->
+            recs_skip_width_dep(Bin);
+        ?COMPACT_INTEGER ->
+            <<_, Rest/binary>> = Bin,
+            Rest;
+        ?COMPACT_ATOM ->
+            <<_, Rest/binary>> = Bin,
+            Rest;
+        ?COMPACT_XREG ->
+            <<_, Rest/binary>> = Bin,
+            Rest;
+        ?COMPACT_YREG ->
+            <<_, Rest/binary>> = Bin,
+            Rest;
+        ?COMPACT_LARGE_INTEGER ->
+            recs_skip_large_imm(Bin);
+        ?COMPACT_LARGE_ATOM ->
+            recs_skip_large_imm(Bin);
+        ?COMPACT_LARGE_XREG ->
+            <<_, _, Rest/binary>> = Bin,
+            Rest;
+        ?COMPACT_LARGE_YREG ->
+            <<_, _, Rest/binary>> = Bin,
+            Rest;
+        ?COMPACT_EXTENDED when First =:= ?COMPACT_EXTENDED_LITERAL ->
+            <<_, Second, _/binary>> = Bin,
+            InnerLen = recs_value32_byte_len(Second),
+            Total = 1 + InnerLen,
+            <<_Skip:Total/binary, Rest/binary>> = Bin,
+            Rest
+    end.
+
+%% Byte length of a width-dependent compact term (literal-family encoding).
+recs_skip_width_dep(<<First, Rest/binary>> = Bin) ->
+    case (First bsr 3) band 16#3 of
+        0 ->
+            Rest;
+        2 ->
+            Rest;
+        1 ->
+            <<_, _, Rest1/binary>> = Bin,
+            Rest1;
+        3 ->
+            Total = 1 + ((First bsr 5) + 2),
+            <<_Skip:Total/binary, Rest1/binary>> = Bin,
+            Rest1
+    end.
+
+recs_skip_large_imm(<<First, _/binary>> = Bin) ->
+    case First band ?COMPACT_LARGE_IMM_MASK of
+        ?COMPACT_11BITS_VALUE ->
+            <<_, _, Rest/binary>> = Bin,
+            Rest;
+        ?COMPACT_NBITS_VALUE ->
+            {Total, Src} =
+                case (First bsr 5) + 2 of
+                    Sz when Sz > 8 ->
+                        % Extended form: first byte, a compact literal N, then N + 9 bytes.
+                        <<_, Rest0/binary>> = Bin,
+                        {N, Rest1} = recs_decode_value(Rest0),
+                        {9 + N, Rest1};
+                    Sz ->
+                        {1 + Sz, Bin}
+                end,
+            <<_Skip:Total/binary, Rest/binary>> = Src,
+            Rest
+    end.
+
+%% Byte length of an inline 32-bit value (used after ?COMPACT_EXTENDED_LITERAL).
+recs_value32_byte_len(Byte) ->
+    case (Byte bsr 3) band 16#3 of
+        0 -> 1;
+        2 -> 1;
+        1 -> 2;
+        3 -> 1 + ((Byte bsr 5) + 2)
+    end.
+
 %% Type chunk constants (from beam_types.erl)
 -define(BEAM_TYPE_ATOM, (1 bsl 0)).
 -define(BEAM_TYPE_BITSTRING, (1 bsl 1)).
@@ -299,6 +468,7 @@ parse_imported_functions_chunk0(
 -define(BEAM_TYPE_REFERENCE, (1 bsl 10)).
 -define(BEAM_TYPE_TUPLE, (1 bsl 11)).
 
+-spec type_resolver(binary()) -> type_resolver().
 type_resolver(<<Version:32, _Count:32, TypeData/binary>>) when
     Version =:= ?BEAM_TYPES_VERSION_V3; Version =:= ?BEAM_TYPES_VERSION_V4
 ->

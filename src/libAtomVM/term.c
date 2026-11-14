@@ -58,10 +58,11 @@ enum TermTypeIndex
     TERM_TYPE_INDEX_PORT = 6,
     TERM_TYPE_INDEX_PID = 7,
     TERM_TYPE_INDEX_TUPLE = 8,
-    TERM_TYPE_INDEX_MAP = 9,
-    TERM_TYPE_INDEX_NIL = 10,
-    TERM_TYPE_INDEX_NON_EMPTY_LIST = 11,
-    TERM_TYPE_INDEX_BINARY = 12,
+    TERM_TYPE_INDEX_RECORD = 9,
+    TERM_TYPE_INDEX_MAP = 10,
+    TERM_TYPE_INDEX_NIL = 11,
+    TERM_TYPE_INDEX_NON_EMPTY_LIST = 12,
+    TERM_TYPE_INDEX_BINARY = 13,
 };
 
 struct FprintfFun
@@ -277,6 +278,49 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
             return ret;
         }
 
+    } else if (term_is_record(t)) {
+        const struct RecordDef *def = term_get_record_def(t);
+        atom_index_t mod_idx = term_to_atom_index(def->module);
+        atom_index_t name_idx = term_to_atom_index(def->name);
+        size_t mod_len = 0;
+        const uint8_t *mod_str = atom_table_get_atom_string(global->atom_table, mod_idx, &mod_len);
+        size_t name_len = 0;
+        const uint8_t *name_str = atom_table_get_atom_string(global->atom_table, name_idx, &name_len);
+        int ret = fun->print(fun, "#%.*s:%.*s{",
+            (int) mod_len, mod_str, (int) name_len, name_str);
+        if (UNLIKELY(ret < 0)) {
+            return ret;
+        }
+        size_t num_fields = term_get_record_num_fields(t);
+        for (size_t i = 0; i < num_fields; i++) {
+            if (i != 0) {
+                int printed = fun->print(fun, ",");
+                if (UNLIKELY(printed < 0)) {
+                    return printed;
+                }
+                ret += printed;
+            }
+            atom_index_t key_idx = term_to_atom_index(def->fields[i].name);
+            size_t key_len = 0;
+            const uint8_t *key_str = atom_table_get_atom_string(global->atom_table, key_idx, &key_len);
+            int printed = fun->print(fun, "%.*s=", (int) key_len, key_str);
+            if (UNLIKELY(printed < 0)) {
+                return printed;
+            }
+            ret += printed;
+            printed = term_funprint(fun, term_get_record_value(t, i), global);
+            if (UNLIKELY(printed < 0)) {
+                return printed;
+            }
+            ret += printed;
+        }
+        int printed = fun->print(fun, "}");
+        if (UNLIKELY(printed < 0)) {
+            return printed;
+        }
+        ret += printed;
+        return ret;
+
     } else if (term_is_tuple(t)) {
         int ret = fun->print(fun, "{");
         if (UNLIKELY(ret < 0)) {
@@ -490,6 +534,8 @@ static enum TermTypeIndex term_type_to_index(term t)
             switch (boxed_value[0] & TERM_BOXED_TAG_MASK) {
                 case TERM_BOXED_TUPLE:
                     return TERM_TYPE_INDEX_TUPLE;
+                case TERM_BOXED_RECORD:
+                    return TERM_TYPE_INDEX_RECORD;
                 case TERM_BOXED_POSITIVE_INTEGER:
                     return TERM_TYPE_INDEX_INTEGER;
                 case TERM_BOXED_NEGATIVE_INTEGER:
@@ -1004,6 +1050,73 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                             t = term_get_tuple_element(t, 0);
                             other = term_get_tuple_element(other, 0);
 
+                        } else {
+                            CMP_POP_AND_CONTINUE();
+                        }
+                        break;
+                    }
+                    case TERM_TYPE_INDEX_RECORD: {
+                        const struct RecordDef *def_t = term_get_record_def(t);
+                        const struct RecordDef *def_o = term_get_record_def(other);
+                        if (def_t != def_o) {
+                            if (def_t->module != def_o->module) {
+                                TermCompareResult atom_cmp = term_compare(
+                                    def_t->module, def_o->module, opts, global);
+                                if (atom_cmp == TermCompareMemoryAllocFail) {
+                                    return TermCompareMemoryAllocFail;
+                                }
+                                result = atom_cmp;
+                                goto unequal;
+                            }
+                            if (def_t->name != def_o->name) {
+                                TermCompareResult atom_cmp = term_compare(
+                                    def_t->name, def_o->name, opts, global);
+                                if (atom_cmp == TermCompareMemoryAllocFail) {
+                                    return TermCompareMemoryAllocFail;
+                                }
+                                result = atom_cmp;
+                                goto unequal;
+                            }
+                            if (def_t->is_exported != def_o->is_exported) {
+                                // false < true
+                                result = def_t->is_exported ? TermGreaterThan : TermLessThan;
+                                goto unequal;
+                            }
+                            if (def_t->num_fields != def_o->num_fields) {
+                                result = (def_t->num_fields > def_o->num_fields)
+                                    ? TermGreaterThan
+                                    : TermLessThan;
+                                goto unequal;
+                            }
+                            for (size_t i = 0; i < def_t->num_fields; i++) {
+                                if (def_t->fields[i].name != def_o->fields[i].name) {
+                                    TermCompareResult key_cmp = term_compare(
+                                        def_t->fields[i].name, def_o->fields[i].name, opts, global);
+                                    if (key_cmp == TermCompareMemoryAllocFail) {
+                                        return TermCompareMemoryAllocFail;
+                                    }
+                                    result = key_cmp;
+                                    goto unequal;
+                                }
+                            }
+                        }
+
+                        size_t n = term_get_record_num_fields(t);
+                        if (n > 0) {
+                            for (size_t i = n - 1; i >= 1; i--) {
+                                if (UNLIKELY(temp_stack_push(&temp_stack,
+                                                 term_get_record_value(t, i))
+                                        != TempStackOk)) {
+                                    return TermCompareMemoryAllocFail;
+                                }
+                                if (UNLIKELY(temp_stack_push(&temp_stack,
+                                                 term_get_record_value(other, i))
+                                        != TempStackOk)) {
+                                    return TermCompareMemoryAllocFail;
+                                }
+                            }
+                            t = term_get_record_value(t, 0);
+                            other = term_get_record_value(other, 0);
                         } else {
                             CMP_POP_AND_CONTINUE();
                         }

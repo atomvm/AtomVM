@@ -83,6 +83,8 @@ The following BEAM chunks are included in BEAM files:
 * `FunT`
 * `StrT`
 * `LitT`
+* `Type` (OTP 28+ type table, required by typed-instruction opcodes)
+* `Recs` (OTP 29+ native record definitions)
 
 Any other chunks are stripped out of the BEAM files before insertion into AVM files.
 

@@ -74,7 +74,9 @@
     xor_/3,
     shift_right_arith/3,
     div_/3,
-    rem_/3
+    rem_/3,
+    set_vm_record_type/3,
+    get_vm_record_type/2
 ]).
 
 -ifdef(JIT_DWARF).

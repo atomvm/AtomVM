@@ -72,7 +72,9 @@
     return_labels_and_lines/2,
     add_label/2,
     add_label/3,
-    xor_/3
+    xor_/3,
+    set_vm_record_type/3,
+    get_vm_record_type/2
 ]).
 
 -ifdef(JIT_DWARF).
@@ -2870,7 +2872,7 @@ increment_sp(
     I3 = jit_arm32_asm:str(al, Reg, ?Y_REGS),
     Code = <<I1/binary, I2/binary, I3/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
-    Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    Regs1 = jit_regs:invalidate_y_regs(jit_regs:invalidate_reg(Regs0, Reg)),
     State#state{stream = Stream1, regs = Regs1}.
 
 set_continuation_to_label(
@@ -3805,6 +3807,16 @@ add_label(
     };
 add_label(#state{labels = Labels} = State, Label, Offset) ->
     State#state{labels = Labels#{Label => Offset}}.
+
+%% @doc Record a type assertion for a VM x/y register. The assertion is
+%% invalidated automatically by the same hooks that invalidate `regs` tracking
+%% (writes to the VM register, C calls clobbering x regs, labels).
+set_vm_record_type(#state{regs = Regs} = State, VmLoc, Type) ->
+    State#state{regs = jit_regs:set_vm_type(Regs, VmLoc, Type)}.
+
+%% @doc Look up the type assertion previously recorded for a VM x/y register.
+get_vm_record_type(#state{regs = Regs}, VmLoc) ->
+    jit_regs:get_vm_type(Regs, VmLoc).
 
 %% Convert a value to a contents descriptor for tracking.
 value_to_contents(Value) -> jit_regs:value_to_contents(Value, ?MAX_REG).

@@ -76,7 +76,9 @@
     xor_/3,
     shift_right_arith/3,
     div_reg/3,
-    rem_reg/3
+    rem_reg/3,
+    set_vm_record_type/3,
+    get_vm_record_type/2
 ]).
 
 -ifdef(JIT_DWARF).
@@ -3150,7 +3152,7 @@ increment_sp(
     I3 = jit_xtensa_asm:s32i(Reg, BaseReg2, Off2),
     Code = <<I1/binary, I2/binary, I3/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
-    Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    Regs1 = jit_regs:invalidate_y_regs(jit_regs:invalidate_reg(Regs0, Reg)),
     State#state{stream = Stream1, regs = Regs1}.
 
 set_continuation_to_label(
@@ -4331,6 +4333,16 @@ ldr_y_reg(DstReg, Y, 0) ->
     I4 = jit_xtensa_asm:add(DstReg, DstReg, ?A8_REG),
     I5 = jit_xtensa_asm:l32i(DstReg, DstReg, 0),
     <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>.
+
+%% @doc Record the record type a VM x/y register is known to hold, as asserted
+%% by OP_IS_NATIVE_RECORD. Invalidation is jit_regs' business: any write to the
+%% VM register clears it through jit_regs:invalidate_vm_loc/2.
+set_vm_record_type(#state{regs = Regs} = State, VmLoc, Type) ->
+    State#state{regs = jit_regs:set_vm_type(Regs, VmLoc, Type)}.
+
+%% @doc Look up the type assertion previously recorded for a VM x/y register.
+get_vm_record_type(#state{regs = Regs}, VmLoc) ->
+    jit_regs:get_vm_type(Regs, VmLoc).
 
 reg_bit(a0) -> ?REG_BIT_A0;
 reg_bit(a1) -> ?REG_BIT_A1;
