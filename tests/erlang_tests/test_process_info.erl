@@ -92,6 +92,14 @@ test_registered_name() ->
 
         erlang:register(has_name, Pid),
         has_name = get_item(Pid, registered_name),
+        ok =
+            try erlang:register(second_name, Pid) of
+                _ -> unexpected
+            catch
+                error:badarg -> ok
+            end,
+        undefined = erlang:whereis(second_name),
+        has_name = get_item(Pid, registered_name),
 
         erlang:unregister(has_name),
         [] = process_info(Pid, registered_name),

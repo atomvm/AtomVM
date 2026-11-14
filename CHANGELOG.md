@@ -59,6 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed `erlang:register/2` allowing a process or port that is already
+  registered to be registered under additional names
 - Fixed `lists:seq/3` returning `[From]` instead of `[]` for empty ranges with
   `abs(Incr) > 1`
 - Fixed timers created by `erlang:send_after/3` and `erlang:start_timer/3,4`

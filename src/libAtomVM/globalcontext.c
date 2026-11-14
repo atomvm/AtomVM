@@ -614,7 +614,8 @@ bool globalcontext_register_process(GlobalContext *glb, int atom_index, term loc
     struct ListHead *item;
     LIST_FOR_EACH (item, registered_processes_list) {
         const struct RegisteredProcess *registered_process = GET_LIST_ENTRY(item, struct RegisteredProcess, registered_processes_list_head);
-        if (registered_process->atom_index == atom_index) {
+        if (registered_process->atom_index == atom_index
+            || registered_process->local_pid_or_port == local_pid_or_port) {
             synclist_unlock(&glb->registered_processes);
             return false;
         }
