@@ -279,6 +279,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   supported delays are `0..4294967295` milliseconds
 - Fixed `erlang:cancel_timer/1` returning `false` for nonreference arguments
   instead of raising `badarg`
+- Fixed timers created by `erlang:send_after/3` and `erlang:start_timer/3,4`
+  remaining active after their PID destination exits; registered-name timers
+  remain active until expiry or explicit cancellation
 
 ## [0.7.0-beta.0] - 2026-09-28
 
