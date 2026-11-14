@@ -113,6 +113,98 @@ focused native replays, CLI tests, baseline comparisons, manifests and hashes.
 No failures were hidden and no AtomVM runtime implementation was changed in
 that upstream refresh.
 
+### Timer argument validation follow-up
+
+`timer_manager:send_after/3` now rejects invalid times and destinations in the
+caller, before starting the manager or creating a timer worker. `erlang:send_after/3`
+raises `badarg` while `timer:send_after/2,3` catches `badarg` and returns
+`{error, badarg}` to match OTP. Destinations must be local PIDs
+or atoms; nonreference cancellation arguments now raise `badarg`, while unknown
+references still return `false`.
+
+The supported delay range is explicitly 0 through 4294967295 milliseconds,
+matching AtomVM's uint32 receive timeout. Modern OTP accepts larger delays;
+rejecting those unsupported delays synchronously does not implement OTP's
+extended timer range. Boundary tests cover zero, the maximum, and maximum + 1.
+Public-API regressions also cover invalid types, foreign-node PIDs, registered
+names, and unknown references. The new regression fails on the original code
+and passes after the fix. The timer-manager, timer, gen_server, gen_statem, and
+supervisor test modules all pass. The timer-manager boundary regressions also
+pass in native-only precompiled execution, and the independent timer/subtraction
+CLI oracle test passes. Erlfmt and `git diff --check` pass.
+
+A replay of all 69 new observations in both interpreter and aarch64 precompiled
+execution now matches 48 cases, with 21 failures and zero unverified references:
+all eight argument-validation failures are fixed. The remaining failures are
+12 missing-unzip cases, four destination-death cleanup cases, and five missing
+`send_after/4` cases. The full 4,141-case corpus was not rerun after this fix.
+Evidence is retained under `.amp/in/artifacts/timer-validation-*`.
+
+### Destination-death cleanup follow-up
+
+Timer workers now monitor PID destinations for both `send_after` and
+`start_timer`. Destination death ends the worker and removes the timer using
+the existing completion path, including replying `false` to a pending cancel.
+Cancellation also checks PID liveness so a queued cancel cannot return remaining
+time merely because the destination's `DOWN` has not been processed yet.
+Registered-name timers are not tied to the current name holder and remain active
+when that process dies.
+
+Public regressions cover death before/after creation with zero-, one-, and
+60000-millisecond delays, repeated cancellation, automatic removal without an
+explicit cancel, and live registered-name timer controls. The regression failed
+on the unchanged runtime. The timer-manager, timer, gen_server, gen_statem, and
+supervisor modules pass after the change; timer-manager regressions also pass
+in aarch64 precompiled execution.
+
+Finite stress validation passes 1,000 ordered death cases and 500 two-canceller
+races on OTP, interpreter AtomVM, and precompiled AtomVM. A separate forced
+ordering queues cancellation before the worker installs its destination monitor:
+a monitor-only variant incorrectly returns 60000, while the full fix returns
+`false` in both AtomVM modes. These checks do not enumerate all schedules.
+
+The 69-case focused replay now matches 52 cases in both AtomVM modes, with
+17 failures and zero unverified references. All four destination-death failures
+are fixed; the remaining failures are twelve missing-unzip and five missing
+`send_after/4` observations. The full runtime corpus was not rerun. Evidence is
+retained under `.amp/in/artifacts/timer-destination-death-*`.
+
+### Expanded `send_after/4` differential cases
+
+Replaced the five shallow option probes with 52 OTP-extension observations
+(47 net new cases, 4,188 runtime cases total). These are explicitly labeled
+`otp_extension`, not attributed to Lynx's symbolic timer proofs:
+
+- Default and explicit relative options; duplicate options in both orders and
+  repeated identical options. OTP 29 uses the last valid `{abs, Boolean}` value.
+- Relative delivery at zero and 20 milliseconds; absolute past, current, and
+  future deadlines; future and expired cancellation with repeated cancellation.
+- Twelve malformed-option forms, including improper lists, nonboolean values,
+  wrong tuple arities, unknown options, and invalid entries before/after a valid
+  option. Later valid options do not hide an invalid earlier entry.
+- Negative relative times, noninteger times in both modes, and invalid
+  destinations, retaining OTP's `badarg` separately from missing API `undef`.
+
+Absolute timestamps are constructed from each VM's monotonic clock. Past
+cases age a timestamp actually observed during the VM's lifetime: subtracting
+from a newly started OTP VM can precede `system_info(start_time)` and correctly
+raise `badarg`. Delivery observations check the unchanged nested payload,
+not-before-deadline timing, preservation of unrelated mailbox contents, and
+repeated cancellation. Cancellation normalizes scheduler-dependent expiry
+races and validates remaining-time bounds instead of comparing exact clock
+values. The outer runner bounds non-delivery; no tight upper latency bound or
+all-schedules guarantee is asserted.
+
+The public CLI integration test independently checks handwritten OTP results
+for all 52 cases. The CLI suite passes sixteen tests, with the optional Lynx
+fixture integration test skipped because `LYNX_CHECKOUT` was not set. Focused
+interpreter and aarch64 precompiled replays each
+match 52 of 116 cases, with 64 failures and zero unverified references:
+all 52 `/4` cases currently fail with `undef`, and the twelve existing unzip
+failures remain. No runtime implementation changed and no failures are skipped.
+The full 4,188-case corpus was not rerun. Evidence is retained under
+`.amp/in/artifacts/timer-options/focused-{interpreter,native}`.
+
 ## Coverage batches
 
 Current priority is more OTP differential coverage of existing fixtures and
