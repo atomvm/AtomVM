@@ -200,8 +200,13 @@ handshake_loop(SSLContext, Socket) ->
                     Error
             end;
         want_write ->
-            % We're currrently missing non-blocking writes
-            handshake_loop(SSLContext, Socket);
+            case wait_write(Socket) of
+                ok ->
+                    handshake_loop(SSLContext, Socket);
+                {error, _Reason} = Error ->
+                    socket:close(Socket),
+                    Error
+            end;
         {error, _Reason} = Error ->
             socket:close(Socket),
             Error
@@ -253,8 +258,13 @@ close_notify_loop(SSLContext, Socket) ->
                     Error
             end;
         want_write ->
-            % We're currrently missing non-blocking writes
-            close_notify_loop(SSLContext, Socket);
+            case wait_write(Socket) of
+                ok ->
+                    close_notify_loop(SSLContext, Socket);
+                {error, _Reason} = Error ->
+                    socket:close(Socket),
+                    Error
+            end;
         {error, _Reason} = Error ->
             socket:close(Socket),
             Error
@@ -283,8 +293,12 @@ send({SSLContext, Socket} = SSLSocket, Binary) ->
                     Error
             end;
         want_write ->
-            % We're currrently missing non-blocking writes
-            send(SSLSocket, Binary);
+            case wait_write(Socket) of
+                ok ->
+                    send(SSLSocket, Binary);
+                {error, _Reason} = Error ->
+                    Error
+            end;
         {error, _Reason} = Error ->
             Error
     end.
@@ -318,8 +332,27 @@ recv0({SSLContext, Socket} = SSLSocket, Length, Remaining, Acc) ->
                     Error
             end;
         want_write ->
-            % We're currrently missing non-blocking writes
-            recv0(SSLSocket, Length, Remaining, Acc);
+            case wait_write(Socket) of
+                ok ->
+                    recv0(SSLSocket, Length, Remaining, Acc);
+                {error, _Reason} = Error ->
+                    Error
+            end;
+        {error, _Reason} = Error ->
+            Error
+    end.
+
+%% @private
+wait_write(Socket) ->
+    Ref = erlang:make_ref(),
+    case socket:nif_select_write(Socket, Ref) of
+        ok ->
+            receive
+                {'$socket', Socket, select, Ref} ->
+                    ok;
+                {'$socket', Socket, abort, {Ref, Reason}} ->
+                    {error, Reason}
+            end;
         {error, _Reason} = Error ->
             Error
     end.

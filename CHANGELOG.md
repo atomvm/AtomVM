@@ -140,6 +140,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `unicode:characters_to_list/1,2` and `unicode:characters_to_binary/1,2,3` returning an
   error tuple with an uninitialized value in place of the rest for a top-level argument that is
   not chardata, such as `unicode:characters_to_list(foo)`; they now raise `badarg`
+- Fixed Erlang distribution over sockets (`socket_dist_controller`) silently ignoring
+  `socket:send/2` errors on `tick` and outgoing distribution data; the connection is now
+  terminated instead of continuing to run against a broken socket
 - `gen_tcp:send/2` no longer blocks the process serving the socket when the peer does not read:
   sends are queued and completed as the socket becomes writable, so `gen_tcp:recv/2,3`,
   `gen_tcp:close/1` and `gen_tcp:controlling_process/2` keep working meanwhile, and a pending send
