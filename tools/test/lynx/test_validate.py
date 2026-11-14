@@ -12,6 +12,8 @@ import sys
 import tempfile
 import unittest
 
+import lean_runtime
+
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
@@ -105,6 +107,41 @@ class ValidationTests(unittest.TestCase):
                   {:ok, {true, true, false, [:retained]}},
                   {:ok, {:tick, false, false}}
                 ] = values
+                """, str(output / "manifest.json")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_send_after_options_have_independent_oracles(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            selected = [entry for entry in lean_runtime.cases()
+                        if entry.get("otp_extension") == "send_after/4"]
+            self.assertTrue(all("lean_origins" not in entry for entry in selected))
+            source = work / "input.json"
+            source.write_text(json.dumps(selected))
+            output = work / "results"
+            summary = self.invoke(output, "--replay", source)
+            # Missing /4 support stays a visible failure, not an allowlisted pass.
+            # This check remains valid once AtomVM implements the API.
+            self.assertEqual(summary["passed"] + summary["failed"], 52)
+            self.assertEqual(summary["unverified"], 0)
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                values = JSON.decode!(File.read!(path))["expected"]
+                         |> Enum.map(&:erlang.binary_to_term(Base.decode64!(&1)))
+                delivered = {:ok, {true, {:nested, %{1 => :one, 1.0 => :float}, <<5::3>>},
+                                   true, false, false, [:retained]}}
+                canceled = {:ok, {true, true, false, [:retained]}}
+                # Four relative option forms; three absolute option forms.
+                # Past/current deadlines deliver; cancel races have one normalized
+                # valid result. Invalid entries must raise badarg, not undef.
+                expected = List.duplicate([delivered, delivered, canceled], 4)
+                           |> List.flatten()
+                expected = expected ++ List.flatten(List.duplicate(
+                  [delivered, delivered, delivered, delivered, canceled, canceled, canceled], 3))
+                expected = expected ++ List.duplicate({:exception, :error, :badarg}, 19)
+                true = values === expected
                 """, str(output / "manifest.json")
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)

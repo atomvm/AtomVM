@@ -172,6 +172,26 @@ zero unverified references. The failures are four existing short-float mismatche
 plus 29 new timer/unzip differences; all 4,072 old decoded results are unchanged.
 A focused aarch64 precompiled replay flags the same 29 new cases (40 matches).
 The expanded full native corpus was not rerun. No failures are allowlisted.
+The subsequent [timer validation fix](PLAN.md#timer-argument-validation-follow-up)
+removes eight argument-validation failures in focused interpreter/native replays;
+the full-corpus figures above are the pre-fix baseline.
+[Destination-death cleanup](PLAN.md#destination-death-cleanup-follow-up) fixes
+four more observations for PID timers while retaining registered-name timers.
+That focused replay matches 52 of 69 cases in both modes; the remaining
+17 failures are missing unzip and `send_after/4` support.
+
+The subsequent [`send_after/4` coverage expansion](PLAN.md#expanded-send_after4-differential-cases)
+replaces five option probes with 52 OTP-extension cases, increasing the runtime
+corpus to **4,188**. It covers relative and absolute delivery, past/current/future
+monotonic deadlines, duplicate-option precedence, malformed options, invalid
+arguments, and cancellation. Each VM constructs its own absolute timestamps;
+past cases age a known-valid timestamp rather than preceding a fresh VM's start
+time. Delivery checks include a not-before-deadline observation, not a tight
+upper latency bound. Handwritten OTP expectations check all 52 cases independently.
+The expanded focused replay matches 52 of 116 cases in both execution modes,
+with 64 failures (52 missing `/4`, twelve missing unzip) and zero unverified
+references. This is coverage only: no runtime API implementation is included,
+and the full 4,188-case corpus has not been rerun.
 
 The execution-path extension adds 466 cases for 20 arithmetic, comparison, and
 map-lookup operations. Each captures direct-body and dynamic `apply/3` outcomes
