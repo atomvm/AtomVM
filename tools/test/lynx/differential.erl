@@ -91,7 +91,18 @@
     phash2_live_identities/1,
     many_sends/2,
     await_many_drain/1,
-    await_many_drain/2
+    await_many_drain/2,
+    short_circuit_chain/2,
+    word_mask_check/2,
+    bnot_involution/1,
+    integer_range_check/3,
+    local_node_check/2,
+    spawn_behavior/1,
+    spawn_wait_child/0,
+    spawn_bad_child/0,
+    nested_spawn_cleanup/0,
+    demonitor_oldest_message/1,
+    killed_linked_root/1
 ]).
 
 %% Timer observations use delivery/monitor handshakes, not elapsed-time
@@ -847,13 +858,22 @@ short_circuit(Op, Left, Right) ->
         try
             put(left, seen),
             case Op of
-                or_else -> Left orelse rhs(Right);
-                and_also -> Left andalso rhs(Right)
+                or_else -> lhs(Left) orelse rhs(Right);
+                and_also -> lhs(Left) andalso rhs(Right);
+                strict_and -> lhs(Left) and rhs(Right);
+                strict_or -> lhs(Left) or rhs(Right)
             end
         catch
             C:R -> {exception, C, R}
         end,
     {Result, get(left), get(rhs)}.
+
+lhs(lhs_throw) ->
+    throw(left_boom);
+lhs(lhs_error) ->
+    error(left_boom);
+lhs(Value) ->
+    Value.
 
 rhs(value) ->
     put(rhs, seen),
@@ -861,6 +881,76 @@ rhs(value) ->
 rhs(throw) ->
     put(rhs, seen),
     throw(boom).
+
+short_circuit_chain(right_body, X) ->
+    erase(),
+    put(steps, []),
+    Result =
+        try
+            step_ge(X, 0) andalso (step_le(X, 10) andalso step_ne(X, 5))
+        catch
+            C:R -> {exception, C, R}
+        end,
+    {Result, lists:reverse(get(steps))};
+short_circuit_chain(left_body, X) ->
+    erase(),
+    put(steps, []),
+    Result =
+        try
+            ((step_ge(X, 0) andalso step_le(X, 10)) andalso step_ne(X, 5))
+        catch
+            C:R -> {exception, C, R}
+        end,
+    {Result, lists:reverse(get(steps))};
+short_circuit_chain(right_guard, X) ->
+    case X of
+        V when V >= 0 andalso (V =< 10 andalso V =/= 5) -> matched;
+        _ -> rejected
+    end;
+short_circuit_chain(left_guard, X) ->
+    case X of
+        V when ((V >= 0) andalso (V =< 10)) andalso (V =/= 5) -> matched;
+        _ -> rejected
+    end;
+short_circuit_chain(right_mixed, {Left, Mid, Right}) ->
+    erase(),
+    put(steps, []),
+    Result =
+        try
+            chain_step(left, Left) andalso (chain_step(mid, Mid) andalso chain_step(right, Right))
+        catch
+            C:R -> {exception, C, R}
+        end,
+    {Result, lists:reverse(get(steps))};
+short_circuit_chain(left_mixed, {Left, Mid, Right}) ->
+    erase(),
+    put(steps, []),
+    Result =
+        try
+            (chain_step(left, Left) andalso chain_step(mid, Mid)) andalso chain_step(right, Right)
+        catch
+            C:R -> {exception, C, R}
+        end,
+    {Result, lists:reverse(get(steps))}.
+
+step_ge(X, Bound) ->
+    put(steps, [ge | get(steps)]),
+    X >= Bound.
+
+step_le(X, Bound) ->
+    put(steps, [le | get(steps)]),
+    X =< Bound.
+
+step_ne(X, Bound) ->
+    put(steps, [ne | get(steps)]),
+    X =/= Bound.
+
+chain_step(Tag, throw) ->
+    put(steps, [Tag | get(steps)]),
+    throw({tag_throw, Tag});
+chain_step(Tag, Value) ->
+    put(steps, [Tag | get(steps)]),
+    Value.
 
 receive_timeout(Timeout, Messages) ->
     [self() ! M || M <- Messages],
@@ -4306,3 +4396,362 @@ await_many_flush_ref(Ref) ->
         {Ref, _} -> await_many_flush_ref(Ref)
     after 0 -> ok
     end.
+
+word_mask_check(N, Bits) ->
+    Mask = (1 bsl Bits) - 1,
+    Mod = 1 bsl Bits,
+    Masked = N band Mask,
+    Remainder = N rem Mod,
+    {Masked, Remainder, Masked =:= Remainder}.
+
+bnot_involution(N) ->
+    try
+        B1 = bnot N,
+        B2 = bnot B1,
+        Dyn1 = call(erlang, 'bnot', [N]),
+        Dyn2 = call(erlang, 'bnot', [Dyn1]),
+        {ok, B1, B2, B2 =:= N, B1 =:= Dyn1, B2 =:= Dyn2}
+    catch
+        C:R -> {exception, C, R}
+    end.
+
+integer_range_check(N, Lo, Hi) ->
+    Guard =
+        case N of
+            V when is_integer(V, Lo, Hi) -> matched;
+            _ -> rejected
+        end,
+    Body =
+        try
+            {ok, erlang:is_integer(N, Lo, Hi)}
+        catch
+            C:R -> {exception, C, R}
+        end,
+    Dynamic =
+        try
+            {ok, call(erlang, is_integer, [N, Lo, Hi])}
+        catch
+            C2:R2 -> {exception, C2, R2}
+        end,
+    {Guard, Body, Dynamic}.
+
+local_node_check(local, Extra) ->
+    Self = self(),
+    Ref = make_ref(),
+    {Dead, DRef} = spawn_monitor(fun() -> ok end),
+    receive
+        {'DOWN', DRef, process, Dead, normal} -> ok
+    end,
+    LocalNode = node(),
+    {
+        is_atom(LocalNode),
+        node(Self) =:= LocalNode,
+        node(Ref) =:= LocalNode,
+        node(Dead) =:= LocalNode,
+        is_port_paths(Self),
+        is_port_paths(Ref),
+        is_port_paths(Extra)
+    };
+local_node_check(invalid, Value) ->
+    Body =
+        try
+            {ok, node(Value)}
+        catch
+            C:R -> {exception, C, R}
+        end,
+    Dynamic =
+        try
+            {ok, call(erlang, node, [Value])}
+        catch
+            C2:R2 -> {exception, C2, R2}
+        end,
+    {Body, Dynamic, is_port_paths(Value)}.
+
+is_port_paths(Term) ->
+    Guard =
+        case Term of
+            T when is_port(T) -> true;
+            _ -> false
+        end,
+    {is_port(Term), call(erlang, is_port, [Term]), Guard}.
+
+spawn_behavior(parent_child_sync) ->
+    isolated(fun() ->
+        Parent = self(),
+        Child = spawn(fun() ->
+            receive
+                {go, Parent} -> Parent ! {done, self()}
+            end
+        end),
+        ChildRef = monitor(process, Child),
+        Child ! {go, Parent},
+        GotMsg =
+            receive
+                {done, Sender} -> Sender =:= Child
+            end,
+        GotDown =
+            receive
+                {'DOWN', ChildRef, process, Child, Reason} -> Reason
+            end,
+        {is_pid(Child), Child =/= Parent, GotMsg, GotDown, is_process_alive(Child)}
+    end);
+spawn_behavior(child_immediate) ->
+    isolated(fun() ->
+        Parent = self(),
+        Child = spawn(fun() -> Parent ! {done, self()} end),
+        ChildRef = monitor(process, Child),
+        GotMsg =
+            receive
+                {done, Sender} -> Sender =:= Child
+            end,
+        GotDown =
+            receive
+                {'DOWN', ChildRef, process, Child, Reason} ->
+                    case Reason of
+                        normal -> exited_normal;
+                        noproc -> exited_normal;
+                        OtherDown -> OtherDown
+                    end
+            end,
+        {is_pid(Child), Child =/= Parent, GotMsg, GotDown, is_process_alive(Child)}
+    end);
+spawn_behavior(invalid_not_fun) ->
+    spawn_invalid(not_a_fun);
+spawn_behavior(invalid_arity1) ->
+    spawn_invalid(fun(X) -> X end);
+spawn_behavior(invalid_arity2) ->
+    spawn_invalid(fun(A, B) -> {A, B} end);
+spawn_behavior(unknown_export) ->
+    spawn_failing_child(fun ?MODULE:spawn_wait_child/0, fun ?MODULE:missing_child/0);
+spawn_behavior(unknown_module) ->
+    spawn_failing_child(fun ?MODULE:spawn_wait_child/0, fun lynx_missing_spawn_mod:missing/0).
+
+spawn_invalid(BadFun) ->
+    isolated(fun() ->
+        process_flag(trap_exit, true),
+        S =
+            try spawn(BadFun) of
+                P ->
+                    Ref = monitor(process, P),
+                    receive
+                        {'DOWN', Ref, process, P, _} -> ok
+                    end,
+                    {unexpected, is_pid(P)}
+            catch
+                C1:R1 -> {C1, R1}
+            end,
+        SL =
+            try spawn_link(BadFun) of
+                P2 ->
+                    receive
+                        {'EXIT', P2, _} -> ok
+                    end,
+                    {unexpected, is_pid(P2)}
+            catch
+                C2:R2 -> {C2, R2}
+            end,
+        SM =
+            try spawn_monitor(BadFun) of
+                {P3, Ref3} ->
+                    receive
+                        {'DOWN', Ref3, process, P3, _} -> ok
+                    end,
+                    {unexpected, P3 =/= self(), is_reference(Ref3)}
+            catch
+                C3:R3 -> {C3, R3}
+            end,
+        {S, SL, SM}
+    end).
+
+spawn_failing_child(_OkFun, MissingFun) ->
+    isolated(fun() ->
+        {Pid, Ref} = spawn_monitor(MissingFun),
+        DownReason =
+            receive
+                {'DOWN', Ref, process, Pid, R} ->
+                    case R of
+                        {Reason, Stack} when is_list(Stack) -> {Reason, stack};
+                        Other -> Other
+                    end
+            end,
+        PlainPid = spawn(MissingFun),
+        PlainRef = monitor(process, PlainPid),
+        PlainReason =
+            receive
+                {'DOWN', PlainRef, process, PlainPid, PR} ->
+                    case PR of
+                        {Reason2, Stack2} when is_list(Stack2) -> {Reason2, stack};
+                        Other2 -> Other2
+                    end
+            end,
+        PlainOutcome =
+            case PlainReason of
+                DownReason -> exited_expected;
+                noproc -> exited_expected;
+                OtherOutcome -> OtherOutcome
+            end,
+        {
+            is_pid(Pid),
+            DownReason,
+            is_process_alive(Pid),
+            is_pid(PlainPid),
+            PlainOutcome,
+            is_process_alive(PlainPid)
+        }
+    end).
+
+spawn_wait_child() ->
+    ok.
+
+spawn_bad_child() ->
+    error(child_boom).
+
+nested_spawn_cleanup() ->
+    isolated(fun() ->
+        Parent = self(),
+        {Child, ChildRef} = spawn_monitor(fun() ->
+            {Grandchild, GCRef} = spawn_monitor(fun() -> Parent ! {gc_started, self()} end),
+            GCDown =
+                receive
+                    {'DOWN', GCRef, process, Grandchild, Reason} -> Reason
+                end,
+            Parent ! {child_observed, is_process_alive(Grandchild), GCDown}
+        end),
+        GCPid =
+            receive
+                {gc_started, P} -> P
+            end,
+        ChildObs =
+            receive
+                {child_observed, Alive, Reason} -> {Alive, Reason}
+            end,
+        ChildDown =
+            receive
+                {'DOWN', ChildRef, process, Child, CR} -> CR
+            end,
+        {ChildObs, ChildDown, is_process_alive(Child), is_process_alive(GCPid)}
+    end).
+
+demonitor_oldest_message(tag_mismatch) ->
+    isolated(fun() ->
+        Parent = self(),
+        Child = spawn(fun() ->
+            receive
+                {Parent, stop} -> ok
+            end
+        end),
+        Ref = monitor(process, Child),
+        self() ! {other, Ref, [], [], []},
+        Child ! {Parent, stop},
+        % Wait until the real DOWN arrives before calling demonitor(Ref, [flush]).
+        RealDown =
+            receive
+                {'DOWN', Ref, process, Child, normal} = D -> D
+            end,
+        self() ! RealDown,
+        Flushed = demonitor(Ref, [flush]),
+        Remaining = [normalize_down(M, Ref, Child) || M <- drain()],
+        {Flushed, Remaining}
+    end);
+demonitor_oldest_message(forged_then_real_down) ->
+    isolated(fun() ->
+        {Child, Ref} = spawn_monitor(fun() -> ok end),
+        RealDown =
+            receive
+                {'DOWN', Ref, process, Child, normal} = D -> D
+            end,
+        self() ! {'DOWN', Ref, process, fake_pid, fake_reason},
+        self() ! RealDown,
+        Flushed = demonitor(Ref, [flush]),
+        Remaining = [normalize_down(M, Ref, Child) || M <- drain()],
+        {Flushed, Remaining}
+    end);
+demonitor_oldest_message(real_then_forged_down) ->
+    isolated(fun() ->
+        {Child, Ref} = spawn_monitor(fun() -> ok end),
+        receive
+            {'DOWN', Ref, process, Child, normal} = D -> self() ! D
+        end,
+        self() ! {'DOWN', Ref, process, fake_pid, fake_reason},
+        Flushed = demonitor(Ref, [flush]),
+        Remaining = [normalize_down(M, Ref, Child) || M <- drain()],
+        {Flushed, Remaining}
+    end);
+demonitor_oldest_message(noproc_with_forged) ->
+    isolated(fun() ->
+        {Dead, DeadRef} = spawn_monitor(fun() -> ok end),
+        receive
+            {'DOWN', DeadRef, process, Dead, normal} -> ok
+        end,
+        Ref = monitor(process, Dead),
+        self() ! {'DOWN', Ref, process, fake_pid, fake_reason},
+        Flushed = demonitor(Ref, [flush]),
+        Remaining = [normalize_down(M, Ref, Dead) || M <- drain()],
+        {Flushed, Remaining}
+    end).
+
+normalize_down({Tag, Ref, Kind, Who, Reason}, ExpectedRef, ExpectedPid) ->
+    NormWho =
+        if
+            Who =:= ExpectedPid -> child_pid;
+            true -> Who
+        end,
+    {Tag, Ref =:= ExpectedRef, Kind, NormWho, Reason};
+normalize_down(Other, _ExpectedRef, _ExpectedPid) ->
+    Other.
+
+killed_linked_root(exit_atom) ->
+    isolated(fun() ->
+        Parent = self(),
+        {Victim, VRef} = spawn_monitor(fun() ->
+            put(key, 1),
+            Child = spawn_link(fun() ->
+                receive
+                    {Parent, go} -> exit(boom)
+                end
+            end),
+            Parent ! {ready, get(key)},
+            put(key, 2),
+            Child ! {Parent, go},
+            receive
+                never -> ok
+            end
+        end),
+        Ready =
+            receive
+                {ready, Val} -> Val
+            end,
+        Reason =
+            receive
+                {'DOWN', VRef, process, Victim, R} -> R
+            end,
+        {Ready, Reason, is_process_alive(Victim)}
+    end);
+killed_linked_root(error_reason) ->
+    isolated(fun() ->
+        Parent = self(),
+        {Victim, VRef} = spawn_monitor(fun() ->
+            put(key, 1),
+            Child = spawn_link(fun() ->
+                receive
+                    {Parent, go} -> spawn_bad_child()
+                end
+            end),
+            Parent ! {ready, get(key)},
+            put(key, 2),
+            Child ! {Parent, go},
+            receive
+                never -> ok
+            end
+        end),
+        Ready =
+            receive
+                {ready, Val} -> Val
+            end,
+        Reason =
+            receive
+                {'DOWN', VRef, process, Victim, {R, Stack}} when is_list(Stack) -> {R, stack};
+                {'DOWN', VRef, process, Victim, Other} -> Other
+            end,
+        {Ready, Reason, is_process_alive(Victim)}
+    end).

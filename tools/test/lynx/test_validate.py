@@ -1400,7 +1400,7 @@ class ValidationTests(unittest.TestCase):
         word_cases = [c for c in lean_runtime.cases() if c.get("word_size_dependent")]
         self.assertEqual(len(word_cases), 24)
         stack_cases = [c for c in lean_runtime.cases() if c.get("stacktrace_dependent")]
-        self.assertEqual(len(stack_cases), 169)
+        self.assertEqual(len(stack_cases), 172)
         self.assertGreaterEqual(len(lean_runtime.float32_cases()), 8)
 
         with tempfile.TemporaryDirectory() as directory:
@@ -1696,6 +1696,71 @@ class ValidationTests(unittest.TestCase):
                   {:ok, :no},
                   {:ok, :no},
                   {:ok, {32, <<255, 219, 255, 223>>, {0x10FFFF, <<>>}}},
+                ] = values
+                """, str(output / "manifest.json"),
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_remaining_behavioral_probes_have_independent_oracles(self):
+        self.assertEqual(len(lean_runtime.cases()), 5609)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "behavioral_oracles.json"
+            expressions = [
+                "differential:short_circuit(or_else,lhs_throw,value)",
+                "differential:short_circuit(or_else,lhs_error,throw)",
+                "differential:short_circuit(strict_and,1,value)",
+                "differential:short_circuit(strict_or,false,throw)",
+                "differential:short_circuit_chain(left_mixed,{true,bad,throw})",
+                "differential:short_circuit_chain(right_guard,5)",
+                "differential:demonitor_oldest_message(tag_mismatch)",
+                "differential:demonitor_oldest_message(forged_then_real_down)",
+                "differential:killed_linked_root(exit_atom)",
+                "differential:word_mask_check((1 bsl 64)+7,64)",
+                "differential:bnot_involution(-(1 bsl 63))",
+                "differential:integer_range_check(5,0,10)",
+                "differential:integer_range_check(5,0.0,10)",
+                "differential:local_node_check(local,0)",
+                "differential:function_apply(local_one,#{capture=><<1,2,3>>},[a,b,c])",
+                "differential:spawn_behavior(parent_child_sync)",
+                "differential:spawn_behavior(invalid_not_fun)",
+                "differential:spawn_behavior(invalid_arity1)",
+                "differential:spawn_behavior(unknown_export)",
+                "differential:nested_spawn_cleanup()",
+            ]
+            source.write_text(json.dumps([{"expression": e} for e in expressions]))
+            output = work / "results"
+            self.assertEqual(
+                self.invoke(output, "--replay", source),
+                {"laws": 0, "passed": len(expressions), "failed": 0,
+                 "unverified": 0, "uncovered": 0},
+            )
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                values = JSON.decode!(File.read!(path))["expected"]
+                         |> Enum.map(&:erlang.binary_to_term(Base.decode64!(&1)))
+                [
+                  {:ok, {{:exception, :throw, :left_boom}, :seen, :undefined}},
+                  {:ok, {{:exception, :error, :left_boom}, :seen, :undefined}},
+                  {:ok, {{:exception, :error, :badarg}, :seen, :seen}},
+                  {:ok, {{:exception, :throw, :boom}, :seen, :seen}},
+                  {:ok, {{:exception, :error, {:badarg, :bad}}, [:left, :mid]}},
+                  {:ok, :rejected},
+                  {:ok, {:ok, {true, [{:DOWN, true, :process, :child_pid, :normal}]}}},
+                  {:ok, {:ok, {true, [{:DOWN, true, :process, :child_pid, :normal}]}}},
+                  {:ok, {:ok, {1, :boom, false}}},
+                  {:ok, {7, 7, true}},
+                  {:ok, {:ok, 9223372036854775807, -9223372036854775808, true, true, true}},
+                  {:ok, {:matched, {:ok, true}, {:ok, true}}},
+                  {:ok, {:rejected, {:exception, :error, :badarg}, {:exception, :error, :badarg}}},
+                  {:ok, {true, true, true, true, {false, false, false}, {false, false, false}, {false, false, false}}},
+                  {:ok, {:error, :badarity, true, true}},
+                  {:ok, {:ok, {true, true, true, :normal, false}}},
+                  {:ok, {:ok, {{:error, :badarg}, {:error, :badarg}, {:error, :badarg}}}},
+                  {:ok, {:ok, {{:unexpected, true}, {:error, :badarg}, {:error, :badarg}}}},
+                  {:ok, {:ok, {true, {:undef, :stack}, false, true, :exited_expected, false}}},
+                  {:ok, {:ok, {{false, :normal}, :normal, false, false}}},
                 ] = values
                 """, str(output / "manifest.json"),
             ], capture_output=True, text=True, timeout=30)

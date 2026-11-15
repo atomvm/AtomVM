@@ -753,6 +753,23 @@ def cases():
         for left in ["true", "false", "1", "bad"]:
             for right in ["value", "throw"]:
                 probe(s, names, f"differential:short_circuit({op},{left},{right})")
+    for op in ["or_else", "and_also"]:
+        for left in ["lhs_throw", "lhs_error"]:
+            for right in ["value", "throw"]:
+                probe(s, "orElse_propagates_left_error", f"differential:short_circuit({op},{left},{right})")
+    for op in ["strict_and", "strict_or"]:
+        for left in ["true", "false", "1", "bad"]:
+            for right in ["value", "throw"]:
+                probe(s, "and_rejects_non_boolean", f"differential:short_circuit({op},{left},{right})")
+    for x in ["-1", "0", "5", "6", "10", "11", "0.0", "5.0", "bad"]:
+        probe(s, "andAlso_chain_conjunction", f"differential:short_circuit_chain(right_body,{x})")
+        probe(s, "andAlso_chain_conjunction", f"differential:short_circuit_chain(right_guard,{x})")
+        probe(s, "andAlso_left_chain_conjunction", f"differential:short_circuit_chain(left_body,{x})")
+        probe(s, "andAlso_left_chain_conjunction", f"differential:short_circuit_chain(left_guard,{x})")
+    for triple in ["{false,bad,true}", "{false,throw,throw}", "{true,bad,throw}",
+                   "{bad,false,throw}", "{true,true,throw}"]:
+        probe(s, "andAlso_chain_conjunction", f"differential:short_circuit_chain(right_mixed,{triple})")
+        probe(s, "andAlso_left_chain_conjunction", f"differential:short_circuit_chain(left_mixed,{triple})")
 
     p = "Modules/Process"
     for timeout in ["-1", "1.0", "bad", "4294967295", "4294967296",
@@ -1055,8 +1072,9 @@ def cases():
 
     for kind in ["local_zero", "local_one", "local_two", "external_zero", "external_one",
                  "external_two", "bif_zero", "bif_one", "missing_export", "missing_module", "not_fun"]:
-        for args in ["[]", "[7]", "[left,right]", "[7|improper]", "bad"]:
-            probe(e, ["dynamic_apply_2", "dynamic_apply_captures", "dynamic_apply_2_errors"],
+        for args in ["[]", "[7]", "[left,right]", "[a,b,c]", "[7|improper]", "bad"]:
+            probe(e, ["dynamic_apply_2", "dynamic_apply_array", "dynamic_apply_captures",
+                      "dynamic_apply_2_errors"],
                   f"differential:function_apply({kind},#{{capture=><<1,2,3>>}},{args})")
     for module, name in [("differential", "function_zero"), ("differential", "function_one"),
                          ("differential", "missing"), ("lynx_missing_functions", "missing"),
@@ -1548,6 +1566,79 @@ def cases():
     for variant in ["closures_shadowed_map", "closures_signed_zero_and_external",
                     "pids_and_refs", "composite_live_identities"]:
         probe(hashing, "capture_hash", f"differential:phash2_live_identities({variant})")
+
+    # Remaining behavioral probes across Modules/Signals.lean and Modules/Erlang.lean.
+    for kind in ["tag_mismatch", "forged_then_real_down", "real_then_forged_down", "noproc_with_forged"]:
+        probe("Modules/Signals", "demonitor_flushes_oldest_monitor_message",
+              f"differential:demonitor_oldest_message({kind})")
+    probe("Modules/Signals", "killed_root_keeps_environment", "differential:killed_linked_root(exit_atom)")
+    probe("Modules/Signals", "killed_root_keeps_environment", "differential:killed_linked_root(error_reason)",
+          stacktrace_dependent=True)
+
+    for op, a, b in [("/", "0.0", "0.0"), ("/", "1.0", "0.0"), ("/", "-1.0", "0.0"),
+                     ("+", "-1.7976931348623157e308", "-1.7976931348623157e308"),
+                     ("-", "-1.7976931348623157e308", "1.7976931348623157e308"),
+                     ("*", "1.7976931348623157e308", "-2.0"),
+                     ("*", "1 bsl 255", "1.0e240"),
+                     ("*", "-(1 bsl 255)", "1.0e240")]:
+        probe(e, "nonfinite_float_results_rejected", f"differential:execution_paths('{op}',{a},{b})")
+
+    non_numeric_terms = ["bad", "[]", "[1]", "{}", "#{}", "<<1>>", "fun erlang:abs/1"]
+    for op, origin in [("+", "addition_rejects_nonnumeric"), ("*", "multiplication_rejects_nonnumeric")]:
+        for num in ["0", "1", "1.5"]:
+            for other in non_numeric_terms:
+                probe(e, origin, f"differential:execution_paths('{op}',{num},{other})")
+                probe(e, origin, f"differential:execution_paths('{op}',{other},{num})")
+        probe(e, origin, f"differential:execution_paths('{op}',bad,[])")
+        probe(e, origin, f"differential:execution_paths('{op}',[],bad)")
+
+    for op in ["div", "rem", "band", "bor", "bxor", "bsl", "bsr"]:
+        for n in ["0", "2"]:
+            for non_int in ["0.0", "1.0", "bad", "[]", "<<1>>"]:
+                probe(e, "integer_operations_reject_nonintegers", f"differential:execution_paths('{op}',{n},{non_int})")
+                probe(e, "integer_operations_reject_nonintegers", f"differential:execution_paths('{op}',{non_int},{n})")
+
+    for bits in [0, 1, 8, 28, 32, 59, 60, 64, 100]:
+        for n in ["0", "1", f"(1 bsl {bits})-1", f"1 bsl {bits}", f"(1 bsl {bits})+7", "(1 bsl 130)+12345"]:
+            probe(e, "word_mask", f"differential:word_mask_check({n},{bits})")
+    for val in ["-1", "-7", "-8", "-9", "7", "-(1 bsl 100)", "-(1 bsl 100)-1", "(1 bsl 100)-1"]:
+        for bits in ["0", "1", "2", "100", "200"]:
+            probe(e, "right_shift_is_floor_division", f"differential:execution_paths('bsr',{val},{bits})")
+    for n in ["0", "-1", "1", "-2", "(1 bsl 27)-1", "1 bsl 27", "-(1 bsl 27)",
+              "(1 bsl 59)-1", "1 bsl 59", "-(1 bsl 59)", "(1 bsl 63)-1", "-(1 bsl 63)",
+              "1 bsl 64", "(1 bsl 100)+7", "-(1 bsl 100)-7", "0.0", "bad"]:
+        probe(e, "bnot/1_involution", f"differential:bnot_involution({n})")
+
+    for n in ["-1", "0", "5", "10", "11", "0.0", "5.0", "bad"]:
+        probe(e, "integer_range_guard", f"differential:integer_range_check({n},0,10)")
+    for n, lo, hi in [("5", "10", "0"), ("bad", "10", "0"), ("5", "0.0", "10"),
+                      ("5", "0", "10.0"), ("bad", "bad", "10"), ("bad", "0", "bad"),
+                      ("-(1 bsl 100)-1", "-(1 bsl 100)", "1 bsl 100"),
+                      ("-(1 bsl 100)", "-(1 bsl 100)", "1 bsl 100"),
+                      ("1 bsl 59", "-(1 bsl 100)", "1 bsl 100"),
+                      ("(1 bsl 63)-1", "-(1 bsl 100)", "1 bsl 100"),
+                      ("1 bsl 100", "-(1 bsl 100)", "1 bsl 100"),
+                      ("(1 bsl 100)+1", "-(1 bsl 100)", "1 bsl 100")]:
+        probe(e, "integer_range_guard", f"differential:integer_range_check({n},{lo},{hi})")
+
+    for extra in ["0", "a", "[]", "{}", "#{}", "<<>>", "fun()->ok end"]:
+        probe(e, "local_node", f"differential:local_node_check(local,{extra})")
+    for invalid in ["[]", "1", "a", "{}", "#{}", "<<>>", "fun()->ok end"]:
+        probe(e, "local_node", f"differential:local_node_check(invalid,{invalid})")
+
+    for n in ["0", "3", "-3", "100", "(1 bsl 53)+1", "1 bsl 60", "1 bsl 255", "-(1 bsl 255)"]:
+        for flt in ["0.75", "0.5", "1.25"]:
+            probe(e, "integer_float_product", f"differential:execution_paths('*',{n},{flt})")
+            probe(e, "integer_float_product", f"differential:execution_paths('*',{flt},{n})")
+
+    for kind in ["parent_child_sync", "child_immediate"]:
+        probe(e, "spawn_schedules_child_or_parent_first", f"differential:spawn_behavior({kind})")
+    probe(e, "completed_nested_processes_are_removed", "differential:nested_spawn_cleanup()")
+    for kind in ["invalid_not_fun", "invalid_arity1", "invalid_arity2"]:
+        probe(e, "spawn_rejects_invalid_fun", f"differential:spawn_behavior({kind})")
+    for kind in ["unknown_export", "unknown_module"]:
+        probe(e, "spawn_unknown_fun_fails_in_child", f"differential:spawn_behavior({kind})",
+              stacktrace_dependent=True)
     return selected
 
 
