@@ -1589,8 +1589,10 @@ spawn(Module, Function, Args) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec spawn_link(Function :: function()) -> pid().
-spawn_link(Function) ->
-    erlang:spawn_opt(Function, [link]).
+spawn_link(Function) when erlang:is_function(Function, 0) ->
+    erlang:spawn_opt(Function, [link]);
+spawn_link(_Function) ->
+    erlang:error(badarg).
 
 %%-----------------------------------------------------------------------------
 %% @param   Module      module of the function to create a process from
@@ -1612,8 +1614,10 @@ spawn_link(Module, Function, Args) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec spawn_monitor(Function :: function()) -> pid().
-spawn_monitor(Function) ->
-    erlang:spawn_opt(Function, [monitor]).
+spawn_monitor(Function) when erlang:is_function(Function, 0) ->
+    erlang:spawn_opt(Function, [monitor]);
+spawn_monitor(_Function) ->
+    erlang:error(badarg).
 
 %%-----------------------------------------------------------------------------
 %% @param   Module      module of the function to create a process from

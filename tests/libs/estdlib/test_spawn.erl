@@ -107,13 +107,40 @@ test_external_funs() ->
             begin
                 {BadPid, BadRef} = spawn_opt(Fun, [monitor]),
                 {{badarity, {Fun, []}}, Stack} = child_down(BadPid, BadRef),
-                true = is_list(Stack)
+                true = is_list(Stack),
+                badarg_err =
+                    case expect_spawn_link_badarg() of
+                        true ->
+                            try
+                                spawn_link(Fun)
+                            catch
+                                error:badarg -> badarg_err
+                            end;
+                        false ->
+                            %% BEAM OTP < 29 miscompiles static bad-arity spawn_link/1 calls
+                            %% because beam_ssa_type assumes badarg while runtime spawns.
+                            badarg_err
+                    end,
+                badarg_err =
+                    try
+                        spawn_monitor(Fun)
+                    catch
+                        error:badarg -> badarg_err
+                    end
             end
          || Fun <- [fun(X) -> {Captured, X} end, fun ?MODULE:f/1, fun erlang:abs/1]
         ],
         ok
     after
         process_flag(trap_exit, Previous)
+    end.
+
+expect_spawn_link_badarg() ->
+    case erlang:system_info(machine) of
+        "ATOM" ->
+            true;
+        "BEAM" ->
+            list_to_integer(erlang:system_info(otp_release)) >= 29
     end.
 
 child_down(Pid, Ref) ->
