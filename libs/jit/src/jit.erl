@@ -2345,7 +2345,9 @@ first_pass(
             {SegmentUnit, AccRest3} = decode_literal(AccRest2),
             AccRest4 = skip_compact_term(AccRest3),
             {AccMSt1, Src, AccRest5} = decode_compact_term(AccRest4, MMod, AccMSt0, AccState0),
-            {AccMSt2, Size, AccRest6} = decode_compact_term(AccRest5, MMod, AccMSt1, AccState0),
+            {AccMSt2, Size, AccRest6} = decode_bs_create_bin_size(
+                AtomType, AccRest5, MMod, AccMSt1, AccState0
+            ),
             {AccMSt3, AccLiteralSize1, AccSizeReg1, AccState1} = first_pass_bs_create_bin_compute_size(
                 AtomType,
                 Src,
@@ -2452,9 +2454,13 @@ first_pass(
             AtomType = AtomResolver(AtomTypeIndex),
             {_Seg, AccRest2} = decode_literal(AccRest1),
             {SegmentUnit, AccRest3} = decode_literal(AccRest2),
-            {AccMSt1, Flags, AccRest4} = decode_compact_term(AccRest3, MMod, AccMSt0, State1),
+            {AccMSt1, Flags, AccRest4} = decode_bs_create_bin_flags(
+                AccRest3, MMod, AccMSt0, State1
+            ),
             {AccMSt2, Src, AccRest5} = decode_compact_term(AccRest4, MMod, AccMSt1, State1),
-            {AccMSt3, Size, AccRest6} = decode_compact_term(AccRest5, MMod, AccMSt2, State1),
+            {AccMSt3, Size, AccRest6} = decode_bs_create_bin_size(
+                AtomType, AccRest5, MMod, AccMSt2, State1
+            ),
             ?TRACE("{~p,~p,~p,~p,~p,~p},", [AtomType, _Seg, SegmentUnit, Flags, Src, Size]),
             {AccMSt4, AccOffset1, AccCreatedBin1} = first_pass_bs_create_bin_insert_value(
                 AtomType,
@@ -2838,30 +2844,36 @@ first_pass_bs_create_bin_insert_value(
 first_pass_bs_create_bin_insert_value(
     utf16, Flags, Src, _Size, _SegmentUnit, Fail, CreatedBin, Offset, MMod, MSt0
 ) ->
-    {MSt1, FlagsValue} = decode_flags_list(Flags, MMod, MSt0),
-    {MSt2, SrcValue} = term_to_int(Src, Fail, MMod, MSt1),
-    {MSt3, Size} = MMod:call_primitive(MSt2, ?PRIM_BITSTRING_INSERT_UTF16, [
+    % term_to_int can raise a badarg and use a temp register for this, start
+    % with it; free any runtime Flags register immediately after decoding it.
+    {MSt1, SrcValue} = term_to_int(Src, Fail, MMod, MSt0),
+    {MSt2, FlagsValue} = decode_flags_list(Flags, MMod, MSt1),
+    MSt3 = MMod:free_native_registers(MSt2, [Flags]),
+    {MSt4, Size} = MMod:call_primitive(MSt3, ?PRIM_BITSTRING_INSERT_UTF16, [
         CreatedBin, Offset, {free, SrcValue}, {free, FlagsValue}
     ]),
-    {MSt4, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
-        MMod, MSt3, Offset, Size, 8
+    {MSt5, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
+        MMod, MSt4, Offset, Size, 8
     ),
-    {MSt4, NewOffset, CreatedBin};
+    {MSt5, NewOffset, CreatedBin};
 first_pass_bs_create_bin_insert_value(
     utf32, Flags, Src, _Size, _SegmentUnit, Fail, CreatedBin, Offset, MMod, MSt0
 ) ->
-    {MSt1, FlagsValue} = decode_flags_list(Flags, MMod, MSt0),
-    {MSt2, SrcValue} = term_to_int(Src, Fail, MMod, MSt1),
-    {MSt3, BoolResult} = MMod:call_primitive(MSt2, ?PRIM_BITSTRING_INSERT_UTF32, [
+    % term_to_int can raise a badarg and use a temp register for this, start
+    % with it; free any runtime Flags register immediately after decoding it.
+    {MSt1, SrcValue} = term_to_int(Src, Fail, MMod, MSt0),
+    {MSt2, FlagsValue} = decode_flags_list(Flags, MMod, MSt1),
+    MSt3 = MMod:free_native_registers(MSt2, [Flags]),
+    {MSt4, BoolResult} = MMod:call_primitive(MSt3, ?PRIM_BITSTRING_INSERT_UTF32, [
         CreatedBin, Offset, {free, SrcValue}, {free, FlagsValue}
     ]),
-    MSt4 = cond_raise_badarg_or_jump_to_fail_label(
-        {'(bool)', {free, BoolResult}, '==', false}, Fail, MMod, MSt3
+    MSt5 = cond_raise_badarg_or_jump_to_fail_label(
+        {'(bool)', {free, BoolResult}, '==', false}, Fail, MMod, MSt4
     ),
-    {MSt5, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
-        MMod, MSt4, Offset, 4, 8
+    {MSt6, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
+        MMod, MSt5, Offset, 4, 8
     ),
-    {MSt5, NewOffset, CreatedBin};
+    {MSt6, NewOffset, CreatedBin};
 first_pass_bs_create_bin_insert_value(
     integer, Flags, Src, Size, SegmentUnit, Fail, CreatedBin, Offset, MMod, MSt0
 ) ->
@@ -4773,6 +4785,37 @@ decode_compile_time_literal(<<?COMPACT_EXTENDED_LITERAL, Rest0/binary>>, #state{
     {LiteralIndex, Rest1} = decode_literal(Rest0),
     LiteralTerm = Resolver(LiteralIndex),
     {LiteralTerm, Rest1}.
+
+decode_bs_create_bin_flags(<<0:4, ?COMPACT_ATOM:4, Rest/binary>>, _MMod, MSt, _State) ->
+    {MSt, [], Rest};
+decode_bs_create_bin_flags(
+    <<?COMPACT_EXTENDED_LITERAL, Rest0/binary>> = Bin,
+    MMod,
+    MSt,
+    #state{literal_resolver = Resolver} = State
+) ->
+    {LiteralIndex, Rest1} = decode_literal(Rest0),
+    LiteralTerm = Resolver(LiteralIndex),
+    case is_valid_flags_list(LiteralTerm) of
+        true -> {MSt, LiteralTerm, Rest1};
+        false -> decode_compact_term(Bin, MMod, MSt, State)
+    end;
+decode_bs_create_bin_flags(Bin, MMod, MSt, State) ->
+    decode_compact_term(Bin, MMod, MSt, State).
+
+decode_bs_create_bin_size(AtomType, Bin, _MMod, MSt, _State) when
+    AtomType =:= utf8; AtomType =:= utf16; AtomType =:= utf32
+->
+    {MSt, 0, skip_compact_term(Bin)};
+decode_bs_create_bin_size(_AtomType, Bin, MMod, MSt, State) ->
+    decode_compact_term(Bin, MMod, MSt, State).
+
+is_valid_flags_list([]) ->
+    true;
+is_valid_flags_list([Flag | T]) when Flag =:= little; Flag =:= signed; Flag =:= native ->
+    is_valid_flags_list(T);
+is_valid_flags_list(_) ->
+    false.
 
 decode_flags_list(L, _MMod, MSt) when is_list(L) ->
     % compile time decoding

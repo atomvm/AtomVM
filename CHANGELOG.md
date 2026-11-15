@@ -214,6 +214,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `abs(Incr) > 1`
 - Fixed `erlang:register/2` allowing a process or port that is already
   registered to be registered under additional names
+- Fixed JIT register exhaustion on 6-register targets (`x86_64` and `armv6m`) when
+  compiling `bs_create_bin` UTF segments
 
 ## [0.7.0-beta.0] - 2026-09-28
 

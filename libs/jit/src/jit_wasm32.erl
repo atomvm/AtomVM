@@ -104,6 +104,16 @@
     rem_reg/3
 ]).
 
+-ifdef(JIT_DWARF).
+-export([
+    dwarf_opcode/2,
+    dwarf_label/2,
+    dwarf_function/3,
+    dwarf_line/2,
+    dwarf_variables/2
+]).
+-endif.
+
 -compile([warnings_as_errors]).
 
 -include_lib("jit.hrl").
@@ -1874,3 +1884,28 @@ build_func_bodies(SortedBodies, Idx, NumFunctions, ScratchLocals, Acc) ->
                 jit_wasm32_asm:encode_func_body(ScratchLocals, StubExpr)
         end,
     build_func_bodies(SortedBodies, Idx + 1, NumFunctions, ScratchLocals, [Body | Acc]).
+
+-ifdef(JIT_DWARF).
+%% WASM32 emits structured WASM modules rather than native ELF code, so ELF DWARF
+%% debug info does not apply; keep pass-through callbacks so jit.erl compiled
+%% with -DJIT_DWARF can compile for wasm32 without raising undef.
+-spec dwarf_opcode(state(), binary() | integer()) -> state().
+dwarf_opcode(State, _OpCode) ->
+    State.
+
+-spec dwarf_label(state(), non_neg_integer()) -> state().
+dwarf_label(State, _Label) ->
+    State.
+
+-spec dwarf_line(state(), non_neg_integer()) -> state().
+dwarf_line(State, _Line) ->
+    State.
+
+-spec dwarf_function(state(), atom(), non_neg_integer()) -> state().
+dwarf_function(State, _FunctionName, _Arity) ->
+    State.
+
+-spec dwarf_variables(state(), [{term(), term()}]) -> state().
+dwarf_variables(State, _VarMappings) ->
+    State.
+-endif.
