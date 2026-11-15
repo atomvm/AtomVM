@@ -535,6 +535,8 @@ bool bitstring_insert_f32(
     term dst_bin, size_t offset, avm_float_t value, enum BitstringFlags bs_flags);
 bool bitstring_insert_f64(
     term dst_bin, size_t offset, avm_float_t value, enum BitstringFlags bs_flags);
+bool bitstring_insert_float(
+    term dst_bin, size_t offset, term value, size_t size_bits, enum BitstringFlags bs_flags);
 
 /**
  * @brief Heap words needed to extract a len_bits slice at bit offset offset.

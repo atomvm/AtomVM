@@ -1720,21 +1720,6 @@ static bool jit_bitstring_insert_integer(term bin, size_t offset, term value, si
     return bitstring_insert_bigint(bin, offset, big_src_value, big_len, big_sign, n, flags);
 }
 
-static bool jit_bitstring_insert_float(term bin, size_t offset, term value, size_t n, enum BitstringFlags flags)
-{
-    avm_float_t float_value = term_conv_to_float(value);
-    if (UNLIKELY(!isfinite(float_value))) {
-        return false;
-    }
-    if (n == 16) {
-        return bitstring_insert_f16(bin, offset, float_value, flags);
-    } else if (n == 32) {
-        return bitstring_insert_f32(bin, offset, float_value, flags);
-    } else {
-        return bitstring_insert_f64(bin, offset, float_value, flags);
-    }
-}
-
 static void jit_bitstring_copy_module_str(Context *ctx, JITState *jit_state, term bin, size_t offset, int str_id, size_t len)
 {
     TRACE("jit_bitstring_copy_module_str: bin=%p offset=%d str_id=%d len=%d\n", (void *) bin, (int) offset, str_id, (int) len);
@@ -2115,7 +2100,7 @@ const ModuleNativeInterface module_native_interface = {
     jit_stacktrace_build,
     jit_term_reuse_binary,
     jit_alloc_big_integer_fragment,
-    jit_bitstring_insert_float,
+    bitstring_insert_float,
     jit_raw_raise,
     jit_raise_error_mfa,
     jit_try_case,

@@ -3719,24 +3719,6 @@ schedule_in:
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
 
-                avm_float_t float_value = 0;
-                bool is_number = false;
-                if (term_is_float(src)) {
-                    float_value = term_to_float(src);
-                    is_number = true;
-                } else if (term_is_any_integer(src)) {
-                    float_value = term_conv_to_float(src);
-                    is_number = isfinite(float_value);
-                }
-
-                if (UNLIKELY(!is_number)) {
-                    if (fail == 0) {
-                        RAISE_ERROR(BADARG_ATOM);
-                    } else {
-                        JUMP_TO_LABEL(mod, fail);
-                    }
-                }
-
                 size_t size_bits;
                 term size_term = size == term_nil() ? term_from_int(64) : size;
                 if (UNLIKELY(!bs_scaled_size_bits(size_term, unit, 64, &size_bits)
@@ -3748,18 +3730,14 @@ schedule_in:
                     }
                 }
 
-                bool result;
-                if (size_bits == 16) {
-                    result = bitstring_insert_f16(ctx->bs, ctx->bs_offset, float_value, flags_value);
-                } else if (size_bits == 32) {
-                    result = bitstring_insert_f32(ctx->bs, ctx->bs_offset, float_value, flags_value);
-                } else {
-                    result = bitstring_insert_f64(ctx->bs, ctx->bs_offset, float_value, flags_value);
-                }
-
-                if (UNLIKELY(!result)) {
+                if (UNLIKELY(!bitstring_insert_float(
+                        ctx->bs, ctx->bs_offset, src, size_bits, flags_value))) {
                     TRACE("bs_put_float: Failed to insert float into binary\n");
-                    RAISE_ERROR(BADARG_ATOM);
+                    if (fail == 0) {
+                        RAISE_ERROR(BADARG_ATOM);
+                    } else {
+                        JUMP_TO_LABEL(mod, fail);
+                    }
                 }
 
                 ctx->bs_offset += size_bits;
@@ -5932,33 +5910,8 @@ schedule_in:
                             break;
                         }
                         case FLOAT_ATOM: {
-                            avm_float_t float_value = 0;
-                            bool is_number = false;
-                            if (term_is_float(src)) {
-                                float_value = term_to_float(src);
-                                is_number = true;
-                            } else if (term_is_any_integer(src)) {
-                                float_value = term_conv_to_float(src);
-                                is_number = isfinite(float_value);
-                            }
-
-                            if (UNLIKELY(!is_number)) {
-                                if (fail == 0) {
-                                    RAISE_ERROR(BADARG_ATOM);
-                                } else {
-                                    JUMP_TO_LABEL(mod, fail);
-                                }
-                            }
-
-                            bool result;
-                            if (size_value == 16) {
-                                result = bitstring_insert_f16(t, offset, float_value, flags_value);
-                            } else if (size_value == 32) {
-                                result = bitstring_insert_f32(t, offset, float_value, flags_value);
-                            } else {
-                                result = bitstring_insert_f64(t, offset, float_value, flags_value);
-                            }
-                            if (UNLIKELY(!result)) {
+                            if (UNLIKELY(!bitstring_insert_float(
+                                    t, offset, src, size_value, flags_value))) {
                                 TRACE("bs_create_bin/6: Failed to insert float into binary\n");
                                 if (fail == 0) {
                                     RAISE_ERROR(BADARG_ATOM);
