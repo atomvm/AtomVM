@@ -104,7 +104,12 @@
     demonitor_oldest_message/1,
     killed_linked_root/1,
     is_number_paths/1,
-    fun_info_mfa/1
+    fun_info_mfa/1,
+    error_pair/2,
+    is_reference_paths/1,
+    receive_selective/1,
+    try_boundaries/1,
+    process_probe/1
 ]).
 
 %% Timer observations use delivery/monitor handshakes, not elapsed-time
@@ -4904,3 +4909,386 @@ fun_info_mfa(make_fun_external) ->
     erlang:fun_info_mfa(erlang:make_fun(?MODULE, function_one, 1));
 fun_info_mfa(Term) ->
     call(erlang, fun_info_mfa, [Term]).
+
+error_pair(Reason, Args) ->
+    Uncaught =
+        try call(erlang, error, [Reason, Args]) of
+            V -> {returned, V}
+        catch
+            UC:UR -> {exception, UC, UR}
+        end,
+    Caught =
+        try erlang:error(Reason, Args) of
+            Val -> {returned, Val}
+        catch
+            C:R -> {caught, C, R}
+        end,
+    {Uncaught, Caught}.
+
+is_reference_paths(live_ref) ->
+    is_reference_paths(make_ref());
+is_reference_paths(live_pid) ->
+    is_reference_paths(self());
+is_reference_paths(Term) ->
+    Guard =
+        case Term of
+            T when is_reference(T) -> true;
+            _ -> false
+        end,
+    {erlang:is_reference(Term), is_reference(Term), call(erlang, is_reference, [Term]), Guard}.
+
+receive_selective(preserve_unmatched) ->
+    isolated(fun() ->
+        [self() ! M || M <- [1, wanted, 2, wanted]],
+        Matched =
+            receive
+                wanted -> matched
+            end,
+        {Matched, drain()}
+    end);
+receive_selective(exact_numeric) ->
+    isolated(fun() ->
+        [self() ! M || M <- [#{1 => a}, {tag, 1.0}, <<5:3>>, {tag, 1}, {tag, 1.0}]],
+        Matched =
+            receive
+                {tag, 1} -> exact_int
+            end,
+        {Matched, drain()}
+    end);
+receive_selective(clause_priority_mailbox) ->
+    isolated(fun() ->
+        [self() ! M || M <- [first, {val, 7}]],
+        Matched =
+            receive
+                {val, N} when is_integer(N) -> {bound, N + 1};
+                Atom when is_atom(Atom) -> {atom_first, Atom}
+            end,
+        {Matched, drain()}
+    end);
+receive_selective(clause_priority_order) ->
+    isolated(fun() ->
+        [self() ! M || M <- [{pair, 7}, tail]],
+        Matched =
+            receive
+                {pair, X} when is_integer(X) -> {int, X + 1};
+                {pair, _} -> wild
+            end,
+        {Matched, drain()}
+    end);
+receive_selective(receive_body_exception) ->
+    isolated(fun() ->
+        [self() ! M || M <- [7, keep]],
+        Result =
+            try
+                receive
+                    X -> erlang:error({failure, X})
+                end
+            catch
+                error:{failure, 7} -> caught
+            end,
+        {Result, drain()}
+    end).
+
+try_boundaries(success_body) ->
+    try
+        try 7 of
+            V -> throw({body_throw, V})
+        catch
+            _:_ -> inner_caught
+        end
+    catch
+        throw:{body_throw, 7} -> outer_caught
+    end;
+try_boundaries(success_body_after) ->
+    isolated(fun() ->
+        try
+            try 7 of
+                V ->
+                    put(tag, V),
+                    erlang:error({body_err, V})
+            catch
+                _:_ -> inner_caught
+            after
+                put(after_ran, true)
+            end
+        catch
+            error:{body_err, 7} -> {outer_caught, get(tag), get(after_ran)}
+        end
+    end);
+try_boundaries(handler_propagates) ->
+    try
+        try
+            erlang:error(protected)
+        catch
+            error:protected -> exit(handler_exit)
+        end
+    catch
+        exit:handler_exit -> outer_caught
+    end;
+try_boundaries(handler_propagates_wildcard) ->
+    try
+        try
+            erlang:error(protected)
+        catch
+            _:_ -> exit(handler_exit)
+        end
+    catch
+        exit:handler_exit -> outer_caught
+    end.
+
+process_probe({refs, state_and_effect}) ->
+    isolated(fun() ->
+        put(k, #{a => 1}),
+        self() ! queued,
+        R1 = make_ref(),
+        R2 = make_ref(),
+        [R3, R4] = [make_ref() || _ <- [1, 2]],
+        [Same1, Same2] = lists:duplicate(2, R1),
+        {
+            is_reference(R1),
+            R1 =/= R2,
+            R3 =/= R4,
+            Same1 =:= Same2,
+            get(k),
+            drain()
+        }
+    end);
+process_probe({refs_fresh, N}) ->
+    isolated(fun() ->
+        R0 = make_ref(),
+        Refs = [make_ref() || _ <- lists:seq(1, N)],
+        Unique = sets:size(sets:from_list(Refs)),
+        {length(Refs) =:= N, Unique =:= N, not lists:member(R0, Refs)}
+    end);
+process_probe({child_timeout, Delay}) ->
+    isolated(fun() ->
+        Parent = self(),
+        {Child, Mon} = spawn_monitor(fun() ->
+            self() ! noise,
+            Res =
+                receive
+                    wanted -> matched
+                after Delay -> timeout
+                end,
+            Parent ! {child_res, Res, drain()}
+        end),
+        ChildRes =
+            receive
+                {child_res, R, Left} -> {R, Left}
+            end,
+        Down =
+            receive
+                {'DOWN', Mon, process, Child, Reason} -> Reason
+            end,
+        {ChildRes, Down}
+    end);
+process_probe(infinity_alive) ->
+    isolated(fun() ->
+        {Child, Mon} = spawn_monitor(fun() ->
+            receive
+                never -> expired
+            after infinity -> expired_timeout
+            end
+        end),
+        receive
+        after 5 -> ok
+        end,
+        Alive = is_process_alive(Child),
+        exit(Child, kill),
+        Down =
+            receive
+                {'DOWN', Mon, process, Child, Reason} -> Reason
+            end,
+        {Alive, Down}
+    end);
+process_probe(guard_child_self) ->
+    isolated(fun() ->
+        Parent = self(),
+        {Child, Mon} = spawn_monitor(fun() ->
+            receive
+                M when M =:= self() ->
+                    Parent ! {matched, M =:= self(), [X =:= Parent || X <- drain()]}
+            end
+        end),
+        Child ! Parent,
+        receive
+        after 2 -> ok
+        end,
+        Child ! Child,
+        Res =
+            receive
+                {matched, SelfOk, Left} -> {SelfOk, Left}
+            end,
+        Down =
+            receive
+                {'DOWN', Mon, process, Child, Reason} -> Reason
+            end,
+        {Res, Down}
+    end);
+process_probe(blocking_not_exception) ->
+    isolated(fun() ->
+        Parent = self(),
+        {Child, Mon} = spawn_monitor(fun() ->
+            Res =
+                try
+                    receive
+                        {go, V} -> {ok, V}
+                    end
+                catch
+                    _:_ -> caught_unexpected
+                end,
+            Parent ! {child_done, Res}
+        end),
+        receive
+        after 5 -> ok
+        end,
+        Alive = is_process_alive(Child),
+        Child ! {go, 7},
+        ChildRes =
+            receive
+                {child_done, R} -> R
+            end,
+        Down =
+            receive
+                {'DOWN', Mon, process, Child, Reason} -> Reason
+            end,
+        {Alive, ChildRes, Down}
+    end);
+process_probe({handshake, DelayMode}) ->
+    isolated(fun() ->
+        Parent = self(),
+        put(role, parent),
+        self() ! parent_mail,
+        {Child, Mon} = spawn_monitor(fun() ->
+            put(role, child),
+            self() ! child_mail,
+            case DelayMode of
+                delay_child -> receive
+                    after 2 -> ok
+                    end;
+                _ -> ok
+            end,
+            receive
+                start -> Parent ! {done, get(role), drain()}
+            end
+        end),
+        case DelayMode of
+            delay_parent -> receive
+                after 2 -> ok
+                end;
+            _ -> ok
+        end,
+        Child ! start,
+        ChildOut =
+            receive
+                {done, CRole, CMail} -> {CRole, CMail}
+            end,
+        Down =
+            receive
+                {'DOWN', Mon, process, Child, Reason} -> Reason
+            end,
+        {get(role), ChildOut, Down, drain()}
+    end);
+process_probe(two_senders) ->
+    isolated(fun() ->
+        Parent = self(),
+        {L, LMon} = spawn_monitor(fun() -> Parent ! {sender, left} end),
+        {R, RMon} = spawn_monitor(fun() -> Parent ! {sender, right} end),
+        M1 =
+            receive
+                {sender, _} = X1 -> X1
+            end,
+        M2 =
+            receive
+                {sender, _} = X2 -> X2
+            end,
+        DL =
+            receive
+                {'DOWN', LMon, process, L, R1} -> R1
+            end,
+        DR =
+            receive
+                {'DOWN', RMon, process, R, R2} -> R2
+            end,
+        {lists:sort([M1, M2]), DL, DR, drain()}
+    end);
+process_probe(terminated_child) ->
+    isolated(fun() ->
+        {Child, Mon} = spawn_monitor(fun() ->
+            put(child_key, val),
+            ok
+        end),
+        Down =
+            receive
+                {'DOWN', Mon, process, Child, Reason} -> Reason
+            end,
+        Before = is_process_alive(Child),
+        Sent = (Child ! {ignored, <<1:3>>}),
+        receive
+        after 2 -> ok
+        end,
+        After = is_process_alive(Child),
+        {Down, Before, Sent, After, drain()}
+    end);
+process_probe(terminated_root) ->
+    isolated(fun() ->
+        Parent = self(),
+        {SubRoot, SubMon} = spawn_monitor(fun() ->
+            Sub = self(),
+            Sender = spawn(fun() ->
+                Mon = monitor(process, Sub),
+                Sub ! sender_ready,
+                receive
+                    go ->
+                        SubReason =
+                            receive
+                                {'DOWN', Mon, process, Sub, Reason} -> Reason
+                            end,
+                        Ret = (Sub ! late),
+                        Parent ! {sender_done, SubReason, Ret =:= late, is_process_alive(Sub)}
+                end
+            end),
+            receive
+                sender_ready -> Parent ! {sender_spawned, Sender}
+            end
+        end),
+        Sender =
+            receive
+                {sender_spawned, SP} -> SP
+            end,
+        SMon = monitor(process, Sender),
+        SubDown =
+            receive
+                {'DOWN', SubMon, process, SubRoot, R1} -> R1
+            end,
+        Sender ! go,
+        SenderOut =
+            receive
+                {sender_done, SR, LateOk, Alive} -> {SR, LateOk, Alive}
+            end,
+        SenderDown =
+            receive
+                {'DOWN', SMon, process, Sender, R2} -> R2
+            end,
+        {SubDown, SenderOut, SenderDown, is_process_alive(SubRoot), drain()}
+    end);
+process_probe({child_isolated, Kind}) ->
+    isolated(fun() ->
+        put(parent_key, kept),
+        self() ! parent_mail,
+        {Child, Mon} = spawn_monitor(fun() ->
+            case Kind of
+                error -> erlang:error(failure);
+                throw -> erlang:throw(failure);
+                exit -> erlang:exit(failure)
+            end
+        end),
+        Down =
+            receive
+                {'DOWN', Mon, process, Child, {Reason, Stack}} when is_list(Stack) ->
+                    {Reason, stack};
+                {'DOWN', Mon, process, Child, Other} ->
+                    Other
+            end,
+        {Down, is_process_alive(Child), get(parent_key), drain()}
+    end).

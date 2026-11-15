@@ -16,8 +16,8 @@ runner semantics in [README.md](README.md).
   `b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de` in the latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 5,818 public-behavior recipes inspired by Lean tests
-  and upstream examples (`313` of `438` Lean test sites across all 26 files). Source
+- `lean_runtime.py` selects 5,863 public-behavior recipes inspired by Lean tests
+  and upstream examples (`335` of `438` Lean test sites across all 26 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
   the proved postcondition to be true on both VMs: five integer singleton sums,
@@ -972,6 +972,39 @@ Batch 11 — Complete `Modules/Timers.lean` differential coverage (2026-11-15):
 - Verified focused replay (`19/19` passing), full interpreter CI run (`5,850` cases
   with `--seed 20261114 --generated 32` and `--expected-failures tools/test/lynx/expected_failures.json`:
   `5,703` matched OTP, `147/147` expected failures, `0` unexpected failures/passes,
+  `0` unverified), and `test_validate.py` (`29` tests: `26` passed, `3` env-gated
+  optional skipped).
+
+Batch 12 — Expand `Modules/Process.lean` public-behavior coverage (2026-11-15):
+
+- Added 45 differential cases in `lean_runtime.py` (`5,818 -> 5,863`, `335` of `438`
+  Lean sites across 26 files: `Modules/Process.lean` reaches `37/49`) covering 22
+  testable sites:
+  - `error_reason`, `error_caught` (`differential:error_pair/2` on `erlang:error/2`
+    uncaught and caught paths including non-list arg terms).
+  - `reference_type_guard`, `make_ref_preserves_process_state`, `make_ref_fresh`,
+    `make_ref_is_effectful` (`differential:is_reference_paths/1` and `process_probe`
+    ref state/effect/batch-uniqueness checks).
+  - `selective_receive_preserves_unmatched`, `receive_bindings_and_clause_priority`,
+    `receive_body_exception_is_caught`, `finite_timeout_progress`,
+    `timeout_can_expire_child`, `infinity_never_expires`,
+    `guard_reads_waiting_child_identity` (`differential:receive_selective/1`,
+    `receive_timeout(5, ...)`, and `process_probe` child timeout/infinity/self-guard
+    probes).
+  - `try_success_body_is_outside_handler`, `try_handler_exception_propagates`,
+    `blocking_is_not_an_exception` (`differential:try_boundaries/1` and blocked child
+    wake check).
+  - `blocked_processes_resume`, `handshake_every_run`, `two_senders_every_run`,
+    `terminated_child_is_not_revived`, `terminated_root_discards_late_messages`,
+    `child_exception_is_isolated` (deterministic `process_probe` handshakes, sorted
+    two-sender completion, dead child/root non-revival, and unlinked child `error`/
+    `throw`/`exit` isolation).
+  - Remaining 12 uncovered `Modules/Process.lean` sites are pure Lean symbolic
+    scheduler traces, `¬ Result.IsReadOnly` guard purity proofs, unbounded deadlock
+    theorems, or meta-theorems matching the `Modules/Process.lean` inventory note.
+- Verified focused replay (`45/45` passing), full interpreter CI run (`5,895` cases
+  with `--seed 20261114 --generated 32` and `--expected-failures tools/test/lynx/expected_failures.json`:
+  `5,748` matched OTP, `147/147` expected failures, `0` unexpected failures/passes,
   `0` unverified), and `test_validate.py` (`29` tests: `26` passed, `3` env-gated
   optional skipped).
 
