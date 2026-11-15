@@ -20,7 +20,7 @@
 
 -module(test_binary).
 
--export([test/0]).
+-export([test/0, id/1]).
 
 -include("etest.hrl").
 
@@ -29,6 +29,7 @@ test() ->
     ok = test_split_scope_gc(),
     ok = test_hex(),
     ok = test_list_to_bin(),
+    ok = test_utf_dynamic_offset(),
     ok.
 
 test_split() ->
@@ -118,4 +119,15 @@ test_hex() ->
     ?ASSERT_EXCEPTION(binary:encode_hex(<<1:4>>), error, badarg),
     ?ASSERT_EXCEPTION(binary:encode_hex(<<1:4>>, lowercase), error, badarg),
     ?ASSERT_EXCEPTION(binary:encode_hex(<<"AB", 1:1>>), error, badarg),
+    ok.
+
+id(X) -> X.
+
+test_utf_dynamic_offset() ->
+    Off = ?MODULE:id(5),
+    C = ?MODULE:id(16#1F600),
+    ?ASSERT_MATCH(<<0:Off, C/utf32-little>>, <<0:5, 16#1F600/utf32-little>>),
+    ?ASSERT_MATCH(<<0:Off, C/utf16-little>>, <<0:5, 16#1F600/utf16-little>>),
+    ?ASSERT_MATCH(<<0:Off, $a/utf32-little>>, <<0:5, $a/utf32-little>>),
+    ?ASSERT_MATCH(<<0:Off, $a/utf16-little>>, <<0:5, $a/utf16-little>>),
     ok.
