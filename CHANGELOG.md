@@ -218,6 +218,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   compiling `bs_create_bin` UTF segments
 - Fixed `float32` bitstring construction double-rounding unboxed integers through
   `binary64` before narrowing
+- Fixed dynamic calls (such as `erlang:apply/3`) to 3-arity BIFs (`erlang:is_integer/3`) raising `undef`
 
 ## [0.7.0-beta.0] - 2026-09-28
 
