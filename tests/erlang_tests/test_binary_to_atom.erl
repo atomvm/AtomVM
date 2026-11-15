@@ -77,6 +77,22 @@ test_more_than_255_bytes() ->
             should_have_raised
         catch
             error:system_limit -> ok
+        end,
+    A255 = duplicate(<<"a">>, 255, <<>>),
+    ok =
+        try
+            _ = binary_to_atom(id(<<A255/binary, 16#FF>>), utf8),
+            should_have_raised
+        catch
+            error:system_limit -> ok
+        end,
+    A254 = duplicate(<<"a">>, 254, <<>>),
+    ok =
+        try
+            _ = binary_to_atom(id(<<A254/binary, 16#FF>>), utf8),
+            should_have_raised
+        catch
+            error:badarg -> ok
         end.
 
 id(X) ->

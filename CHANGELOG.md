@@ -221,6 +221,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed dynamic calls (such as `erlang:apply/3`) to 3-arity BIFs (`erlang:is_integer/3`) raising `undef`
 - Fixed `erlang:spawn_link/1` and `erlang:spawn_monitor/1` spawning processes for
   wrong-arity funs instead of raising `badarg`
+- Fixed `erlang:binary_to_atom/1,2` raising `badarg` instead of `system_limit`
+  after 255 valid UTF-8 characters when followed by invalid trailing bytes, and
+  fixed a temporary buffer leak for `latin1` inputs
 
 ## [0.7.0-beta.0] - 2026-09-28
 
