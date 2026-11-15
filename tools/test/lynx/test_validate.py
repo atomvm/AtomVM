@@ -1573,6 +1573,70 @@ class ValidationTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("1 unexpected passes", result.stderr)
 
+    def test_portable_only_and_parallel_jobs(self):
+        import validate as vmod
+        sample = [
+            {"expression": "1 + 2"},
+            {"expression": "lists:keyfind(1,1,[{1,a}])", "word_size_dependent": True},
+            {"expression": "try error(boom) catch _:_:S -> S end", "stacktrace_dependent": True},
+        ]
+        kept_same, ow, os_cnt = vmod.filter_portable_cases(
+            sample, {"word_size": 8, "stacktraces": True}, oracle_word_size=8
+        )
+        self.assertEqual((len(kept_same), ow, os_cnt), (3, 0, 0))
+        kept_diff, ow, os_cnt = vmod.filter_portable_cases(
+            sample, {"word_size": 4, "stacktraces": False}, oracle_word_size=8
+        )
+        self.assertEqual((kept_diff, ow, os_cnt), ([sample[0]], 1, 1))
+
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            build32 = work / "build32"
+            (build32 / "src").mkdir(parents=True)
+            (build32 / "tools/packbeam").mkdir(parents=True)
+            (build32 / "libs").mkdir()
+            (build32 / "CMakeCache.txt").write_text(
+                "AVM_DISABLE_JIT:BOOL=ON\n"
+                "AVM_ENABLE_PRECOMPILED:BOOL=OFF\n"
+                "AVM_CREATE_STACKTRACES:BOOL=OFF\n"
+                "CMAKE_SIZEOF_VOID_P:INTERNAL=4\n"
+            )
+            (build32 / "libs/atomvmlib.avm").touch()
+            (build32 / "tools/packbeam/packbeam").symlink_to(ROOT / "build/tools/packbeam/packbeam")
+            ok_3 = bytes([131, 104, 2, 119, 2, *b"ok", 97, 3])
+            runtime = build32 / "src/AtomVM"
+            runtime.write_text(f"#!/bin/sh\necho 'LYNX_SEMANTIC_DONE'\necho 'LYNX_RESULT {list(ok_3)}'\n")
+            runtime.chmod(0o755)
+            mixed = work / "mixed.json"
+            mixed.write_text(json.dumps(sample))
+            out_portable = work / "out-portable"
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--build", str(build32),
+                 "--replay", str(mixed), "--portable-only", "--output", str(out_portable)],
+                capture_output=True, text=True, timeout=120,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("Omitted 2 target-inapplicable cases (word_size=1, stacktraces=1).", result.stdout)
+            self.assertEqual(
+                json.loads((out_portable / "summary.json").read_text()),
+                {"laws": 0, "passed": 1, "failed": 0, "unverified": 0, "uncovered": 0},
+            )
+
+            out_parallel = work / "out-parallel"
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--build", str(ROOT / "build"),
+                 "--seed", "20261114", "--generated", "24", "--jobs", "4",
+                 "--output", str(out_parallel)],
+                capture_output=True, text=True, timeout=120,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(
+                json.loads((out_parallel / "summary.json").read_text()),
+                {"laws": 0, "passed": 24, "failed": 0, "unverified": 0, "uncovered": 0},
+            )
+            self.assertEqual(list(out_parallel.glob("*.avm")), [])
+            self.assertEqual(list(out_parallel.glob("*.pack.log")), [])
+
 
 if __name__ == "__main__":
     unittest.main()
