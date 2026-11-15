@@ -168,7 +168,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **5,863 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **6,014 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -881,8 +881,9 @@ oracles:
 python3 -B -m unittest discover -s tools/test/lynx -p test_validate.py -v
 ```
 
-Twenty-seven enabled CLI tests pass under `ATOMVM_JIT_BUILD=.amp/in/build-on-demand`
-(29 total; 2 optional `ATOMVM_JIT_PRECOMPILE_BUILD` / `LYNX_CHECKOUT` tests skipped). Set
+Twenty-seven enabled CLI tests pass in default interpreter runs (`30` total;
+`3` env-gated optional `ATOMVM_JIT_BUILD`, `ATOMVM_JIT_PRECOMPILE_BUILD`, and
+`LYNX_CHECKOUT` tests skipped). Set
 `LYNX_CHECKOUT=/path/to/lynx`
 to enable the additional full-fixture/export inventory and partial-replay integration
 test. It requires Mix/Lean on PATH and takes several minutes; ordinary integration

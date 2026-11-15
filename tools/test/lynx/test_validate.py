@@ -1718,7 +1718,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 5863)
+        self.assertEqual(len(lean_runtime.cases()), 6014)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"
@@ -1821,6 +1821,80 @@ class ValidationTests(unittest.TestCase):
                   {:ok, {:ok, {{:failure, :stack}, false, :kept, [:parent_mail]}}},
                 ] = values
                 true = (from_keys_ok === %{1 => :tag, 1.0 => :tag})
+                """, str(output / "manifest.json"),
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_upstream_stdlib_example_observations_have_independent_oracles(self):
+        all_cases = lean_runtime.cases()
+        expected_groups = {
+            "examples/otp/base64.exs#encoding_roundtrip": 31,
+            "examples/otp/binary.exs#hex_roundtrip": 16,
+            "examples/otp/calendar.exs#date_to_gregorian_days_cycle": 18,
+            "examples/otp/json.exs#json_roundtrip": 42,
+            "examples/otp/queue.exs#reverse_involution": 6,
+            "examples/otp/queue.exs#reverse_exchanges_ends": 6,
+            "examples/otp/queue.exs#front_insert_peek": 6,
+            "examples/otp/queue.exs#split_preserves_ordered_partition": 26,
+        }
+        for tag, min_count in expected_groups.items():
+            matched = [c for c in all_cases if c.get("upstream_example") == tag]
+            self.assertEqual(len(matched), min_count, tag)
+            self.assertTrue(all("lean_origins" not in c and not c.get("assert_true")
+                                for c in matched), tag)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "upstream_stdlib.json"
+            expressions = [
+                "B = <<251,255>>, Opts = #{mode => urlsafe, padding => false}, "
+                "E = base64:encode(B, Opts), D = base64:decode(E, Opts), {E, D, D =:= B}",
+                "B = <<15,16,255>>, {binary:encode_hex(B), "
+                "binary:encode_hex(B, lowercase), binary:decode_hex(<<\"0aA0fF\">>)}",
+                "differential:call(binary,decode_hex,[<<\"0\">>])",
+                "Y = 2000, D1 = calendar:date_to_gregorian_days({Y,1,1}), "
+                "D2 = calendar:date_to_gregorian_days({Y+400,1,1}), {D1, D2, D2 =:= D1 + 146097}",
+                "differential:call(calendar,datetime_to_gregorian_seconds,[{{2024,1,1},{24,0,0}}])",
+                "V = #{<<\"a\">> => 1, <<\"b\">> => [false, null]}, "
+                "E = iolist_to_binary(json:encode(V)), {E, json:decode(E) =:= V}",
+                r'differential:call(json,decode,[<<"\"\\uD800\\uD800\"">>])',
+                r'differential:call(json,decode,[<<"\"\\uD800\"">>])',
+                "differential:call(json,decode,[<<\"1 2\">>])",
+                "differential:call(json,decode,[<<\"1e1000\">>])",
+                "Q = {[3,2],[1]}, R1 = queue:reverse(Q), R2 = queue:reverse(R1), "
+                "{queue:to_list(R1), queue:peek(Q), queue:peek_r(Q), queue:to_list(R2) =:= queue:to_list(Q)}",
+                "Q = queue:from_list([1,2,3,4]), {Q1,Q2} = queue:split(2,Q), "
+                "{queue:to_list(Q1), queue:to_list(Q2), queue:to_list(queue:join(Q1,Q2))}",
+                "differential:call(queue,out,[queue:new()])",
+            ]
+            source.write_text(json.dumps([{"expression": e} for e in expressions]))
+            output = work / "results"
+            self.assertEqual(
+                self.invoke(output, "--replay", source),
+                {"laws": 0, "passed": len(expressions), "failed": 0,
+                 "unverified": 0, "uncovered": 0},
+            )
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                values = JSON.decode!(File.read!(path))["expected"]
+                         |> Enum.map(&:erlang.binary_to_term(Base.decode64!(&1)))
+                [
+                  {:ok, {"-_8", <<251, 255>>, true}},
+                  {:ok, {"0F10FF", "0f10ff", <<10, 160, 255>>}},
+                  {:exception, :error, :badarg},
+                  {:ok, {730485, 876582, true}},
+                  {:exception, :error, :function_clause},
+                  {:ok, {json_bin, true}},
+                  {:exception, :error, {:unexpected_sequence, "\\\\uD800\\\\uD800"}},
+                  {:exception, :error, :unexpected_end},
+                  {:exception, :error, {:invalid_byte, 32}},
+                  {:exception, :error, {:unexpected_sequence, "1.0e1000"}},
+                  {:ok, {[3, 2, 1], {:value, 1}, {:value, 3}, true}},
+                  {:ok, {[1, 2], [3, 4], [1, 2, 3, 4]}},
+                  {:ok, {:empty, {[], []}}},
+                ] = values
+                true = is_binary(json_bin)
+                true = (:json.decode(json_bin) === %{"a" => 1, "b" => [false, :null]})
                 """, str(output / "manifest.json"),
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)

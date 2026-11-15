@@ -147,6 +147,193 @@ def cases():
         selected.append({"upstream_example": "examples/otp/lists.exs#sequence_formula",
                          "expression": f"differential:call(lists,seq,[{','.join(args)}])"})
 
+    # Upstream stdlib example laws for modules bundled in AtomVM libs/estdlib/src:
+    # base64, binary hex, calendar, json, and queue.
+    for data in ["<<>>", "<<0>>", "<<255>>", "<<1,2>>", "<<1,2,3>>",
+                 "<<62,63,254,255>>", "<<\"hello\">>"]:
+        selected.append({
+            "upstream_example": "examples/otp/base64.exs#encoding_roundtrip",
+            "expression": f"B = {data}, E = base64:encode(B), D = base64:decode(E), "
+                          "{E, D, D =:= B, byte_size(E) =:= ((byte_size(B) + 2) div 3) * 4}",
+        })
+    for data in ["<<>>", "<<0>>", "<<1,2>>", "<<62,63,254,255>>"]:
+        selected.append({
+            "upstream_example": "examples/otp/base64.exs#encoding_roundtrip",
+            "expression": f"B = {data}, S = base64:encode_to_string(B), "
+                          "D = base64:decode_to_string(S), {S, D, list_to_binary(D) =:= B}",
+        })
+    for mode in ["standard", "urlsafe"]:
+        for pad in ["true", "false"]:
+            for data in ["<<>>", "<<251>>", "<<251,255>>", "<<251,255,191>>"]:
+                selected.append({
+                    "upstream_example": "examples/otp/base64.exs#encoding_roundtrip",
+                    "expression": f"B = {data}, Opts = #{{mode => {mode}, padding => {pad}}}, "
+                                  "E = base64:encode(B, Opts), D = base64:decode(E, Opts), {E, D, D =:= B}",
+                })
+    for expr in [
+        "{base64:encode(\"hello\"), base64:decode(\"aGVsbG8=\"), "
+        "base64:decode(<<\"SGVsbG8\">>, #{padding => false}), "
+        "base64:decode_to_string(base64:encode_to_string(<<251,255>>, #{mode => urlsafe, padding => false}), #{mode => urlsafe, padding => false})}",
+        "differential:call(base64,decode,[<<\"!!!!\">>])",
+        "differential:call(base64,decode,[<<\"AA\">>,#{padding => false}])",
+        "differential:call(base64,decode_to_string,[\"SGVsbG8=\"])",
+    ]:
+        selected.append({"upstream_example": "examples/otp/base64.exs#encoding_roundtrip",
+                         "expression": expr})
+
+    for data in ["<<>>", "<<0>>", "<<15,16,255>>", "<<\"AtomVM\">>"]:
+        selected.append({
+            "upstream_example": "examples/otp/binary.exs#hex_roundtrip",
+            "expression": f"B = {data}, {{binary:encode_hex(B), "
+                          "binary:decode_hex(binary:encode_hex(B)) =:= B, "
+                          "binary:encode_hex(B, uppercase), "
+                          "binary:decode_hex(binary:encode_hex(B, uppercase)) =:= B, "
+                          "binary:encode_hex(B, lowercase), "
+                          "binary:decode_hex(binary:encode_hex(B, lowercase)) =:= B}",
+        })
+    for expr in [
+        "differential:call(binary,decode_hex,[<<>>])",
+        "differential:call(binary,decode_hex,[<<\"00ff\">>])",
+        "differential:call(binary,decode_hex,[<<\"00FF\">>])",
+        "differential:call(binary,decode_hex,[<<\"0aA0fF\">>])",
+        "differential:call(binary,decode_hex,[<<\"0\">>])",
+        "differential:call(binary,decode_hex,[<<\"zz\">>])",
+        "differential:call(binary,decode_hex,[<<\"0g\">>])",
+        "differential:call(binary,decode_hex,[<<1:1>>])",
+        "differential:call(binary,decode_hex,[bad])",
+        "differential:call(binary,encode_hex,[<<1:1>>])",
+        "differential:call(binary,encode_hex,[bad])",
+        "differential:call(binary,encode_hex,[<<1>>,mixed])",
+    ]:
+        selected.append({"upstream_example": "examples/otp/binary.exs#hex_roundtrip",
+                         "expression": expr})
+
+    for year in ["0", "1", "399", "400", "1970", "2000", "2024", "2400"]:
+        selected.append({
+            "upstream_example": "examples/otp/calendar.exs#date_to_gregorian_days_cycle",
+            "expression": f"Y = {year}, D1 = calendar:date_to_gregorian_days({{Y,1,1}}), "
+                          "D2 = calendar:date_to_gregorian_days({Y+400,1,1}), "
+                          "{D1, D2, D2 =:= D1 + 146097}",
+        })
+    for year, month, day in [(0, 1, 1), (1970, 1, 1), (2000, 2, 29), (2024, 2, 29), (2024, 12, 31)]:
+        selected.append({
+            "upstream_example": "examples/otp/calendar.exs#date_to_gregorian_days_cycle",
+            "expression": f"{{calendar:date_to_gregorian_days({year},{month},{day}), "
+                          f"calendar:day_of_the_week({{{year},{month},{day}}}), "
+                          f"calendar:day_of_the_week({year},{month},{day}), "
+                          f"calendar:datetime_to_gregorian_seconds({{{{{year},{month},{day}}},{{23,59,59}}}})}}",
+        })
+    for sec in ["0", "86400", "1700000000", "-86400"]:
+        selected.append({
+            "upstream_example": "examples/otp/calendar.exs#date_to_gregorian_days_cycle",
+            "expression": f"differential:call(calendar,system_time_to_universal_time,[{sec},second])",
+        })
+    selected.append({
+        "upstream_example": "examples/otp/calendar.exs#date_to_gregorian_days_cycle",
+        "expression": "differential:call(calendar,datetime_to_gregorian_seconds,[{{2024,1,1},{24,0,0}}])",
+    })
+
+    for term in [
+        "null", "true", "false", "0", "-7", "42", "1 bsl 100", "-(1 bsl 100)",
+        "0.0", "3.14", "-12.5", "1.0e20",
+        "<<>>", "<<\"hello\">>", "<<\"a\\nb\\tc\\rd\\\\e\\\"f\">>",
+        "<<\"\\x{00}\\x{1f}\\x{7f}\">>",
+        "<<\"cafe\\x{0301} 😀 日本語\"/utf8>>",
+        "<<\"0123456789abcdef0123456789abcdef\">>",
+        "[]", "[1,true,null,<<\"x\">>,#{}]",
+        "#{<<\"a\">> => 1, <<\"nested\">> => #{<<\"b\">> => [false, <<>>]}}",
+    ]:
+        selected.append({
+            "upstream_example": "examples/otp/json.exs#json_roundtrip",
+            "expression": f"V = {term}, E = iolist_to_binary(json:encode(V)), "
+                          "D = json:decode(E), {E, D, D =:= V}",
+        })
+    selected.append({
+        "upstream_example": "examples/otp/json.exs#json_roundtrip",
+        "expression": "V = lists:foldl(fun(I,Acc)->[I,Acc] end,null,lists:seq(1,32)), "
+                      "E = iolist_to_binary(json:encode(V)), {json:decode(E) =:= V}",
+    })
+    for raw in [
+        "<<\" -0.0 \">>",
+        "<<\"\\t\\n\\r [ 1 , -2.5 , true ]\\n\">>",
+        r'<<"\"\\\\\\/\\b\\f\\n\\r\\t\"">>',
+        r'<<"\"\\u0041\\uD83D\\uDE00\"">>',
+        "<<>>", "<<\" \">>", "<<\"{\">>", "<<\"[1,\">>", "<<\"[1,]\">>",
+        "<<\"\\\"unterminated\">>",
+        r'<<"\"\\uD800\"">>',
+        r'<<"\"\\uD800\\uD800\"">>',
+        r'<<"\"\\uDC00\"">>',
+        r'<<"\"\\uZZZZ\"">>',
+        "<<\"01\">>", "<<\"truee\">>", "<<\"1 2\">>", "<<\"1e1000\">>", "<<\"[1 2]\">>",
+    ]:
+        selected.append({
+            "upstream_example": "examples/otp/json.exs#json_roundtrip",
+            "expression": f"differential:call(json,decode,[{raw}])",
+        })
+    selected.append({
+        "upstream_example": "examples/otp/json.exs#json_roundtrip",
+        "expression": "{continue, S1} = json:decode_start(<<\"{\\\"k\\\":\">>, ok, #{}), "
+                      "{continue, S2} = json:decode_continue(<<\"[1,2\">>, S1), "
+                      "json:decode_continue(<<\"]}\">>, S2)",
+    })
+
+    for q_expr in [
+        "queue:new()",
+        "queue:from_list([1])",
+        "queue:from_list([1,2,3,4,5])",
+        "{[3,2,1],[]}",
+        "{[],[1,2,3]}",
+        "{[3,2],[1]}",
+    ]:
+        selected.append({
+            "upstream_example": "examples/otp/queue.exs#reverse_involution",
+            "expression": f"Q = {q_expr}, R1 = queue:reverse(Q), R2 = queue:reverse(R1), "
+                          "{queue:is_queue(Q), queue:to_list(R1), queue:to_list(R2) =:= queue:to_list(Q)}",
+        })
+        selected.append({
+            "upstream_example": "examples/otp/queue.exs#reverse_exchanges_ends",
+            "expression": f"Q = {q_expr}, R = queue:reverse(Q), "
+                          "{queue:peek(Q), queue:peek_r(Q), "
+                          "queue:peek(R) =:= queue:peek_r(Q), queue:peek_r(R) =:= queue:peek(Q), "
+                          "lists:reverse(queue:to_list(Q)) =:= queue:to_list(R)}",
+        })
+        selected.append({
+            "upstream_example": "examples/otp/queue.exs#front_insert_peek",
+            "expression": f"Q = {q_expr}, Q2 = queue:in_r(tag,Q), P = queue:peek(Q2), "
+                          "{{value,tag}, Q3} = queue:out(Q2), "
+                          "{P =:= {value,tag}, queue:to_list(Q3) =:= queue:to_list(Q)}",
+        })
+        for split_n in (["0"] if q_expr == "queue:new()" else ["0", "1", "queue:len(Q)"]):
+            selected.append({
+                "upstream_example": "examples/otp/queue.exs#split_preserves_ordered_partition",
+                "expression": f"Q = {q_expr}, N = {split_n}, {{Q1,Q2}} = queue:split(N,Q), "
+                              "{queue:to_list(Q1), queue:to_list(Q2), queue:len(Q1) =:= N, "
+                              "queue:to_list(Q1) ++ queue:to_list(Q2) =:= queue:to_list(Q), "
+                              "queue:to_list(queue:join(Q1,Q2)) =:= queue:to_list(Q)}",
+            })
+    selected.append({
+        "upstream_example": "examples/otp/queue.exs#split_preserves_ordered_partition",
+        "expression": "Q = queue:from_list([1,2,3,4,5]), {Q1,Q2} = queue:split(2,Q), "
+                      "{queue:to_list(Q1), queue:to_list(Q2), queue:member(3,Q), queue:member(9,Q), "
+                      "queue:to_list(queue:filter(fun(X)->X rem 2 =:= 0 end,Q)), "
+                      "queue:fold(fun(X,A)->X+A end,0,Q), "
+                      "queue:any(fun(X)->X>4 end,Q), queue:all(fun(X)->X>0 end,Q), "
+                      "queue:to_list(queue:delete(3,Q)), queue:to_list(queue:delete_r(3,Q))}",
+    })
+    for bad in [
+        "differential:call(queue,out,[queue:new()])",
+        "differential:call(queue,out_r,[queue:new()])",
+        "differential:call(queue,get,[queue:new()])",
+        "differential:call(queue,get_r,[queue:new()])",
+        "differential:call(queue,drop,[queue:new()])",
+        "differential:call(queue,drop_r,[queue:new()])",
+        "differential:call(queue,split,[2,queue:from_list([1])])",
+        "differential:call(queue,split,[-1,queue:from_list([1])])",
+        "differential:call(queue,len,[bad])",
+    ]:
+        selected.append({"upstream_example": "examples/otp/queue.exs#split_preserves_ordered_partition",
+                         "expression": bad})
+
     t = "Modules/Timers"
     for payload in ["tick", "{nested,#{1=>one,1.0=>float},<<5:3>>}"]:
         for mode, label, delay in [
