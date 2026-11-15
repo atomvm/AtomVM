@@ -155,6 +155,12 @@ def cases():
             ("expired", "cancel_twice", 0),
             ("dead_before", "cancel_after_destination_exits", 60000),
             ("dead_after", "cancel_after_destination_exits_later", 60000),
+            ("time_left", "cancel_reports_time_left", 5000),
+            ("time_left", "cancel_reports_time_left", 60000),
+            ("no_time_left", "cancel_reports_no_time_left", 0),
+            ("false_before_delivery", "cancel_false_before_delivery", 0),
+            ("false_before_delivery_waited", "cancel_false_before_delivery", 1),
+            ("false_before_delivery_target", "cancel_false_before_delivery", 1),
         ]:
             probe(t, label, f"differential:timer({mode},{delay},{payload})")
     call(t, "cancel_other_reference", "cancel_timer", "make_ref()")
@@ -166,6 +172,14 @@ def cases():
         # a timer if the target incorrectly accepts the invalid arguments.
         probe(t, "send_after_negative_time" if time == "-1" else "send_after_long_times",
               f"R=erlang:send_after({time},{destination},tick),"
+              "{is_reference(R),erlang:cancel_timer(R)=/=false}")
+    for mode, delay, options in [("deliver", 10, "[{abs,true},{abs,false}]"),
+                                 ("deliver", 10, "[]"),
+                                 ("cancel", 60000, "[{abs,true},{abs,false}]")]:
+        probe(t, "send_after_options", f"differential:timer_options({mode},{delay},{options})")
+    for opts in ["[abs]", "[{info,true}]", "[{abs,false},abs]", "[{abs,true},{info,true}]"]:
+        probe(t, "send_after_options",
+              f"R=erlang:send_after(10,self(),tick,{opts}),"
               "{is_reference(R),erlang:cancel_timer(R)=/=false}")
     # OTP extensions, not instances of Lynx's symbolic timer/options proofs.
     # Absolute inputs are offsets from each VM's own monotonic clock. Opposite
