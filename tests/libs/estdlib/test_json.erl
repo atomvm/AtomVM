@@ -55,6 +55,7 @@ test() ->
     ok = test_encode_truncated_utf8(),
     ok = test_encode_checked_normalizing_encoder(),
     ok = test_encode_weather(),
+    ok = test_decode_otp_error_reasons(),
     ok.
 
 test_y() ->
@@ -1588,4 +1589,49 @@ test_encode_weather() ->
     ?ASSERT_EQUALS(0.80, maps:get(<<"rain_probability">>, Day2)),
 
     null = maps:get(<<"alerts">>, Decoded),
+    ok.
+
+test_decode_otp_error_reasons() ->
+    ok =
+        try json:decode(<<"1 2">>) of
+            _ -> error(should_have_failed)
+        catch
+            error:{invalid_byte, $\s} -> ok
+        end,
+    ok =
+        try json:decode(<<"1e1000">>) of
+            _ -> error(should_have_failed)
+        catch
+            error:{unexpected_sequence, <<"1.0e1000">>} -> ok
+        end,
+    ok =
+        try json:decode(<<"[1e1000]">>) of
+            _ -> error(should_have_failed)
+        catch
+            error:{unexpected_sequence, <<"1.0e1000">>} -> ok
+        end,
+    ok =
+        try json:decode(<<"\"\\uD800\"">>) of
+            _ -> error(should_have_failed)
+        catch
+            error:unexpected_end -> ok
+        end,
+    ok =
+        try json:decode(<<"\"\\uD800a\"">>) of
+            _ -> error(should_have_failed)
+        catch
+            error:unexpected_end -> ok
+        end,
+    ok =
+        try json:decode(<<"\"\\uDC00\"">>) of
+            _ -> error(should_have_failed)
+        catch
+            error:{unexpected_sequence, <<"\\uDC00">>} -> ok
+        end,
+    ok =
+        try json:decode(<<"\"\\uD800\\u0041\"">>) of
+            _ -> error(should_have_failed)
+        catch
+            error:{unexpected_sequence, <<"\\uD800\\u0041">>} -> ok
+        end,
     ok.
