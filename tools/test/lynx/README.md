@@ -168,7 +168,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **5,609 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **5,721 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -687,8 +687,8 @@ python3 tools/test/lynx/validate.py --lynx ../lynx --build build --generated 0 \
 
 With `--lynx`, `mix` and `lake` must also be on PATH with the Elixir/Lean versions
 required by that checkout. Mix/Lake may build their normal caches. The fixture
-API currently targets Lynx revision `b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de`,
-updated from `2aa1467d4c28c4bffd5f5d205ebb197e261f85a4`; see
+API currently targets Lynx revision `6968d72cb99211eb9cab973e067f24a18cacfb3e`,
+updated from `b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de`; see
 [the latest refresh](PLAN.md#latest-upstream-refresh) for current results.
 The current full fixture run checks nine laws and matches 2,347 calls, with no
 differential failures or uncovered exports and the same four unverified OTP
@@ -854,7 +854,7 @@ Additional target and representation modes:
 
 Scheduler interleavings, GC stress, and bare-metal embedded boards remain outside
 the CLI runner. `.github/workflows/lynx-differential.yaml` pins upstream Lynx
-`b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de` in a dedicated workflow without adding
+`6968d72cb99211eb9cab973e067f24a18cacfb3e` in a dedicated workflow without adding
 a Lynx dependency to the normal AtomVM build/test workflows. Run `--help` for
 options.
 
