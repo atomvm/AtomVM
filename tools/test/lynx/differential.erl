@@ -102,7 +102,9 @@
     spawn_bad_child/0,
     nested_spawn_cleanup/0,
     demonitor_oldest_message/1,
-    killed_linked_root/1
+    killed_linked_root/1,
+    is_number_paths/1,
+    fun_info_mfa/1
 ]).
 
 %% Timer observations use delivery/monitor handshakes, not elapsed-time
@@ -4755,3 +4757,29 @@ killed_linked_root(error_reason) ->
             end,
         {Ready, Reason, is_process_alive(Victim)}
     end).
+
+is_number_paths(live_pid) ->
+    is_number_paths(self());
+is_number_paths(live_ref) ->
+    is_number_paths(make_ref());
+is_number_paths(Term) ->
+    Guard =
+        case Term of
+            T when is_number(T) -> true;
+            _ -> false
+        end,
+    {erlang:is_number(Term), is_number(Term), call(erlang, is_number, [Term]), Guard}.
+
+fun_info_mfa(local_zero) ->
+    Fun = fun() -> zero end,
+    {M, N, A} = erlang:fun_info_mfa(Fun),
+    {M =:= ?MODULE, is_atom(N), A};
+fun_info_mfa(local_capture) ->
+    Capture = #{capture => <<1, 2, 3>>},
+    Fun = fun(X) -> {Capture, X} end,
+    {M, N, A} = erlang:fun_info_mfa(Fun),
+    {M =:= ?MODULE, is_atom(N), A};
+fun_info_mfa(make_fun_external) ->
+    erlang:fun_info_mfa(erlang:make_fun(?MODULE, function_one, 1));
+fun_info_mfa(Term) ->
+    call(erlang, fun_info_mfa, [Term]).

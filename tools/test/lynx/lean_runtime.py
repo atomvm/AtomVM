@@ -413,6 +413,10 @@ def cases():
                 call(b, label, fn, subject, pattern, "[]", module="binary")
     call(b, "guard:6", "last", '<<"ab]">>', module="binary")
     call(b, "guard:7", "last", "<<>>", module="binary")
+    for value in ["0", "1", "255", "256", "(1 bsl 64)+5", "1 bsl 255", "-1", "-(1 bsl 100)"]:
+        call(b, "guard:3", "encode_unsigned", value, module="binary")
+    for value in ["a", "0.0", "1.0", "[]", "<<1>>"]:
+        call(b, "guard:4", "encode_unsigned", value, module="binary")
 
     l = "Modules/Lists"
     for value in ["[]", "[a,b]", "[a|improper]", "1"]:
@@ -550,6 +554,19 @@ def cases():
         call(m, ["merge_bindings", "bad_maps"], "merge", a, b, module="maps")
     for value in ["[]", "[{a,1},{a,2}]", "[{1,a},{1.0,b}]", "[{a,1}|1]", "[{a}]", "1"]:
         call(m, "from_list_pairs", "from_list", value, module="maps")
+    for keys, val in [
+        ("[]", "v"), ("[]", "0"), ("[a]", "{boxed,<<5:3>>,[1|2]}"),
+        ("[b,a,b,c,a]", "1 bsl 100"), ("[1,1.0]", "tag"), ("[0,0.0,-0.0]", "zero"),
+        ("[1,1.0,0,0.0,-0.0,1 bsl 100,-(1 bsl 100),1 bsl 100]", "mix"),
+        ("[#{1=>a},#{1.0=>b},{1},{1.0},[1],[1.0],<<5:3>>,<<5:3>>,a]", "deep"),
+        ("lists:seq(1,31)", "ok"), ("lists:seq(1,32)", "ok"),
+        ("lists:seq(1,33)", "ok"), ("lists:seq(1,40)", "#{nested=>1}"),
+        ("lists:seq(1,20)++lists:seq(10,35)", "overlap"),
+        ("[a|b]", "v"), ("[a,b|1]", "v"), ("bad", "v"), ("0", "v"),
+        ("{a,b}", "v"), ("#{a=>1}", "v"), ("<<1,2>>", "v"),
+    ]:
+        call(m, ["from_list_pairs", "numeric_key_types_are_distinct", "enumeration_lookup"],
+             "from_keys", keys, val, module="maps")
     for value in ["none", "[0|#{}]"]:
         probe(m, "fold_inputs", f"differential:map_fold({value},valid)")
     # Extend fold_inputs with callback dispatch/exception behavior. Count and sum
@@ -1120,6 +1137,12 @@ def cases():
         for args in ["[]", "[7]", "[left,right]", "[7|improper]", "bad"]:
             probe("Term/Dispatch", "apply_calls_by_name",
                   f"differential:function_named({module},{name},{args})")
+    for target in ["local_zero", "local_capture", "make_fun_external",
+                   "fun lists:reverse/1", "fun erlang:abs/1",
+                   "fun differential:function_zero/0", "fun differential:function_two/2",
+                   "not_a_fun", "0", "1.0", "[]", "{lists,reverse,1}", "#{}"]:
+        probe("Term/Dispatch", "fun_info_mfa_reports_compiled_name",
+              f"differential:fun_info_mfa({target})")
     for fun in ["fun differential:function_one/1", "fun(X)->X end", "not_fun"]:
         for arity in ["0", "1", "2", "255", "256", "-1", "1 bsl 100", "1.0"]:
             call(e, ["is_function/2_arity", "is_function/2_invalid_arity", "is_function/2_mismatch"],
@@ -1674,6 +1697,14 @@ def cases():
     for kind in ["unknown_export", "unknown_module"]:
         probe(e, "spawn_unknown_fun_fails_in_child", f"differential:spawn_behavior({kind})",
               stacktrace_dependent=True)
+    for term in ["0", "1", "-1", "(1 bsl 27)-1", "1 bsl 27", "-(1 bsl 27)-1",
+                 "(1 bsl 59)-1", "1 bsl 59", "(1 bsl 63)-1", "-(1 bsl 63)",
+                 "1 bsl 64", "1 bsl 100", "-(1 bsl 255)",
+                 "0.0", "-0.0", "1.5", "-1.5", "5.0e-324", "1.7976931348623157e308",
+                 "true", "false", "a", "[]", "[1]", "{}", "#{1=>1}", "<<>>", "<<1:1>>",
+                 "fun erlang:abs/1", "fun()->1 end", "live_pid", "live_ref"]:
+        probe(e, ["numeric_guards_integer_identity", "numeric_guards_invalid"],
+              f"differential:is_number_paths({term})")
     return selected
 
 
