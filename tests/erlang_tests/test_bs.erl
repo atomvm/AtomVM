@@ -1051,6 +1051,7 @@ test_float() ->
     <<64, 0, 0, 0, 0, 0, 0, 0>> = <<Int2/float>>,
     <<192, 0, 0, 0, 0, 0, 0, 0>> = <<IntNeg2/float>>,
     <<66, 0, 0, 0>> = <<Int32:32/float>>,
+    ok = test_float32_int_rounding(FloatSize),
 
     Pi16 = id(3.14),
     <<66, 72>> = <<Pi16:16/float>>,
@@ -1121,6 +1122,39 @@ test_float16_rounding(FloatSize) ->
     % A tie at the top of the range rounds up to infinity.
     <<123, 255>> = <<(id(65519.0)):16/float>>,
     <<124, 0>> = <<(id(65520.0)):16/float>>,
+    ok.
+
+test_float32_int_rounding(FloatSize) ->
+    % Small integers (<= 59 bits on 64-bit VMs) round directly to float32,
+    % while larger integers round through double (except when avm_floatsize=4
+    % where boxed integers convert directly to float).
+    V59 = id(288230393331580929),
+    V60 = id(576460786663161857),
+    DynSize = id(32),
+    case erlang:system_info(wordsize) of
+        8 ->
+            <<92, 128, 0, 1>> = <<V59:32/float>>,
+            <<220, 128, 0, 1>> = <<(-V59):32/float>>,
+            <<92, 128, 0, 1>> = <<V59:DynSize/float>>,
+            <<5:3, 92, 128, 0, 1, 3:5>> = <<5:3, V59:32/float, 3:5>>,
+            case FloatSize of
+                8 ->
+                    <<93, 0, 0, 0>> = <<V60:32/float>>,
+                    <<221, 0, 0, 0>> = <<(-V60):32/float>>;
+                4 ->
+                    <<93, 0, 0, 1>> = <<V60:32/float>>,
+                    <<221, 0, 0, 1>> = <<(-V60):32/float>>
+            end;
+        4 ->
+            case FloatSize of
+                8 ->
+                    <<92, 128, 0, 0>> = <<V59:32/float>>,
+                    <<220, 128, 0, 0>> = <<(-V59):32/float>>;
+                4 ->
+                    <<92, 128, 0, 1>> = <<V59:32/float>>,
+                    <<220, 128, 0, 1>> = <<(-V59):32/float>>
+            end
+    end,
     ok.
 
 test_create_with_invalid_float_value() ->

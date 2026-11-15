@@ -292,6 +292,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   registered to be registered under additional names
 - Fixed JIT register exhaustion on 6-register targets (`x86_64` and `armv6m`) when
   compiling `bs_create_bin` UTF segments
+- Fixed `float32` bitstring construction double-rounding unboxed integers through
+  `binary64` before narrowing
 
 ## [0.7.0-beta.0] - 2026-09-28
 
