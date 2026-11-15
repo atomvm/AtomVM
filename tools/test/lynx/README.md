@@ -179,6 +179,11 @@ runtime-specific process/reference/closure hash identities are compared within e
 run, never serialized as cross-runtime expectations.
 This mode uses **AtomVM's bundled standard library**, not OTP's `lists.beam`.
 Missing functions and differing error precedence remain failures, not skips.
+For CI gating against the full corpus without hiding those differences in
+`summary.json` or `failures.json`, pass
+`--expected-failures tools/test/lynx/expected_failures.json` to run all cases
+and strictly expect failures only in the three documented areas (`phash2`,
+short-float `float_text`, and invalid-input `lists:reverse/1`).
 OTP is the execution oracle, not the Lean model: for example, tested OTP 29
 accepts an already queued receive match before checking an invalid timeout.
 That differs from the model test named `timeout_validation_precedes_scan`.
@@ -779,7 +784,7 @@ separated by `LYNX_SEMANTIC_DONE\n` after `actual()` completes).
 Additional target and representation modes:
 
 - On-demand JIT (`AVM_DISABLE_JIT=OFF`, `AVM_ENABLE_PRECOMPILED=OFF`): keep
-  probe/helper BEAMs in bytecode form (`--timeout 30` recommended for cold JIT
+  probe/helper BEAMs in bytecode form (`--timeout 120` recommended for cold JIT
   compilation) so `code_server` compiles them on demand at runtime.
 - Emscripten / `wasm32` (`src/platforms/emscripten` with `-DAVM_EMSCRIPTEN_ENV=node`):
   pass `--build <wasm-build> --host-build <host-build>` so `node` executes

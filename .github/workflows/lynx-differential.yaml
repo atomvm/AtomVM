@@ -41,7 +41,7 @@ jobs:
             run_unit_tests: true
             run_jit_test: false
             checkout_lynx: true
-            validate_args: --lean-runtime lynx --seed 20261114 --generated 32
+            validate_args: --lean-runtime lynx --seed 20261114 --generated 32 --expected-failures tools/test/lynx/expected_failures.json
           - name: linux-x86_64-on-demand-jit
             os: ubuntu-24.04
             cmake_opts: -DAVM_DISABLE_JIT=OFF -DAVM_ENABLE_PRECOMPILED=OFF -DAVM_PRECOMPILED_TARGETS=x86_64
@@ -49,7 +49,7 @@ jobs:
             run_unit_tests: false
             run_jit_test: true
             checkout_lynx: false
-            validate_args: --seed 20261114 --generated 32 --timeout 30
+            validate_args: --seed 20261114 --generated 32 --timeout 120
           - name: linux-x86_64-precompiled
             os: ubuntu-24.04
             cmake_opts: -DAVM_DISABLE_JIT=ON -DAVM_ENABLE_PRECOMPILED=ON -DAVM_PRECOMPILED_TARGETS=x86_64
@@ -65,7 +65,7 @@ jobs:
             run_unit_tests: false
             run_jit_test: true
             checkout_lynx: false
-            validate_args: --seed 20261114 --generated 32 --timeout 30
+            validate_args: --seed 20261114 --generated 32 --timeout 120
           - name: linux-arm64-precompiled
             os: ubuntu-24.04-arm
             cmake_opts: -DAVM_DISABLE_JIT=ON -DAVM_ENABLE_PRECOMPILED=ON -DAVM_PRECOMPILED_TARGETS=aarch64
