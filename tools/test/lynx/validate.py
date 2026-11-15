@@ -153,11 +153,76 @@ def resolve_target(build, host_build_arg):
     }
 
 
+def load_expected_failures(path):
+    """Load and validate an expected-failure area manifest."""
+    data = json.loads(path.read_text())
+    areas = data.get("areas") if isinstance(data, dict) else None
+    if not isinstance(areas, list) or not areas:
+        raise ValueError(f"Expected non-empty 'areas' list in {path}")
+    parsed = []
+    for area in areas:
+        if not isinstance(area, dict):
+            raise ValueError(f"Invalid area entry in {path}: {area!r}")
+        name = area.get("name")
+        reason = area.get("reason")
+        prefix = area.get("expression_prefix")
+        expressions = area.get("expressions", [])
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"Expected non-empty area 'name' in {path}")
+        if not isinstance(reason, str) or not reason:
+            raise ValueError(f"Expected non-empty area 'reason' for {name!r} in {path}")
+        if prefix is not None and (not isinstance(prefix, str) or not prefix):
+            raise ValueError(f"Invalid 'expression_prefix' for {name!r} in {path}")
+        if not isinstance(expressions, list) or any(not isinstance(e, str) or not e for e in expressions):
+            raise ValueError(f"Invalid 'expressions' list for {name!r} in {path}")
+        if prefix is None and not expressions:
+            raise ValueError(f"Area {name!r} in {path} must define 'expression_prefix' or 'expressions'")
+        parsed.append({
+            "name": name,
+            "reason": reason,
+            "expression_prefix": prefix,
+            "expressions": set(expressions),
+        })
+    return parsed
+
+
+def classify_expected_failures(entries, failures, areas):
+    """Partition failures into expected-area failures, unexpected failures, and unexpected passes."""
+    expected_by_module = {}
+    area_counts = {area["name"]: 0 for area in areas}
+    for entry in entries:
+        expr = entry["expression"]
+        matched = [
+            area["name"] for area in areas
+            if (area["expression_prefix"] is not None and expr.startswith(area["expression_prefix"]))
+            or expr in area["expressions"]
+        ]
+        if matched:
+            expected_by_module[entry["module"]] = matched
+            for name in matched:
+                area_counts[name] += 1
+
+    failed_modules = {failure["case"]["module"] for failure in failures}
+    unexpected_failures = [
+        failure for failure in failures
+        if failure["case"].get("module") not in expected_by_module
+    ]
+    unexpected_passes = [
+        entry for entry in entries
+        if entry["module"] in expected_by_module and entry["module"] not in failed_modules
+    ]
+    return unexpected_failures, unexpected_passes, area_counts, len(expected_by_module)
+
+
 def validate(args, work):
     build = args.build.resolve()
     lynx = args.lynx.resolve() if args.lynx else None
     if lynx and not (lynx / "mix.exs").is_file():
         raise RuntimeError(f"Not a Lynx checkout: {lynx}")
+    expected_areas = (
+        load_expected_failures(args.expected_failures.resolve())
+        if args.expected_failures else None
+    )
     target = resolve_target(build, args.host_build)
     required_tools = ["erl", "erlc", "elixir"] + (["mix", "lake"] if lynx else [])
     if target["platform"] == "emscripten":
@@ -340,15 +405,38 @@ def validate(args, work):
             json.loads((work / "unverified.json").read_text()),
         )
         (work / "lean-coverage.json").write_text(json.dumps(report, indent=2))
-    if summary["failed"]:
-        failures = json.loads((work / "failures.json").read_text())
-        if args.shrink:
-            shrink(args, work, failures[0])
-    if summary["failed"] or summary["unverified"] or (summary["uncovered"] and not args.replay):
-        raise RuntimeError(
-            f"{summary['failed']} differential failures, {summary['unverified']} unverified cases, "
-            f"{summary['uncovered']} uncovered exports; see {work / 'summary.json'}"
+    failures = json.loads((work / "failures.json").read_text()) if summary["failed"] else []
+    uncovered = summary["uncovered"] and not args.replay
+    if expected_areas is not None:
+        unexpected_failures, unexpected_passes, area_counts, total_expected = classify_expected_failures(
+            entries, failures, expected_areas
         )
+        matched_expected = total_expected - len(unexpected_passes)
+        area_summary = ", ".join(f"{name}: {count}" for name, count in area_counts.items())
+        print(
+            f"Expected failures: {matched_expected}/{total_expected} ({area_summary}); "
+            f"{len(unexpected_failures)} unexpected failures; {len(unexpected_passes)} unexpected passes",
+            flush=True,
+        )
+        for entry in unexpected_passes:
+            print(f"UNEXPECTED PASS {entry['expression']}", flush=True)
+        if args.shrink and unexpected_failures:
+            shrink(args, work, unexpected_failures[0])
+        if unexpected_failures or unexpected_passes or summary["unverified"] or uncovered:
+            raise RuntimeError(
+                f"{len(unexpected_failures)} unexpected differential failures, "
+                f"{len(unexpected_passes)} unexpected passes, "
+                f"{summary['unverified']} unverified cases, "
+                f"{summary['uncovered']} uncovered exports; see {work / 'summary.json'}"
+            )
+    else:
+        if args.shrink and failures:
+            shrink(args, work, failures[0])
+        if summary["failed"] or summary["unverified"] or uncovered:
+            raise RuntimeError(
+                f"{summary['failed']} differential failures, {summary['unverified']} unverified cases, "
+                f"{summary['uncovered']} uncovered exports; see {work / 'summary.json'}"
+            )
 
 
 def etf_result_contract(encoded):
@@ -458,6 +546,10 @@ def main():
     parser.add_argument("--float-encoding", action="store_true", help="Focus generated cases on float16/32 encoding boundaries")
     parser.add_argument("--float32", action="store_true", help="Include IEEE-754 binary32 cases with float32 expectations")
     parser.add_argument("--replay", type=Path, help="Replay cases.json, failures.json, or minimized.json instead of generating")
+    parser.add_argument(
+        "--expected-failures", type=Path,
+        help="JSON manifest of known failing areas expected to fail (fails on unexpected failures or passes)",
+    )
     parser.add_argument("--shrink", action="store_true", help="Try up to 30 reductions of the first generated failure")
     parser.add_argument(
         "--build", type=Path, default=Path(__file__).resolve().parents[3] / "build",

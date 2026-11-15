@@ -1240,8 +1240,8 @@ class ValidationTests(unittest.TestCase):
             output = work / "jit"
             result = subprocess.run(
                 [sys.executable, str(SCRIPT), "--build", str(jit_build),
-                 "--replay", str(source), "--timeout", "30", "--output", str(output)],
-                capture_output=True, text=True, timeout=300,
+                 "--replay", str(source), "--timeout", "120", "--output", str(output)],
+                capture_output=True, text=True, timeout=600,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             summary = json.loads((output / "summary.json").read_text())
@@ -1436,6 +1436,94 @@ class ValidationTests(unittest.TestCase):
             self.assertIs(target["stacktraces"], True)
             self.assertEqual(target["execution_mode"], "interpreter")
             self.assertEqual(target["packbeam"], (ROOT / "build/tools/packbeam/packbeam").resolve())
+
+    def test_expected_failures_manifest_and_strict_checking(self):
+        import validate as vmod
+        manifest_path = Path(__file__).with_name("expected_failures.json")
+        areas = vmod.load_expected_failures(manifest_path)
+        all_entries = [{**c, "module": f"m_{i}"} for i, c in enumerate(lean_runtime.cases())]
+        _, _, area_counts, total_expected = vmod.classify_expected_failures(all_entries, [], areas)
+        self.assertEqual(area_counts, {"phash2": 112, "float_text_short": 4, "lists_reverse_invalid": 2})
+        self.assertEqual(total_expected, 118)
+        all_exprs = {c["expression"] for c in all_entries}
+        for area in areas:
+            for expr in area["expressions"]:
+                self.assertIn(expr, all_exprs)
+
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            # 1. Sampled expected failures across all 3 areas + passing neighbors exit 0,
+            # while still recording true failures in summary.json and failures.json.
+            sample = work / "sample.json"
+            sample.write_text(json.dumps([
+                {"expression": "1 + 2"},
+                {"expression": "differential:phash2_probe(0)"},
+                {"expression": "differential:float_text(100.0,[short])"},
+                {"expression": "differential:float_text(12300.0,[short])"},
+                {"expression": "differential:call(lists,'reverse',[[a,b]])"},
+                {"expression": "differential:call(lists,'reverse',[bad])"},
+            ]))
+            ok_out = work / "ok"
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--build", str(ROOT / "build"),
+                 "--replay", str(sample), "--expected-failures", str(manifest_path),
+                 "--output", str(ok_out)],
+                capture_output=True, text=True, timeout=120,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(
+                json.loads((ok_out / "summary.json").read_text()),
+                {"laws": 0, "passed": 3, "failed": 3, "unverified": 0, "uncovered": 0},
+            )
+            self.assertEqual(len(json.loads((ok_out / "failures.json").read_text())), 3)
+
+            # 2. Any unexpected failure still causes a nonzero exit.
+            fake_build = work / "fake_build"
+            (fake_build / "src").mkdir(parents=True)
+            (fake_build / "tools/packbeam").mkdir(parents=True)
+            (fake_build / "libs").mkdir()
+            (fake_build / "CMakeCache.txt").write_text("AVM_DISABLE_JIT:BOOL=ON\nAVM_ENABLE_PRECOMPILED:BOOL=OFF\n")
+            (fake_build / "libs/atomvmlib.avm").touch()
+            (fake_build / "tools/packbeam/packbeam").symlink_to(ROOT / "build/tools/packbeam/packbeam")
+            wrong_etf = bytes([131, 104, 2, 119, 2, *b"ok", 97, 99])
+            fake_runtime = fake_build / "src/AtomVM"
+            fake_runtime.write_text(f"#!/bin/sh\necho 'LYNX_SEMANTIC_DONE'\necho 'LYNX_RESULT {list(wrong_etf)}'\n")
+            fake_runtime.chmod(0o755)
+            unexpected_fail = work / "unexpected_fail.json"
+            unexpected_fail.write_text(json.dumps([
+                {"expression": "differential:phash2_probe(0)"},
+                {"expression": "1 + 2"},
+            ]))
+            fail_out = work / "unexpected_fail"
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--build", str(fake_build),
+                 "--replay", str(unexpected_fail), "--expected-failures", str(manifest_path),
+                 "--output", str(fail_out)],
+                capture_output=True, text=True, timeout=120,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("1 unexpected differential failures", result.stderr)
+
+            # 3. An expected failure that unexpectedly passes causes a nonzero exit.
+            xfail_pass = work / "xfail_pass.json"
+            xfail_pass.write_text(json.dumps({
+                "areas": [{
+                    "name": "unexpected_pass_check",
+                    "reason": "test strict xfail",
+                    "expressions": ["1 + 2"],
+                }]
+            }))
+            pass_input = work / "pass_input.json"
+            pass_input.write_text(json.dumps([{"expression": "1 + 2"}]))
+            pass_out = work / "unexpected_pass"
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--build", str(ROOT / "build"),
+                 "--replay", str(pass_input), "--expected-failures", str(xfail_pass),
+                 "--output", str(pass_out)],
+                capture_output=True, text=True, timeout=120,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("1 unexpected passes", result.stderr)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,27 @@
+{
+  "areas": [
+    {
+      "name": "phash2",
+      "reason": "erlang:phash2/1,2 is not implemented in AtomVM (error:undef)",
+      "expression_prefix": "differential:phash2_"
+    },
+    {
+      "name": "float_text_short",
+      "reason": "Short float formatting mismatches outside planned fixes",
+      "expressions": [
+        "differential:float_text(12300.0,[short])",
+        "differential:float_text(0.00012,[short])",
+        "differential:float_text(1.0e23,[short])",
+        "differential:float_text(9.999999999999999e22,[short])"
+      ]
+    },
+    {
+      "name": "lists_reverse_invalid",
+      "reason": "lists:reverse/1 raises badarg rather than OTP function_clause on invalid inputs",
+      "expressions": [
+        "differential:call(lists,'reverse',[[a|improper]])",
+        "differential:call(lists,'reverse',[bad])"
+      ]
+    }
+  ]
+}
