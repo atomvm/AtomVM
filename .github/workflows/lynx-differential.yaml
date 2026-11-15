@@ -40,6 +40,7 @@ jobs:
             build_targets: AtomVM PackBEAM atomvmlib exavmlib
             run_unit_tests: true
             run_jit_test: false
+            run_precompile_test: false
             checkout_lynx: true
             validate_args: --lean-runtime lynx --seed 20261114 --generated 32 --expected-failures tools/test/lynx/expected_failures.json
           - name: linux-x86_64-on-demand-jit
@@ -48,6 +49,7 @@ jobs:
             build_targets: AtomVM PackBEAM atomvmlib exavmlib
             run_unit_tests: false
             run_jit_test: true
+            run_precompile_test: false
             checkout_lynx: false
             validate_args: --seed 20261114 --generated 32 --timeout 120
           - name: linux-x86_64-precompiled
@@ -56,6 +58,7 @@ jobs:
             build_targets: AtomVM PackBEAM atomvmlib eavmlib exavmlib
             run_unit_tests: false
             run_jit_test: false
+            run_precompile_test: true
             checkout_lynx: false
             validate_args: --seed 20261114 --generated 32
           - name: linux-arm64-on-demand-jit
@@ -64,6 +67,7 @@ jobs:
             build_targets: AtomVM PackBEAM atomvmlib exavmlib
             run_unit_tests: false
             run_jit_test: true
+            run_precompile_test: false
             checkout_lynx: false
             validate_args: --seed 20261114 --generated 32 --timeout 120
           - name: linux-arm64-precompiled
@@ -72,6 +76,7 @@ jobs:
             build_targets: AtomVM PackBEAM atomvmlib eavmlib exavmlib
             run_unit_tests: false
             run_jit_test: false
+            run_precompile_test: false
             checkout_lynx: false
             validate_args: --seed 20261114 --generated 32
           - name: linux-x86_64-float32
@@ -80,6 +85,7 @@ jobs:
             build_targets: AtomVM PackBEAM atomvmlib exavmlib
             run_unit_tests: false
             run_jit_test: false
+            run_precompile_test: false
             checkout_lynx: false
             validate_args: --float32 --generated 0
           - name: linux-x86_64-no-stacktraces
@@ -88,6 +94,7 @@ jobs:
             build_targets: AtomVM PackBEAM atomvmlib exavmlib
             run_unit_tests: false
             run_jit_test: false
+            run_precompile_test: false
             checkout_lynx: false
             validate_args: --seed 20261114 --generated 32
     steps:
@@ -136,6 +143,10 @@ jobs:
       - name: Run on-demand JIT probe test
         if: matrix.run_jit_test
         run: ATOMVM_JIT_BUILD=build python3 -B -m unittest discover -s tools/test/lynx -p test_validate.py -k test_jit_build_compiles_bytecode_probes_on_demand -v
+
+      - name: Run multi-target JIT precompile check
+        if: matrix.run_precompile_test
+        run: ATOMVM_JIT_PRECOMPILE_BUILD=build python3 -B -m unittest discover -s tools/test/lynx -p test_validate.py -k test_jit_precompile_all_targets -v
 
       - name: Run differential validation
         run: python3 -B tools/test/lynx/validate.py --build build ${{ matrix.validate_args }} --output /tmp/lynx-diff
