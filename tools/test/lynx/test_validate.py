@@ -1398,7 +1398,7 @@ class ValidationTests(unittest.TestCase):
 
     def test_word_size_and_float32_expectations_are_representation_aware(self):
         word_cases = [c for c in lean_runtime.cases() if c.get("word_size_dependent")]
-        self.assertEqual(len(word_cases), 20)
+        self.assertEqual(len(word_cases), 24)
         stack_cases = [c for c in lean_runtime.cases() if c.get("stacktrace_dependent")]
         self.assertEqual(len(stack_cases), 169)
         self.assertGreaterEqual(len(lean_runtime.float32_cases()), 8)
@@ -1491,8 +1491,16 @@ class ValidationTests(unittest.TestCase):
         areas = vmod.load_expected_failures(manifest_path)
         all_entries = [{**c, "module": f"m_{i}"} for i, c in enumerate(lean_runtime.cases())]
         _, _, area_counts, total_expected = vmod.classify_expected_failures(all_entries, [], areas)
-        self.assertEqual(area_counts, {"phash2": 112, "float_text_short": 4, "lists_reverse_invalid": 2})
-        self.assertEqual(total_expected, 118)
+        self.assertEqual(
+            area_counts,
+            {
+                "phash2": 112,
+                "float_text_short": 4,
+                "lists_reverse_invalid": 2,
+                "bitstring_size_system_limit": 3,
+            },
+        )
+        self.assertEqual(total_expected, 121)
         all_exprs = {c["expression"] for c in all_entries}
         for area in areas:
             for expr in area["expressions"]:
@@ -1636,6 +1644,62 @@ class ValidationTests(unittest.TestCase):
             )
             self.assertEqual(list(out_parallel.glob("*.avm")), [])
             self.assertEqual(list(out_parallel.glob("*.pack.log")), [])
+
+    def test_bitstring_recipes_have_independent_oracles(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "bitstring_oracles.json"
+            expressions = [
+                "differential:bit_construct_binary(whole_binary_unit16,<<1,2,3,4>>,0)",
+                "differential:bit_construct_binary(whole_binary_unit16,<<1,2,3>>,0)",
+                "differential:bit_construct_binary(sized_bitstring,<<16#AB,5:3>>,5)",
+                "differential:bit_construct_binary(concat_assoc,{<<5:3>>,<<16#AB:8>>,<<3:2>>},0)",
+                "differential:bit_construct_int(unit3_unsigned_big,16#DEAD,5,3)",
+                "differential:float_construct(big,{ieee64,1,0,0},64,3)",
+                "differential:bit_match_int(unaligned_signed_little_rest,<<5:3,(-7):11/signed-little,1:1>>,11)",
+                "differential:bit_match_int(size_from_prev_signed,<<15:4,1,2>>,0)",
+                "differential:bit_match_binary(unaligned_binary2_rest,<<5:3,16#AB,16#CD,3:2>>,0)",
+                "differential:bit_match_binary(unaligned_tail_binary,<<5:3,16#AB,1:1>>,0)",
+                "differential:bit_match_float(big,<<128,0,0,0,0,0,0,0>>,64)",
+                "differential:bit_match_float(big,<<124,0>>,16)",
+                "differential:bit_match_literal(full_partial_5_3,<<5:3>>)",
+                "differential:bit_match_literal(full_partial_5_3,<<16#A0:4>>)",
+                "differential:utf_match_term(utf8,not_bits)",
+                "differential:utf_roundtrip(utf16le,16#10FFFF)",
+            ]
+            source.write_text(json.dumps([{"expression": e} for e in expressions]))
+            output = work / "results"
+            self.assertEqual(
+                self.invoke(output, "--replay", source),
+                {"laws": 0, "passed": len(expressions), "failed": 0,
+                 "unverified": 0, "uncovered": 0},
+            )
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                values = JSON.decode!(File.read!(path))["expected"]
+                         |> Enum.map(&:erlang.binary_to_term(Base.decode64!(&1)))
+                [
+                  {:ok, {32, <<1, 2, 3, 4>>}},
+                  {:exception, :error, :badarg},
+                  {:ok, {5, <<21::size(5)>>}},
+                  {:ok, {true, true, <<181, 15::size(5)>>}},
+                  {:ok, {15, <<189, 45::size(7)>>, <<183, 171, 7::size(4)>>}},
+                  {:ok, {64, <<128, 0, 0, 0, 0, 0, 0, 0>>, <<176, 0, 0, 0, 0, 0, 0, 0, 3>>}},
+                  {:ok, {-7, <<1::size(1)>>}},
+                  {:ok, :no},
+                  {:ok, {<<0xAB, 0xCD>>, <<3::size(2)>>}},
+                  {:ok, :no},
+                  {:ok, {true, -0.0, <<128, 0, 0, 0, 0, 0, 0, 0>>, <<>>}},
+                  {:ok, :no},
+                  {:ok, :matched},
+                  {:ok, :no},
+                  {:ok, :no},
+                  {:ok, {32, <<255, 219, 255, 223>>, {0x10FFFF, <<>>}}},
+                ] = values
+                """, str(output / "manifest.json"),
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
 
 if __name__ == "__main__":

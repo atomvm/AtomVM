@@ -22,6 +22,15 @@
         "differential:call(lists,'reverse',[[a|improper]])",
         "differential:call(lists,'reverse',[bad])"
       ]
+    },
+    {
+      "name": "bitstring_size_system_limit",
+      "reason": "Bitstring construction with 65-bit size raises badarg in AtomVM rather than OTP system_limit",
+      "expressions": [
+        "differential:bit_construct_binary(sized_bitstring,<<1,2>>,1 bsl 64)",
+        "differential:bit_construct_int(unsigned_big,1,1 bsl 64,0)",
+        "differential:bit_construct_int(unsigned_big,1,1 bsl 64,3)"
+      ]
     }
   ]
 }

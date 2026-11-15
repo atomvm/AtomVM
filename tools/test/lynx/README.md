@@ -168,12 +168,16 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **4,449 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **5,085 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
 with retained mailboxes, monitored process/reference/dictionary handshakes, lifecycle
-combinations, and UTF-8/16/32 construction/matching. UTF cases include malformed,
+combinations, UTF-8/16/32 construction/matching, and comprehensive bitstring
+construction and matching (unit/alignment checks, sub-byte and partial-byte
+endianness, large/unit-scaled truncation, float16/32/64 IEEE-754 encodings,
+dynamic previous-segment sizes, unaligned binary captures, and partial/literal
+patterns). UTF cases include malformed,
 incomplete, unaligned, and valid codepoints with invalid suffixes. Child and
 runtime-specific process/reference/closure hash identities are compared within each
 run, never serialized as cross-runtime expectations.
@@ -182,8 +186,9 @@ Missing functions and differing error precedence remain failures, not skips.
 For CI gating against the full corpus without hiding those differences in
 `summary.json` or `failures.json`, pass
 `--expected-failures tools/test/lynx/expected_failures.json` to run all cases
-and strictly expect failures only in the three documented areas (`phash2`,
-short-float `float_text`, and invalid-input `lists:reverse/1`).
+and strictly expect failures only in the four documented areas (`phash2`,
+short-float `float_text`, invalid-input `lists:reverse/1`, and `1 bsl 64`
+bitstring segment size `badarg` vs `system_limit`).
 OTP is the execution oracle, not the Lean model: for example, tested OTP 29
 accepts an already queued receive match before checking an invalid timeout.
 That differs from the model test named `timeout_validation_precedes_scan`.
@@ -282,6 +287,21 @@ test sites across all 26 files): 6 `upstream_example` scenarios for
 All 36 cases match OTP 29 (`0` failed, `0` unverified) across host interpreter
 (`build`), `aarch64` precompiled (`.amp/in/build-native`), and `aarch64`
 on-demand JIT (`.amp/in/build-on-demand`).
+
+Follow-up `Term/Bitstring/*` expansion adds 636 bitstring construction and matching
+cases (`4,449 -> 5,085` runtime cases total; `277` of `428` Lean test sites across
+all 26 files, reaching `40/42` in `Term/Bitstring/Construction.lean` and `43/44`
+in `Term/Bitstring/Matching.lean`). Across all 862 `Term/Bitstring/*` cases on
+64-bit host interpreter (`build`) and `aarch64` precompiled JIT
+(`.amp/in/build-native`), 859 match OTP 29 and 3 reveal the
+`bitstring_size_system_limit` discrepancy tracked in `expected_failures.json`
+(`1 bsl 64` segment size raising `badarg` instead of `system_limit`); the
+earlier `float32_int_double_rounding` discrepancy is resolved by converting
+unboxed small integers directly to `float` in `bitstring_insert_float`. On
+32-bit `wasm32` (`.amp/in/build-wasm32`, `--portable-only`), the 4
+`word_size_dependent` `±288230393331580929:32/float` probes are omitted (small
+integers are 28-bit on 32-bit VMs vs 60-bit on 64-bit OTP), with 855 matching
+OTP 29 and the same 3 `bitstring_size_system_limit` discrepancies.
 
 The execution-path extension adds 466 cases for 20 arithmetic, comparison, and
 map-lookup operations. Each captures direct-body and dynamic `apply/3` outcomes
