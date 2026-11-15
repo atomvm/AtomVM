@@ -878,6 +878,41 @@ def cases():
         probe(p, ["successive_references_are_distinct", "references_are_unique_across_processes",
                   "dictionary_preserves_reference_counter", "dictionary_preserves_mailbox",
                   "suspended_processes_keep_their_dictionaries"], f"differential:process_exchange({value})")
+    for reason, args in [("boom", "[]"), ("custom_reason", '[1,<<"a">>]'),
+                         ("{complex,1 bsl 100}", "none"), ("my_err", "not_a_list")]:
+        probe(p, ["error_reason", "error_caught"], f"differential:error_pair({reason},{args})")
+    for term in ["live_ref", "live_pid", "0", "1 bsl 100", "0.0", "true", "a",
+                 "[]", "{}", "#{}", "<<>>", "fun erlang:abs/1", "fun()->ok end"]:
+        probe(p, "reference_type_guard", f"differential:is_reference_paths({term})")
+    probe(p, ["make_ref_preserves_process_state", "make_ref_is_effectful"],
+          "differential:process_probe({refs,state_and_effect})")
+    for n in [32, 64]:
+        probe(p, "make_ref_fresh", f"differential:process_probe({{refs_fresh,{n}}})")
+    for mode in ["preserve_unmatched", "exact_numeric"]:
+        probe(p, "selective_receive_preserves_unmatched", f"differential:receive_selective({mode})")
+    for mode in ["clause_priority_mailbox", "clause_priority_order"]:
+        probe(p, "receive_bindings_and_clause_priority", f"differential:receive_selective({mode})")
+    probe(p, "receive_body_exception_is_caught", "differential:receive_selective(receive_body_exception)")
+    for messages in ["[]", "[before]"]:
+        probe(p, "finite_timeout_progress", f"differential:receive_timeout(5,{messages})")
+    for delay in [2, 5]:
+        probe(p, ["timeout_can_expire_child", "finite_timeout_progress"],
+              f"differential:process_probe({{child_timeout,{delay}}})")
+    probe(p, "infinity_never_expires", "differential:process_probe(infinity_alive)")
+    probe(p, "guard_reads_waiting_child_identity", "differential:process_probe(guard_child_self)")
+    for mode in ["success_body", "success_body_after"]:
+        probe(p, "try_success_body_is_outside_handler", f"differential:try_boundaries({mode})")
+    for mode in ["handler_propagates", "handler_propagates_wildcard"]:
+        probe(p, "try_handler_exception_propagates", f"differential:try_boundaries({mode})")
+    probe(p, "blocking_is_not_an_exception", "differential:process_probe(blocking_not_exception)")
+    for delay_mode in ["immediate", "delay_parent", "delay_child"]:
+        probe(p, ["blocked_processes_resume", "handshake_every_run"],
+              f"differential:process_probe({{handshake,{delay_mode}}})")
+    probe(p, "two_senders_every_run", "differential:process_probe(two_senders)")
+    probe(p, "terminated_child_is_not_revived", "differential:process_probe(terminated_child)")
+    probe(p, "terminated_root_discards_late_messages", "differential:process_probe(terminated_root)")
+    for kind in ["error", "throw", "exit"]:
+        probe(p, "child_exception_is_isolated", f"differential:process_probe({{child_isolated,{kind}}})")
     for mode, name in [("normal", "monitor_reports_normal_exit"), ("raised", "monitor_reports_raised_reason"),
                        ("noproc", "monitor_missing_process"), ("flush", "demonitor_flushes_down")]:
         extra = {"stacktrace_dependent": True} if mode == "raised" else {}

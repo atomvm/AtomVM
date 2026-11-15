@@ -1718,7 +1718,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 5818)
+        self.assertEqual(len(lean_runtime.cases()), 5863)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"
@@ -1747,6 +1747,23 @@ class ValidationTests(unittest.TestCase):
                 "differential:is_number_paths(true)",
                 "differential:call(maps,'from_keys',[[1,1.0],tag])",
                 "differential:call(maps,'from_keys',[[a|b],v])",
+                "differential:error_pair(custom_reason,[1,<<\"a\">>])",
+                "differential:is_reference_paths(live_ref)",
+                "differential:is_reference_paths(live_pid)",
+                "differential:process_probe({refs,state_and_effect})",
+                "differential:receive_selective(clause_priority_mailbox)",
+                "differential:receive_selective(receive_body_exception)",
+                "differential:process_probe({child_timeout,2})",
+                "differential:process_probe(infinity_alive)",
+                "differential:process_probe(guard_child_self)",
+                "differential:try_boundaries(success_body)",
+                "differential:try_boundaries(handler_propagates)",
+                "differential:process_probe(blocking_not_exception)",
+                "differential:process_probe({handshake,delay_child})",
+                "differential:process_probe(two_senders)",
+                "differential:process_probe(terminated_child)",
+                "differential:process_probe(terminated_root)",
+                "differential:process_probe({child_isolated,error})",
             ]
             source.write_text(json.dumps([{"expression": e} for e in expressions]))
             output = work / "results"
@@ -1785,6 +1802,23 @@ class ValidationTests(unittest.TestCase):
                   {:ok, {false, false, false, false}},
                   {:ok, from_keys_ok},
                   {:exception, :error, :badarg},
+                  {:ok, {{:exception, :error, :custom_reason}, {:caught, :error, :custom_reason}}},
+                  {:ok, {true, true, true, true}},
+                  {:ok, {false, false, false, false}},
+                  {:ok, {:ok, {true, true, true, true, %{a: 1}, [:queued]}}},
+                  {:ok, {:ok, {{:atom_first, :first}, [val: 7]}}},
+                  {:ok, {:ok, {:caught, [:keep]}}},
+                  {:ok, {:ok, {{:timeout, [:noise]}, :normal}}},
+                  {:ok, {:ok, {true, :killed}}},
+                  {:ok, {:ok, {{true, [true]}, :normal}}},
+                  {:ok, :outer_caught},
+                  {:ok, :outer_caught},
+                  {:ok, {:ok, {true, {:ok, 7}, :normal}}},
+                  {:ok, {:ok, {:parent, {:child, [:child_mail]}, :normal, [:parent_mail]}}},
+                  {:ok, {:ok, {[sender: :left, sender: :right], :normal, :normal, []}}},
+                  {:ok, {:ok, {:normal, false, {:ignored, <<1::size(3)>>}, false, []}}},
+                  {:ok, {:ok, {:normal, {:normal, true, false}, :normal, false, []}}},
+                  {:ok, {:ok, {{:failure, :stack}, false, :kept, [:parent_mail]}}},
                 ] = values
                 true = (from_keys_ok === %{1 => :tag, 1.0 => :tag})
                 """, str(output / "manifest.json"),
