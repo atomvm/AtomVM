@@ -320,6 +320,36 @@ def cases():
         probe(c, ["guard:3", "float_binary_round_trip"], f"differential:float_text({value},[short])")
     for ordinal, atom, encoding in [(4, "'héllo'", "utf8"), (5, "'café'", "latin1"), (6, "'π'", "latin1")]:
         call(c, f"guard:{ordinal}", "atom_to_binary", atom, encoding)
+    for binary_expr in [
+        "<<>>", "<<104,105>>", "<<192,128>>", "<<194,128>>", "<<224,159,128>>",
+        "<<224,160,128>>", "<<237,160,128>>", "<<237,159,191>>",
+        "<<240,143,128,128>>", "<<240,144,128,128>>", "<<244,143,191,191>>",
+        "<<244,144,128,128>>", "<<245,128,128,128>>", "<<128>>", "<<195>>",
+        "binary:copy(<<97>>,256)", "<<(binary:copy(<<97>>,255))/binary,255>>",
+        "<<(binary:copy(<<97>>,254))/binary,255>>", "binary:copy(<<97>>,1021)",
+        "binary:copy(<<195,169>>,255)", "binary:copy(<<240,159,152,128>>,255)",
+        "binary:copy(<<195,169>>,300)",
+    ]:
+        for encoding in ["utf8", "unicode", "latin1"]:
+            call(c, "guard:7", "binary_to_atom", binary_expr, encoding)
+    for encoding in ["utf8", "unicode", "latin1"]:
+        call(c, "guard:8", "binary_to_atom", "binary:copy(<<97>>,255)", encoding)
+    for binary_expr in [
+        "<<>>", "<<104,105>>", "<<194,128>>", "<<192,128>>", "<<255>>",
+        "binary:copy(<<97>>,255)", "binary:copy(<<97>>,256)",
+        "<<(binary:copy(<<97>>,255))/binary,255>>",
+        "<<(binary:copy(<<97>>,254))/binary,255>>", "a", "<<128:7>>",
+    ]:
+        call(c, "guard:9", "binary_to_atom", binary_expr)
+    for binary_expr in ["<<104>>", "<<>>", "a"]:
+        call(c, "guard:10", "binary_to_atom", binary_expr, "ascii")
+    for non_binary in ["a", "[104]", "1"]:
+        for encoding in ["utf8", "latin1"]:
+            call(c, "guard:11", "binary_to_atom", non_binary, encoding)
+    for encoding in ["utf8", "unicode", "latin1"]:
+        call(c, "guard:12", "binary_to_atom", "<<128:7>>", encoding)
+    for value in ["{a,1}", "{}", "{1,1.0,<<5:3>>,[a|b],#{k=>1}}", "[]", "a", "1", "<<1,2>>", "#{a=>1}"]:
+        call(c, "tuple_to_list_elements", "tuple_to_list", value)
     for value in ["0", "-7", "1 bsl 100", "-(1 bsl 255)"]:
         call(c, "integer_binary_round_trip", "integer_to_binary", value)
         probe(c, "integer_binary_round_trip",
@@ -360,13 +390,13 @@ def cases():
         ('<<"abcab">>', '<<"ab">>', "[{scope,{1,4}}]"),
         ('<<"abcab">>', '<<"ab">>', "[{scope,{1,3}}]"),
     ]:
-        call(b, "guard:3", "match", subject, pattern, options, module="binary")
+        call(b, "guard:5", "match", subject, pattern, options, module="binary")
     # Earlier matches beat longer later ones; at the same position the longest
     # fitting pattern wins, independent of pattern-list order and scope sign.
     for pattern in ['[<<"ab">>,<<"abc">>]', '[<<"abc">>,<<"ab">>]']:
         for options in ["[]", "[{scope,{3,3}}]", "[{scope,{6,-3}}]",
                         "[{scope,{3,2}}]", "[{scope,{3,0}}]", "[{scope,{8,0}}]"]:
-            call(b, "guard:3", "match", '<<"zababcab">>', pattern, options, module="binary")
+            call(b, "guard:5", "match", '<<"zababcab">>', pattern, options, module="binary")
             call(b, "guard:1", "split", '<<"zababcab">>', pattern, options, module="binary")
             call(b, "guard:1", "split", '<<"zababcab">>', pattern, f"[global|{options}]", module="binary")
     for options in ["[{scope,{0,3}},{scope,{3,3}}]", "[{scope,{3,3}},{scope,{0,3}}]",
@@ -374,15 +404,15 @@ def cases():
                     "[{scope,{3,3}},{scope,invalid}]", "[{scope,{3,3}}|ignored]",
                     "[{scope,{3,3}},bad]", "[{scope,{3,3,0}}]", "[{scope,{3,1.0}}]",
                     "bad", "[bad]", "[{scope,{1 bsl 100,0}}]"]:
-        for fn, label in [("match", "guard:3"), ("split", "guard:1")]:
+        for fn, label in [("match", "guard:5"), ("split", "guard:1")]:
             call(b, label, fn, '<<"zababcab">>', '<<"ab">>', options, module="binary")
     for pattern in ['[]', '[<<>>]', '[<<"ab">>,<<>>]', '[<<"ab">>,bad]',
                     '[<<"ab">>|tail]', '[<<1:1>>]', '[[<<"ab">>]]']:
         for subject in ['<<>>', '<<"zababcab">>']:
-            for fn, label in [("match", "guard:3"), ("split", "guard:1")]:
+            for fn, label in [("match", "guard:5"), ("split", "guard:1")]:
                 call(b, label, fn, subject, pattern, "[]", module="binary")
-    call(b, "guard:4", "last", '<<"ab]">>', module="binary")
-    call(b, "guard:5", "last", "<<>>", module="binary")
+    call(b, "guard:6", "last", '<<"ab]">>', module="binary")
+    call(b, "guard:7", "last", "<<>>", module="binary")
 
     l = "Modules/Lists"
     for value in ["[]", "[a,b]", "[a|improper]", "1"]:
@@ -1032,13 +1062,18 @@ def cases():
         probe("Modules/Signals", "raise_classes",
               f"differential:trace_depth({depth},9,{{modern,error}})")
     for key, items in [("b", "[skipped,{}, {a,1},{b,first},{b,second}]"),
+                       ("c", "[{a}]"),
                        ("missing", "[skipped,{a,1}]"), ("1", "[{1.0,float},{1,integer}]"),
                        ("1.0", "[{1,integer},{1.0,float}]"), ("0.0", "[{-0.0,negative}]"),
                        ("{1}", "[{{1.0},nested}]"), ("b", "[{b,first}|improper]"),
                        ("missing", "[{a,1}|improper]"), ("b", "[]"), ("b", "bad")]:
         for position in ["1", "2", "0", "-1", "1.0", "1 bsl 100"]:
             for fn in ["keyfind", "keymember"]:
-                call("Modules/Signals", "keyfind_finds_first_match", fn, key, position, items, module="lists")
+                origins = ["Modules/Signals.lean#keyfind_finds_first_match"]
+                if fn == "keymember":
+                    origins.append("Modules/Lists.lean#keymember_finds_tuples")
+                selected.append({"lean_origins": origins,
+                                 "expression": f"differential:call(lists,'{fn}',[{key},{position},{items}])"})
 
     # Interior fields skip short tuples; map keys remain exact. The scalar
     # precision controls also expose OTP's lossy integer-key fast path, which

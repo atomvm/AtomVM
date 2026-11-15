@@ -12,12 +12,12 @@ runner semantics in [README.md](README.md).
 ## Current baseline
 
 - The supported fixture revision is Lynx
-  `b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de`, updated from
-  `2aa1467d4c28c4bffd5f5d205ebb197e261f85a4` in the latest upstream refresh below.
+  `6968d72cb99211eb9cab973e067f24a18cacfb3e`, updated from
+  `b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de` in the latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 5,609 public-behavior recipes inspired by Lean tests
-  and upstream examples (`298` of `428` Lean test sites across all 26 files). Source
+- `lean_runtime.py` selects 5,721 public-behavior recipes inspired by Lean tests
+  and upstream examples (`306` of `438` Lean test sites across all 26 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
   the proved postcondition to be true on both VMs: five integer singleton sums,
@@ -909,6 +909,28 @@ Batch 8 remaining behavioral sites in `Modules/Erlang.lean`, `Term/ShortCircuit.
   (ASan + no stacktraces, 3 `stacktrace_dependent` omitted via `--portable-only`), 13/13
   focused cases on `.amp/in/build-on-demand`, 17/17 portable cases on `.amp/in/build-wasm32`,
   and 27 enabled CLI tests (`29` total, 2 skipped) under `ATOMVM_JIT_BUILD=.amp/in/build-on-demand`.
+
+Upstream refresh to `6968d72` (`1925266`, `d74890a`, `6968d72`) and Batch 9 BIF coverage (2026-11-15):
+
+- Pinned upstream Lynx at `6968d72cb99211eb9cab973e067f24a18cacfb3e` (`438` total
+  `Lean/LynxTest` sites across 26 files), updated shifted `Modules/Binary.lean`
+  `guard:3..5 -> guard:5..7` attributions caused by the new `unsignedCases` guards,
+  and added 112 differential cases (`5,609 -> 5,721`, `306` of `438` Lean sites:
+  `Modules/Conversions.lean` `17/17`, `Modules/Lists.lean` `9/9`) for
+  `erlang:binary_to_atom/1,2`, `erlang:tuple_to_list/1`, and `lists:keymember/3`
+  short tuples (`binary:encode_unsigned/1` remains unimplemented in AtomVM and
+  `Modules/Binary.lean#guard:3..4` remain unsampled).
+- Differential checking exposed an AtomVM `binary_to_atom/2` discrepancy on
+  255 valid ASCII characters followed by an invalid UTF-8 byte (`0xFF`), where
+  `src/libAtomVM/bif.c` returned `badarg` instead of OTP/Lynx `system_limit`.
+  Fixed `binary_to_atom` in `src/libAtomVM/bif.c` to enforce the 255-codepoint
+  atom limit before decoding trailing bytes (and `badarg` on oversized
+  `binary_to_existing_atom` lookups, plus freeing temporary `latin1 -> utf8`
+  buffers), with regression checks in `tests/erlang_tests/test_binary_to_atom.erl`.
+- Verified focused replay (`300/300` passing), full interpreter CI run (`5,753` cases
+  with `--seed 20261114 --generated 32`: `5,632` matched OTP, `121/121` expected
+  failures, `0` unexpected failures/passes), `./build/tests/test-erlang`, and
+  `test_validate.py` (`29` tests: `26` passed, `3` env-gated optional skipped).
 
 ## Rules for each batch
 
