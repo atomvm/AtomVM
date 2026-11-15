@@ -16,8 +16,8 @@ runner semantics in [README.md](README.md).
   `b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de` in the latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 5,799 public-behavior recipes inspired by Lean tests
-  and upstream examples (`309` of `438` Lean test sites across all 26 files). Source
+- `lean_runtime.py` selects 5,818 public-behavior recipes inspired by Lean tests
+  and upstream examples (`313` of `438` Lean test sites across all 26 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
   the proved postcondition to be true on both VMs: five integer singleton sums,
@@ -952,6 +952,28 @@ Batch 10 — Remaining `Lean/modules.json` BIF differential coverage (2026-11-15
   and `--expected-failures tools/test/lynx/expected_failures.json`: `5,684` matched OTP,
   `147/147` expected failures, `0` unexpected failures/passes, `0` unverified) and
   `test_validate.py` (`29` tests: `26` passed, `3` env-gated optional skipped).
+
+Batch 11 — Complete `Modules/Timers.lean` differential coverage (2026-11-15):
+
+- Added 19 differential cases in `lean_runtime.py` (`5,799 -> 5,818`, `313` of `438`
+  Lean sites across 26 files: `Modules/Timers.lean` reaches `13/13`) covering the
+  four remaining sites in `Modules/Timers.lean`:
+  - `cancel_reports_time_left` (`4` cases via `differential:timer(time_left,5000|60000,...)`:
+    confirms positive remaining milliseconds `0 < Remaining <= Delay` and non-delivery).
+  - `cancel_reports_no_time_left` (`2` cases via `differential:timer(no_time_left,0,...)`:
+    confirms `0` or `false` on immediate 0ms cancel with non-delivery vs delivery).
+  - `cancel_false_before_delivery` (`6` cases across `false_before_delivery`,
+    `false_before_delivery_waited`, and cross-process `false_before_delivery_target`:
+    allows non-blocking `after 0` peek to miss when `cancel_timer/1` returns `false`
+    while verifying eventual delivery).
+  - `send_after_options` (`7` cases via `differential:timer_options(...)` at `10`ms /
+    `60000`ms and malformed option `badarg` checks without altering the 52
+    `otp_extension` entries).
+- Verified focused replay (`19/19` passing), full interpreter CI run (`5,850` cases
+  with `--seed 20261114 --generated 32` and `--expected-failures tools/test/lynx/expected_failures.json`:
+  `5,703` matched OTP, `147/147` expected failures, `0` unexpected failures/passes,
+  `0` unverified), and `test_validate.py` (`29` tests: `26` passed, `3` env-gated
+  optional skipped).
 
 ## Rules for each batch
 

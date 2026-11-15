@@ -83,10 +83,16 @@ class ValidationTests(unittest.TestCase):
                 "differential:timer(cancel,60000,tick)",
                 "differential:timer(cancel,0,tick)",
                 "differential:timer(expired,0,tick)",
+                "differential:timer(time_left,60000,tick)",
+                "differential:timer(no_time_left,0,tick)",
+                "differential:timer(false_before_delivery_waited,1,tick)",
+                "differential:timer(false_before_delivery_target,1,tick)",
+                "differential:timer_options(deliver,10,[{abs,true},{abs,false}])",
+                "R=erlang:send_after(10,self(),tick,[abs]),{is_reference(R),erlang:cancel_timer(R)=/=false}",
             ]]))
             output = work / "results"
             self.assertEqual(self.invoke(output, "--replay", source),
-                             {"laws": 0, "passed": 9, "failed": 0,
+                             {"laws": 0, "passed": 15, "failed": 0,
                               "unverified": 0, "uncovered": 0})
             # Expectations are handwritten, not derived from the helper. Both
             # cancel outcomes must preserve unrelated mailbox contents, while
@@ -105,7 +111,13 @@ class ValidationTests(unittest.TestCase):
                   {:ok, {true, <<5::3>>, [:retained]}},
                   {:ok, {true, true, false, [:retained]}},
                   {:ok, {true, true, false, [:retained]}},
-                  {:ok, {:tick, false, false}}
+                  {:ok, {:tick, false, false}},
+                  {:ok, {true, :remaining_timeout, false, [:retained]}},
+                  {:ok, {true, :ok, false, [:retained]}},
+                  {:ok, {true, :settled, false, [:retained]}},
+                  {:ok, {true, :settled, :normal, false, [:retained]}},
+                  {:ok, {true, {:nested, %{1 => :one, 1.0 => :float}, <<5::3>>}, true, false, false, [:retained]}},
+                  {:exception, :error, :badarg}
                 ] = values
                 """, str(output / "manifest.json")
             ], capture_output=True, text=True, timeout=30)
@@ -1706,7 +1718,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 5799)
+        self.assertEqual(len(lean_runtime.cases()), 5818)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

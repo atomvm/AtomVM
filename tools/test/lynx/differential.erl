@@ -143,6 +143,81 @@ timer(expired, Delay, Payload) ->
             {Token, Value} -> Value
         end,
     {Received, erlang:cancel_timer(Ref), erlang:cancel_timer(Ref)};
+timer(Mode, Delay, Payload) when
+    Mode =:= time_left;
+    Mode =:= no_time_left;
+    Mode =:= false_before_delivery;
+    Mode =:= false_before_delivery_waited
+->
+    Token = make_ref(),
+    self() ! retained,
+    Ref = erlang:send_after(Delay, self(), {Token, Payload}),
+    case Mode of
+        false_before_delivery_waited ->
+            receive
+            after Delay + 5 -> ok
+            end;
+        _ ->
+            ok
+    end,
+    Canceled = erlang:cancel_timer(Ref),
+    Valid = verify_timer_cancel(Mode, Delay, Token, Payload, Canceled),
+    {is_reference(Ref), Valid, erlang:cancel_timer(Ref), drain()};
+timer(false_before_delivery_target, Delay, Payload) ->
+    Parent = self(),
+    Token = make_ref(),
+    {Dest, Monitor} = spawn_monitor(fun() ->
+        receive
+            {Parent, check} ->
+                Outcome =
+                    receive
+                        {Token, Payload} -> settled
+                    after 0 ->
+                        receive
+                            {Token, Payload} -> settled
+                        end
+                    end,
+                Parent ! {Parent, child_result, Outcome};
+            {Parent, ensure_absent} ->
+                Outcome =
+                    receive
+                        {Token, _} -> unexpected_after_cancel
+                    after 10 ->
+                        settled
+                    end,
+                Parent ! {Parent, child_result, Outcome}
+        end
+    end),
+    self() ! retained,
+    Ref = erlang:send_after(Delay, Dest, {Token, Payload}),
+    receive
+    after Delay + 5 -> ok
+    end,
+    Canceled = erlang:cancel_timer(Ref),
+    Dest !
+        {Parent,
+            case Canceled of
+                false -> check;
+                _ -> ensure_absent
+            end},
+    ChildOutcome =
+        receive
+            {Parent, child_result, Res} -> Res
+        end,
+    DownReason =
+        receive
+            {'DOWN', Monitor, process, Dest, Reason} -> Reason
+        end,
+    Valid =
+        case Canceled of
+            false ->
+                ChildOutcome;
+            Remaining when is_integer(Remaining), Remaining >= 0, Remaining =< Delay ->
+                ChildOutcome;
+            Other ->
+                {unexpected, Other}
+        end,
+    {is_reference(Ref), Valid, DownReason, erlang:cancel_timer(Ref), drain()};
 timer(Mode, Delay, Payload) when Mode =:= dead_before; Mode =:= dead_after ->
     {Child, Monitor} = spawn_monitor(fun() ->
         receive
@@ -172,6 +247,52 @@ timer(Mode, Delay, Payload) when Mode =:= dead_before; Mode =:= dead_after ->
             Other -> Other
         end,
     {is_reference(Ref), Result, erlang:cancel_timer(Ref), drain()}.
+
+verify_timer_cancel(time_left, Delay, Token, Payload, Canceled) ->
+    case Canceled of
+        false ->
+            await_timer(Token, Payload, delivered);
+        Remaining when is_integer(Remaining), Remaining > 0, Remaining =< Delay ->
+            await_no_timer(Token, remaining_timeout);
+        Other ->
+            {unexpected, Other}
+    end;
+verify_timer_cancel(no_time_left, _Delay, Token, Payload, Canceled) ->
+    case Canceled of
+        false ->
+            await_timer(Token, Payload, ok);
+        0 ->
+            await_no_timer(Token, ok);
+        Other ->
+            {unexpected, Other}
+    end;
+verify_timer_cancel(_Mode, Delay, Token, Payload, Canceled) ->
+    case Canceled of
+        false ->
+            %% cancel_timer/1 returning false may precede mailbox delivery;
+            %% tolerate an after-0 miss before blocking for the message.
+            receive
+                {Token, Payload} -> settled
+            after 0 ->
+                await_timer(Token, Payload, settled)
+            end;
+        Remaining when is_integer(Remaining), Remaining >= 0, Remaining =< Delay ->
+            await_no_timer(Token, settled);
+        Other ->
+            {unexpected, Other}
+    end.
+
+await_no_timer(Token, OkTag) ->
+    receive
+        {Token, _} -> unexpected_after_cancel
+    after 10 ->
+        OkTag
+    end.
+
+await_timer(Token, Payload, OkTag) ->
+    receive
+        {Token, Payload} -> OkTag
+    end.
 
 %% Absolute deadlines are constructed in each VM's own monotonic epoch.
 %% Keep the not-before observation, but never serialize clock values or demand
