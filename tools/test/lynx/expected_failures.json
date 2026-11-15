@@ -31,6 +31,16 @@
         "differential:bit_construct_int(unsigned_big,1,1 bsl 64,0)",
         "differential:bit_construct_int(unsigned_big,1,1 bsl 64,3)"
       ]
+    },
+    {
+      "name": "binary_encode_unsigned",
+      "reason": "binary:encode_unsigned/1 is not implemented in AtomVM (error:undef)",
+      "expression_prefix": "differential:call(binary,'encode_unsigned',"
+    },
+    {
+      "name": "fun_info_mfa",
+      "reason": "erlang:fun_info_mfa/1 is not implemented in AtomVM (error:undef)",
+      "expression_prefix": "differential:fun_info_mfa("
     }
   ]
 }

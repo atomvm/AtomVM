@@ -1498,9 +1498,11 @@ class ValidationTests(unittest.TestCase):
                 "float_text_short": 4,
                 "lists_reverse_invalid": 2,
                 "bitstring_size_system_limit": 3,
+                "binary_encode_unsigned": 13,
+                "fun_info_mfa": 13,
             },
         )
-        self.assertEqual(total_expected, 121)
+        self.assertEqual(total_expected, 147)
         all_exprs = {c["expression"] for c in all_entries}
         for area in areas:
             for expr in area["expressions"]:
@@ -1508,8 +1510,8 @@ class ValidationTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
-            # 1. Sampled expected failures across all 3 areas + passing neighbors exit 0,
-            # while still recording true failures in summary.json and failures.json.
+            # 1. Sampled expected failures across unimplemented/known areas + passing
+            # neighbors exit 0, while still recording true failures in summary.json and failures.json.
             sample = work / "sample.json"
             sample.write_text(json.dumps([
                 {"expression": "1 + 2"},
@@ -1518,6 +1520,8 @@ class ValidationTests(unittest.TestCase):
                 {"expression": "differential:float_text(12300.0,[short])"},
                 {"expression": "differential:call(lists,'reverse',[[a,b]])"},
                 {"expression": "differential:call(lists,'reverse',[bad])"},
+                {"expression": "differential:call(binary,'encode_unsigned',[(1 bsl 64)+5])"},
+                {"expression": "differential:fun_info_mfa(local_capture)"},
             ]))
             ok_out = work / "ok"
             result = subprocess.run(
@@ -1529,9 +1533,9 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(
                 json.loads((ok_out / "summary.json").read_text()),
-                {"laws": 0, "passed": 3, "failed": 3, "unverified": 0, "uncovered": 0},
+                {"laws": 0, "passed": 3, "failed": 5, "unverified": 0, "uncovered": 0},
             )
-            self.assertEqual(len(json.loads((ok_out / "failures.json").read_text())), 3)
+            self.assertEqual(len(json.loads((ok_out / "failures.json").read_text())), 5)
 
             # 2. Any unexpected failure still causes a nonzero exit.
             fake_build = work / "fake_build"
@@ -1702,7 +1706,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 5721)
+        self.assertEqual(len(lean_runtime.cases()), 5799)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"
@@ -1727,6 +1731,10 @@ class ValidationTests(unittest.TestCase):
                 "differential:spawn_behavior(invalid_arity1)",
                 "differential:spawn_behavior(unknown_export)",
                 "differential:nested_spawn_cleanup()",
+                "differential:is_number_paths(1 bsl 64)",
+                "differential:is_number_paths(true)",
+                "differential:call(maps,'from_keys',[[1,1.0],tag])",
+                "differential:call(maps,'from_keys',[[a|b],v])",
             ]
             source.write_text(json.dumps([{"expression": e} for e in expressions]))
             output = work / "results"
@@ -1761,7 +1769,12 @@ class ValidationTests(unittest.TestCase):
                   {:ok, {:ok, {{:unexpected, true}, {:error, :badarg}, {:error, :badarg}}}},
                   {:ok, {:ok, {true, {:undef, :stack}, false, true, :exited_expected, false}}},
                   {:ok, {:ok, {{false, :normal}, :normal, false, false}}},
+                  {:ok, {true, true, true, true}},
+                  {:ok, {false, false, false, false}},
+                  {:ok, from_keys_ok},
+                  {:exception, :error, :badarg},
                 ] = values
+                true = (from_keys_ok === %{1 => :tag, 1.0 => :tag})
                 """, str(output / "manifest.json"),
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)

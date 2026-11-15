@@ -16,8 +16,8 @@ runner semantics in [README.md](README.md).
   `b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de` in the latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 5,721 public-behavior recipes inspired by Lean tests
-  and upstream examples (`306` of `438` Lean test sites across all 26 files). Source
+- `lean_runtime.py` selects 5,799 public-behavior recipes inspired by Lean tests
+  and upstream examples (`309` of `438` Lean test sites across all 26 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
   the proved postcondition to be true on both VMs: five integer singleton sums,
@@ -930,6 +930,27 @@ Upstream refresh to `6968d72` (`1925266`, `d74890a`, `6968d72`) and Batch 9 BIF 
 - Verified focused replay (`300/300` passing), full interpreter CI run (`5,753` cases
   with `--seed 20261114 --generated 32`: `5,632` matched OTP, `121/121` expected
   failures, `0` unexpected failures/passes), `./build/tests/test-erlang`, and
+  `test_validate.py` (`29` tests: `26` passed, `3` env-gated optional skipped).
+
+Batch 10 — Remaining `Lean/modules.json` BIF differential coverage (2026-11-15):
+
+- Added 78 differential cases in `lean_runtime.py` (`5,721 -> 5,799`, `309` of `438`
+  Lean sites across 26 files: `Modules/Binary.lean` reaches `7/7`,
+  `Term/Dispatch.lean` reaches `5/17`) covering the four remaining BIFs in Lynx's
+  `Lean/modules.json` outside `erts_internal`:
+  - `erlang:is_number/1` (`32` cases via `differential:is_number_paths/1`: qualified,
+    inline, `apply/3`, and guard paths across small/large ints, floats, booleans,
+    compounds, funs, and live pids/refs; `32/32` pass).
+  - `maps:from_keys/2` (`20` cases via `differential:call(maps,'from_keys',...)`:
+    empty, duplicate keys, numeric exact keys, nested keys, shared boxed values,
+    `31/32/33/40` size boundaries, and `badarg` invalid/improper lists; `20/20` pass).
+  - `binary:encode_unsigned/1` (`13` cases attributed to `Modules/Binary.lean#guard:3..4`,
+    tracked in `expected_failures.json` as `binary_encode_unsigned` due to `error:undef`).
+  - `erlang:fun_info_mfa/1` (`13` cases attributed to `Term/Dispatch.lean#fun_info_mfa_reports_compiled_name`,
+    tracked in `expected_failures.json` as `fun_info_mfa` due to `error:undef`).
+- Verified full interpreter CI run (`5,831` cases with `--seed 20261114 --generated 32`
+  and `--expected-failures tools/test/lynx/expected_failures.json`: `5,684` matched OTP,
+  `147/147` expected failures, `0` unexpected failures/passes, `0` unverified) and
   `test_validate.py` (`29` tests: `26` passed, `3` env-gated optional skipped).
 
 ## Rules for each batch

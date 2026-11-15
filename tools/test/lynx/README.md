@@ -168,7 +168,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **5,721 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **5,799 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -186,9 +186,10 @@ Missing functions and differing error precedence remain failures, not skips.
 For CI gating against the full corpus without hiding those differences in
 `summary.json` or `failures.json`, pass
 `--expected-failures tools/test/lynx/expected_failures.json` to run all cases
-and strictly expect failures only in the four documented areas (`phash2`,
-short-float `float_text`, invalid-input `lists:reverse/1`, and `1 bsl 64`
-bitstring segment size `badarg` vs `system_limit`).
+and strictly expect failures only in the six documented areas (`phash2`,
+short-float `float_text`, invalid-input `lists:reverse/1`, `1 bsl 64`
+bitstring segment size `badarg` vs `system_limit`,
+`binary:encode_unsigned/1`, and `erlang:fun_info_mfa/1`).
 OTP is the execution oracle, not the Lean model: for example, tested OTP 29
 accepts an already queued receive match before checking an invalid timeout.
 That differs from the model test named `timeout_validation_precedes_scan`.
