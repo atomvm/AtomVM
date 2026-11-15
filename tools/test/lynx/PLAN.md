@@ -16,8 +16,8 @@ runner semantics in [README.md](README.md).
   `2aa1467d4c28c4bffd5f5d205ebb197e261f85a4` in the latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 5,085 public-behavior recipes inspired by Lean tests
-  and upstream examples (`277` of `428` Lean test sites across all 26 files). Source
+- `lean_runtime.py` selects 5,609 public-behavior recipes inspired by Lean tests
+  and upstream examples (`298` of `428` Lean test sites across all 26 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
   the proved postcondition to be true on both VMs: five integer singleton sums,
@@ -889,6 +889,26 @@ Batch 7 execution-path, representation, and ASan verification (2026-11-14):
   `transport` stage & timeout classification, 32-bit word-size / `--float32` /
   `AVM_CREATE_STACKTRACES=OFF` oracle guards, and `wasm32`/`--host-build` target
   resolution.
+
+Batch 8 remaining behavioral sites in `Modules/Erlang.lean`, `Term/ShortCircuit.lean`, and `Modules/Signals.lean` (2026-11-15):
+
+- Covers all 21 remaining behavioral theorem sites (`Term/ShortCircuit.lean`: `13/13`,
+  `Modules/Signals.lean`: `20/20`, `Modules/Erlang.lean`: `75/76` leaving only
+  `private theorem floatOne_toRat`), adding 524 runtime cases (`5,085 -> 5,609`,
+  `277 -> 298` of `428` Lean sites; `stacktrace_dependent`: `169 -> 172`).
+- Differential validation of the 579 cases matching those 21 origins uncovered two
+  genuine AtomVM defects (fixed separately and tested in `test_is_integer_3` and
+  `test_spawn`): `maybe_call_native` in `src/libAtomVM/opcodesswitch.h` and
+  `src/libAtomVM/jit.c` omitted `case 3:` for `BIFFunctionType` (breaking dynamic
+  `apply(erlang, is_integer, [X, Lo, Hi])`), and `erlang:spawn_link/1` /
+  `erlang:spawn_monitor/1` in `libs/estdlib/src/erlang.erl` lacked an `is_function(..., 0)`
+  guard raising `error:badarg` for wrong-arity funs. Nonfinite/product float probes
+  stay within AtomVM's 256-bit integer limit (`1 bsl 255`).
+- Verified 579/579 passing on host interpreter (`build`) and `aarch64` precompiled JIT
+  (`.amp/in/build-native`), 576/576 portable cases passing on `.amp/in/build-ci-no-stack`
+  (ASan + no stacktraces, 3 `stacktrace_dependent` omitted via `--portable-only`), 13/13
+  focused cases on `.amp/in/build-on-demand`, 17/17 portable cases on `.amp/in/build-wasm32`,
+  and 27 enabled CLI tests (`29` total, 2 skipped) under `ATOMVM_JIT_BUILD=.amp/in/build-on-demand`.
 
 ## Rules for each batch
 

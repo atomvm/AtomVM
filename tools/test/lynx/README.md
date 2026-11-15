@@ -168,7 +168,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **5,085 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **5,609 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -302,6 +302,27 @@ unboxed small integers directly to `float` in `bitstring_insert_float`. On
 `word_size_dependent` `±288230393331580929:32/float` probes are omitted (small
 integers are 28-bit on 32-bit VMs vs 60-bit on 64-bit OTP), with 855 matching
 OTP 29 and the same 3 `bitstring_size_system_limit` discrepancies.
+
+Follow-up expansion for the remaining behavioral sites across
+`Modules/Erlang.lean` (`60/76 -> 75/76`, leaving only `private theorem
+floatOne_toRat`), `Term/ShortCircuit.lean` (`9/13 -> 13/13`), and
+`Modules/Signals.lean` (`18/20 -> 20/20`) adds 524 runtime cases (`5,085 -> 5,609`
+total; `298` of `428` Lean test sites across all 26 files): strict/short-circuit
+chain and error propagation, `demonitor/2` `[flush]` oldest-message ordering,
+linked-child crash cleanup, `erlang:is_integer/3` guard/body/dynamic paths,
+word-masking, floor right shifts, `bnot/1` involution, `node/0,1` + `is_port/1`,
+dynamic 3-arg `apply`, nonnumeric/noninteger/nonfinite arithmetic rejections,
+integer-float products within 256-bit integers, and `spawn*` valid/invalid/missing
+fun behavior. Across all 579 cases exercising those 21 origins on host interpreter
+(`build`) and `aarch64` precompiled JIT (`.amp/in/build-native`), 579/579 match
+OTP 29 (`0` failed, `0` unverified) after fixing `maybe_call_native` (`case 3:`
+dispatch for `BIFFunctionType` in `opcodesswitch.h` and `jit.c`, fixing dynamic
+`apply(erlang, is_integer, [X, Lo, Hi])`) and `erlang:spawn_link/1` /
+`erlang:spawn_monitor/1` arity-0 fun guards (`badarg` in `erlang.erl`). On
+`.amp/in/build-ci-no-stack` (`--portable-only`, Debug + ASan + no stacktraces),
+all 576 portable cases match OTP 29 (3 `stacktrace_dependent` omitted); 13
+focused JIT cases pass on `.amp/in/build-on-demand` and 17 portable cases pass
+on `.amp/in/build-wasm32`.
 
 The execution-path extension adds 466 cases for 20 arithmetic, comparison, and
 map-lookup operations. Each captures direct-body and dynamic `apply/3` outcomes
@@ -821,9 +842,11 @@ Additional target and representation modes:
   with explicit `float32_expected` ETF oracles; unannotated `binary64` float
   results are marked `unverified` (`stage: "oracle"`).
 - Stacktraces disabled (`AVM_CREATE_STACKTRACES=OFF`): `run.json` records
-  `"avm_create_stacktraces": false`, and the 169 `stacktrace_dependent`
+  `"avm_create_stacktraces": false`, and the 172 `stacktrace_dependent`
   recipes (`monitor_exit(raised)`, valid-stack `raise_exception/3`, valid-raise/generated
-  `trace_depth/3`, and uncaught-error `function_spawn/3` cases) are marked
+  `trace_depth/3`, `killed_linked_root(error_reason)`, and uncaught-error
+  `function_spawn/3` / `spawn_behavior/1` cases where `catch C:R:S` / exit reasons
+  yield `undefined` instead of a stack list) are marked
   `unverified` (`stage: "oracle"`) unless omitted upfront with `--portable-only`.
   `.github/workflows/lynx-differential.yaml` exercises this build via
   `linux-x86_64-no-stacktraces` (`--lean-runtime lynx --seed 20261114
@@ -857,8 +880,8 @@ oracles:
 python3 -B -m unittest discover -s tools/test/lynx -p test_validate.py -v
 ```
 
-Twenty-three enabled CLI tests pass under `ATOMVM_JIT_BUILD=.amp/in/build-on-demand`
-(24 total; 1 optional `LYNX_CHECKOUT` fixture test skipped). Set
+Twenty-seven enabled CLI tests pass under `ATOMVM_JIT_BUILD=.amp/in/build-on-demand`
+(29 total; 2 optional `ATOMVM_JIT_PRECOMPILE_BUILD` / `LYNX_CHECKOUT` tests skipped). Set
 `LYNX_CHECKOUT=/path/to/lynx`
 to enable the additional full-fixture/export inventory and partial-replay integration
 test. It requires Mix/Lean on PATH and takes several minutes; ordinary integration
