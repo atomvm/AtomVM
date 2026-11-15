@@ -2269,21 +2269,34 @@ term binary_to_atom(Context *ctx, term a_binary, term encoding, bool create_new,
     size_t atom_data_len;
     uint8_t *buf = NULL;
     if (LIKELY(!encode_latin1_to_utf8)) {
-        if (UNLIKELY(!unicode_is_valid_utf8_buf((const uint8_t *) atom_string, atom_string_len))) {
-            *error_reason = BADARG_ATOM;
-            return term_invalid_term();
-        }
-        size_t len = unicode_buf_utf8_len((const uint8_t *) atom_string, atom_string_len);
-        if (UNLIKELY(len > 255)) {
-            *error_reason = SYSTEM_LIMIT_ATOM;
-            return term_invalid_term();
+        // Match OTP's 255-character atom limit before validating any trailing bytes.
+        size_t offset = 0;
+        size_t char_count = 0;
+        const uint8_t *str = (const uint8_t *) atom_string;
+        while (offset < atom_string_len) {
+            if (UNLIKELY(char_count == 255)) {
+                *error_reason = create_new ? SYSTEM_LIMIT_ATOM : BADARG_ATOM;
+                return term_invalid_term();
+            }
+            if (LIKELY(str[offset] < 0x80)) {
+                offset++;
+            } else {
+                uint32_t codepoint;
+                size_t out_size;
+                if (UNLIKELY(unicode_utf8_decode(str + offset, atom_string_len - offset, &codepoint, &out_size) != UnicodeTransformDecodeSuccess)) {
+                    *error_reason = BADARG_ATOM;
+                    return term_invalid_term();
+                }
+                offset += out_size;
+            }
+            char_count++;
         }
 
-        atom_data = (const uint8_t *) atom_string;
+        atom_data = str;
         atom_data_len = atom_string_len;
     } else {
         if (UNLIKELY(atom_string_len > 255)) {
-            *error_reason = SYSTEM_LIMIT_ATOM;
+            *error_reason = create_new ? SYSTEM_LIMIT_ATOM : BADARG_ATOM;
             return term_invalid_term();
         }
 
@@ -2309,6 +2322,7 @@ term binary_to_atom(Context *ctx, term a_binary, term encoding, bool create_new,
     }
     atom_index_t global_atom_index;
     enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atom(ctx->global->atom_table, atom_data, atom_data_len, atom_opts, &global_atom_index);
+    free(buf);
     switch (ensure_result) {
         case AtomTableEnsureAtomNotFound:
         case AtomTableEnsureAtomInvalidLen: {
