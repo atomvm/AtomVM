@@ -69,6 +69,15 @@
     function_child_exit/0,
     utf/3,
     utf_construct/3,
+    utf_match_term/2,
+    utf_roundtrip/2,
+    bit_construct_binary/3,
+    bit_construct_int/4,
+    float_construct/4,
+    bit_match_binary/3,
+    bit_match_int/3,
+    bit_match_float/3,
+    bit_match_literal/2,
     map_relations/3,
     map_singleton_iteration/2,
     map_guards/2,
@@ -3430,6 +3439,340 @@ float_bits(Value, Width, Offset, little) ->
     Bits = <<5:Offset, Value:Width/float-little, 3:3>>,
     <<_:Offset, Encoded:Width/bitstring, _:3>> = Bits,
     {Bits, Encoded}.
+
+utf_match_term(utf8, Term) ->
+    case Term of
+        <<C/utf8, R/bitstring>> -> {C, R};
+        _ -> no
+    end;
+utf_match_term(utf16, Term) ->
+    case Term of
+        <<C/utf16, R/bitstring>> -> {C, R};
+        _ -> no
+    end;
+utf_match_term(utf16le, Term) ->
+    case Term of
+        <<C/utf16-little, R/bitstring>> -> {C, R};
+        _ -> no
+    end;
+utf_match_term(utf32, Term) ->
+    case Term of
+        <<C/utf32, R/bitstring>> -> {C, R};
+        _ -> no
+    end;
+utf_match_term(utf32le, Term) ->
+    case Term of
+        <<C/utf32-little, R/bitstring>> -> {C, R};
+        _ -> no
+    end.
+
+utf_roundtrip(Encoding, C) ->
+    Encoded =
+        case Encoding of
+            utf8 -> <<C/utf8>>;
+            utf16 -> <<C/utf16>>;
+            utf16le -> <<C/utf16-little>>;
+            utf32 -> <<C/utf32>>;
+            utf32le -> <<C/utf32-little>>
+        end,
+    {bit_size(Encoded), Encoded, utf_match_term(Encoding, Encoded)}.
+
+bit_construct_binary(whole_bitstring, Value, _Size) ->
+    R = <<Value/bitstring>>,
+    {bit_size(R), R};
+bit_construct_binary(whole_binary, Value, _Size) ->
+    R = <<Value/binary>>,
+    {bit_size(R), R};
+bit_construct_binary(whole_binary_unit16, Value, _Size) ->
+    R = <<Value/binary-unit:16>>,
+    {bit_size(R), R};
+bit_construct_binary(whole_bitstring_unit3, Value, _Size) ->
+    R = <<Value/binary-unit:3>>,
+    {bit_size(R), R};
+bit_construct_binary(whole_bitstring_unit256, Value, _Size) ->
+    R = <<Value/binary-unit:256>>,
+    {bit_size(R), R};
+bit_construct_binary(sized_binary, Value, Size) ->
+    R = <<Value:Size/binary>>,
+    {bit_size(R), R};
+bit_construct_binary(sized_binary_unit16, Value, Size) ->
+    R = <<Value:Size/binary-unit:16>>,
+    {bit_size(R), R};
+bit_construct_binary(sized_bitstring, Value, Size) ->
+    R = <<Value:Size/bitstring>>,
+    {bit_size(R), R};
+bit_construct_binary(sized_bitstring_unit3, Value, Size) ->
+    R = <<Value:Size/binary-unit:3>>,
+    {bit_size(R), R};
+bit_construct_binary(concat_empty, Value, _Size) ->
+    Left = <<<<>>/bitstring, Value/bitstring>>,
+    Right = <<Value/bitstring, <<>>/bitstring>>,
+    {Left =:= Value, Right =:= Value, bit_size(Left), Left};
+bit_construct_binary(concat_assoc, {A, B, C}, _Size) ->
+    AB = <<A/bitstring, B/bitstring>>,
+    BC = <<B/bitstring, C/bitstring>>,
+    Left = <<AB/bitstring, C/bitstring>>,
+    Right = <<A/bitstring, BC/bitstring>>,
+    {Left =:= Right, bit_size(Left) =:= bit_size(A) + bit_size(B) + bit_size(C), Left};
+bit_construct_binary(cross_byte_concat_unit3, {Prefix, Mid, Suffix}, Size) ->
+    R = <<Prefix/bitstring, Mid:Size/integer-unit:3, Suffix/bitstring>>,
+    {bit_size(R), R};
+bit_construct_binary(cross_byte_concat_little_unit5, {Prefix, Mid, Suffix}, Size) ->
+    R = <<Prefix/bitstring, Mid:Size/integer-little-unit:5, Suffix/bitstring>>,
+    {bit_size(R), R};
+bit_construct_binary(build_from_bytes, _Value, _Size) ->
+    A = <<1>>,
+    B = <<2, 3>>,
+    C = <<1, 2>>,
+    {<<A/binary, B/binary>>, <<200:8>>, <<65/utf8>>, <<C/binary>>}.
+
+int_result(Seg, Joined) ->
+    {bit_size(Seg), Seg, Joined}.
+
+bit_construct_int(unsigned_big, Value, Size, Offset) ->
+    int_result(<<Value:Size/unsigned-big>>, <<5:Offset, Value:Size/unsigned-big, 3:2>>);
+bit_construct_int(unsigned_little, Value, Size, Offset) ->
+    int_result(<<Value:Size/unsigned-little>>, <<5:Offset, Value:Size/unsigned-little, 3:2>>);
+bit_construct_int(signed_big, Value, Size, Offset) ->
+    int_result(<<Value:Size/signed-big>>, <<5:Offset, Value:Size/signed-big, 3:2>>);
+bit_construct_int(signed_little, Value, Size, Offset) ->
+    int_result(<<Value:Size/signed-little>>, <<5:Offset, Value:Size/signed-little, 3:2>>);
+bit_construct_int(unit3_unsigned_big, Value, Size, Offset) ->
+    int_result(
+        <<Value:Size/unsigned-big-unit:3>>,
+        <<5:Offset, Value:Size/unsigned-big-unit:3, 3:2>>
+    );
+bit_construct_int(unit5_signed_little, Value, Size, Offset) ->
+    int_result(
+        <<Value:Size/signed-little-unit:5>>,
+        <<5:Offset, Value:Size/signed-little-unit:5, 3:2>>
+    );
+bit_construct_int(unit256_big, Value, Size, Offset) ->
+    int_result(
+        <<Value:Size/unsigned-big-unit:256>>,
+        <<5:Offset, Value:Size/unsigned-big-unit:256, 3:2>>
+    );
+bit_construct_int(unit256_little, Value, Size, Offset) ->
+    int_result(
+        <<Value:Size/unsigned-little-unit:256>>,
+        <<5:Offset, Value:Size/unsigned-little-unit:256, 3:2>>
+    ).
+
+float_operand({ieee64, Sign, Exp, Frac}) ->
+    <<F:64/float>> = <<Sign:1, Exp:11, Frac:52>>,
+    F;
+float_operand(Value) ->
+    Value.
+
+float_construct(big, ValSpec, Size, Offset) ->
+    V = float_operand(ValSpec),
+    int_result(<<V:Size/float-big>>, <<5:Offset, V:Size/float-big, 3:5>>);
+float_construct(little, ValSpec, Size, Offset) ->
+    V = float_operand(ValSpec),
+    int_result(<<V:Size/float-little>>, <<5:Offset, V:Size/float-little, 3:5>>);
+float_construct(unit2_big, ValSpec, Size, Offset) ->
+    V = float_operand(ValSpec),
+    int_result(<<V:Size/float-big-unit:2>>, <<5:Offset, V:Size/float-big-unit:2, 3:5>>);
+float_construct(unit2_little, ValSpec, Size, Offset) ->
+    V = float_operand(ValSpec),
+    int_result(<<V:Size/float-little-unit:2>>, <<5:Offset, V:Size/float-little-unit:2, 3:5>>).
+
+bit_match_binary(binary_sized_rest, Input, Size) ->
+    case Input of
+        <<A:Size/binary, R/bitstring>> -> {A, R};
+        _ -> no
+    end;
+bit_match_binary(binary_unit16_rest, Input, Size) ->
+    case Input of
+        <<A:Size/binary-unit:16, R/bitstring>> -> {A, R};
+        _ -> no
+    end;
+bit_match_binary(bitstring_sized_rest, Input, Size) ->
+    case Input of
+        <<A:Size/bitstring, R/bitstring>> -> {A, R};
+        _ -> no
+    end;
+bit_match_binary(bitstring_unit3_rest, Input, Size) ->
+    case Input of
+        <<A:Size/binary-unit:3, R/bitstring>> -> {A, R};
+        _ -> no
+    end;
+bit_match_binary(tail_binary_after3, Input, _Size) ->
+    case Input of
+        <<A:3, R/binary>> -> {A, R};
+        _ -> no
+    end;
+bit_match_binary(tail_bitstring_after3, Input, _Size) ->
+    case Input of
+        <<A:3, R/bitstring>> -> {A, R};
+        _ -> no
+    end;
+bit_match_binary(tail_binary_unit16_after4, Input, _Size) ->
+    case Input of
+        <<A:4, R/binary-unit:16>> -> {A, R};
+        _ -> no
+    end;
+bit_match_binary(fixed_tail_bitstring16, Input, _Size) ->
+    case Input of
+        <<A:3, R:16/bitstring>> -> {A, R};
+        _ -> no
+    end;
+bit_match_binary(fixed_tail_binary2, Input, _Size) ->
+    case Input of
+        <<A:3, R:2/binary>> -> {A, R};
+        _ -> no
+    end;
+bit_match_binary(finish_byte, Input, _Size) ->
+    case Input of
+        <<A:8>> -> A;
+        _ -> no
+    end;
+bit_match_binary(unaligned_binary2_rest, Input, _Size) ->
+    case Input of
+        <<_:3, B:2/binary, R/bitstring>> -> {B, R};
+        _ -> no
+    end;
+bit_match_binary(unaligned_bitstring16_rest, Input, _Size) ->
+    case Input of
+        <<_:3, B:16/bitstring, R/bitstring>> -> {B, R};
+        _ -> no
+    end;
+bit_match_binary(unaligned_tail_binary, Input, _Size) ->
+    case Input of
+        <<_:3, B/binary>> -> B;
+        _ -> no
+    end.
+
+bit_match_int(unsigned_big_exact, Input, Size) ->
+    case Input of
+        <<V:Size/unsigned-big>> -> V;
+        _ -> no
+    end;
+bit_match_int(unsigned_big_rest, Input, Size) ->
+    case Input of
+        <<V:Size/unsigned-big, R/bitstring>> -> {V, R};
+        _ -> no
+    end;
+bit_match_int(signed_big_rest, Input, Size) ->
+    case Input of
+        <<V:Size/signed-big, R/bitstring>> -> {V, R};
+        _ -> no
+    end;
+bit_match_int(unsigned_little_rest, Input, Size) ->
+    case Input of
+        <<V:Size/unsigned-little, R/bitstring>> -> {V, R};
+        _ -> no
+    end;
+bit_match_int(signed_little_rest, Input, Size) ->
+    case Input of
+        <<V:Size/signed-little, R/bitstring>> -> {V, R};
+        _ -> no
+    end;
+bit_match_int(unaligned_unsigned_little_rest, Input, Size) ->
+    case Input of
+        <<_:3, V:Size/unsigned-little, R/bitstring>> -> {V, R};
+        _ -> no
+    end;
+bit_match_int(unaligned_signed_little_rest, Input, Size) ->
+    case Input of
+        <<_:3, V:Size/signed-little, R/bitstring>> -> {V, R};
+        _ -> no
+    end;
+bit_match_int(zero_width_tail, Input, _Size) ->
+    case Input of
+        <<V:0, R/bitstring>> -> {V, R};
+        _ -> no
+    end;
+bit_match_int(size_from_prev_binary, Input, _Size) ->
+    case Input of
+        <<L:8, P:L/binary, R/bitstring>> -> {L, P, R};
+        _ -> no
+    end;
+bit_match_int(size_from_prev_unit2, Input, _Size) ->
+    case Input of
+        <<N:4, V:N/integer-unit:2, R/bitstring>> -> {N, V, R};
+        _ -> no
+    end;
+bit_match_int(size_from_prev_signed, Input, _Size) ->
+    case Input of
+        <<L:4/signed, V:L/bitstring, R/bitstring>> -> {L, V, R};
+        _ -> no
+    end;
+bit_match_int(consecutive_segments, Input, _Size) ->
+    case Input of
+        <<A:3, B:5/signed, C:11/little, D:5, R/bitstring>> -> {A, B, C, D, R};
+        _ -> no
+    end.
+
+float_match_result(F, R) ->
+    {is_float(F), F, <<F:64/float>>, R}.
+
+bit_match_float(big, Input, Size) ->
+    case Input of
+        <<F:Size/float-big, R/bitstring>> -> float_match_result(F, R);
+        _ -> no
+    end;
+bit_match_float(little, Input, Size) ->
+    case Input of
+        <<F:Size/float-little, R/bitstring>> -> float_match_result(F, R);
+        _ -> no
+    end;
+bit_match_float(unaligned_big, Input, Size) ->
+    case Input of
+        <<_:3, F:Size/float-big, R/bitstring>> -> float_match_result(F, R);
+        _ -> no
+    end;
+bit_match_float(unaligned_little, Input, Size) ->
+    case Input of
+        <<_:3, F:Size/float-little, R/bitstring>> -> float_match_result(F, R);
+        _ -> no
+    end;
+bit_match_float(unit2_big, Input, Size) ->
+    case Input of
+        <<F:Size/float-big-unit:2, R/bitstring>> -> float_match_result(F, R);
+        _ -> no
+    end;
+bit_match_float(unit4_little, Input, Size) ->
+    case Input of
+        <<F:Size/float-little-unit:4, R/bitstring>> -> float_match_result(F, R);
+        _ -> no
+    end;
+bit_match_float(exact64, Input, _Size) ->
+    case Input of
+        <<F:64/float>> -> float_match_result(F, <<>>);
+        _ -> no
+    end.
+
+bit_match_literal(prefix_binary, Input) ->
+    case Input of
+        <<"abc", R/binary>> -> R;
+        _ -> no
+    end;
+bit_match_literal(prefix_bitstring, Input) ->
+    case Input of
+        <<"abc", R/bitstring>> -> R;
+        _ -> no
+    end;
+bit_match_literal(prefix_partial, Input) ->
+    case Input of
+        <<5:3, R/bitstring>> -> R;
+        _ -> no
+    end;
+bit_match_literal(full_abc, Input) ->
+    case Input of
+        <<"abc">> -> matched;
+        _ -> no
+    end;
+bit_match_literal(full_partial_5_3, Input) ->
+    case Input of
+        <<5:3>> -> matched;
+        _ -> no
+    end;
+bit_match_literal(unaligned_partial_5_3, Input) ->
+    case Input of
+        <<_:3, 5:3>> -> matched;
+        _ -> no
+    end.
 
 phash2_term({float_bits, Sign, Exp, Frac}) ->
     <<F:64/float>> = <<Sign:1, Exp:11, Frac:52>>,

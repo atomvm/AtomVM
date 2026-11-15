@@ -16,9 +16,9 @@ runner semantics in [README.md](README.md).
   `2aa1467d4c28c4bffd5f5d205ebb197e261f85a4` in the latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 4,449 public-behavior recipes inspired by Lean tests
-  and upstream examples. Source attribution is not an assertion of theorem
-  premises or proof coverage.
+- `lean_runtime.py` selects 5,085 public-behavior recipes inspired by Lean tests
+  and upstream examples (`277` of `428` Lean test sites across all 26 files). Source
+  attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
   the proved postcondition to be true on both VMs: five integer singleton sums,
   the empty sum, and thirteen protocol postconditions. Other matching

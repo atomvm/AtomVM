@@ -1089,8 +1089,12 @@ def cases():
     construction = "Term/Bitstring/Construction"
     matching = "Term/Bitstring/Matching"
     for encoding, bits in [
-        ("utf8", ["<<>>", "<<128>>", "<<192,128>>", "<<237,160,128>>", "<<244,144,128,128>>",
-                  "<<194,64:7>>", "<<97,255>>", "<<226,130,172>>", "<<240,159,152,128>>", "<<239,187,191>>"]),
+        ("utf8", ["<<>>", "<<128>>", "<<192,128>>", "<<16#C1,16#BF>>",
+                  "<<16#E0,16#80,16#80>>", "<<16#E0,16#9F,16#BF>>",
+                  "<<237,160,128>>", "<<16#F0,16#80,16#80,16#80>>",
+                  "<<16#F0,16#8F,16#BF,16#BF>>", "<<244,144,128,128>>",
+                  "<<194,64:7>>", "<<97,255>>", "<<226,130,172>>",
+                  "<<240,159,152,128>>", "<<239,187,191>>"]),
         ("utf16", ["<<>>", "<<0>>", "<<16#DC00:16>>", "<<16#D800:16>>", "<<16#D800:16,65:16>>",
                    "<<16#DC00:16,16#D800:16>>", "<<0,32:7>>", "<<16#D800:16,16#6E00:15>>",
                    "<<97:16,16#DC00:16>>", "<<16#D83D:16,16#DE00:16>>", "<<16#FEFF:16>>"]),
@@ -1105,16 +1109,395 @@ def cases():
     ]:
         for offset in [0, 3]:
             for value in bits:
-                probe(matching, ["utf16_rejects_malformed" if encoding.startswith("utf16") else
-                                 "utf32_rejects_malformed" if encoding.startswith("utf32") else "utf8_rejects_malformed",
-                                 "utf_rejects_incomplete_final_code_unit", "utf_preserves_invalid_suffix",
-                                 "utf_unaligned_with_partial_suffix"],
+                malformed = ("utf16_rejects_malformed" if encoding.startswith("utf16") else
+                             "utf32_rejects_malformed" if encoding.startswith("utf32") else
+                             ["utf8_rejects_malformed", "match_utf8_rejects_overlong"])
+                origins = ([malformed] if isinstance(malformed, str) else malformed) + [
+                    "utf_rejects_incomplete_final_code_unit",
+                    "utf_preserves_invalid_suffix",
+                    "utf_unaligned_with_partial_suffix",
+                ]
+                probe(matching, origins,
                       f"differential:utf({encoding},<<5:{offset},({value})/bitstring>>,{offset})")
-            for codepoint in [0, 127, 128, 0xD7FF, 0xD800, 0xDFFF, 0xE000, 0xFEFF, 0x20AC,
-                              0x1F600, 0x10FFFF, 0x110000, -1]:
+            for codepoint in [0, 127, 128, 0x7FF, 0x800, 0xD7FF, 0xD800, 0xDFFF,
+                              0xE000, 0xFEFF, 0xFFFF, 0x10000, 0x20AC, 0x1F600,
+                              0x10FFFF, 0x110000, -1]:
                 probe(construction, ["utf_boundaries", "utf_characters", "utf_invalid_scalars",
                                      "utf_unaligned_concatenation"],
                       f"differential:utf_construct({encoding},{codepoint},{offset})")
+
+    for encoding in ["utf8", "utf16", "utf16le", "utf32", "utf32le"]:
+        for codepoint in [0, 0x7F, 0x80, 0x7FF, 0x800, 0xD7FF, 0xE000, 0xFEFF,
+                          0xFFFF, 0x10000, 0x20AC, 0x1F600, 0x10FFFF]:
+            c_origins = ["utf_boundaries", "utf_characters", "utf16_size", "utf32_preserves_scalar"]
+            m_origins = ["utf_scalar_boundaries", "utf32_big_roundtrip",
+                         "utf8_returns_scalar", "utf16_returns_scalar", "utf32_returns_scalar"]
+            probe(construction, c_origins, f"differential:utf_roundtrip({encoding},{codepoint})")
+            probe(matching, m_origins, f"differential:utf_roundtrip({encoding},{codepoint})")
+        for nonint in ["a", "1.0", "<<65>>", "[65]", "{}"]:
+            probe(construction, "utf_noninteger",
+                  f"differential:utf_construct({encoding},{nonint},0)")
+        for nonbits in ["a", "65", "[65]", "{<<65>>}"]:
+            probe(matching, "utf_nonbitstring_inputs",
+                  f"differential:utf_match_term({encoding},{nonbits})")
+
+    # Whole, sized, unit-checked, and associative bitstring construction.
+    for kind, val, size, origins in [
+        ("whole_bitstring", "<<>>", "0", ["whole_bitstring_preserves_encoding"]),
+        ("whole_bitstring", "<<5:3>>", "0", ["whole_bitstring_preserves_encoding"]),
+        ("whole_bitstring", "<<16#AA,5:3>>", "0", ["whole_bitstring_preserves_encoding"]),
+        ("whole_bitstring", "bad", "0", ["invalid_operands"]),
+        ("whole_binary", "<<1,2,3>>", "0", ["whole_segment_checks_unit"]),
+        ("whole_binary", "<<5:3>>", "0", ["whole_segment_checks_unit"]),
+        ("whole_binary", "<<1,5:3>>", "0", ["whole_segment_checks_unit"]),
+        ("whole_binary", "123", "0", ["invalid_operands"]),
+        ("whole_binary_unit16", "<<1,2,3,4>>", "0", ["whole_segment_checks_unit"]),
+        ("whole_binary_unit16", "<<1,2,3>>", "0", ["whole_segment_checks_unit"]),
+        ("whole_binary_unit16", "<<5:3>>", "0", ["whole_segment_checks_unit"]),
+        ("whole_bitstring_unit3", "<<5:3>>", "0", ["whole_segment_checks_unit"]),
+        ("whole_bitstring_unit3", "<<63:6>>", "0", ["whole_segment_checks_unit"]),
+        ("whole_bitstring_unit3", "<<1>>", "0", ["whole_segment_checks_unit"]),
+        ("whole_bitstring_unit256", "<<0:256>>", "0", ["whole_segment_checks_unit", "maximum_unit"]),
+        ("whole_bitstring_unit256", "<<0:512>>", "0", ["whole_segment_checks_unit", "maximum_unit"]),
+        ("whole_bitstring_unit256", "<<0:248>>", "0", ["whole_segment_checks_unit", "maximum_unit"]),
+        ("whole_bitstring_unit256", "<<5:3>>", "0", ["whole_segment_checks_unit", "maximum_unit"]),
+        ("sized_binary", "<<1,2,3>>", "2", ["sized_segment_preserves_prefix"]),
+        ("sized_binary", "<<16#AA,5:3>>", "1", ["sized_segment_preserves_prefix"]),
+        ("sized_binary", "<<1,2>>", "0", ["sized_segment_preserves_prefix", "zero_width"]),
+        ("sized_binary", "<<5:3>>", "1", ["sized_segment_preserves_prefix"]),
+        ("sized_binary", "<<1>>", "2", ["sized_segment_preserves_prefix"]),
+        ("sized_binary", "<<1,2>>", "-1", ["negative_size"]),
+        ("sized_binary", "bad", "0", ["zero_width", "invalid_operands"]),
+        ("sized_binary_unit16", "<<1,2,3,4,5>>", "2", ["sized_segment_preserves_prefix"]),
+        ("sized_binary_unit16", "<<1,2,3>>", "2", ["sized_segment_preserves_prefix"]),
+        ("sized_bitstring", "<<16#AB,5:3>>", "5", ["sized_segment_preserves_prefix"]),
+        ("sized_bitstring", "<<16#AB,5:3>>", "11", ["sized_segment_preserves_prefix"]),
+        ("sized_bitstring", "<<16#AB,5:3>>", "12", ["sized_segment_preserves_prefix"]),
+        ("sized_bitstring", "<<1,2>>", "0", ["zero_width"]),
+        ("sized_bitstring", "<<1,2>>", "-1", ["negative_size"]),
+        ("sized_bitstring", "<<1,2>>", "bad", ["invalid_operands"]),
+        ("sized_bitstring", "<<1,2>>", "1 bsl 64", ["invalid_operands"]),
+        ("sized_bitstring_unit3", "<<16#AB,5:3>>", "3", ["sized_segment_preserves_prefix"]),
+        ("sized_bitstring_unit3", "<<16#AB,5:3>>", "4", ["sized_segment_preserves_prefix"]),
+        ("concat_empty", "<<>>", "0", ["concatenation_empty"]),
+        ("concat_empty", "<<5:3>>", "0", ["concatenation_empty"]),
+        ("concat_empty", "<<1,2,3:5>>", "0", ["concatenation_empty"]),
+        ("concat_assoc", "{<<5:3>>,<<16#AB:8>>,<<3:2>>}", "0",
+         ["concatenation_preserves_bits", "concatenation_associative"]),
+        ("concat_assoc", "{<<1:1>>,<<0:7>>,<<16#FF>>}", "0",
+         ["concatenation_preserves_bits", "concatenation_associative"]),
+        ("cross_byte_concat_unit3", "{<<5:3>>,16#1234,<<3:2>>}", "5",
+         ["units_and_cross_byte_concatenation", "scaled_unit_truncation"]),
+        ("cross_byte_concat_little_unit5", "{<<2:2>>,-17,<<1:3>>}", "3",
+         ["units_and_cross_byte_concatenation", "scaled_unit_truncation"]),
+    ]:
+        probe(construction, origins, f"differential:bit_construct_binary({kind},{val},{size})")
+
+    probe(matching, "build_from_bytes", "differential:bit_construct_binary(build_from_bytes,0,0)")
+
+    # Integer bitstring construction across widths, signedness, endianness, units, and errors.
+    for spec, val, size, origins in [
+        ("unsigned_big", "0", "8", ["unsigned_byte_boundaries", "integer_segment_size"]),
+        ("unsigned_big", "255", "8", ["unsigned_byte_boundaries", "integer_segment_preserves_bits"]),
+        ("unsigned_big", "256", "8", ["unsigned_byte_boundaries"]),
+        ("unsigned_big", "-1", "8", ["unsigned_byte_boundaries", "negative_values_and_truncation"]),
+        ("unsigned_big", "-256", "8", ["unsigned_byte_boundaries", "negative_values_and_truncation"]),
+        ("signed_big", "-128", "8", ["signed_byte_boundaries"]),
+        ("signed_big", "127", "8", ["signed_byte_boundaries"]),
+        ("signed_big", "128", "8", ["signed_byte_boundaries"]),
+        ("signed_big", "-129", "8", ["signed_byte_boundaries"]),
+        ("unsigned_big", "16#1234", "16", ["byte_aligned_endianness"]),
+        ("unsigned_little", "16#1234", "16", ["byte_aligned_endianness"]),
+        ("signed_big", "-32768", "16", ["multibyte_overflow_and_underflow"]),
+        ("signed_little", "32768", "16", ["multibyte_overflow_and_underflow"]),
+        ("signed_big", "-32769", "16", ["multibyte_overflow_and_underflow"]),
+        ("unsigned_big", "65536", "16", ["multibyte_overflow_and_underflow"]),
+        ("unsigned_big", "16#5A", "7", ["subbyte_endianness"]),
+        ("unsigned_little", "16#5A", "7", ["subbyte_endianness"]),
+        ("signed_big", "-5", "4", ["subbyte_endianness"]),
+        ("signed_little", "-5", "4", ["subbyte_endianness"]),
+        ("unsigned_big", "16#ABC", "12", ["big_and_little_partial_bytes"]),
+        ("unsigned_little", "16#ABC", "12", ["big_and_little_partial_bytes"]),
+        ("signed_big", "-2049", "12", ["big_and_little_partial_bytes", "partial_byte_overflow_and_underflow"]),
+        ("signed_little", "2048", "12", ["big_and_little_partial_bytes", "partial_byte_overflow_and_underflow"]),
+        ("unsigned_big", "8", "3", ["partial_byte_overflow_and_underflow"]),
+        ("signed_big", "-5", "3", ["partial_byte_overflow_and_underflow"]),
+        ("unsigned_little", "16#1FFF", "13", ["partial_byte_overflow_and_underflow"]),
+        ("unsigned_big", "(1 bsl 100) + 16#ABCD", "13", ["large_integer_truncation"]),
+        ("unsigned_little", "-(1 bsl 100) - 1", "13", ["large_integer_truncation", "negative_values_and_truncation"]),
+        ("signed_big", "(1 bsl 128) - 1", "64", ["large_integer_truncation", "multibyte_overflow_and_underflow"]),
+        ("unsigned_little", "1 bsl 200", "128", ["large_integer_truncation"]),
+        ("unit3_unsigned_big", "16#DEAD", "5", ["scaled_unit_truncation", "units_and_cross_byte_concatenation"]),
+        ("unit5_signed_little", "-(1 bsl 40) - 3", "3", ["scaled_unit_truncation", "units_and_cross_byte_concatenation"]),
+        ("unit256_big", "(1 bsl 255) + 16#1234", "1", ["maximum_unit"]),
+        ("unit256_little", "16#123456", "2", ["maximum_unit"]),
+        ("unsigned_big", "123", "0", ["zero_width"]),
+        ("signed_little", "1 bsl 100", "0", ["zero_width"]),
+        ("unsigned_big", "bad", "0", ["zero_width", "invalid_operands"]),
+        ("unsigned_big", "1", "-1", ["negative_size"]),
+        ("unsigned_big", "bad", "-1", ["negative_size", "invalid_operands"]),
+        ("unsigned_big", "1.5", "8", ["invalid_operands"]),
+        ("unsigned_big", "bad", "8", ["invalid_operands"]),
+        ("unsigned_big", "1", "bad", ["invalid_operands"]),
+        ("unsigned_big", "1", "1 bsl 64", ["invalid_operands"]),
+    ]:
+        for offset in [0, 3]:
+            probe(construction, origins,
+                  f"differential:bit_construct_int({spec},{val},{size},{offset})")
+
+    # Float16, float32, float64 construction and error paths.
+    float_construct_cases = [
+        # Float64 signed zeros, normals, extremes, integer conversions.
+        ("big", "0.0", "64", ["float64_signed_zeros", "float64_size"]),
+        ("big", "-0.0", "64", ["float64_signed_zeros", "float64_size"]),
+        ("little", "{ieee64,1,0,0}", "64", ["float64_signed_zeros", "float64_unaligned_concatenation"]),
+        ("little", "{ieee64,0,1023,0}", "64", ["float64_normal_values", "float64_unaligned_concatenation"]),
+        ("big", "{ieee64,1,1024,1}", "64", ["float64_normal_values"]),
+        ("big", "{ieee64,0,0,1}", "64", ["float64_extremes"]),
+        ("little", "{ieee64,1,0,1}", "64", ["float64_extremes"]),
+        ("big", "{ieee64,0,1,0}", "64", ["float64_extremes"]),
+        ("big", "{ieee64,0,2046,(1 bsl 52)-1}", "64", ["float64_extremes"]),
+        ("little", "{ieee64,1,2046,(1 bsl 52)-1}", "64", ["float64_extremes"]),
+        ("big", "0", "64", ["float64_integer_conversion"]),
+        ("big", "(1 bsl 53) + 1", "64", ["float64_integer_conversion"]),
+        ("big", "-((1 bsl 53) + 1)", "64", ["float64_integer_conversion"]),
+        ("big", "(1 bsl 255) - 1", "64", ["float64_integer_conversion"]),
+        ("big", "-(1 bsl 255)", "64", ["float64_integer_conversion"]),
+        # Runtime float widths (including unit:2).
+        ("unit2_big", "{ieee64,0,1023,0}", "32", ["runtime_float_widths", "float64_size"]),
+        ("unit2_little", "{ieee64,1,1020,0}", "16", ["runtime_float_widths", "float32_construction"]),
+        ("unit2_big", "{ieee64,0,1023,0}", "8", ["runtime_float_widths", "float16_construction"]),
+        ("big", "1.0", "-1", ["runtime_float_widths"]),
+        ("big", "1.0", "size", ["runtime_float_widths"]),
+        # Float16 OTP bs_construct_SUITE fp16/1 vectors.
+        ("big", "{ieee64,0,999,16971005}", "16", ["float16_construction"]),
+        ("little", "{ieee64,1,999,16971005}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1008,4494803592606853}", "16", ["float16_construction"]),
+        ("little", "{ieee64,1,1008,4494803592606853}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1009,0}", "16", ["float16_construction"]),
+        ("little", "{ieee64,1,1009,0}", "16", ["float16_construction"]),
+        ("big", "65504", "16", ["float16_construction"]),
+        ("little", "-65504", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1038,4499201580859392}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1022,4499201592118391}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,0,0}", "16", ["float16_construction"]),
+        ("little", "{ieee64,1,0,0}", "16", ["float16_construction"]),
+        ("big", "1", "16", ["float16_construction"]),
+        ("little", "-1", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1023,4398035252105}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1021,1499733803991469}", "16", ["float16_construction"]),
+        ("big", "1000000000", "16", ["float16_construction"]),
+        ("little", "-1000000000", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1004,2674012278751232}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1001,1125899906842624}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1007,1741626418397184}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1023,2199560126464}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1023,2199023255552}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1023,2199027449856}", "16", ["float16_construction"]),
+        # Float32 vectors.
+        ("big", "{ieee64,0,0,0}", "32", ["float32_construction"]),
+        ("big", "{ieee64,0,1020,0}", "32", ["float32_construction"]),
+        ("little", "{ieee64,0,1020,0}", "32", ["float32_construction"]),
+        ("big", "{ieee64,1,0,0}", "32", ["float32_construction"]),
+        ("big", "{ieee64,0,2019,2221273467876764}", "32", ["float32_construction"]),
+        ("little", "{ieee64,1,2019,2221273467876764}", "32", ["float32_construction"]),
+        ("big", "{ieee64,0,856,3921383706114079}", "32", ["float32_construction"]),
+        ("big", "{ieee64,0,1019,2702159776422298}", "32", ["float32_construction"]),
+        ("big", "288230393331580929", "32", ["float32_construction"]),
+        ("big", "-288230393331580929", "32", ["float32_construction"]),
+        ("big", "576460786663161857", "32", ["float32_construction"]),
+        ("big", "-576460786663161857", "32", ["float32_construction"]),
+        ("big", "576460752303423487", "32", ["float32_construction"]),
+        ("big", "1 bsl 200", "32", ["float32_construction"]),
+        ("little", "-(1 bsl 200)", "32", ["float32_construction"]),
+        # Narrow float & width errors (keep integers within AtomVM 256-bit limit).
+        ("big", "one", "16", ["narrow_float_errors"]),
+        ("little", "one", "64", ["narrow_float_errors"]),
+        ("big", "1.0", "0", ["narrow_float_errors", "zero_width"]),
+        ("big", "1.0", "8", ["narrow_float_errors"]),
+        ("big", "1.0", "24", ["narrow_float_errors"]),
+        ("big", "1.0", "128", ["narrow_float_errors"]),
+    ]
+    for spec, val, size, origins in float_construct_cases:
+        extra = (
+            {"word_size_dependent": True}
+            if size == "32" and val in {"288230393331580929", "-288230393331580929"}
+            else {}
+        )
+        for offset in [0, 3]:
+            probe(construction, origins,
+                  f"differential:float_construct({spec},{val},{size},{offset})", **extra)
+
+    # Bitstring binary, tail, alignment, and literal matching.
+    for spec, bits, size, origins in [
+        ("binary_sized_rest", "<<1,2,3>>", "2", ["binary_consumes_exact_width"]),
+        ("binary_sized_rest", "<<1,2,3:5>>", "2", ["binary_consumes_exact_width"]),
+        ("binary_sized_rest", "<<1,2:7>>", "2", ["short_binary_input"]),
+        ("binary_sized_rest", "<<>>", "1", ["short_binary_input"]),
+        ("binary_sized_rest", "not_bits", "0", ["short_binary_input"]),
+        ("binary_unit16_rest", "<<1,2,3,4,5>>", "2", ["binary_consumes_exact_width"]),
+        ("binary_unit16_rest", "<<1,2,3>>", "2", ["short_binary_input"]),
+        ("bitstring_sized_rest", "<<16#AB,5:3>>", "5", ["binary_consumes_exact_width"]),
+        ("bitstring_sized_rest", "<<16#AB,5:3>>", "11", ["binary_consumes_exact_width"]),
+        ("bitstring_sized_rest", "<<16#AB,5:3>>", "12", ["short_binary_input"]),
+        ("bitstring_unit3_rest", "<<16#AB,5:3>>", "3", ["binary_consumes_exact_width"]),
+        ("bitstring_unit3_rest", "<<16#AB,5:3>>", "4", ["short_binary_input"]),
+        ("tail_binary_after3", "<<5:3,1,2>>", "0", ["tail_alignment"]),
+        ("tail_binary_after3", "<<5:3>>", "0", ["tail_alignment"]),
+        ("tail_binary_after3", "<<5:3,1:1>>", "0", ["tail_alignment"]),
+        ("tail_bitstring_after3", "<<5:3,1:1>>", "0", ["tail_alignment"]),
+        ("tail_binary_unit16_after4", "<<9:4,1,2,3,4>>", "0", ["tail_alignment"]),
+        ("tail_binary_unit16_after4", "<<9:4,1,2,3>>", "0", ["tail_alignment"]),
+        ("fixed_tail_bitstring16", "<<5:3,16#1234:16>>", "0", ["fixed_tail_sizes"]),
+        ("fixed_tail_bitstring16", "<<5:3,16#123:15>>", "0", ["fixed_tail_sizes"]),
+        ("fixed_tail_bitstring16", "<<5:3,16#12345:17>>", "0", ["fixed_tail_sizes"]),
+        ("fixed_tail_binary2", "<<5:3,16#AB,16#CD>>", "0", ["fixed_tail_sizes"]),
+        ("fixed_tail_binary2", "<<5:3,16#AB,7:7>>", "0", ["fixed_tail_sizes"]),
+        ("finish_byte", "<<42>>", "0", ["finish_requires_no_remaining_bits"]),
+        ("finish_byte", "<<42,0>>", "0", ["finish_requires_no_remaining_bits"]),
+        ("finish_byte", "<<42,1:1>>", "0", ["finish_requires_no_remaining_bits"]),
+        ("finish_byte", "<<>>", "0", ["finish_requires_no_remaining_bits"]),
+        ("unaligned_binary2_rest", "<<5:3,16#AB,16#CD,3:2>>", "0", ["unaligned_binary_capture"]),
+        ("unaligned_binary2_rest", "<<5:3,16#AB,16#CD>>", "0", ["unaligned_binary_capture"]),
+        ("unaligned_binary2_rest", "<<5:3,16#AB,7:7>>", "0", ["short_binary_input", "unaligned_binary_capture"]),
+        ("unaligned_bitstring16_rest", "<<5:3,16#12,16#34,1:1>>", "0", ["unaligned_binary_capture"]),
+        ("unaligned_tail_binary", "<<5:3,16#AB,16#CD>>", "0", ["unaligned_capture_requires_binary_length"]),
+        ("unaligned_tail_binary", "<<5:3>>", "0", ["unaligned_capture_requires_binary_length"]),
+        ("unaligned_tail_binary", "<<5:3,16#AB,1:1>>", "0", ["unaligned_capture_requires_binary_length"]),
+    ]:
+        probe(matching, origins, f"differential:bit_match_binary({spec},{bits},{size})")
+
+    # Integer matching: exact width, short, zero-width, signed, partial little-endian, dynamic size.
+    for spec, bits, size, origins in [
+        ("unsigned_big_rest", "<<110,117>>", "8", ["match_leading_byte", "integer_consumes_exact_width"]),
+        ("unsigned_big_rest", "<<1,2,3>>", "16", ["match_leading_bytes", "integer_consumes_exact_width"]),
+        ("unsigned_big_rest", "<<>>", "8", ["match_byte_empty", "short_integer_input"]),
+        ("unsigned_big_rest", "<<255:7>>", "8", ["short_integer_input"]),
+        ("unsigned_big_rest", "<<16#AB,5:3>>", "11", ["integer_consumes_exact_width"]),
+        ("unsigned_big_rest", "<<16#AB,5:3>>", "12", ["short_integer_input"]),
+        ("zero_width_tail", "<<>>", "0", ["integer_zero_width"]),
+        ("zero_width_tail", "<<1,2>>", "0", ["integer_zero_width"]),
+        ("zero_width_tail", "<<5:3>>", "0", ["integer_zero_width"]),
+        ("zero_width_tail", "not_bits", "0", ["integer_zero_width", "integer_pattern_failures"]),
+        ("signed_big_rest", "<<128>>", "8", ["integer_signed_boundaries"]),
+        ("signed_big_rest", "<<127>>", "8", ["integer_signed_boundaries"]),
+        ("signed_big_rest", "<<255>>", "8", ["integer_signed_boundaries"]),
+        ("signed_little_rest", "<<0,128>>", "16", ["integer_signed_boundaries"]),
+        ("signed_little_rest", "<<255,127>>", "16", ["integer_signed_boundaries"]),
+        ("signed_big_rest", "<<4:3,1:1>>", "3", ["integer_signed_boundaries"]),
+        ("signed_big_rest", "<<3:3,1:1>>", "3", ["integer_signed_boundaries"]),
+        ("signed_big_rest", "<<16#8000000000000000:64>>", "64", ["integer_signed_boundaries"]),
+        ("unsigned_little_rest", "<<16#BC,16#A:4,1:1>>", "12", ["integer_partial_little_endian"]),
+        ("signed_little_rest", "<<16#BC,16#F:4>>", "12", ["integer_partial_little_endian"]),
+        ("unaligned_unsigned_little_rest", "<<5:3,16#1234:13/little,3:2>>", "13", ["integer_partial_little_endian"]),
+        ("unaligned_signed_little_rest", "<<5:3,(-7):11/signed-little,1:1>>", "11", ["integer_partial_little_endian"]),
+        ("unsigned_big_exact", "<<1>>", "8", ["finish_requires_no_remaining_bits"]),
+        ("unsigned_big_exact", "<<1,2>>", "8", ["finish_requires_no_remaining_bits", "integer_pattern_failures"]),
+        ("unsigned_big_rest", "bad_input", "8", ["integer_pattern_failures"]),
+        ("unsigned_big_rest", "<<1,2>>", "-1", ["integer_pattern_failures"]),
+        ("unsigned_big_rest", "<<1,2>>", "bad", ["integer_pattern_failures"]),
+        ("size_from_prev_binary", "<<2,16#AA,16#BB,5:3>>", "0", ["size_from_previous_segment"]),
+        ("size_from_prev_binary", "<<0,5:3>>", "0", ["size_from_previous_segment"]),
+        ("size_from_prev_binary", "<<3,1,2>>", "0", ["size_from_previous_segment"]),
+        ("size_from_prev_unit2", "<<5:4,16#2AA:10,1:2>>", "0", ["size_from_previous_segment"]),
+        ("size_from_prev_signed", "<<15:4,1,2>>", "0", ["size_from_previous_segment"]),
+        ("consecutive_segments", "<<5:3,29:5,16#5A3:11/little,19:5,3:2>>", "0", ["consecutive_integer_segments"]),
+    ]:
+        probe(matching, origins, f"differential:bit_match_int({spec},{bits},{size})")
+
+    # Float16, float32, float64 matching (finite values, signed zero, subnormals, nonfinite & invalid widths).
+    for spec, bits, size, origins in [
+        ("big", "<<60,0>>", "16", ["float_extraction_returns_float", "float16_matching"]),
+        ("big", "<<0,0>>", "16", ["float16_matching"]),
+        ("big", "<<128,0>>", "16", ["float16_matching"]),
+        ("big", "<<0,1>>", "16", ["float16_matching"]),
+        ("big", "<<128,1>>", "16", ["float16_matching"]),
+        ("big", "<<3,255>>", "16", ["float16_matching"]),
+        ("big", "<<4,0>>", "16", ["float16_matching"]),
+        ("big", "<<123,255>>", "16", ["float16_matching"]),
+        ("little", "<<255,251,7:3>>", "16", ["float16_matching"]),
+        ("unaligned_big", "<<5:3,123,255,3:2>>", "16", ["float16_matching"]),
+        ("big", "<<124,0>>", "16", ["float16_matching"]),
+        ("big", "<<252,0>>", "16", ["float16_matching"]),
+        ("big", "<<124,1>>", "16", ["float16_matching"]),
+        ("big", "<<126,0>>", "16", ["float16_matching"]),
+        ("big", "<<123,255:7>>", "16", ["float16_matching"]),
+        ("big", "<<0,0,0,0>>", "32", ["float32_matching"]),
+        ("big", "<<128,0,0,0>>", "32", ["float32_matching"]),
+        ("big", "<<0,0,0,1>>", "32", ["float32_matching"]),
+        ("big", "<<128,0,0,1>>", "32", ["float32_matching"]),
+        ("big", "<<62,0,0,0>>", "32", ["float32_matching"]),
+        ("big", "<<127,127,255,255>>", "32", ["float32_matching"]),
+        ("little", "<<0,0,0,192,1:1>>", "32", ["float32_matching"]),
+        ("unaligned_little", "<<5:3,0,0,128,63,3:2>>", "32", ["float32_matching"]),
+        ("big", "<<127,128,0,0>>", "32", ["float32_matching"]),
+        ("big", "<<255,128,0,0>>", "32", ["float32_matching"]),
+        ("big", "<<127,192,0,0>>", "32", ["float32_matching"]),
+        ("big", "<<127,128,0,1>>", "32", ["float32_matching"]),
+        ("big", "<<62,0,0,0:7>>", "32", ["float32_matching"]),
+        ("big", "<<0:64>>", "64", ["float64_signed_zero_and_subnormal"]),
+        ("big", "<<1:1,0:63>>", "64", ["float64_signed_zero_and_subnormal"]),
+        ("big", "<<0,0,0,0,0,0,0,1>>", "64", ["float64_signed_zero_and_subnormal"]),
+        ("big", "<<128,0,0,0,0,0,0,1>>", "64", ["float64_signed_zero_and_subnormal"]),
+        ("big", "<<0,15,255,255,255,255,255,255>>", "64", ["float64_signed_zero_and_subnormal"]),
+        ("unaligned_little", "<<5:3,1,0,0,0,0,0,0,128,3:5>>", "64", ["float64_signed_zero_and_subnormal"]),
+        ("big", "<<0,16,0,0,0,0,0,0>>", "64", ["float64_normal_and_extreme"]),
+        ("big", "<<63,240,0,0,0,0,0,0,9>>", "64", ["float64_normal_and_extreme"]),
+        ("big", "<<127,239,255,255,255,255,255,255>>", "64", ["float64_normal_and_extreme"]),
+        ("little", "<<255,255,255,255,255,255,239,255>>", "64", ["float64_normal_and_extreme"]),
+        ("exact64", "<<63,240,0,0,0,0,0,0>>", "64", ["float64_normal_and_extreme", "finish_requires_no_remaining_bits"]),
+        ("exact64", "<<63,240,0,0,0,0,0,0,1>>", "64", ["finish_requires_no_remaining_bits", "float64_rejects_nonfinite_and_short_inputs"]),
+        ("big", "<<127,240,0,0,0,0,0,0>>", "64", ["float64_rejects_nonfinite_and_short_inputs"]),
+        ("big", "<<255,240,0,0,0,0,0,0>>", "64", ["float64_rejects_nonfinite_and_short_inputs"]),
+        ("big", "<<127,248,0,0,0,0,0,0>>", "64", ["float64_rejects_nonfinite_and_short_inputs"]),
+        ("big", "<<127,240,0,0,0,0,0,1>>", "64", ["float64_rejects_nonfinite_and_short_inputs"]),
+        ("big", "<<63,240,0,0,0,0,0,0:7>>", "64", ["float64_rejects_nonfinite_and_short_inputs"]),
+        ("big", "not_bits", "64", ["float64_rejects_nonfinite_and_short_inputs"]),
+        ("unit2_big", "<<60,0,9>>", "8", ["runtime_float_widths", "float16_matching"]),
+        ("unit2_big", "<<62,0,0,0>>", "16", ["runtime_float_widths", "float32_matching"]),
+        ("unit2_big", "<<63,240,0,0,0,0,0,0>>", "32", ["runtime_float_widths", "float64_normal_and_extreme"]),
+        ("unit4_little", "<<0,60>>", "4", ["runtime_float_widths"]),
+        ("unit4_little", "<<0,0,0,62>>", "8", ["runtime_float_widths"]),
+        ("unit4_little", "<<0,0,0,0,0,0,240,63>>", "16", ["runtime_float_widths"]),
+        ("big", "<<0:128>>", "0", ["float_zero_and_invalid_widths"]),
+        ("big", "<<0:128>>", "8", ["float_zero_and_invalid_widths"]),
+        ("big", "<<0:128>>", "24", ["float_zero_and_invalid_widths"]),
+        ("big", "<<0:128>>", "48", ["float_zero_and_invalid_widths"]),
+        ("big", "<<0:128>>", "128", ["float_zero_and_invalid_widths"]),
+        ("big", "<<0:128>>", "-1", ["float_zero_and_invalid_widths", "runtime_float_widths"]),
+        ("big", "<<0:128>>", "bad", ["float_zero_and_invalid_widths", "runtime_float_widths"]),
+    ]:
+        probe(matching, origins, f"differential:bit_match_float({spec},{bits},{size})")
+
+    # Literal bitstring matching: prefix, exact byte/bit, and sub-byte patterns.
+    for kind, bits, origins in [
+        ("prefix_binary", "<<\"abc\">>", ["literal_prefix_tail"]),
+        ("prefix_binary", "<<\"abcdef\">>", ["literal_prefix_tail"]),
+        ("prefix_binary", "<<\"abcd\",1:1>>", ["literal_prefix_tail", "tail_alignment"]),
+        ("prefix_binary", "<<\"ab\">>", ["literal_prefix_tail"]),
+        ("prefix_bitstring", "<<\"abcd\",1:1>>", ["literal_prefix_tail"]),
+        ("prefix_partial", "<<16#A0>>", ["literal_prefix_tail", "partial_literal_pattern"]),
+        ("prefix_partial", "<<5:3>>", ["literal_prefix_tail", "partial_literal_pattern"]),
+        ("prefix_partial", "<<4:3,1>>", ["literal_prefix_tail", "partial_literal_pattern"]),
+        ("prefix_partial", "<<>>", ["literal_prefix_tail"]),
+        ("full_abc", "<<\"abc\">>", ["full_literal_pattern_requires_exact_bytes_and_length"]),
+        ("full_abc", "<<\"abcd\">>", ["full_literal_pattern_requires_exact_bytes_and_length"]),
+        ("full_abc", "<<\"abc\",0:1>>", ["full_literal_pattern_requires_exact_bytes_and_length"]),
+        ("full_abc", "<<\"ab\">>", ["full_literal_pattern_requires_exact_bytes_and_length"]),
+        ("full_abc", "<<\"abd\">>", ["full_literal_pattern_requires_exact_bytes_and_length"]),
+        ("full_abc", "abc", ["full_literal_pattern_requires_exact_bytes_and_length"]),
+        ("full_partial_5_3", "<<5:3>>", ["partial_literal_pattern"]),
+        ("full_partial_5_3", "<<16#A0:3>>", ["partial_literal_pattern"]),
+        ("full_partial_5_3", "<<16#80:3>>", ["partial_literal_pattern"]),
+        ("full_partial_5_3", "<<16#A0:4>>", ["partial_literal_pattern"]),
+        ("full_partial_5_3", "<<16#A0:0>>", ["partial_literal_pattern"]),
+        ("full_partial_5_3", "<<16#A0,0:3>>", ["partial_literal_pattern"]),
+        ("full_partial_5_3", "<<>>", ["partial_literal_pattern"]),
+        ("unaligned_partial_5_3", "<<5:3,5:3>>", ["partial_literal_pattern"]),
+        ("unaligned_partial_5_3", "<<5:3,4:3>>", ["partial_literal_pattern"]),
+        ("unaligned_partial_5_3", "<<5:3,5:4>>", ["partial_literal_pattern"]),
+    ]:
+        probe(matching, origins, f"differential:bit_match_literal({kind},{bits})")
 
     hashing = "Modules/Hashing"
     hashing_vectors = [
@@ -1258,6 +1641,8 @@ def inventory(checkout, selected, failures=None, unverified=()):
             "Term/Try.lean": "Model empty stack traces and exhaustion are not VM expectations; translation-fixture mode tests try behavior separately.",
             "Term/Maps.lean": "Internal duplicate-binding association lists and extraction sentinels are not public map representations.",
             "Term/Bitstring.lean": "Internal padding validity and proof objects are not observable VM heap contracts.",
+            "Term/Bitstring/Construction.lean": "Public bitstring construction samples within AtomVM's 256-bit integer limit; ofBits representation lemmas are internal to Lean.",
+            "Term/Bitstring/Matching.lean": "Public bitstring matching samples; extract_rewrites is a Lean simp lemma.",
         }
         rows.append({"source": source, "sha256": hashlib.sha256(raw).hexdigest(), "tests": tests,
                      "note": notes.get(source, "Finite public-behavior samples and invalid-input extensions, not universal theorem instances.")})
