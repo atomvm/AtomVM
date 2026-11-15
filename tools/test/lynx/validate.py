@@ -6,6 +6,7 @@
 
 import argparse
 import base64
+import concurrent.futures
 import hashlib
 import json
 import math
@@ -16,6 +17,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 from pathlib import Path
 
 # Keep local runs from leaving imported bytecode in the source checkout.
@@ -214,6 +216,35 @@ def classify_expected_failures(entries, failures, areas):
     return unexpected_failures, unexpected_passes, area_counts, len(expected_by_module)
 
 
+def query_otp_word_size():
+    """Return the word size (in bytes) reported by the OTP oracle on PATH."""
+    output = subprocess.check_output(
+        ["elixir", "-e", "IO.write(:erlang.system_info(:wordsize))"],
+        text=True,
+    )
+    return int(output.strip())
+
+
+def filter_portable_cases(selected, target, oracle_word_size=None):
+    """Drop recipes whose oracle assumptions disagree with the target configuration."""
+    kept = []
+    omitted_word = 0
+    omitted_stack = 0
+    for entry in selected:
+        if (
+            entry.get("word_size_dependent")
+            and oracle_word_size is not None
+            and target["word_size"] != oracle_word_size
+        ):
+            omitted_word += 1
+            continue
+        if entry.get("stacktrace_dependent") and not target["stacktraces"]:
+            omitted_stack += 1
+            continue
+        kept.append(entry)
+    return kept, omitted_word, omitted_stack
+
+
 def validate(args, work):
     build = args.build.resolve()
     lynx = args.lynx.resolve() if args.lynx else None
@@ -271,6 +302,22 @@ def validate(args, work):
         selected += generate(args.seed, args.generated, args.float_encoding)
     if not selected:
         raise RuntimeError("No cases selected; use --generated, --replay, --lynx, --lean-runtime, or --float32")
+    if args.portable_only:
+        oracle_word_size = (
+            query_otp_word_size()
+            if any(entry.get("word_size_dependent") for entry in selected)
+            else None
+        )
+        selected, omitted_word, omitted_stack = filter_portable_cases(
+            selected, target, oracle_word_size
+        )
+        omitted = omitted_word + omitted_stack
+        if omitted:
+            print(
+                f"Omitted {omitted} target-inapplicable cases "
+                f"(word_size={omitted_word}, stacktraces={omitted_stack}).",
+                flush=True,
+            )
     print(f"Seed {args.seed}; {len(selected)} cases; build {build}", flush=True)
     entries = []
     for index, entry in enumerate(selected):
@@ -360,39 +407,64 @@ def validate(args, work):
             run_info.update(native_elixir_library=str(native_elixir),
                             native_elixir_library_sha256=hashlib.sha256(native_elixir.read_bytes()).hexdigest())
             (work / "run.json").write_text(json.dumps(run_info))
-    actuals = []
-    for entry, driver in zip(entries, drivers):
-        pack = work / "case.avm"
+    actuals = [None] * len(entries)
+    progress_lock = threading.Lock()
+    completed = 0
+
+    def run_single_case(index, entry, driver):
+        nonlocal completed
+        pack = work / f"{entry['module']}.avm"
         log_path = work / f"{entry['module']}.log"
-        command(
-            [str(target["packbeam"]), "create", str(pack), str(driver)]
-            + [str(p) for p in fixture_beams],
-            work, work / "pack.log",
-        )
+        pack_log = work / f"{entry['module']}.pack.log" if args.jobs > 1 else work / "pack.log"
         try:
-            output = command(
-                target["runtime_argv"] + [str(pack)] + [str(p) for p in libraries],
-                work, log_path, timeout=args.timeout,
+            command(
+                [str(target["packbeam"]), "create", str(pack), str(driver)]
+                + [str(p) for p in fixture_beams],
+                work, pack_log,
             )
-            lines = [line[len("LYNX_RESULT "):] for line in output.splitlines() if line.startswith("LYNX_RESULT ")]
-            if len(lines) != 1:
-                raise RuntimeError(f"Expected one result, got {len(lines)}: {output}")
-            encoded = bytes(json.loads(lines[0]))
-            actuals.append({
-                "status": "ok",
-                "stage": "complete",
-                "timeout": False,
-                "value": base64.b64encode(encoded).decode(),
-            })
-        except CommandTimeoutError as error:
-            stage = "transport" if "LYNX_SEMANTIC_DONE" in error.output.splitlines() else "semantic"
-            actuals.append({"status": "error", "stage": stage, "timeout": True, "message": str(error)})
-        except (RuntimeError, ValueError, TypeError) as error:
-            log_text = log_path.read_text() if log_path.is_file() else ""
-            stage = "transport" if "LYNX_SEMANTIC_DONE" in log_text.splitlines() else "semantic"
-            actuals.append({"status": "error", "stage": stage, "timeout": False, "message": str(error)})
-        if len(actuals) % 20 == 0:
-            print(f"Executed {len(actuals)}/{len(entries)} cases", flush=True)
+            if args.jobs > 1:
+                pack_log.unlink(missing_ok=True)
+            try:
+                output = command(
+                    target["runtime_argv"] + [str(pack)] + [str(p) for p in libraries],
+                    work, log_path, timeout=args.timeout,
+                )
+                lines = [line[len("LYNX_RESULT "):] for line in output.splitlines() if line.startswith("LYNX_RESULT ")]
+                if len(lines) != 1:
+                    raise RuntimeError(f"Expected one result, got {len(lines)}: {output}")
+                encoded = bytes(json.loads(lines[0]))
+                actual = {
+                    "status": "ok",
+                    "stage": "complete",
+                    "timeout": False,
+                    "value": base64.b64encode(encoded).decode(),
+                }
+            except CommandTimeoutError as error:
+                stage = "transport" if "LYNX_SEMANTIC_DONE" in error.output.splitlines() else "semantic"
+                actual = {"status": "error", "stage": stage, "timeout": True, "message": str(error)}
+            except (RuntimeError, ValueError, TypeError) as error:
+                log_text = log_path.read_text() if log_path.is_file() else ""
+                stage = "transport" if "LYNX_SEMANTIC_DONE" in log_text.splitlines() else "semantic"
+                actual = {"status": "error", "stage": stage, "timeout": False, "message": str(error)}
+        finally:
+            pack.unlink(missing_ok=True)
+        actuals[index] = actual
+        with progress_lock:
+            completed += 1
+            if completed % 20 == 0:
+                print(f"Executed {completed}/{len(entries)} cases", flush=True)
+
+    if args.jobs == 1:
+        for index, (entry, driver) in enumerate(zip(entries, drivers)):
+            run_single_case(index, entry, driver)
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as executor:
+            futures = [
+                executor.submit(run_single_case, index, entry, driver)
+                for index, (entry, driver) in enumerate(zip(entries, drivers))
+            ]
+            for future in futures:
+                future.result()
     (work / "actuals.json").write_text(json.dumps(actuals))
     # Compare deserialized terms on OTP, not using AtomVM's comparator.
     compare_host = ["mix", "run", "--no-compile"] if lynx else ["elixir"]
@@ -550,6 +622,14 @@ def main():
         "--expected-failures", type=Path,
         help="JSON manifest of known failing areas expected to fail (fails on unexpected failures or passes)",
     )
+    parser.add_argument(
+        "--portable-only", action="store_true",
+        help="Omit word-size- or stacktrace-dependent recipes when the target configuration differs from the oracle",
+    )
+    parser.add_argument(
+        "--jobs", type=int, default=1,
+        help="Parallel worker threads for case execution (default: 1)",
+    )
     parser.add_argument("--shrink", action="store_true", help="Try up to 30 reductions of the first generated failure")
     parser.add_argument(
         "--build", type=Path, default=Path(__file__).resolve().parents[3] / "build",
@@ -566,6 +646,8 @@ def main():
         parser.error("--timeout must be positive and finite")
     if args.generated < 0:
         parser.error("--generated must not be negative")
+    if args.jobs < 1:
+        parser.error("--jobs must be at least 1")
     work = None
     try:
         if args.output:

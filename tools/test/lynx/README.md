@@ -772,7 +772,11 @@ target too (for example, `eavmlib_aarch64`); extra library hashes are recorded.
 Emscripten/Node (`wasm32`) is supported with `--host-build`; bare-metal boards
 remain unsupported.
 
-Use `--timeout` to adjust the default five-second bound per runtime call. Host
+Use `--timeout` to adjust the default five-second bound per runtime call, `--jobs`
+to run per-case `packbeam` and VM invocations across parallel worker threads
+(default `1`), and `--portable-only` to omit `word_size_dependent` or
+`stacktrace_dependent` recipes whose oracle assumptions disagree with the
+resolved target. Host compile/proof/compare commands have a ten-minute bound.
 compile/proof/compare commands have a ten-minute bound. `run.json` records the
 resolved `execution_mode` (`interpreter`, `on_demand_jit`, `precompiled`, or
 `jit+precompiled`), `target` (`platform`, `arch`, `word_size`, `float_bits`, and
@@ -800,9 +804,10 @@ Additional target and representation modes:
   `"avm_create_stacktraces": false`, and the 169 `stacktrace_dependent`
   recipes (`monitor_exit(raised)`, valid-stack `raise_exception/3`, valid-raise/generated
   `trace_depth/3`, and uncaught-error `function_spawn/3` cases) are marked
-  `unverified` (`stage: "oracle"`). `.github/workflows/lynx-differential.yaml`
-  exercises this build via `linux-x86_64-no-stacktraces`
-  (`--seed 20261114 --generated 32`).
+  `unverified` (`stage: "oracle"`) unless omitted upfront with `--portable-only`.
+  `.github/workflows/lynx-differential.yaml` exercises this build via
+  `linux-x86_64-no-stacktraces` (`--lean-runtime lynx --seed 20261114
+  --generated 32 --portable-only --expected-failures tools/test/lynx/expected_failures.json --jobs 4`).
 
 Scheduler interleavings, GC stress, and bare-metal embedded boards remain outside
 the CLI runner. `.github/workflows/lynx-differential.yaml` pins upstream Lynx

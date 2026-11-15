@@ -42,7 +42,7 @@ jobs:
             run_jit_test: false
             run_precompile_test: false
             checkout_lynx: true
-            validate_args: --lean-runtime lynx --seed 20261114 --generated 32 --expected-failures tools/test/lynx/expected_failures.json
+            validate_args: --lean-runtime lynx --seed 20261114 --generated 32 --expected-failures tools/test/lynx/expected_failures.json --jobs 4
           - name: linux-x86_64-on-demand-jit
             os: ubuntu-24.04
             cmake_opts: -DAVM_DISABLE_JIT=OFF -DAVM_ENABLE_PRECOMPILED=OFF -DAVM_PRECOMPILED_TARGETS=x86_64
@@ -51,7 +51,7 @@ jobs:
             run_jit_test: true
             run_precompile_test: false
             checkout_lynx: false
-            validate_args: --seed 20261114 --generated 32 --timeout 120
+            validate_args: --seed 20261114 --generated 64 --timeout 120 --jobs 4
           - name: linux-x86_64-precompiled
             os: ubuntu-24.04
             cmake_opts: -DAVM_DISABLE_JIT=ON -DAVM_ENABLE_PRECOMPILED=ON -DAVM_PRECOMPILED_TARGETS=x86_64
@@ -59,8 +59,8 @@ jobs:
             run_unit_tests: false
             run_jit_test: false
             run_precompile_test: true
-            checkout_lynx: false
-            validate_args: --seed 20261114 --generated 32
+            checkout_lynx: true
+            validate_args: --lean-runtime lynx --seed 20261114 --generated 32 --expected-failures tools/test/lynx/expected_failures.json --jobs 4
           - name: linux-arm64-on-demand-jit
             os: ubuntu-24.04-arm
             cmake_opts: -DAVM_DISABLE_JIT=OFF -DAVM_ENABLE_PRECOMPILED=OFF -DAVM_PRECOMPILED_TARGETS=aarch64
@@ -69,7 +69,7 @@ jobs:
             run_jit_test: true
             run_precompile_test: false
             checkout_lynx: false
-            validate_args: --seed 20261114 --generated 32 --timeout 120
+            validate_args: --seed 20261114 --generated 64 --timeout 120 --jobs 4
           - name: linux-arm64-precompiled
             os: ubuntu-24.04-arm
             cmake_opts: -DAVM_DISABLE_JIT=ON -DAVM_ENABLE_PRECOMPILED=ON -DAVM_PRECOMPILED_TARGETS=aarch64
@@ -77,8 +77,8 @@ jobs:
             run_unit_tests: false
             run_jit_test: false
             run_precompile_test: false
-            checkout_lynx: false
-            validate_args: --seed 20261114 --generated 32
+            checkout_lynx: true
+            validate_args: --lean-runtime lynx --seed 20261114 --generated 32 --expected-failures tools/test/lynx/expected_failures.json --jobs 4
           - name: linux-x86_64-float32
             os: ubuntu-24.04
             cmake_opts: -DAVM_DISABLE_JIT=ON -DAVM_ENABLE_PRECOMPILED=OFF -DAVM_USE_32BIT_FLOAT=ON -DAVM_WARNINGS_ARE_ERRORS=ON
@@ -95,8 +95,8 @@ jobs:
             run_unit_tests: false
             run_jit_test: false
             run_precompile_test: false
-            checkout_lynx: false
-            validate_args: --seed 20261114 --generated 32
+            checkout_lynx: true
+            validate_args: --lean-runtime lynx --seed 20261114 --generated 32 --portable-only --expected-failures tools/test/lynx/expected_failures.json --jobs 4
     steps:
       - name: Checkout AtomVM
         uses: actions/checkout@v4
@@ -197,7 +197,7 @@ jobs:
           cmake --build build-wasm32 --target AtomVM
 
       - name: Run wasm32 differential validation
-        run: python3 -B tools/test/lynx/validate.py --build build-wasm32 --host-build build --seed 20261114 --generated 32 --output /tmp/lynx-wasm32
+        run: python3 -B tools/test/lynx/validate.py --build build-wasm32 --host-build build --seed 20261114 --generated 100 --timeout 30 --jobs 4 --output /tmp/lynx-wasm32
 
       - name: Upload wasm32 differential failure artifacts
         if: failure()
