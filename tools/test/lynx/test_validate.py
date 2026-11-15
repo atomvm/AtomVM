@@ -1266,6 +1266,54 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
             self.assertIn("Compilation of ", (output / "lynx_probe_0.log").read_text())
 
+    @unittest.skipUnless(
+        os.getenv("ATOMVM_JIT_PRECOMPILE_BUILD"),
+        "Set ATOMVM_JIT_PRECOMPILE_BUILD to test jit_precompile across all targets",
+    )
+    def test_jit_precompile_all_targets(self):
+        jit_build = Path(os.environ["ATOMVM_JIT_PRECOMPILE_BUILD"]).resolve()
+        jit_beams = jit_build / "libs" / "jit" / "src" / "beams"
+        self.assertTrue(jit_beams.is_dir(), f"Missing JIT beam directory: {jit_beams}")
+        targets = [
+            "x86_64", "x86_64+float32",
+            "aarch64", "aarch64+float32",
+            "arm32", "arm32+float32",
+            "armv6m", "armv6m+float32",
+            "armv6m+thumb2", "armv6m+thumb2+float32",
+            "riscv32", "riscv32+float32",
+            "riscv64", "riscv64+float32",
+            "wasm32", "wasm32+float32",
+            "xtensa", "xtensa+float32",
+        ]
+        diff_erl = SCRIPT.parent / "differential.erl"
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            compile_beam = subprocess.run(
+                ["erlc", "-o", str(work), str(diff_erl)],
+                capture_output=True, text=True, timeout=60,
+            )
+            self.assertEqual(compile_beam.returncode, 0, compile_beam.stdout + compile_beam.stderr)
+            diff_beam = work / "differential.beam"
+            targets_erl = "[" + ",".join(f'"{t}"' for t in targets) + "]"
+            script = (
+                f'Work = "{work}", Beam = "{diff_beam}", '
+                f"lists:foreach(fun(T) -> "
+                f'Dir = Work ++ "/" ++ T, '
+                f'ok = filelib:ensure_dir(Dir ++ "/x"), '
+                f"ok = jit_precompile:compile(T, Dir, false, Beam), "
+                f'Out = Dir ++ "/differential.beam", '
+                f"{{ok, Bin}} = file:read_file(Out), "
+                f"{{ok, differential, Chunks}} = beam_lib:all_chunks(Bin), "
+                f'{{"avmN", Native}} = lists:keyfind("avmN", 1, Chunks), '
+                f"true = byte_size(Native) > 0 "
+                f"end, {targets_erl}), init:stop()."
+            )
+            res = subprocess.run(
+                ["erl", "-pa", str(jit_beams), "-noshell", "-eval", script],
+                capture_output=True, text=True, timeout=120,
+            )
+            self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+
     def test_timeout_and_failure_stages_distinguish_oracle_semantic_and_transport(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
