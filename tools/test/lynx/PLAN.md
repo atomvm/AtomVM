@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   `b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de` in the latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,014 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 6,060 public-behavior recipes inspired by Lean tests
   and upstream examples (`335` of `438` Lean test sites across all 26 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -1008,24 +1008,35 @@ Batch 12 — Expand `Modules/Process.lean` public-behavior coverage (2026-11-15)
   `0` unverified), and `test_validate.py` (`29` tests: `26` passed, `3` env-gated
   optional skipped).
 
-Batch 13 — Add `upstream_example` coverage for bundled `estdlib` modules (`base64`, `binary` hex, `calendar`, `json`, `queue`) (2026-11-15):
+Batch 13 — Add `upstream_example` coverage for all `examples/otp/*.exs` stdlib laws (`array`, `base64`, `binary` hex, `calendar`, `gb_trees`, `json`, `queue`, `rand`) (2026-11-15):
 
-- Added 151 `upstream_example` differential cases in `lean_runtime.py`
-  (`5,863 -> 6,014`, retaining `335` of `438` Lean sites across all 26 files)
-  covering the five remaining `examples/otp/*.exs` modules bundled in AtomVM's
-  `libs/estdlib/src/`:
-  - `examples/otp/base64.exs#encoding_roundtrip` (`31` cases): `encode/1,2` and
+- Added 197 `upstream_example` differential cases in `lean_runtime.py`
+  (`5,863 -> 6,060`, retaining `335` of `438` Lean sites across all 26 files)
+  covering all eight remaining `examples/otp/*.exs` modules (and documenting all
+  non-law / unimplemented OTP gaps in `tools/test/lynx/expected_failures.json`):
+  - `examples/otp/base64.exs#encoding_roundtrip` (`50` cases): `encode/1,2` and
     `decode/1,2` roundtrips + `((Len + 2) div 3) * 4` length law across lengths
     mod 3, `standard`/`urlsafe` alphabets, `padding => true|false`,
-    `encode_to_string`/`decode_to_string`, flat string input, and agreed error
-    checks.
+    `encode_to_string`/`decode_to_string`, flat string input, agreed error
+    checks, 15 `base64_invalid_error_reason` cases (uniform `badarg` vs OTP
+    `function_clause` / `missing_padding` / `{case_clause, eq}` / `badarith`),
+    and 4 `base64_iolist_whitespace_and_byte_range` cases (nested `iolist()`
+    acceptance, out-of-range byte lists, and whitespace rejection per `@doc`).
   - `examples/otp/binary.exs#hex_roundtrip` (`16` cases): `encode_hex/1,2`
     (`uppercase`/`lowercase`) roundtrips, mixed-case `decode_hex/1`, and
     odd-length/non-hex/bitstring/invalid-case error paths.
-  - `examples/otp/calendar.exs#date_to_gregorian_days_cycle` (`18` cases):
-    the 400-year `146,097`-day Gregorian cycle law (`Year >= 0`), leap-day and
-    year-end boundaries, `day_of_the_week/1,3`, `datetime_to_gregorian_seconds/1`,
-    `system_time_to_universal_time/2`, and invalid-time `function_clause`.
+  - `examples/otp/calendar.exs` (`36` cases across all 6 laws): `28` cases under
+    `date_to_gregorian_days_cycle` (400-year `146,097`-day Gregorian cycle law
+    for `Year >= 0`, leap-day/year-end boundaries, `day_of_the_week/1,3`,
+    `datetime_to_gregorian_seconds/1`, `system_time_to_universal_time/2`,
+    invalid-time `function_clause`, 6 `calendar_date_range_guards` cases for
+    `Year >= 0, M in 1..12, D in 1..31`, and 4
+    `calendar_negative_subsecond_system_time` truncation bug cases for `-1` in
+    `millisecond`/`microsecond`/`nanosecond`/`native`), plus 8
+    `calendar_unimplemented_functions` cases across
+    `seconds_to_daystime_roundtrips` (`2`), `seconds_to_time_roundtrips` (`1`),
+    `is_leap_year_cycle` (`2`), `gregorian_days_roundtrip` (`2`), and
+    `iso_week_number_valid_date` (`1`).
   - `examples/otp/json.exs#json_roundtrip` (`42` cases): `encode/1`/`decode/1`
     roundtrips across booleans/null, small and boxed integers, floats, control
     and multi-byte UTF-8 strings, SWAR-width strings, depth-32 nested structures,
@@ -1037,8 +1048,13 @@ Batch 13 — Add `upstream_example` coverage for bundled `estdlib` modules (`bas
     front-loaded `{[3,2,1],[]}`, back-loaded `{[],[1,2,3]}`, and split
     `{[3,2],[1]}` representations, plus `filter`/`fold`/`any`/`all`/`delete`/
     `delete_r` and empty/bounds `badarg` checks.
-  - `array`, `gb_trees`, and `rand` from `examples/otp/*.exs` remain excluded as
-    those modules are not bundled in AtomVM `libs/estdlib/src/`.
+  - Unimplemented `examples/otp/*.exs` modules documented in
+    `expected_failures.json`: `array_module_unimplemented` (`3` cases for
+    `examples/otp/array.exs#set_obeys_update_contract`),
+    `gb_trees_module_unimplemented` (`3` cases for
+    `examples/otp/gb_trees.exs#balance_preserves_observations`), and
+    `rand_module_unimplemented` (`3` cases across
+    `examples/otp/rand.exs#{shuffle_permutes, shuffle_short_consumes_nothing}`).
 - Follow-up fix in `libs/estdlib/src/json.erl`: `decode/1` no longer strips
   trailing whitespace before reporting `{invalid_byte, Byte}` on trailing
   garbage (`<<"1 2">>`), default float decoding converts `binary_to_float`
@@ -1047,13 +1063,13 @@ Batch 13 — Add `upstream_example` coverage for bundled `estdlib` modules (`bas
   `{unexpected_sequence, _}`, and `parse_surrogate_low` raises `unexpected_end`
   when a high surrogate is not followed by `\uXXXX`, matching OTP and
   `test_json.erl`'s regression table; retained `test_decode_otp_error_reasons/0`
-  in `tests/libs/estdlib/test_json.erl`. Remaining non-law error/guard differences
-  in `base64` (uniform `badarg`) and `calendar` (`Year >= 0, M in 1..12, D in 1..31`
-  spec guards) are left untouched outside this batch.
-- Verified `test_json`, full interpreter CI run (`6,046` cases with
+  in `tests/libs/estdlib/test_json.erl`. Remaining non-law / unimplemented
+  differences (`193` cases total across `14` areas) are documented in
+  `tools/test/lynx/expected_failures.json`.
+- Verified `test_json`, full interpreter CI run (`6,092` cases with
   `--seed 20261114 --generated 32` and
   `--expected-failures tools/test/lynx/expected_failures.json`: `5,899` matched
-  OTP, `147/147` expected failures, `0` unexpected failures/passes, `0`
+  OTP, `193/193` expected failures, `0` unexpected failures/passes, `0`
   unverified), and `test_validate.py` (`30` tests including
   `test_upstream_stdlib_example_observations_have_independent_oracles`: `27`
   passed, `3` env-gated optional skipped).

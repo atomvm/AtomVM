@@ -41,6 +41,100 @@
       "name": "fun_info_mfa",
       "reason": "erlang:fun_info_mfa/1 is not implemented in AtomVM (error:undef)",
       "expression_prefix": "differential:fun_info_mfa("
+    },
+    {
+      "name": "base64_invalid_error_reason",
+      "reason": "base64 raises badarg uniformly per base64.erl @doc rather than OTP function_clause, missing_padding, {case_clause, eq}, or badarith",
+      "expressions": [
+        "differential:call(base64,decode,[<<\"A\">>])",
+        "differential:call(base64,decode,[<<\"AA\">>])",
+        "differential:call(base64,decode,[<<\"AA=\">>])",
+        "differential:call(base64,decode,[<<\"AA===\">>])",
+        "differential:call(base64,decode,[<<\"-===\">>])",
+        "differential:call(base64,decode,[<<1:1>>])",
+        "differential:call(base64,decode,[1])",
+        "differential:call(base64,decode_to_string,[\"!!!!\"])",
+        "differential:call(base64,encode,[<<\"a\">>,bad])",
+        "differential:call(base64,encode,[[a]])",
+        "differential:call(base64,encode,[[<<\"a\">>|tail]])",
+        "differential:call(base64,decode,[<<\"-\">>,#{mode => standard}])",
+        "differential:call(base64,decode,[<<\"+\">>,#{mode => urlsafe}])",
+        "differential:call(base64,decode,[<<\"====\">>])",
+        "differential:call(base64,decode,[<<\"A===\">>])"
+      ]
+    },
+    {
+      "name": "base64_iolist_whitespace_and_byte_range",
+      "reason": "base64.erl accepts nested iolist() inputs, rejects out-of-range byte list elements (>255), and rejects whitespace in decode/1,2 per @doc unlike OTP",
+      "expressions": [
+        "differential:call(base64,encode,[[<<\"hi\">>,[32,<<\"there\">>]]])",
+        "differential:call(base64,decode,[[<<\"SGVs\">>,<<\"bG8=\">>]])",
+        "differential:call(base64,encode,[[256]])",
+        "differential:call(base64,decode,[<<\"SGVs bG8=\">>])"
+      ]
+    },
+    {
+      "name": "calendar_date_range_guards",
+      "reason": "calendar enforces Year >= 0, M in 1..12, D in 1..31 guards per calendar.erl -spec rather than accepting out-of-range components like OTP",
+      "expressions": [
+        "differential:call(calendar,date_to_gregorian_days,[{2024,13,1}])",
+        "differential:call(calendar,date_to_gregorian_days,[{-1,1,1}])",
+        "differential:call(calendar,date_to_gregorian_days,[{2024,0,1}])",
+        "differential:call(calendar,date_to_gregorian_days,[{2024,1,32}])",
+        "differential:call(calendar,day_of_the_week,[{-1,1,1}])",
+        "differential:call(calendar,datetime_to_gregorian_seconds,[{{-1,1,1},{0,0,0}}])"
+      ]
+    },
+    {
+      "name": "calendar_negative_subsecond_system_time",
+      "reason": "calendar:system_time_to_universal_time/2 truncates negative sub-second inputs toward zero instead of floor-dividing like OTP",
+      "expressions": [
+        "differential:call(calendar,system_time_to_universal_time,[-1,millisecond])",
+        "differential:call(calendar,system_time_to_universal_time,[-1,microsecond])",
+        "differential:call(calendar,system_time_to_universal_time,[-1,nanosecond])",
+        "differential:call(calendar,system_time_to_universal_time,[-1,native])"
+      ]
+    },
+    {
+      "name": "calendar_unimplemented_functions",
+      "reason": "OTP calendar functions from examples/otp/calendar.exs not implemented in AtomVM calendar.erl (error:undef)",
+      "expressions": [
+        "differential:call(calendar,seconds_to_daystime,[86400])",
+        "differential:call(calendar,time_to_seconds,[{1,2,3}])",
+        "differential:call(calendar,seconds_to_time,[3723])",
+        "differential:call(calendar,is_leap_year,[2024])",
+        "differential:call(calendar,is_leap_year,[2424])",
+        "differential:call(calendar,gregorian_days_to_date,[739251])",
+        "differential:call(calendar,valid_date,[{2024,2,29}])",
+        "differential:call(calendar,iso_week_number,[{2024,1,1}])"
+      ]
+    },
+    {
+      "name": "array_module_unimplemented",
+      "reason": "OTP array module is not implemented in AtomVM (error:undef)",
+      "expressions": [
+        "A = array:new(), W = array:set(2, hello, A), {array:get(2, W), array:size(W), array:set(2, world, W) =:= array:set(2, world, A)}",
+        "A = array:from_list([10,20,30]), {array:is_array(A), array:size(A), array:get(1, A), array:to_list(A)}",
+        "differential:call(array,get,[0,array:new()])"
+      ]
+    },
+    {
+      "name": "gb_trees_module_unimplemented",
+      "reason": "OTP gb_trees module is not implemented in AtomVM (error:undef)",
+      "expressions": [
+        "T = gb_trees:from_orddict([{1,a},{2,b},{3,c}]), B = gb_trees:balance(T), {gb_trees:to_list(B) =:= gb_trees:to_list(T), gb_trees:lookup(2, B) =:= gb_trees:lookup(2, T), gb_trees:size(B) =:= gb_trees:size(T)}",
+        "T = gb_trees:insert(b, 2, gb_trees:insert(a, 1, gb_trees:empty())), {gb_trees:size(T), gb_trees:to_list(T), gb_trees:lookup(a, T), gb_trees:lookup(z, T)}",
+        "differential:call(gb_trees,get,[missing,gb_trees:empty()])"
+      ]
+    },
+    {
+      "name": "rand_module_unimplemented",
+      "reason": "OTP rand module is not implemented in AtomVM (error:undef)",
+      "expressions": [
+        "S0 = rand:seed_s(exsss, {1,2,3}), {L, S1} = rand:shuffle_s([1,2,3,4], S0), {lists:sort(L), element(1, S1) =:= element(1, S0)}",
+        "S0 = rand:seed_s(exsss, {1,2,3}), {H, _} = S0, {L, _} = rand:shuffle_s([3,1,4,1,5], S0), {maps:get(type, H), length(L), lists:sort(L)}",
+        "S0 = rand:seed_s(exsss, {1,2,3}), {rand:shuffle_s([], S0) =:= {[], S0}, rand:shuffle_s([only], S0) =:= {[only], S0}}"
+      ]
     }
   ]
 }
