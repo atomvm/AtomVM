@@ -129,6 +129,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `unicode:characters_to_list/1,2` and `unicode:characters_to_binary/1,2,3` returning an
   error tuple with an uninitialized value in place of the rest for a top-level argument that is
   not chardata, such as `unicode:characters_to_list(foo)`; they now raise `badarg`
+- Fixed `min/2` and `max/2` returning the second argument instead of the first on numeric ties
 
 ## [0.7.0-beta.0] - 2026-09-28
 
