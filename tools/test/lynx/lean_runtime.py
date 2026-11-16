@@ -177,6 +177,29 @@ def cases():
         "differential:call(base64,decode,[<<\"!!!!\">>])",
         "differential:call(base64,decode,[<<\"AA\">>,#{padding => false}])",
         "differential:call(base64,decode_to_string,[\"SGVsbG8=\"])",
+        # Documented OTP error-reason differences (expected_failures.json:
+        # AtomVM raises badarg uniformly per base64.erl @doc):
+        "differential:call(base64,decode,[<<\"A\">>])",
+        "differential:call(base64,decode,[<<\"AA\">>])",
+        "differential:call(base64,decode,[<<\"AA=\">>])",
+        "differential:call(base64,decode,[<<\"AA===\">>])",
+        "differential:call(base64,decode,[<<\"-===\">>])",
+        "differential:call(base64,decode,[<<1:1>>])",
+        "differential:call(base64,decode,[1])",
+        "differential:call(base64,decode_to_string,[\"!!!!\"])",
+        "differential:call(base64,encode,[<<\"a\">>,bad])",
+        "differential:call(base64,encode,[[a]])",
+        "differential:call(base64,encode,[[<<\"a\">>|tail]])",
+        "differential:call(base64,decode,[<<\"-\">>,#{mode => standard}])",
+        "differential:call(base64,decode,[<<\"+\">>,#{mode => urlsafe}])",
+        "differential:call(base64,decode,[<<\"====\">>])",
+        "differential:call(base64,decode,[<<\"A===\">>])",
+        # Documented base64.erl @doc behavioral differences vs OTP:
+        # nested iolist() acceptance, out-of-range byte lists, whitespace rejection:
+        "differential:call(base64,encode,[[<<\"hi\">>,[32,<<\"there\">>]]])",
+        "differential:call(base64,decode,[[<<\"SGVs\">>,<<\"bG8=\">>]])",
+        "differential:call(base64,encode,[[256]])",
+        "differential:call(base64,decode,[<<\"SGVs bG8=\">>])",
     ]:
         selected.append({"upstream_example": "examples/otp/base64.exs#encoding_roundtrip",
                          "expression": expr})
@@ -232,6 +255,84 @@ def cases():
         "upstream_example": "examples/otp/calendar.exs#date_to_gregorian_days_cycle",
         "expression": "differential:call(calendar,datetime_to_gregorian_seconds,[{{2024,1,1},{24,0,0}}])",
     })
+    # Documented OTP range-guard differences (expected_failures.json: AtomVM
+    # calendar.erl enforces Year >= 0, M in 1..12, D in 1..31 per its -spec):
+    for bad_date in ["{2024,13,1}", "{-1,1,1}", "{2024,0,1}", "{2024,1,32}"]:
+        selected.append({
+            "upstream_example": "examples/otp/calendar.exs#date_to_gregorian_days_cycle",
+            "expression": f"differential:call(calendar,date_to_gregorian_days,[{bad_date}])",
+        })
+    selected.append({
+        "upstream_example": "examples/otp/calendar.exs#date_to_gregorian_days_cycle",
+        "expression": "differential:call(calendar,day_of_the_week,[{-1,1,1}])",
+    })
+    selected.append({
+        "upstream_example": "examples/otp/calendar.exs#date_to_gregorian_days_cycle",
+        "expression": "differential:call(calendar,datetime_to_gregorian_seconds,[{{-1,1,1},{0,0,0}}])",
+    })
+    # Documented negative sub-second truncation bug in calendar:system_time_to_universal_time/2:
+    for unit in ["millisecond", "microsecond", "nanosecond", "native"]:
+        selected.append({
+            "upstream_example": "examples/otp/calendar.exs#date_to_gregorian_days_cycle",
+            "expression": f"differential:call(calendar,system_time_to_universal_time,[-1,{unit}])",
+        })
+    # Unimplemented functions from the remaining laws in examples/otp/calendar.exs:
+    for law_name, expr in [
+        ("seconds_to_daystime_roundtrips", "differential:call(calendar,seconds_to_daystime,[86400])"),
+        ("seconds_to_daystime_roundtrips", "differential:call(calendar,time_to_seconds,[{1,2,3}])"),
+        ("seconds_to_time_roundtrips", "differential:call(calendar,seconds_to_time,[3723])"),
+        ("is_leap_year_cycle", "differential:call(calendar,is_leap_year,[2024])"),
+        ("is_leap_year_cycle", "differential:call(calendar,is_leap_year,[2424])"),
+        ("gregorian_days_roundtrip", "differential:call(calendar,gregorian_days_to_date,[739251])"),
+        ("gregorian_days_roundtrip", "differential:call(calendar,valid_date,[{2024,2,29}])"),
+        ("iso_week_number_valid_date", "differential:call(calendar,iso_week_number,[{2024,1,1}])"),
+    ]:
+        selected.append({
+            "upstream_example": f"examples/otp/calendar.exs#{law_name}",
+            "expression": expr,
+        })
+
+    # Unimplemented stdlib modules from examples/otp/{array,gb_trees,rand}.exs
+    # (expected_failures.json):
+    for expr in [
+        "A = array:new(), W = array:set(2, hello, A), "
+        "{array:get(2, W), array:size(W), array:set(2, world, W) =:= array:set(2, world, A)}",
+        "A = array:from_list([10,20,30]), "
+        "{array:is_array(A), array:size(A), array:get(1, A), array:to_list(A)}",
+        "differential:call(array,get,[0,array:new()])",
+    ]:
+        selected.append({
+            "upstream_example": "examples/otp/array.exs#set_obeys_update_contract",
+            "expression": expr,
+        })
+    for expr in [
+        "T = gb_trees:from_orddict([{1,a},{2,b},{3,c}]), B = gb_trees:balance(T), "
+        "{gb_trees:to_list(B) =:= gb_trees:to_list(T), "
+        "gb_trees:lookup(2, B) =:= gb_trees:lookup(2, T), "
+        "gb_trees:size(B) =:= gb_trees:size(T)}",
+        "T = gb_trees:insert(b, 2, gb_trees:insert(a, 1, gb_trees:empty())), "
+        "{gb_trees:size(T), gb_trees:to_list(T), gb_trees:lookup(a, T), gb_trees:lookup(z, T)}",
+        "differential:call(gb_trees,get,[missing,gb_trees:empty()])",
+    ]:
+        selected.append({
+            "upstream_example": "examples/otp/gb_trees.exs#balance_preserves_observations",
+            "expression": expr,
+        })
+    for law_name, expr in [
+        ("shuffle_permutes",
+         "S0 = rand:seed_s(exsss, {1,2,3}), {L, S1} = rand:shuffle_s([1,2,3,4], S0), "
+         "{lists:sort(L), element(1, S1) =:= element(1, S0)}"),
+        ("shuffle_permutes",
+         "S0 = rand:seed_s(exsss, {1,2,3}), {H, _} = S0, {L, _} = rand:shuffle_s([3,1,4,1,5], S0), "
+         "{maps:get(type, H), length(L), lists:sort(L)}"),
+        ("shuffle_short_consumes_nothing",
+         "S0 = rand:seed_s(exsss, {1,2,3}), "
+         "{rand:shuffle_s([], S0) =:= {[], S0}, rand:shuffle_s([only], S0) =:= {[only], S0}}"),
+    ]:
+        selected.append({
+            "upstream_example": f"examples/otp/rand.exs#{law_name}",
+            "expression": expr,
+        })
 
     for term in [
         "null", "true", "false", "0", "-7", "42", "1 bsl 100", "-(1 bsl 100)",

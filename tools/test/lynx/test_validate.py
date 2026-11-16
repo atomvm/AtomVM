@@ -1512,9 +1512,17 @@ class ValidationTests(unittest.TestCase):
                 "bitstring_size_system_limit": 3,
                 "binary_encode_unsigned": 13,
                 "fun_info_mfa": 13,
+                "base64_invalid_error_reason": 15,
+                "base64_iolist_whitespace_and_byte_range": 4,
+                "calendar_date_range_guards": 6,
+                "calendar_negative_subsecond_system_time": 4,
+                "calendar_unimplemented_functions": 8,
+                "array_module_unimplemented": 3,
+                "gb_trees_module_unimplemented": 3,
+                "rand_module_unimplemented": 3,
             },
         )
-        self.assertEqual(total_expected, 147)
+        self.assertEqual(total_expected, 193)
         all_exprs = {c["expression"] for c in all_entries}
         for area in areas:
             for expr in area["expressions"]:
@@ -1718,7 +1726,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 6014)
+        self.assertEqual(len(lean_runtime.cases()), 6060)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"
@@ -1828,14 +1836,23 @@ class ValidationTests(unittest.TestCase):
     def test_upstream_stdlib_example_observations_have_independent_oracles(self):
         all_cases = lean_runtime.cases()
         expected_groups = {
-            "examples/otp/base64.exs#encoding_roundtrip": 31,
+            "examples/otp/base64.exs#encoding_roundtrip": 50,
             "examples/otp/binary.exs#hex_roundtrip": 16,
-            "examples/otp/calendar.exs#date_to_gregorian_days_cycle": 18,
+            "examples/otp/calendar.exs#date_to_gregorian_days_cycle": 28,
+            "examples/otp/calendar.exs#seconds_to_daystime_roundtrips": 2,
+            "examples/otp/calendar.exs#seconds_to_time_roundtrips": 1,
+            "examples/otp/calendar.exs#is_leap_year_cycle": 2,
+            "examples/otp/calendar.exs#gregorian_days_roundtrip": 2,
+            "examples/otp/calendar.exs#iso_week_number_valid_date": 1,
             "examples/otp/json.exs#json_roundtrip": 42,
             "examples/otp/queue.exs#reverse_involution": 6,
             "examples/otp/queue.exs#reverse_exchanges_ends": 6,
             "examples/otp/queue.exs#front_insert_peek": 6,
             "examples/otp/queue.exs#split_preserves_ordered_partition": 26,
+            "examples/otp/array.exs#set_obeys_update_contract": 3,
+            "examples/otp/gb_trees.exs#balance_preserves_observations": 3,
+            "examples/otp/rand.exs#shuffle_permutes": 2,
+            "examples/otp/rand.exs#shuffle_short_consumes_nothing": 1,
         }
         for tag, min_count in expected_groups.items():
             matched = [c for c in all_cases if c.get("upstream_example") == tag]
