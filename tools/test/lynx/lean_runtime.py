@@ -1962,7 +1962,44 @@ def cases():
                     "pids_and_refs", "composite_live_identities"]:
         probe(hashing, "capture_hash", f"differential:phash2_live_identities({variant})")
 
-    # Remaining behavioral probes across Modules/Signals.lean and Modules/Erlang.lean.
+    # Remaining behavioral probes across Modules/Signals.lean, Term/Try.lean, and Modules/Erlang.lean.
+    for expr_origin, expr in [
+        ("success_binds_multiple_values", "try {7, 9} of {A, B} -> A + B catch _:_ -> caught end"),
+        ("success_binds_no_values", "try ok of ok -> success catch _:_ -> caught end"),
+        ("exception_bindings", "try erlang:throw(t) catch C:R -> {C, R} end"),
+        ("exception_bindings", "try erlang:error(e) catch C:R -> {C, R} end"),
+        ("exception_bindings", "try erlang:exit(x) catch C:R -> {C, R} end"),
+        ("success_body_is_outside_handler", "try 7 of V -> throw(V) catch _:_ -> caught end"),
+        ("handler_exception_propagates", "try error(protected) catch _:_ -> exit(handler) end"),
+        ("outer_handler_catches_success_body",
+         "try try 7 of V -> throw(V) catch _:_ -> inner end catch _:R -> R end"),
+        ("unmatched_handler_reraises", "try throw(fail) catch error:R -> {caught, R} end"),
+        ("unmatched_handler_reraises", "try error(fail) catch throw:R -> {caught, R} end"),
+        ("unmatched_handler_reraises", "try exit(fail) catch error:R -> {caught, R} end"),
+        ("reraise_preserves_class",
+         "try throw(orig) catch C:_R:Stk -> try erlang:raise(C, replaced, Stk) catch C2:R2 -> {C2, R2} end end"),
+        ("reraise_preserves_class",
+         "try error(orig) catch C:_R:Stk -> try erlang:raise(C, replaced, Stk) catch C2:R2 -> {C2, R2} end end"),
+        ("reraise_preserves_class",
+         "try exit(orig) catch C:_R:Stk -> try erlang:raise(C, replaced, Stk) catch C2:R2 -> {C2, R2} end end"),
+        ("protected_effects_survive_failure",
+         "erase(try_key), try put(try_key, protected), throw(failure) "
+         "catch C:R -> {C, R, get(try_key), erase(try_key)} end"),
+        ("cleanup_runs_on_success_and_failure",
+         "erase(try_cleanup), R = try 7 after put(try_cleanup, done) end, {R, erase(try_cleanup)}"),
+        ("cleanup_runs_on_success_and_failure",
+         "erase(try_cleanup), Res = (try try throw(failure) after put(try_cleanup, done) end "
+         "catch C:R -> {C, R} end), {Res, erase(try_cleanup)}"),
+        ("cleanup_failure_overrides_previous_outcome", "try 7 after exit(cleanup) end"),
+        ("cleanup_failure_overrides_previous_outcome", "try throw(failure) after exit(cleanup) end"),
+        ("dispatched_exception_is_caught",
+         "F = fun() -> throw(dispatched) end, try F() catch C:R -> {C, R} end"),
+        ("dispatched_success_body_exception_escapes",
+         "F = fun() -> throw(dispatched) end, try ok of _ -> F() catch _:_ -> caught end"),
+        ("resumed_receive_exception_is_caught",
+         "self() ! 7, try receive V -> throw(V) after 1000 -> timeout end catch _:R -> R end"),
+    ]:
+        probe("Term/Try", expr_origin, expr)
     for kind in ["tag_mismatch", "forged_then_real_down", "real_then_forged_down", "noproc_with_forged"]:
         probe("Modules/Signals", "demonitor_flushes_oldest_monitor_message",
               f"differential:demonitor_oldest_message({kind})")
@@ -2132,7 +2169,7 @@ def inventory(checkout, selected, failures=None, unverified=()):
             "Modules/Signals.lean": "Samples normalize identities and error stack contents; signal/link/alias combinations remain incomplete.",
             "Term/Dispatch.lean": "Synthetic function tables, dispatcher fuel and missing-entry exhaustion have no direct VM equivalent.",
             "Term/Order.lean": "Fixed-point/admissibility proofs and divergence are not sampled as bounded successes.",
-            "Term/Try.lean": "Model empty stack traces and exhaustion are not VM expectations; translation-fixture mode tests try behavior separately.",
+            "Term/Try.lean": "Public try/catch/after behavior samples cover 14/17 theorems; stacktrace_is_empty, exhaustion_is_not_caught, and blocking_is_not_caught are model-only expectations.",
             "Term/Maps.lean": "Internal duplicate-binding association lists and extraction sentinels are not public map representations.",
             "Term/Bitstring.lean": "Internal padding validity and proof objects are not observable VM heap contracts.",
             "Term/Bitstring/Construction.lean": "Public bitstring construction samples within AtomVM's 256-bit integer limit; ofBits representation lemmas are internal to Lean.",

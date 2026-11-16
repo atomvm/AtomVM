@@ -16,8 +16,8 @@ runner semantics in [README.md](README.md).
   `b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de` in the latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,060 public-behavior recipes inspired by Lean tests
-  and upstream examples (`335` of `438` Lean test sites across all 26 files). Source
+- `lean_runtime.py` selects 6,082 public-behavior recipes inspired by Lean tests
+  and upstream examples (`349` of `438` Lean test sites across all 26 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
   the proved postcondition to be true on both VMs: five integer singleton sums,
@@ -1066,13 +1066,36 @@ Batch 13 — Add `upstream_example` coverage for all `examples/otp/*.exs` stdlib
   in `tests/libs/estdlib/test_json.erl`. Remaining non-law / unimplemented
   differences (`193` cases total across `14` areas) are documented in
   `tools/test/lynx/expected_failures.json`.
-- Verified `test_json`, full interpreter CI run (`6,092` cases with
+  - Verified `test_json`, full interpreter CI run (`6,092` cases with
   `--seed 20261114 --generated 32` and
   `--expected-failures tools/test/lynx/expected_failures.json`: `5,899` matched
   OTP, `193/193` expected failures, `0` unexpected failures/passes, `0`
   unverified), and `test_validate.py` (`30` tests including
   `test_upstream_stdlib_example_observations_have_independent_oracles`: `27`
   passed, `3` env-gated optional skipped).
+
+Batch 14 — Cover testable `Term/Try.lean` `try/catch/after` theorems in `lean_runtime.py` (2026-11-16):
+
+- Added `22` standalone Erlang `try/catch/after` probes in `lean_runtime.py`
+  (`6,060 -> 6,082`, lifting attributed Lean coverage to `349` of `438` sites
+  across all 26 files; `Term/Try.lean` reaches `14/17`) covering all `14`
+  testable BEAM semantics in `Term/Try.lean` (`success_binds_multiple_values`,
+  `success_binds_no_values`, `exception_bindings` across `throw`/`error`/`exit`,
+  `success_body_is_outside_handler`, `handler_exception_propagates`,
+  `outer_handler_catches_success_body`, `unmatched_handler_reraises`,
+  `reraise_preserves_class` via `erlang:raise/3`,
+  `protected_effects_survive_failure`, `cleanup_runs_on_success_and_failure`,
+  `cleanup_failure_overrides_previous_outcome`, `dispatched_exception_is_caught`,
+  `dispatched_success_body_exception_escapes`, and
+  `resumed_receive_exception_is_caught`), leaving only the `3` model-only
+  theorems (`stacktrace_is_empty`, `exhaustion_is_not_caught`,
+  `blocking_is_not_caught`).
+- Verified `lean_runtime.inventory()` against `/Users/petermm/OSScontrib/lynx`
+  (`349/438`), `test_validate.py` (`27` passed, `3` env-gated optional skipped),
+  and full interpreter CI run (`6,114` cases with `--seed 20261114 --generated 32`
+  and `--expected-failures tools/test/lynx/expected_failures.json`: `5,921`
+  matched OTP, `193/193` expected failures, `0` unexpected failures/passes, `0`
+  unverified).
 
 ## Rules for each batch
 
