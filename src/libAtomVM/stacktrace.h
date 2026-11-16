@@ -25,6 +25,9 @@
 #include "module.h"
 #include "term.h"
 
+#define DEFAULT_BACKTRACE_DEPTH 8
+#define MAX_BACKTRACE_DEPTH 64
+
 #ifdef __cplusplus
 extern "C" {
 #endif

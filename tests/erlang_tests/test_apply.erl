@@ -23,6 +23,7 @@
 -export([start/0, add/2]).
 
 start() ->
+    ok = test_badarity(),
     NoModule = try_apply(list_to_atom("foo"), list_to_atom("bar")),
     NoFunction = try_apply(?MODULE, no_such_function),
     Initial = NoModule + NoFunction,
@@ -36,6 +37,53 @@ do_apply({M1, F1} = MF1, {M2, F2} = MF2, [H | T], Sum) ->
 
 add(A, B) ->
     A + B.
+
+test_badarity() ->
+    Captured = {boxed, self(), list_to_binary([1, 2, 3])},
+    Local = fun(X) -> {Captured, X} end,
+    [
+        begin
+            {badarity, {Fun, []}} =
+                try
+                    Fun()
+                catch
+                    error:R0 -> R0
+                end,
+            Reason =
+                try
+                    Fun(7, {nested, Captured})
+                catch
+                    error:R2 -> R2
+                end,
+            true = erlang:garbage_collect(),
+            {badarity, {Fun, [7, {nested, Captured}]}} = Reason,
+            ok
+        end
+     || Fun <- [Local, fun erlang:abs/1, fun ?MODULE:missing/1]
+    ],
+    %% Native fun dispatch must reject the call before executing self/0.
+    ok = badarity_native(fun erlang:self/0),
+    %% Exercise argument registers beyond the inline register array as well.
+    Reason21 = badarity_many(Local),
+    {badarity, {Local, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]}} =
+        Reason21,
+    ok.
+
+badarity_native(Fun) ->
+    {badarity, {Fun, [7]}} =
+        try
+            Fun(7)
+        catch
+            error:R -> R
+        end,
+    ok.
+
+badarity_many(Fun) ->
+    try
+        Fun(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21)
+    catch
+        error:R -> R
+    end.
 
 try_apply(M, F) ->
     try

@@ -139,7 +139,7 @@
 -spec decode(binary()) -> decode_value().
 decode(Bin) ->
     {Value, ok, Rest} = decode(Bin, ok, #{}),
-    case skip_whitespace(Rest) of
+    case Rest of
         <<>> -> Value;
         <<Byte, _/binary>> -> error({invalid_byte, Byte})
     end.
@@ -181,6 +181,8 @@ decode_continue(end_of_input, {Buf, Acc, Callbacks}) ->
             _ -> error(unexpected_end)
         end
     catch
+        error:{unexpected_sequence, _} = Reason ->
+            error(Reason);
         error:_ ->
             error(unexpected_end)
     end;
@@ -206,7 +208,7 @@ make_callbacks(Decoders) ->
         object_start = maps:get(object_start, Decoders, fun default_object_start/1),
         object_push = maps:get(object_push, Decoders, fun default_object_push/3),
         object_finish = maps:get(object_finish, Decoders, fun default_object_finish/2),
-        float = maps:get(float, Decoders, fun erlang:binary_to_float/1),
+        float = maps:get(float, Decoders, default),
         integer = maps:get(integer, Decoders, fun erlang:binary_to_integer/1),
         string = maps:get(string, Decoders, fun default_string/1),
         null = maps:get(null, Decoders, null)
@@ -494,15 +496,8 @@ parse_surrogate_low(
                 {unexpected_sequence, <<$\\, $u, H1, H2, H3, H4, $\\, $u, L1, L2, L3, L4>>}
             )
     end;
-parse_surrogate_low(<<>>, _, _H1, _H2, _H3, _H4, _, _, _) ->
-    error(unexpected_end);
-parse_surrogate_low(<<$\\>>, _, _H1, _H2, _H3, _H4, _, _, _) ->
-    error(unexpected_end);
-parse_surrogate_low(<<$\\, $u, _/binary>>, _, _H1, _H2, _H3, _H4, _, _, _) ->
-    %% \u present but fewer than 4 hex digits
-    error(unexpected_end);
-parse_surrogate_low(_, _, H1, H2, H3, H4, _, _, _) ->
-    error({unexpected_sequence, <<$\\, $u, H1, H2, H3, H4>>}).
+parse_surrogate_low(_, _, _H1, _H2, _H3, _H4, _, _, _) ->
+    error(unexpected_end).
 
 safe_hex4(H1, H2, H3, H4) ->
     case {safe_hex(H1), safe_hex(H2), safe_hex(H3), safe_hex(H4)} of
@@ -618,13 +613,21 @@ number_complete(Rest, Orig, Pos, integer, Acc, Callbacks) ->
     {IntFun(NumBin), Acc, Rest};
 number_complete(Rest, Orig, Pos, float, Acc, Callbacks) ->
     NumBin = binary_part(Orig, 0, Pos),
-    FloatFun = Callbacks#callbacks.float,
-    {FloatFun(NumBin), Acc, Rest};
+    {decode_float(NumBin, Callbacks#callbacks.float), Acc, Rest};
 number_complete(Rest, Orig, Pos, float_exp, Acc, Callbacks) ->
     NumBin = binary_part(Orig, 0, Pos),
     NormBin = normalize_float(NumBin),
-    FloatFun = Callbacks#callbacks.float,
-    {FloatFun(NormBin), Acc, Rest}.
+    {decode_float(NormBin, Callbacks#callbacks.float), Acc, Rest}.
+
+decode_float(Bin, default) ->
+    try
+        erlang:binary_to_float(Bin)
+    catch
+        error:badarg ->
+            error({unexpected_sequence, Bin})
+    end;
+decode_float(Bin, FloatFun) ->
+    FloatFun(Bin).
 
 %% Insert ".0" before e/E for numbers like "1e5" -> "1.0e5"
 %% (Erlang's binary_to_float requires a decimal point)

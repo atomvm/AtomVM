@@ -25,6 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added PPP over a UART to the `network` module on ESP32 (opt-in with `CONFIG_AVM_ENABLE_PPP=y`,
   which needs `CONFIG_LWIP_PPP_SUPPORT=y`): `{ppp, [...]}` in `network:start/1` runs the link on a
   UART whose other end is ready for it, such as a cellular modem the application has dialed
+- Added `erlang:binary_part/2`, including use in guards
+- Added `erlang:get_keys/0,1` to query process dictionary keys
+- Added the `{scope, {Start, Length}}` option to `binary:split/3`
+- Added `lists:sum/1`
+- Added more OTP-compatible functions to the estdlib `maps` module, including
+  `maps:take/2`, `maps:update_with/3,4`, `maps:with/2`, `maps:without/2`,
+  `maps:filtermap/2`, `maps:intersect/2`, `maps:intersect_with/3`,
+  `maps:groups_from_list/2,3`, and `maps:is_iterator_valid/1`
+- Added `erlang:send_after/4` with relative and absolute monotonic deadlines,
+  `{abs, boolean()}` option validation, and last-option-wins precedence;
+  future delays remain limited to 4294967295 milliseconds
+- Added `lists:unzip/1` to split a list of pairs into two order-preserving lists
 
 ### Changed
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
@@ -129,6 +141,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `unicode:characters_to_list/1,2` and `unicode:characters_to_binary/1,2,3` returning an
   error tuple with an uninitialized value in place of the rest for a top-level argument that is
   not chardata, such as `unicode:characters_to_list(foo)`; they now raise `badarg`
+- Fixed `0.0` and `-0.0` comparing as exactly equal, selecting the wrong pattern clause
+  and collapsing into a single map key
+- Fixed non-exact comparisons of large integers and floats losing integer precision,
+  making unequal numbers compare as equal or in the wrong order
+- Fixed large integers rounding incorrectly when converted to floats, affecting
+  `float/1` and floating-point arithmetic such as division
+- Fixed float bitstring construction ignoring segment units in the interpreter and JIT
+- Fixed non-integer bitstring pattern sizes raising `badarg` instead of failing the match
+- Fixed float bitstring matching ignoring segment units and rejecting zero-width fields
+- Fixed `:16/float` segments rounding halfway values away from zero and truncating subnormals
+  instead of rounding to nearest, ties to even, so constructed bytes now match BEAM
+- Fixed map ordering comparing values before all keys had been compared
+- Fixed list ordering treating `[]` as smaller than every improper tail
+- Fixed queued messages being skipped by the next receive after an invalid timeout error
+- Fixed `min/2` and `max/2` returning the second argument instead of the first on numeric ties
+- Fixed `maps:fold/3` rejecting exhausted iterators and reporting `badmap` instead of
+  `badarg` for invalid callbacks on non-map inputs
+- Fixed receive timeouts outside `0..4294967295` being accepted or truncated instead
+  of raising `timeout_value`
+- Fixed `demonitor/2` accepting invalid options and returning incorrect `info` results
+  with `flush`; flushing now preserves active-monitor messages and removes only the
+  first matching five-tuple for an inactive monitor, like OTP
+- Fixed exception handling and crash reports reading beyond stacks in older heap
+  fragments, causing memory corruption with stacktrace creation disabled
+- Fixed spawning external funs aborting the VM and nonzero-arity local funs
+  executing without arguments instead of failing in the child
+- Fixed fun calls checking arity after dispatch, including native funs, and raising
+  bare `badarity` instead of `{badarity, {Fun, Args}}`
+- Fixed `erlang:make_fun/3` accepting arities outside `0..255`
+- Fixed AArch64 native compilation of `is_function/2` with a dynamic arity
+- Fixed `lists:keyfind/3` and `lists:keymember/3` using exact instead of numeric equality
+- Fixed `is_process_alive/1` accepting non-PID arguments
+- Fixed linking to a dead local process raising `noproc` instead of delivering an
+  exit message when the caller traps exits
+- Fixed `erlang:raise/3` accepting malformed stack traces instead of returning `badarg`,
+  while preserving re-raising with `undefined` stack traces when stacktrace creation is disabled
+- Fixed `erlang:raise/3` preserving legacy stack frames without adding empty locations
+- Fixed exception stack traces ignoring the depth limit; added support for
+  `erlang:system_flag(backtrace_depth, Depth)` with OTP-compatible defaults and bounds
+- Fixed `erlang:monitor/2,3` checking target types only for live non-self targets
+  and rejecting registered names of the other type instead of reporting `noproc`
+- Fixed `erlang:link/1` creating a link to self instead of succeeding without changing links
+- Fixed crossed local unlink/relink operations leaving a link active at only one endpoint
+- Fixed `erlang:link/1` failing to reactivate a local link while an unlink is pending
+- Fixed queued local linked exits being delivered after `erlang:unlink/1` returns
+- Fixed `erlang:demonitor/2` ignoring `flush` when called by the monitored process
+- Fixed `lists:keyfind/3` and `lists:keymember/3` not matching OTP's rounded
+  comparison of immediate integer keys against float fields
+- Fixed `binary:match/3` accepting an invalid scope when a later scope replaces it
+- Fixed `list_to_integer/1,2` accepting a numeric prefix before an embedded NUL
+- Fixed missing modules aborting Emscripten builds on Node with an unavailable
+  `XMLHttpRequest` instead of raising `undef`
+- Fixed `maps:merge_with/3` accepting invalid combiners without overlapping keys
+  and reporting callback or map errors instead of `badarg` for invalid combiners
+- Fixed `sets:new/1` and `sets:from_list/2` option parsing to match OTP while
+  retaining version-2-only support
+- Fixed `sets:subtract/2` and `sets:is_subset/2` rejecting an invalid right
+  operand when the left set is empty, unlike OTP
+- Fixed shutdown freeing platform polling state before socket monitor callbacks
+  unregister pending select events
+- Fixed `erlang:send_after/3` and `timer:send_after/2,3` accepting invalid arguments
+  and failing in timer workers instead of raising `badarg` (`erlang:send_after/3`) or
+  returning `{error, badarg}` (`timer:send_after/2,3`) in the caller;
+  supported delays are `0..4294967295` milliseconds
+- Fixed `erlang:cancel_timer/1` returning `false` for nonreference arguments
+  instead of raising `badarg`
+- Fixed timers created by `erlang:send_after/3` and `erlang:start_timer/3,4`
+  remaining active after their PID destination exits; registered-name timers
+  remain active until expiry or explicit cancellation
+- Fixed `lists:seq/3` returning `[From]` instead of `[]` for empty ranges with
+  `abs(Incr) > 1`
+- Fixed `erlang:register/2` allowing a process or port that is already
+  registered to be registered under additional names
+- Fixed JIT register exhaustion on 6-register targets (`x86_64` and `armv6m`) when
+  compiling `bs_create_bin` UTF segments
+- Fixed `float32` bitstring construction double-rounding unboxed integers through
+  `binary64` before narrowing
+- Fixed dynamic calls (such as `erlang:apply/3`) to 3-arity BIFs (`erlang:is_integer/3`) raising `undef`
+- Fixed `erlang:spawn_link/1` and `erlang:spawn_monitor/1` spawning processes for
+  wrong-arity funs instead of raising `badarg`
+- Fixed `erlang:binary_to_atom/1,2` raising `badarg` instead of `system_limit`
+  after 255 valid UTF-8 characters when followed by invalid trailing bytes, and
+  fixed a temporary buffer leak for `latin1` inputs
+- Fixed `json:decode/1` error reasons to match OTP on trailing whitespace before
+  unexpected bytes (`{invalid_byte, 32}`), overflowing float exponents
+  (`{unexpected_sequence, ...}`), and lone high surrogates (`unexpected_end`)
 
 ## [0.7.0-beta.0] - 2026-09-28
 

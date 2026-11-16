@@ -61,7 +61,9 @@ test() ->
     ok = test_sublist3(),
     ok = test_droplast(),
     ok = test_zip(),
+    ok = test_unzip(),
     ok = test_zipwith(),
+    ok = test_sum(),
     ok.
 
 test_nth() ->
@@ -328,6 +330,14 @@ test_seq() ->
     ?ASSERT_MATCH(lists:seq(1, 1), [1]),
     ?ASSERT_MATCH(lists:seq(1, 0), []),
     ?ASSERT_MATCH(lists:seq(1, 0, 1), []),
+    ?ASSERT_MATCH(lists:seq(id(5), id(4), id(2)), []),
+    ?ASSERT_MATCH(lists:seq(id(5), id(3), id(2)), []),
+    ?ASSERT_MATCH(lists:seq(id(10), id(7), id(5)), []),
+    ?ASSERT_MATCH(lists:seq(id(10), id(5), id(5)), []),
+    ?ASSERT_MATCH(lists:seq(id(4), id(5), id(-2)), []),
+    ?ASSERT_MATCH(lists:seq(id(3), id(5), id(-2)), []),
+    ?ASSERT_MATCH(lists:seq(id(7), id(10), id(-5)), []),
+    ?ASSERT_MATCH(lists:seq(id(5), id(10), id(-5)), []),
 
     ?ASSERT_ERROR(lists:seq(foo, 1)),
     ?ASSERT_ERROR(lists:seq(1, bar)),
@@ -337,6 +347,10 @@ test_seq() ->
     ?ASSERT_ERROR(lists:seq(-1, 1, -1)),
     ?ASSERT_ERROR(lists:seq(1, -1, 1)),
     ?ASSERT_ERROR(lists:seq(1, 2, 0)),
+    ?ASSERT_ERROR(lists:seq(id(5), id(2), id(2)), badarg),
+    ?ASSERT_ERROR(lists:seq(id(10), id(4), id(5)), badarg),
+    ?ASSERT_ERROR(lists:seq(id(2), id(5), id(-2)), badarg),
+    ?ASSERT_ERROR(lists:seq(id(4), id(10), id(-5)), badarg),
     ok.
 
 test_sort() ->
@@ -550,6 +564,20 @@ test_zip() ->
     ?ASSERT_ERROR(lists:zip([a], [1, 2]), function_clause),
     ok.
 
+test_unzip() ->
+    ?ASSERT_MATCH(lists:unzip(id([])), {[], []}),
+    ?ASSERT_MATCH(lists:unzip(id([{a, 7}])), {[a], [7]}),
+    Pairs = id([{1, one}, {1.0, <<5:3>>}, {1, {nested, #{x => 7}}}, {a, [1 | tail]}]),
+    ?ASSERT_MATCH(
+        lists:unzip(Pairs),
+        {[1, 1.0, 1, a], [one, <<5:3>>, {nested, #{x => 7}}, [1 | tail]]}
+    ),
+    ?ASSERT_ERROR(lists:unzip(id(bad)), function_clause),
+    ?ASSERT_ERROR(lists:unzip(id([{a, 1}, bad])), function_clause),
+    ?ASSERT_ERROR(lists:unzip(id([{a, 1} | tail])), function_clause),
+    ?ASSERT_ERROR(lists:unzip(id([{a, 1, extra}])), function_clause),
+    ok.
+
 test_zipwith() ->
     ?ASSERT_MATCH(lists:zipwith(fun(A, B) -> {A, B} end, [a, b, c], [1, 2, 3]), [
         {a, 1}, {b, 2}, {c, 3}
@@ -557,6 +585,21 @@ test_zipwith() ->
     ?ASSERT_MATCH(lists:zipwith(fun(A, B) -> A + B end, [1, 2, 3], [10, 20, 30]), [11, 22, 33]),
     ?ASSERT_MATCH(lists:zipwith(fun(_, _) -> ok end, [], []), []),
     ?ASSERT_ERROR(lists:zipwith(fun(A, B) -> {A, B} end, [a], [1, 2]), function_clause),
+    ok.
+
+test_sum() ->
+    ?ASSERT_MATCH(lists:sum(id([])), 0),
+    ?ASSERT_MATCH(lists:sum(id([9, -4, 2])), 7),
+    Big = 1 bsl 100,
+    ?ASSERT_MATCH(lists:sum(id([Big, 17, -Big])), 17),
+    ?ASSERT_MATCH(lists:sum(id([1, 2.5, -4])), -0.5),
+    ?ASSERT_MATCH(lists:sum(id([0.0])), 0.0),
+    %% Accumulate left-to-right, rather than reassociating float additions.
+    ?ASSERT_MATCH(lists:sum(id([1.0e20, -1.0e20, 3.0])), 3.0),
+    ?ASSERT_ERROR(lists:sum(id(not_a_list)), function_clause),
+    ?ASSERT_ERROR(lists:sum(id([1 | bad_tail])), function_clause),
+    ?ASSERT_ERROR(lists:sum(id([1, bad_number])), badarith),
+    ?ASSERT_ERROR(lists:sum(id([bad_number | bad_tail])), badarith),
     ok.
 
 id(X) ->

@@ -23,7 +23,7 @@
 %%-----------------------------------------------------------------------------
 -module(timer_manager).
 
--export([start/0, start_timer/3, cancel_timer/1, get_timer_refs/0, send_after/3]).
+-export([start/0, start_timer/3, cancel_timer/1, get_timer_refs/0, send_after/3, send_after/4]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -export([run_timer/6]).
 
@@ -68,9 +68,11 @@ start_timer(Time, Dest, Msg) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec cancel_timer(TimerRef :: reference()) -> false | non_neg_integer().
-cancel_timer(TimerRef) ->
+cancel_timer(TimerRef) when is_reference(TimerRef) ->
     maybe_start(),
-    gen_server:call(?SERVER_NAME, {cancel, TimerRef}).
+    gen_server:call(?SERVER_NAME, {cancel, TimerRef});
+cancel_timer(_TimerRef) ->
+    erlang:error(badarg).
 
 -spec get_timer_refs() -> [reference()].
 get_timer_refs() ->
@@ -88,10 +90,39 @@ get_timer_refs() ->
 %%          manager and can be cancelled with {@link cancel_timer/1}.
 %% @end
 %%-----------------------------------------------------------------------------
--spec send_after(non_neg_integer(), pid() | atom(), term()) -> reference().
+-spec send_after(0..16#FFFFFFFF, pid() | atom(), term()) -> reference().
 send_after(Time, Dest, Msg) ->
-    maybe_start(),
-    gen_server:call(?SERVER_NAME, {send_after, Time, Dest, Msg}).
+    send_after(Time, Dest, Msg, []).
+
+-spec send_after(non_neg_integer(), pid() | atom(), term(), [{abs, boolean()}]) -> reference().
+send_after(Time, Dest, Msg, Options) when
+    is_integer(Time),
+    Time >= 0,
+    is_atom(Dest) orelse (is_pid(Dest) andalso node(Dest) =:= node())
+->
+    Absolute = absolute_option(Options, false),
+    Now = erlang:monotonic_time(millisecond),
+    Deadline =
+        case Absolute of
+            true -> Time;
+            false -> Now + Time
+        end,
+    case Deadline - Now =< 16#FFFFFFFF of
+        true ->
+            maybe_start(),
+            gen_server:call(?SERVER_NAME, {send_after, {abs, Deadline}, Dest, Msg});
+        false ->
+            erlang:error(badarg)
+    end;
+send_after(_Time, _Dest, _Msg, _Options) ->
+    erlang:error(badarg).
+
+absolute_option([], Absolute) ->
+    Absolute;
+absolute_option([{abs, Absolute} | Options], _Previous) when is_boolean(Absolute) ->
+    absolute_option(Options, Absolute);
+absolute_option(_Options, _Absolute) ->
+    erlang:error(badarg).
 
 %%
 %% ?GEN_SERVER callbacks
@@ -166,12 +197,31 @@ do_start_timer(Time, Dest, Msg, Mode) ->
 
 %% @private
 run_timer(MgrPid, Time, TimerRef, Dest, Msg, Mode) ->
-    Start = erlang:system_time(millisecond),
+    DestMonitor =
+        case is_pid(Dest) of
+            true -> erlang:monitor(process, Dest);
+            false -> undefined
+        end,
+    Now = erlang:monotonic_time(millisecond),
+    {Deadline, Timeout} =
+        case Time of
+            {abs, Absolute} -> {Absolute, max(0, Absolute - Now)};
+            _ -> {Now + Time, Time}
+        end,
     receive
+        {'DOWN', DestMonitor, process, Dest, _Reason} ->
+            %% Like expiry, destination death makes cancellation return false,
+            %% including a cancellation already queued in the manager.
+            MgrPid ! {fired, self()};
         {cancel, From} ->
+            Remaining =
+                case is_pid(Dest) andalso not erlang:is_process_alive(Dest) of
+                    true -> false;
+                    false -> max(0, Deadline - erlang:monotonic_time(millisecond))
+                end,
             MgrPid ! {canceled, self()},
-            gen_server:reply(From, Time - (erlang:system_time(millisecond) - Start))
-    after Time ->
+            gen_server:reply(From, Remaining)
+    after Timeout ->
         MgrPid ! {fired, self()},
         case Mode of
             wrapped -> Dest ! {timeout, TimerRef, Msg};

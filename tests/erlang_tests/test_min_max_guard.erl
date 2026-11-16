@@ -28,7 +28,31 @@ start() ->
     ok = test_without_guard(min, 2, 1, 2),
     ok = test_without_guard(max, 2, 1, 1),
     ok = test_tail(),
+    ok = tie(1, 1.0),
+    ok = tie(1.0, 1),
+    ok = tie(0.0, -0.0),
+    ok = tie(-0.0, 0.0),
     0.
+
+tie(A, B) ->
+    A = min(A, B),
+    A = max(A, B),
+    A = apply(erlang, min, [A, B]),
+    A = apply(erlang, max, [A, B]),
+    case is_float(A) of
+        true ->
+            Bits = <<A/float>>,
+            Bits = <<(min(A, B))/float>>,
+            Bits = <<(max(A, B))/float>>;
+        false ->
+            ok
+    end,
+    tie_guard(A, B).
+
+tie_guard(A, B) when min(A, B) =:= A, max(A, B) =:= A ->
+    ok;
+tie_guard(_A, _B) ->
+    fail.
 
 test_guard(min, X, Y, Z) when min(X, Y) < Z ->
     ok;

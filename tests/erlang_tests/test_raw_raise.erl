@@ -23,7 +23,34 @@
 -export([start/0, do_raise/0, fail_with_atom/1, do_raise_not_error/0]).
 
 start() ->
+    ok = test_reraise_caught_stacktrace(),
     do_catch() + do_catch2().
+
+test_reraise_caught_stacktrace() ->
+    [badarg, badarg, badarg] = [
+        try
+            erlang:raise(Class, reraised, [])
+        catch
+            Class:reraised:Stacktrace ->
+                %% With stacktrace creation disabled, catch supplies undefined.
+                %% Exercise both compiled calls and the dynamic NIF path.
+                ok =
+                    try erlang:raise(Class, reraised, Stacktrace) of
+                        _ -> returned
+                    catch
+                        Class:reraised -> ok
+                    end,
+                ok =
+                    try apply(id(erlang), id(raise), [Class, reraised, Stacktrace]) of
+                        _ -> returned
+                    catch
+                        Class:reraised -> ok
+                    end,
+                badarg = apply(id(erlang), id(raise), [Class, reraised, bad_stacktrace])
+        end
+     || Class <- [error, exit, throw]
+    ],
+    ok.
 
 do_catch() ->
     try ?MODULE:do_raise() of

@@ -132,6 +132,8 @@ erlang:process_flag/3, &process_flag_nif
 erlang:processes/0, &processes_nif
 erlang:process_info/2, &process_info_nif
 erlang:get/0, &get_0_nif
+erlang:get_keys/0, &get_keys_nif
+erlang:get_keys/1, &get_keys_nif
 erlang:put/2, &put_nif
 erlang:binary_to_term/1, &binary_to_term_nif
 erlang:binary_to_term/2, &binary_to_term_nif
@@ -253,6 +255,7 @@ lists:reverse/1, &lists_reverse_nif
 lists:reverse/2, &lists_reverse_nif
 maps:from_keys/2, &maps_from_keys_nif
 maps:next/1, &maps_next_nif
+maps:take/2, &maps_take_nif
 unicode:characters_to_list/1, &unicode_characters_to_list_nif
 unicode:characters_to_list/2, &unicode_characters_to_list_nif
 unicode:characters_to_binary/1, &unicode_characters_to_binary_nif

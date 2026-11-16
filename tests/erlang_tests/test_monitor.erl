@@ -23,6 +23,13 @@
 -export([start/0]).
 
 start() ->
+    ok = test_link_dead_process(),
+    ok = test_self_link(),
+    ok = test_relink(),
+    ok = test_unlink_exit_race(64),
+    ok = test_crossed_unlinks(64),
+    ok = test_demonitor_boundaries(),
+    ok = test_monitor_target_types(),
     ok = test_monitor_normal(),
     ok = test_monitor_demonitor(),
     ok = test_monitor_noproc(),
@@ -32,6 +39,7 @@ start() ->
     ok = test_monitor_demonitor_flush_info_false(),
     ok = test_monitor_self(),
     ok = test_monitor_demonitor_from_other(),
+    ok = test_monitor_demonitor_from_target(),
     ok = test_monitor_registered(),
     ok = test_monitor_registered_noproc(),
 
@@ -77,6 +85,345 @@ start() ->
     ok = test_binary_to_term_invalid_process_ref(),
     ok = test_alias_ref_ordering(),
     0.
+
+test_crossed_unlinks(0) ->
+    ok;
+test_crossed_unlinks(N) ->
+    [test_crossed_unlink(A, B) || A <- [false, true], B <- [false, true]],
+    test_crossed_unlinks(N - 1).
+
+test_crossed_unlink(A, B) ->
+    Parent = self(),
+    {Child, Ref} = spawn_opt(
+        fun Loop() ->
+            receive
+                {go, Relink} ->
+                    crossed_unlink_action(Parent, Relink),
+                    Loop();
+                check ->
+                    {links, Links} = process_info(self(), links),
+                    Parent ! {self(), [Parent] =:= [P || P <- Links, P =:= Parent]},
+                    Loop();
+                stop ->
+                    ok
+            end
+        end,
+        [monitor]
+    ),
+    true = link(Child),
+    true = crossed_unlink_check(Child),
+    Child ! {go, B},
+    crossed_unlink_action(Child, A),
+    %% The first reply fences peer operations; the second fences our acknowledgements.
+    _ = crossed_unlink_check(Child),
+    PeerLinked = crossed_unlink_check(Child),
+    {links, Links} = process_info(self(), links),
+    PeerLinked = [Child] =:= [P || P <- Links, P =:= Child],
+    %% Both pending unlink entries must also be gone before a later fresh link.
+    true = link(Child),
+    true = crossed_unlink_check(Child),
+    true = unlink(Child),
+    Child ! stop,
+    receive
+        {'DOWN', Ref, process, Child, normal} -> ok
+    end.
+
+crossed_unlink_check(Child) ->
+    Child ! check,
+    receive
+        {Child, Linked} -> Linked
+    end.
+
+crossed_unlink_action(Pid, Relink) ->
+    true = unlink(Pid),
+    case Relink of
+        true -> true = link(Pid);
+        false -> ok
+    end.
+
+%% A linked exit may win the race, but cannot kill a worker after unlink returns.
+test_unlink_exit_race(0) ->
+    ok;
+test_unlink_exit_race(N) ->
+    Parent = self(),
+    {Child, ChildRef} = spawn_opt(
+        fun() ->
+            receive
+                %% Still kills a non-trapping peer, without printing a crash dump.
+                go -> exit(shutdown)
+            end
+        end,
+        [monitor]
+    ),
+    {Worker, WorkerRef} = spawn_opt(
+        fun() ->
+            true = link(Child),
+            Parent ! {self(), ready},
+            wait_unlink_target_dead(Child),
+            true = unlink(Child),
+            Parent ! {self(), unlinked},
+            receive
+                stop -> ok
+            end
+        end,
+        [monitor]
+    ),
+    receive
+        {Worker, ready} -> ok
+    end,
+    Child ! go,
+    receive
+        {'DOWN', ChildRef, process, Child, shutdown} -> ok
+    end,
+    Worker ! stop,
+    Reason =
+        receive
+            {'DOWN', WorkerRef, process, Worker, R} -> R
+        end,
+    receive
+        {Worker, unlinked} -> normal = Reason
+    after 0 -> shutdown = Reason
+    end,
+    test_unlink_exit_race(N - 1).
+
+wait_unlink_target_dead(Child) ->
+    case is_process_alive(Child) of
+        true -> wait_unlink_target_dead(Child);
+        false -> ok
+    end.
+
+test_relink() ->
+    Parent = self(),
+    {Child, Ref} = spawn_opt(
+        fun Loop() ->
+            receive
+                check ->
+                    {links, Links} = process_info(self(), links),
+                    Parent ! {self(), [Pid || Pid <- Links, Pid =:= Parent]},
+                    Loop();
+                {stop, Reason} ->
+                    exit(Reason)
+            end
+        end,
+        [monitor]
+    ),
+    Previous = process_flag(trap_exit, true),
+    try
+        [
+            begin
+                true = link(Child),
+                true = link(Child),
+                true = unlink(Child),
+                {links, Unlinked} = process_info(self(), links),
+                [] = [Pid || Pid <- Unlinked, Pid =:= Child],
+                true = link(Child),
+                {links, Relinked} = process_info(self(), links),
+                [Child] = [Pid || Pid <- Relinked, Pid =:= Child],
+                Child ! check,
+                {Child, [Parent]} = recv_one(),
+                %% The peer reply also puts any earlier unlink acknowledgement behind us.
+                {links, Settled} = process_info(self(), links),
+                [Child] = [Pid || Pid <- Settled, Pid =:= Child]
+            end
+         || _ <- [first, second, third]
+        ],
+        Child ! {stop, relinked},
+        receive
+            {'EXIT', Child, relinked} -> ok
+        after 1000 -> error(missing_relinked_exit)
+        end,
+        receive
+            {'DOWN', Ref, process, Child, relinked} -> ok
+        after 1000 -> error(missing_relinked_down)
+        end,
+        ok
+    after
+        unlink(Child),
+        Child ! {stop, normal},
+        demonitor(Ref, [flush]),
+        process_flag(trap_exit, Previous)
+    end.
+
+test_self_link() ->
+    {Child, Ref} = spawn_opt(
+        fun() ->
+            receive
+                stop -> ok
+            end
+        end,
+        [link, monitor]
+    ),
+    {links, Links} = process_info(self(), links),
+    Previous = process_flag(trap_exit, false),
+    self() ! self_link_sentinel,
+    try
+        [
+            begin
+                process_flag(trap_exit, Trap),
+                [
+                    begin
+                        true = link(self()),
+                        {links, Links} = process_info(self(), links),
+                        true = link(self()),
+                        true = garbage_collect(),
+                        {links, Links} = process_info(self(), links),
+                        true = unlink(self()),
+                        {links, Links} = process_info(self(), links)
+                    end
+                 || _ <- [first, second]
+                ]
+            end
+         || Trap <- [false, true]
+        ],
+        self_link_sentinel = recv_one(),
+        ok
+    after
+        process_flag(trap_exit, Previous),
+        Child ! stop,
+        receive
+            {'DOWN', Ref, process, Child, normal} -> ok
+        end,
+        case Previous of
+            true ->
+                receive
+                    {'EXIT', Child, normal} -> ok
+                end;
+            false ->
+                ok
+        end
+    end.
+
+test_monitor_target_types() ->
+    {Dead, DeadRef} = spawn_opt(fun() -> ok end, [monitor]),
+    {'DOWN', DeadRef, process, Dead, normal} = recv_one(),
+    {Child, ChildRef} = spawn_opt(
+        fun() ->
+            receive
+                stop -> ok
+            end
+        end,
+        [monitor]
+    ),
+    try
+        [
+            begin
+                badarg =
+                    try
+                        monitor(port, Target)
+                    catch
+                        error:R -> R
+                    end,
+                [
+                    badarg =
+                        try
+                            monitor(port, Target, Options)
+                        catch
+                            error:R2 -> R2
+                        end
+                 || Options <- [[], [{alias, explicit_unalias}]]
+                ]
+            end
+         || Target <- [self(), Child, Dead]
+        ],
+        [
+            begin
+                true = register(test_monitor_target_name, Owner),
+                try
+                    [
+                        begin
+                            Ref = monitor(port, test_monitor_target_name, Options),
+                            {'DOWN', Ref, port, {test_monitor_target_name, Node}, noproc} = recv_one(),
+                            true = Node =:= node(),
+                            false = demonitor(Ref, [info]),
+                            HasAlias = Options =/= [],
+                            HasAlias = erlang:unalias(Ref)
+                        end
+                     || Options <- [[], [{alias, explicit_unalias}]]
+                    ]
+                after
+                    unregister(test_monitor_target_name)
+                end
+            end
+         || Owner <- [self(), Child]
+        ],
+        ok = assert_no_message()
+    after
+        Child ! stop,
+        receive
+            {'DOWN', ChildRef, process, Child, normal} -> ok
+        end
+    end.
+
+test_link_dead_process() ->
+    {Child, Ref} = spawn_opt(fun() -> ok end, [monitor]),
+    receive
+        {'DOWN', Ref, process, Child, normal} -> ok
+    end,
+    Previous = process_flag(trap_exit, false),
+    try
+        noproc =
+            try link(Child) of
+                _ -> unexpected
+            catch
+                error:Reason -> Reason
+            end,
+        false = process_flag(trap_exit, true),
+        [
+            begin
+                true = link(Child),
+                receive
+                    {'EXIT', Child, noproc} -> ok
+                after 1000 -> error(no_exit)
+                end
+            end
+         || _ <- [first, second]
+        ],
+        true = unlink(Child),
+        receive
+            {'EXIT', Child, _} -> error(duplicate_exit)
+        after 0 -> ok
+        end
+    after
+        process_flag(trap_exit, Previous)
+    end.
+
+test_demonitor_boundaries() ->
+    false = demonitor(make_ref(), [flush, info]),
+    Child = spawn_opt(
+        fun() ->
+            receive
+                stop -> ok
+            end
+        end,
+        []
+    ),
+    Ref = monitor(process, Child),
+    [
+        badarg =
+            try
+                demonitor(Ref, Options)
+            catch
+                error:badarg -> badarg
+            end
+     || Options <- [[bad], [info | bad], [{flush, true}], not_a_list]
+    ],
+    %% Invalid options must not remove the active monitor. Flushing an active
+    %% monitor must also leave even matching five-tuples in the mailbox alone.
+    self() ! {other, Ref, a, b, c},
+    true = demonitor(Ref, [info, flush]),
+    {other, Ref, a, b, c} = recv_one(),
+    Fence = monitor(process, Child),
+    Child ! stop,
+    {'DOWN', Fence, process, Child, normal} = recv_one(),
+    false = demonitor(Fence, [flush, info]),
+    %% Flush removes just the oldest matching five-tuple, irrespective of tag;
+    %% it does not change the info result for an already consumed monitor.
+    self() ! {other, Fence, a, b, c},
+    self() ! {'DOWN', Fence, process, Child, normal},
+    false = demonitor(Fence, [flush, info]),
+    {'DOWN', Fence, process, Child, normal} = recv_one(),
+    ok = assert_no_message(),
+    ok.
 
 %% An alias sorts after every plain reference whichever was created first. Two
 %% owners' aliases are distinct and strictly ordered, but that direction follows
@@ -305,6 +652,61 @@ test_monitor_demonitor_from_other() ->
             {'DOWN', Ref, process, Pid, normal} -> ok
         after 500 -> timeout
         end,
+    ok.
+
+test_monitor_demonitor_from_target() ->
+    [
+        begin
+            Parent = self(),
+            {Pid, Fence} = spawn_opt(
+                fun() ->
+                    receive
+                        {check, Ref} ->
+                            Other = make_ref(),
+                            self() ! {matching, Ref, a, b, c},
+                            self() ! {other, Other, a, b, c},
+                            self() ! keep,
+                            false = demonitor(Ref, [info]),
+                            Expected = demonitor(Ref, Options),
+                            {other, Other, a, b, c} = recv_one(),
+                            keep = recv_one(),
+                            ok = assert_no_message(),
+                            Parent ! {self(), checked},
+                            receive
+                                stop -> ok
+                            end
+                    end
+                end,
+                [monitor, {min_heap_size, 100}]
+            ),
+            Ref =
+                case Mode of
+                    plain -> monitor(process, Pid);
+                    _ -> monitor(process, Pid, [{alias, Mode}])
+                end,
+            Pid ! {check, Ref},
+            receive
+                {Pid, checked} -> ok;
+                {'DOWN', Fence, process, Pid, Failed} -> error({target_demonitor, Failed})
+            after 5000 -> error(target_demonitor_timeout)
+            end,
+            Pid ! stop,
+            receive
+                {'DOWN', Fence, process, Pid, normal} -> ok
+            end,
+            receive
+                {'DOWN', Ref, process, Pid, normal} -> ok
+            after 5000 -> error(owner_monitor_lost)
+            end,
+            _ = erlang:unalias(Ref)
+        end
+     || {Mode, Options, Expected} <- [
+            {plain, [flush], true},
+            {plain, [flush, info], false},
+            {explicit_unalias, [flush], true},
+            {explicit_unalias, [flush, info], false}
+        ]
+    ],
     ok.
 
 test_alias() ->

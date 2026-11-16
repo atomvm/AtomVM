@@ -711,6 +711,44 @@ void test_resource_release_in_down_handler_two_monitors(void)
     globalcontext_destroy(glb);
 }
 
+static void resource_down_stop_select(ErlNifEnv *env, void *resource, ErlNifPid *pid, ErlNifMonitor *mon)
+{
+    UNUSED(pid);
+    UNUSED(mon);
+    int fd = *((int *) resource);
+    cb_read_resource = enif_select(env, fd, ERL_NIF_SELECT_STOP, resource, NULL, term_nil());
+}
+
+void test_select_monitor_during_global_shutdown(void)
+{
+    GlobalContext *glb = globalcontext_new();
+    Context *ctx = context_new(glb);
+    ErlNifEnv *env = erl_nif_env_from_context(ctx);
+    ErlNifResourceTypeInit init = { 0 };
+    init.members = 3;
+    init.down = resource_down_stop_select;
+    ErlNifResourceFlags flags;
+    ErlNifResourceType *type = enif_init_resource_type(env, "shutdown_select", &init, ERL_NIF_RT_CREATE, &flags);
+    assert(type != NULL);
+    int fds[2];
+    assert(pipe(fds) == 0);
+    int *resource = enif_alloc_resource(type, sizeof(int));
+    assert(resource != NULL);
+    *resource = fds[0];
+    ErlNifPid pid = ctx->process_id;
+    assert(enif_monitor_process(env, resource, &pid, NULL) == 0);
+    assert(enif_select(env, fds[0], ERL_NIF_SELECT_READ, resource, &pid, UNDEFINED_ATOM) == 0);
+    assert(enif_release_resource(resource));
+    cb_read_resource = 0;
+
+    // Destroy a process still selecting: its down callback must be able to
+    // unregister the event before platform polling state is released.
+    globalcontext_destroy(glb);
+    assert(cb_read_resource == ERL_NIF_SELECT_STOP_SCHEDULED);
+    close(fds[0]);
+    close(fds[1]);
+}
+
 #ifndef HAVE_KQUEUE
 // Regression test for the generic_unix poll(2) backend: enif_select arms an
 // event under the select_events lock but marks select_events_poll_count dirty
@@ -811,6 +849,7 @@ int main(int argc, char **argv)
     test_resource_binaries();
     test_resource_release_in_down_handler();
     test_resource_release_in_down_handler_two_monitors();
+    test_select_monitor_during_global_shutdown();
 #ifndef HAVE_KQUEUE
     test_select_event_armed_during_listener_only_rebuild();
 #endif
