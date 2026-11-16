@@ -2000,6 +2000,41 @@ def cases():
          "self() ! 7, try receive V -> throw(V) after 1000 -> timeout end catch _:R -> R end"),
     ]:
         probe("Term/Try", expr_origin, expr)
+    for expr_origin, expr in [
+        ("iterator_shapes", "differential:call(erts_internal,mc_iterator,[#{}])"),
+        ("iterator_shapes", "differential:call(erts_internal,mc_iterator,[[a]])"),
+        ("iterator_shapes", "differential:call(erts_internal,mc_iterator,[a])"),
+        ("iterator_entries", "#{{k, K} => V * 10 || K := V <- #{a => 1, b => 2}}"),
+        ("refill_raises", "differential:call(erts_internal,mc_refill,[a])"),
+        ("refill_raises", "differential:call(erts_internal,mc_refill,[[]])"),
+        ("refill_raises", "differential:call(erts_internal,mc_refill,[none])"),
+    ]:
+        probe("Modules/ErtsInternal", expr_origin, expr)
+    for expr_origin, expr in [
+        ("entries_in_requested_order", "#{b := X, a := Y, b := Z} = #{a => 1, b => 2}, {X, Y, Z}"),
+        ("entries_shadowed_key", "M = maps:from_list([{a, 1}, {a, 2}]), #{a := X} = M, X"),
+        ("entries_missing_key", "try #{a := _, b := _} = #{} of _ -> matched catch error:{badmatch, _} -> badmatch end"),
+        ("entries_missing_later", "try #{a := _, b := _} = #{a => 1} of _ -> matched catch error:{badmatch, _} -> badmatch end"),
+        ("entries_empty", "#{} = #{a => 1}, ok"),
+        ("entries_empty_nonmap", "try (fun(M) -> #{} = M end)(1) of _ -> matched catch error:{badmatch, 1} -> badmatch end"),
+        ("entries_numeric_keys", "try #{1 := _} = #{1.0 => 1} of _ -> matched catch error:{badmatch, _} -> badmatch end"),
+        ("entries_arity", "M = #{a => 1, b => 2, c => 3}, #{a := A, c := C} = M, length([A, C])"),
+    ]:
+        probe("Term/Maps", expr_origin, expr)
+    for expr_origin, expr in [
+        ("recursive_dispatch", "F = fun Self(0) -> 0; Self(N) -> Self(N - 1) end, F(3)"),
+        ("pure_calls",
+         "Add = fun(C) -> fun(X) -> C + X end end, F = Add(10), Bad = not_a_fun, "
+         "{F(7), (try F() catch error:{badarity, {G, []}} -> {badarity, is_function(G, 1)} end), "
+         "(try Bad() catch error:{badfun, not_a_fun} -> badfun end)}"),
+        ("effectful_call", "is_pid((fun() -> self() end)())"),
+        ("apply_call", "Inc = fun(X) -> X + 1 end, Forward = fun(X) -> Inc(X) end, Forward(1)"),
+        ("sequential_dispatch", "F = fun() -> 7 end, {F(), F()}"),
+        ("catch_dispatched_exception", "F = fun() -> throw(9) end, try F() catch throw:9 -> 42 end"),
+        ("dispatched_state",
+         "erase(dispatch_k), F = fun() -> put(dispatch_k, 1), 7 end, R = F(), {R, erase(dispatch_k)}"),
+    ]:
+        probe("Term/Dispatch", expr_origin, expr)
     for kind in ["tag_mismatch", "forged_then_real_down", "real_then_forged_down", "noproc_with_forged"]:
         probe("Modules/Signals", "demonitor_flushes_oldest_monitor_message",
               f"differential:demonitor_oldest_message({kind})")
@@ -2163,14 +2198,14 @@ def inventory(checkout, selected, failures=None, unverified=()):
             "PublicApi.lean": "Lean API snapshots, #check and rewrite interfaces; not VM API coverage.",
             "Counterexample.lean": "Model schedule exploration and diagnostics; no fixed runtime race outcome is asserted.",
             "Purity.lean": "Symbolic purity, termination and execution-budget properties are not runtime tests.",
-            "Modules/ErtsInternal.lean": "Compiler/model iterator adapters are not portable ERTS contracts.",
+            "Modules/ErtsInternal.lean": "Public mc_iterator/1 non-map shapes, map comprehensions, and mc_refill/1 error paths cover 3/3 theorems without comparing VM-internal iterator structures.",
             "Modules/Process.lean": "Samples observe public process behavior, not all schedules, model PID paths, deadlock or exhaustion.",
             "Modules/Timers.lean": "Delivery/cancellation handshakes and OTP error paths; elapsed milliseconds and all-run model proofs are not cross-VM expectations.",
             "Modules/Signals.lean": "Samples normalize identities and error stack contents; signal/link/alias combinations remain incomplete.",
-            "Term/Dispatch.lean": "Synthetic function tables, dispatcher fuel and missing-entry exhaustion have no direct VM equivalent.",
+            "Term/Dispatch.lean": "Public recursive, captured, effectful, sequential, exception, and stateful dispatch samples cover 12/17 theorems; remaining 5 test synthetic depth-0/exhaustion and table-resolve internals.",
             "Term/Order.lean": "Fixed-point/admissibility proofs and divergence are not sampled as bounded successes.",
             "Term/Try.lean": "Public try/catch/after behavior samples cover 14/17 theorems; stacktrace_is_empty, exhaustion_is_not_caught, and blocking_is_not_caught are model-only expectations.",
-            "Term/Maps.lean": "Internal duplicate-binding association lists and extraction sentinels are not public map representations.",
+            "Term/Maps.lean": "Public Erlang map pattern-matching samples cover 8/8 theorems; shadowed association-list internals are model representations.",
             "Term/Bitstring.lean": "Internal padding validity and proof objects are not observable VM heap contracts.",
             "Term/Bitstring/Construction.lean": "Public bitstring construction samples within AtomVM's 256-bit integer limit; ofBits representation lemmas are internal to Lean.",
             "Term/Bitstring/Matching.lean": "Public bitstring matching samples; extract_rewrites is a Lean simp lemma.",

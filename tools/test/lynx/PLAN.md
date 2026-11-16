@@ -16,8 +16,8 @@ runner semantics in [README.md](README.md).
   `b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de` in the latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,082 public-behavior recipes inspired by Lean tests
-  and upstream examples (`349` of `438` Lean test sites across all 26 files). Source
+- `lean_runtime.py` selects 6,104 public-behavior recipes inspired by Lean tests
+  and upstream examples (`367` of `438` Lean test sites across all 26 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
   the proved postcondition to be true on both VMs: five integer singleton sums,
@@ -1094,6 +1094,34 @@ Batch 14 — Cover testable `Term/Try.lean` `try/catch/after` theorems in `lean_
   (`349/438`), `test_validate.py` (`27` passed, `3` env-gated optional skipped),
   and full interpreter CI run (`6,114` cases with `--seed 20261114 --generated 32`
   and `--expected-failures tools/test/lynx/expected_failures.json`: `5,921`
+  matched OTP, `193/193` expected failures, `0` unexpected failures/passes, `0`
+  unverified).
+
+Batch 15 — Cover remaining testable `Modules/ErtsInternal.lean`, `Term/Maps.lean`, and `Term/Dispatch.lean` theorems (2026-11-16):
+
+- Added `22` standalone Erlang probes in `lean_runtime.py` (`6,082 -> 6,104`,
+  lifting attributed Lean coverage to `367` of `438` sites across all 26
+  files):
+  - `Modules/ErtsInternal.lean` (`0/3 -> 3/3`, `7` cases):
+    `iterator_shapes` (`mc_iterator` on `#{}`, `[a]`, `a`), `iterator_entries`
+    (map comprehension `#{{k, K} => V * 10 || K := V <- #{a => 1, b => 2}}`),
+    and `refill_raises` (`mc_refill` on `a`, `[]`, `none`).
+  - `Term/Maps.lean` (`0/8 -> 8/8`, `8` cases): public Erlang map
+    pattern-matching across all 8 theorems (`entries_in_requested_order`,
+    `entries_shadowed_key` via `maps:from_list/1`, `entries_missing_key`,
+    `entries_missing_later`, `entries_empty`, `entries_empty_nonmap`,
+    `entries_numeric_keys`, `entries_arity`).
+  - `Term/Dispatch.lean` (`5/17 -> 12/17`, `7` cases): `recursive_dispatch`,
+    `pure_calls` (closure capture, `{badarity, ...}`, `{badfun, ...}`),
+    `effectful_call`, `apply_call`, `sequential_dispatch`,
+    `catch_dispatched_exception`, and `dispatched_state`, leaving only the `5`
+    depth-0/exhaustion/table-lookup Lean model theorems (`pure_dispatch_without_depth`,
+    `exhaustion_is_not_an_exception`, `pure_spawn_without_depth`,
+    `recursive_spawn_exhausts`, `resolve_finds_named_entries`).
+- Verified `lean_runtime.inventory()` against `/Users/petermm/OSScontrib/lynx`
+  (`367/438`), `test_validate.py` (`27` passed, `3` env-gated optional skipped),
+  and full interpreter CI run (`6,136` cases with `--seed 20261114 --generated 32`
+  and `--expected-failures tools/test/lynx/expected_failures.json`: `5,943`
   matched OTP, `193/193` expected failures, `0` unexpected failures/passes, `0`
   unverified).
 
