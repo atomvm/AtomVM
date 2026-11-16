@@ -89,7 +89,8 @@ endif()
 # idf_component_register, where CONFIG_* variables are available.
 
 option(AVM_USE_RYU "Enable vendored Ryu backend for short float formatting." OFF)
-set(AVM_RYU_OPTIMIZE_SIZE ON)
+option(AVM_RYU_OPTIMIZE_SIZE "Use Ryu small lookup tables to reduce Flash usage." ON)
+option(AVM_RYU_COMPILE_FOR_SIZE "Compile Ryu with -Os regardless of global optimization level." ON)
 
 project(atomvm-esp32-test)
 

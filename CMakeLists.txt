@@ -36,6 +36,8 @@ option(AVM_ENABLE_PRECOMPILED "Enable execution of precompiled code, even if JIT
 option(AVM_DISABLE_JIT_DWARF "Disable DWARF debug and profiling info for JIT." ON)
 option(AVM_USE_32BIT_FLOAT "Use 32 bit floats." OFF)
 option(AVM_USE_RYU "Enable vendored Ryu backend for short float formatting." OFF)
+option(AVM_RYU_OPTIMIZE_SIZE "Use Ryu small lookup tables to reduce Flash usage." OFF)
+option(AVM_RYU_COMPILE_FOR_SIZE "Compile Ryu with -Os regardless of global optimization level." OFF)
 option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
 option(AVM_RELEASE "Build an AtomVM release" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)

@@ -52,6 +52,14 @@ menu "AtomVM configuration"
         help
             Use the vendored erlang/ryu backend for the `short` float formatting option.
             When disabled, the lower-flash Grisu3/printf fallback formatting path is used.
+
+    config AVM_RYU_COMPILE_FOR_SIZE
+        bool "Compile Ryu with -Os for smaller Flash footprint"
+        depends on AVM_USE_RYU
+        default y
+        help
+            Compile the vendored Ryu sources with -Os regardless of the global
+            ESP-IDF compiler optimization level (e.g. -O2 in release builds).
              
     config AVM_CREATE_STACKTRACES
         bool  "Create BEAM stack traces."

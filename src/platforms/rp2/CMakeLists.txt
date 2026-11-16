@@ -71,6 +71,8 @@ set(HAVE_RMDIR "" CACHE INTERNAL "Have symbol rmdir" FORCE)
 option(AVM_DISABLE_SMP "Disable SMP support." OFF)
 option(AVM_USE_32BIT_FLOAT "Use 32 bit floats." OFF)
 option(AVM_USE_RYU "Enable vendored Ryu backend for short float formatting." OFF)
+option(AVM_RYU_OPTIMIZE_SIZE "Use Ryu small lookup tables to reduce Flash usage." ON)
+option(AVM_RYU_COMPILE_FOR_SIZE "Compile Ryu with -Os regardless of global optimization level." ON)
 option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
 option(AVM_WAIT_FOR_USB_CONNECT "Wait for USB connection before starting" OFF)
 option(AVM_WAIT_BOOTSEL_ON_EXIT "Wait in BOOTSEL rather than shutdown on exit" ON)
@@ -110,7 +112,6 @@ else()
 endif()
 
 set(AVM_DISABLE_TASK_DRIVER ON FORCE)
-set(AVM_RYU_OPTIMIZE_SIZE ON)
 
 set(
     PLATFORM_LIB_SUFFIX
