@@ -23,8 +23,12 @@
 #include <otp_ssl.h>
 #include <sdkconfig.h>
 
-
 #ifdef CONFIG_AVM_ENABLE_OTP_SSL_NIFS
+
+#if defined(CONFIG_MBEDTLS_SSL_PROTO_TLS1_3) \
+    && (!defined(CONFIG_ESP_MAIN_TASK_STACK_SIZE) || CONFIG_ESP_MAIN_TASK_STACK_SIZE < 6144)
+#error "TLS 1.3 on ESP32 requires CONFIG_ESP_MAIN_TASK_STACK_SIZE >= 6144"
+#endif
 
 REGISTER_NIF_COLLECTION(otp_ssl, otp_ssl_init, NULL, otp_ssl_nif_get_nif)
 
