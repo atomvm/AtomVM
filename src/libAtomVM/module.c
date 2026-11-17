@@ -30,6 +30,7 @@
 #include "external_term.h"
 #include "globalcontext.h"
 #include "iff.h"
+#include "intn.h"
 #include "jit.h"
 #include "list.h"
 #include "nifs.h"
@@ -914,6 +915,438 @@ static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, ui
     }
 }
 
+static inline size_t record_value32_byte_len(uint8_t first_byte)
+{
+    switch ((first_byte >> 3) & 0x3) {
+        case 0:
+        case 2:
+            return 1;
+        case 1:
+            return 2;
+        case 3: {
+            uint8_t sz = (first_byte >> 5) + 2;
+            if (sz > 4) {
+                return 0;
+            }
+            return (size_t) (1u + sz);
+        }
+        default:
+            return 0;
+    }
+}
+
+// Decode a small compact-encoded literal (as used for the length of extended
+// integers). Returns false if it doesn't fit the 1 or 2 bytes forms.
+static inline bool record_decode_small_literal(const uint8_t *pc, const uint8_t *pc_end, uint32_t *value, size_t *byte_len)
+{
+    if (UNLIKELY(pc >= pc_end)) {
+        return false;
+    }
+    switch ((pc[0] >> 3) & 0x3) {
+        case 0:
+        case 2:
+            *value = pc[0] >> 4;
+            *byte_len = 1;
+            return true;
+        case 1:
+            if (UNLIKELY(pc_end - pc < 2)) {
+                return false;
+            }
+            *value = ((uint32_t) (pc[0] & 0xE0) << 3) | pc[1];
+            *byte_len = 2;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static inline size_t record_compact_term_byte_len(const uint8_t *pc, const uint8_t *pc_end)
+{
+    if (UNLIKELY(pc >= pc_end)) {
+        return 0;
+    }
+    uint8_t first_byte = *pc;
+    switch (first_byte & 0xF) {
+        case COMPACT_LARGE_LITERAL:
+        case COMPACT_LITERAL: {
+            switch ((first_byte >> 3) & 0x3) {
+                case 0:
+                case 2:
+                    return 1;
+                case 1:
+                    return 2;
+                case 3: {
+                    uint8_t sz = (first_byte >> 5) + 2;
+                    return (size_t) (1u + sz);
+                }
+                default:
+                    return 0;
+            }
+        }
+        case COMPACT_INTEGER:
+        case COMPACT_ATOM:
+        case COMPACT_XREG:
+        case COMPACT_YREG:
+            return 1;
+        case COMPACT_EXTENDED:
+            if (first_byte == COMPACT_EXTENDED_LITERAL) {
+                if (UNLIKELY((size_t) (pc_end - pc) < 2)) {
+                    return 0;
+                }
+                size_t inner = record_value32_byte_len(pc[1]);
+                if (inner == 0) {
+                    return 0;
+                }
+                return 1u + inner;
+            }
+            return 0; // other extended tags not expected in record defaults
+        case COMPACT_LARGE_INTEGER:
+        case COMPACT_LARGE_ATOM:
+            switch (first_byte & COMPACT_LARGE_IMM_MASK) {
+                case COMPACT_11BITS_VALUE:
+                    return 2;
+                case COMPACT_NBITS_VALUE: {
+                    int sz = (first_byte >> 5) + 2;
+                    if (sz > 8) {
+                        // Extended integer: 9 + N bytes, N as a compact literal
+                        // following the first byte.
+                        if ((first_byte & 0xF) != COMPACT_LARGE_INTEGER) {
+                            return 0;
+                        }
+                        uint32_t extra;
+                        size_t len_bytes;
+                        if (!record_decode_small_literal(pc + 1, pc_end, &extra, &len_bytes)) {
+                            return 0;
+                        }
+                        return 1u + len_bytes + 9u + extra;
+                    }
+                    return (size_t) (1u + sz);
+                }
+                default:
+                    return 0;
+            }
+        case COMPACT_LARGE_XREG:
+        case COMPACT_LARGE_YREG:
+            return 2;
+        default:
+            return 0;
+    }
+}
+
+#define RECS_RANGE_CHECK_VALUE(decode_pc, pc_end, expected_tag, fail_label)    \
+    do {                                                                       \
+        if (UNLIKELY((decode_pc) >= (pc_end)                                   \
+                || (*(decode_pc) &0x7) != (expected_tag))) {                   \
+            goto fail_label;                                                   \
+        }                                                                      \
+        size_t _len = record_value32_byte_len(*(decode_pc));                   \
+        if (UNLIKELY(_len == 0 || (size_t) ((pc_end) - (decode_pc)) < _len)) { \
+            goto fail_label;                                                   \
+        }                                                                      \
+    } while (0)
+
+static enum ModuleLoadResult module_load_records_table(Module *mod, const uint8_t *recs_chunk, unsigned long recs_size)
+{
+    mod->records_count = 0;
+    mod->records_table = NULL;
+
+    if (recs_chunk == NULL || recs_size < 12) {
+        return MODULE_LOAD_OK;
+    }
+
+    const uint8_t *pc = recs_chunk + IFF_SECTION_HEADER_SIZE;
+    const uint8_t *pc_end = recs_chunk + IFF_SECTION_HEADER_SIZE + recs_size;
+    pc += 4; // skip version
+    uint32_t num_records = READ_32_UNALIGNED(pc);
+    pc += 4;
+    pc += 4; // skip total fields count
+
+    if (num_records == 0) {
+        return MODULE_LOAD_OK;
+    }
+
+    if (UNLIKELY(num_records > (recs_size - 12) / 5)) {
+        fprintf(stderr, "Error: Recs chunk claims %u records but is only %lu bytes.\n",
+            (unsigned) num_records, recs_size);
+        return MODULE_ERROR_INVALID;
+    }
+
+    // Write through a non-const local during load; publish to the
+    // const-qualified mod->records_table once fully initialized so a
+    // failed/partial load leaves the module with records_count == 0
+    // and module_destroy has nothing to walk.
+    struct RecordDef *table = calloc(num_records, sizeof(struct RecordDef));
+    if (IS_NULL_PTR(table)) {
+        return MODULE_ERROR_FAILED_ALLOCATION;
+    }
+
+    term module_atom = module_get_name(mod);
+    for (uint32_t r = 0; r < num_records; r++) {
+        if (UNLIKELY(pc >= pc_end)) {
+            goto truncated;
+        }
+        // Skip the synthetic call_last opcode byte (5).
+        pc++;
+
+        term record_name;
+        RECS_RANGE_CHECK_VALUE(pc, pc_end, COMPACT_ATOM, truncated);
+        DECODE_ATOM(record_name, pc);
+        table[r].module = module_atom;
+        table[r].name = record_name;
+
+        term exported_atom;
+        RECS_RANGE_CHECK_VALUE(pc, pc_end, COMPACT_ATOM, truncated);
+        DECODE_ATOM(exported_atom, pc);
+        table[r].is_exported = (exported_atom == TRUE_ATOM);
+
+        if (UNLIKELY(pc >= pc_end || *pc != COMPACT_EXTENDED_LIST)) {
+            goto truncated;
+        }
+        pc++; // skip extended_list tag
+
+        uint32_t list_count;
+        RECS_RANGE_CHECK_VALUE(pc, pc_end, COMPACT_LITERAL, truncated);
+        DECODE_LITERAL(list_count, pc);
+
+        // list_count counts both names and defaults (name, default pairs).
+        if (UNLIKELY(list_count % 2 != 0)) {
+            goto truncated;
+        }
+        size_t num_fields = list_count / 2;
+        struct RecordFieldDef *fields = NULL;
+        if (num_fields > 0) {
+            if (UNLIKELY(num_fields > (size_t) (pc_end - pc) / 2)) {
+                goto truncated;
+            }
+            fields = calloc(num_fields, sizeof(struct RecordFieldDef));
+            if (IS_NULL_PTR(fields)) {
+                goto alloc_failed;
+            }
+            table[r].fields = fields;
+        }
+        table[r].num_fields = num_fields;
+
+        for (size_t f = 0; f < num_fields; f++) {
+            term field_name;
+            RECS_RANGE_CHECK_VALUE(pc, pc_end, COMPACT_ATOM, truncated);
+            DECODE_ATOM(field_name, pc);
+            fields[f].name = field_name;
+
+            if (UNLIKELY(pc >= pc_end)) {
+                goto truncated;
+            }
+            if (*pc == 0) {
+                fields[f].default_encoded = NULL;
+                pc++;
+            } else {
+                size_t default_len = record_compact_term_byte_len(pc, pc_end);
+                if (UNLIKELY(default_len == 0
+                        || (size_t) (pc_end - pc) < default_len)) {
+                    goto truncated;
+                }
+                fields[f].default_encoded = pc;
+                pc += default_len;
+            }
+        }
+    }
+
+    mod->records_table = table;
+    mod->records_count = num_records;
+    return MODULE_LOAD_OK;
+
+truncated:
+    fprintf(stderr, "Error: Recs chunk truncated or malformed.\n");
+    for (uint32_t r = 0; r < num_records; r++) {
+        free((struct RecordFieldDef *) table[r].fields);
+    }
+    free(table);
+    return MODULE_ERROR_INVALID;
+
+alloc_failed:
+    for (uint32_t r = 0; r < num_records; r++) {
+        free((struct RecordFieldDef *) table[r].fields);
+    }
+    free(table);
+    return MODULE_ERROR_FAILED_ALLOCATION;
+}
+
+#undef RECS_RANGE_CHECK_VALUE
+
+const struct RecordDef *module_find_record_def(const Module *mod, term record_name)
+{
+    for (size_t i = 0; i < mod->records_count; i++) {
+        if (mod->records_table[i].name == record_name) {
+            return &mod->records_table[i];
+        }
+    }
+    return NULL;
+}
+
+const struct RecordDef *module_find_record_def_global(
+    GlobalContext *global, term module_name, term record_name)
+{
+    if (!term_is_atom(module_name) || !term_is_atom(record_name)) {
+        return NULL;
+    }
+    Module *mod = globalcontext_get_module(global, term_to_atom_index(module_name));
+    if (mod == NULL) {
+        return NULL;
+    }
+    return module_find_record_def(mod, record_name);
+}
+
+// Decode an extended (more than 8 bytes) integer default. The encoding was
+// validated by record_compact_term_byte_len when loading the table.
+static term module_decode_record_default_bigint(Context *ctx, const uint8_t *pc)
+{
+    uint32_t extra;
+    size_t len_bytes;
+    // Bounds were checked at load time, any end pointer large enough does.
+    if (UNLIKELY(!record_decode_small_literal(pc + 1, pc + 3, &extra, &len_bytes))) {
+        return term_invalid_term();
+    }
+    size_t bytes_size = 9u + extra;
+    const uint8_t *bytes = pc + 1 + len_bytes;
+
+    intn_integer_sign_t sign;
+    intn_digit_t bigint[INTN_MAX_RES_LEN];
+    int count = intn_from_integer_bytes(bytes, bytes_size, IntnSigned, bigint, &sign);
+    if (UNLIKELY(count < 0)) {
+        return term_invalid_term();
+    }
+    count = (int) intn_count_digits(bigint, (size_t) count);
+
+    Heap heap;
+    if (intn_fits_int64(bigint, (size_t) count, sign)) {
+        int64_t value = intn_to_int64(bigint, (size_t) count, sign);
+        size_t boxed_size = term_boxed_integer_size(value);
+        if (boxed_size == 0) {
+            return term_from_int((avm_int_t) value);
+        }
+        if (UNLIKELY(memory_init_heap(&heap, boxed_size) != MEMORY_GC_OK)) {
+            return term_invalid_term();
+        }
+        memory_heap_append_heap(&ctx->heap, &heap);
+        return term_make_maybe_boxed_int64(value, &heap);
+    }
+
+    size_t intn_data_size;
+    size_t rounded_res_len;
+    term_bigint_size_requirements((size_t) count, &intn_data_size, &rounded_res_len);
+    if (UNLIKELY(memory_init_heap(&heap, BOXED_BIGINT_HEAP_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
+        return term_invalid_term();
+    }
+    term bigint_term = term_create_uninitialized_bigint(intn_data_size, (term_integer_sign_t) sign, &heap);
+    term_initialize_bigint(bigint_term, bigint, (size_t) count, rounded_res_len);
+    memory_heap_append_heap(&ctx->heap, &heap);
+    return bigint_term;
+}
+
+// Allocates via heap fragments (memory_heap_append_heap), not GC. Callers
+// (OP_PUT_RECORD, bif_records_get_definition_2, jit_put_record) rely on this
+// so terms already produced in the same loop remain valid across iterations.
+term module_decode_record_default(Module *mod, Context *ctx, const uint8_t *pc)
+{
+    uint8_t b0 = pc[0];
+    switch (b0 & 0xF) {
+        case COMPACT_LITERAL:
+        case COMPACT_INTEGER:
+            switch ((b0 >> 3) & 0x3) {
+                case 0:
+                case 2:
+                    return term_from_int(b0 >> 4);
+                case 1:
+                    return term_from_int(((avm_int_t) (b0 & 0xE0) << 3) | pc[1]);
+                case 3: {
+                    uint8_t sz = (b0 >> 5) + 2;
+                    avm_int_t val = 0;
+                    for (uint8_t vi = 0; vi < sz; vi++) {
+                        val = (val << 8) | pc[1 + vi];
+                    }
+                    return term_from_int(val);
+                }
+                default:
+                    UNREACHABLE();
+            }
+        case COMPACT_ATOM:
+            if (b0 == COMPACT_ATOM) {
+                return term_nil();
+            }
+            return module_get_atom_term_by_id(mod, b0 >> 4);
+        case COMPACT_LARGE_ATOM:
+            if ((b0 & COMPACT_LARGE_IMM_MASK) == COMPACT_11BITS_VALUE) {
+                return module_get_atom_term_by_id(mod, ((b0 & 0xE0) << 3) | pc[1]);
+            }
+            if ((b0 & COMPACT_LARGE_IMM_MASK) == COMPACT_NBITS_VALUE) {
+                size_t sz = (size_t) ((b0 >> 5) + 2);
+                // Atom indices are 32-bit; longer encodings cannot resolve.
+                if (sz > 4) {
+                    return term_invalid_term();
+                }
+                unsigned int index = 0;
+                for (size_t i = 0; i < sz; i++) {
+                    index = (index << 8) | pc[1 + i];
+                }
+                return module_get_atom_term_by_id(mod, (int) index);
+            }
+            return term_invalid_term();
+        case COMPACT_LARGE_INTEGER:
+            if ((b0 & COMPACT_LARGE_IMM_MASK) == COMPACT_11BITS_VALUE) {
+                return term_from_int(((avm_int_t) (b0 & 0xE0) << 3) | pc[1]);
+            }
+            if ((b0 & COMPACT_LARGE_IMM_MASK) == COMPACT_NBITS_VALUE) {
+                size_t sz = (size_t) ((b0 >> 5) + 2);
+                if (sz > 8) {
+                    return module_decode_record_default_bigint(ctx, pc);
+                }
+                // Big-endian signed: sign-extend from MSB.
+                avm_int64_t value = (int8_t) pc[1];
+                for (size_t i = 1; i < sz; i++) {
+                    value = (avm_int64_t) ((uint64_t) value << 8) | pc[1 + i];
+                }
+                size_t boxed_size = term_boxed_integer_size(value);
+                if (boxed_size == 0) {
+                    return term_from_int((avm_int_t) value);
+                }
+                Heap heap;
+                if (UNLIKELY(memory_init_heap(&heap, boxed_size) != MEMORY_GC_OK)) {
+                    return term_invalid_term();
+                }
+                memory_heap_append_heap(&ctx->heap, &heap);
+                return term_make_maybe_boxed_int64(value, &heap);
+            }
+            return term_invalid_term();
+        case COMPACT_EXTENDED:
+            if (b0 == COMPACT_EXTENDED_LITERAL) {
+                uint8_t b1 = pc[1];
+                int index;
+                switch ((b1 >> 3) & 0x3) {
+                    case 0:
+                    case 2:
+                        index = b1 >> 4;
+                        break;
+                    case 1:
+                        index = ((b1 & 0xE0) << 3) | pc[2];
+                        break;
+                    case 3: {
+                        int sz = (b1 >> 5) + 2;
+                        index = 0;
+                        for (int i = 0; i < sz; i++) {
+                            index = (index << 8) | pc[2 + i];
+                        }
+                        break;
+                    }
+                    default:
+                        UNREACHABLE();
+                }
+                return module_load_literal(mod, index, ctx);
+            }
+            return term_invalid_term();
+        default:
+            return term_invalid_term();
+    }
+}
+
 static enum ModuleLoadResult module_build_imported_functions_table(Module *this_module, uint8_t *table_data, GlobalContext *glb)
 {
     int functions_count = READ_32_UNALIGNED(table_data + 8);
@@ -1258,6 +1691,13 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
         mod->types_data = NULL;
     }
 
+    const uint8_t *recs_chunk = offsets[RECS] ? beam_file + offsets[RECS] : NULL;
+    if (UNLIKELY(module_load_records_table(mod, recs_chunk, sizes[RECS]) != MODULE_LOAD_OK)) {
+        fprintf(stderr, "Error: Failed to load native records table: %s:%i.\n", __FILE__, __LINE__);
+        module_destroy(mod);
+        return NULL;
+    }
+
 #ifndef AVM_NO_JIT
     if (mod->native_code == NULL) {
 #endif
@@ -1319,6 +1759,10 @@ COLD_FUNC void module_destroy(Module *module)
     free(module->literals_table);
     free(module->local_atoms_to_global_table);
     free(module->line_refs_offsets);
+    for (size_t i = 0; i < module->records_count; i++) {
+        free((struct RecordFieldDef *) module->records_table[i].fields);
+    }
+    free((struct RecordDef *) module->records_table);
     if (module->free_literals_data) {
         free(module->literals_data);
     }

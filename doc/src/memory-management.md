@@ -368,6 +368,29 @@ Tuples are represented as boxed terms containing a boxed header (`boxed[0]`), a 
     |                                |
     |<---------- word-size --------->|
 
+### Native Records
+
+Records compiled with OTP 29+ native-record support are represented as boxed terms containing a boxed header (`boxed[0]`), a type tag of `0x3C` (`111100b`), a raw pointer to a shared, immutable `RecordDef` (read directly from the module's `Recs` chunk, untagged so the GC skips it), and then `n`-many field values in declaration order. The boxed-size field is `n + 1` (the `+1` accounts for the def pointer), so the standard boxed walker can size the term:
+
+                              |< 6  >|
+    +=========================+======+
+    |    boxed-size (n+1)     |111100| boxed[0]
+    +-------------------------+------+
+    |     RecordDef * (raw, GC skip) | boxed[1]
+    +--------------------------------+
+    |             field-1            | boxed[2]
+    +--------------------------------+
+    |             field-2            | boxed[3]
+    +--------------------------------+
+    |               ...              | boxed[i+1]
+    +--------------------------------+
+    |             field-n            | boxed[n+1]
+    +================================+
+    |                                |
+    |<---------- word-size --------->|
+
+The `RecordDef` lives in the owning module's memory (`mod->records_table`) and is treated as immutable. It carries the module atom, record name atom, an `is_exported` flag, and the declared fields (each with a name atom and an optional encoded default). Records carry only the def pointer; module name, record name, exported flag, and field names are all read through it. The def pointer is stored in `boxed[1]` without any term tag, so the garbage collector walks `boxed[2..n+1]` as terms and leaves `boxed[1]` untouched.
+
 ### Maps
 
 Maps are represented as boxed terms containing a boxed header (`boxed[0]`), a type tag of `0x2C` (`101100b`), followed by:

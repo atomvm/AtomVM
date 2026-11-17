@@ -46,6 +46,7 @@
 -define(TERM_BOXED_EXTERNAL_PID, 16#30).
 -define(TERM_BOXED_EXTERNAL_PORT, 16#34).
 -define(TERM_BOXED_EXTERNAL_REF, 16#38).
+-define(TERM_BOXED_RECORD, 16#3C).
 
 -define(TERM_BOXED_TAG_MASK_NO_SIGN, 16#3B).
 % Optimization : ((Reg & 0x3F) != 0x8) && ((Reg & 0x3F) != 0xC) && ((Reg & 0x3F) != 0x18)

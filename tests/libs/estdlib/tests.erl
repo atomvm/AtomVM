@@ -68,6 +68,7 @@ get_non_networking_tests(_OTPVersion) ->
         test_gen_server,
         test_gen_statem,
         test_io_lib,
+        test_native_records_io_lib,
         test_logger,
         test_maps,
         test_proc_lib,

@@ -99,6 +99,21 @@ struct LiteralEntry
     void const *data;
 };
 
+struct RecordFieldDef
+{
+    term name;
+    const uint8_t *default_encoded;
+};
+
+struct RecordDef
+{
+    term module;
+    term name;
+    bool is_exported;
+    size_t num_fields;
+    const struct RecordFieldDef *fields;
+};
+
 struct ModuleFilename
 {
     uint8_t *data;
@@ -139,6 +154,9 @@ struct Module
     struct LiteralEntry *literals_table;
 
     void *types_data;
+
+    size_t records_count;
+    const struct RecordDef *records_table;
 
     atom_index_t *local_atoms_to_global_table;
 
@@ -289,6 +307,45 @@ static inline term module_get_atom_term_by_id(const Module *mod, int local_atom_
 }
 
 const struct ExportedFunction *module_resolve_function0(Module *mod, int import_table_index, struct UnresolvedFunctionCall *unresolved, GlobalContext *glb);
+
+/**
+ * @brief Look up a native record definition by name atom in a single module.
+ *
+ * @param mod the module to search.
+ * @param record_name the record name (atom term) to look up.
+ * @return a pointer to the matching RecordDef, or NULL if not found.
+ */
+const struct RecordDef *module_find_record_def(const Module *mod, term record_name);
+
+/**
+ * @brief Look up a native record definition by (module, name) across all loaded modules.
+ *
+ * @details Resolves @c module_name through @c globalcontext_get_module (which may
+ * lazy-load from AVM packs) and then searches the module's records table.
+ *
+ * @param global the global context.
+ * @param module_name the defining-module atom term.
+ * @param record_name the record name atom term.
+ * @return a pointer to the matching RecordDef, or NULL if not found.
+ */
+const struct RecordDef *module_find_record_def_global(
+    GlobalContext *global, term module_name, term record_name);
+
+/**
+ * @brief Decode a compact-term encoded default value from a record field.
+ *
+ * @details Mirrors the relevant arms of the interpreter's DECODE_COMPACT_TERM
+ * macro for the subset of forms that the loader accepts inside the Recs chunk.
+ * For literal references (COMPACT_EXTENDED_LITERAL), loads the underlying
+ * literal via @c module_load_literal, which can allocate on the heap.
+ *
+ * @param mod the module that owns the encoded payload.
+ * @param ctx the target context (used for literal materialization).
+ * @param pc pointer to the first byte of the encoded value within the Recs
+ *           chunk; must be a non-NULL field default pointer.
+ * @return the decoded term, or @c term_invalid_term() on unsupported encodings.
+ */
+term module_decode_record_default(Module *mod, Context *ctx, const uint8_t *pc);
 
 /**
  * @brief Get the module name, as an atom term.
