@@ -103,7 +103,7 @@ check_c_source_compiles("
 " HAVE_PTHREAD_RWLOCK)
 endif()
 if(HAVE_PTHREAD_RWLOCK)
-    target_compile_definitions(${COMPONENT_LIB} INTERFACE HAVE_PTHREAD_RWLOCK)
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC HAVE_PTHREAD_RWLOCK)
 endif()
 
 check_c_source_compiles("
