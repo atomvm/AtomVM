@@ -214,6 +214,7 @@
     | {reset, non_neg_integer()}
     | {phy_addr, 0..31}
     | {route_priority, 0..255}
+    | {ipv4, ipv4_info()}
     | dhcp_hostname_config()
     | {started, fun(() -> term())}
     | {connected, fun(() -> term())}

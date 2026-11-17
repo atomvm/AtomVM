@@ -442,13 +442,20 @@ off, an `eth` entry makes `network:start/1` return `{error, eth_not_supported}`.
 | `reset` | `non_neg_integer()` | none | PHY reset GPIO, pulsed by ESP-IDF during PHY init |
 | `phy_addr` | `0..31` | first PHY found | PHY address on the SMI bus |
 | `route_priority` | `0..255` | 128 | Default route priority; the interface with the highest one that is up carries the traffic (STA: 100, AP: 10) |
+| `ipv4` | `{Address, Netmask, Gateway}` | none (DHCP) | A fixed address instead of DHCP; a gateway of `{0, 0, 0, 0}` is none. `got_ip` still fires when the link comes up |
 | `dhcp_hostname` | `string() \| binary()` | none | DHCP hostname |
 | `started` | `fun(() -> term())` | none | The interface is up, link state unknown |
 | `connected` | `fun(() -> term())` | none | Link up |
 | `disconnected` | `fun(() -> term())` | none | Link down |
 | `got_ip` | `fun((ip_info()) -> term())` | none | DHCP lease obtained |
 
-Invalid pins or a `phy_addr` out of range make `network:start/1` return `{error, badarg}`.
+With `ipv4`, the cable can go to a field network with fixed addresses and no DHCP server (a PLC, a
+pump), while STA or PPP stay the way out: a gateway of `{0, 0, 0, 0}` and a `route_priority` below
+theirs keep the default route on them. The DHCP client never starts on the Ethernet netif, since
+starting it clears the DNS servers, which lwIP shares with the other interfaces.
+
+Invalid pins, a `phy_addr` out of range or a malformed `ipv4` make `network:start/1` return
+`{error, badarg}`.
 `network:start/1` blocks until the PHY answers on the SMI bus; it does not wait for a cable. A
 clock out on GPIO16 or GPIO17 is refused while PSRAM is in use, because WROVER modules use those
 pins for it. [`network:eth_status/0`](./apidocs/erlang/eavmlib/network.md#eth_status0) returns

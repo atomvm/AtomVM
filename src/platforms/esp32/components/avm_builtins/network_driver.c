@@ -134,6 +134,7 @@ static const char *const power_atom = ATOM_STR("\x5", "power");
 static const char *const reset_atom = ATOM_STR("\x5", "reset");
 static const char *const rmii_clock_atom = ATOM_STR("\xA", "rmii_clock");
 static const char *const route_priority_atom = ATOM_STR("\xE", "route_priority");
+static const char *const ipv4_atom = ATOM_STR("\x4", "ipv4");
 static const char *const in_atom = ATOM_STR("\x2", "in");
 static const char *const out_atom = ATOM_STR("\x3", "out");
 #endif
@@ -195,6 +196,9 @@ struct ClientData
     esp_eth_netif_glue_handle_t eth_glue;
     esp_netif_t *eth_netif;
     int eth_power;
+    // A fixed address ({ipv4, ...}), set on the netif before the link comes up.
+    bool eth_static;
+    esp_netif_ip_info_t eth_ip;
 #endif
 #ifdef HAVE_PPP
     struct PPPGlue *ppp_glue;
@@ -1423,6 +1427,43 @@ static bool eth_config_int(term eth_config, AtomString key, int *value, GlobalCo
 
 // GPIO_IS_VALID_GPIO and GPIO_IS_VALID_OUTPUT_GPIO shift 1ULL by the pin number, which is undefined
 // from 64 up (on Xtensa GPIO99 tests as GPIO35): the number is bounded first.
+// {A, B, C, D}, each 0..255, as an lwIP address.
+static bool term_to_ip4(term t, esp_ip4_addr_t *addr)
+{
+    if (!term_is_tuple(t) || term_get_tuple_arity(t) != 4) {
+        return false;
+    }
+    uint8_t bytes[4];
+    for (int i = 0; i < 4; i++) {
+        term byte = term_get_tuple_element(t, i);
+        if (!term_is_integer(byte) || term_to_int(byte) < 0 || term_to_int(byte) > 255) {
+            return false;
+        }
+        bytes[i] = (uint8_t) term_to_int(byte);
+    }
+    addr->addr = ESP_IP4TOADDR(bytes[0], bytes[1], bytes[2], bytes[3]);
+    return true;
+}
+
+// {ipv4, {Address, Netmask, Gateway}}: a fixed address instead of DHCP. A gateway of
+// {0, 0, 0, 0} is none, for a link to a field network that is not a way out.
+static bool eth_static_ip(term eth_config, struct ClientData *data, GlobalContext *global)
+{
+    term ipv4 = interop_kv_get_value(eth_config, ipv4_atom, global);
+    if (term_is_invalid_term(ipv4)) {
+        data->eth_static = false;
+        return true;
+    }
+    if (!term_is_tuple(ipv4) || term_get_tuple_arity(ipv4) != 3
+        || !term_to_ip4(term_get_tuple_element(ipv4, 0), &data->eth_ip.ip)
+        || !term_to_ip4(term_get_tuple_element(ipv4, 1), &data->eth_ip.netmask)
+        || !term_to_ip4(term_get_tuple_element(ipv4, 2), &data->eth_ip.gw)) {
+        return false;
+    }
+    data->eth_static = true;
+    return true;
+}
+
 static bool eth_valid_output_gpio(int gpio)
 {
     return gpio == -1 || (gpio >= 0 && gpio < GPIO_PIN_COUNT && GPIO_IS_VALID_OUTPUT_GPIO(gpio));
@@ -1433,12 +1474,14 @@ static void stop_eth(struct ClientData *data);
 // Starts the Ethernet MAC with a generic (IEEE 802.3) RMII PHY, e.g. LAN8720 or JL1101:
 //
 //   {eth, [{mdc, 23}, {mdio, 18}, {rmii_clock, {out, 17}}, {power, 0}, {reset, 5},
-//          {phy_addr, 0}, {route_priority, 128}, {dhcp_hostname, "name"}]}
+//          {phy_addr, 0}, {route_priority, 128}, {dhcp_hostname, "name"},
+//          {ipv4, {{192, 168, 0, 50}, {255, 255, 255, 0}, {0, 0, 0, 0}}}]}
 //
 // mdc, mdio and rmii_clock default to ETH_ESP32_EMAC_DEFAULT_CONFIG() (on the ESP32: 23, 18 and
 // the sdkconfig clock choice). power, if set, is driven high before the PHY is probed; reset is
 // the PHY's reset pin, pulsed by ESP-IDF during PHY init. phy_addr defaults to the first PHY
-// found. Under CONFIG_ETH_USE_OPENETH (QEMU), the OpenCores MAC with a DP83848 at address 1 is
+// found. ipv4, if set, is a fixed address (a gateway of {0, 0, 0, 0} is none) instead of DHCP:
+// the DHCP client never starts, which would clear the DNS servers the other netifs got. Under CONFIG_ETH_USE_OPENETH (QEMU), the OpenCores MAC with a DP83848 at address 1 is
 // used instead and the pin options are only validated. On failure, undoes its own work, replies
 // to the caller and returns false.
 static bool start_eth(Context *ctx, term pid, term ref, struct ClientData *data, term eth_config)
@@ -1469,7 +1512,8 @@ static bool start_eth(Context *ctx, term pid, term ref, struct ClientData *data,
         || !eth_config_int(eth_config, phy_addr_atom, &phy_addr, global)
         || phy_addr < ESP_ETH_PHY_ADDR_AUTO || phy_addr > 31
         || !eth_config_int(eth_config, route_priority_atom, &route_priority, global)
-        || route_priority < 0 || route_priority > 255) {
+        || route_priority < 0 || route_priority > 255
+        || !eth_static_ip(eth_config, data, global)) {
         goto badarg;
     }
 
@@ -1573,7 +1617,18 @@ static bool start_eth(Context *ctx, term pid, term ref, struct ClientData *data,
         || (err = esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &event_handler, data)) != ESP_OK) {
         goto error;
     }
-    set_dhcp_hostname(data->eth_netif, "ETH", interop_kv_get_value(eth_config, dhcp_hostname_atom, global));
+    if (data->eth_static) {
+        // Before the link comes up: with the DHCP client stopped and a valid address, esp_netif's
+        // connected action posts ETH_GOT_IP itself. Starting the client, even to stop it right
+        // after, would clear the DNS servers, which lwIP shares with the other netifs.
+        err = esp_netif_dhcpc_stop(data->eth_netif);
+        if ((err != ESP_OK && err != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED)
+            || (err = esp_netif_set_ip_info(data->eth_netif, &data->eth_ip)) != ESP_OK) {
+            goto error;
+        }
+    } else {
+        set_dhcp_hostname(data->eth_netif, "ETH", interop_kv_get_value(eth_config, dhcp_hostname_atom, global));
+    }
     if ((err = esp_eth_start(data->eth_handle)) != ESP_OK) {
         goto error;
     }
@@ -2074,6 +2129,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     data->eth_handle = NULL;
     data->eth_glue = NULL;
     data->eth_netif = NULL;
+    data->eth_static = false;
     data->eth_power = -1;
 #endif
 #ifdef HAVE_PPP
