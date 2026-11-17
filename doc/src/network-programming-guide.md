@@ -447,15 +447,17 @@ off, an `eth` entry makes `network:start/1` return `{error, eth_not_supported}`.
 | `started` | `fun(() -> term())` | none | The interface is up, link state unknown |
 | `connected` | `fun(() -> term())` | none | Link up |
 | `disconnected` | `fun(() -> term())` | none | Link down |
-| `got_ip` | `fun((ip_info()) -> term())` | none | DHCP lease obtained |
+| `got_ip` | `fun((ip_info()) -> term())` | none | IPv4 address ready (DHCP or `ipv4`) |
 
 With `ipv4`, the cable can go to a field network with fixed addresses and no DHCP server (a PLC, a
 pump), while STA or PPP stay the way out: a gateway of `{0, 0, 0, 0}` and a `route_priority` below
 theirs keep the default route on them. The DHCP client never starts on the Ethernet netif, since
 starting it clears the DNS servers, which lwIP shares with the other interfaces.
 
-Invalid pins, a `phy_addr` out of range or a malformed `ipv4` make `network:start/1` return
-`{error, badarg}`.
+Invalid pins, a `phy_addr` out of range or an invalid `ipv4` (malformed, or a zero address or
+netmask) make the network server terminate with `{start_port_failed, badarg}` after
+`network:start/1` returns `{ok, Pid}`; `network:wait_for_eth/2` monitors the start and returns
+`{error, badarg}` instead.
 `network:start/1` blocks until the PHY answers on the SMI bus; it does not wait for a cable. A
 clock out on GPIO16 or GPIO17 is refused while PSRAM is in use, because WROVER modules use those
 pins for it. [`network:eth_status/0`](./apidocs/erlang/eavmlib/network.md#eth_status0) returns

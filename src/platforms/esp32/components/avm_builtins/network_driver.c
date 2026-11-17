@@ -1446,7 +1446,8 @@ static bool term_to_ip4(term t, esp_ip4_addr_t *addr)
 }
 
 // {ipv4, {Address, Netmask, Gateway}}: a fixed address instead of DHCP. A gateway of
-// {0, 0, 0, 0} is none, for a link to a field network that is not a way out.
+// {0, 0, 0, 0} is none, for a link to a field network that is not a way out; the address and the
+// netmask must not be zero.
 static bool eth_static_ip(term eth_config, struct ClientData *data, GlobalContext *global)
 {
     term ipv4 = interop_kv_get_value(eth_config, ipv4_atom, global);
@@ -1457,7 +1458,10 @@ static bool eth_static_ip(term eth_config, struct ClientData *data, GlobalContex
     if (!term_is_tuple(ipv4) || term_get_tuple_arity(ipv4) != 3
         || !term_to_ip4(term_get_tuple_element(ipv4, 0), &data->eth_ip.ip)
         || !term_to_ip4(term_get_tuple_element(ipv4, 1), &data->eth_ip.netmask)
-        || !term_to_ip4(term_get_tuple_element(ipv4, 2), &data->eth_ip.gw)) {
+        || !term_to_ip4(term_get_tuple_element(ipv4, 2), &data->eth_ip.gw)
+        // esp_netif_is_valid_static_ip() rejects these, and ETH_GOT_IP would never come.
+        || data->eth_ip.ip.addr == 0
+        || data->eth_ip.netmask.addr == 0) {
         return false;
     }
     data->eth_static = true;
@@ -1605,6 +1609,11 @@ static bool start_eth(Context *ctx, term pid, term ref, struct ClientData *data,
 
     esp_netif_inherent_config_t netif_base = ESP_NETIF_INHERENT_DEFAULT_ETH();
     netif_base.route_prio = route_priority;
+    if (data->eth_static) {
+        // Copied at creation: esp_netif_set_ip_info() would clear the DNS servers, which lwIP
+        // shares with the other netifs, for a netif with the DHCP client flag.
+        netif_base.ip_info = &data->eth_ip;
+    }
     esp_netif_config_t netif_config = { .base = &netif_base, .driver = NULL, .stack = ESP_NETIF_NETSTACK_DEFAULT_ETH };
     data->eth_netif = esp_netif_new(&netif_config);
     data->eth_glue = esp_eth_new_netif_glue(data->eth_handle);
@@ -1618,12 +1627,12 @@ static bool start_eth(Context *ctx, term pid, term ref, struct ClientData *data,
         goto error;
     }
     if (data->eth_static) {
-        // Before the link comes up: with the DHCP client stopped and a valid address, esp_netif's
-        // connected action posts ETH_GOT_IP itself. Starting the client, even to stop it right
-        // after, would clear the DNS servers, which lwIP shares with the other netifs.
+        // Before the link comes up: with the DHCP client stopped (INIT -> STOPPED, which starts
+        // nothing) and the address set at creation, esp_netif's connected action posts ETH_GOT_IP
+        // itself. The DHCP flag stays: without it, that action returns before posting. Starting
+        // the client would clear the DNS servers, which lwIP shares with the other netifs.
         err = esp_netif_dhcpc_stop(data->eth_netif);
-        if ((err != ESP_OK && err != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED)
-            || (err = esp_netif_set_ip_info(data->eth_netif, &data->eth_ip)) != ESP_OK) {
+        if (err != ESP_OK && err != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED) {
             goto error;
         }
     } else {

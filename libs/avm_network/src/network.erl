@@ -390,7 +390,8 @@ wait_for_eth(EthConfig) when is_list(EthConfig) ->
 %% @doc     Start the Ethernet interface and wait for it to get an address
 %%
 %%          This function will start the Ethernet interface, and will wait for
-%%          the link to come up and DHCP to assign an address. This is a
+%%          the link to come up and an IPv4 address to become available (by
+%%          DHCP, or the `ipv4' option). This is a
 %%          convenience function, for applications that do not need to be
 %%          notified of connectivity changes in the network.
 %% @end

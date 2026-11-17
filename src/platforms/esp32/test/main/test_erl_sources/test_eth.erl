@@ -25,6 +25,7 @@
 start() ->
     ok = test_badarg(),
     ok = test_wait_for_eth_refused(),
+    ok = test_static_ip(),
     ok = test_callbacks_in_order(),
     ok = test_wait_for_eth_after_stop(),
     ok.
@@ -37,7 +38,15 @@ test_badarg() ->
         [{power, not_a_pin}],
         [{rmii_clock, {out, 99}}],
         [{rmii_clock, {sideways, 0}}],
-        [{route_priority, 256}]
+        [{route_priority, 256}],
+        [{ipv4, invalid}],
+        [{ipv4, {{10, 0, 2, 42}, {255, 255, 255, 0}}}],
+        [{ipv4, {{10, 0, 42}, {255, 255, 255, 0}, {0, 0, 0, 0}}}],
+        [{ipv4, {{10, 0, 2, -1}, {255, 255, 255, 0}, {0, 0, 0, 0}}}],
+        [{ipv4, {{10, 0, 2, 42}, {255, 255, 255, 256}, {0, 0, 0, 0}}}],
+        [{ipv4, {{10, 0, 2, 42}, {255, 255, 255, 0}, {0, 0, 0, 1 bsl 40}}}],
+        [{ipv4, {{0, 0, 0, 0}, {255, 255, 255, 0}, {0, 0, 0, 0}}}],
+        [{ipv4, {{10, 0, 2, 42}, {0, 0, 0, 0}, {0, 0, 0, 0}}}]
     ]).
 
 expect_badarg(EthConfig) ->
@@ -51,6 +60,18 @@ expect_badarg(EthConfig) ->
 
 %% wait_for_eth/2 returns the driver's reason, not a timeout, and leaves no
 %% monitor message behind.
+%% A fixed address is reported as given, by got_ip, on two start/stop cycles.
+test_static_ip() ->
+    IpInfo = {{10, 0, 2, 42}, {255, 255, 255, 0}, {0, 0, 0, 0}},
+    lists:foreach(
+        fun(_) ->
+            {ok, IpInfo} = network:wait_for_eth([{ipv4, IpInfo}], 5000),
+            connected = network:eth_status(),
+            ok = network:stop()
+        end,
+        [first, second]
+    ).
+
 test_wait_for_eth_refused() ->
     {error, badarg} = network:wait_for_eth([{phy_addr, 32}], 5000),
     receive
