@@ -767,9 +767,14 @@ Module *globalcontext_load_module_from_avm(GlobalContext *global, const char *mo
     return module_new_from_iff_binary(global, beam_module, beam_module_size);
 }
 
+Module *globalcontext_get_loaded_module(GlobalContext *global, atom_index_t module_name_atom)
+{
+    return (Module *) valueshashtable_get_value(global->modules_table, module_name_atom, TO_VALUESHASHTABLE_VALUE(NULL));
+}
+
 Module *globalcontext_get_module(GlobalContext *global, atom_index_t module_name_atom)
 {
-    Module *found_module = (Module *) valueshashtable_get_value(global->modules_table, module_name_atom, TO_VALUESHASHTABLE_VALUE(NULL));
+    Module *found_module = globalcontext_get_loaded_module(global, module_name_atom);
 
     if (!found_module) {
         size_t module_name_len;

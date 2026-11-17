@@ -6517,7 +6517,7 @@ static void *nif_code_all_available_fold(void *accum, const void *section_ptr, u
                 if (UNLIKELY(ensure_result != AtomTableEnsureAtomOk)) {
                     loaded = false;
                 } else {
-                    Module *loaded_module = globalcontext_get_module(acc->ctx->global, module_name_ix);
+                    Module *loaded_module = globalcontext_get_loaded_module(acc->ctx->global, module_name_ix);
                     loaded = loaded_module != NULL;
                 }
             } else {

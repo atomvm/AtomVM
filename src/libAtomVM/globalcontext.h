@@ -539,6 +539,17 @@ int globalcontext_insert_module(GlobalContext *global, Module *module);
 Module *globalcontext_get_module_by_index(GlobalContext *global, int index);
 
 /**
+ * @brief Returns an already loaded module with the given name
+ *
+ * @details Looks up the module in the modules table without attempting to load
+ * it. Use this when checking whether a module is loaded.
+ * @param global the global context.
+ * @param module_name_atom the module name.
+ * @returns a pointer to a Module struct, or NULL if it is not loaded.
+ */
+Module *globalcontext_get_loaded_module(GlobalContext *global, atom_index_t module_name_atom);
+
+/**
  * @brief Returns the module with the given name
  *
  * @details Tries to get the module with the given name from the modules table and eventually loads it.
