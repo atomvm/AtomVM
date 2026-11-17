@@ -37,10 +37,6 @@ loop(Socket) ->
             io:format("Send packet ~p to ~p.~n", [
                 Data, Dest
             ]);
-        {ok, Rest} ->
-            io:format("Send packet ~p to ~p.  Remaining: ~p~n", [
-                Data, Dest, Rest
-            ]);
         {error, Reason} ->
             io:format("An error occurred sending a packet: ~p~n", [Reason])
     end,

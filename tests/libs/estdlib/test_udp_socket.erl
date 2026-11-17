@@ -24,6 +24,8 @@
 
 test() ->
     ok = test_echo(),
+    ok = test_send_empty(),
+    ok = test_sendto_nowait_and_timeout(),
     ok = test_buf_size(),
     ok = test_timeout(),
     ok = test_nowait(),
@@ -49,6 +51,34 @@ test() ->
     ok.
 
 -define(PACKET_SIZE, 7).
+
+%% An empty datagram is a valid datagram: sendto/3 must hand it to the socket.
+test_send_empty() ->
+    {ok, Receiver} = socket:open(inet, dgram, udp),
+    ok = socket:bind(Receiver, #{family => inet, addr => loopback, port => 0}),
+    {ok, #{port := Port}} = socket:sockname(Receiver),
+    {ok, Sender} = socket:open(inet, dgram, udp),
+    ok = socket:sendto(Sender, <<>>, #{family => inet, addr => loopback, port => Port}),
+    ok = socket:close(Sender),
+    {error, _} = socket:sendto(Sender, <<>>, #{family => inet, addr => loopback, port => Port}),
+    ok = socket:close(Receiver),
+    ok.
+
+%% UDP datagrams are not buffered in a way that blocks the sender, so both the
+%% nowait and the timeout forms of sendto/4 complete right away.
+test_sendto_nowait_and_timeout() ->
+    {ok, Receiver} = socket:open(inet, dgram, udp),
+    ok = socket:bind(Receiver, #{family => inet, addr => loopback, port => 0}),
+    {ok, #{port := Port}} = socket:sockname(Receiver),
+    Dest = #{family => inet, addr => loopback, port => Port},
+    {ok, Sender} = socket:open(inet, dgram, udp),
+    ok = socket:sendto(Sender, <<"nowait">>, Dest, nowait),
+    ok = socket:sendto(Sender, <<"timeout">>, Dest, 1000),
+    {ok, {_Source1, <<"nowait">>}} = socket:recvfrom(Receiver, 0, 5000),
+    {ok, {_Source2, <<"timeout">>}} = socket:recvfrom(Receiver, 0, 5000),
+    ok = socket:close(Sender),
+    ok = socket:close(Receiver),
+    ok.
 
 start_echo_server(Port) ->
     {ok, Socket} = socket:open(inet, dgram, udp),
