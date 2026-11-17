@@ -560,8 +560,10 @@ The `network` driver owns the WiFi radio, and ESP-NOW borrows it:
   starts WiFi, and the network process then stops with `{start_port_failed, ap_only_held}`. A
   network with both `sta` and `ap` works.
 
-Only one port can be open (`{error, already_open}`), linked to the process that opened it: when
-that process dies the port closes, and ESP-NOW can be opened again.
+Only one port can be open (`{error, already_open}`), linked to the process that opened it before
+ESP-NOW starts: when that process exits abnormally the port terminates, and the next
+`espnow:open/1` reclaims ESP-NOW. A normal exit does not close the port: call `espnow:close/1`
+before returning normally.
 
 `espnow:send/3` waits until the frame is out and returns `ok` (for a unicast frame, the peer
 acknowledged it; for a broadcast, it went out) or `{error, fail}`. The driver gives the radio one

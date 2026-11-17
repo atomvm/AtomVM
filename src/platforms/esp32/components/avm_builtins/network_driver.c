@@ -1949,9 +1949,19 @@ static bool wifi_ap_only(void)
     return wifi_used_by_network && esp_wifi_get_mode(&mode) == ESP_OK && mode == WIFI_MODE_AP;
 }
 
-esp_err_t network_wifi_hold(void (*restarted)(bool bare_sta))
+void network_wifi_lock(void)
 {
     SMP_MUTEX_LOCK(wifi_mutex);
+}
+
+void network_wifi_unlock(void)
+{
+    SMP_MUTEX_UNLOCK(wifi_mutex);
+}
+
+// Called with the radio lock taken (network_wifi_lock/0).
+esp_err_t network_wifi_hold(void (*restarted)(bool bare_sta))
+{
     esp_err_t err;
     if (wifi_holder_restarted != NULL) {
         err = ESP_ERR_INVALID_STATE;
@@ -1973,18 +1983,16 @@ esp_err_t network_wifi_hold(void (*restarted)(bool bare_sta))
     }
     wifi_holder_restarted = restarted;
 unlock:
-    SMP_MUTEX_UNLOCK(wifi_mutex);
     return err;
 }
 
+// Called with the radio lock taken (network_wifi_lock/0).
 void network_wifi_release(void)
 {
-    SMP_MUTEX_LOCK(wifi_mutex);
     wifi_holder_restarted = NULL;
     if (!wifi_used_by_network) {
         wifi_off();
     }
-    SMP_MUTEX_UNLOCK(wifi_mutex);
 }
 
 static bool start_wifi(Context *ctx, term pid, term ref, struct ClientData *data,

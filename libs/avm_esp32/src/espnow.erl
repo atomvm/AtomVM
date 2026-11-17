@@ -61,7 +61,8 @@
 %% `pmk' is the primary key that encrypts the peers' `lmk' keys.
 
 -type peer_option() :: {channel, channel()} | {lmk, key()}.
-%% `lmk' encrypts the traffic with this peer (at most 6 encrypted peers).
+%% `lmk' encrypts the traffic with this peer; the SDK takes as many encrypted
+%% peers as `CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM' (7 by default, up to 17).
 
 -export_type([mac/0, channel/0]).
 
@@ -74,21 +75,25 @@ open() ->
 %% Only one port can be open: `{error, already_open}' while another is. An
 %% AP-only network cannot carry ESP-NOW (its frames go out on the STA):
 %% `{error, ap_only}'. `{error, badarg}' is a bad option. The port is linked
-%% to the caller: if the caller dies the port closes, and ESP-NOW can be
-%% opened again.
+%% to the caller before ESP-NOW starts: an abnormal caller exit terminates
+%% the port, and a later open/1 reclaims its ESP-NOW state. A normal caller
+%% exit does not close it; call close/1 before returning normally.
 -spec open([open_option()]) -> {ok, port()} | {error, term()}.
 open(Options) ->
     Receiver = proplists:get_value(receiver, Options, self()),
     try open_port({spawn, "espnow"}, []) of
         Port ->
+            % Linked before ESP-NOW starts, not after: a caller killed while
+            % the port opens takes the port with it, and the next open/1
+            % reclaims ESP-NOW. Killed before this, it leaves an idle port
+            % that holds nothing.
+            link(Port),
             Opts = [{receiver, Receiver} | proplists:delete(receiver, Options)],
             case port:call(Port, {open, Opts}) of
                 ok ->
-                    % The caller owns the port: if it dies, the port goes with
-                    % it, and the next open/1 can open ESP-NOW again.
-                    link(Port),
                     {ok, Port};
                 {error, _} = Error ->
+                    unlink(Port),
                     Error
             end
     catch

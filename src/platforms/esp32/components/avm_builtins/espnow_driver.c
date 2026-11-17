@@ -96,10 +96,24 @@ struct EspNowSend
     uint8_t data[];
 };
 
+// The radio lock (network_wifi_lock/0) is taken around everything the
+// scheduler does here: open, close, reclaiming a killed port's state, the
+// peers and their keys, sends. The network driver holds it while it restarts
+// the radio and calls espnow_wifi_restarted, so neither runs halfway through
+// the other. Then, if needed, the listeners lock: never the other way round.
+
+enum EspNowCompletion
+{
+    EspNowNoCompletion = 0,
+    EspNowCompletedOk,
+    EspNowCompletedFail
+};
+
 struct EspNowData
 {
-    QueueHandle_t queue;
+    // First: at VM teardown sys_listener_destroy frees the listener pointer.
     EventListener listener;
+    QueueHandle_t queue;
     GlobalContext *global;
     int32_t receiver;
     // The port that opened it. Its context does not point here: a port
@@ -116,10 +130,19 @@ struct EspNowData
     struct EspNowSend *sends;
     struct EspNowSend *last_send;
     bool sending;
+    // The send callback's result, left by the listener for the port's
+    // handler, which takes it when the listener's wakeup comes. A message the
+    // port gets from anyone else finds nothing to take.
+    _Atomic uint8_t completion;
+    // Closed with events still in the queue: the listener takes the rest
+    // through the event set, then frees the queue and this. Read and written
+    // under the listeners lock.
+    bool closing;
 };
 
 // ESP-NOW is one per chip: at most one open port. Stored before the
-// callbacks are registered, cleared before teardown frees it.
+// callbacks are registered, cleared before teardown frees it. The scheduler
+// reads and writes it under the radio lock; the Wi-Fi task's callbacks load it.
 static _Atomic(struct EspNowData *) espnow_data;
 // Callbacks running now, so that teardown waits for them.
 static _Atomic uint32_t espnow_in_callback;
@@ -130,16 +153,18 @@ static _Atomic uint8_t espnow_channel;
 // The keys, installed again each time the radio restarts (a network starting
 // or stopping), which clears them: the PMK given at open, and the encrypted
 // peers' LMKs. Written by the port, read by the network driver's callback,
-// both under `espnow_keys_lock'.
+// both under the radio lock, which also covers the SDK call each goes with.
+// Room for every peer: the SDK enforces its configured encrypted-peer limit
+// (CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM, up to 17), which the
+// ESP_NOW_MAX_ENCRYPT_PEER_NUM macro (6) does not follow.
 struct EspNowKey
 {
     uint8_t mac[MAC_LEN];
     uint8_t lmk[ESP_NOW_KEY_LEN];
 };
-static portMUX_TYPE espnow_keys_lock = portMUX_INITIALIZER_UNLOCKED;
 static bool espnow_has_pmk;
 static uint8_t espnow_pmk[ESP_NOW_KEY_LEN];
-static struct EspNowKey espnow_lmks[ESP_NOW_MAX_ENCRYPT_PEER_NUM];
+static struct EspNowKey espnow_lmks[ESP_NOW_MAX_TOTAL_PEER_NUM];
 static size_t espnow_lmk_count;
 
 static NativeHandlerResult espnow_consume_mailbox(Context *ctx);
@@ -252,59 +277,45 @@ static void espnow_send_cb(const uint8_t *mac, esp_now_send_status_t status)
 
 static void forget_lmk(const uint8_t mac[MAC_LEN])
 {
-    taskENTER_CRITICAL(&espnow_keys_lock);
     for (size_t i = 0; i < espnow_lmk_count; i++) {
         if (memcmp(espnow_lmks[i].mac, mac, MAC_LEN) == 0) {
             espnow_lmks[i] = espnow_lmks[--espnow_lmk_count];
             break;
         }
     }
-    taskEXIT_CRITICAL(&espnow_keys_lock);
 }
 
+// Once the SDK accepted the peer, so there is room: it holds at most
+// ESP_NOW_MAX_TOTAL_PEER_NUM peers, the broadcast one among them.
 static void remember_lmk(const uint8_t mac[MAC_LEN], const uint8_t lmk[ESP_NOW_KEY_LEN])
 {
     forget_lmk(mac);
-    taskENTER_CRITICAL(&espnow_keys_lock);
-    if (espnow_lmk_count < ESP_NOW_MAX_ENCRYPT_PEER_NUM) {
-        memcpy(espnow_lmks[espnow_lmk_count].mac, mac, MAC_LEN);
-        memcpy(espnow_lmks[espnow_lmk_count].lmk, lmk, ESP_NOW_KEY_LEN);
-        espnow_lmk_count++;
-    }
-    taskEXIT_CRITICAL(&espnow_keys_lock);
+    memcpy(espnow_lmks[espnow_lmk_count].mac, mac, MAC_LEN);
+    memcpy(espnow_lmks[espnow_lmk_count].lmk, lmk, ESP_NOW_KEY_LEN);
+    espnow_lmk_count++;
 }
 
 static void forget_keys(void)
 {
-    taskENTER_CRITICAL(&espnow_keys_lock);
     espnow_has_pmk = false;
     espnow_lmk_count = 0;
-    taskEXIT_CRITICAL(&espnow_keys_lock);
 }
 
 // The network driver stopped and started the radio, which cleared the keys
 // ESP-NOW installed in it: encrypted frames went out with no key and were
 // dropped by the peer. The keys go back; on a bare STA (network:stop/0) the
-// channel is ours again too. Reads nothing that teardown frees.
+// channel is ours again too. Reads nothing that teardown frees. Called by
+// the network driver with the radio lock taken: no peer changes meanwhile.
 static void espnow_wifi_restarted(bool bare_sta)
 {
-    taskENTER_CRITICAL(&espnow_keys_lock);
-    bool has_pmk = espnow_has_pmk;
-    uint8_t pmk[ESP_NOW_KEY_LEN];
-    memcpy(pmk, espnow_pmk, ESP_NOW_KEY_LEN);
-    size_t count = espnow_lmk_count;
-    struct EspNowKey lmks[ESP_NOW_MAX_ENCRYPT_PEER_NUM];
-    memcpy(lmks, espnow_lmks, sizeof(lmks));
-    taskEXIT_CRITICAL(&espnow_keys_lock);
-
-    if (has_pmk) {
-        esp_now_set_pmk(pmk);
+    if (espnow_has_pmk) {
+        esp_now_set_pmk(espnow_pmk);
     }
-    for (size_t i = 0; i < count; i++) {
+    for (size_t i = 0; i < espnow_lmk_count; i++) {
         esp_now_peer_info_t peer;
-        if (esp_now_get_peer(lmks[i].mac, &peer) == ESP_OK) {
+        if (esp_now_get_peer(espnow_lmks[i].mac, &peer) == ESP_OK) {
             peer.encrypt = true;
-            memcpy(peer.lmk, lmks[i].lmk, ESP_NOW_KEY_LEN);
+            memcpy(peer.lmk, espnow_lmks[i].lmk, ESP_NOW_KEY_LEN);
             esp_now_mod_peer(&peer);
         }
     }
@@ -314,10 +325,23 @@ static void espnow_wifi_restarted(bool bare_sta)
     }
 }
 
-// Scheduler. A received frame goes to the receiver as
+// After close, with no event left and no listener running (both under the
+// listeners lock): the queue has no notification left in the event set.
+static void free_closed(struct EspNowData *data)
+{
+    if (UNLIKELY(xQueueRemoveFromSet(data->queue, event_set) != pdPASS)) {
+        ESP_LOGE(TAG, "Failed to remove the ESP-NOW queue from the event set");
+    }
+    vQueueDelete(data->queue);
+    free(data);
+}
+
+// Scheduler, under the listeners lock, for each event the poll loop selected
+// from the event set. A received frame goes to the receiver as
 // {espnow, rx, Mac, Data, #{rssi => Rssi}}, its binary the one the Wi-Fi task
-// filled; a send result goes to the port, as {espnow_sent, ok | fail}, which
-// answers the waiting send/3 and gives the radio the next frame.
+// filled; a send result is left in `completion', and the atom espnow_sent
+// wakes the port up to answer the waiting send/3 and give the radio the next
+// frame. After close the events left are dropped, and the last one frees all.
 static EventListener *espnow_event_callback(GlobalContext *glb, EventListener *listener)
 {
     struct EspNowData *data = GET_LIST_ENTRY(listener, struct EspNowData, listener);
@@ -326,16 +350,20 @@ static EventListener *espnow_event_callback(GlobalContext *glb, EventListener *l
         return listener;
     }
 
-    if (event.kind == EspNowSent) {
-        // On the stack: a send/3 waits for it, it cannot be lost.
-        BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(2), heap);
-        {
-            term message = term_alloc_tuple(2, &heap);
-            term_put_tuple_element(message, 0, globalcontext_make_atom(glb, ATOM_STR("\xB", "espnow_sent")));
-            term_put_tuple_element(message, 1, event.ok ? OK_ATOM : globalcontext_make_atom(glb, ATOM_STR("\x4", "fail")));
-            globalcontext_send_message(glb, data->port, message);
+    if (data->closing) {
+        if (event.kind == EspNowReceived) {
+            free(event.frame); // neither listed nor counted
         }
-        END_WITH_STACK_HEAP(heap, glb);
+        if (uxQueueMessagesWaiting(data->queue) != 0) {
+            return listener;
+        }
+        free_closed(data);
+        return NULL;
+    }
+
+    if (event.kind == EspNowSent) {
+        atomic_store(&data->completion, event.ok ? EspNowCompletedOk : EspNowCompletedFail);
+        globalcontext_send_message(glb, data->port, globalcontext_make_atom(glb, ATOM_STR("\xB", "espnow_sent")));
         return listener;
     }
 
@@ -406,12 +434,16 @@ static void reply_send(GlobalContext *glb, const struct EspNowSend *send, term r
     END_WITH_STACK_HEAP(heap, glb);
 }
 
-// The callbacks first: once espnow_data is NULL no new callback touches
-// `data', and one already running finishes before it goes (a callback never
-// blocks, and on a single core the scheduler cannot preempt one). Then the
-// listener, whose dispatch unregistering waits for, and the queue, emptied
-// of the frames still staged: xQueueRemoveFromSet fails on a non-empty
-// queue. The sends still waiting are answered {error, closed}.
+// With the radio lock taken. The callbacks first: once espnow_data is NULL no
+// new callback touches `data', and one already running finishes before it
+// goes (a callback never blocks, and on a single core the scheduler cannot
+// preempt one). The sends still waiting are answered {error, closed}.
+// The queue last. Each event in it has a notification in the event set,
+// which only the poll loop takes, before it calls the listener: emptying the
+// queue here would leave notifications behind for a queue that is gone. Under
+// the listeners lock no listener runs: an empty queue has no notification
+// left and goes now; one with events left goes from the listener, once it
+// has taken the last.
 static void teardown(struct EspNowData *data)
 {
     GlobalContext *glb = data->global;
@@ -424,17 +456,6 @@ static void teardown(struct EspNowData *data)
     }
     atomic_store(&espnow_channel, 0);
     forget_keys();
-    sys_unregister_listener(glb, &data->listener);
-    struct EspNowEvent event;
-    while (xQueueReceive(data->queue, &event, 0) == pdTRUE) {
-        if (event.kind == EspNowReceived) {
-            free(event.frame);
-        }
-    }
-    if (UNLIKELY(xQueueRemoveFromSet(data->queue, event_set) != pdPASS)) {
-        ESP_LOGE(TAG, "Failed to remove the ESP-NOW queue from the event set");
-    }
-    vQueueDelete(data->queue);
     network_wifi_release();
     term closed = globalcontext_make_atom(glb, ATOM_STR("\x6", "closed"));
     while (data->sends != NULL) {
@@ -443,7 +464,18 @@ static void teardown(struct EspNowData *data)
         reply_send(glb, send, closed, false);
         free(send);
     }
-    free(data);
+
+    struct ListHead *listeners = synclist_wrlock(&glb->listeners);
+    UNUSED(listeners);
+    data->closing = true;
+    bool idle = uxQueueMessagesWaiting(data->queue) == 0;
+    if (idle) {
+        list_remove(&data->listener.listeners_list_head);
+    }
+    synclist_unlock(&glb->listeners);
+    if (idle) {
+        free_closed(data);
+    }
 }
 
 static esp_err_t add_peer(const uint8_t mac[MAC_LEN], uint8_t channel, const uint8_t *lmk)
@@ -494,6 +526,8 @@ static term badarg(Heap *heap)
 }
 
 // {open, Options}, the port's first call: `receiver', `channel' and `pmk'.
+// A state left by a killed port is reclaimed here, under the radio lock like
+// every other use of it.
 // `{error, already_open}' while another port has ESP-NOW, `{error, ap_only}'
 // while an AP-only network runs the radio, `badarg' for bad options, the
 // ESP-IDF error otherwise. A port that fails to open terminates.
@@ -553,7 +587,7 @@ static term do_open(Heap *heap, Context *ctx, term req)
     sys_register_listener(glb, &data->listener);
     if (xQueueAddToSet(data->queue, event_set) != pdPASS) {
         ESP_LOGE(TAG, "Failed to add the ESP-NOW queue to the event set");
-        sys_unregister_listener(glb, &data->listener);
+        sys_unregister_listener(glb, &data->listener); // empty queue, never in the set
         atomic_store(&espnow_channel, 0);
         vQueueDelete(data->queue);
         network_wifi_release();
@@ -564,10 +598,8 @@ static term do_open(Heap *heap, Context *ctx, term req)
     atomic_store(&espnow_data, data);
 
     if (!term_is_invalid_term(pmk)) {
-        taskENTER_CRITICAL(&espnow_keys_lock);
         memcpy(espnow_pmk, term_binary_data(pmk), ESP_NOW_KEY_LEN);
         espnow_has_pmk = true;
-        taskEXIT_CRITICAL(&espnow_keys_lock);
     }
     if ((err = esp_now_init()) != ESP_OK
         || (!term_is_invalid_term(pmk) && (err = esp_now_set_pmk((const uint8_t *) term_binary_data(pmk))) != ESP_OK)
@@ -650,13 +682,17 @@ static void next_send(GlobalContext *glb, struct EspNowData *data)
     }
 }
 
-// {espnow_sent, ok | fail}, from the listener: the frame out has its result.
-static void sent(GlobalContext *glb, struct EspNowData *data, term result)
+// The atom espnow_sent, the listener's wakeup: the frame out has its result,
+// if `completion' holds one. Anyone can send the port that atom; only the
+// listener leaves a result, so a lookalike finds none and answers nothing.
+static void sent(GlobalContext *glb, struct EspNowData *data)
 {
+    uint8_t completion = atomic_exchange(&data->completion, EspNowNoCompletion);
     struct EspNowSend *send = data->sends;
-    if (!data->sending || send == NULL) {
+    if (completion == EspNowNoCompletion || !data->sending || send == NULL) {
         return;
     }
+    term result = completion == EspNowCompletedOk ? OK_ATOM : globalcontext_make_atom(glb, ATOM_STR("\x4", "fail"));
     data->sending = false;
     data->sends = send->next;
     reply_send(glb, send, result, result == OK_ATOM);
@@ -738,23 +774,14 @@ static term do_get_channel(Heap *heap, GlobalContext *glb)
     return port_heap_create_ok_tuple(heap, term_from_int(primary));
 }
 
-// {ok, #{dropped => N}}: frames lost before reaching the receiver.
+// {ok, #{dropped => N}}: frames lost before reaching the receiver. A count
+// past the small integers (2^27 on a 32-bit chip) is boxed.
 static term do_stats(Heap *heap, GlobalContext *glb, struct EspNowData *data)
 {
+    term dropped = term_make_maybe_boxed_int64(atomic_load(&data->dropped), heap);
     term map = term_alloc_map(1, heap);
-    term_set_map_assoc(map, 0, globalcontext_make_atom(glb, ATOM_STR("\x7", "dropped")), term_from_int(atomic_load(&data->dropped)));
+    term_set_map_assoc(map, 0, globalcontext_make_atom(glb, ATOM_STR("\x7", "dropped")), dropped);
     return port_heap_create_ok_tuple(heap, map);
-}
-
-// {espnow_sent, Result}, which the listener sends to the port.
-static bool is_sent(GlobalContext *glb, term message, term *result)
-{
-    if (!term_is_tuple(message) || term_get_tuple_arity(message) != 2
-        || term_get_tuple_element(message, 0) != globalcontext_make_atom(glb, ATOM_STR("\xB", "espnow_sent"))) {
-        return false;
-    }
-    *result = term_get_tuple_element(message, 1);
-    return true;
 }
 
 static NativeHandlerResult espnow_consume_mailbox(Context *ctx)
@@ -763,20 +790,22 @@ static NativeHandlerResult espnow_consume_mailbox(Context *ctx)
     bool closed = false;
     while (!closed && mailbox_has_next(&ctx->mailbox)) {
         Message *message = mailbox_first(&ctx->mailbox);
+        network_wifi_lock();
         // Only the port that opened ESP-NOW drives it.
         struct EspNowData *data = atomic_load(&espnow_data);
         bool owner = data != NULL && data->port == ctx->process_id;
 
-        term result;
-        if (is_sent(glb, message->message, &result)) {
+        if (message->message == globalcontext_make_atom(glb, ATOM_STR("\xB", "espnow_sent"))) {
             if (owner) {
-                sent(glb, data, result);
+                sent(glb, data);
             }
+            network_wifi_unlock();
             mailbox_remove_message(&ctx->mailbox, &ctx->heap);
             continue;
         }
         GenMessage gen_message;
         if (UNLIKELY(port_parse_gen_message(message->message, &gen_message) != GenCallMessage)) {
+            network_wifi_unlock();
             ESP_LOGW(TAG, "Received invalid message.");
             mailbox_remove_message(&ctx->mailbox, &ctx->heap);
             continue;
@@ -790,8 +819,8 @@ static NativeHandlerResult espnow_consume_mailbox(Context *ctx)
 
         // The reply is built on the stack, so it can always be sent: a caller
         // of port:call/2 waits for it without a timeout. The largest is
-        // {Ref, {ok, #{dropped => N}}}.
-        BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + term_map_size_in_terms(1), heap);
+        // {Ref, {ok, #{dropped => N}}}, N maybe boxed.
+        BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + term_map_size_in_terms(1) + BOXED_INT64_SIZE, heap);
         {
             term reply;
             switch (cmd) {
@@ -833,6 +862,7 @@ static NativeHandlerResult espnow_consume_mailbox(Context *ctx)
             }
         }
         END_WITH_STACK_HEAP(heap, glb);
+        network_wifi_unlock();
         mailbox_remove_message(&ctx->mailbox, &ctx->heap);
     }
     return closed ? NativeTerminate : NativeContinue;

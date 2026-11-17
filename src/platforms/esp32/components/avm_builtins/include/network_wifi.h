@@ -36,6 +36,15 @@
  * Stopping the radio clears what the holder installed in it (ESP-NOW's
  * keys), and a bare STA is on the holder's channel again.
  */
+/*
+ * The radio lock, which the network driver holds while it starts and stops
+ * the radio and calls `restarted'. A holder takes it around everything it
+ * does with the radio, so that nothing of its own runs halfway through a
+ * restart: hold and release are called with it taken. It is taken before the
+ * listeners lock, never after.
+ */
+void network_wifi_lock(void);
+void network_wifi_unlock(void);
 esp_err_t network_wifi_hold(void (*restarted)(bool bare_sta));
 void network_wifi_release(void);
 
