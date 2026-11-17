@@ -48,6 +48,8 @@
 %% internal nifs
 -export([
     nif_select_read/2,
+    nif_connect/2,
+    nif_connect_result/1,
     nif_select_write/2,
     nif_accept/1,
     nif_recv/2,
@@ -755,8 +757,12 @@ setopt(_Socket, _SocketOption, _Value) ->
 %%          Wait for the socket to connect to an address.  The socket should
 %%          be a connection-based socket.
 %%
-%%          Note that this function will block until a connection is made
-%%          to a server.
+%%          Note that this function will block the calling process until a
+%%          connection is made to a server, or the attempt fails. Only the
+%%          calling process: on platforms with BSD sockets the connect is
+%%          non-blocking, and this waits for the socket to become writable,
+%%          so a peer that never answers does not stop the scheduler, and
+%%          killing the caller abandons the attempt.
 %%
 %% Example:
 %%
@@ -764,7 +770,26 @@ setopt(_Socket, _SocketOption, _Value) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec connect(Socket :: socket(), Address :: sockaddr()) -> ok | {error, Reason :: term()}.
-connect(_Socket, _Address) ->
+connect(Socket, Address) ->
+    case ?MODULE:nif_connect(Socket, Address) of
+        undefined ->
+            % BSD sockets: in progress (EINPROGRESS).
+            case wait_write(Socket, infinity) of
+                ok ->
+                    ?MODULE:nif_connect_result(Socket);
+                {error, _Reason} = Error ->
+                    Error
+            end;
+        Other ->
+            Other
+    end.
+
+%% @private
+nif_connect(_Socket, _Address) ->
+    erlang:nif_error(undefined).
+
+%% @private
+nif_connect_result(_Socket) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

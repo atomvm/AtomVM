@@ -160,8 +160,9 @@ connect(Addr, Port, TLSOptions) when
     case socket:connect(Socket, #{family => inet, addr => Addr, port => Port}) of
         ok ->
             connect(Socket, TLSOptions);
-        {error, _Reason} ->
-            {error, _Reason}
+        {error, _Reason} = Error ->
+            ok = socket:close(Socket),
+            Error
     end.
 
 -spec connect(Socket :: socket:socket(), TLSOptions :: [tls_client_option()]) ->

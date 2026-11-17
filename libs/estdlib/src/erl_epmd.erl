@@ -120,6 +120,7 @@ port_please(Name, Host) ->
                     ok = socket:close(Socket),
                     Result;
                 {error, _} ->
+                    ok = socket:close(Socket),
                     noport
             end;
         {error, _} ->
@@ -155,6 +156,7 @@ names(Host) ->
                     ok = socket:close(Socket),
                     Result;
                 {error, _} = ErrConnect ->
+                    ok = socket:close(Socket),
                     ErrConnect
             end;
         {error, _} = ErrGetAddr ->

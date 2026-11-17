@@ -770,12 +770,16 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
         TRACE("nif_socket_open: Created socket fd=%i\n", rsrc_obj->fd);
         socket_init_select_state(rsrc_obj);
 
-        if (type != SOCK_STREAM) {
-            // TCP sockets are made non-blocking after connect, for now.
-            if (UNLIKELY(fcntl(rsrc_obj->fd, F_SETFL, O_NONBLOCK) != 0)) {
-                AVM_LOGE(TAG, "Unable to configure fd=%d to be non blocking.", rsrc_obj->fd);
-                return make_errno_tuple(ctx);
-            }
+        // Every socket is non-blocking from the start: a TCP connect then
+        // returns EINPROGRESS instead of holding the scheduler, and
+        // socket:connect/2 waits for the socket to become writable.
+        if (UNLIKELY(fcntl(rsrc_obj->fd, F_SETFL, O_NONBLOCK) != 0)) {
+            int err = errno;
+            AVM_LOGE(TAG, "Unable to configure fd=%d to be non blocking.", rsrc_obj->fd);
+            close(rsrc_obj->fd);
+            rsrc_obj->fd = CLOSED_FD;
+            enif_release_resource(rsrc_obj);
+            return make_error_tuple(posix_errno_to_term(err, ctx->global), ctx);
         }
 
 #elif OTP_SOCKET_LWIP
@@ -3303,26 +3307,20 @@ static term nif_socket_connect(Context *ctx, int argc, term argv[])
         address.sin_addr.s_addr = htonl(inet_addr4_to_uint32(addr));
     }
 
+    // The fd is non-blocking since nif_socket_open: a peer that never
+    // answers gives EINPROGRESS, and socket:connect/2 waits for the socket to
+    // become writable (wait_write/2), then reads the outcome
+    // (nif_connect_result/1).
     socklen_t addr_len = sizeof(struct sockaddr_in);
     int res = connect(rsrc_obj->fd, (const struct sockaddr *) &address, addr_len);
     if (res == -1) {
-        if (errno == EINPROGRESS) {
-
-            // TODO make connect non-blocking
-            SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        int err = errno;
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        if (err == EINPROGRESS) {
             return UNDEFINED_ATOM;
-
-        } else {
-            SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
-            AVM_LOGE(TAG, "Unable to connect: res=%i errno=%i", res, errno);
-            return make_error_tuple(CLOSED_ATOM, ctx);
         }
+        return make_error_tuple(posix_errno_to_term(err, global), ctx);
     } else if (res == 0) {
-        if (UNLIKELY(fcntl(rsrc_obj->fd, F_SETFL, O_NONBLOCK) != 0)) {
-            AVM_LOGE(TAG, "Unable to configure fd=%d to be non blocking.", rsrc_obj->fd);
-            SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
-            return make_errno_tuple(ctx);
-        }
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
         return OK_ATOM;
     } else {
@@ -3360,6 +3358,40 @@ static term nif_socket_connect(Context *ctx, int argc, term argv[])
     }
 #endif
 }
+
+#if OTP_SOCKET_BSD
+// The outcome of a connect that was in progress, once the socket is writable.
+static term nif_socket_connect_result(Context *ctx, int argc, term argv[])
+{
+    TRACE("nif_socket_connect_result\n");
+    UNUSED(argc);
+
+    VALIDATE_VALUE(argv[0], term_is_otp_socket);
+
+    struct SocketResource *rsrc_obj;
+    if (UNLIKELY(!term_to_otp_socket(argv[0], &rsrc_obj, ctx))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    SMP_RWLOCK_RDLOCK(rsrc_obj->socket_lock);
+    if (rsrc_obj->fd == CLOSED_FD) {
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        return make_error_tuple(CLOSED_ATOM, ctx);
+    }
+    int err = 0;
+    socklen_t len = sizeof(err);
+    int res = getsockopt(rsrc_obj->fd, SOL_SOCKET, SO_ERROR, &err, &len);
+    int getsockopt_errno = errno;
+    SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+    if (UNLIKELY(res != 0)) {
+        return make_error_tuple(posix_errno_to_term(getsockopt_errno, ctx->global), ctx);
+    }
+    if (err != 0) {
+        return make_error_tuple(posix_errno_to_term(err, ctx->global), ctx);
+    }
+    return OK_ATOM;
+}
+#endif
 
 //
 // shutdown
@@ -3541,6 +3573,12 @@ static const struct Nif socket_connect_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_socket_connect
 };
+#if OTP_SOCKET_BSD
+static const struct Nif socket_connect_result_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_socket_connect_result
+};
+#endif
 static const struct Nif socket_shutdown_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_socket_shutdown
@@ -3623,10 +3661,16 @@ const struct Nif *otp_socket_nif_get_nif(const char *nifname)
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &socket_sendto_nif;
         }
-        if (strcmp("connect/2", rest) == 0) {
+        if (strcmp("nif_connect/2", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &socket_connect_nif;
         }
+#if OTP_SOCKET_BSD
+        if (strcmp("nif_connect_result/1", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &socket_connect_result_nif;
+        }
+#endif
         if (strcmp("shutdown/2", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &socket_shutdown_nif;
