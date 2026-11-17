@@ -98,13 +98,25 @@ test_psk_kept_sealed() ->
             {started_with, Config} -> Config
         after 5000 -> no_start
         end,
+    %% An SSID-only reconnect keeps the stored password: the driver gets it in
+    %% clear, the stored configuration keeps it sealed.
+    ok = network:sta_connect([{ssid, "other"}]),
+    Reconnected =
+        receive
+            {connected_with, Updated} -> Updated
+        after 5000 -> no_connect
+        end,
     Stored = gen_server:call(network, get_config),
     StoredPsk = proplists:get_value(psk, proplists:get_value(sta, Stored)),
+    Printed = erlang:iolist_to_binary(io_lib:format("~p", [Stored])),
     exit(Pid, kill),
     exit(Port, kill),
     ok = wait_unregistered(network, 50),
     ok = wait_unregistered(network_port, 50),
     "secret" = proplists:get_value(psk, proplists:get_value(sta, Started)),
+    "other" = proplists:get_value(ssid, proplists:get_value(sta, Reconnected)),
+    "secret" = proplists:get_value(psk, proplists:get_value(sta, Reconnected)),
+    nomatch = binary:match(Printed, <<"secret">>),
     true = is_function(StoredPsk, 0),
     "secret" = StoredPsk(),
     ok.
@@ -113,6 +125,10 @@ fake_start_port(Test) ->
     receive
         {From, Ref, {start, Config}} ->
             Test ! {started_with, Config},
+            From ! {Ref, ok},
+            fake_start_port(Test);
+        {From, Ref, {connect, Config}} ->
+            Test ! {connected_with, Config},
             From ! {Ref, ok},
             fake_start_port(Test);
         _Other ->

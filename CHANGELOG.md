@@ -38,9 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   message when the socket is writable again)
 
 ### Changed
-- The `network` process keeps the `psk` of its `sta` and `ap` options in a closure, so a crash report
-  of that process no longer prints the Wi-Fi password; it is revealed only in the messages to the
-  driver
+- The `network` process keeps the `psk` of its `sta` and `ap` options in closures, so printing its
+  stored configuration (for example in a crash report of that process) no longer exposes those
+  passwords. Driver messages still carry them in plaintext, and this does not redact credentials in
+  pending `sta_connect/1` requests, caller error reports or other diagnostic data
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
 - `.avm` files, binaries and the pack embedded in an escript must now end exactly with the pack
   terminator: data after the end of the pack (for example a padded partition dump passed to
