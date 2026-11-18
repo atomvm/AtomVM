@@ -61,13 +61,17 @@ expect_badarg(EthConfig) ->
 %% wait_for_eth/2 returns the driver's reason, not a timeout, and leaves no
 %% monitor message behind.
 %% A fixed address is reported as given, by got_ip, on two start/stop cycles.
+%% wait_for_eth/2 leaves its connected and disconnected callbacks pointed at
+%% this process: whatever they sent is flushed after each cycle, or the next
+%% test would read it as its own first event.
 test_static_ip() ->
     IpInfo = {{10, 0, 2, 42}, {255, 255, 255, 0}, {0, 0, 0, 0}},
     lists:foreach(
         fun(_) ->
             {ok, IpInfo} = network:wait_for_eth([{ipv4, IpInfo}], 5000),
             connected = network:eth_status(),
-            ok = network:stop()
+            ok = network:stop(),
+            flush()
         end,
         [first, second]
     ).
