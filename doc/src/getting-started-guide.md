@@ -119,7 +119,7 @@ Flashing the ESP32 using a pre-built binary image is by far the easiest path to 
 We recommend first erasing any existing applications on the ESP32 device.  E.g.,
 
 ```shell
-$ esptool.py --chip auto --port /dev/ttyUSB0 --baud 921600 erase_flash
+$ esptool --chip auto --port /dev/ttyUSB0 --baud 921600 erase_flash
 ```
 
 ```{note}
@@ -143,14 +143,14 @@ Alpha and Beta images may be unstable and may result in unpredictable behavior. 
 opening a detailed [issue on GitHub](https://github.com/atomvm/AtomVM/issues), if you encounter such problems.
 ```
 
-Finally, use the `esptool.py` command to flash the image to the bootloader start address `0x1000` on the ESP32.  E.g.,
+Finally, use the `esptool` command to flash the image to the bootloader start address `0x1000` on the ESP32.  E.g.,
 
 ```shell
-$ esptool.py \
+$ esptool \
 --chip auto \
 --port /dev/ttyUSB0 --baud 921600 \
 --before default_reset --after hard_reset \
-write_flash -u \
+write-flash -u \
 --flash_mode dio --flash_freq 40m --flash_size detect \
 0x1000 \
 /path/to/Atomvm-esp32-v0.6.0.img

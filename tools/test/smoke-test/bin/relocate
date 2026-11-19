@@ -41,7 +41,7 @@ echo -n "ESP32_BAUD [921600]> "; read
 if [ -n "\${REPLY}" ]; then
     export ESP32_BAUD="\${REPLY}"
 fi
-echo -n "ESP32_ESPTOOL [esptool.py]> "; read
+echo -n "ESP32_ESPTOOL [esptool]> "; read
 if [ -n "\${REPLY}" ]; then
     export ESP32_ESPTOOL="\${REPLY}"
 fi

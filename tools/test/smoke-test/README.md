@@ -71,7 +71,7 @@ This step will create an activate script, which you should then _source_ (*not* 
     ====================================================================
     ESP32_PORT [/dev/ttyUSB0]> /dev/tty.usbserial-0164A0E0
     ESP32_BAUD [921600]>
-    ESP32_ESPTOOL [esptool.py]>
+    ESP32_ESPTOOL [esptool]>
     ESP32_CHIP [auto]>
     ESP32_OFFSET [0x1000]>
     ==================================
@@ -82,21 +82,21 @@ This step will create an activate script, which you should then _source_ (*not* 
 
     ESP32_CHIP=auto
     ATOMVM_REBAR3_PLUGIN_ESP32_FLASH_PORT=/dev/tty.usbserial-0164A0E0
-    ESP32_ESPTOOL=esptool.py
+    ESP32_ESPTOOL=esptool
     ESP32_OFFSET=0x1000
     ATOMVM_REBAR3_PLUGIN_ESP32_FLASH_CHIP=auto
     ESP32_BAUD=921600
     ATOMVM_REBAR3_PLUGIN_ESP32_FLASH_BAUD=921600
     ESP32_PORT=/dev/tty.usbserial-0164A0E0
-    ATOMVM_REBAR3_PLUGIN_ESP32_FLASH_ESPTOOL=esptool.py
+    ATOMVM_REBAR3_PLUGIN_ESP32_FLASH_ESPTOOL=esptool
 
     You are now ready for smoke testing AtomVM.  Good luck!
 
 You can now run commands, such as erasing the flash drive on your device:
 
     shell$ esp32-erase
-    # esptool.py --chip auto --port /dev/tty.usbserial-0164A0E0 --baud 921600 erase_flash
-    esptool.py v3.3.4-dev
+    # esptool --chip auto --port /dev/tty.usbserial-0164A0E0 --baud 921600 erase_flash
+    esptool v3.3.4-dev
     Serial port /dev/tty.usbserial-0164A0E0
     Connecting....
     Detecting chip type... Unsupported detection protocol, switching and trying again...
@@ -118,8 +118,8 @@ You can now run commands, such as erasing the flash drive on your device:
 And then flash the image to your device:
 
     shell$ esp32-flash /path/to/atomvm.img
-    # esptool.py --chip auto --port /dev/tty.usbserial-0164A0E0 --baud 921600 --before default_reset --after hard_reset write_flash -u --flash_mode keep --flash_freq keep --flash_size detect 0x1000 /path/to/atomvm.img
-    esptool.py v3.3.4-dev
+    # esptool --chip auto --port /dev/tty.usbserial-0164A0E0 --baud 921600 --before default_reset --after hard_reset write-flash -u --flash_mode keep --flash_freq keep --flash_size detect 0x1000 /path/to/atomvm.img
+    esptool v3.3.4-dev
     Serial port /dev/tty.usbserial-0164A0E0
     Connecting....
     Detecting chip type... Unsupported detection protocol, switching and trying again...
@@ -186,9 +186,9 @@ To run an example program, `cd` into the appropriate example directory, and buil
     ===> Verifying dependencies...
     ===> Analyzing applications...
     ===> Compiling hello_world
-    ===> esptool.py --chip auto --port /dev/tty.usbserial-0164A0E0 --baud 921600 --before default_reset --after hard_reset write_flash -u --flash_mode keep --flash_freq keep --flash_size detect 0x250000 .../atomvm_examples/erlang/hello_world/_build/default/lib/hello_world.avm
+    ===> esptool --chip auto --port /dev/tty.usbserial-0164A0E0 --baud 921600 --before default_reset --after hard_reset write-flash -u --flash_mode keep --flash_freq keep --flash_size detect 0x250000 .../atomvm_examples/erlang/hello_world/_build/default/lib/hello_world.avm
 
-    esptool.py v3.3.4-dev
+    esptool v3.3.4-dev
     Serial port /dev/tty.usbserial-0164A0E0
     Connecting.....
     Detecting chip type... Unsupported detection protocol, switching and trying again...
