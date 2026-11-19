@@ -38,6 +38,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   message when the socket is writable again)
 
 ### Changed
+- With BSD sockets (generic_unix, ESP32), `socket:connect/2` returns the reason a connect failed,
+  as OTP does (`{error, econnrefused}`, `{error, etimedout}`, `{error, ehostunreach}`...), instead
+  of `{error, closed}`. On ESP32, Wi-Fi down gives `{error, ehostunreach}`, and a refused port gives
+  `{error, econnreset}` because lwIP reports a RST during the handshake as a reset. It may also
+  return `{error, econnreset}` when the peer accepts and immediately resets, where it previously
+  returned `ok` and the error surfaced on the first `recv` or `send`; this is the OTP behaviour
+- Functions that report a POSIX error (such as `socket` and `atomvm:posix_*`) return
+  `econnrefused`, `econnreset`, `econnaborted`, `etimedout`, `ehostunreach`, `enetunreach`,
+  `enetdown`, `eaddrnotavail`, `ealready` and `eisconn` as atoms instead of the errno number
 - Stopped CI testing on FreeBSD 13, which has reached end of life.
 - `.avm` files, binaries and the pack embedded in an escript must now end exactly with the pack
   terminator: data after the end of the pack (for example a padded partition dump passed to
@@ -58,6 +67,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed `socket:connect/2` (and so `ssl:connect` and `gen_tcp:connect` with
+  `{inet_backend, socket}`) blocking the scheduler
+  with BSD sockets (ESP32, generic_unix) while the peer did not answer: the connect is now
+  non-blocking, and only the calling process waits
 - Fixed maps decoded by `binary_to_term/1,2` and received over distribution keeping the
   encoder's key order, which broke `==` and made `=>` updates on an existing key produce
   duplicate keys
