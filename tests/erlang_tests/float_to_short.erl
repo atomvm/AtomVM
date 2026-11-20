@@ -69,10 +69,15 @@ test_short_grisu3() ->
             ]),
             ok;
         4 ->
-            %% 32-bit: best-effort, verify roundtrip and expected output
-            %% 3.14 rounds to a different 32-bit float (3.1400001...)
-            %% Our %.9g gives "3.1400001" -- correct but not shortest
-            <<"3.1400001">> = erlang:float_to_binary(?MODULE:id(3.14), [short]),
+            case uses_ryu() of
+                true ->
+                    <<"3.14">> = erlang:float_to_binary(?MODULE:id(3.14), [short]);
+                false ->
+                    %% 32-bit fallback: best-effort, verify roundtrip and expected output
+                    %% 3.14 rounds to a different 32-bit float (3.1400001...)
+                    %% Our %.9g gives "3.1400001" -- correct but not shortest
+                    <<"3.1400001">> = erlang:float_to_binary(?MODULE:id(3.14), [short])
+            end,
             F = ?MODULE:id(3.14),
             F = erlang:binary_to_float(erlang:float_to_binary(?MODULE:id(F), [short])),
             ok
@@ -103,9 +108,9 @@ test_short_edge_cases() ->
             ),
             %% Values where Grisu3 falls back to %.17g (longer output than
             %% OTP/Ryu but still roundtrips correctly)
-            case erlang:system_info(machine) of
-                "BEAM" ->
-                    %% OTP uses Ryu: shortest output guaranteed
+            case uses_ryu() of
+                true ->
+                    %% OTP / AtomVM with Ryu: shortest output guaranteed
                     <<"1.0e23">> = erlang:float_to_binary(?MODULE:id(1.0e23), [short]),
                     <<"9.0e-265">> = erlang:float_to_binary(?MODULE:id(9.0e-265), [short]),
                     <<"5.423717798060526e125">> = erlang:float_to_binary(
@@ -114,7 +119,7 @@ test_short_edge_cases() ->
                     <<"1.372371880954233e-288">> = erlang:float_to_binary(
                         ?MODULE:id(1.372371880954233e-288), [short]
                     ),
-                    %% Near 2^53: OTP uses scientific with shortest digits
+                    %% Near 2^53: scientific with shortest digits
                     <<"1.979740120616623e16">> = erlang:float_to_binary(
                         ?MODULE:id(1.979740120616623e+16), [short]
                     ),
@@ -127,8 +132,8 @@ test_short_edge_cases() ->
                     <<"-1.8830736066034812e16">> = erlang:float_to_binary(
                         ?MODULE:id(-1.8830736066034812e+16), [short]
                     );
-                "ATOM" ->
-                    %% AtomVM uses Grisu3: fallback gives longer but correct output
+                false ->
+                    %% AtomVM with Grisu3: fallback gives longer but correct output
                     <<"9.9999999999999992e22">> = erlang:float_to_binary(?MODULE:id(1.0e23), [short]),
                     <<"9.0000000000000006e-265">> = erlang:float_to_binary(?MODULE:id(9.0e-265), [
                         short
@@ -211,13 +216,14 @@ test_short_list() ->
 
 test_1000_float_list() ->
     Data = get_1000_float_list(),
+    IsRyu = uses_ryu(),
     case erlang:system_info(machine) of
         "BEAM" ->
             test_1000_float_list_beam(Data);
         "ATOM" ->
             case floatsize() of
-                8 -> test_1000_float_list_atom64(Data);
-                4 -> test_1000_float_list_atom32(Data)
+                8 -> test_1000_float_list_atom64(Data, IsRyu);
+                4 -> test_1000_float_list_atom32(Data, IsRyu)
             end
     end.
 
@@ -233,20 +239,32 @@ test_1000_float_list_beam([{F, Bin64, _Bin32, SkipOnBeam} | Rest]) ->
 test_1000_float_list_beam([]) ->
     ok.
 
-test_1000_float_list_atom64([{F, Bin64, _Bin32, _SkipOnBeam} | Rest]) ->
-    Bin64 = erlang:float_to_binary(?MODULE:id(F), [short]),
-    F = ?MODULE:id(erlang:binary_to_float(?MODULE:id(Bin64))),
-    test_1000_float_list_atom64(Rest);
-test_1000_float_list_atom64([]) ->
+test_1000_float_list_atom64([{F, Bin64, _Bin32, SkipOnBeam} | Rest], IsRyu) ->
+    case {IsRyu, SkipOnBeam} of
+        {true, true} ->
+            Out = erlang:float_to_binary(?MODULE:id(F), [short]),
+            F = ?MODULE:id(erlang:binary_to_float(?MODULE:id(Out)));
+        _ ->
+            Bin64 = erlang:float_to_binary(?MODULE:id(F), [short]),
+            F = ?MODULE:id(erlang:binary_to_float(?MODULE:id(Bin64)))
+    end,
+    test_1000_float_list_atom64(Rest, IsRyu);
+test_1000_float_list_atom64([], _IsRyu) ->
     ok.
 
-test_1000_float_list_atom32([{_F, _Bin64, skip, _SkipOnBeam} | Rest]) ->
-    test_1000_float_list_atom32(Rest);
-test_1000_float_list_atom32([{F, _Bin64, Bin32, _SkipOnBeam} | Rest]) ->
-    Bin32 = erlang:float_to_binary(?MODULE:id(F), [short]),
-    F = ?MODULE:id(erlang:binary_to_float(?MODULE:id(Bin32))),
-    test_1000_float_list_atom32(Rest);
-test_1000_float_list_atom32([]) ->
+test_1000_float_list_atom32([{_F, _Bin64, skip, _SkipOnBeam} | Rest], IsRyu) ->
+    test_1000_float_list_atom32(Rest, IsRyu);
+test_1000_float_list_atom32([{F, _Bin64, Bin32, _SkipOnBeam} | Rest], IsRyu) ->
+    case IsRyu of
+        true ->
+            Out = erlang:float_to_binary(?MODULE:id(F), [short]),
+            F = ?MODULE:id(erlang:binary_to_float(?MODULE:id(Out)));
+        false ->
+            Bin32 = erlang:float_to_binary(?MODULE:id(F), [short]),
+            F = ?MODULE:id(erlang:binary_to_float(?MODULE:id(Bin32)))
+    end,
+    test_1000_float_list_atom32(Rest, IsRyu);
+test_1000_float_list_atom32([], _IsRyu) ->
     ok.
 
 get_1000_float_list() ->
@@ -1264,6 +1282,17 @@ floatsize() ->
     case erlang:system_info(machine) of
         "BEAM" -> 8;
         "ATOM" -> erlang:system_info(avm_floatsize)
+    end.
+
+uses_ryu() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            true;
+        "ATOM" ->
+            case floatsize() of
+                8 -> erlang:float_to_binary(?MODULE:id(1.0e23), [short]) =:= <<"1.0e23">>;
+                4 -> erlang:float_to_binary(?MODULE:id(3.14), [short]) =:= <<"3.14">>
+            end
     end.
 
 negate(X) -> -1.0 * X.

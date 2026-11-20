@@ -49,7 +49,8 @@ extern "C" {
  */
 typedef enum
 {
-    /** Shortest roundtrip representation (Grisu3 for doubles, best-effort for floats).
+    /** Shortest roundtrip representation (Ryu when AVM_USE_RYU is enabled;
+     *  otherwise Grisu3 for doubles, best-effort for floats).
      *  Within (-2^53, 2^53): whichever notation is shorter.
      *  Outside that range: always scientific notation.
      *  Precision parameter is ignored. */

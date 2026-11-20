@@ -113,6 +113,38 @@ set(SOURCE_FILES
     valueshashtable.c
 )
 
+if (AVM_USE_RYU)
+    set(RYU_HEADER_FILES
+        ryu/LICENSE-Apache2
+        ryu/LICENSE-Boost
+        ryu/common.h
+        ryu/digit_table.h
+        ryu/ryu.h
+    )
+    if (AVM_USE_32BIT_FLOAT)
+        list(APPEND RYU_HEADER_FILES
+            ryu/f2s_full_table.h
+            ryu/f2s_intrinsics.h
+            ryu/to_chars32.h
+        )
+        list(APPEND RYU_SOURCE_FILES
+            ryu/f2s.c
+        )
+    else()
+        list(APPEND RYU_HEADER_FILES
+            ryu/d2s_full_table.h
+            ryu/d2s_small_table.h
+            ryu/d2s_intrinsics.h
+            ryu/to_chars.h
+        )
+        list(APPEND RYU_SOURCE_FILES
+            ryu/d2s.c
+        )
+    endif()
+    set(HEADER_FILES ${HEADER_FILES} ${RYU_HEADER_FILES})
+    set(SOURCE_FILES ${SOURCE_FILES} ${RYU_SOURCE_FILES})
+endif()
+
 if(NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED)
     set(HEADER_FILES ${HEADER_FILES}
         jit.h
@@ -143,6 +175,22 @@ endif()
 
 if (ENABLE_REALLOC_GC)
     target_compile_definitions(libAtomVM PUBLIC ENABLE_REALLOC_GC)
+endif()
+
+if (AVM_USE_RYU)
+    target_compile_definitions(libAtomVM PUBLIC AVM_USE_RYU)
+    if (AVM_USE_32BIT_FLOAT)
+        set(RYU_TARGET_SOURCE ryu/f2s.c)
+        set_source_files_properties(ryu/f2s.c PROPERTIES COMPILE_DEFINITIONS RYU_FLOAT_FULL_TABLE)
+    else()
+        set(RYU_TARGET_SOURCE ryu/d2s.c)
+        if (AVM_RYU_OPTIMIZE_SIZE)
+            set_source_files_properties(ryu/d2s.c PROPERTIES COMPILE_DEFINITIONS RYU_OPTIMIZE_SIZE)
+        endif()
+    endif()
+    if (AVM_RYU_COMPILE_FOR_SIZE AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        set_source_files_properties(${RYU_TARGET_SOURCE} PROPERTIES COMPILE_OPTIONS -Os)
+    endif()
 endif()
 
 # AtomVM options used in libAtomVM

@@ -42,6 +42,17 @@ else()
     set(AVM_DISABLE_JIT ON)
 endif()
 
+if(CONFIG_AVM_USE_RYU)
+    set(AVM_USE_RYU ON CACHE BOOL "Enable vendored Ryu backend for short float formatting." FORCE)
+    if(CONFIG_AVM_RYU_COMPILE_FOR_SIZE)
+        set(AVM_RYU_COMPILE_FOR_SIZE ON CACHE BOOL "Compile Ryu with -Os regardless of global optimization level." FORCE)
+    else()
+        set(AVM_RYU_COMPILE_FOR_SIZE OFF CACHE BOOL "Compile Ryu with -Os regardless of global optimization level." FORCE)
+    endif()
+else()
+    set(AVM_USE_RYU OFF CACHE BOOL "Enable vendored Ryu backend for short float formatting." FORCE)
+endif()
+
 # GCC complains about "warning: #include_next is a GCC extension" when using pedantic flag
 # "pedantic" flag should be disabled rather poluting diagnostics with warnings caused from 3rd party
 option(AVM_PEDANTIC_WARNINGS "Pedantic compiler warnings" OFF)
