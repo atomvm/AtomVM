@@ -12,6 +12,16 @@ AtomVM provides two paths for testing "on device", the locally run QEMU emulator
 
 Instructions for running the tests [on QEMU are documented here](https://doc.atomvm.org/main/build-instructions.html#running-tests-for-esp32).
 
+The network tests (`test_socket`, `test_ssl`) connect to servers on the QEMU
+SLIRP host (10.0.2.2) instead of an external site. Start them before running
+pytest:
+
+```shell
+escript local_test_servers.escript --certdir /tmp &
+```
+
+(They bind ports 80, 443 and 53, so this may require root on Linux.)
+
 # Wokwi CI simulator testing
 
 Wokwi CI is a commercial cloud CI, see [wokwi-ci/getting-started](https://docs.wokwi.com/wokwi-ci/getting-started), running it locally requires you to obtain a `WOKWI_CLI_TOKEN` [Get token](https://wokwi.com/dashboard/ci) and usage fees may apply in the future - AtomVM uses it through the [pytest-embedded-wokwi](https://github.com/espressif/pytest-embedded/tree/main/pytest-embedded-wokwi) integration.
