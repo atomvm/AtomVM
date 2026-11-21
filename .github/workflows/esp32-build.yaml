@@ -47,7 +47,6 @@ jobs:
       matrix:
         esp-idf-target: ["esp32", "esp32c3"]
         idf-version:
-         - 'v5.2.8'
          - 'v5.3.6'
          - 'v5.4.4'
          - 'v5.5.5'
@@ -168,7 +167,6 @@ jobs:
         fi
 
     - name: Print size info with idf.py
-      if: matrix.idf-version != 'v5.2.8'
       shell: bash
       working-directory: ./src/platforms/esp32/
       run: |
