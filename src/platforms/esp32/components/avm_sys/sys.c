@@ -46,12 +46,8 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <sys/socket.h>
-
-#if ESP_IDF_VERSION_MAJOR >= 5
 #include "esp_chip_info.h"
 #include <spi_flash_mmap.h>
-#endif
-
 #include <esp_vfs_eventfd.h>
 
 #ifdef HAVE_SOC_CPU_CORES_NUM
@@ -80,25 +76,17 @@ static const char *const esp_largest_free_block_atom = "\x18" "esp32_largest_fre
 static const char *const esp_get_minimum_free_size_atom = "\x17" "esp32_minimum_free_size";
 static const char *const esp_chip_info_atom = "\xF" "esp32_chip_info";
 static const char *const esp_idf_version_atom = "\xF" "esp_idf_version";
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 3, 2)
 static const char *const esp32_atom = "\x5" "esp32";
 static const char *const esp32_s2_atom = "\x8" "esp32_s2";
 static const char *const esp32_s3_atom = "\x8" "esp32_s3";
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
 static const char *const esp32_c2_atom = "\x8" "esp32_c2";
-#endif
 static const char *const esp32_c3_atom = "\x8" "esp32_c3";
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0)
 static const char *const esp32_c6_atom = "\x8" "esp32_c6";
 static const char *const esp32_h2_atom = "\x8" "esp32_h2";
-#endif
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 3, 0)
 static const char *const esp32_p4_atom = "\x8" "esp32_p4";
-#endif
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
 static const char *const esp32_c5_atom = "\x8" "esp32_c5";
 static const char *const esp32_c61_atom = "\x9" "esp32_c61";
-#endif
 #endif
 static const char *const emb_flash_atom = "\x9" "emb_flash";
 static const char *const bgn_atom = "\x3" "bgn";
@@ -263,11 +251,7 @@ void sys_init_platform(GlobalContext *glb)
     // other cores, supposing it's pinned to core 0.
     esp_pthread_cfg_t esp_pthread_cfg = esp_pthread_get_default_config();
     esp_pthread_cfg.prio = uxTaskPriorityGet(NULL);
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0))
     BaseType_t affinity = xTaskGetCoreID(NULL);
-#else
-    BaseType_t affinity = xTaskGetAffinity(NULL);
-#endif
     if (affinity == -1) {
         esp_pthread_cfg.pin_to_core = tskNO_AFFINITY;
     } else {
@@ -543,7 +527,6 @@ Context *sys_create_port(GlobalContext *glb, const char *port_name, term opts)
 
 static term get_model(Context *ctx, esp_chip_model_t model)
 {
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 3, 2)
     switch (model) {
         case CHIP_ESP32:
             return globalcontext_make_atom(ctx->global, esp32_atom);
@@ -551,10 +534,8 @@ static term get_model(Context *ctx, esp_chip_model_t model)
             return globalcontext_make_atom(ctx->global, esp32_s2_atom);
         case CHIP_ESP32S3:
             return globalcontext_make_atom(ctx->global, esp32_s3_atom);
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
         case CHIP_ESP32C2:
             return globalcontext_make_atom(ctx->global, esp32_c2_atom);
-#endif
         case CHIP_ESP32C3:
             return globalcontext_make_atom(ctx->global, esp32_c3_atom);
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
@@ -563,22 +544,16 @@ static term get_model(Context *ctx, esp_chip_model_t model)
         case CHIP_ESP32C61:
             return globalcontext_make_atom(ctx->global, esp32_c61_atom);
 #endif
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0)
         case CHIP_ESP32C6:
             return globalcontext_make_atom(ctx->global, esp32_c6_atom);
         case CHIP_ESP32H2:
             return globalcontext_make_atom(ctx->global, esp32_h2_atom);
-#endif
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 3, 0)
         case CHIP_ESP32P4:
             return globalcontext_make_atom(ctx->global, esp32_p4_atom);
-#endif
         default:
             return UNDEFINED_ATOM;
     }
-#else
     return UNDEFINED_ATOM;
-#endif
 }
 
 static term get_features(Context *ctx, uint32_t features)

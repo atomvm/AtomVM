@@ -578,7 +578,7 @@ static term nif_esp_sleep_enable_ext1_wakeup(Context *ctx, int argc, term argv[]
 }
 #endif
 
-#if SOC_PM_SUPPORT_EXT1_WAKEUP && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 2)
+#if SOC_PM_SUPPORT_EXT1_WAKEUP
 static term nif_esp_sleep_enable_ext1_wakeup_io(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -1037,7 +1037,7 @@ static const struct Nif esp_sleep_enable_ext1_wakeup_nif =
     .nif_ptr = nif_esp_sleep_enable_ext1_wakeup
 };
 #endif
-#if SOC_PM_SUPPORT_EXT1_WAKEUP && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 2)
+#if SOC_PM_SUPPORT_EXT1_WAKEUP
 static const struct Nif esp_sleep_enable_ext1_wakeup_io_nif =
 {
     .base.type = NIFFunctionType,
@@ -1201,7 +1201,7 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         return &esp_sleep_enable_ext1_wakeup_nif;
     }
 #endif
-#if SOC_PM_SUPPORT_EXT1_WAKEUP && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 2)
+#if SOC_PM_SUPPORT_EXT1_WAKEUP
     if (strcmp("esp:sleep_enable_ext1_wakeup_io/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_sleep_enable_ext1_wakeup_io_nif;
