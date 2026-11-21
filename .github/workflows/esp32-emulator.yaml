@@ -1,0 +1,121 @@
+#
+#  Copyright 2026 Peter Madsen-Mygdal <petermm@gmail.com>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: ESP32 Emulator test
+
+on:
+  push:
+    paths:
+      - ".github/workflows/esp32-emulator.yaml"
+      - "CMakeLists.txt"
+      - "CMakeModules/**"
+      - "libs/**"
+      - "src/platforms/esp32/**"
+      - "src/libAtomVM/**"
+      - "tools/packbeam/**"
+  pull_request:
+    paths:
+      - ".github/workflows/esp32-emulator.yaml"
+      - "CMakeLists.txt"
+      - "CMakeModules/**"
+      - "libs/**"
+      - "src/platforms/esp32/**"
+      - "src/libAtomVM/**"
+      - "tools/packbeam/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  esp-emulator-test:
+    runs-on: ubuntu-24.04
+    container: espressif/idf:v5.5.5
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        esp-idf-target: ["esp32c3", "esp32c6", "esp32h2", "esp32p4"]
+
+    env:
+      SOC_TARGET: ${{ matrix.esp-idf-target }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Install build dependencies
+        run: |
+          set -eu
+          apt update
+          DEBIAN_FRONTEND=noninteractive apt install -y -q \
+              curl doxygen gcc g++ zlib1g-dev libmbedtls-dev
+
+      - name: "Set ImageOS for erlef/setup-beam"
+        run: |
+          sed -n -E -e 's|VERSION_ID="(.+)\..+"|ImageOS=ubuntu\1|p' /etc/os-release >> "${GITHUB_ENV}"
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28"
+          rebar3-version: "3.25.1"
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://repo.hex.pm
+            https://cdn.jsdelivr.net/hex
+
+      - name: Build ${{ matrix.esp-idf-target }} tests and merged flash image
+        working-directory: ./src/platforms/esp32/test/
+        run: |
+          set -eu
+          export PATH="${PATH}:${HOME}/.cache/rebar3/bin"
+          . "${IDF_PATH}/export.sh"
+          idf.py -DSDKCONFIG_DEFAULTS='sdkconfig.ci.wokwi' set-target "${SOC_TARGET}"
+          idf.py build
+          idf.py merge-bin -o merged_flash.bin
+
+      - name: Install ESP-Emulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL \
+              https://raw.githubusercontent.com/espressif/esp-emulator/06102dc8a043e4f2ba6b2e3cabcf516c4ea84576/install.sh \
+              | sh -s -- --version 0.48.0
+          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+
+      - name: Run ${{ matrix.esp-idf-target }} tests with ESP-Emulator
+        shell: bash
+        working-directory: ./src/platforms/esp32/test/
+        env:
+          RUST_BACKTRACE: "1"
+          RUST_LOG: warn
+        run: |
+          set -euo pipefail
+
+          timeout --signal=TERM --kill-after=5s 260s esp-emu \
+              --chip "${SOC_TARGET}" \
+              --firmware build/merged_flash.bin \
+              --wifi-ssid Wokwi-GUEST \
+              --wifi-password "" \
+              --net user \
+              --timeout 240s \
+              --exit-on "Returned from app_main()" \
+              --log-color never \
+              2>&1 | tee esp-emulator.log
+
+          if [[ "${SOC_TARGET}" == "esp32c3" || "${SOC_TARGET}" == "esp32c6" ]]; then
+              # ESP-Emulator 0.48.0 does not forward SNTP traffic in the
+              # AP+STA configuration used by test_wifi_example, so that is the
+              # sole expected failure on Wi-Fi chips. Match both its failure
+              # line and the summary so no other failure is hidden.
+              grep -E 'test_wifi_example.*FAIL|FAIL.*test_wifi_example' esp-emulator.log
+              grep -E '^[0-9]+ Tests 1 Failures 0 Ignored' esp-emulator.log
+          else
+              grep -E '^[0-9]+ Tests 0 Failures 0 Ignored' esp-emulator.log
+          fi
