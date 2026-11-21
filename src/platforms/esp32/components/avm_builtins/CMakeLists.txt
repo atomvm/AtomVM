@@ -20,6 +20,7 @@
 
 set(AVM_BUILTIN_COMPONENT_SRCS
     "dac_driver.c"
+    "espnow_driver.c"
     "gpio_driver.c"
     "i2c_driver.c"
     "i2c_resource.c"
