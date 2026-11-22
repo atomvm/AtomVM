@@ -25,6 +25,8 @@
 
 -export_record([nodef_local]).
 -record #pair{a, b}.
+-record #outer{x, i}.
+-record #inner{i}.
 -record #nodef_local{a, b}.
 -record(#point{x = 0, y = 0, z = 0}).
 -record(#empty{}).
@@ -54,6 +56,7 @@ start() ->
     ok = test_bigint_default(),
     ok = test_ets_bag_record_keys(),
     ok = test_get_record_field_anonymous_id(),
+    ok = test_nested_anonymous_pattern(),
     ok = test_get_record_field_remote_checks(),
     ok = test_put_record_tuple_id_checks(),
     ok = test_is_record_opcodes(),
@@ -240,6 +243,21 @@ test_get_record_field_anonymous_id() ->
     {badfield, {{?MODULE, pair}, zz}} = catch_error(fun() -> P#_.zz end),
     {badrecord, 42} = catch_error(fun() -> (?MODULE:id(42))#_.a end),
     ok.
+
+%% The inner #_{} pattern must not reuse the record type tracked for the outer
+%% record: here `i' sits at a different position in each record.
+test_nested_anonymous_pattern() ->
+    Outer = ?MODULE:id(#outer{x = 1, i = #inner{i = found}}),
+    found = nested_i(Outer),
+    none = nested_i(?MODULE:id(#outer{x = 1, i = 42})),
+    none = nested_i(?MODULE:id(#pair{a = 1, b = 2})),
+    ok.
+
+nested_i(R) ->
+    case R of
+        #outer{i = #_{i = V}} -> V;
+        _ -> none
+    end.
 
 %% R#mod:name.field on exported/unexported records and on unknown fields.
 test_get_record_field_remote_checks() ->

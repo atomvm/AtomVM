@@ -1350,11 +1350,12 @@ add_label(
 
 get_regs_tracking(#state{regs = Regs}) -> Regs.
 
-%% @doc Record a type assertion for a VM x/y register. The assertion is
-%% invalidated automatically by the same hooks that invalidate `regs` tracking
-%% (writes to the VM register, C calls clobbering x regs, labels).
-set_vm_record_type(#state{regs = Regs} = State, VmLoc, Type) ->
-    State#state{regs = jit_regs:set_vm_type(Regs, VmLoc, Type)}.
+%% @doc Record a type assertion for a VM x/y register. This is a no-op on
+%% wasm32: unlike the native backends, wasm32 has no write tracking
+%% (`jit_regs:invalidate_vm_loc/2' is never called), so a recorded type would
+%% outlive the value held in the register until the next C call or label.
+set_vm_record_type(State, _VmLoc, _Type) ->
+    State.
 
 %% @doc Look up the type assertion previously recorded for a VM x/y register.
 get_vm_record_type(#state{regs = Regs}, VmLoc) ->

@@ -63,6 +63,13 @@ alloc_and_free_test() ->
     ?assertEqual(8, length(?BACKEND:available_regs(State2))),
     ok.
 
+%% wasm32 has no register write tracking, so a recorded VM record type would
+%% outlive the value written to the register. It must never be recorded.
+vm_record_type_not_tracked_test() ->
+    State0 = ?BACKEND:new(0, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:set_vm_record_type(State0, {x_reg, 0}, {record, outer}),
+    ?assertEqual(undefined, ?BACKEND:get_vm_record_type(State1, {x_reg, 0})).
+
 assert_all_native_free_test() ->
     State = ?BACKEND:new(0, jit_stream_binary, jit_stream_binary:new(0)),
     ?assertEqual(ok, ?BACKEND:assert_all_native_free(State)).
