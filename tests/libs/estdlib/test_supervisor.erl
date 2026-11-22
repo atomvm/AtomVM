@@ -20,11 +20,26 @@
 
 -module(test_supervisor).
 
--export([start/0, test/0, init/1, start_link/1, child_start/1]).
+-export([
+    start/0,
+    test/0,
+    init/1,
+    start_link/1,
+    child_start/1,
+    start_rest_worker/2,
+    start_slow_rest_worker/2,
+    start_simple_worker/2,
+    start_ignoring_worker/2,
+    start_unrestartable_worker/2,
+    start_stubborn_worker/2,
+    start_already_started_worker/2
+]).
 
+-spec start() -> ok.
 start() ->
     ok = test().
 
+-spec test() -> ok.
 test() ->
     ok = test_basic_supervisor(),
     ok = test_map_supervisor(),
@@ -36,6 +51,12 @@ test() ->
     ok = test_which_children(),
     ok = test_count_children(),
     ok = test_one_for_all(),
+    ok = test_rest_for_one(),
+    ok = test_simple_one_for_one(),
+    ok = test_simple_one_for_one_ignore_on_restart(),
+    ok = test_simple_one_for_one_terminate_restarting(),
+    ok = test_simple_one_for_one_start_child_error(),
+    ok = test_simple_one_for_one_terminate_dead_pid(),
     ok = test_crash_limits(),
     ok = try_again_restart(),
     ok = try_again_restart_shutdown(),
@@ -43,6 +64,9 @@ test() ->
     ok = test_failed_child_cleanup_releases_names(),
     ok = test_forged_restart_message(),
     ok = test_restart_survives_messages_one_for_all(),
+    ok = test_restart_survives_messages_rest_for_one(),
+    ok = test_rest_for_one_exit_while_stopping(),
+    ok = test_rest_for_one_kill_request_while_stopping(),
     ok = test_retry_survives_messages_one_for_one(),
     ok.
 
@@ -206,6 +230,7 @@ test_terminate_timeout() ->
         end,
     ok.
 
+-spec child_start(term()) -> ignore | {ok, pid()} | {ok, pid(), term()} | {error, term()} | term().
 child_start(ignore) ->
     ignore;
 child_start(start) ->
@@ -310,10 +335,15 @@ gate(Parent, Auto) ->
 %% Wait until the supervisor is blocked asking Gate for permission, queue a
 %% call to the supervisor, then let the start proceed with Allow.
 hold_gate_with_pending_call(SupPid, Gate, Allow) ->
+    hold_gate_with_pending_call(SupPid, Gate, Allow, []).
+
+%% Same, queueing Messages ahead of the call.
+hold_gate_with_pending_call(SupPid, Gate, Allow, Messages) ->
     receive
         {gate, Gate} -> ok
     after 2000 -> error({timeout, gate})
     end,
+    lists:foreach(fun(Message) -> SupPid ! Message end, Messages),
     Tag = make_ref(),
     SupPid ! {'$gen_call', {self(), Tag}, which_children},
     Gate ! {answer, Allow},
@@ -368,9 +398,11 @@ get_and_test_server() ->
     pong = gen_server:call(Pid, ping),
     Pid.
 
+-spec start_link(pid()) -> {ok, pid()} | ignore | {error, term()}.
 start_link(Parent) ->
     supervisor:start_link(?MODULE, {test_basic_supervisor, Parent}).
 
+-spec init(term()) -> {ok, {term(), [term()]}}.
 init({test_basic_supervisor, Parent}) ->
     ChildSpecs = [
         {test_child, {ping_pong_server, start_link, [Parent]}, transient, brutal_kill, worker, [
@@ -406,6 +438,95 @@ init({test_supervisor_order, Parent}) ->
     {ok, {{one_for_one, 10000, 3600}, ChildSpecs}};
 init({test_no_child, _Parent}) ->
     {ok, {#{strategy => one_for_one, intensity => 10000, period => 3600}, []}};
+init({test_rest_for_one, Parent}) ->
+    ChildSpecs = [
+        #{
+            id => Id,
+            start => {?MODULE, start_rest_worker, [Id, Parent]},
+            restart => permanent,
+            shutdown => brutal_kill,
+            type => worker,
+            modules => [?MODULE]
+        }
+     || Id <- [rest_a, rest_b, rest_c]
+    ],
+    {ok, {#{strategy => rest_for_one, intensity => 10, period => 60}, ChildSpecs}};
+init({test_rest_for_one_exit_while_stopping, Parent}) ->
+    Spec = fun(Id, Start, Shutdown) ->
+        #{
+            id => Id,
+            start => {?MODULE, Start, [Id, Parent]},
+            restart => permanent,
+            shutdown => Shutdown,
+            type => worker,
+            modules => [?MODULE]
+        }
+    end,
+    ChildSpecs = [
+        Spec(rest_a, start_rest_worker, brutal_kill),
+        Spec(rest_b, start_rest_worker, brutal_kill),
+        Spec(rest_c, start_slow_rest_worker, 2000)
+    ],
+    {ok, {#{strategy => rest_for_one, intensity => 10, period => 60}, ChildSpecs}};
+init({test_simple_one_for_one, Parent}) ->
+    Template = #{
+        id => dynamic,
+        start => {?MODULE, start_simple_worker, [Parent]},
+        restart => permanent,
+        shutdown => brutal_kill,
+        type => worker,
+        modules => [?MODULE]
+    },
+    {ok, {#{strategy => simple_one_for_one, intensity => 10, period => 60}, [Template]}};
+init({test_rest_for_one_kill_request, Parent}) ->
+    Spec = fun(Id, Start, Shutdown) ->
+        #{
+            id => Id,
+            start => {?MODULE, Start, [Id, Parent]},
+            restart => permanent,
+            shutdown => Shutdown,
+            type => worker,
+            modules => [?MODULE]
+        }
+    end,
+    ChildSpecs = [
+        Spec(rest_a, start_stubborn_worker, 300),
+        Spec(rest_b, start_rest_worker, brutal_kill),
+        Spec(rest_c, start_slow_rest_worker, 2000)
+    ],
+    {ok, {#{strategy => rest_for_one, intensity => 10, period => 60}, ChildSpecs}};
+init({test_simple_start_error, Parent}) ->
+    Template = #{
+        id => dynamic,
+        start => {?MODULE, start_already_started_worker, [Parent]},
+        restart => permanent,
+        shutdown => brutal_kill,
+        type => worker,
+        modules => [?MODULE]
+    },
+    {ok, {#{strategy => simple_one_for_one, intensity => 10, period => 60}, [Template]}};
+init({test_simple_ignore, Parent}) ->
+    Template = #{
+        id => dynamic,
+        start => {?MODULE, start_ignoring_worker, [Parent]},
+        restart => permanent,
+        shutdown => brutal_kill,
+        type => worker,
+        modules => [?MODULE]
+    },
+    {ok, {#{strategy => simple_one_for_one, intensity => 10, period => 60}, [Template]}};
+init({test_simple_restart_fails, Parent}) ->
+    Template = #{
+        id => dynamic,
+        start => {?MODULE, start_unrestartable_worker, [Parent]},
+        restart => permanent,
+        shutdown => brutal_kill,
+        type => worker,
+        modules => [?MODULE]
+    },
+    %% Every failed retry counts as a restart: keep the intensity out of reach
+    %% so the supervisor is still up when terminate_child/2 cancels the retry.
+    {ok, {#{strategy => simple_one_for_one, intensity => 1000, period => 60}, [Template]}};
 init({test_one_for_all, Parent}) ->
     ChildSpecs = [
         #{
@@ -679,6 +800,30 @@ test_restart_survives_messages_one_for_all() ->
     Gate ! stop,
     ok.
 
+%% Same with rest_for_one: a call or an unrelated 'EXIT' reaching the
+%% supervisor while the crashed child restarts must not cancel the restart of
+%% the children started after it.
+test_restart_survives_messages_rest_for_one() ->
+    Self = self(),
+    Gate = spawn(fun() -> gate(Self, 1) end),
+    Ref = make_ref(),
+    Name = test_restart_survives_messages_rest,
+    {ok, SupPid} = supervisor:start_link(
+        ?MODULE, {test_restart_stall, rest_for_one, Gate, Self, Ref, Name}
+    ),
+    Gated1 = wait_child_pid(Ref, gated),
+    Idle1 = wait_for_new_registered(Name, undefined, 20),
+    exit(Gated1, kill),
+    %% gated restarts first; an 'EXIT' and a call arrive while it is starting
+    ok = hold_gate_with_pending_call(SupPid, Gate, true, [{'EXIT', Gate, unrelated}]),
+    Gated2 = wait_child_pid(Ref, gated),
+    true = Gated2 =/= Gated1,
+    _Idle2 = wait_for_new_registered(Name, Idle1, 20),
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    Gate ! stop,
+    ok.
+
 %% A message reaching the supervisor while a child fails to restart must not
 %% cancel the retry.
 test_retry_survives_messages_one_for_one() ->
@@ -920,6 +1065,321 @@ try_again_one_for_all() ->
 
     process_flag(trap_exit, false),
     ok.
+
+-spec start_rest_worker(term(), pid()) -> {ok, pid()}.
+start_rest_worker(Id, Parent) ->
+    Pid = spawn_link(fun() ->
+        Parent ! {rest_started, Id, self()},
+        rest_worker_loop()
+    end),
+    {ok, Pid}.
+
+rest_worker_loop() ->
+    receive
+        crash -> exit(crashed);
+        stop -> ok
+    end.
+
+test_rest_for_one() ->
+    {ok, SupPid} = supervisor:start_link(?MODULE, {test_rest_for_one, self()}),
+    {rest_a, PidA} = recv_rest_started(rest_a),
+    {rest_b, PidB} = recv_rest_started(rest_b),
+    {rest_c, _PidC} = recv_rest_started(rest_c),
+    %% Crash the middle child: rest_b and rest_c must restart, rest_a must not.
+    PidB ! crash,
+    {rest_b, NewPidB} = recv_rest_started(rest_b),
+    {rest_c, _NewPidC} = recv_rest_started(rest_c),
+    true = is_pid(NewPidB),
+    true = NewPidB =/= PidB,
+    %% rest_a was started before the crashed child and must be left running.
+    ok = recv_no_rest_started(rest_a),
+    true = is_process_alive(PidA),
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    ok.
+
+-spec start_slow_rest_worker(term(), pid()) -> {ok, pid()}.
+start_slow_rest_worker(Id, Parent) ->
+    Pid = spawn_link(fun() ->
+        process_flag(trap_exit, true),
+        Parent ! {rest_started, Id, self()},
+        receive
+            {'EXIT', _From, _Reason} -> timer:sleep(500)
+        end
+    end),
+    {ok, Pid}.
+
+%% A sibling started before the crashed child may exit while the children
+%% after the crashed one are being stopped. Its 'EXIT' must not be swallowed:
+%% the supervisor has to restart it as well.
+test_rest_for_one_exit_while_stopping() ->
+    {ok, SupPid} = supervisor:start_link(
+        ?MODULE, {test_rest_for_one_exit_while_stopping, self()}
+    ),
+    {rest_a, PidA} = recv_rest_started(rest_a),
+    {rest_b, PidB} = recv_rest_started(rest_b),
+    {rest_c, _PidC} = recv_rest_started(rest_c),
+    %% rest_c takes 500 ms to stop: kill rest_a while the supervisor waits.
+    PidB ! crash,
+    timer:sleep(100),
+    exit(PidA, kill),
+    {rest_a, NewPidA} = recv_rest_started(rest_a),
+    true = NewPidA =/= PidA,
+    ok = wait_all_rest_alive(SupPid, 50),
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    ok.
+
+%% A kill request for a sibling started before the crashed child (here the
+%% shutdown timeout of a pending terminate_child/2) must not be lost while the
+%% children after the crashed one are being stopped.
+test_rest_for_one_kill_request_while_stopping() ->
+    %% Earlier tests may leave notifications behind: they would hand us stale pids.
+    ok = flush_rest_started(),
+    {ok, SupPid} = supervisor:start_link(
+        ?MODULE, {test_rest_for_one_kill_request, self()}
+    ),
+    {rest_a, PidA} = recv_rest_started(rest_a),
+    {rest_b, PidB} = recv_rest_started(rest_b),
+    {rest_c, _PidC} = recv_rest_started(rest_c),
+    Self = self(),
+    %% rest_a ignores the shutdown signal: it is killed after 300 ms.
+    spawn(fun() -> Self ! {terminated, supervisor:terminate_child(SupPid, rest_a)} end),
+    timer:sleep(50),
+    %% Make the supervisor stop rest_c (500 ms) while rest_a's timeout expires.
+    PidB ! crash,
+    ok =
+        receive
+            {terminated, Result} -> Result
+        after 3000 -> error(terminate_child_never_returned)
+        end,
+    false = is_process_alive(PidA),
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    ok.
+
+wait_all_rest_alive(SupPid, 0) ->
+    error({rest_children_not_alive, supervisor:which_children(SupPid)});
+wait_all_rest_alive(SupPid, N) ->
+    Children = supervisor:which_children(SupPid),
+    Alive = [Id || {Id, Pid, _, _} <- Children, is_pid(Pid), is_process_alive(Pid)],
+    case lists:sort(Alive) of
+        [rest_a, rest_b, rest_c] ->
+            ok;
+        _ ->
+            timer:sleep(100),
+            wait_all_rest_alive(SupPid, N - 1)
+    end.
+
+flush_rest_started() ->
+    receive
+        {rest_started, _Id, _Pid} -> flush_rest_started()
+    after 0 -> ok
+    end.
+
+recv_rest_started(Id) ->
+    receive
+        {rest_started, Id, Pid} -> {Id, Pid}
+    after 2000 -> error({timeout, {rest_started, Id}})
+    end.
+
+recv_no_rest_started(Id) ->
+    receive
+        {rest_started, Id, _Pid} -> error({unexpected_restart, Id})
+    after 200 -> ok
+    end.
+
+-spec start_simple_worker(pid(), term()) -> {ok, pid()}.
+start_simple_worker(Parent, N) ->
+    Pid = spawn_link(fun() ->
+        Parent ! {simple_started, N, self()},
+        simple_worker_loop()
+    end),
+    {ok, Pid}.
+
+simple_worker_loop() ->
+    receive
+        crash -> exit(crashed);
+        stop -> ok
+    end.
+
+test_simple_one_for_one() ->
+    {ok, SupPid} = supervisor:start_link(?MODULE, {test_simple_one_for_one, self()}),
+    {ok, Pid1} = supervisor:start_child(SupPid, [1]),
+    {simple_started, 1, Pid1} = recv_simple_started(1),
+    {ok, Pid2} = supervisor:start_child(SupPid, [2]),
+    {simple_started, 2, Pid2} = recv_simple_started(2),
+    %% which_children reports dynamic children with an undefined id
+    Children = supervisor:which_children(SupPid),
+    2 = length(Children),
+    [{undefined, _, worker, [?MODULE]}, {undefined, _, worker, [?MODULE]}] = Children,
+    %% simple_one_for_one has a single child spec (the template), so specs is
+    %% always 1 regardless of the number of dynamic children.
+    [{specs, 1}, {active, 2}, {supervisors, 0}, {workers, 2}] = supervisor:count_children(SupPid),
+    %% id-based operations are invalid for simple_one_for_one
+    {error, simple_one_for_one} = supervisor:delete_child(SupPid, whatever),
+    {error, simple_one_for_one} = supervisor:restart_child(SupPid, whatever),
+    {error, simple_one_for_one} = supervisor:terminate_child(SupPid, not_a_pid),
+    %% terminate one dynamic child by pid
+    ok = supervisor:terminate_child(SupPid, Pid1),
+    [{undefined, _, worker, [?MODULE]}] = supervisor:which_children(SupPid),
+    %% crashing a permanent dynamic child restarts it with its own args ([2])
+    Pid2 ! crash,
+    {simple_started, 2, NewPid2} = recv_simple_started(2),
+    true = is_pid(NewPid2),
+    true = NewPid2 =/= Pid2,
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    ok.
+
+-spec start_ignoring_worker(pid(), term()) -> term().
+start_ignoring_worker(Parent, N) ->
+    case erlang:get({ignore_next, N}) of
+        true ->
+            Parent ! {ignored, N},
+            ignore;
+        _ ->
+            erlang:put({ignore_next, N}, true),
+            start_simple_worker(Parent, N)
+    end.
+
+-spec start_stubborn_worker(term(), pid()) -> {ok, pid()}.
+start_stubborn_worker(Id, Parent) ->
+    Pid = spawn_link(fun() ->
+        process_flag(trap_exit, true),
+        Parent ! {rest_started, Id, self()},
+        stubborn_loop()
+    end),
+    {ok, Pid}.
+
+stubborn_loop() ->
+    receive
+        _ -> stubborn_loop()
+    end.
+
+-spec start_already_started_worker(pid(), term()) -> {error, {already_started, pid()}}.
+start_already_started_worker(Parent, _N) ->
+    {error, {already_started, Parent}}.
+
+-spec start_unrestartable_worker(pid(), term()) -> term().
+start_unrestartable_worker(Parent, N) ->
+    case erlang:get({fail_next, N}) of
+        true ->
+            Parent ! {restart_attempted, N},
+            %% Slow the retry loop so the child is observably parked in
+            %% {restarting, Pid} rather than racing through its intensity.
+            receive
+            after 250 -> ok
+            end,
+            {error, always_fails};
+        _ ->
+            erlang:put({fail_next, N}, true),
+            start_simple_worker(Parent, N)
+    end.
+
+test_simple_one_for_one_ignore_on_restart() ->
+    {ok, SupPid} = supervisor:start_link(?MODULE, {test_simple_ignore, self()}),
+    {ok, Pid} = supervisor:start_child(SupPid, [1]),
+    {simple_started, 1, Pid} = recv_simple_started(1),
+    [{undefined, Pid, worker, [?MODULE]}] = supervisor:which_children(SupPid),
+    Pid ! crash,
+    ok = recv_ignored(1),
+    %% OTP kept the child with pid = undefined until OTP 27.
+    case get_otp_version() of
+        Version when Version =:= atomvm orelse Version >= 27 ->
+            ok = wait_no_children(SupPid, 50),
+            [{specs, 1}, {active, 0}, {supervisors, 0}, {workers, 0}] = supervisor:count_children(
+                SupPid
+            );
+        _ ->
+            ok
+    end,
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    ok.
+
+%% OTP replies with the start function's error unchanged.
+test_simple_one_for_one_start_child_error() ->
+    {ok, SupPid} = supervisor:start_link(?MODULE, {test_simple_start_error, self()}),
+    Self = self(),
+    {error, {already_started, Self}} = supervisor:start_child(SupPid, [1]),
+    [] = supervisor:which_children(SupPid),
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    ok.
+
+%% OTP returns not_found only for a live pid that is not a child; a pid that
+%% is gone (terminated, exited or replaced by a restart) yields ok.
+test_simple_one_for_one_terminate_dead_pid() ->
+    {ok, SupPid} = supervisor:start_link(?MODULE, {test_simple_one_for_one, self()}),
+    {ok, Pid1} = supervisor:start_child(SupPid, [1]),
+    {simple_started, 1, Pid1} = recv_simple_started(1),
+    ok = supervisor:terminate_child(SupPid, Pid1),
+    ok = supervisor:terminate_child(SupPid, Pid1),
+    %% A pid replaced by a restart.
+    {ok, Pid2} = supervisor:start_child(SupPid, [2]),
+    {simple_started, 2, Pid2} = recv_simple_started(2),
+    Pid2 ! crash,
+    {simple_started, 2, NewPid2} = recv_simple_started(2),
+    true = NewPid2 =/= Pid2,
+    ok = supervisor:terminate_child(SupPid, Pid2),
+    %% A live pid that is not a child.
+    {error, not_found} = supervisor:terminate_child(SupPid, self()),
+    [{undefined, NewPid2, worker, [?MODULE]}] = supervisor:which_children(SupPid),
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    ok.
+
+test_simple_one_for_one_terminate_restarting() ->
+    {ok, SupPid} = supervisor:start_link(?MODULE, {test_simple_restart_fails, self()}),
+    {ok, Pid} = supervisor:start_child(SupPid, [1]),
+    {simple_started, 1, Pid} = recv_simple_started(1),
+    Pid ! crash,
+    ok = recv_restart_attempted(1),
+    ok = supervisor:terminate_child(SupPid, Pid),
+    [] = supervisor:which_children(SupPid),
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    ok.
+
+get_otp_version() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            list_to_integer(erlang:system_info(otp_release));
+        _ ->
+            atomvm
+    end.
+
+recv_ignored(N) ->
+    receive
+        {ignored, N} -> ok
+    after 2000 -> error({timeout, {ignored, N}})
+    end.
+
+recv_restart_attempted(N) ->
+    receive
+        {restart_attempted, N} -> ok
+    after 2000 -> error({timeout, {restart_attempted, N}})
+    end.
+
+wait_no_children(_SupPid, 0) ->
+    error(children_not_dropped);
+wait_no_children(SupPid, N) ->
+    case supervisor:which_children(SupPid) of
+        [] ->
+            ok;
+        _ ->
+            receive
+            after 20 -> ok
+            end,
+            wait_no_children(SupPid, N - 1)
+    end.
+
+recv_simple_started(N) ->
+    receive
+        {simple_started, N, Pid} -> {simple_started, N, Pid}
+    after 2000 -> error({timeout, {simple_started, N}})
+    end.
 
 wait_child_pid(Ref, Name) ->
     receive

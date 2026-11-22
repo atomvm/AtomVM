@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `{error, {timeout, RestData}}`) or made asynchronous (`{select, SelectInfo}` or
   `{select, {SelectInfo, RestData}}`, followed by a `{'$socket', Socket, select, SelectHandle}`
   message when the socket is writable again)
+- Added support for `rest_for_one` and `simple_one_for_one` supervisor restart strategies
 
 ### Changed
 - With BSD sockets (generic_unix, ESP32), `socket:connect/2` returns the reason a connect failed,
