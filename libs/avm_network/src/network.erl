@@ -830,13 +830,17 @@ init(Config) ->
         end,
     {ok,
         #state{
-            config = Config, port = Port, ref = Ref, sta_state = Status, eth_state = EthStatus
+            config = seal_secrets(Config),
+            port = Port,
+            ref = Ref,
+            sta_state = Status,
+            eth_state = EthStatus
         },
         {continue, start_port}}.
 
 %% @hidden
 handle_continue(start_port, #state{config = Config, port = Port, ref = Ref} = State) ->
-    Port ! {self(), Ref, {start, Config}},
+    Port ! {self(), Ref, {start, reveal_secrets(Config)}},
     receive
         {Ref, ok} ->
             {noreply, State};
@@ -849,16 +853,17 @@ handle_call(halt_sta, _From, #state{ref = Ref} = State) ->
     network_port ! {self(), Ref, halt_sta},
     wait_halt_sta_reply(Ref, State#state{sta_state = disconnecting});
 handle_call(connect, _From, #state{config = Config, ref = Ref} = State) ->
-    network_port ! {self(), Ref, {connect, Config}},
+    network_port ! {self(), Ref, {connect, reveal_secrets(Config)}},
     wait_connect_reply(Ref, Config, State#state{sta_state = connecting});
 handle_call({connect, Config}, _From, #state{config = OldConfig, ref = Ref} = State) ->
     case update_config(OldConfig, Config) of
         {error, Reason} ->
             {reply, {error, Reason}, State};
         NewConfig ->
-            network_port ! {self(), Ref, {connect, NewConfig}},
-            wait_connect_reply(Ref, NewConfig, State#state{
-                sta_state = connecting, config = NewConfig
+            network_port ! {self(), Ref, {connect, reveal_secrets(NewConfig)}},
+            Sealed = seal_secrets(NewConfig),
+            wait_connect_reply(Ref, Sealed, State#state{
+                sta_state = connecting, config = Sealed
             })
     end;
 handle_call(sta_status, _From, State) ->
@@ -1038,6 +1043,39 @@ wait_connect_reply(Ref, NewConfig, State) ->
     after 60000 ->
         {reply, {error, timeout}, State#state{sta_state = disconnected}}
     end.
+
+%% @private
+%% The passwords of the start options (psk in sta and ap), kept in this process's state as
+%% closures: a crash report prints a fun as #Fun<...>, without what it captured. They are revealed
+%% only in the messages to the driver.
+seal_secrets(Config) ->
+    map_secrets(Config, fun
+        (Psk) when is_function(Psk, 0) -> Psk;
+        (Psk) -> fun() -> Psk end
+    end).
+
+%% @private
+reveal_secrets(Config) ->
+    map_secrets(Config, fun
+        (Psk) when is_function(Psk, 0) -> Psk();
+        (Psk) -> Psk
+    end).
+
+%% @private
+map_secrets(Config, Fun) ->
+    [map_secret(Entry, Fun) || Entry <- Config].
+
+%% @private
+map_secret({Mode, Options}, Fun) when (Mode =:= sta orelse Mode =:= ap) andalso is_list(Options) ->
+    {Mode, [
+        case Option of
+            {psk, Psk} -> {psk, Fun(Psk)};
+            Other -> Other
+        end
+     || Option <- Options
+    ]};
+map_secret(Entry, _Fun) ->
+    Entry.
 
 %% @private
 wait_halt_sta_reply(Ref, State) ->
