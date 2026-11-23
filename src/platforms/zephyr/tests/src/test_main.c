@@ -6,6 +6,8 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+#include <zephyr/kernel.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/ztest.h>
 #include <zephyr/devicetree.h>
 #include <stddef.h>
@@ -327,3 +329,61 @@ ZTEST(atomvm_tests, test_flash_map)
     zassert_equal(ret_value, OK_ATOM, "test_flash_map did not return 'ok'");
 }
 #endif
+
+struct signal_poll_test_ctx
+{
+    struct k_work_delayable work;
+    GlobalContext *glb;
+    atomic_t fired;
+};
+
+static void signal_poll_test_work_handler(struct k_work *work)
+{
+    struct k_work_delayable *dwork = k_work_delayable_from_work(work);
+    struct signal_poll_test_ctx *ctx = CONTAINER_OF(dwork, struct signal_poll_test_ctx, work);
+    atomic_set(&ctx->fired, 1);
+    sys_signal(ctx->glb);
+}
+
+static void assert_signal_wakes_poll(struct signal_poll_test_ctx *ctx, int timeout_ms, const char *label)
+{
+    struct k_work_sync sync;
+    sys_poll_events(ctx->glb, SYS_POLL_EVENTS_DO_NOT_WAIT);
+    atomic_set(&ctx->fired, 0);
+
+    int rc = k_work_schedule(&ctx->work, K_MSEC(50));
+    if (rc < 0) {
+        globalcontext_destroy(ctx->glb);
+        zassert_true(false, "Failed to schedule %s signal work (%d)", label, rc);
+    }
+
+    int64_t start_ms = k_uptime_get();
+    sys_poll_events(ctx->glb, timeout_ms);
+    int64_t elapsed_ms = k_uptime_get() - start_ms;
+
+    (void) k_work_cancel_delayable_sync(&ctx->work, &sync);
+
+    bool fired = atomic_get(&ctx->fired) == 1;
+    if (!fired || elapsed_ms >= 1000) {
+        globalcontext_destroy(ctx->glb);
+    }
+    zassert_true(fired, "Delayed work did not fire before %s poll returned", label);
+    zassert_true(elapsed_ms < 1000, "sys_signal did not wake %s sys_poll_events early (elapsed=%ld ms)", label, (long) elapsed_ms);
+}
+
+ZTEST(atomvm_tests, test_sys_signal_wakes_poll)
+{
+    GlobalContext *glb = globalcontext_new();
+    zassert_not_null(glb, "Failed to create GlobalContext");
+
+    struct signal_poll_test_ctx ctx = {
+        .glb = glb,
+        .fired = ATOMIC_INIT(0)
+    };
+    k_work_init_delayable(&ctx.work, signal_poll_test_work_handler);
+
+    assert_signal_wakes_poll(&ctx, 2000, "finite");
+    assert_signal_wakes_poll(&ctx, SYS_POLL_EVENTS_WAIT_FOREVER, "infinite");
+
+    globalcontext_destroy(glb);
+}

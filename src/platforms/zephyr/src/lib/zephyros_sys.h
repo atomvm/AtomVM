@@ -117,8 +117,15 @@ struct EventListener
     struct EventListener *(*handler)(GlobalContext *glb, struct EventListener *listener);
 };
 
+#if defined(CONFIG_NET_SOCKETS) && defined(CONFIG_EVENTFD)
+#define AVM_ZEPHYR_USE_EVENTFD_SIGNAL 1
+#endif
+
 #if defined(CONFIG_NET_SOCKETS)
 #include <poll.h>
+#endif
+#if !defined(AVM_ZEPHYR_USE_EVENTFD_SIGNAL)
+#include <zephyr/kernel.h>
 #endif
 #include <erl_nif.h>
 
@@ -129,8 +136,10 @@ struct ZephyrPlatformData
     int listeners_poll_count;
     int select_events_poll_count;
 #endif
-#if defined(CONFIG_EVENTFD)
+#if defined(AVM_ZEPHYR_USE_EVENTFD_SIGNAL)
     int signal_fd;
+#else
+    struct k_sem signal_sem;
 #endif
     ErlNifResourceType *zephyr_mounted_fs_resource_type;
 };

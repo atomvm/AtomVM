@@ -38,7 +38,7 @@
 #include <sys/select.h>
 #endif
 
-#if defined(CONFIG_EVENTFD)
+#if defined(AVM_ZEPHYR_USE_EVENTFD_SIGNAL)
 #include <sys/eventfd.h>
 #include <unistd.h>
 #endif
@@ -130,10 +130,15 @@ void sys_init_platform(GlobalContext *glb)
     platform->listeners_poll_count = -1;
     platform->select_events_poll_count = -1;
 #endif
-#if defined(CONFIG_EVENTFD)
+#if defined(AVM_ZEPHYR_USE_EVENTFD_SIGNAL)
     platform->signal_fd = eventfd(0, EFD_NONBLOCK);
     if (platform->signal_fd < 0) {
         AVM_LOGE(TAG, "Failed to create eventfd");
+        AVM_ABORT();
+    }
+#else
+    if (k_sem_init(&platform->signal_sem, 0, 1) != 0) {
+        AVM_LOGE(TAG, "Failed to initialize signal semaphore");
         AVM_ABORT();
     }
 #endif
@@ -145,7 +150,7 @@ void sys_free_platform(GlobalContext *glb)
 {
     struct ZephyrPlatformData *platform = glb->platform_data;
     if (platform) {
-#if defined(CONFIG_EVENTFD)
+#if defined(AVM_ZEPHYR_USE_EVENTFD_SIGNAL)
         if (platform->signal_fd >= 0) {
             close(platform->signal_fd);
         }
@@ -160,16 +165,34 @@ void sys_free_platform(GlobalContext *glb)
 
 void sys_signal(GlobalContext *glb)
 {
-#if defined(CONFIG_EVENTFD)
     struct ZephyrPlatformData *platform = glb->platform_data;
-    if (platform && platform->signal_fd >= 0) {
+    if (!platform) {
+        return;
+    }
+#if defined(AVM_ZEPHYR_USE_EVENTFD_SIGNAL)
+    if (platform->signal_fd >= 0) {
         eventfd_t val = 1;
         (void) eventfd_write(platform->signal_fd, val);
     }
 #else
-    UNUSED(glb);
+    k_sem_give(&platform->signal_sem);
 #endif
 }
+
+#if !defined(AVM_ZEPHYR_USE_EVENTFD_SIGNAL)
+static void sys_wait_signal_sem(struct ZephyrPlatformData *platform, int timeout_ms)
+{
+    k_timeout_t wait_timeout;
+    if (timeout_ms == SYS_POLL_EVENTS_DO_NOT_WAIT) {
+        wait_timeout = K_NO_WAIT;
+    } else if (timeout_ms < 0) {
+        wait_timeout = K_FOREVER;
+    } else {
+        wait_timeout = K_MSEC(timeout_ms);
+    }
+    (void) k_sem_take(&platform->signal_sem, wait_timeout);
+}
+#endif
 
 void sys_poll_events(GlobalContext *glb, int timeout_ms)
 {
@@ -184,7 +207,7 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
     int select_events_poll_count = platform->select_events_poll_count;
 
     int signal_poll_count = 0;
-#if defined(CONFIG_EVENTFD)
+#if defined(AVM_ZEPHYR_USE_EVENTFD_SIGNAL)
     signal_poll_count = 1;
 #endif
 
@@ -227,7 +250,7 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
         fds = new_fds;
         platform->fds = fds;
 
-#if defined(CONFIG_EVENTFD)
+#if defined(AVM_ZEPHYR_USE_EVENTFD_SIGNAL)
         fds[0].fd = platform->signal_fd;
         fds[0].events = POLLIN;
         fds[0].revents = 0;
@@ -268,12 +291,12 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
     }
 
     int poll_count = signal_poll_count + listeners_poll_count + select_events_poll_count;
+#if !defined(AVM_ZEPHYR_USE_EVENTFD_SIGNAL)
     if (poll_count == 0) {
-        if (timeout_ms > 0) {
-            k_msleep(timeout_ms);
-        }
+        sys_wait_signal_sem(platform, timeout_ms);
         return;
     }
+#endif
 
     int nb_descriptors = poll(fds, poll_count, timeout_ms);
     if (nb_descriptors <= 0) {
@@ -281,7 +304,7 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
     }
 
     fd_index = 0;
-#if defined(CONFIG_EVENTFD)
+#if defined(AVM_ZEPHYR_USE_EVENTFD_SIGNAL)
     if (nb_descriptors > 0) {
         if (fds[0].revents & POLLIN) {
             eventfd_t ignored;
@@ -318,9 +341,11 @@ void sys_poll_events(GlobalContext *glb, int timeout_ms)
         select_event_notify(fds[fd_index].fd, is_read, is_write, glb);
     }
 #else
-    if (timeout_ms > 0) {
-        k_msleep(timeout_ms);
+    struct ZephyrPlatformData *platform = glb->platform_data;
+    if (UNLIKELY(!platform)) {
+        return;
     }
+    sys_wait_signal_sem(platform, timeout_ms);
 #endif
 }
 
