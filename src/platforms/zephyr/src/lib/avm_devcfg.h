@@ -20,6 +20,8 @@
 #ifndef _AVM_DEVCFG_H_
 #define _AVM_DEVCFG_H_
 
+#include <stdint.h>
+
 #include <zephyr/autoconf.h>
 #include <zephyr/devicetree.h>
 
@@ -36,7 +38,9 @@
 #define AVM_FLASH_SIZE_BYTES ((CONFIG_FLASH_SIZE) * 1024U)
 #endif
 
-#if (AVM_FLASH_SIZE_BYTES <= (512U * 1024U))
+#if defined(CONFIG_AVM_APP_ADDRESS) && (CONFIG_AVM_APP_ADDRESS != 0)
+#define AVM_APP_ADDRESS (CONFIG_AVM_APP_ADDRESS)
+#elif (AVM_FLASH_SIZE_BYTES <= (512U * 1024U))
 #define AVM_APP_ADDRESS ((CONFIG_FLASH_BASE_ADDRESS) + 0x60000U)
 #elif (AVM_FLASH_SIZE_BYTES <= (1024U * 1024U))
 #define AVM_APP_ADDRESS ((CONFIG_FLASH_BASE_ADDRESS) + 0x80000U)
@@ -44,7 +48,12 @@
 #define AVM_APP_ADDRESS ((CONFIG_FLASH_BASE_ADDRESS) + 0x100000U)
 #endif
 
-
-#define CFG_FLASH_END ((uint32_t) ((CONFIG_FLASH_BASE_ADDRESS) + AVM_FLASH_SIZE_BYTES))
+#if defined(CONFIG_AVM_APP_SIZE) && (CONFIG_AVM_APP_SIZE != 0)
+#define AVM_APP_MAX_SIZE ((uint32_t) (CONFIG_AVM_APP_SIZE))
+#define CFG_FLASH_END ((uintptr_t) (AVM_APP_ADDRESS) + (uintptr_t) (CONFIG_AVM_APP_SIZE))
+#else
+#define CFG_FLASH_END ((uintptr_t) (CONFIG_FLASH_BASE_ADDRESS) + (uintptr_t) AVM_FLASH_SIZE_BYTES)
+#define AVM_APP_MAX_SIZE ((uint32_t) (CFG_FLASH_END - (uintptr_t) (AVM_APP_ADDRESS)))
+#endif
 
 #endif /* _AVM_DEVCFG_H_ */

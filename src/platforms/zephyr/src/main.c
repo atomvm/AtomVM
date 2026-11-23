@@ -47,7 +47,6 @@
 #include "lib/zephyros_sys.h"
 
 #define AVM_ADDRESS (AVM_APP_ADDRESS)
-#define AVM_FLASH_END (CFG_FLASH_END)
 
 #define TAG "AtomVM"
 
@@ -89,7 +88,7 @@ int main()
     return 0;
 #endif
 
-    uint32_t size = (AVM_FLASH_END - AVM_ADDRESS);
+    uint32_t size = AVM_APP_MAX_SIZE;
     const void *flashed_avm;
 
 #if defined(AVM_ZEPHYR_TEST_AVM)
@@ -103,7 +102,7 @@ int main()
         AVM_ABORT();
     }
 #else
-    flashed_avm = (const void *) AVM_ADDRESS;
+    flashed_avm = (const void *) (uintptr_t) AVM_ADDRESS;
 #endif
 
     uint32_t startup_beam_size;

@@ -58,6 +58,24 @@ config AVM_ENABLE_CRYPTO
     help
       Enable mbedTLS and PSA Cryptography support for AtomVM.
 
+config AVM_APP_ADDRESS
+    hex "Address or flash offset of the application AVM pack"
+    default 0x0
+    help
+      Address where AtomVM reads the application AVM pack when it is not at
+      a fixed offset of internal flash (e.g. loaded into RAM or mapped from
+      external SPI flash). On ESP32 targets, this is interpreted as a flash
+      offset passed to spi_flash_mmap; on other targets it is a memory-mapped
+      address. 0 derives the offset/address from the flash size. Boards
+      mapping the pack outside internal flash should also set AVM_APP_SIZE.
+
+config AVM_APP_SIZE
+    hex "Maximum size of the application AVM pack"
+    default 0x0
+    help
+      Maximum size in bytes of the application AVM pack region at
+      AVM_APP_ADDRESS. 0 means up to the end of internal flash.
+
 endmenu
 
 # Override defaults of Zephyr options when AVM_ENABLE_WIFI is active
