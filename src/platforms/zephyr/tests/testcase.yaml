@@ -1,0 +1,83 @@
+#
+# This file is part of AtomVM.
+#
+# Copyright 2026 Peter M <petermm@gmail.com>
+#
+# SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+tests:
+  atomvm.zephyr.tests:
+    tags:
+      - atomvm
+      - zephyr
+      - qemu
+    platform_allow:
+      - qemu_x86_64
+      - native_sim/native/64
+    integration_platforms:
+      - qemu_x86_64
+      - native_sim/native/64
+    harness: ztest
+    timeout: 30
+    extra_configs:
+      - CONFIG_FILE_SYSTEM=y
+      - CONFIG_FAT_FILESYSTEM_ELM=y
+      - CONFIG_DISK_ACCESS=y
+      - CONFIG_DISK_DRIVERS=y
+      - CONFIG_DISK_DRIVER_RAM=y
+      - CONFIG_FILE_SYSTEM_MKFS=y
+  atomvm.zephyr.build_esp32:
+    tags:
+      - atomvm
+      - zephyr
+      - esp32
+    platform_allow:
+      - esp32_devkitc/esp32/procpu
+      - esp32s3_devkitc/esp32s3/procpu
+      - esp32c3_devkitm/esp32c3
+    integration_platforms:
+      - esp32_devkitc/esp32/procpu
+    build_only: true
+  atomvm.zephyr.i2c_native_sim:
+    tags:
+      - atomvm
+      - zephyr
+      - i2c
+      - native_sim
+    platform_allow:
+      - native_sim/native/64
+    integration_platforms:
+      - native_sim/native/64
+    harness: ztest
+    extra_args: AVM_ZEPHYR_NATIVE_SIM_I2C_TEST=ON
+    timeout: 30
+  atomvm.zephyr.i2c_native_sim.asan_ubsan:
+    tags:
+      - atomvm
+      - zephyr
+      - i2c
+      - native_sim
+      - asan
+      - ubsan
+    platform_allow:
+      - native_sim/native/64
+    integration_platforms:
+      - native_sim/native/64
+    harness: ztest
+    extra_args: AVM_ZEPHYR_NATIVE_SIM_I2C_TEST=ON
+    extra_configs:
+      - CONFIG_ASAN=y
+      - CONFIG_UBSAN=y
+    timeout: 30
+  atomvm.zephyr.retention_rp2040:
+    tags:
+      - atomvm
+      - zephyr
+      - retention
+      - rp2040
+    platform_allow:
+      - rpi_pico/rp2040
+    integration_platforms:
+      - rpi_pico/rp2040
+    build_only: true
