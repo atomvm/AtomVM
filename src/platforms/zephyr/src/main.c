@@ -70,6 +70,21 @@ extern const uint8_t zephyr_test_modules_avm[];
 extern const size_t zephyr_test_modules_avm_size;
 #endif
 
+#if !defined(AVM_ZEPHYR_BOOT_TEST)
+static void append_const_avmpack(GlobalContext *glb, const void *data, uint32_t size)
+{
+    struct ConstAVMPack *avmpack_data = malloc(sizeof(struct ConstAVMPack));
+    if (IS_NULL_PTR(avmpack_data)) {
+        AVM_LOGE(TAG, "Memory error: Cannot allocate AVMPackData.");
+        AVM_ABORT();
+    }
+    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info, size);
+    avmpack_data->base.data = data;
+    avmpack_data->base.in_use = true;
+    synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
+}
+#endif
+
 int main()
 {
     printk("%s", ATOMVM_BANNER);
@@ -121,15 +136,35 @@ int main()
     AVM_LOGD(TAG, "Booting file mapped at: %p, size: %lu", flashed_avm, (unsigned long) startup_beam_size);
     AVM_LOGI(TAG, "Application size: %lu B, free flash space: %lu KiB", (unsigned long) startup_beam_size, (unsigned long) ((size - startup_beam_size) / 1024));
 
-    struct ConstAVMPack *avmpack_data = malloc(sizeof(struct ConstAVMPack));
-    if (IS_NULL_PTR(avmpack_data)) {
-        AVM_LOGE(TAG, "Memory error: Cannot allocate AVMPackData.");
+    append_const_avmpack(glb, flashed_avm, size);
+
+#if !defined(AVM_ZEPHYR_TEST_AVM) && defined(CONFIG_AVM_LIB_ADDRESS) && (CONFIG_AVM_LIB_ADDRESS != 0)
+    uint32_t lib_region_size = (uint32_t) CONFIG_AVM_LIB_SIZE;
+    const void *lib_avm = NULL;
+#if defined(CONFIG_SOC_FAMILY_ESPRESSIF_ESP32)
+    spi_flash_mmap_handle_t lib_mmap_handle;
+    esp_err_t lib_mmap_result = spi_flash_mmap(CONFIG_AVM_LIB_ADDRESS, lib_region_size, SPI_FLASH_MMAP_DATA, &lib_avm, &lib_mmap_handle);
+    if (lib_mmap_result != ESP_OK) {
+        AVM_LOGE(TAG, "Unable to map library AVM pack from flash offset 0x%lx: %d", (unsigned long) CONFIG_AVM_LIB_ADDRESS, lib_mmap_result);
         AVM_ABORT();
     }
-    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info, size);
-    avmpack_data->base.data = flashed_avm;
-    avmpack_data->base.in_use = true;
-    synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
+#else
+    lib_avm = (const void *) (uintptr_t) CONFIG_AVM_LIB_ADDRESS;
+#endif
+    uint32_t lib_avm_size = 0;
+    if (avmpack_compute_size(lib_avm, lib_region_size, &lib_avm_size)) {
+        append_const_avmpack(glb, lib_avm, lib_avm_size);
+        AVM_LOGI(TAG, "Library AVM pack mapped at %p (%lu B)", lib_avm, (unsigned long) lib_avm_size);
+    } else if (avmpack_is_valid(lib_avm, lib_region_size)) {
+        AVM_LOGE(TAG, "Truncated or corrupt library AVM pack at %p", lib_avm);
+        AVM_ABORT();
+    } else {
+#if defined(CONFIG_SOC_FAMILY_ESPRESSIF_ESP32)
+        spi_flash_munmap(lib_mmap_handle);
+#endif
+        AVM_LOGW(TAG, "No valid library AVM pack at %p", lib_avm);
+    }
+#endif
 
     Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
     globalcontext_insert_module(glb, mod);

@@ -76,6 +76,22 @@ config AVM_APP_SIZE
       Maximum size in bytes of the application AVM pack region at
       AVM_APP_ADDRESS. 0 means up to the end of internal flash.
 
+config AVM_LIB_ADDRESS
+    hex "Address or flash offset of a library AVM pack"
+    default 0x0
+    help
+      Address of an optional library AVM pack (e.g. atomvmlib) loaded next to
+      the application pack so the application pack only needs its own modules.
+      Modules are looked up in the application pack first. On ESP32 targets,
+      this is interpreted as a flash offset passed to spi_flash_mmap; on other
+      targets it is a memory-mapped address. 0 disables library pack loading.
+
+config AVM_LIB_SIZE
+    hex "Maximum size of the library AVM pack"
+    default 0x100000
+    help
+      Maximum size in bytes of the library AVM pack region at AVM_LIB_ADDRESS.
+
 endmenu
 
 # Override defaults of Zephyr options when AVM_ENABLE_WIFI is active
