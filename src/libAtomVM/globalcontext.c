@@ -252,8 +252,6 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
     smp_scheduler_join_all();
 #endif
 
-    sys_free_platform(glb);
-
     struct ListHead *item;
     struct ListHead *tmp;
 
@@ -333,6 +331,12 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
     synclist_destroy(&glb->processes_table);
 
     atom_table_destroy(glb->atom_table);
+
+    // Free the platform data last: destroying the processes above fires the
+    // monitors of the resources they own (e.g. socket_down, which unregisters
+    // their select events), and the select event teardown reads the platform
+    // data.
+    sys_free_platform(glb);
 
     free(glb);
 }

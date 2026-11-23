@@ -196,6 +196,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rebuilding its poll set was not polled until another one was registered or unregistered
 - Fixed TLS connections with `verify_none` being limited to TLS 1.2 when built
   with MbedTLS 3.6.1 or later and TLS 1.3 support enabled
+- Fixed a use-after-free of the platform data at VM shutdown, when a process owning a
+  socket with a registered select is destroyed after the platform data was freed
 
 ## [0.7.0-beta.0] - 2026-09-28
 
