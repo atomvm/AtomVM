@@ -47,6 +47,7 @@
 #include <esp_netif.h>
 #include <esp_vfs.h>
 #include <esp_vfs_fat.h>
+#include <lwip/dns.h>
 #include <sdmmc_cmd.h>
 
 extern const uint8_t main_avm[] asm("_binary_esp32_test_modules_avm_start");
@@ -718,6 +719,41 @@ TEST_CASE("test_eth", "[test_run]")
     // Unlike the cases above, network:start/1 brings Ethernet up itself.
     term ret_value = avm_test_case("test_eth.beam");
     TEST_ASSERT(ret_value == OK_ATOM);
+}
+
+// Runs in the lwIP thread: the DNS servers belong to it.
+static esp_err_t seed_dns(void *ctx)
+{
+    UNUSED(ctx);
+    ip_addr_t main_dns = IPADDR4_INIT_BYTES(192, 0, 2, 53);
+    ip_addr_t backup_dns = IPADDR4_INIT_BYTES(198, 51, 100, 53);
+    dns_setserver(0, &main_dns);
+    dns_setserver(1, &backup_dns);
+    return ESP_OK;
+}
+
+static esp_err_t read_dns(void *ctx)
+{
+    ip_addr_t *servers = ctx;
+    servers[0] = *dns_getserver(0);
+    servers[1] = *dns_getserver(1);
+    return ESP_OK;
+}
+
+TEST_CASE("test_eth_static_dns", "[test_run]")
+{
+    // lwIP keeps one set of DNS servers for every interface: a fixed Ethernet
+    // address must leave the ones another interface (Wi-Fi, PPP) got alone.
+    TEST_ASSERT(esp_netif_init() == ESP_OK);
+    TEST_ASSERT(esp_netif_tcpip_exec(seed_dns, NULL) == ESP_OK);
+    term ret_value = avm_test_case("test_eth_static_dns.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+    ip_addr_t servers[2];
+    TEST_ASSERT(esp_netif_tcpip_exec(read_dns, servers) == ESP_OK);
+    ip_addr_t main_dns = IPADDR4_INIT_BYTES(192, 0, 2, 53);
+    ip_addr_t backup_dns = IPADDR4_INIT_BYTES(198, 51, 100, 53);
+    TEST_ASSERT(ip_addr_cmp(&servers[0], &main_dns));
+    TEST_ASSERT(ip_addr_cmp(&servers[1], &backup_dns));
 }
 
 TEST_CASE("test_eth_teardown", "[test_run]")
