@@ -61,6 +61,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   existing macOS 15 coverage is unchanged
 - `erlang:term_to_binary/1,2` and `erlang:binary_to_term/1,2` now process nested lists, tuples
   and maps iteratively
+- The `network` process keeps the `psk` of its `sta` and `ap` options in closures, so printing its
+  stored configuration (for example in a crash report of that process) no longer exposes those
+  passwords. Driver messages still carry them in plaintext, and this does not redact credentials in
+  pending `sta_connect/1` requests, caller error reports or other diagnostic data
 
 ### Removed
 - Removed support for BEAM files compiled by OTP 26 with the `no_init_yregs`, `no_make_fun3`,
