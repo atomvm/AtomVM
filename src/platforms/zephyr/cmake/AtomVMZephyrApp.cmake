@@ -68,10 +68,12 @@ endif()
 
 set(HAVE_CLOCK_SETTIME ON FORCE)
 set(HAVE_PLATFORM_ATOMIC_H ON CACHE BOOL "Platform has platform_atomic.h" FORCE)
-if(CONFIG_SOC_FAMILY_ESPRESSIF_ESP32 AND CONFIG_RISCV)
-    # Espressif RISC-V targets such as ESP32-C3 can pass libAtomVM's C11
-    # atomic compile check but fail to link __atomic_fetch_* helpers. Use
-    # Zephyr's platform atomic shim instead of advertising HAVE_ATOMIC.
+if(CONFIG_ATOMIC_OPERATIONS_C OR (CONFIG_SOC_FAMILY_ESPRESSIF_ESP32 AND CONFIG_RISCV))
+    # Targets without hardware atomic instructions (such as ESP32-C3 or
+    # LiteX VexRiscv without the A extension) can pass libAtomVM's C11
+    # atomic compile check under the toolchain default ISA but fail to link
+    # __atomic_fetch_* helpers. Use Zephyr's platform atomic shim instead
+    # of advertising HAVE_ATOMIC.
     set(ATOMIC_POINTER_LOCK_FREE_IS_TWO FALSE CACHE INTERNAL "Use Zephyr platform atomics" FORCE)
 endif()
 set(HAVE_RENAME "" CACHE INTERNAL "Have symbol rename" FORCE)
