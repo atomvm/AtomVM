@@ -74,4 +74,10 @@ if (AVM_USE_LIBSODIUM)
 endif()
 
 include(../../GetBootAVM.cmake)
+
+# ML-KEM-768 takes ~52 KB of flash on ESP32 once libsodium provides it.
+if (CONFIG_AVM_DISABLE_MLKEM)
+    target_compile_definitions(libAtomVM PUBLIC AVM_DISABLE_MLKEM)
+endif()
+
 partition_table_get_partition_info(boot_offset "--partition-name boot.avm" "offset")

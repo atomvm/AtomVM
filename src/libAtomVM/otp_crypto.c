@@ -63,7 +63,7 @@
 #include <sodium.h>
 #endif
 
-#if defined(HAVE_LIBSODIUM) && defined(crypto_kem_mlkem768_PUBLICKEYBYTES)
+#if defined(HAVE_LIBSODIUM) && defined(crypto_kem_mlkem768_PUBLICKEYBYTES) && !defined(AVM_DISABLE_MLKEM)
 #define CRYPTO_MLKEM768_AVAILABLE 1
 #endif
 

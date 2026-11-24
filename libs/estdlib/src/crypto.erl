@@ -384,7 +384,8 @@ crypto_final(_State) ->
 %%          * `ecdh' with `x25519 | secp256k1 | secp256r1 | secp384r1 | secp521r1 |
 %%            brainpoolP256r1 | brainpoolP384r1 | brainpoolP512r1'
 %%          * `eddsa' with `ed25519'
-%%          * `mlkem768' with `[]' (requires libsodium >= 1.0.22)
+%%          * `mlkem768' with `[]' (requires libsodium >= 1.0.22, and a build
+%%            without `AVM_DISABLE_MLKEM')
 %%
 %%          Keys are returned as raw key material, not PEM, DER, or `public_key'
 %%          records.
@@ -446,7 +447,8 @@ compute_key(_Type, _OtherPublicKey, _MyPrivateKey, _Param) ->
 %%          because that is the one libsodium provides; `mlkem512' and
 %%          `mlkem1024' raise `badarg'.
 %%
-%%          Only available on builds with libsodium >= 1.0.22.
+%%          Only available on builds with libsodium >= 1.0.22 that do not set
+%%          `AVM_DISABLE_MLKEM'.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec encapsulate_key(Type :: kem(), OthersPublicKey :: binary()) ->
@@ -474,7 +476,8 @@ encapsulate_key(_Type, _OthersPublicKey) ->
 %%          because that is the one libsodium provides; `mlkem512' and
 %%          `mlkem1024' raise `badarg'.
 %%
-%%          Only available on builds with libsodium >= 1.0.22.
+%%          Only available on builds with libsodium >= 1.0.22 that do not set
+%%          `AVM_DISABLE_MLKEM'.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec decapsulate_key(

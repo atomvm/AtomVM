@@ -1220,6 +1220,10 @@ libsodium to be installed on the build host (e.g. `libsodium-dev` on Debian/Ubun
 `espressif/libsodium` component on ESP32.  On generic UNIX, `-DAVM_STATIC_LIBSODIUM=ON` links
 `libsodium.a` into the AtomVM binary instead of depending on the shared library at run time.
 
+Set `-DAVM_DISABLE_MLKEM=ON` on generic UNIX or `CONFIG_AVM_DISABLE_MLKEM=y` on ESP32 to omit
+ML-KEM-768.  This disables `crypto:generate_key(mlkem768, [])`, `crypto:encapsulate_key/2`,
+and `crypto:decapsulate_key/3` without disabling Ed25519 or X25519.
+
 ```{important}
 **Increase the ESP32 task stack size when using libsodium.**
 The Ed25519 and X25519 operations backed by libsodium use a large amount of stack, more than the ESP32 main task is
