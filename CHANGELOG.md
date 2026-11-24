@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0-beta.1] - Unreleased
 
 ### Added
+- Added `esp32_internal_largest_free_block` and `esp32_internal_minimum_free_size` to
+  `erlang:system_info/1` on the ESP32: the heap keys without PSRAM
 - Added `gen:start/5,6`, used by Elixir's `GenServer`
 - Added ML-KEM-768 (FIPS 203) key encapsulation to `crypto`, requiring libsodium >= 1.0.22
 - Added `AVM_STATIC_LIBSODIUM` CMake option to statically link libsodium
