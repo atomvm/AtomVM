@@ -28,6 +28,8 @@ start() ->
     ok = test_static_ip(),
     ok = test_callbacks_in_order(),
     ok = test_wait_for_eth_after_stop(),
+    ok = test_sntp_alone(),
+    ok = test_sntp_alone_badarg(),
     ok.
 
 test_badarg() ->
@@ -56,6 +58,31 @@ expect_badarg(EthConfig) ->
         {'DOWN', Monitor, process, Pid, {start_port_failed, badarg}} -> ok;
         {'DOWN', Monitor, process, Pid, Other} -> error({unexpected, EthConfig, Other})
     after 5000 -> error({timeout, EthConfig})
+    end.
+
+% SNTP alone, for an interface brought up outside the network driver:
+% accepted, not refused as a config with no network. sta_status/0 is answered
+% only once the driver has replied to the start.
+test_sntp_alone() ->
+    {ok, _Pid} = network:start([{sntp, [{host, <<"pool.ntp.org">>}]}]),
+    inactive = network:sta_status(),
+    ok = network:stop().
+
+% SNTP alone that cannot start, with no host or a host that is not a string,
+% is refused by the driver rather than accepted with nothing running.
+test_sntp_alone_badarg() ->
+    lists:foreach(fun expect_start_badarg/1, [
+        [{sntp, []}],
+        [{sntp, [{host, invalid}]}]
+    ]).
+
+expect_start_badarg(Config) ->
+    {ok, Pid} = network:start(Config),
+    Monitor = monitor(process, Pid),
+    receive
+        {'DOWN', Monitor, process, Pid, {start_port_failed, badarg}} -> ok;
+        {'DOWN', Monitor, process, Pid, Other} -> error({unexpected, Config, Other})
+    after 5000 -> error({timeout, Config})
     end.
 
 %% wait_for_eth/2 returns the driver's reason, not a timeout, and leaves no

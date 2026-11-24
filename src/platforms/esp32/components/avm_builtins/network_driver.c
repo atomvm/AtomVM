@@ -1363,7 +1363,8 @@ static void time_sync_notification_cb(struct timeval *tv)
     }
 }
 
-static void maybe_set_sntp(term sntp_config, GlobalContext *global)
+// True if SNTP was started: a host was given and could be read.
+static bool maybe_set_sntp(term sntp_config, GlobalContext *global)
 {
     if (!term_is_invalid_term(sntp_config) && !term_is_invalid_term(interop_kv_get_value(sntp_config, host_atom, global))) {
         int ok;
@@ -1378,10 +1379,12 @@ static void maybe_set_sntp(term sntp_config, GlobalContext *global)
             sntp_set_time_sync_notification_cb(time_sync_notification_cb);
             esp_sntp_init();
             ESP_LOGI(TAG, "SNTP initialized with host set to %s", host);
+            return true;
         } else {
             ESP_LOGE(TAG, "Unable to locate sntp host in configuration");
         }
     }
+    return false;
 }
 
 static void set_dhcp_hostname(esp_netif_t *interface, const char *interface_name, term dhcp_hostname_term)
@@ -2226,8 +2229,12 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     }
 #endif
     bool want_wifi = !term_is_invalid_term(sta_config) || !term_is_invalid_term(ap_config);
-    if (UNLIKELY(!want_wifi && term_is_invalid_term(eth_config) && term_is_invalid_term(ppp_config))) {
-        ESP_LOGE(TAG, "Expected STA, AP, ETH or PPP configuration but got none");
+    bool want_interface = want_wifi || !term_is_invalid_term(eth_config) || !term_is_invalid_term(ppp_config);
+    // SNTP alone is for an interface brought up outside this driver, from C
+    // or by another port driver.
+    term sntp_config = interop_kv_get_value(config, sntp_atom, ctx->global);
+    if (UNLIKELY(!want_interface && term_is_invalid_term(sntp_config))) {
+        ESP_LOGE(TAG, "Expected STA, AP, ETH, PPP or SNTP configuration but got none");
         term error = port_create_error_tuple(ctx, BADARG_ATOM);
         port_send_reply(ctx, pid, ref, error);
         return;
@@ -2302,9 +2309,14 @@ static void start_network(Context *ctx, term pid, term ref, term config)
 #endif
 
     //
-    // Set up simple NTP, if configured
+    // Set up simple NTP, if configured. With an interface, an unusable SNTP
+    // setting is ignored as before; alone, it is the whole request and fails.
     //
-    maybe_set_sntp(interop_kv_get_value(config, sntp_atom, ctx->global), ctx->global);
+    if (!maybe_set_sntp(sntp_config, ctx->global) && !want_interface) {
+        term error = port_create_error_tuple(ctx, BADARG_ATOM);
+        port_send_reply(ctx, pid, ref, error);
+        goto cleanup;
+    }
 
     //
     // Set the DHCP hostname, if STA mode is enabled
