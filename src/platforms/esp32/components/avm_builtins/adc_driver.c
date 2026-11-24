@@ -106,11 +106,7 @@ static const AtomStringIntPair attenuation_table[] = {
     { ATOM_STR("\x4", "db_0"), ADC_ATTEN_DB_0 },
     { ATOM_STR("\x6", "db_2_5"), ADC_ATTEN_DB_2_5 },
     { ATOM_STR("\x4", "db_6"), ADC_ATTEN_DB_6 },
-#if (ESP_IDF_VERSION <= ESP_IDF_VERSION_VAL(5, 1, 2))
-    { ATOM_STR("\x5", "db_11"), ADC_ATTEN_DB_11 },
-#else
     { ATOM_STR("\x5", "db_12"), ADC_ATTEN_DB_12 },
-#endif
     SELECT_INT_DEFAULT(ADC_INVALID_PARAM)
 };
 
@@ -175,15 +171,9 @@ static int approximate_millivolts(int adc_reading, adc_atten_t attenuation, adc_
         case ADC_ATTEN_DB_6:
             millivolt_max = 1750;
             break;
-#if (ESP_IDF_VERSION <= ESP_IDF_VERSION_VAL(5, 1, 2))
-        case ADC_ATTEN_DB_11:
-            millivolt_max = 2450;
-            break;
-#else
         case ADC_ATTEN_DB_12:
             millivolt_max = 2450;
             break;
-#endif
     }
 
     // Estimate V = RAW * ATTEN_MAX_MV / 2^BITWIDTH
@@ -454,13 +444,10 @@ static term nif_adc_acquire(Context *ctx, int argc, term argv[])
 
     term attenuation = argv[3];
     VALIDATE_VALUE(attenuation, term_is_atom);
-    // TODO: remove macro and update log to ESP_LOGW after ESP-IDf v5.1 is EOL; then all current will deprecate db_11.
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0))
     if (attenuation == globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "db_11"))) {
         ESP_LOGI(TAG, "attenuation 'db_11' replaced by 'db_12' and will be deprecated in a future\nrelease, applications should be updated to use 'db_12' instead.");
         attenuation = globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "db_12"));
     }
-#endif
     adc_atten_t atten = interop_atom_term_select_int(attenuation_table, attenuation, ctx->global);
     if (UNLIKELY(atten == ADC_INVALID_PARAM)) {
         ESP_LOGE(TAG, "invalid attenuation");

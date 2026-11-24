@@ -28,9 +28,7 @@
 
 #include <driver/uart.h>
 #include <esp_log.h>
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0)
 #include <soc/gpio_num.h>
-#endif
 
 #if SOC_USB_SERIAL_JTAG_SUPPORTED
 #include <driver/usb_serial_jtag.h>

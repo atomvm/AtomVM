@@ -311,33 +311,16 @@ static inline term authmode_to_atom_term(GlobalContext *global, wifi_auth_mode_t
         case WIFI_AUTH_DUMMY2:
             authmode = make_atom(global, ATOM_STR("\x6", "dummy2"));
             break;
-#if (ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 3, 0))
-        case WIFI_AUTH_DUMMY3:
-            authmode = make_atom(global, ATOM_STR("\x6", "dummy3"));
-            break;
-#if (ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 2, 0))
-        case WIFI_AUTH_DUMMY4:
-            authmode = make_atom(global, ATOM_STR("\x6", "dummy4"));
-            break;
-        case WIFI_AUTH_DUMMY5:
-            authmode = make_atom(global, ATOM_STR("\x6", "dummy5"));
-            break;
 #endif
-#endif
-#endif
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0))
         case WIFI_AUTH_WPA3_EXT_PSK:
             authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\xC", "wpa3_ext_psk"));
             break;
         case WIFI_AUTH_WPA3_EXT_PSK_MIXED_MODE:
             authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\x12", "wpa3_ext_psk_mixed"));
             break;
-#endif
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 3, 0))
         case WIFI_AUTH_DPP:
             authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\x3", "dpp"));
             break;
-#endif
 #if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0))
         case WIFI_AUTH_WPA3_ENTERPRISE:
             authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\xf", "wpa3_enterprise"));
@@ -456,7 +439,6 @@ static bool ensure_scan_atoms_exist(GlobalContext *global)
     if (UNLIKELY(!ensure_atom(global, owe))) {
         return false;
     }
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0))
     static const char *const wpa3_ext_psk = ATOM_STR("\xC", "wpa3_ext_psk");
     if (UNLIKELY(!ensure_atom(global, wpa3_ext_psk))) {
         return false;
@@ -465,13 +447,10 @@ static bool ensure_scan_atoms_exist(GlobalContext *global)
     if (UNLIKELY(!ensure_atom(global, wpa3_ext_psk_mixed))) {
         return false;
     }
-#endif
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 3, 0))
     static const char *const dpp = ATOM_STR("\x3", "dpp");
     if (UNLIKELY(!ensure_atom(global, dpp))) {
         return false;
     }
-#endif
 #if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0))
     static const char *const wpa3_enterprise = ATOM_STR("\xF", "wpa3_enterprise");
     if (UNLIKELY(!ensure_atom(global, wpa3_enterprise))) {
@@ -923,13 +902,11 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
                 break;
             }
 
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0))
             case WIFI_EVENT_HOME_CHANNEL_CHANGE: {
                 wifi_event_home_channel_change_t *chan_data = (wifi_event_home_channel_change_t *) event_data;
                 ESP_LOGD(TAG, "WIFI_EVENT home channel changed from %u to %u.", chan_data->old_chan, chan_data->new_chan);
                 break;
             }
-#endif
 
             case WIFI_EVENT_STA_BEACON_TIMEOUT: {
                 ESP_LOGI(TAG, "WIFI_EVENT_STA_BEACON_TIMEOUT received. Maybe poor signal, or network congestion?");
