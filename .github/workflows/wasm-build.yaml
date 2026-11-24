@@ -163,7 +163,7 @@ jobs:
         set -euo pipefail
         mkdir build
         cd build
-        emcmake cmake .. ${{ matrix.jit }}
+        emcmake cmake .. -DENABLE_PROGRAMS=OFF -DENABLE_TESTING=OFF ${{ matrix.jit }}
         emmake make -j
 
     - name: Download AtomVM and test modules (non-JIT)
@@ -274,7 +274,7 @@ jobs:
         set -euo pipefail
         mkdir build
         cd build
-        emcmake cmake .. -DAVM_EMSCRIPTEN_ENV=web ${{ matrix.jit }}
+        emcmake cmake .. -DAVM_EMSCRIPTEN_ENV=web -DENABLE_PROGRAMS=OFF -DENABLE_TESTING=OFF ${{ matrix.jit }}
         emmake make -j
 
     - name: "Perform CodeQL Analysis"
