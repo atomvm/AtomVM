@@ -342,6 +342,12 @@ struct xtensa_part_mapping {
     uintptr_t ibus_base;
     size_t size;
     spi_flash_mmap_handle_t ibus_handle;
+    // True for a mapping installed on demand by sys_map_native_code,
+    // false = kept for the VM lifetime.
+    bool on_demand;
+    // Modules running from an on-demand mapping: on ESP32 it is released with
+    // the last one.
+    size_t module_count;
 };
 static struct xtensa_part_mapping *s_xtensa_part_mappings = NULL;
 static int s_xtensa_part_count = 0;
@@ -398,6 +404,8 @@ const void *esp32_sys_mmap_partition(const char *partition_name, spi_flash_mmap_
                 s_xtensa_part_mappings[s_xtensa_part_count].ibus_base = (uintptr_t) ibus_ptr;
                 s_xtensa_part_mappings[s_xtensa_part_count].size = partition->size;
                 s_xtensa_part_mappings[s_xtensa_part_count].ibus_handle = ibus_handle;
+                s_xtensa_part_mappings[s_xtensa_part_count].on_demand = false;
+                s_xtensa_part_mappings[s_xtensa_part_count].module_count = 0;
                 s_xtensa_part_count++;
                 pthread_mutex_unlock(&s_xtensa_part_mutex);
             }
@@ -949,24 +957,36 @@ ModuleNativeEntryPoint sys_map_native_code(const uint8_t *code, size_t code_size
     // address by finding the partition whose DBUS window contains addr and
     // computing the offset into its IBUS window. This is more reliable than
     // spi_flash_phys2cache which fails on LX6 even after a successful IBUS mmap.
+    // The lock is held until the mapping is settled. Otherwise two modules
+    // loaded at once could both miss this lookup and ask for the same pages,
+    // and spi_flash_mmap does not map a range that is already mapped: it
+    // returns a pointer into the first mapping, which would go away with the
+    // first module.
     pthread_mutex_lock(&s_xtensa_part_mutex);
     for (int i = 0; i < s_xtensa_part_count; i++) {
         uintptr_t dbus_base = s_xtensa_part_mappings[i].dbus_base;
         size_t mapping_size = s_xtensa_part_mappings[i].size;
         if (addr >= dbus_base && (addr + code_size) <= (dbus_base + mapping_size)) {
             addr = s_xtensa_part_mappings[i].ibus_base + (addr - dbus_base);
+            if (s_xtensa_part_mappings[i].on_demand) {
+                s_xtensa_part_mappings[i].module_count++;
+            }
             break;
         }
     }
-    pthread_mutex_unlock(&s_xtensa_part_mutex);
     // If addr is still in DROM, no partition mapping was found. Fall back to
     // on-demand spi_flash_mmap(INST) for native code embedded in the app ELF
     // binary (e.g. via _binary_xxx_start / ConstAVMPack in the test harness).
     // Failure to install an IBUS mapping returns NULL so the caller falls back
     // to interpreted mode rather than jumping to a non-executable DROM address.
+    // Instruction address space is scarce on ESP32 (51 pages of 64 KB, shared
+    // with the application), and a module that is not enclosed in an existing
+    // mapping gets its own, so sys_release_native_code releases these mappings
+    // there with the last module running from them.
     if (addr >= SOC_DROM_LOW && addr < SOC_DROM_HIGH) {
         size_t phys_addr = spi_flash_cache2phys((void *) addr);
         if (phys_addr == SPI_FLASH_CACHE2PHYS_FAIL) {
+            pthread_mutex_unlock(&s_xtensa_part_mutex);
             ESP_LOGE(TAG, "spi_flash_cache2phys failed for 0x%" PRIx32, (uint32_t) addr);
             return NULL;
         }
@@ -977,10 +997,11 @@ ModuleNativeEntryPoint sys_map_native_code(const uint8_t *code, size_t code_size
         const void *ibus_ptr;
         spi_flash_mmap_handle_t ibus_handle;
         if (spi_flash_mmap(phys_page_base, map_size, SPI_FLASH_MMAP_INST, &ibus_ptr, &ibus_handle) != ESP_OK) {
-            ESP_LOGE(TAG, "spi_flash_mmap(INST) failed for 0x%" PRIx32, (uint32_t) addr);
+            pthread_mutex_unlock(&s_xtensa_part_mutex);
+            ESP_LOGE(TAG, "spi_flash_mmap(INST) failed for 0x%" PRIx32 " (%" PRIu32 " free pages)",
+                (uint32_t) addr, (uint32_t) spi_flash_mmap_get_free_pages(SPI_FLASH_MMAP_INST));
             return NULL;
         }
-        pthread_mutex_lock(&s_xtensa_part_mutex);
         struct xtensa_part_mapping *new_mappings = realloc(s_xtensa_part_mappings,
             (s_xtensa_part_count + 1) * sizeof(struct xtensa_part_mapping));
         if (IS_NULL_PTR(new_mappings)) {
@@ -995,10 +1016,12 @@ ModuleNativeEntryPoint sys_map_native_code(const uint8_t *code, size_t code_size
         s_xtensa_part_mappings[s_xtensa_part_count].ibus_base = (uintptr_t) ibus_ptr;
         s_xtensa_part_mappings[s_xtensa_part_count].size = map_size;
         s_xtensa_part_mappings[s_xtensa_part_count].ibus_handle = ibus_handle;
+        s_xtensa_part_mappings[s_xtensa_part_count].on_demand = true;
+        s_xtensa_part_mappings[s_xtensa_part_count].module_count = 1;
         s_xtensa_part_count++;
-        pthread_mutex_unlock(&s_xtensa_part_mutex);
         addr = (uintptr_t) ibus_ptr + offset_in_page;
     }
+    pthread_mutex_unlock(&s_xtensa_part_mutex);
 #endif
 
     return (ModuleNativeEntryPoint) addr;
@@ -1006,7 +1029,33 @@ ModuleNativeEntryPoint sys_map_native_code(const uint8_t *code, size_t code_size
 
 void sys_release_native_code(ModuleNativeEntryPoint entry_point)
 {
-    // Native code points into flash; nothing to free
+#if defined(CONFIG_IDF_TARGET_ESP32)
+    // Native code points into flash, but it may run from an instruction bus
+    // mapping that sys_map_native_code installed on demand: release it with
+    // the last module running from it.
+    uintptr_t addr = (uintptr_t) entry_point;
+    pthread_mutex_lock(&s_xtensa_part_mutex);
+    for (int i = 0; i < s_xtensa_part_count; i++) {
+        struct xtensa_part_mapping *mapping = &s_xtensa_part_mappings[i];
+        if (mapping->on_demand && addr >= mapping->ibus_base && addr < mapping->ibus_base + mapping->size) {
+            mapping->module_count--;
+            if (mapping->module_count == 0) {
+                spi_flash_munmap(mapping->ibus_handle);
+                s_xtensa_part_count--;
+                *mapping = s_xtensa_part_mappings[s_xtensa_part_count];
+            }
+            break;
+        }
+    }
+    pthread_mutex_unlock(&s_xtensa_part_mutex);
+#else
+    // Native code points into flash; nothing to free on RISC-V. The other
+    // Xtensa targets should release their on-demand instruction bus mappings
+    // too, but QEMU's ESP32-S3 corrupts the data mapping of a flash page when
+    // another mapping of the same page is removed (espressif/qemu#170).
+    // Keeping them is safe, as ESP32-S3 has plenty of pages (512).
+    // TODO: release them as soon as that bug is fixed.
     UNUSED(entry_point);
+#endif
 }
 #endif
