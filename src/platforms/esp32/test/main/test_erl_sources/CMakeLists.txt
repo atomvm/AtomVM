@@ -127,6 +127,7 @@ else()
     compile_erlang(test_ssl)
 endif()
 compile_erlang(test_system_architecture)
+compile_erlang(test_heap_info)
 compile_erlang(test_time_and_processes)
 compile_erlang(test_twdt)
 compile_erlang(test_tz)
@@ -162,6 +163,7 @@ set(erlang_test_beams
     test_spi.beam
     test_ssl.beam
     test_system_architecture.beam
+    test_heap_info.beam
     test_time_and_processes.beam
     test_twdt.beam
     test_tz.beam
