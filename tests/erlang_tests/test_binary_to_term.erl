@@ -797,10 +797,12 @@ test_encode_reference() ->
     true = Ref9 > RefA,
     true = RefA > Ref7,
 
-    % Zero-length is tolerated
-    RefB = binary_to_term_idempotent(<<131, 90, 0, 0, 119, 4, "true", 1:32>>, "26"),
-    "#Ref<1>" = ref_to_list(RefB),
-    true = RefB < Ref1,
+    case rejects_zero_length_reference() of
+        true ->
+            ok = expect_badarg(fun() -> binary_to_term(<<131, 90, 0, 0, 119, 4, "true", 1:32>>) end);
+        false ->
+            ok
+    end,
 
     % Creation comes before first word in comparison
     % Ref1 = binary_to_term_idempotent(<<131, 90, 0, 1, 119, 4, "true", 1:32, 43:32>>, "26"),
@@ -1502,6 +1504,19 @@ erts_has_cve_2026_54890_fix(Version) ->
     (Version >= [15, 2, 7, 11] andalso Version < [16]) orelse
         (Version >= [16, 4, 0, 4] andalso Version < [17]) orelse
         Version >= [17, 0, 4].
+
+%% OTP-20530 was fixed in OTP 27.3.4.20, 28.5.0.9 and 29.1.3.
+rejects_zero_length_reference() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            case erts_version() of
+                [15 | _] = Version -> Version >= [15, 2, 7, 15];
+                [16 | _] = Version -> Version >= [16, 4, 0, 8];
+                Version -> Version >= [17, 1, 2]
+            end;
+        _ ->
+            true
+    end.
 
 erts_version() ->
     erts_version(erlang:system_info(version), 0, []).

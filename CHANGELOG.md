@@ -308,6 +308,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `json:decode/1` error reasons to match OTP on trailing whitespace before
   unexpected bytes (`{invalid_byte, 32}`), overflowing float exponents
   (`{unexpected_sequence, ...}`), and lone high surrogates (`unexpected_end`)
+- `binary_to_term/1,2` now raises `badarg` for references with zero ID words, matching patched OTP
+  releases
 
 ## [0.7.0-beta.0] - 2026-09-28
 
