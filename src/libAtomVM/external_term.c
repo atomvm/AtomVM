@@ -1010,9 +1010,6 @@ static term parse_simple_term(const uint8_t *external_term_buf, size_t *eterm_si
 
         case NEWER_REFERENCE_EXT: {
             uint16_t len = READ_16_UNALIGNED(external_term_buf + 1);
-            if (UNLIKELY(len > 5)) {
-                return term_invalid_term();
-            }
             size_t node_size;
             term node = parse_simple_term(external_term_buf + 3, &node_size, copy, heap, glb, opts);
             if (UNLIKELY(!term_is_atom(node))) {
@@ -1515,6 +1512,9 @@ static int calculate_simple_heap_usage(const uint8_t *external_term_buf, size_t 
             remaining -= 3;
             int buf_pos = 3;
             uint16_t len = READ_16_UNALIGNED(external_term_buf + 1);
+            if (UNLIKELY(len == 0 || len > 5)) {
+                return INVALID_TERM_SIZE;
+            }
             size_t heap_size = EXTERNAL_REF_SIZE(len);
             size_t node_size = 0;
             int u = calculate_simple_heap_usage(external_term_buf + buf_pos, remaining, &node_size, copy, opts, glb);

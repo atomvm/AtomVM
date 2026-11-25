@@ -205,6 +205,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rebuilding its poll set was not polled until another one was registered or unregistered
 - Fixed TLS connections with `verify_none` being limited to TLS 1.2 when built
   with MbedTLS 3.6.1 or later and TLS 1.3 support enabled
+- `binary_to_term/1,2` now raises `badarg` for references with zero ID words, matching patched OTP
+  releases
 
 ## [0.7.0-beta.0] - 2026-09-28
 
