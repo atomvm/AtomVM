@@ -1156,6 +1156,7 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
         if (ENDIAN_SWAP_16(native_code->version) != JIT_FORMAT_VERSION) {
             fprintf(stderr, "Unknown native code chunk version (%d)\n", ENDIAN_SWAP_16(native_code->version));
         } else {
+            bool arch_found = false;
             for (int arch_index = 0; arch_index < ENDIAN_SWAP_16(native_code->architectures_count); arch_index++) {
                 uint16_t runtime_variant = JIT_VARIANT_PIC;
 #ifdef AVM_USE_SINGLE_PRECISION
@@ -1165,6 +1166,7 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
                 runtime_variant |= JIT_VARIANT_THUMB2;
 #endif
                 if (ENDIAN_SWAP_16(native_code->architectures[arch_index].architecture) == JIT_ARCH_TARGET && ENDIAN_SWAP_16(native_code->architectures[arch_index].variant) == runtime_variant) {
+                    arch_found = true;
                     size_t arch_offset = ENDIAN_SWAP_32(native_code->architectures[arch_index].offset);
                     size_t arch_code_size;
                     if (arch_index + 1 < ENDIAN_SWAP_16(native_code->architectures_count)) {
@@ -1188,7 +1190,11 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
                 }
             }
             if (mod->native_code == NULL) {
-                fprintf(stderr, "Native code chunk found but no compatible architecture or variant found\n");
+                if (arch_found) {
+                    fprintf(stderr, "Native code chunk found but it could not be mapped for execution\n");
+                } else {
+                    fprintf(stderr, "Native code chunk found but no compatible architecture or variant found\n");
+                }
             }
         }
     } else {
