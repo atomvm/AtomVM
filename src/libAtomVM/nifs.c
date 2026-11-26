@@ -3071,8 +3071,12 @@ static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[])
         free(alloc_ptr);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    term bin_res = term_from_literal_binary(bin_buf, bin_size, &ctx->heap, ctx->global);
-
+    term bin_res = term_create_uninitialized_binary(bin_size, &ctx->heap, ctx->global);
+    if (UNLIKELY(term_is_invalid_term(bin_res))) {
+        free(alloc_ptr);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    memcpy((void *) term_binary_data(bin_res), bin_buf, bin_size);
     free(alloc_ptr);
     return bin_res;
 }
