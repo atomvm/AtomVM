@@ -895,6 +895,11 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
     bool handle_error = false;
     bool reprocess_outer = false;
     while (signal_message) {
+        if (context_get_flags(ctx, Killed)) {
+            // Teardown answers pending requests only after removing the process.
+            mailbox_requeue_outer_signals(&ctx->mailbox, signal_message);
+            break;
+        }
         switch (signal_message->type) {
             case KillSignal: {
                 struct TermSignal *kill_signal

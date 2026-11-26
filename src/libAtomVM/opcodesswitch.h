@@ -792,6 +792,11 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         bool handle_error = false;                                                              \
         bool reprocess_outer = false;                                                           \
         while (signal_message) {                                                                \
+            if (context_get_flags(ctx, Killed)) {                                                \
+                /* Teardown answers requests after removing the process. */                     \
+                mailbox_requeue_outer_signals(&ctx->mailbox, signal_message);                    \
+                break;                                                                          \
+            }                                                                                   \
             switch (signal_message->type) {                                                     \
                 case KillSignal: {                                                              \
                     struct TermSignal *kill_signal                                              \

@@ -27,6 +27,7 @@
 % process_info/2 paths are tested here.
 start() ->
     ok = test_registered_name(),
+    ok = test_info_after_kill(),
     ok = test_heap_size(),
     ok = test_memory(),
     ok = test_total_heap_size(),
@@ -109,6 +110,42 @@ test_registered_name() ->
     Check(self()),
     with_other_pid(Check),
 
+    ok.
+
+test_info_after_kill() ->
+    [
+        begin
+            {Pid, Ref} = spawn_opt(
+                fun() ->
+                    receive
+                        stop -> ok
+                    end
+                end,
+                [monitor]
+            ),
+            case Named of
+                true -> true = register(process_info_killed_child, Pid);
+                false -> ok
+            end,
+            % Make the child handle a request before queuing the kill.
+            Before =
+                case Named of
+                    true -> {registered_name, process_info_killed_child};
+                    false -> []
+                end,
+            Before = process_info(Pid, registered_name),
+            true = exit(Pid, kill),
+            % Do not wait for DOWN: this request must observe the earlier kill.
+            undefined = process_info(Pid, Item),
+            false = is_process_alive(Pid),
+            receive
+                {'DOWN', Ref, process, Pid, killed} -> ok
+            end,
+            undefined = whereis(process_info_killed_child)
+        end
+     || Named <- [false, true],
+        Item <- [registered_name, [registered_name], [registered_name, message_queue_len]]
+    ],
     ok.
 
 test_heap_size() ->

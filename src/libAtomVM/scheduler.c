@@ -83,6 +83,11 @@ static void scheduler_process_native_signal_messages(Context *ctx)
     MailboxMessage *signal_message = mailbox_process_outer_list_native(&ctx->mailbox);
     bool reprocess_outer = false;
     while (signal_message) {
+        if (context_get_flags(ctx, Killed)) {
+            // Teardown answers pending requests only after removing the process.
+            mailbox_requeue_outer_signals(&ctx->mailbox, signal_message);
+            break;
+        }
         switch (signal_message->type) {
             case KillSignal: {
                 struct TermSignal *kill_signal = CONTAINER_OF(signal_message, struct TermSignal, base);
