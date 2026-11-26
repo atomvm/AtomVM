@@ -83,7 +83,7 @@ must survive later flag changes or alias removal. See
 The final receive deliberately establishes reception before a surviving worker
 reports. This does not cover returning before any reception (the separate
 `exit_signal_self_is_handled_later` model example), all schedules or all allowed
-outcomes.
+outcomes. The separate unfenced-completion batch below samples the first gap.
 
 ### 4. Liveness/dead-query fast paths and queued notifications
 
@@ -125,6 +125,28 @@ An optimized-away `receive after 0` does not establish signal reception.
 Receive-marker instructions alone also do not establish an optimized mailbox-skip
 path: the interpreter currently treats them as no-ops apart from register clearing.
 This batch does not claim a new mailbox-skip optimization or all compiler shapes.
+
+### 6. Unfenced self-exit completion
+
+- [x] Separate a post-function-return report from the worker's final DOWN, with
+  no explicit worker-side receive, mailbox query or acknowledgement on the
+  unfenced path. Add PID self-signals only; leave aliases/flag transitions in
+  their existing batches.
+- [x] Pair async cases with legacy self-`exit/2` and real receive-fenced async
+  controls, both trap settings and normal/structured/kill reasons.
+- [x] Use exact outcomes for the 15 deterministic recipes and strict allowed
+  combinations for the three fatal unfenced async recipes; retain raw traces
+  and independently validate report content/count, exit reason and monitor cleanup.
+
+The batch adds 18 asserted recipes. An unfenced fatal signal can stop the worker
+before its report, after its report, or lose to normal process completion. A normal
+DOWN is not by itself a passing observation: it must have the exact return report,
+except for the legacy untrapped-normal control, which must never report. Both OTP
+and AtomVM actually completed normally after unfenced self-`kill` in the isolated
+sweep; receive-fenced self-`kill` terminates with `killed` and no report. The report
+proves the callback returned, not that a signal was pending at that moment or
+that the worker stayed alive afterwards. See
+[PLAN.md](PLAN.md#unfenced-self-exit-completion).
 
 ### Audit scope and exclusions
 

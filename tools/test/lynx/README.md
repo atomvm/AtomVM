@@ -177,7 +177,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **6,911 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **6,929 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -742,6 +742,18 @@ Both VMs must satisfy the allowed contract; `LYNX_QUERY_TRACE` observations rema
 in saved logs and are checked against independent tables and reordered replay.
 No scheduling winner, monitor-registration barrier, or all-outcome coverage is
 assumed.
+Eighteen [self-exit completion observations](PLAN.md#unfenced-self-exit-completion)
+separate a callback-return report from the worker's final DOWN. Unfenced callbacks
+and their reporting wrapper contain no receives; legacy self-exits and real
+receive-fenced async exits supply exact controls. Both trap settings and
+normal/structured/kill reasons are covered. Only three fatal unfenced recipes
+admit multiple report/DOWN combinations; all others require exact outcomes.
+Normal completion after an unfenced self-`kill` is actually observed on both VMs,
+while its fenced control must die with `killed` before reporting. Raw
+`LYNX_COMPLETION_TRACE` observations and monitor cleanup are independently checked,
+with filtered/reordered replay and an OTP-29 gate for the twelve async cases.
+A report establishes the callback returned, not that its signal remained pending
+or the worker survived afterwards. No scheduling winner is required.
 Thirty-two [lowered-receive observations](PLAN.md#lowered-receive-continuations)
 pair manually lowered Core with source controls for consecutive timeout-only
 loops, discarded clause results and rescanning previously skipped messages.

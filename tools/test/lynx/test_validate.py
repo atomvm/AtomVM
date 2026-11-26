@@ -1013,6 +1013,89 @@ class ValidationTests(unittest.TestCase):
                              {"laws": 0, "passed": 0, "failed": 0,
                               "unverified": 1, "uncovered": 0})
 
+    def test_unfenced_self_exit_completion_and_exact_controls(self):
+        otp = subprocess.check_output(["elixir", "-e", "IO.write(System.otp_release())"], text=True)
+        if int(otp) < 29:
+            self.skipTest("exit_signal/2 requires an OTP 29 oracle")
+        selected = [e for e in lean_runtime.cases() if "self_exit_completion_mode" in e]
+        self.assertEqual(len(selected), 18)
+        self.assertTrue(all(e.get("assert_true") for e in selected))
+        self.assertEqual(sum(e.get("minimum_otp") == 29 for e in selected), 12)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            source.write_text(json.dumps(selected))
+            output = work / "results"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 18, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            saved = json.loads((output / "cases.json").read_text())
+            source.write_text(json.dumps([saved[i] for i in [17, 7, 0, 11, 13, 4]]))
+            replay = work / "replay"
+            self.assertEqual(self.invoke(replay, "--replay", source),
+                             {"laws": 0, "passed": 6, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                traces = fn log ->
+                  Regex.scan(~r/^LYNX_COMPLETION_TRACE (\\[.*\\])$/m, log)
+                  |> Enum.map(fn [_, bytes] -> bytes |> JSON.decode!()
+                    |> :erlang.list_to_binary() |> :erlang.binary_to_term() end)
+                end
+                report = [{:returned, {true, {:continued, 17, <<5::3>>}}}]
+                # Explicit normal/structured/kill columns. Only the three
+                # fatal unfenced cells admit multiple outcomes. No formula
+                # from the observer determines these independent expectations.
+                table = %{
+                  {"legacy", false} => [[:stopped], [:stopped], [:stopped]],
+                  {"legacy", true} => [[:completed], [:completed], [:stopped]],
+                  {"fenced", false} => [[:completed], [:stopped], [:stopped]],
+                  {"fenced", true} => [[:completed], [:completed], [:stopped]],
+                  {"unfenced", false} => [[:completed],
+                    [:stopped, :stopped_after_return, :completed],
+                    [:stopped, :stopped_after_return, :completed]],
+                  {"unfenced", true} => [[:completed], [:completed],
+                    [:stopped, :stopped_after_return, :completed]]
+                }
+                for path <- System.argv() do
+                  cases = JSON.decode!(File.read!(Path.join(path, "cases.json")))
+                  values = JSON.decode!(File.read!(Path.join(path, "manifest.json")))["expected"]
+                  otp_traces = traces.(File.read!(Path.join(path, "proofs.log")))
+                  true = length(cases) == length(values) and length(cases) == length(otp_traces)
+                  for {{entry, encoded}, otp_trace} <- Enum.zip(Enum.zip(cases, values), otp_traces) do
+                    {:ok, true} = :erlang.binary_to_term(Base.decode64!(encoded))
+                    {column, reason} = case entry["self_exit_completion_reason"] do
+                      "normal" -> {0, :normal}
+                      "kill" -> {2, :killed}
+                      "{shutdown,<<5:3>>}" -> {1, {:shutdown, <<5::3>>}}
+                    end
+                    outcomes = Map.fetch!(table,
+                      {entry["self_exit_completion_mode"], entry["self_exit_completion_trap"]})
+                    legal = for outcome <- Enum.at(outcomes, column) do
+                      case outcome do
+                        :stopped -> {reason, [], false}
+                        :stopped_after_return -> {reason, report, false}
+                        :completed -> {:normal, report, false}
+                      end
+                    end
+                    [actual] = traces.(File.read!(Path.join(path, entry["module"] <> ".log")))
+                    for trace <- [otp_trace, actual] do
+                      unless trace in legal, do: raise(inspect({entry, legal, trace}))
+                    end
+                  end
+                end
+                """, str(output), str(replay)
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+            source.write_text(json.dumps([dict(selected[6], minimum_otp=999)]))
+            gated = work / "gated"
+            self.assertEqual(self.invoke(gated, "--replay", source),
+                             {"laws": 0, "passed": 0, "failed": 0,
+                              "unverified": 1, "uncovered": 0})
+            manifest = json.loads((gated / "manifest.json").read_text())
+            self.assertEqual(manifest["expected"], [None])
+            self.assertEqual(manifest["oracle_errors"], ["OTP reference requires OTP 999 or newer"])
+
     def test_query_notifications_have_independent_outcomes_and_controls(self):
         otp = subprocess.check_output(["elixir", "-e", "IO.write(System.otp_release())"], text=True)
         if int(otp) < 29:
@@ -2659,7 +2742,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 6911)
+        self.assertEqual(len(lean_runtime.cases()), 6929)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

@@ -1441,6 +1441,24 @@ def cases():
                                 else "exit_signal_self_ends_before_timeout")
                         entry["lean_origins"] = [f"Modules/Signals.lean#{site}"]
                     selected.append(entry)
+    # Observe a real function return without a worker-side receive. A later
+    # normal DOWN alone cannot show whether the post-call continuation ran.
+    for mode in ["legacy", "unfenced", "fenced"]:
+        for trap in ["false", "true"]:
+            for reason in ["normal", "{shutdown,<<5:3>>}", "kill"]:
+                entry = {
+                    "expression": f"differential:self_exit_completion({mode},{trap},{reason}) =:= {{ok,allowed}}",
+                    "assert_true": True,
+                    "self_exit_completion_mode": mode,
+                    "self_exit_completion_trap": trap == "true",
+                    "self_exit_completion_reason": reason,
+                }
+                if mode != "legacy":
+                    entry["minimum_otp"] = 29
+                    site = ("exit_signal_self_is_handled_later" if mode == "unfenced"
+                            else "exit_signal_self_ends_before_timeout")
+                    entry["lean_origins"] = [f"Modules/Signals.lean#{site}"]
+                selected.append(entry)
     for state in ["active", "active_message", "queued", "queued_twice", "queued_other", "consumed", "unknown"]:
         for options in ["[]", "[flush]", "[info]", "[flush,info]", "[info,flush]",
                         "[bad]", "[info|bad]", "[{flush,true}]"]:

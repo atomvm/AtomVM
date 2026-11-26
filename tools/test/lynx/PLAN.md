@@ -16,8 +16,8 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,911 public-behavior recipes inspired by Lean tests
-  and upstream examples (`376` of `478` Lean test sites across all 28 files). Source
+- `lean_runtime.py` selects 6,929 public-behavior recipes inspired by Lean tests
+  and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
   the proved postcondition to be true on both VMs: five integer singleton sums,
@@ -38,6 +38,69 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Unfenced self-exit completion
+
+Add 18 asserted recipes (2026-11-26), extending the previously fenced self-exit
+observations without adding an API or runtime change:
+
+- Six legacy self-`exit/2` controls, six unfenced `exit_signal/2` samples and
+  six receive-fenced `exit_signal/2` controls combine normal/structured/kill
+  reasons with both trap settings. Fifteen recipes have exact outcomes; only
+  three fatal unfenced async recipes allow multiple combinations.
+- Each monitored worker calls a callback and reports its returned value, then
+  completes without an explicit receive on the unfenced path. The exact report
+  includes the API's `true` result and a tagged continuation payload. Reporting
+  establishes a function return, not worker survival or the internal state of
+  the self-signal. The observer waits for DOWN before checking all reports and
+  inactive-monitor cleanup, rejecting missing/duplicate/extra reports, wrong
+  return values, unexpected DOWN reasons and timeouts.
+- Fatal unfenced signals permit death before the report, death after the report,
+  or normal completion with the exact report. Normal completion without a report
+  is never accepted there. Legacy self-exit while untrapped, including reason
+  `normal`, and legacy self-`kill` cannot report. Receive-fenced fatal async calls
+  must likewise terminate before the callback returns. Nonfatal cases must
+  report exactly once and terminate normally. No catching of exits is involved.
+- Both OTP 29.1.3 and AtomVM actually returned and completed normally after
+  unfenced self-`kill` in the isolated sweep. The paired receive-fenced control
+  dies with `killed` and no report. Normal completion can win over reception;
+  `kill` is untrappable when received, not a synchronous self-termination promise
+  for `exit_signal/2`. OTP's `send_exit_signal_bif` preserves synchronous self
+  suicide only for legacy `exit/2`; its exiting-signal handler discards pending
+  exits without replacing an already selected termination reason.
+- Recipes require the allowed predicate to be true on each VM, not agreement on
+  a scheduling winner. `LYNX_COMPLETION_TRACE` preserves actual ETF observations
+  in OTP `proofs.log` and individual AtomVM logs. The CLI regression checks both
+  sets against an independent handwritten table, six-case filtered/reordered
+  replay and the OTP gate. The twelve async recipes require OTP 29; legacy
+  controls introduce no newer API requirement.
+- BEAM inspection distinguishes the direct legacy callback, the unfenced async
+  callback with no receive operations, and the fenced async callback with a real
+  scan/wait. The worker wrapper makes a non-tail callback call before sending the
+  report and returning; it has no receive operations. Parent-side receives are
+  outside the critical path. These are public behavior samples inspired by
+  `exit_signal_self_is_handled_later`, not a proof that every permitted schedule
+  or a particular queued-signal state was reached.
+
+Validation against OTP 29.1.3: all 18 cases pass in interpreter, AArch64
+precompiled and on-demand JIT modes, zero failures/unverified. Six-case
+filtered/reordered replay passes in each mode. Independent tables check raw
+traces from both VMs, and the CLI regression checks the OTP gate. Repeating all
+18 samples 64 times gives 1,152 observations per VM per mode (6,912 total), all
+independently valid. Every unfenced repeat in these runs chose normal completion
+with its exact report; no other scheduling winner is required or claimed as
+observed. The fatal receive-fenced controls do exercise termination before the
+report. The full CLI harness passes 41 tests with three optional skips (44
+discovered, 436.619 seconds). Saved BEAM checks, source/helper hashes, Erlang
+formatting, Python 3.9 grammar, whitespace and baseline-preservation checks pass.
+No runtime fix or expected-failure addition was needed.
+
+All 6,911 earlier recipes and metadata remain unchanged: total 6,929; attribution
+377/478 sites in 28 files; fixture counts unchanged at 2,351 calls / 203 exports /
+13 modules. Evidence is under `.amp/in/artifacts/lynx-self-exit-completion/`.
+No full runtime corpus, fresh Lean laws, embedded/32-bit/float32 or all-schedule
+coverage is claimed. Runtime fixes and standalone Erlang regressions, if needed,
+remain separate from this coverage batch.
 
 ## Lowered-receive continuations
 

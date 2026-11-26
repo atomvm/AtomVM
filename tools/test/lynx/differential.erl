@@ -44,6 +44,7 @@
     self_exit/4,
     trap_transition/3,
     exit_reception/5,
+    self_exit_completion/3,
     monitor_options/2,
     alias_lifetime/2,
     alias_owner/2,
@@ -2208,6 +2209,86 @@ exit_reception(Api, Destination, Timing, Final, Reason) ->
         case lists:member(Trace, Allowed) of
             true -> allowed;
             false -> {invalid_exit_reception, Trace}
+        end
+    end).
+
+%% No receive, mailbox query or acknowledgement follows the signal in the
+%% unfenced function or its worker wrapper. A report observes the function's
+%% return; the separate DOWN can still show fatal reception after that report.
+self_exit_completion(Mode, Trap, Reason) ->
+    isolated(fun() ->
+        Parent = self(),
+        Run =
+            case Mode of
+                legacy ->
+                    fun() ->
+                        Result = exit(self(), Reason),
+                        {Result, {continued, 17, <<5:3>>}}
+                    end;
+                unfenced ->
+                    fun() ->
+                        Result = erlang:exit_signal(self(), Reason),
+                        {Result, {continued, 17, <<5:3>>}}
+                    end;
+                fenced ->
+                    fun() ->
+                        Self = self(),
+                        Result = erlang:exit_signal(Self, Reason),
+                        Self ! completion_fence,
+                        receive
+                            completion_fence -> {Result, {continued, 17, <<5:3>>}}
+                        end
+                    end
+            end,
+        {Worker, Ref} = spawn_monitor(fun() ->
+            false = process_flag(trap_exit, Trap),
+            Value = Run(),
+            Parent ! {self(), {returned, Value}}
+        end),
+        Down =
+            receive
+                {'DOWN', Ref, process, Worker, R} -> R
+            after 2000 ->
+                exit(Worker, kill),
+                receive
+                    {'DOWN', Ref, process, Worker, _} -> timeout
+                end
+            end,
+        Reports = [
+            case Message of
+                {Worker, Value} -> Value;
+                Other -> Other
+            end
+         || Message <- drain()
+        ],
+        Trace = {Down, Reports, demonitor(Ref, [info])},
+        io:format("LYNX_COMPLETION_TRACE ~w~n", [binary_to_list(term_to_binary(Trace))]),
+        Report = [{returned, {true, {continued, 17, <<5:3>>}}}],
+        ExitReason =
+            case Reason of
+                kill -> killed;
+                _ -> Reason
+            end,
+        Fatal = Reason =:= kill orelse (not Trap andalso Reason =/= normal),
+        Allowed =
+            case {Mode, Fatal, Trap} of
+                {legacy, _, false} ->
+                    [{ExitReason, [], false}];
+                {legacy, true, _} ->
+                    [{ExitReason, [], false}];
+                {fenced, true, _} ->
+                    [{ExitReason, [], false}];
+                {unfenced, true, _} ->
+                    %% Reception can precede the return/report, follow the
+                    %% report, or lose to normal process completion. Never
+                    %% accept normal completion without the exact report.
+                    [{ExitReason, [], false}, {ExitReason, Report, false}, {normal, Report, false}];
+                _ ->
+                    [{normal, Report, false}]
+            end,
+        case lists:member(Trace, Allowed) of
+            true -> allowed;
+            false -> {invalid_self_exit_completion, Trace}
         end
     end).
 
