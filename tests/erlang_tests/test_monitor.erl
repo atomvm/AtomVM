@@ -31,6 +31,7 @@ start() ->
     ok = test_demonitor_boundaries(),
     ok = test_monitor_target_types(),
     ok = test_monitor_normal(),
+    ok = test_link_exit_before_down(64),
     ok = test_monitor_demonitor(),
     ok = test_monitor_noproc(),
     ok = test_monitor_demonitor_flush(),
@@ -478,6 +479,42 @@ test_monitor_normal() ->
         after 5000 -> timeout
         end,
     ok.
+
+test_link_exit_before_down(0) ->
+    ok;
+test_link_exit_before_down(Count) ->
+    Parent = self(),
+    [
+        begin
+            process_flag(trap_exit, Trap),
+            % Install the monitor before the child adds its link.
+            {Child, Ref} = spawn_opt(
+                fun() ->
+                    link(Parent),
+                    ok
+                end,
+                [monitor]
+            ),
+            receive
+                {'DOWN', Ref, process, Child, normal} -> ok
+            end,
+            Trap = process_flag(trap_exit, true),
+            Expected =
+                case Trap of
+                    true -> normal;
+                    false -> none
+                end,
+            % DOWN guarantees the normal link exit has already been handled.
+            Expected =
+                receive
+                    {'EXIT', Child, Reason} -> Reason
+                after 0 -> none
+                end,
+            true = process_flag(trap_exit, false)
+        end
+     || Trap <- [false, true]
+    ],
+    test_link_exit_before_down(Count - 1).
 
 test_monitor_demonitor() ->
     Pid = spawn_opt(fun() -> normal_loop() end, []),

@@ -104,6 +104,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed a VM abort (`context_monitors_handle_terminate: Assertion 'target != NULL'`) when a
   crashed process was monitored by a process terminating at the same time: printing the crash
   report could drop or reorder signals still pending in the mailbox
+- Fixed local linked exits being delivered after monitor `DOWN` signals when the monitor
+  was created before the link
 - Fixed messages that drivers send from a task (for example ESP32 network events) arriving in
   reverse order when they went through the global queue, which is always the case without SMP
 - Fixed a heap overflow in the generic_unix poll loop when a select event was armed while

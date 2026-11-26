@@ -894,6 +894,14 @@ static struct Monitor *context_monitors_handle_terminate(Context *ctx)
     struct ListHead *item;
     struct ListHead *tmp;
     struct Monitor *result = NULL;
+    // Link exits must precede DOWN signals, even when the monitor was created first.
+    MUTABLE_LIST_FOR_EACH (item, tmp, &ctx->monitors_head) {
+        struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
+        if (monitor->monitor_type == CONTEXT_MONITOR_LINK_LOCAL) {
+            list_remove(item);
+            list_prepend(&ctx->monitors_head, item);
+        }
+    }
     MUTABLE_LIST_FOR_EACH (item, tmp, &ctx->monitors_head) {
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
         switch (monitor->monitor_type) {
