@@ -502,16 +502,25 @@ class ValidationTests(unittest.TestCase):
                 "differential:execution_paths(map_get,1.0,#{1=>wanted})",
                 "differential:execution_paths(map_get,key,bad)",
             ]
-            source.write_text(json.dumps([{"expression": e} for e in expressions]))
+            structural = [entry for entry in lean_runtime.cases() if "structural_bif" in entry]
+            self.assertEqual(len(structural), 70)
+            self.assertEqual({entry["structural_bif"] for entry in structural},
+                             {"length", "hd", "tl", "element", "tuple_size", "byte_size", "bit_size"})
+            source.write_text(json.dumps([{"expression": e} for e in expressions] + structural))
             output = work / "paths"
             self.assertEqual(self.invoke(output, "--replay", source),
-                             {"laws": 0, "passed": 14, "failed": 0,
+                             {"laws": 0, "passed": 84, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            saved = json.loads((output / "cases.json").read_text())
+            source.write_text(json.dumps([saved[i] for i in [83, 14, 24, 30, 66, 81, 4, 1]]))
+            replay = work / "replay"
+            self.assertEqual(self.invoke(replay, "--replay", source),
+                             {"laws": 0, "passed": 8, "failed": 0,
                               "unverified": 0, "uncovered": 0})
             check = subprocess.run([
                 "elixir", "-e", """
-                [path] = System.argv()
-                values = JSON.decode!(File.read!(path))["expected"]
-                  |> Enum.map(fn s -> :erlang.binary_to_term(Base.decode64!(s)) end)
+                [original, replay] = System.argv()
+                original_cases = JSON.decode!(File.read!(Path.join(original, "cases.json")))
                 paths = fn value, guard -> {:ok,
                   [body: value, dynamic: value, guard: guard]} end
                 map_paths = fn value, guard, pattern -> {:ok,
@@ -527,8 +536,61 @@ class ValidationTests(unittest.TestCase):
                   map_paths.({:ok, :other}, :rejected, {:matched, :other}),
                   map_paths.({:exception, :error, {:badkey, 1.0}}, :rejected, :no_match),
                   map_paths.({:exception, :error, {:badmap, :bad}}, :rejected, :no_match)]
-                true = values === expected
-                """, str(output / "manifest.json")
+                manual = Map.new(Enum.zip(Enum.map(Enum.take(original_cases, 14),
+                                                  & &1["expression"]), expected))
+                tables = %{
+                  "length" => %{"empty" => 0, "three" => 3, "two" => 2, "live" => 3,
+                    "runtime_list" => 257, "improper" => :badarg,
+                    "nested_improper" => :badarg, "non_list" => :badarg},
+                  "hd" => %{"empty" => :badarg, "proper" => :wanted, "improper" => :wanted,
+                    "other" => :other, "non_list" => :badarg, "heap_head" => {:nested, <<5::3>>}},
+                  "tl" => %{"empty" => :badarg, "proper" => [:wanted], "improper" => :wanted,
+                    "singleton" => [], "non_list" => :badarg,
+                    "heap_tail" => [{:nested, <<5::3>>} | :tail]},
+                  "tuple_size" => %{"empty" => 0, "three" => 3, "two" => 2,
+                    "non_tuple" => :badarg, "live" => 3},
+                  "element" => %{"index_-1" => :badarg, "index_0" => :badarg,
+                    "index_1" => :wanted, "index_2" => :other, "index_3" => {:nested, <<5::3>>},
+                    "index_4" => :badarg, "index_1.0" => :badarg, "index_bad" => :badarg,
+                    "index_1 bsl 100" => :badarg, "empty" => :badarg, "non_tuple" => :badarg,
+                    "invalid_both" => :badarg, "runtime_32" => :other,
+                    "runtime_33" => :wanted, "runtime_34" => :badarg}
+                }
+                sizes = %{"heap_binary" => 248, "refc_binary" => 2056,
+                  "aligned_slice" => 520, "unaligned_slice" => 520, "partial_slice" => 515,
+                  "non_bitstring_atom" => :badarg, "non_bitstring_list" => :badarg}
+                targets = %{"length" => 3, "hd" => :wanted, "tl" => [:wanted],
+                  "tuple_size" => 3, "element" => :wanted, "byte_size" => 3, "bit_size" => 24}
+                for path <- [original, replay] do
+                  cases = JSON.decode!(File.read!(Path.join(path, "cases.json")))
+                  values = JSON.decode!(File.read!(Path.join(path, "manifest.json")))["expected"]
+                  true = length(cases) === length(values)
+                  for {entry, encoded} <- Enum.zip(cases, values) do
+                    want = case entry["structural_bif"] do
+                      nil -> Map.fetch!(manual, entry["expression"])
+                      op ->
+                        label = entry["structural_case"]
+                        result = if op in ["byte_size", "bit_size"] do
+                          bits = case label do
+                            "bits_" <> n -> String.to_integer(n)
+                            _ -> Map.fetch!(sizes, label)
+                          end
+                          if op == "byte_size" and bits != :badarg, do: div(bits+7, 8), else: bits
+                        else
+                          Map.fetch!(Map.fetch!(tables, op), label)
+                        end
+                        observation = if result == :badarg, do: {:exception, :error, :badarg},
+                                                              else: {:ok, result}
+                        guard = if result != :badarg and result === Map.fetch!(targets, op),
+                          do: :matched, else: :rejected
+                        {:ok, observations} = paths.(observation, guard)
+                        {:ok, {observations, observations}}
+                    end
+                    got = :erlang.binary_to_term(Base.decode64!(encoded))
+                    if got !== want, do: raise(inspect({entry, want, got}))
+                  end
+                end
+                """, str(output), str(replay)
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
@@ -2348,7 +2410,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 6709)
+        self.assertEqual(len(lean_runtime.cases()), 6779)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

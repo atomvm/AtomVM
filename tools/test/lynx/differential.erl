@@ -372,7 +372,22 @@ call(Module, Function, Args) -> apply(Module, Function, Args).
 
 %% Compare observations, not equality between paths: guards reject errors and
 %% map patterns fail to match where body/dynamic lookups raise exceptions.
+%% Unary structural operations use B as the exact guard-match target.
 execution_paths(Op, A, B) ->
+    Args =
+        case Op of
+            Unary when
+                Unary =:= length;
+                Unary =:= hd;
+                Unary =:= tl;
+                Unary =:= tuple_size;
+                Unary =:= byte_size;
+                Unary =:= bit_size
+            ->
+                [A];
+            _ ->
+                [A, B]
+        end,
     Pattern =
         case Op of
             map_get -> [{pattern, path_map_pattern(A, B)}];
@@ -380,7 +395,7 @@ execution_paths(Op, A, B) ->
         end,
     [
         {body, path_result(fun() -> path_body(Op, A, B) end)},
-        {dynamic, path_result(fun() -> call(erlang, Op, [A, B]) end)},
+        {dynamic, path_result(fun() -> call(erlang, Op, Args) end)},
         {guard, path_guard(Op, A, B)}
         | Pattern
     ].
@@ -412,7 +427,14 @@ path_body('<', A, B) -> A < B;
 path_body('=<', A, B) -> A =< B;
 path_body('>', A, B) -> A > B;
 path_body('>=', A, B) -> A >= B;
-path_body(map_get, A, B) -> map_get(A, B).
+path_body(map_get, A, B) -> map_get(A, B);
+path_body(length, A, _) -> length(A);
+path_body(hd, A, _) -> hd(A);
+path_body(tl, A, _) -> tl(A);
+path_body(element, A, B) -> element(A, B);
+path_body(tuple_size, A, _) -> tuple_size(A);
+path_body(byte_size, A, _) -> byte_size(A);
+path_body(bit_size, A, _) -> bit_size(A).
 
 %% Arithmetic guards match numeric zero, retaining success and rejection paths.
 path_guard('+', A, B) when A + B == 0 -> matched;
@@ -435,6 +457,13 @@ path_guard('=<', A, B) when A =< B -> matched;
 path_guard('>', A, B) when A > B -> matched;
 path_guard('>=', A, B) when A >= B -> matched;
 path_guard(map_get, A, B) when map_get(A, B) =:= wanted -> matched;
+path_guard(length, A, B) when length(A) =:= B -> matched;
+path_guard(hd, A, B) when hd(A) =:= B -> matched;
+path_guard(tl, A, B) when tl(A) =:= B -> matched;
+path_guard(element, A, B) when element(A, B) =:= wanted -> matched;
+path_guard(tuple_size, A, B) when tuple_size(A) =:= B -> matched;
+path_guard(byte_size, A, B) when byte_size(A) =:= B -> matched;
+path_guard(bit_size, A, B) when bit_size(A) =:= B -> matched;
 path_guard(_, _, _) -> rejected.
 
 path_map_pattern(Key, Map) ->

@@ -45,18 +45,22 @@ validation; no expected failures were added.
 
 ### 2. Structural BIF execution paths
 
-- [ ] Extend body/dynamic-call/guard comparisons to `length/1`, `hd/1`, `tl/1`,
+- [x] Extend body/dynamic-call/guard comparisons to `length/1`, `hd/1`, `tl/1`,
   `element/2`, `tuple_size/1`, `byte_size/1` and `bit_size/1`.
-- [ ] Distinguish body/dynamic exceptions from guard rejection using opaque
+- [x] Distinguish body/dynamic exceptions from guard rejection using opaque
   arguments. Include empty/improper lists, invalid tuples and index boundaries,
   partial bitstrings, heap/sub-binaries and live values across calls/GC.
-- [ ] Inspect emitted BEAM before claiming distinct opcode paths; different
+- [x] Inspect emitted BEAM before claiming distinct opcode paths; different
   source forms can compile identically. Avoid duplicating existing map guards.
 
-The explicit execution-path matrix currently covers arithmetic, comparisons and
-`map_get`; direct calls and fixtures already cover some structural behavior.
-All 18 exploratory structural observations matched OTP in interpreter mode.
-These were feasibility probes, not permanent tests or native-path validation.
+Added 70 permanent recipes with independent expected values and mixed/reordered
+saved replay, extending the existing arithmetic/comparison/map-get observer.
+Each compares three paths before and after explicit GC. Body and guard BIF
+instructions have different failure targets; dynamic calls use `erlang:apply/3`.
+These are dispatch/failure contexts, not dedicated structural opcodes. All 70
+match OTP in interpreter, AArch64 precompiled and on-demand JIT modes, without
+runtime fixes or expected failures. See
+[PLAN.md](PLAN.md#structural-bif-execution-paths).
 
 ### 3. Exit reception across trap-flag changes
 
@@ -103,7 +107,8 @@ unattributed sites classify as 71 model/proof contracts, 19 blocked persistent-t
 sites, 11 represented/overlapping sites and four partially sampled signal
 behaviors. Attribution is not branch coverage: all Maps sites already had labels,
 yet custom-order differential combinations were missing. The iterator batch above
-adds 240 recipes (total 6,709), without changing attribution or fixture counts.
+adds 240 recipes; the structural BIF batch adds another 70 (total 6,779),
+without changing attribution or fixture counts.
 
 Tagged monitors explicitly raise `unsupported`; priority exits/monitors and
 distribution require separate support work, not an assumption that the APIs are

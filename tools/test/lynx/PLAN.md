@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,709 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 6,779 public-behavior recipes inspired by Lean tests
   and upstream examples (`373` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,55 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Structural BIF execution paths
+
+Add 70 recipes (2026-11-26) through the existing `execution_paths/3` observer:
+`length/1` (8), `hd/1` (6), `tl/1` (6), `tuple_size/1` (5), `element/2` (15),
+`byte_size/1` (15) and `bit_size/1` (15). Keep the previous arithmetic,
+comparison and map-get observations unchanged; no new runtime API is needed.
+
+- Compare exact body and dynamic-call results/exceptions against guard
+  success/rejection. Valid results that do not equal the guard target must
+  reject without being confused with invalid inputs. Improper cons cells are
+  valid for `hd`/`tl` but invalid for `length`; tuple controls include empty and
+  non-tuples, negative/zero/last/past-end indices, float/atom/bignum indices,
+  and a runtime-built 33-element tuple.
+- Each recipe keeps opaque inputs and the first observations live across calls
+  and explicit `garbage_collect/0`, then observes all three paths again.
+  Runtime-built lists/tuples include heap terms and live process/reference/fun
+  values where only scalar sizes escape. Bitstring controls cover 0/1/7/8/9/
+  23/24/25 bits, 31/257-byte binaries, 65-byte aligned and unaligned slices,
+  and an unaligned 515-bit slice. Byte size rounds partial bytes up, not down.
+- OTP 29.1.3 BEAM inspection confirms body `bif` instructions for `hd`, `tl`,
+  `element` and `tuple_size`; `gc_bif` for `length`, `byte_size` and `bit_size`.
+  Body failure targets are zero (raise); guards use the same BIF families with
+  nonzero rejection targets. Dynamic calls use `erlang:apply/3`. These are
+  distinct dispatch/failure contexts, not seven newly exercised dedicated
+  structural opcodes. Representative drivers retain inputs and first results
+  in stack slots across explicit GC; calls are not constant-folded away.
+- Extend the existing CLI regression with independent expected-value tables,
+  arithmetic byte-size expectations and an eight-case filtered/reordered replay
+  mixing structural and original arithmetic cases. No assembly-shape
+  assertions are kept as brittle permanent tests.
+- All 70 recipes match OTP 29.1.3 in interpreter, AArch64 precompiled and
+  on-demand JIT modes, with zero failures/unverified; no runtime correction or
+  expected-failure addition. Full CLI harness: 37 passed, three optional skips
+  (40 discovered). The affected independent-oracle/replay test also passes
+  after the final constructor adjustment. Erlang formatting, Python 3.9
+  grammar and whitespace checks pass.
+- Assembly exposed a constant-folded initial improper-tail constructor. Its
+  final opaque `lists:reverse/2` construction is present in saved BEAM, and
+  was rechecked separately in all three modes. `final-input.json` is the final
+  70-recipe selection; `allocated-tail-*` records that one-case recheck.
+- All 6,709 earlier recipes and metadata are unchanged: total 6,779,
+  attribution still 373/478 sites in 28 files; fixture counts unchanged.
+  This batch does not rerun the full runtime corpus, fresh Lean laws or embedded
+  targets, and makes no claim of guaranteed heap movement or all GC schedules.
+
+Local evidence: `.amp/in/artifacts/lynx-structural-paths/` contains saved input,
+per-mode manifests/results, toolchain, independent CLI and harness logs,
+`beam-paths.txt`, `beam-gc-roots.txt` and regenerated inventory.
 
 ## Custom map-iterator ordering and consumers
 

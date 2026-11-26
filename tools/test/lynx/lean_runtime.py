@@ -547,6 +547,68 @@ def cases():
         value = f"maps:from_list([{{I,I}} || I <- lists:seq(1,{size})])"
         for key in ["1", "1.0", "missing"]:
             probe("Modules/Maps", "update_lookup", f"differential:execution_paths(map_get,{key},{value})")
+    # Reuse body/dynamic/guard observations, keeping inputs and first results
+    # live across a call and explicit GC. A successful unequal guard must reject
+    # just like an invalid BIF, but body/dynamic results distinguish the two.
+    structural_inputs = {
+        "length": ("3", [
+            ("empty", "[]"), ("three", "[wanted,{nested,7},<<5:3>>]"),
+            ("two", "[a,b]"), ("improper", "[wanted|tail]"),
+            ("nested_improper", "[a,b|tail]"), ("non_list", "{a,b}"),
+            ("live", "[self(),make_ref(),fun()->alive end]"),
+            ("runtime_list", "lists:seq(1,257)"),
+        ]),
+        "hd": ("wanted", [
+            ("empty", "[]"), ("proper", "[wanted,{nested,7}]"),
+            ("improper", "[wanted|tail]"), ("other", "[other]"),
+            ("non_list", "{wanted}"),
+            ("heap_head", "lists:reverse([tail,{nested,<<5:3>>}])"),
+        ]),
+        "tl": ("[wanted]", [
+            ("empty", "[]"), ("proper", "[head,wanted]"),
+            ("improper", "[head|wanted]"), ("singleton", "[head]"),
+            ("non_list", "42"),
+            ("heap_tail", "lists:reverse(differential:exception_argument([{nested,<<5:3>>},head]),tail)"),
+        ]),
+        "tuple_size": ("3", [
+            ("empty", "{}"), ("three", "{wanted,<<5:3>>,[a|tail]}"),
+            ("two", "{a,b}"), ("non_tuple", "[a,b,c]"),
+            ("live", "list_to_tuple([self(),make_ref(),fun()->alive end])"),
+        ]),
+    }
+    binary_inputs = [(f"bits_{bits}", f"<<5:{bits}>>") for bits in [0, 1, 7, 8, 9, 23, 24, 25]] + [
+        ("heap_binary", "binary:copy(<<7>>,31)"),
+        ("refc_binary", "binary:copy(<<7>>,257)"),
+        ("aligned_slice", "binary:part(binary:copy(<<17>>,129),1,65)"),
+        ("unaligned_slice", "begin Parent=differential:exception_argument("
+         "<<7:3,(binary:copy(<<17>>,129))/binary,3:5>>),"
+         "<<_:3,Slice:65/binary,_/bitstring>>=Parent,Slice end"),
+        ("partial_slice", "begin Parent=differential:exception_argument("
+         "binary:copy(<<17>>,129)),<<_:5,Slice:515/bitstring,_/bitstring>>=Parent,Slice end"),
+        ("non_bitstring_atom", "bad"), ("non_bitstring_list", "[1,2,3]"),
+    ]
+    structural_inputs.update(byte_size=("3", binary_inputs), bit_size=("24", binary_inputs))
+    for op, (target, inputs) in structural_inputs.items():
+        origin = {"length": "length/1_two_elements", "hd": "hd/1_cons", "tl": "tl/1_cons",
+                  "tuple_size": "tuple_access"}.get(op, "bitstring_guards")
+        for label, value in inputs:
+            path = f"differential:execution_paths({op},V,{target})"
+            probe(e, origin, f"V=differential:exception_argument({value}),Before={path},"
+                  f"true=erlang:garbage_collect(),After={path},{{Before,After}}",
+                  structural_bif=op, structural_case=label)
+    tuple_value = "{wanted,other,{nested,<<5:3>>}}"
+    element_inputs = [(f"index_{index}", index, tuple_value)
+                      for index in ["-1", "0", "1", "2", "3", "4", "1.0", "bad", "1 bsl 100"]] + [
+        ("empty", "1", "{}"), ("non_tuple", "1", "[wanted,other]"),
+        ("invalid_both", "0", "bad"),
+    ] + [(f"runtime_{index}", str(index), "setelement(33,erlang:make_tuple(33,other),wanted)")
+         for index in [32, 33, 34]]
+    for label, index, value in element_inputs:
+        path = "differential:execution_paths(element,I,V)"
+        probe(e, "tuple_access", f"I=differential:exception_argument({index}),"
+              f"V=differential:exception_argument({value}),Before={path},"
+              f"true=erlang:garbage_collect(),After={path},{{Before,After}}",
+              structural_bif="element", structural_case=label)
     for a in ["true", "false", "0"]:
         for b in ["true", "false", "bad"]:
             call(e, "xor/2_booleans", "xor", a, b)
