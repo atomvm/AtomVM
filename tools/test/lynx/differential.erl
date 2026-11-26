@@ -59,6 +59,7 @@
     function_compare/2,
     function_identity/2,
     function_apply/3,
+    exception_argument/1,
     function_named/3,
     function_make/4,
     function_spawn/3,
@@ -3663,6 +3664,9 @@ function_identity(Kind, Padding) ->
             {dictionary, {Writes, Reads, Erased, get(A), get(B)}}
         }
     end).
+
+%% A remote call keeps paired driver arguments opaque to the compiler.
+exception_argument(Value) -> Value.
 
 function_zero() -> zero.
 function_one(X) -> {one, X}.

@@ -168,7 +168,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **6,148 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **6,193 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -207,7 +207,16 @@ Nested function captures and integer/float captures distinguish loose equality
 from exact keys. Maps include 2, 31, 32, and 33 keys; no raw fun identity or
 implementation-dependent ordering is compared across VMs.
 
-The subsequent [signal-queue batch](PLAN.md#signal-queue-differential-boundaries)
+The [compiler-exception batch](PLAN.md#compiler-folded-versus-runtime-exceptions)
+adds 45 observations: 15 scenarios through pure literal, effectful literal, and
+opaque runtime calls. These compare exact exception classes/reasons and effect
+traces for pattern/guard failures, matched/later clauses, badfun/badarity, and
+body `error`/`throw`/`exit`. Optimized OTP 29 Core confirms literal
+`{function_clause,b}` and `{function_clause,a,3}` failures; dynamic BEAM calls
+retain `call_fun`. All 45 match OTP 29 in interpreter and AArch64 precompiled
+execution. This adds no Lean theorem claims or expected-failure entries.
+
+The [signal-queue batch](PLAN.md#signal-queue-differential-boundaries)
 adds 24 cases for immediate post-kill process queries, trapping after normal
 `DOWN`, and unfenced unlink/relink/kill. Live, pre-trapped and final-unlinked
 controls distinguish missing behavior; 1/16/64 iterations sample schedules,

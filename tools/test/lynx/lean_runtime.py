@@ -1475,6 +1475,63 @@ def cases():
                  f"[skipped,{{}},{{prefix}},{{prefix,{stored},only}}]", module="lists",
                  word_size_dependent=True)
 
+    # Upstream compiler regression, not a Lean theorem attribution. Keep the
+    # same source call with either compiler-known or remotely returned operands.
+    # Folded failures must retain preceding effects, but never run the body.
+    effect_key = "'$lynx_exception_effects'"
+    body = f"put({effect_key},[body|get({effect_key})]),matched"
+    for scenario, fun, args in [
+        ("atom_match", f"fun(a)->{body} end", ["a"]),
+        ("atom_miss", f"fun(a)->{body} end", ["b"]),
+        ("numeric_miss", f"fun(1)->{body} end", ["1.0"]),
+        ("two_arg_miss", f"fun(a,2)->{body} end", ["a", "3"]),
+        ("map_match", f"fun(#{{key:=7}})->{body} end", ["#{key=>7,extra=>9}"]),
+        ("map_miss", f"fun(#{{key:=7}})->{body} end", ["#{other=>7}"]),
+        ("guard_match", f"fun(X) when is_integer(X),X>0->{body} end", ["7"]),
+        ("guard_false", f"fun(X) when is_integer(X),X>0->{body} end", ["-3"]),
+        ("guard_error", f"fun(X) when element(2,X)=:=accepted->{body} end", ["{accepted}"]),
+        ("later_clause", f"fun(a)->wrong_clause;(b)->{body} end", ["b"]),
+        ("badfun", "not_fun", ["7"]),
+        ("badarity", f"fun(_)->{body} end", ["7", "9"]),
+        ("body_error", f"fun(a)->{body},error(body_failed) end", ["a"]),
+        ("body_throw", f"fun(a)->{body},throw(body_failed) end", ["a"]),
+        ("body_exit", f"fun(a)->{body},exit(body_failed) end", ["a"]),
+    ]:
+        for path in ["literal", "effectful_literal", "runtime"]:
+            operands = [fun, *args]
+            if path == "runtime":
+                operands = [f"differential:exception_argument({value})" for value in operands]
+            arguments = [f"begin put({effect_key},[arg{index}|get({effect_key})]),"
+                         f"{value} end" for index, value in enumerate(operands[1:], 1)]
+            setup = ""
+            callee = f"({operands[0]})"
+            handler = ""
+            if scenario in ["badfun", "badarity"]:
+                # An atom in direct callee position denotes a local function.
+                setup = f"F={operands[0]},"
+                callee = "F"
+            if scenario == "badarity":
+                # Only this case needs a fun-identity check. Keeping a reference
+                # in other handlers can prevent the compiler folding the call.
+                handler = ("error:{badarity,{BadFun,BadArgs}}->"
+                           "{exception,error,{badarity,BadFun=:=F,BadArgs}};")
+            if path == "literal":
+                # Effects inside arguments inhibit Core folding on OTP 29.
+                # Separate preceding effects from the pure literal call, and
+                # retain effectful_literal as a third, distinct path control.
+                setup += "".join(f"put({effect_key},[arg{index}|get({effect_key})]),"
+                                 for index in range(1, len(args) + 1))
+                arguments = args
+            selected.append({
+                "upstream_test": "test/lynx/core_to_leanj_test.exs#function clause failures raise function_clause alone",
+                "exception_scenario": scenario,
+                "exception_path": path,
+                "expression": f"put({effect_key},[before]),{setup}"
+                              f"Outcome=try {callee}({','.join(arguments)}) of V->{{ok,V}} catch "
+                              f"{handler}ExcClass:ExcReason->{{exception,ExcClass,ExcReason}} end,"
+                              f"{{Outcome,lists:reverse(erase({effect_key}))}}",
+            })
+
     for kind in ["local_zero", "local_one", "local_two", "external_zero", "external_one",
                  "external_two", "bif_zero", "bif_one", "missing_export", "missing_module", "not_fun"]:
         for args in ["[]", "[7]", "[left,right]", "[a,b,c]", "[7|improper]", "bad"]:

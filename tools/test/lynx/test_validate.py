@@ -865,6 +865,47 @@ class ValidationTests(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_compiler_folded_and_runtime_exceptions_have_independent_oracles(self):
+        selected = [entry for entry in lean_runtime.cases() if "exception_path" in entry]
+        scenarios = ["atom_match", "atom_miss", "numeric_miss", "two_arg_miss",
+                     "map_match", "map_miss", "guard_match", "guard_false", "guard_error",
+                     "later_clause", "badfun", "badarity", "body_error", "body_throw", "body_exit"]
+        self.assertEqual([(entry["exception_scenario"], entry["exception_path"])
+                          for entry in selected],
+                         [(scenario, path) for scenario in scenarios
+                          for path in ["literal", "effectful_literal", "runtime"]])
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "exceptions.json"
+            source.write_text(json.dumps(selected))
+            output = work / "results"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 45, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            # Handwritten outcomes distinguish atom vs tuple reasons, swallowed
+            # guard errors, argument order/count, and entering a rejected body.
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                actual = JSON.decode!(File.read!(path))["expected"]
+                         |> Enum.map(&:erlang.binary_to_term(Base.decode64!(&1)))
+                success = {{:ok, :matched}, [:before, :arg1, :body]}
+                miss = {{:exception, :error, :function_clause}, [:before, :arg1]}
+                expected = [
+                  success, miss, miss,
+                  {{:exception, :error, :function_clause}, [:before, :arg1, :arg2]},
+                  success, miss, success, miss, miss, success,
+                  {{:exception, :error, {:badfun, :not_fun}}, [:before, :arg1]},
+                  {{:exception, :error, {:badarity, true, [7, 9]}}, [:before, :arg1, :arg2]},
+                  {{:exception, :error, :body_failed}, [:before, :arg1, :body]},
+                  {{:exception, :throw, :body_failed}, [:before, :arg1, :body]},
+                  {{:exception, :exit, :body_failed}, [:before, :arg1, :body]}
+                ] |> Enum.flat_map(fn value -> [{:ok, value}, {:ok, value}, {:ok, value}] end)
+                true = actual === expected
+                """, str(output / "manifest.json")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     def test_function_identity_preserves_exact_keys_across_copy_and_gc(self):
         kinds = ["named_zero", "named_one", "named_two", "captured_named", "numeric_capture"]
         expressions = [f"differential:function_identity({kind},{padding})"
@@ -1784,7 +1825,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 6148)
+        self.assertEqual(len(lean_runtime.cases()), 6193)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,148 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 6,193 public-behavior recipes inspired by Lean tests
   and upstream examples (`369` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -37,6 +37,42 @@ The supported checkout has 28 Lean test files, including new concurrency audits
 and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` and `erlang:exit_signal/2` remain separately observed API gaps.
 Fixture validation does not establish complete runtime-model support.
+
+## Compiler-folded versus runtime exceptions
+
+Add 45 public observations (2026-11-26), inspired by upstream Lynx commit
+`8558502245de2a5c725c8802446b8198e84b39bb` and its
+`function clause failures raise function_clause alone` regression. Compiler-known
+failed anonymous calls may become a literal Core `match_fail` tuple containing
+arguments; the observable error reason must still be the atom `function_clause`.
+This is upstream compiler-test provenance, not new Lean-site attribution.
+
+- Fifteen scenarios cover atom, exact numeric, two-argument and map patterns;
+  successful and false/erroring guards; a later matching clause; badfun and
+  badarity controls; and matched-body `error`, `throw` and `exit`.
+- Each scenario uses pure literal, effectful literal, and opaque runtime operands.
+  A remote identity helper keeps dynamic funs and arguments opaque. OTP 29 does
+  not fold failures with effects inside arguments, so pure literal calls record
+  preceding effects separately; the effectful-literal path checks argument
+  evaluation. Keep all three instead of assuming source literals imply folding.
+- Optimized Core for the actual emitted literal drivers contains
+  `{function_clause,b}` and `{function_clause,a,3}`; matching runtime drivers
+  retain `call_fun/1,2`. Do not assert these incidental compiler shapes in the
+  permanent behavioral tests.
+- Compare exact class/reason and ordered effect traces. Only badarity's embedded
+  fun identity is represented by a same-runtime equality check; its arguments
+  remain exact. Handwritten public CLI expectations check all 45 results,
+  including once-only argument/body effects and no body entry on clause failure.
+- Focused interpreter (`build`) and AArch64 precompiled
+  (`.amp/in/build-native`, on-demand JIT disabled) replays both match OTP 29 on
+  all 45 cases, without failures or unverified cases. Inventory remains
+  `369/478` sites in 28 files. No runtime fixes or expected-failure edits.
+  The complete harness CLI suite passes: 29 passed, 3 optional environment-gated
+  tests skipped (32 discovered); `git diff --check` is clean.
+- Evidence: `.amp/in/artifacts/lynx-folded-exceptions/` contains replay inputs,
+  final per-mode sources/manifests/results/build hashes, optimized Core and
+  assembly, and CLI test output. This batch does not rerun the full runtime
+  corpus, on-demand JIT or embedded targets.
 
 ## Signal-queue ordering fixes
 
