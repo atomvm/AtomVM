@@ -51,12 +51,16 @@ exact traces; use allowed outcomes for competing writers/erase.
 
 ## 4. Async `erlang:exit_signal/2`
 
-- [ ] Add explicit coverage of the new API, distinct from helpers that call
-  `exit/2`: normal/abnormal/kill signals and self-signal queue processing.
+- [x] Implement the new API with standalone Erlang regressions, independently
+  of helpers that call `exit/2`, and add 56 differential observations covering
+  normal/abnormal/kill signals, self-signal processing, PID/alias destinations,
+  reply-alias ordering, inactive references and invalid/dead destinations.
 
-**Blocked on runtime support:** the probed call returned `undef` on AtomVM.
-Check oracle availability, isolate fatal calls in workers, and use monitors and
-allowed outcomes; asynchronous self-signaling does not guarantee survival.
+The oracle requires OTP 29 or newer; older references are unverified, not
+matches. Fatal calls run in monitored workers. The implementation supports local
+processes, ports and aliases; distributed destinations and priority options in
+`exit_signal/3` remain outside this batch. See the
+[batch details](PLAN.md#asynchronous-exit-signals).
 
 ## 5. Compiler-folded exceptions and optimized Core evaluation order
 

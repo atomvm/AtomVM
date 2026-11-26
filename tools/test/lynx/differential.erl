@@ -39,6 +39,7 @@
     linked_exit/2,
     exit_signal/2,
     exit_signal/3,
+    async_exit/3,
     self_exit/4,
     trap_transition/3,
     monitor_options/2,
@@ -1774,6 +1775,86 @@ exit_signal_run(Trap, Reason, Mode) ->
         after 0 -> no_reply
         end,
     {LocalLinked, PeerLinked, Down, Observation, Exit}.
+
+%% This is the OTP 29 API, unlike the older exit_signal helpers using exit/2.
+async_exit(self, Trap, Reason) ->
+    isolated(fun() ->
+        process_flag(trap_exit, Trap),
+        self() ! before_signal,
+        Result = erlang:exit_signal(self(), Reason),
+        self() ! after_signal,
+        {Result, async_exit_messages(self(), [])}
+    end);
+async_exit(dead, _Trap, Reason) ->
+    isolated(fun() ->
+        {Child, Ref} = spawn_monitor(fun() -> ok end),
+        receive
+            {'DOWN', Ref, process, Child, normal} -> ok
+        end,
+        erlang:exit_signal(Child, Reason)
+    end);
+async_exit(Mode, Trap, Reason) ->
+    isolated(fun() ->
+        Parent = self(),
+        {Child, Ref} = spawn_monitor(fun() ->
+            process_flag(trap_exit, Trap),
+            Destination =
+                case Mode of
+                    pid ->
+                        self();
+                    plain_ref ->
+                        make_ref();
+                    inactive_alias ->
+                        A = alias(),
+                        true = unalias(A),
+                        A;
+                    alias ->
+                        alias();
+                    _ ->
+                        alias([reply])
+                end,
+            Parent ! {self(), Destination},
+            Messages = async_exit_messages(Parent, []),
+            Active =
+                case Mode of
+                    pid -> not_alias;
+                    _ -> unalias(Destination)
+                end,
+            Parent ! {self(), {Messages, Active}}
+        end),
+        Destination =
+            receive
+                {Child, D} -> D
+            end,
+        case Mode of
+            reply_then_exit -> Destination ! before_signal;
+            exit_then_reply -> ok;
+            _ -> Child ! before_signal
+        end,
+        true = erlang:exit_signal(Destination, Reason),
+        case Mode of
+            exit_then_reply -> Destination ! before_signal;
+            _ -> ok
+        end,
+        Child ! after_signal,
+        Down =
+            receive
+                {'DOWN', Ref, process, Child, R} -> R
+            end,
+        Observation =
+            receive
+                {Child, Value} -> Value
+            after 0 -> no_reply
+            end,
+        {Down, Observation}
+    end).
+
+async_exit_messages(Sender, Acc) ->
+    receive
+        after_signal -> lists:reverse([after_signal | Acc]);
+        {'EXIT', Sender, Reason} -> async_exit_messages(Sender, [{exit, Reason} | Acc]);
+        Message -> async_exit_messages(Sender, [Message | Acc])
+    end.
 
 self_exit(Arity, Trap, Linked, Reason) ->
     isolated(fun() ->

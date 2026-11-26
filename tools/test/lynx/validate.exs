@@ -69,19 +69,25 @@ case System.argv() do
 
     references =
       Enum.map(cases, fn entry ->
-        task = Task.async(fn -> apply(String.to_atom(entry["module"]), :actual, []) end)
+        minimum_otp = Map.get(entry, "minimum_otp", 0)
 
-        case Task.yield(task, String.to_integer(timeout)) do
-          {:ok, {:exception, :error, :undef}} ->
-            %{value: nil, error: "OTP reference called an undefined function"}
+        if minimum_otp > String.to_integer(System.otp_release()) do
+          %{value: nil, error: "OTP reference requires OTP #{minimum_otp} or newer"}
+        else
+          task = Task.async(fn -> apply(String.to_atom(entry["module"]), :actual, []) end)
 
-          {:ok, value} ->
-            %{value: Base.encode64(:erlang.term_to_binary(value)), error: nil}
+          case Task.yield(task, String.to_integer(timeout)) do
+            {:ok, {:exception, :error, :undef}} ->
+              %{value: nil, error: "OTP reference called an undefined function"}
 
-          nil ->
-            Task.shutdown(task, :brutal_kill)
-            IO.puts("UNVERIFIED OTP reference timed out: #{entry["expression"]}")
-            %{value: nil, error: "OTP reference timed out"}
+            {:ok, value} ->
+              %{value: Base.encode64(:erlang.term_to_binary(value)), error: nil}
+
+            nil ->
+              Task.shutdown(task, :brutal_kill)
+              IO.puts("UNVERIFIED OTP reference timed out: #{entry["expression"]}")
+              %{value: nil, error: "OTP reference timed out"}
+          end
         end
       end)
 

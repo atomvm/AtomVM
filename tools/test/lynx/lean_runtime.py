@@ -1244,6 +1244,26 @@ def cases():
             for last in ["demonitor", "explicit_unalias", "reply_demonitor"]:
                 probe("Modules/Signals", "alias_ends_with_demonitor",
                       f"differential:monitor_target(process,{state},[{{alias,{first}}},{{alias,{last}}}])")
+    for mode in ["self", "pid", "alias", "reply_alias", "inactive_alias", "plain_ref",
+                 "reply_then_exit", "exit_then_reply", "dead"]:
+        for trap in (["false"] if mode == "dead" else ["false", "true"]):
+            for reason in ["normal", "{shutdown,<<5:3>>}", "kill"]:
+                entry = {
+                    "expression": f"differential:async_exit({mode},{trap},{reason})",
+                    "minimum_otp": 29, "async_exit_mode": mode,
+                    "async_exit_trap": trap == "true", "async_exit_reason": reason,
+                    "otp_api": "erlang:exit_signal/2",
+                }
+                if mode in ("self", "pid", "dead"):
+                    site = "exit_signal_self_ends_before_timeout" if mode == "self" else "exit_signal_to_others"
+                    entry["lean_origins"] = [f"Modules/Signals.lean#{site}"]
+                # Alias semantics are OTP extensions: Lynx explicitly does not model them.
+                selected.append(entry)
+    for value in ["bad", "7", "[]", "{}", "fun()->ok end"]:
+        selected.append({
+            "expression": f"differential:call(erlang,exit_signal,[{value},reason])",
+            "minimum_otp": 29, "async_exit_mode": "invalid", "otp_api": "erlang:exit_signal/2",
+        })
     for mode in ["trapped", "untrapped", "unlinked"]:
         for reason in ["normal", "boom", "kill"]:
             probe("Modules/Signals", ["linked_crash_kills_parent", "linked_normal_exit_is_ignored",

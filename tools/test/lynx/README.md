@@ -177,7 +177,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **6,413 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **6,469 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -191,6 +191,11 @@ incomplete, unaligned, and valid codepoints with invalid suffixes. Child and
 runtime-specific process/reference/closure hash identities are compared within each
 run, never serialized as cross-runtime expectations.
 This mode uses **AtomVM's bundled standard library**, not OTP's `lists.beam`.
+The 56 [asynchronous-exit observations](PLAN.md#asynchronous-exit-signals)
+exercise `erlang:exit_signal/2`, not the older helpers calling `exit/2`, including
+self-signals and alias ordering. They require an OTP 29 oracle: on older OTP,
+the reference is unverified before any worker executes, rather than counting a
+nested `undef` as a match.
 Missing functions and differing error precedence remain failures, not skips.
 For CI gating against the full corpus without hiding those differences in
 `summary.json` or `failures.json`, pass

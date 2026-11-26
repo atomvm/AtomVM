@@ -721,6 +721,84 @@ class ValidationTests(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_async_exit_has_independent_oracles_and_otp_gate(self):
+        otp = subprocess.check_output(["elixir", "-e", "IO.write(System.otp_release())"], text=True)
+        if int(otp) < 29:
+            self.skipTest("exit_signal/2 requires an OTP 29 oracle")
+        selected = [entry for entry in lean_runtime.cases() if "async_exit_mode" in entry]
+        self.assertEqual(len(selected), 56)
+        self.assertTrue(all(entry["minimum_otp"] == 29 for entry in selected))
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            source.write_text(json.dumps(selected))
+            output = work / "results"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 56, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            saved = json.loads((output / "cases.json").read_text())
+            source.write_text(json.dumps([saved[i] for i in [55, 0, 42, 19]]))
+            replay = work / "replay"
+            self.assertEqual(self.invoke(replay, "--replay", source),
+                             {"laws": 0, "passed": 4, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                for path <- System.argv() do
+                  cases = JSON.decode!(File.read!(Path.join(path, "cases.json")))
+                  values = JSON.decode!(File.read!(Path.join(path, "manifest.json")))["expected"]
+                  true = length(cases) === length(values)
+                  for {entry, encoded} <- Enum.zip(cases, values) do
+                    mode = entry["async_exit_mode"]
+                    trap = entry["async_exit_trap"] == true
+                    reason = case entry["async_exit_reason"] do
+                      "normal" -> :normal
+                      "kill" -> :kill
+                      _ -> {:shutdown, <<5::3>>}
+                    end
+                    active = mode not in ["inactive_alias", "plain_ref", "reply_then_exit"]
+                    fatal = active and (reason == :kill or (not trap and reason != :normal))
+                    down = if reason == :kill, do: :killed, else: reason
+                    want = cond do
+                      mode == "invalid" -> {:exception, :error, :badarg}
+                      mode == "dead" -> {:ok, {:ok, true}}
+                      mode == "self" and fatal -> {:ok, {:exit, down}}
+                      mode == "self" ->
+                        messages = if trap, do: [:before_signal, {:exit, reason}, :after_signal],
+                                           else: [:before_signal, :after_signal]
+                        {:ok, {:ok, {true, messages}}}
+                      fatal -> {:ok, {:ok, {down, :no_reply}}}
+                      true ->
+                        messages = cond do
+                          not active or not trap -> [:before_signal, :after_signal]
+                          mode == "exit_then_reply" -> [{:exit, reason}, :before_signal, :after_signal]
+                          true -> [:before_signal, {:exit, reason}, :after_signal]
+                        end
+                        alias_state = cond do
+                          mode == "pid" -> :not_alias
+                          mode in ["alias", "reply_alias"] -> true
+                          true -> false
+                        end
+                        {:ok, {:ok, {:normal, {messages, alias_state}}}}
+                    end
+                    got = :erlang.binary_to_term(Base.decode64!(encoded))
+                    if got !== want, do: raise(inspect({entry, want, got}))
+                  end
+                end
+                """, str(output), str(replay)
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+            # Even a nested isolated undef must not become a successful oracle
+            # on an older host. Force the same gate on every supported host.
+            source.write_text(json.dumps([dict(selected[0], minimum_otp=999)]))
+            gated = work / "gated"
+            self.assertEqual(self.invoke(gated, "--replay", source),
+                             {"laws": 0, "passed": 0, "failed": 0,
+                              "unverified": 1, "uncovered": 0})
+            manifest = json.loads((gated / "manifest.json").read_text())
+            self.assertEqual(manifest["expected"], [None])
+            self.assertEqual(manifest["oracle_errors"], ["OTP reference requires OTP 999 or newer"])
+
     def test_fanout_and_ending_requests_have_independent_oracles(self):
         selected = [entry for entry in lean_runtime.cases() if "termination_scenario" in entry]
         self.assertEqual([(e["termination_scenario"], e["termination_mode"], e["peers"])
@@ -2206,7 +2284,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 6413)
+        self.assertEqual(len(lean_runtime.cases()), 6469)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

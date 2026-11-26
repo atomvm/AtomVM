@@ -16,8 +16,8 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,413 public-behavior recipes inspired by Lean tests
-  and upstream examples (`371` of `478` Lean test sites across all 28 files). Source
+- `lean_runtime.py` selects 6,469 public-behavior recipes inspired by Lean tests
+  and upstream examples (`373` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
   the proved postcondition to be true on both VMs: five integer singleton sums,
@@ -35,8 +35,50 @@ runner semantics in [README.md](README.md).
 
 The supported checkout has 28 Lean test files, including new concurrency audits
 and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
-`persistent_term` and `erlang:exit_signal/2` remain separately observed API gaps.
+`persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
+implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Asynchronous exit signals
+
+Add 56 OTP-29-gated observations (2026-11-26), distinct from legacy helpers that
+call `exit/2`. Runtime support and standalone `test_exit2` regressions are kept
+outside the Lynx harness so they can be cherry-picked independently.
+
+- Self, PID, active alias, reply alias, inactive alias and plain-reference targets
+  cover normal, compound partial-bitstring and kill reasons with both trap
+  settings. Dead and invalid destinations provide controls. Before/EXIT/after
+  observations check exact sender order; reply-before-exit and exit-before-reply
+  distinguish alias deactivation order. An exit does not consume a reply alias.
+- Unlike `exit(self(), normal)`, an untrapping self-target ignores normal and
+  returns true. Fatal self-signals run in monitored workers and remain
+  uncatchable. The standalone regression also checks AtomVM echo-port normal,
+  kill and dead-target behavior; the port branch is not an OTP comparison.
+- The receiver validates aliases and normalizes explicit exit signals while
+  splitting its mailbox. Trapped exits become ordered messages; fatal exits
+  remain signals so earlier requests can run before termination. No sender
+  reads another process's alias table. Legacy `exit/2` is unchanged.
+- Reference execution checks `minimum_otp` before starting workers, preventing
+  nested isolated `undef` from becoming a false match on older OTP. The public
+  CLI test independently derives all expected observations, exercises filtered
+  and reindexed replay, and forces the gate with an unavailable OTP version.
+- All 6,413 earlier recipes and metadata remain unchanged. Total: 6,469;
+  attribution: 373/478 sites in 28 files. Alias cases have no Lean attribution:
+  Lynx explicitly does not model alias exits. These are finite observations,
+  not universal scheduler or theorem coverage.
+- Against OTP 29.1.3 / ERTS 17.1.2, interpreter, AArch64 precompiled and
+  on-demand JIT each match 56/56, with zero failures or unverified results.
+  JIT uses `--timeout 60 --jobs 2`. The standalone Erlang regression passes on
+  OTP and all three AtomVM modes, including a reference-counted binary reason.
+  The full interpreter Erlang core corpus passes, as do rebuilt mailbox, heap,
+  struct and ENIF tests. Full CLI harness: 36 passed, 3 optional skips (39
+  discovered, 323.367 seconds). Erlang formatting, changed C-function formatting,
+  Python 3.9 grammar and whitespace checks pass.
+- Local processes, ports and aliases are supported. Distribution and the
+  priority options of `exit_signal/3` are outside scope. The full Lynx runtime
+  corpus, embedded targets and fresh Lean laws were not rerun for this batch.
+  Evidence: `.amp/in/artifacts/exit-signal/` and
+  `.amp/in/artifacts/lynx-exit-signal/`.
 
 ## Fan-out termination and ending-process requests
 
