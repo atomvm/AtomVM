@@ -865,6 +865,86 @@ class ValidationTests(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_core_evaluation_order_and_replay_have_independent_oracles(self):
+        selected = [entry for entry in lean_runtime.cases() if "core_order_scenario" in entry]
+        self.assertEqual(len(selected), 34)
+        self.assertEqual(sum("core_body" in entry for entry in selected), 32)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "core.json"
+            source.write_text(json.dumps(selected))
+            output = work / "results"
+            summary = self.invoke(output, "--replay", source)
+            self.assertEqual(summary["passed"] + summary["failed"], 34)
+            self.assertEqual(summary["unverified"], 0)
+            self.assertEqual(summary["laws"], 0)
+            self.assertEqual(summary["uncovered"], 0)
+            # Missing-key reason remains a visible differential failure, not an
+            # allowlisted pass. All ordering scenarios must match; this check
+            # also stays valid once the missing-key opcode reason is corrected.
+            failures = json.loads((output / "failures.json").read_text())
+            self.assertTrue(all(f["case"]["core_order_scenario"] == "map_missing_key"
+                                for f in failures))
+            # Reindex a mixed Core/source subset from the saved cases, not the
+            # recipes: companions and macros must follow the replay's modules.
+            saved = json.loads((output / "cases.json").read_text())
+            source.write_text(json.dumps([saved[-1], saved[4], saved[28]]))
+            replay = work / "replay"
+            self.assertEqual(self.invoke(replay, "--replay", source),
+                             {"laws": 0, "passed": 3, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                ok = fn trace -> {{:ok, [:seed, :tail]}, trace} end
+                err = fn reason, trace -> {{:exception, :error, reason}, trace} end
+                expected = %{
+                  "direct_success" => ok.([:h, :f]),
+                  "direct_head_error" => err.(:f, [:h, :f]),
+                  "direct_tail_error" => err.(:h, [:h]),
+                  "direct_both_error" => err.(:h, [:h]),
+                  "nested_call_success" => ok.([:g, :h, :f]),
+                  "nested_call_head_error" => err.(:f, [:g, :h, :f]),
+                  "nested_call_tail_error" => err.(:h, [:g, :h]),
+                  "nested_call_both_error" => err.(:h, [:g, :h]),
+                  "nested_call_prefix_error" => err.(:g, [:g]),
+                  "let_success" => ok.([:g, :h, :f]),
+                  "let_both_error" => err.(:h, [:g, :h]),
+                  "let_prefix_error" => err.(:g, [:g]),
+                  "sequence_success" => ok.([:g, :h, :f]),
+                  "sequence_both_error" => err.(:h, [:g, :h]),
+                  "case_success" => ok.([:g, :h, :f]),
+                  "case_both_error" => err.(:h, [:g, :h]),
+                  "shadowed_let_success" => ok.([:g, :h, :f]),
+                  "shadowed_let_both_error" => err.(:h, [:g, :h]),
+                  "shadowed_let_prefix_error" => err.(:g, [:g]),
+                  "local_function_success" => ok.([:g, :h, :f]),
+                  "local_function_both_error" => err.(:h, [:g, :h]),
+                  "try_head_success" => ok.([:h, :g, :f]),
+                  "try_head_both_error" => err.(:h, [:h]),
+                  "case_miss" => err.({:case_clause, :seed}, [:g, :h]),
+                  "case_miss_tail_error" => err.(:h, [:g, :h]),
+                  "let_capture" => {{:ok, [:seed, :outside]}, [:g, :h, :f]},
+                  "tuple_arguments" => {{:ok, [{7, 9}, :tail]}, [:g1, :g2, :h, :f]},
+                  "tuple_argument_error" => err.(:g2, [:g1, :g2]),
+                  "map_update" => {{:ok, [%{a: 1, b: 2}, :tail]}, [:v, :h]},
+                  "map_missing_key" => err.({:badkey, :a}, [:v, :h]),
+                  "map_missing_key_tail_error" => err.(:h, [:v, :h]),
+                  "map_bad_base" => err.({:badmap, :bad}, [:v]),
+                  "source_success" => ok.([:g, :f, :h]),
+                  "source_both_error" => err.(:f, [:g, :f])
+                }
+                for path <- System.argv() do
+                  cases = JSON.decode!(File.read!(Path.join(path, "cases.json")))
+                  values = JSON.decode!(File.read!(Path.join(path, "manifest.json")))["expected"]
+                  for {entry, encoded} <- Enum.zip(cases, values) do
+                    value = :erlang.binary_to_term(Base.decode64!(encoded))
+                    true = value === {:ok, Map.fetch!(expected, entry["core_order_scenario"])}
+                  end
+                end
+                """, str(output), str(replay)
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     def test_compiler_folded_and_runtime_exceptions_have_independent_oracles(self):
         selected = [entry for entry in lean_runtime.cases() if "exception_path" in entry]
         scenarios = ["atom_match", "atom_miss", "numeric_miss", "two_arg_miss",
@@ -1825,7 +1905,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 6193)
+        self.assertEqual(len(lean_runtime.cases()), 6227)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

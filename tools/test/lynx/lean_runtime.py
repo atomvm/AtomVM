@@ -1475,6 +1475,94 @@ def cases():
                  f"[skipped,{{}},{{prefix}},{{prefix,{stored},only}}]", module="lists",
                  word_size_dependent=True)
 
+    # Raw Core, not source Erlang: computations nested in cons heads have
+    # distinct hoisting rules. Keep provenance separate from Lean theorem sites.
+    def core_step(tag, value, fail=False):
+        action = "error" if fail else "return"
+        return f"call 'differential':'core_step'('{tag}','{action}',{value})"
+
+    def core_probe(scenario, body):
+        selected.append({
+            "upstream_test": "test/lynx/core_to_leanj_test.exs#a cons head runs what it computes first before the tail, and its last operation after",
+            "core_order_scenario": scenario,
+            "core_body": body,
+            "expression": "differential:core_order(fun ?CORE_MODULE:entry/0)",
+        })
+
+    for shape, modes in [
+        ("direct", ["success", "head_error", "tail_error", "both_error"]),
+        ("nested_call", ["success", "head_error", "tail_error", "both_error", "prefix_error"]),
+        ("let", ["success", "both_error", "prefix_error"]),
+        ("sequence", ["success", "both_error"]),
+        ("case", ["success", "both_error"]),
+        ("shadowed_let", ["success", "both_error", "prefix_error"]),
+        ("local_function", ["success", "both_error"]),
+        ("try_head", ["success", "both_error"]),
+    ]:
+        for mode in modes:
+            head_error = mode in ["head_error", "both_error"]
+            g = core_step("g", "'seed'", mode == "prefix_error")
+            f = core_step("f", "X", head_error)
+            f_seed = core_step("f", "'seed'", head_error)
+            f_nested = core_step("f", g, head_error)
+            f_local = core_step("f", "apply 'local'/0()", head_error)
+            h = core_step("h", "['tail']", mode in ["tail_error", "both_error"])
+            head = {
+                "direct": f_seed,
+                "nested_call": f_nested,
+                "let": f"let <X> = {g} in {f}",
+                "sequence": f"do {g} {f_seed}",
+                "case": f"case {g} of <X> when 'true' -> {f} end",
+                "shadowed_let": f"let <X> = {g} in let <X> = {f} in X",
+                "local_function": f"letrec 'local'/0 = fun () -> {g} in {f_local}",
+                "try_head": f"try {g} of <X> -> {f} catch <C,R,S> -> primop 'raise'(S,R)"
+            }[shape]
+            core_probe(f"{shape}_{mode}", f"[{head}|{h}]")
+
+    g = core_step("g", "'seed'")
+    f = core_step("f", "X")
+    h = core_step("h", "['tail']")
+    case_miss = (f"case {g} of <'other'> when 'true' -> 'wrong' "
+                 "<X> when 'true' -> primop 'match_fail'({'case_clause',X}) end")
+    for scenario, body in [
+        ("case_miss", f"[{case_miss}|{h}]"),
+        ("case_miss_tail_error", f"[{case_miss}|{core_step('h', '[]', True)}]"),
+        ("let_capture", "let <X> = 'outside' in "
+                        f"[let <X> = {g} in {f}|{core_step('h', '[X]')}]"),
+    ]:
+        core_probe(scenario, body)
+    for fail in [False, True]:
+        values = "{" + core_step("g1", "7") + "," + core_step("g2", "9", fail) + "}"
+        core_probe("tuple_argument_error" if fail else "tuple_arguments",
+                   f"[{core_step('f', values)}|{h}]")
+    for scenario, base, tail_error in [
+        ("map_update", "~{'a'=>0}~", False),
+        ("map_missing_key", "~{}~", False),
+        ("map_missing_key_tail_error", "~{}~", True),
+        ("map_bad_base", "'bad'", False),
+    ]:
+        tail = core_step("h", "['tail']", tail_error)
+        # Core map updates require the base type check that source lowering
+        # normally supplies; without it OTP rejects the generated BEAM.
+        head = (f"let <V> = {core_step('v', '2')} in let <B> = "
+                "case M of <~{}~> when 'true' -> M "
+                "<Bad> when 'true' -> call 'erlang':'error'({'badmap',Bad}) end "
+                "in ~{'a':=1,'b'=>V|B}~")
+        core_probe(scenario, f"let <M> = call 'differential':'exception_argument'({base}) in "
+                             f"[{head}|{tail}]")
+
+    # Source Erlang binds the head first: a control against imposing the raw
+    # Core cons ordering on ordinary source expressions.
+    for mode in ["success", "both_error"]:
+        action = "error" if mode == "both_error" else "return"
+        selected.append({
+            "upstream_test": "test/lynx/core_to_leanj_test.exs#calls nested in a cons head run after its tail, but their arguments before it",
+            "core_order_scenario": f"source_{mode}",
+            "expression": "differential:core_order(fun()->"
+                          f"[differential:core_step(f,{action},differential:core_step(g,return,seed))"
+                          f"|differential:core_step(h,{action},[tail])] end)",
+        })
+
     # Upstream compiler regression, not a Lean theorem attribution. Keep the
     # same source call with either compiler-known or remotely returned operands.
     # Folded failures must retain preceding effects, but never run the body.

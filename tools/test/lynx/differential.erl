@@ -60,6 +60,8 @@
     function_identity/2,
     function_apply/3,
     exception_argument/1,
+    core_order/1,
+    core_step/3,
     function_named/3,
     function_make/4,
     function_spawn/3,
@@ -3664,6 +3666,25 @@ function_identity(Kind, Padding) ->
             {dictionary, {Writes, Reads, Erased, get(A), get(B)}}
         }
     end).
+
+%% Core probes share the observer, but the computations themselves must stay
+%% nested in the supplied Core: compiling Erlang source hoists them differently.
+core_order(Fun) ->
+    put('$lynx_core_effects', []),
+    Outcome =
+        try Fun() of
+            Value -> {ok, Value}
+        catch
+            Class:Reason -> {exception, Class, Reason}
+        end,
+    {Outcome, lists:reverse(erase('$lynx_core_effects'))}.
+
+core_step(Tag, Action, Value) ->
+    put('$lynx_core_effects', [Tag | get('$lynx_core_effects')]),
+    case Action of
+        return -> Value;
+        error -> error(Tag)
+    end.
 
 %% A remote call keeps paired driver arguments opaque to the compiler.
 exception_argument(Value) -> Value.

@@ -156,7 +156,16 @@ Deleting a send may turn a later receive into an observed zero-timeout miss.
 It preserves the distinction between value mismatches and target
 errors. This is a bounded greedy reduction, **not a guarantee of a globally
 minimal case or the same underlying root cause**. Original failures remain intact.
-Replay files are trusted local input: they contain Erlang expressions to execute.
+Replay files are trusted local input: they contain Erlang expressions or Core
+Erlang bodies to compile and execute.
+
+Cases with `core_body` additionally emit a companion `.core` module exporting
+`entry/0`, compiled with `erlc +from_core`. Their Erlang `expression` can call it
+through `fun ?CORE_MODULE:entry/0`; the runner defines that macro for each driver.
+Both VMs execute the same compiled BEAM, with companions included in native
+precompilation when needed. `cases.json` and `failures.json` retain the Core body,
+so filtered/reordered replays regenerate correctly named companions. These are
+OTP/AtomVM differential observations, not Lean translations or proof checks.
 
 ## Lean runtime test inventory
 
@@ -168,7 +177,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **6,193 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **6,227 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -206,6 +215,19 @@ map replacement/removal, and dictionary keys, across worker copying and GC.
 Nested function captures and integer/float captures distinguish loose equality
 from exact keys. Maps include 2, 31, 32, and 33 keys; no raw fun identity or
 implementation-dependent ordering is compared across VMs.
+
+The [optimized Core-order batch](PLAN.md#optimized-core-evaluation-order)
+adds 34 observations: 32 Core bodies and two Erlang-source controls. Cons heads
+exercise nested calls, `let`, sequence, case, shadowing/capture, local functions,
+`try`, tuple arguments and mixed map updates, with exact effects and competing
+errors. Initial interpreter and AArch64 precompiled runs matched 33/34 against
+OTP 29.1.3, unchanged from 29.1.2 after fresh compilation and reference generation.
+The failing case exposed `put_map_exact` raising `badarg` rather than
+`{badkey,a}`; its ordering trace matched. A separate runtime correction now
+raises `{badkey, Key}`, with an Erlang regression in `test_map`. Interpreter,
+AArch64 precompiled and on-demand JIT now match 34/34. The JIT replay uses
+`--timeout 60` to allow compilation of the large support module; no
+expected-failure manifest entry was needed.
 
 The [compiler-exception batch](PLAN.md#compiler-folded-versus-runtime-exceptions)
 adds 45 observations: 15 scenarios through pure literal, effectful literal, and

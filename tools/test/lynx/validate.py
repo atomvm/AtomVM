@@ -320,11 +320,22 @@ def validate(args, work):
             )
     print(f"Seed {args.seed}; {len(selected)} cases; build {build}", flush=True)
     entries = []
+    core_sources = []
     for index, entry in enumerate(selected):
         module = f"lynx_probe_{index}"
         entries.append({**entry, "module": module})
+        core_macro = ""
+        if "core_body" in entry:
+            core_module = f"lynx_core_{index}"
+            core_source = work / f"{core_module}.core"
+            core_source.write_text(
+                f"module '{core_module}' ['entry'/0] attributes []\n"
+                f"'entry'/0 = fun () -> {entry['core_body']}\nend\n"
+            )
+            core_sources.append(core_source)
+            core_macro = f"-define(CORE_MODULE,{core_module}).\n"
         (work / f"{module}.erl").write_text(
-            f"-module({module}).\n-export([actual/0,start/0]).\n"
+            f"-module({module}).\n-export([actual/0,start/0]).\n{core_macro}"
             f"actual() -> try {{ok,begin {entry['expression']} end}} "
             "catch Class:Reason -> {exception,Class,Reason} end.\n"
             "start() -> Result = actual(), "
@@ -342,6 +353,9 @@ def validate(args, work):
         + [str(work / f"{e['module']}.erl") for e in entries],
         work, work / "compile.log",
     )
+    if core_sources:
+        command(["erlc", "+from_core", "-o", str(work)] + [str(p) for p in core_sources],
+                work, work / "compile-core.log")
     helper = str(Path(__file__).with_suffix(".exs").resolve())
     host = ["mix", "run"] if lynx else ["elixir"]
     print("Computing isolated OTP references" + (" and checking Lynx laws..." if lynx else "..."), flush=True)
@@ -352,7 +366,7 @@ def validate(args, work):
     mode_label = f"{target['execution_mode']}/{arch}" if arch else target["execution_mode"]
     print(f"Checked {manifest['laws']} laws; running {len(entries)} cases ({mode_label}).", flush=True)
     support = manifest.get("support", [])
-    fixture_beams = [work / "differential.beam"] + [
+    fixture_beams = [work / "differential.beam"] + [p.with_suffix(".beam") for p in core_sources] + [
         work / f"{name}.beam" for name in manifest["fixtures"] + support]
     libraries = [library]
     precompile_only = target["precompiled"] and not target["jit"]

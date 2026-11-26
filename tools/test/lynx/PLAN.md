@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,193 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 6,227 public-behavior recipes inspired by Lean tests
   and upstream examples (`369` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -37,6 +37,73 @@ The supported checkout has 28 Lean test files, including new concurrency audits
 and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` and `erlang:exit_signal/2` remain separately observed API gaps.
 Fixture validation does not establish complete runtime-model support.
+
+## Optimized Core evaluation order
+
+Add 34 observations (2026-11-26), inspired by upstream Lynx commit
+`32173b2475af4c469b25110704eeac9e59286bea`: 32 supplied Core bodies and two
+ordinary Erlang-source controls. No new theorem attribution or runtime fix.
+
+- The runner wraps each `core_body` in a companion `entry/0` module, invokes
+  `erlc +from_core` with normal optimizations, then packages its BEAM for both
+  VMs, including native precompilation. Driver expressions use `?CORE_MODULE`;
+  saved-case/failure replays regenerate companions after filtering/reindexing.
+- Compare values, exact error class/reason and ordered effects for direct and
+  nested cons-head calls, `let`, sequence, case, shadowing/capture, local
+  functions, `try`, tuple arguments and mixed associative/exact map updates.
+  Prefix, head and tail failures distinguish dropped/reordered effects and
+  exception precedence. Handwritten CLI oracles cover all 34 observations.
+- OTP 29 assembly confirms direct Core cons tails run before their final head
+  call; nested-call arguments run before the tail. A `try` head runs wholly
+  after the tail. The source controls instead evaluate the head before the
+  tail. Do not generalize raw Core rules to ordinary source Erlang.
+- Default Core optimization simplifies the shadowed-let body before SSA, so
+  that compiled case runs `g,h,f`, unlike upstream's direct translation of raw
+  Core (`h,g,f`). Saved optimized Core records this distinction; these tests
+  validate BEAM execution after compilation, not the Lynx translator itself.
+- Hand-written map Core includes the base-type check normally supplied by
+  source lowering. Omitting it makes OTP's BEAM validator reject the unchecked
+  associative update; that invalid input is not a runtime differential case.
+- Focused interpreter (`build`) and AArch64 precompiled
+  (`.amp/in/build-native`, on-demand JIT disabled) initially matched 33/34 against
+  OTP 29.1.3 (ERTS 17.1.2), with zero unverified cases. Fresh compilation and
+  reference generation reproduce the OTP 29.1.2 results unchanged; evidence is
+  under `.amp/in/artifacts/lynx-otp2913/` (interpreter/toolchain/harness) and
+  `.amp/in/artifacts/lynx-core-order/otp2913-precompiled/` (native).
+  All ordering traces agreed. One missing exact-map key raised `error:badarg`
+  instead of OTP's `error:{badkey,a}`. Emitted assembly executes
+  `put_map_assoc`, the tail effect, then `put_map_exact`; both opcode handlers
+  explicitly raised `badarg` on a missing key. Ordinary Erlang
+  `M=differential:exception_argument(#{}),M#{a:=1,b=>2}` reproduced the mismatch.
+- Before the runtime correction, the failure stayed visible in `failures.json`
+  and produced a nonzero runner exit; no expected-failure manifest entry was
+  added. The CLI test requires all
+  other scenarios to match and remains valid after a separate opcode fix.
+  A single-failure native replay reproduces the same mismatch with a renamed
+  companion; a reordered mixed Core/source replay matches 3/3. The complete
+  harness CLI suite passes: 30 passed, 3 optional environment-gated skips
+  (33 discovered). Python 3.9 grammar and `git diff --check` pass.
+- All 6,193 prior recipes and metadata are unchanged. Total recipes are 6,227;
+  Lean attribution remains 369/478 sites in 28 files. Evidence is under
+  `.amp/in/artifacts/lynx-core-order/`, including Core/assembly, per-mode inputs,
+  references, actual results, failure replays and build hashes. The full runtime
+  corpus and embedded targets were not rerun for this batch.
+- Separate runtime correction: both `put_map_exact` handlers now raise
+  `{badkey, Key}`, retaining the key through exception allocation. Added `badkey`
+  to the JIT's synchronized fixed-atom prefix. The existing Erlang `test_map`
+  now checks exact class/reason for multi-key updates, empty maps, integer/float
+  key distinction and a dynamically allocated compound key. It passed on OTP
+  29.1.3 and failed on both unchanged AtomVM engines with `badarg`; after the
+  fix it passes in interpreter, AArch64 precompiled and on-demand JIT execution.
+  All 34 Core observations now match in all three modes. The JIT replay uses
+  `--timeout 60 --jobs 2`: the default five seconds expires while compiling the
+  large `differential` support module, before semantic completion. All five
+  interpreter map test modules and the full harness (30 passed, 3 skipped)
+  pass. Regression code generation also succeeds for x86_64, armv6m,
+  armv6m+thumb2, arm32, riscv32, riscv64, xtensa and wasm32; those are not runtime
+  execution claims. Fix, test and changelog are outside `tools/test/lynx` so
+  they can be committed independently. Evidence:
+  `.amp/in/artifacts/map-exact-exception/`.
 
 ## Compiler-folded versus runtime exceptions
 
