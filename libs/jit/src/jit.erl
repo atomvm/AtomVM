@@ -1868,13 +1868,14 @@ first_pass(<<?OP_PUT_MAP_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
             {ASt1, Key, ARest1} = decode_compact_term(ARest0, MMod, ASt0, State0),
             ARest2 = skip_compact_term(ARest1),
             {ASt2, PosReg} = MMod:call_primitive(ASt1, ?PRIM_TERM_FIND_MAP_POS, [
-                ctx, Src, {free, Key}
+                ctx, Src, Key
             ]),
-            ASt3 = MMod:if_block(ASt2, {'(int)', PosReg, '==', ?TERM_MAP_NOT_FOUND}, fun(BSt0) ->
-                MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, offset, ?BADARG_ATOM
+            ASt2a = MMod:if_block(ASt2, {'(int)', PosReg, '==', ?TERM_MAP_NOT_FOUND}, fun(BSt0) ->
+                MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR_TUPLE, [
+                    ctx, jit_state, offset, ?BADKEY_ATOM, Key
                 ])
             end),
+            ASt3 = MMod:free_native_registers(ASt2a, [Key]),
             ASt4 = MMod:if_block(
                 ASt3, {'(int)', {free, PosReg}, '==', ?TERM_MAP_MEMORY_ALLOC_FAIL}, fun(BSt0) ->
                     MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR, [

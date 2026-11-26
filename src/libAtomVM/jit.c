@@ -140,6 +140,7 @@ _Static_assert(ALL_ATOM_INDEX == 15, "ALL_ATOM_INDEX is 15 in libs/jit/src/defau
 _Static_assert(LOWERCASE_EXIT_ATOM_INDEX == 16, "LOWERCASE_EXIT_ATOM_INDEX is 16 in libs/jit/src/default_atoms.hrl ");
 _Static_assert(BADRECORD_ATOM_INDEX == 17, "BADRECORD_ATOM_INDEX is 17 in libs/jit/src/default_atoms.hrl ");
 _Static_assert(SYSTEM_LIMIT_ATOM_INDEX == 18, "SYSTEM_LIMIT_ATOM_INDEX is 18 in libs/jit/src/default_atoms.hrl ");
+_Static_assert(BADKEY_ATOM_INDEX == 19, "BADKEY_ATOM_INDEX is 19 in libs/jit/src/default_atoms.hrl ");
 
 // Verify n_words constants in primitives.hrl
 _Static_assert(

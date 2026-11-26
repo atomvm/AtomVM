@@ -5057,7 +5057,14 @@ schedule_in:
 
                     int map_pos = term_find_map_pos(src, key, ctx->global);
                     if (map_pos == TERM_MAP_NOT_FOUND) {
-                        RAISE_ERROR(BADARG_ATOM);
+                        // We can gc as we are raising, but the key must remain live.
+                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &key, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                        }
+                        term reason = term_alloc_tuple(2, &ctx->heap);
+                        term_put_tuple_element(reason, 0, BADKEY_ATOM);
+                        term_put_tuple_element(reason, 1, key);
+                        RAISE_ERROR(reason);
                     } else if (map_pos == TERM_MAP_MEMORY_ALLOC_FAIL) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
