@@ -89,6 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed AArch64 JIT and precompilation failing when an optimized return was more than
+  1 MiB from the native module base
 - Fixed `lists:all/2` and `lists:any/2` (and their `queue` counterparts) raising
   incorrect exceptions or returning `false` for non-boolean predicate results instead
   of OTP's `{case_clause, Result}` error

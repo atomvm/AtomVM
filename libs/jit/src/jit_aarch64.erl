@@ -639,14 +639,24 @@ jump_to_continuation(
     CurrentStreamOffset = StreamModule:offset(Stream0),
     NetOffset = BaseOffset - CurrentStreamOffset,
 
-    % Get native code base address into temporary register
-    I1 = jit_aarch64_asm:adr(TempReg, NetOffset),
-    % Add target offset to get final absolute address
-    I2 = jit_aarch64_asm:add(TempReg, TempReg, OffsetReg),
-    % Indirect branch to the calculated absolute address
-    I3 = jit_aarch64_asm:br(TempReg),
-
-    Code = <<I1/binary, I2/binary, I3/binary>>,
+    Code =
+        case NetOffset >= -16#100000 of
+            true ->
+                I1 = jit_aarch64_asm:adr(TempReg, NetOffset),
+                I2 = jit_aarch64_asm:add(TempReg, TempReg, OffsetReg),
+                I3 = jit_aarch64_asm:br(TempReg),
+                <<I1/binary, I2/binary, I3/binary>>;
+            false ->
+                % ADR cannot reach the module base. Capture this instruction's PC,
+                % consume the target offset, then reuse its free register for the
+                % full distance back to the base (without assuming page alignment).
+                I1 = jit_aarch64_asm:adr(TempReg, 0),
+                I2 = jit_aarch64_asm:add(TempReg, TempReg, OffsetReg),
+                I3 = jit_aarch64_asm:mov(OffsetReg, -NetOffset),
+                I4 = jit_aarch64_asm:sub(TempReg, TempReg, OffsetReg),
+                I5 = jit_aarch64_asm:br(TempReg),
+                <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>
+        end,
     Stream1 = StreamModule:append(Stream0, Code),
     % Free all registers since this is a tail jump
     State#state{

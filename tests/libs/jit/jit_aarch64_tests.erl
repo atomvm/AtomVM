@@ -20,6 +20,8 @@
 
 -module(jit_aarch64_tests).
 
+-export([offset/1, append/2]).
+
 -include_lib("eunit/include/eunit.hrl").
 
 -include("jit/include/jit.hrl").
@@ -2444,6 +2446,56 @@ jump_to_continuation_test() ->
             "   8:	d61f00e0 	br	x7"
         >>,
     ?assertStream(aarch64, Dump, Stream).
+
+%% Lightweight stream module for testing large code offsets without allocating
+%% multi-megabyte binaries or quadratic binary-append copies.
+offset({Offset, _Pad, Tail}) ->
+    Offset + byte_size(Tail).
+
+append({Offset, Pad, _Tail}, Bin) when Pad > 0 ->
+    {Offset + byte_size(Bin) + Pad, 0, <<>>};
+append({Offset, 0, Tail}, Bin) ->
+    {Offset, 0, <<Tail/binary, Bin/binary>>}.
+
+%% Returns on either side of ADR's negative reach, independently of the stream header.
+jump_to_continuation_range_test_() ->
+    Cases = [
+        {16#100000, <<
+            "   0:\t10800008 \tadr\tx8, 0xfffffffffff00000\n"
+            "   4:\t8b070108 \tadd\tx8, x8, x7\n"
+            "   8:\td61f0100 \tbr\tx8"
+        >>},
+        {16#100004, <<
+            "   0:\t10000008 \tadr\tx8, 0x0\n"
+            "   4:\t8b070108 \tadd\tx8, x8, x7\n"
+            "   8:\td2800087 \tmov\tx7, #0x4\n"
+            "   c:\tf2a00207 \tmovk\tx7, #0x10, lsl #16\n"
+            "  10:\tcb070108 \tsub\tx8, x8, x7\n"
+            "  14:\td61f0100 \tbr\tx8"
+        >>},
+        {16#200004, <<
+            "   0:\t10000008 \tadr\tx8, 0x0\n"
+            "   4:\t8b070108 \tadd\tx8, x8, x7\n"
+            "   8:\td2800087 \tmov\tx7, #0x4\n"
+            "   c:\tf2a00407 \tmovk\tx7, #0x20, lsl #16\n"
+            "  10:\tcb070108 \tsub\tx8, x8, x7\n"
+            "  14:\td61f0100 \tbr\tx8"
+        >>}
+    ],
+    [
+        ?_test(begin
+            State0 = ?BACKEND:new(Variant, ?MODULE, {PrefixSize, Distance - 4, <<>>}),
+            {State1, OffsetReg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+            ReturnOffset = ?BACKEND:offset(State1),
+            ?assertEqual(PrefixSize + Distance, ReturnOffset),
+            State2 = ?BACKEND:jump_to_continuation(State1, {free, OffsetReg}),
+            {ReturnOffset, 0, ReturnCode} = ?BACKEND:stream(State2),
+            ?assertStream(aarch64, Dump, ReturnCode)
+        end)
+     || {Distance, Dump} <- Cases,
+        PrefixSize <- [0, 64],
+        Variant <- [?JIT_VARIANT_PIC, ?JIT_VARIANT_PIC bor ?JIT_VARIANT_FLOAT32]
+    ].
 
 %% After freeing a register, cache is preserved so reload is elided
 cached_load_after_free_test() ->
