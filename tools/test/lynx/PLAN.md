@@ -16,8 +16,8 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,833 public-behavior recipes inspired by Lean tests
-  and upstream examples (`374` of `478` Lean test sites across all 28 files). Source
+- `lean_runtime.py` selects 6,879 public-behavior recipes inspired by Lean tests
+  and upstream examples (`376` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
   the proved postcondition to be true on both VMs: five integer singleton sums,
@@ -38,6 +38,69 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Liveness/dead-target queries with pending notifications
+
+Add 46 asserted recipes (2026-11-26), without new runtime APIs or changes:
+
+- Six monitor/liveness samples use normal and structured reasons with a held
+  live child, an already-dead child, and an unfenced exiting child. Install
+  the tested monitor immediately before `is_process_alive/1`, without a
+  receive or peer acknowledgement between them. Require the real DOWN,
+  `demonitor(Ref, [info]) =:= false` afterwards, and both retained sentinels.
+  Live controls require `{true, Reason}`; dead controls require
+  `{false, noproc}`. Racing permits all four boolean/reason combinations.
+- OTP 29.1.3 actually produced all four pairs in a separate 10,000-sample
+  survey: 9,967 `{true, normal}`, 30 `{true, noproc}`, one `{false, normal}`,
+  two `{false, noproc}`. This disproved an initial too-strong interpretation
+  of the outgoing-signal ordering guarantee. A liveness snapshot is not an
+  acknowledgement of monitor establishment. No particular race outcome or
+  frequency is required, nor is a specific internal queue state claimed.
+- Forty query samples use `is_process_alive/1` and
+  `process_info/2` (`registered_name`). For dead-target cases, a coordinator
+  awaits the target's DOWN before starting the worker. The worker sends itself
+  async normal/structured/kill signals with both trap settings. It reports
+  the query result before any subsequent receive. A final same-sender marker
+  forces reception, preserving the sentinel and any converted EXIT message.
+- For fatal signals, querying before sending must produce exactly one query
+  report; receiving the signal before querying must produce none. Only the
+  unfenced variant allows either. Survivors must report the exact query result
+  and mailbox, not merely avoid crashing. Four held-live controls ensure that
+  constant false/undefined query answers cannot pass. Child timeout cleanup and
+  target-monitor reaping are explicit. Async injection requires OTP 29.
+- This isolates the dead-query fast path from target-death timing: the pending
+  signal is self-sent, and the queried dead PID is a separate process. It is a
+  public-behavior projection inspired by the upstream killer/query example,
+  not a literal translation of its program or a return-before-reception proof.
+  The final receive deliberately precludes a survivor escaping a fatal signal.
+- Both VMs must return true via the existing `assert_true` contract. Single-line
+  `LYNX_QUERY_TRACE` ETF observations are saved in OTP `proofs.log` and each
+  AtomVM probe log. Independent handwritten tables check both sets of traces,
+  exact controls, six-case filtered/reordered replay and the OTP gate. BEAM
+  inspection confirms real query calls and marker receive loops, with no receive
+  between the unfenced signal send and query, or tested monitor and liveness call.
+- All 46 cases pass against OTP 29.1.3 in interpreter, AArch64 precompiled
+  and on-demand JIT modes, zero failures/unverified; independently checked all
+  saved traces and final helper hashes. Repeating all probes 64 times produces
+  2,944 observations per VM per mode, all independently valid (17,664 total).
+  Actual trace frequencies are retained, without requiring all allowed outcomes.
+  Three unfenced liveness queries reported before fatal reception on AtomVM but
+  not OTP in the isolated interpreter sweep; both satisfy the same contract.
+- Full CLI harness: 39 passed, three optional skips (42 discovered). Erlang
+  formatting, Python 3.9 grammar, whitespace and baseline checks pass. Temporary
+  stale-monitor-cleanup and extra-message injections were rejected; mutated
+  files were removed. No runtime fix or expected-failure entry was needed.
+- Preserve all 6,833 earlier recipes and metadata: total 6,879; attribution
+  376/478 sites in 28 files; fixture counts unchanged. The new attribution
+  covers finite projections of `alive_may_leave_monitor_parked` and
+  `process_info_of_dead_does_not_flush`, not universal theorem premises.
+
+Local evidence: `.amp/in/artifacts/lynx-query-notifications/` contains saved
+inputs, OTP survey/source evidence, per-mode observations, repeated-run traces,
+independent CLI/harness logs, BEAM inspection and inventory. No full runtime
+corpus, fresh Lean laws, embedded/32-bit/float32 or all-schedule coverage is
+claimed. Runtime corrections and standalone Erlang regressions, if needed,
+remain separate from this coverage batch.
 
 ## Exit reception across trap-flag changes
 

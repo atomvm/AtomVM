@@ -177,7 +177,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **6,833 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **6,879 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -728,6 +728,20 @@ trapping can later be ignored after trapping is disabled, whereas legacy
 removed before reception may discard the signal, even `kill`, but removal must
 not retract an already converted EXIT message. This is finite allowed-outcome
 sampling, not a claim that all allowed outcomes or schedules were observed.
+Forty-six [query/notification observations](PLAN.md#livenessdead-target-queries-with-pending-notifications)
+add monitor-establishment/liveness races and known-dead queries while caller
+exit signals may be pending. Held-live and already-dead controls are exact;
+unfenced monitor races permit a true liveness result followed by `DOWN/noproc`.
+That outcome is also observed on OTP, not just reachable in the Lynx model.
+Query-before-signal and signal-received-before-query controls distinguish
+returning a query result from reaching a receive that must handle a fatal signal.
+Normal/structured/kill reasons, both trap settings, retained messages and monitor
+cleanup are checked. These are separate-target/self-signal probes, not a literal
+translation of the model's killer/query program. Async injection requires OTP 29.
+Both VMs must satisfy the allowed contract; `LYNX_QUERY_TRACE` observations remain
+in saved logs and are checked against independent tables and reordered replay.
+No scheduling winner, monitor-registration barrier, or all-outcome coverage is
+assumed.
 Forty-two ownership cases pass standalone aliases, plain monitor references, and
 all three monitor-alias types to a third process distinct from the monitored
 target. Foreign `unalias/1` and both

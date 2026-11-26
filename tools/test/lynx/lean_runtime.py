@@ -1529,6 +1529,29 @@ def cases():
         probe("Modules/Signals", "link_to_missing_process",
               f"differential:missing_link({trap})")
     probe("Modules/Signals", "liveness", "differential:process_liveness()")
+    for state in ["live", "dead", "racing"]:
+        for reason in ["normal", "{shutdown,<<5:3>>}"]:
+            probe("Modules/Signals", "alive_may_leave_monitor_parked",
+                  f"differential:liveness_monitor({state},{reason}) =:= {{ok,allowed}}",
+                  assert_true=True, query_notification_family="monitor",
+                  query_notification_state=state, query_notification_reason=reason)
+    for query in ["alive", "info"]:
+        for state, timings in [("dead", ["before", "received", "pending"]),
+                               ("live", ["before", "received"])]:
+            for timing in timings:
+                for trap in (["false", "true"] if state == "dead" else ["true"]):
+                    for reason in (["normal", "{shutdown,<<5:3>>}", "kill"]
+                                   if state == "dead" else ["{shutdown,<<5:3>>}"]):
+                        entry = {
+                            "expression": f"differential:query_notifications({query},{state},{timing},{trap},{reason}) =:= {{ok,allowed}}",
+                            "assert_true": True, "minimum_otp": 29,
+                            "query_notification_family": "query", "query_notification_query": query,
+                            "query_notification_state": state, "query_notification_timing": timing,
+                            "query_notification_trap": trap == "true", "query_notification_reason": reason,
+                        }
+                        if query == "info" and state == "dead":
+                            entry["lean_origins"] = ["Modules/Signals.lean#process_info_of_dead_does_not_flush"]
+                        selected.append(entry)
     # Keep these sequences unfenced until the observation under test. Include
     # live/trapped/unlinked controls so constant answers cannot satisfy the batch.
     for site, scenarios in [

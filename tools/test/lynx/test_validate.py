@@ -1013,6 +1013,98 @@ class ValidationTests(unittest.TestCase):
                              {"laws": 0, "passed": 0, "failed": 0,
                               "unverified": 1, "uncovered": 0})
 
+    def test_query_notifications_have_independent_outcomes_and_controls(self):
+        otp = subprocess.check_output(["elixir", "-e", "IO.write(System.otp_release())"], text=True)
+        if int(otp) < 29:
+            self.skipTest("pending self-signals require an OTP 29 oracle")
+        selected = [e for e in lean_runtime.cases() if "query_notification_family" in e]
+        self.assertEqual(len(selected), 46)
+        self.assertTrue(all(e.get("assert_true") for e in selected))
+        self.assertEqual(sum(e.get("minimum_otp") == 29 for e in selected), 40)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            source.write_text(json.dumps(selected))
+            output = work / "results"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 46, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            saved = json.loads((output / "cases.json").read_text())
+            source.write_text(json.dumps([saved[i] for i in [45, 4, 6, 23, 38, 12]]))
+            replay = work / "replay"
+            self.assertEqual(self.invoke(replay, "--replay", source),
+                             {"laws": 0, "passed": 6, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                traces = fn log ->
+                  Regex.scan(~r/^LYNX_QUERY_TRACE (\\[.*\\])$/m, log)
+                  |> Enum.map(fn [_, bytes] -> bytes |> JSON.decode!()
+                    |> :erlang.list_to_binary() |> :erlang.binary_to_term() end)
+                end
+                for path <- System.argv() do
+                  cases = JSON.decode!(File.read!(Path.join(path, "cases.json")))
+                  values = JSON.decode!(File.read!(Path.join(path, "manifest.json")))["expected"]
+                  otp_traces = traces.(File.read!(Path.join(path, "proofs.log")))
+                  true = length(cases) == length(otp_traces)
+                  for {{entry, encoded}, otp_trace} <- Enum.zip(Enum.zip(cases, values), otp_traces) do
+                    {:ok, true} = :erlang.binary_to_term(Base.decode64!(encoded))
+                    reason = case entry["query_notification_reason"] do
+                      "normal" -> :normal
+                      "kill" -> :kill
+                      _ -> {:shutdown, <<5::3>>}
+                    end
+                    legal = case entry["query_notification_family"] do
+                      "monitor" ->
+                        pairs = case entry["query_notification_state"] do
+                          "live" -> [{true, reason}]
+                          "dead" -> [{false, :noproc}]
+                          "racing" -> [{true, reason}, {false, reason}, {true, :noproc}, {false, :noproc}]
+                        end
+                        for {alive, down} <- pairs,
+                          do: {alive, down, false, [:sentinel, {:retained, <<5::3>>}]}
+                      "query" ->
+                        value = case {entry["query_notification_query"], entry["query_notification_state"]} do
+                          {"alive", "live"} -> true
+                          {"alive", "dead"} -> false
+                          {"info", "live"} -> []
+                          {"info", "dead"} -> :undefined
+                        end
+                        queried = {:queried, value}
+                        # Handwritten behavior table. A query before sending
+                        # a fatal signal MUST report; a received fatal signal
+                        # MUST preclude a report. Only pending allows either.
+                        outcome = case {entry["query_notification_trap"], reason} do
+                          {false, :normal} -> {:survived, [:sentinel]}
+                          {true, :normal} -> {:survived, [:sentinel, {:exit, :normal}]}
+                          {_, :kill} -> {:died, :killed}
+                          {false, _} -> {:died, {:shutdown, <<5::3>>}}
+                          {true, _} -> {:survived, [:sentinel, {:exit, {:shutdown, <<5::3>>}}]}
+                        end
+                        case outcome do
+                          {:survived, messages} -> [{:normal, [queried, {:completed, messages}]}]
+                          {:died, down} ->
+                            case entry["query_notification_timing"] do
+                              "before" -> [{down, [queried]}]
+                              "received" -> [{down, []}]
+                              "pending" -> [{down, []}, {down, [queried]}]
+                            end
+                        end
+                    end
+                    [actual] = traces.(File.read!(Path.join(path, entry["module"] <> ".log")))
+                    for trace <- [otp_trace, actual] do
+                      unless trace in legal, do: raise(inspect({entry, legal, trace}))
+                    end
+                  end
+                end
+                """, str(output), str(replay)
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+            source.write_text(json.dumps([dict(selected[6], minimum_otp=999)]))
+            self.assertEqual(self.invoke(work / "gated", "--replay", source),
+                             {"laws": 0, "passed": 0, "failed": 0,
+                              "unverified": 1, "uncovered": 0})
+
     def test_fanout_and_ending_requests_have_independent_oracles(self):
         selected = [entry for entry in lean_runtime.cases() if "termination_scenario" in entry]
         self.assertEqual([(e["termination_scenario"], e["termination_mode"], e["peers"])
@@ -2498,7 +2590,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 6833)
+        self.assertEqual(len(lean_runtime.cases()), 6879)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

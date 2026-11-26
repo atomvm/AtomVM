@@ -54,6 +54,8 @@
     suspended_receive/1,
     missing_link/1,
     process_liveness/0,
+    liveness_monitor/2,
+    query_notifications/5,
     signal_queue/2,
     termination_fanout/2,
     ending_requests/2,
@@ -2819,6 +2821,185 @@ process_liveness() ->
         end,
         Dead = {is_process_alive(Child), process_info(Child, registered_name)},
         {Alive, Unnamed, Named, Unregistered, Dead}
+    end).
+
+%% Liveness is a snapshot, not an acknowledgement of monitor establishment.
+liveness_monitor(State, Reason) ->
+    isolated(fun() ->
+        self() ! sentinel,
+        self() ! {retained, <<5:3>>},
+        Child = spawn(fun() ->
+            case State of
+                live ->
+                    receive
+                        stop -> ok
+                    end;
+                _ ->
+                    ok
+            end,
+            exit(Reason)
+        end),
+        case State of
+            dead ->
+                Fence = monitor(process, Child),
+                receive
+                    {'DOWN', Fence, process, Child, _} -> ok
+                end;
+            _ ->
+                ok
+        end,
+        Ref = monitor(process, Child),
+        Alive = is_process_alive(Child),
+        case State of
+            live -> Child ! stop;
+            _ -> ok
+        end,
+        Down =
+            receive
+                {'DOWN', Ref, process, Child, R} -> R
+            after 2000 ->
+                exit(Child, kill),
+                receive
+                    {'DOWN', Ref, process, Child, _} -> timeout
+                end
+            end,
+        Trace = {Alive, Down, demonitor(Ref, [info]), drain()},
+        io:format("LYNX_QUERY_TRACE ~w~n", [binary_to_list(term_to_binary(Trace))]),
+        Pairs =
+            case State of
+                live -> [{true, Reason}];
+                dead -> [{false, noproc}];
+                racing -> [{true, Reason}, {true, noproc}, {false, Reason}, {false, noproc}]
+            end,
+        Allowed = [{A, D, false, [sentinel, {retained, <<5:3>>}]} || {A, D} <- Pairs],
+        case lists:member(Trace, Allowed) of
+            true -> allowed;
+            false -> {invalid_liveness_monitor, Trace}
+        end
+    end).
+
+%% Query a separate known-live/dead target while self-signals may be pending.
+%% The query report precedes any receive: don't accidentally fence the race.
+query_notifications(Query, State, Timing, Trap, Reason) ->
+    isolated(fun() ->
+        {Target, TargetRef} = spawn_monitor(fun() ->
+            receive
+                stop -> ok
+            end
+        end),
+        case State of
+            dead ->
+                Target ! stop,
+                receive
+                    {'DOWN', TargetRef, process, Target, normal} -> ok
+                end;
+            live ->
+                ok
+        end,
+        Parent = self(),
+        {Worker, Ref} = spawn_monitor(fun() ->
+            false = process_flag(trap_exit, Trap),
+            Self = self(),
+            Self ! sentinel,
+            case Timing of
+                before -> ok;
+                _ -> true = erlang:exit_signal(Self, Reason)
+            end,
+            case Timing of
+                received ->
+                    Self ! received_fence,
+                    receive
+                        received_fence -> ok
+                    end;
+                _ ->
+                    ok
+            end,
+            Result =
+                case Query of
+                    alive -> is_process_alive(Target);
+                    info -> process_info(Target, registered_name)
+                end,
+            Parent ! {Self, {queried, Result}},
+            case Timing of
+                before -> true = erlang:exit_signal(Self, Reason);
+                _ -> ok
+            end,
+            Self ! final_fence,
+            receive
+                final_fence -> ok
+            end,
+            Messages = [
+                case M of
+                    {'EXIT', Self, R} -> {exit, R};
+                    Other -> Other
+                end
+             || M <- drain()
+            ],
+            Parent ! {Self, {completed, Messages}}
+        end),
+        Down =
+            receive
+                {'DOWN', Ref, process, Worker, R} -> R
+            after 2000 ->
+                exit(Worker, kill),
+                receive
+                    {'DOWN', Ref, process, Worker, _} -> timeout
+                end
+            end,
+        Reports = [
+            case M of
+                {Worker, Value} -> Value;
+                Other -> Other
+            end
+         || M <- drain()
+        ],
+        case State of
+            live ->
+                Target ! stop,
+                receive
+                    {'DOWN', TargetRef, process, Target, normal} -> ok
+                end;
+            dead ->
+                ok
+        end,
+        Trace = {Down, Reports},
+        io:format("LYNX_QUERY_TRACE ~w~n", [binary_to_list(term_to_binary(Trace))]),
+        Expected =
+            case {Query, State} of
+                {alive, live} -> true;
+                {alive, dead} -> false;
+                {info, live} -> [];
+                {info, dead} -> undefined
+            end,
+        Queried = [{queried, Expected}],
+        Fatal = Reason =:= kill orelse (not Trap andalso Reason =/= normal),
+        Allowed =
+            case Fatal of
+                true ->
+                    ExitReason =
+                        case Reason of
+                            kill -> killed;
+                            _ -> Reason
+                        end,
+                    Notes =
+                        case Timing of
+                            before -> [Queried];
+                            received -> [[]];
+                            pending -> [[], Queried]
+                        end,
+                    [{ExitReason, Note} || Note <- Notes];
+                false ->
+                    Mailbox =
+                        case Trap of
+                            true -> [sentinel, {exit, Reason}];
+                            false -> [sentinel]
+                        end,
+                    [{normal, Queried ++ [{completed, Mailbox}]}]
+            end,
+        case lists:member(Trace, Allowed) of
+            true -> allowed;
+            false -> {invalid_query_notifications, Trace}
+        end
     end).
 
 %% Do not insert peer queries or acknowledgements inside the critical sequences.

@@ -87,14 +87,23 @@ outcomes.
 
 ### 4. Liveness/dead-query fast paths and queued notifications
 
-- [ ] Target `alive_may_leave_monitor_parked` and
+- [x] Target `alive_may_leave_monitor_parked` and
   `process_info_of_dead_does_not_flush`: local queries need not establish that
   the caller drained its own incoming notifications.
-- [ ] Add exact live/dead controls, allowed notification traces, retained mailbox
+- [x] Add exact live/dead controls, allowed notification traces, retained mailbox
   sentinels and monitor cleanup. Do not repeat the existing kill/query,
   trap-after-DOWN, unlink/relink/kill or ending-process request batches.
 
-Source-audited candidate only; no new defect or runtime result is claimed.
+Added 46 asserted recipes: six monitor/liveness cases and 40 query/notification
+cases, with independent raw-trace tables and filtered/reordered replay. An OTP
+survey observes all four liveness/DOWN combinations, including `{true, noproc}`;
+none is required as a race winner. Known-dead queries use self-sent async signals
+and a separate prepared target, with exact query-before-signal and
+signal-received-before-query controls, plus held-live controls. This isolates
+caller reception from target-death timing rather than reproducing the model's
+killer/query program literally. A final receive still forces fatal reception;
+returning without one and all-schedule coverage remain outside this batch. See
+[PLAN.md](PLAN.md#livenessdead-target-queries-with-pending-notifications).
 
 ### 5. Compiler-lowered receive continuations (lower priority)
 
