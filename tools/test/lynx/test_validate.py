@@ -721,6 +721,61 @@ class ValidationTests(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_fanout_and_ending_requests_have_independent_oracles(self):
+        selected = [entry for entry in lean_runtime.cases() if "termination_scenario" in entry]
+        self.assertEqual([(e["termination_scenario"], e["termination_mode"], e["peers"])
+                          for e in selected],
+                         [(kind, mode, peers) for peers in [1, 4, 16]
+                          for kind, modes in [("fanout", ["normal", "shutdown", "kill"]),
+                                              ("requests", ["live", "dead", "racing"])]
+                          for mode in modes])
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            source.write_text(json.dumps(selected))
+            output = work / "results"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 18, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            saved = json.loads((output / "cases.json").read_text())
+            source.write_text(json.dumps([saved[i] for i in [17, 0, 13, 4]]))
+            replay = work / "replay"
+            self.assertEqual(self.invoke(replay, "--replay", source),
+                             {"laws": 0, "passed": 4, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                for path <- System.argv() do
+                  cases = JSON.decode!(File.read!(Path.join(path, "cases.json")))
+                  values = JSON.decode!(File.read!(Path.join(path, "manifest.json")))["expected"]
+                  true = length(cases) === length(values)
+                  for {entry, encoded} <- Enum.zip(cases, values) do
+                    peers = entry["peers"]
+                    want = case entry["termination_scenario"] do
+                      "fanout" ->
+                        reason = case entry["termination_mode"] do
+                          "normal" -> :normal
+                          "shutdown" -> {:shutdown, :fanout}
+                          "kill" -> :killed
+                        end
+                        events = fn n -> [{:before_exit, {n, n * 17 + 3}},
+                                          {:exit, reason}, {:down, reason}] end
+                        reports = for n <- 1..peers,
+                          do: {n, events.(n), false, :undefined, [:retained]}
+                        {events.(0), reports, [:retained]}
+                      "requests" ->
+                        reports = for n <- 1..peers,
+                          do: {n, :allowed, :allowed, false, :undefined, [:retained]}
+                        {reports, [:retained]}
+                    end
+                    got = :erlang.binary_to_term(Base.decode64!(encoded))
+                    if got !== {:ok, {:ok, want}}, do: raise(inspect({entry, want, got}))
+                  end
+                end
+                """, str(output), str(replay)
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     def test_map_callbacks_preserve_arguments_effects_and_exceptions(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
@@ -2151,7 +2206,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 6395)
+        self.assertEqual(len(lean_runtime.cases()), 6413)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

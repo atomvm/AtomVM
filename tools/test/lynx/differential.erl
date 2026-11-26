@@ -52,6 +52,8 @@
     missing_link/1,
     process_liveness/0,
     signal_queue/2,
+    termination_fanout/2,
+    ending_requests/2,
     raise_exception/3,
     trace_depth/3,
     trace_depth_a/1,
@@ -2601,6 +2603,225 @@ signal_queue_once({relink_kill, Final}) ->
         after 0 -> none
         end,
     {Down, Exit, drain()}.
+
+%% Fan-out has no cross-recipient delivery order. Keep each recipient's actual
+%% message/EXIT/DOWN order, and accept either state of the root's EXIT when a
+%% peer reports. Do not turn the model's possible "early" outcome into a demand
+%% that every runtime or finite sample must exhibit it.
+termination_fanout(Mode, Count) ->
+    isolated(fun() ->
+        process_flag(trap_exit, true),
+        self() ! retained,
+        Parent = self(),
+        {Target, TargetRef} = spawn_monitor(fun() ->
+            receive
+                {finish, Recipients} ->
+                    [Pid ! {self(), before_exit, {N, N * 17 + 3}} || {N, Pid} <- Recipients],
+                    case Mode of
+                        kill -> exit(self(), kill);
+                        normal -> exit(normal);
+                        shutdown -> exit({shutdown, fanout})
+                    end
+            end
+        end),
+        true = link(Target),
+        Workers = [
+            begin
+                {Pid, Ref} = spawn_monitor(fun() ->
+                    process_flag(trap_exit, true),
+                    self() ! retained,
+                    true = link(Target),
+                    Monitor = monitor(process, Target),
+                    Parent ! {self(), ready},
+                    Events = termination_events(Target, Monitor, 3),
+                    Parent !
+                        {
+                            self(),
+                            {N, Events, is_process_alive(Target),
+                                process_info(Target, registered_name), drain()}
+                        }
+                end),
+                {N, Pid, Ref}
+            end
+         || N <- lists:seq(1, Count)
+        ],
+        [
+            receive
+                {Pid, ready} -> ok
+            end
+         || {_, Pid, _} <- Workers
+        ],
+        Target ! {finish, [{0, Parent} | [{N, Pid} || {N, Pid, _} <- Workers]]},
+        Before = termination_events(Target, TargetRef, 1),
+        [{_, First, _} | _] = Workers,
+        FirstReport =
+            receive
+                {First, Report} -> Report
+            end,
+        Early =
+            receive
+                {'EXIT', Target, R} -> [{exit, R}];
+                {'DOWN', TargetRef, process, Target, R} -> [{down, R}]
+            after 0 -> []
+            end,
+        Rest = termination_events(Target, TargetRef, 2 - length(Early)),
+        Reports = [
+            begin
+                Value =
+                    case Pid =:= First of
+                        true ->
+                            FirstReport;
+                        false ->
+                            receive
+                                {Pid, ReportN} -> ReportN
+                            end
+                    end,
+                receive
+                    {'DOWN', Ref, process, Pid, normal} -> ok
+                end,
+                Value
+            end
+         || {_, Pid, Ref} <- Workers
+        ],
+        {Before ++ Early ++ Rest, Reports, drain()}
+    end).
+
+%% Live/dead controls require exact replies. Racing requests accept only valid
+%% observations, not agreement on which requester runs before the target ends.
+ending_requests(State, Count) ->
+    isolated(fun() ->
+        self() ! retained,
+        Parent = self(),
+        {Target, TargetRef} = spawn_monitor(fun() ->
+            receive
+                stop -> ok
+            end
+        end),
+        Workers = [
+            begin
+                {Pid, Ref} = spawn_monitor(fun() ->
+                    process_flag(trap_exit, true),
+                    self() ! retained,
+                    Parent ! {self(), ready},
+                    receive
+                        go -> ok
+                    end,
+                    true = link(Target),
+                    Monitor = monitor(process, Target),
+                    Info = process_info(Target, registered_name),
+                    Alive = is_process_alive(Target),
+                    Parent ! {self(), queried},
+                    Events = termination_events(Target, Monitor, 2),
+                    Observation = {Info, Alive},
+                    Query =
+                        case {State, Observation} of
+                            {live, {[], true}} -> allowed;
+                            {dead, {undefined, false}} -> allowed;
+                            {racing, {[], true}} -> allowed;
+                            {racing, {[], false}} -> allowed;
+                            {racing, {undefined, false}} -> allowed;
+                            _ -> {unexpected, Observation}
+                        end,
+                    %% A normal DOWN belongs to the established monitor and
+                    %% follows the link exit. An immediate noproc reply to a
+                    %% late monitor is not that termination notification; do
+                    %% not impose its order relative to an earlier link exit.
+                    Replies =
+                        case {State, Events} of
+                            {live, [{exit, normal}, {down, normal}]} -> allowed;
+                            {dead, [{exit, noproc}, {down, noproc}]} -> allowed;
+                            {racing, [{exit, normal}, {down, normal}]} -> allowed;
+                            {racing, [{exit, normal}, {down, noproc}]} -> allowed;
+                            {racing, [{down, noproc}, {exit, normal}]} -> allowed;
+                            {racing, [{exit, noproc}, {down, noproc}]} -> allowed;
+                            {racing, [{down, noproc}, {exit, noproc}]} -> allowed;
+                            _ -> {unexpected, Events}
+                        end,
+                    Parent !
+                        {
+                            self(),
+                            {N, Query, Replies, is_process_alive(Target),
+                                process_info(Target, registered_name), drain()}
+                        }
+                end),
+                {N, Pid, Ref}
+            end
+         || N <- lists:seq(1, Count)
+        ],
+        [
+            receive
+                {Pid, ready} -> ok
+            end
+         || {_, Pid, _} <- Workers
+        ],
+        case State of
+            dead ->
+                Target ! stop,
+                receive
+                    {'DOWN', TargetRef, process, Target, normal} -> ok
+                end;
+            _ ->
+                ok
+        end,
+        [Pid ! go || {_, Pid, _} <- Workers],
+        case State of
+            live ->
+                [
+                    receive
+                        {Pid, queried} -> ok
+                    end
+                 || {_, Pid, _} <- Workers
+                ],
+                Target ! stop;
+            racing ->
+                Target ! stop;
+            dead ->
+                ok
+        end,
+        case State of
+            dead ->
+                ok;
+            _ ->
+                receive
+                    {'DOWN', TargetRef, process, Target, normal} -> ok
+                end
+        end,
+        Reports = [
+            begin
+                case State of
+                    live ->
+                        ok;
+                    _ ->
+                        receive
+                            {Pid, queried} -> ok
+                        end
+                end,
+                Value =
+                    receive
+                        {Pid, Report} -> Report
+                    end,
+                receive
+                    {'DOWN', Ref, process, Pid, normal} -> ok
+                end,
+                Value
+            end
+         || {_, Pid, Ref} <- Workers
+        ],
+        {Reports, drain()}
+    end).
+
+%% Receive all target events together: selective receives for EXIT then DOWN
+%% would hide an ordering violation. Normalize identities, not reasons/order.
+termination_events(_Target, _Ref, 0) ->
+    [];
+termination_events(Target, Ref, Count) ->
+    Event =
+        receive
+            {Target, before_exit, Value} -> {before_exit, Value};
+            {'EXIT', Target, Reason} -> {exit, Reason};
+            {'DOWN', Ref, process, Target, Reason} -> {down, Reason}
+        end,
+    [Event | termination_events(Target, Ref, Count - 1)].
 
 lifecycle_sequence(Setup, Steps) ->
     isolated(fun() ->

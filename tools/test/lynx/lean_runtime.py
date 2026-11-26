@@ -1402,6 +1402,15 @@ def cases():
             for count in [1, 16, 64]:
                 probe("Modules/Signals", site,
                       f"differential:signal_queue({scenario},{count})")
+    for count in [1, 4, 16]:
+        for mode in ["normal", "shutdown", "kill"]:
+            probe("Modules/Signals", "link_exits_in_any_order",
+                  f"differential:termination_fanout({mode},{count})",
+                  termination_scenario="fanout", termination_mode=mode, peers=count)
+        for state in ["live", "dead", "racing"]:
+            probe("Modules/Signals", "queued_requests_answered_one_at_a_time",
+                  f"differential:ending_requests({state},{count})",
+                  termination_scenario="requests", termination_mode=state, peers=count)
     for value in ["bad", "1", "[]", "{}", "make_ref()", "fun()->ok end"]:
         call("Modules/Signals", "liveness", "is_process_alive", value)
         call("Modules/Signals", "liveness", "process_info", value, "registered_name")

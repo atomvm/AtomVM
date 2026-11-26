@@ -177,7 +177,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **6,395 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **6,413 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -215,6 +215,19 @@ map replacement/removal, and dictionary keys, across worker copying and GC.
 Nested function captures and integer/float captures distinguish loose equality
 from exact keys. Maps include 2, 31, 32, and 33 keys; no raw fun identity or
 implementation-dependent ordering is compared across VMs.
+
+The [fan-out/request batch](PLAN.md#fan-out-termination-and-ending-process-requests)
+adds 18 observations with 1/4/16 peers. Fan-out checks exact per-recipient
+message/EXIT/DOWN order for normal, compound shutdown and kill exits, without
+requiring simultaneous delivery across peers. Live/dead controls require exact
+link/monitor and query replies; racing requests normalize only accepted
+live-to-dead observations and notification pairs. Established monitors retain
+EXIT-before-normal-DOWN ordering; late `noproc` replies do not inherit that
+ordering requirement. Every peer must complete and preserve unrelated messages.
+Independent CLI oracles also exercise filtered/reindexed replay. Against OTP
+29.1.3, interpreter and AArch64 precompiled modes each match 180/180 across ten
+repetitions; on-demand JIT matches 18/18. The full harness passes 35 tests with
+3 optional skips.
 
 The [nested fallthrough batch](PLAN.md#nested-fallthrough-continuations)
 adds 32 observations: 16 annotated-Core probes and 16 ordinary-source controls.

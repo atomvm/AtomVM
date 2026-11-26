@@ -16,8 +16,8 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,395 public-behavior recipes inspired by Lean tests
-  and upstream examples (`369` of `478` Lean test sites across all 28 files). Source
+- `lean_runtime.py` selects 6,413 public-behavior recipes inspired by Lean tests
+  and upstream examples (`371` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
   the proved postcondition to be true on both VMs: five integer singleton sums,
@@ -37,6 +37,52 @@ The supported checkout has 28 Lean test files, including new concurrency audits
 and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` and `erlang:exit_signal/2` remain separately observed API gaps.
 Fixture validation does not establish complete runtime-model support.
+
+## Fan-out termination and ending-process requests
+
+Add 18 observations (2026-11-26), inspired by `link_exits_in_any_order` and
+`queued_requests_answered_one_at_a_time` in upstream `Modules/Signals.lean`
+(commit `d526582fef4373b64474b5794050c64ba76d5ff3`). Each scenario uses 1, 4 or
+16 peers; no production runtime changes or expected-failure entries are added.
+
+- Fan-out peers install links and monitors before termination. The target sends
+  distinct tagged payloads to the root and peers, then exits normally, with a
+  compound shutdown reason, or through untrappable self-kill. Every recipient
+  must observe its message, EXIT and DOWN in that order with exact payloads and
+  reasons. Collect these events in one receive rather than selective receives
+  that could hide reordering. The root waits for one peer's report before
+  polling its own notifications; either early presence or absence is accepted.
+  There is no comparison of cross-recipient arrival order.
+- Concurrent requesters call link, monitor, process_info and is_process_alive.
+  The live control holds the target until all requesters report their queries;
+  the dead control waits for target DOWN before releasing them. These require
+  exact live/normal and dead/noproc answers. The racing variant has no such
+  completion fence and accepts live-to-dead transitions, never resurrection,
+  and normal/normal, normal/noproc or noproc/noproc link/monitor reason pairs.
+- Established monitors' normal DOWNs must follow link EXITs. A late monitor's
+  immediate noproc reply is not the same termination notification: its order
+  relative to a link EXIT is intentionally unconstrained in the racing case.
+  An initial overly strict probe rejected DOWN(noproc) before EXIT(normal) in
+  one interpreter repetition; this is retained as test-design evidence, not
+  diagnosed as a runtime bug or converted into an expected failure.
+- Require eventual completion and dead-target queries from every peer, preserve
+  unrelated sentinels, reject extra notifications, consume worker monitors and
+  normalize PIDs/references. No sleeps or internal short deadlines are used;
+  the outer runner bounds hangs. Accepted race variants become `allowed` only
+  after checking observations; unexpected values retain diagnostic payloads.
+  The public CLI test independently checks exact result shapes and per-peer
+  payloads, including a filtered/reindexed saved replay.
+- OTP 29.1.3 / ERTS 17.1.2 comparison: ten repetitions of all 18 cases match
+  180/180 in interpreter and AArch64 precompiled modes; on-demand JIT matches
+  18/18 with `--timeout 60 --jobs 2`. All have zero failures and unverified
+  results. The independent-oracle/reindexed-replay test passes. Full harness:
+  35 passed, 3 optional environment-gated skips (38 discovered, 306.526 seconds).
+  Erlang formatting, Python 3.9 grammar and whitespace checks pass.
+- All 6,395 earlier recipes and metadata are unchanged. Total recipes: 6,413;
+  attribution grows from 369 to 371/478 sites in 28 files. These are finite
+  public-behavior samples, not universal theorem instances or proof that every
+  allowed race outcome occurred. Evidence: `.amp/in/artifacts/lynx-fanout/`.
+  The full runtime corpus, embedded targets and fresh Lean laws are not rerun.
 
 ## Nested fallthrough continuations
 
