@@ -890,7 +890,7 @@ int main(int argc, char **argv)
         }
         return EXIT_FAILURE;
     }
-#ifndef AVM_NO_JIT
+#ifdef AVM_NO_EMU
     if (!beam) {
         if (chdir(AVM_JIT_TARGET_ARCH_DIR) != 0) {
             perror("Error: cannot find " AVM_JIT_TARGET_ARCH_DIR " directory");

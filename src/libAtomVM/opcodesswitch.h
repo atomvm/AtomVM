@@ -3165,6 +3165,19 @@ schedule_in:
 
                         break;
                     }
+#ifndef AVM_NO_JIT
+                    case ModuleNativeFunction: {
+                        const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
+
+                        if (jump->target != mod) {
+                            prev_mod = mod;
+                            mod = jump->target;
+                            code = mod->code->code;
+                        }
+                        native_pc = jump->entry_point;
+                        continue;
+                    }
+#endif
                     case BIFFunctionType: {
                         const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(func);
                         term return_value;

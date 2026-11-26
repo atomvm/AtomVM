@@ -23,6 +23,7 @@
 -export([start/0]).
 
 -include("code_load/export_test_module_data.hrl").
+-include("code_load/interpreted_calls_data.hrl").
 
 export_test_module_data() ->
     ?EXPORT_TEST_MODULE_DATA.
@@ -34,4 +35,17 @@ start() ->
         export_test_module, "export_test_module.beam", Bin
     ),
     {module, export_test_module} = code:ensure_loaded(export_test_module),
+    {module, interpreted_calls} = code:load_binary(
+        interpreted_calls, "interpreted_calls.beam", ?INTERPRETED_CALLS_DATA
+    ),
+    % Start the caller without a native-to-bytecode call that would JIT it.
+    {Pid, Ref} = spawn_opt(interpreted_calls, run, [self()], [monitor]),
+    receive
+        {Pid, ok} -> ok
+    after 5000 -> error(interpreted_calls_timeout)
+    end,
+    receive
+        {'DOWN', Ref, process, Pid, normal} -> ok
+    after 5000 -> error(interpreted_calls_down_timeout)
+    end,
     export_test_module:exported_func(4).
