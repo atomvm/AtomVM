@@ -13,6 +13,80 @@ import tempfile
 import unittest
 
 import lean_runtime
+from generated import generate
+
+
+# An ordered-list oracle, deliberately using no queue operations or probe helpers.
+QUEUE_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path, name))) end
+decode = fn decode, value ->
+  case value do
+    %{"tuple" => xs} -> xs |> Enum.map(&decode.(decode, &1)) |> List.to_tuple()
+    %{"map" => xs} -> Map.new(xs, fn [k,v] -> {decode.(decode,k), decode.(decode,v)} end)
+    %{"bits" => [v,n]} -> <<v::size(n)>>
+    xs when is_list(xs) -> Enum.map(xs, &decode.(decode, &1))
+    atom when is_binary(atom) -> String.to_atom(atom)
+    n -> n
+  end
+end
+snapshot = fn q, saved ->
+  peek = fn xs -> case xs do [] -> :empty; [v|_] -> {:value,v} end end
+  {length(q), q === [], q, peek.(q), peek.(Enum.reverse(q)), saved}
+end
+model = fn [setup, steps] ->
+  {rows, _, _} = Enum.reduce(steps, {[], setup, setup}, fn step, {rows,q,saved} ->
+    ok = fn v, next, retained -> {{:ok,v}, next, retained} end
+    bad = fn reason -> {{:exception,:error,reason}, q, saved} end
+    {result, next, retained} = case step do
+      {:in,v} -> next = q ++ [v]; ok.(next,next,saved)
+      {:in_r,v} -> next = [v|q]; ok.(next,next,saved)
+      {op} when op in [:out,:out_r,:drop,:drop_r,:get,:get_r] ->
+        xs = if op in [:out_r,:drop_r,:get_r], do: Enum.reverse(q), else: q
+        case xs do
+          [] when op in [:out,:out_r] -> ok.(:empty,q,saved)
+          [] -> bad.(:empty)
+          [v|rest] ->
+            next = if op in [:out_r,:drop_r], do: Enum.reverse(rest), else: rest
+            cond do
+              op in [:get,:get_r] -> ok.(v,q,saved)
+              op in [:out,:out_r] -> ok.({:value,v},next,saved)
+              true -> ok.(next,next,saved)
+            end
+        end
+      {:reverse} -> next = Enum.reverse(q); ok.(next,next,saved)
+      {:split,n} when is_integer(n) and n >= 0 and n <= length(q) ->
+        {left,right} = Enum.split(q,n); ok.({left,right},left,saved)
+      {:split,_} -> bad.(:badarg)
+      {:join,:left,items} -> next = items ++ q; ok.(next,next,saved)
+      {:join,:right,items} -> next = q ++ items; ok.(next,next,saved)
+      {:member,v} -> ok.(Enum.any?(q, &(&1 === v)),q,saved)
+      {op,v} when op in [:delete,:delete_r] ->
+        xs = if op === :delete_r, do: Enum.reverse(q), else: q
+        index = Enum.find_index(xs, &(&1 === v))
+        xs = if index === nil, do: xs, else: List.delete_at(xs,index)
+        next = if op === :delete_r, do: Enum.reverse(xs), else: xs
+        ok.(next,next,saved)
+      {:save} -> ok.(:saved,q,q)
+      {:restore} -> ok.(:restored,saved,saved)
+      {:gc} -> ok.(true,q,saved)
+    end
+    {[{result,snapshot.(next,retained)}|rows],next,retained}
+  end)
+  {:ok,{snapshot.(setup,setup),Enum.reverse(rows)}}
+end
+expected = Enum.map(read.("cases.json"), fn entry ->
+  model.(decode.(decode,entry["args"]))
+end)
+from_etf = fn s -> :erlang.binary_to_term(Base.decode64!(s)) end
+true = Enum.map(read.("manifest.json")["expected"],from_etf) === expected
+actual = Enum.map(read.("actuals.json"), fn row ->
+  "ok" = row["status"]
+  from_etf.(row["value"])
+end)
+true = actual === expected
+IO.puts("Checked #{length(expected)} queue traces against independent list model")
+"""
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -259,6 +333,31 @@ class ValidationTests(unittest.TestCase):
                 """, str(output / "manifest.json")
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_queue_sequences_match_list_model_and_reordered_replay(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            selected = [case for case in generate(20261126, 240)
+                        if case["operation"] == "queue_sequence"]
+            self.assertEqual(len(selected), 14)
+            self.assertEqual(selected, [case for case in generate(20261126, 240)
+                                       if case["operation"] == "queue_sequence"])
+            self.assertNotEqual(selected[4:],
+                                [case for case in generate(20261127, 240)
+                                 if case["operation"] == "queue_sequence"][4:])
+            source = work / "input.json"
+            for name, cases in [("first", selected), ("replay", selected[::-3])]:
+                source.write_text(json.dumps(cases))
+                output = work / name
+                self.assertEqual(self.invoke(output, "--replay", source),
+                                 {"laws": 0, "passed": len(cases), "failed": 0,
+                                  "unverified": 0, "uncovered": 0})
+                check = subprocess.run(["elixir", "-e", QUEUE_MODEL, str(output)],
+                                       capture_output=True, text=True, timeout=30)
+                self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+                selected = json.loads((output / "cases.json").read_text())
+                self.assertEqual([(c["seed"], c["index"], c["args"]) for c in selected],
+                                 [(c["seed"], c["index"], c["args"]) for c in cases])
 
     def test_binary_sequences_rebase_scopes_and_preserve_split_edges(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -2205,7 +2304,7 @@ class ValidationTests(unittest.TestCase):
                 ["put", 1, "first"], ["put", 1, "replaced"],
                 ["erase", 1], ["get", 1.0], ["put", 1, "reinserted"],
             ]]
-            for operation in ["map_sequence", "dictionary_sequence", "receive_sequence", "binary_sequence", "lifecycle_sequence"]:
+            for operation in ["map_sequence", "dictionary_sequence", "receive_sequence", "binary_sequence", "lifecycle_sequence", "queue_sequence"]:
                 if operation == "receive_sequence":
                     setup = ["sentinel", 1.0, {"tuple": ["tag", 1]}]
                     steps = [{"tuple": s} for s in [
@@ -2224,6 +2323,12 @@ class ValidationTests(unittest.TestCase):
                         ["whereis_slot", "reg_a"],
                         ["peer_link_action", "alpha", "unlink"],
                         ["kill_child", "alpha", "shutdown"],
+                    ]]
+                elif operation == "queue_sequence":
+                    setup = [1, 1.0, "sentinel"]
+                    steps = [{"tuple": s} for s in [
+                        ["save"], ["out"], ["in_r", 1], ["split", 2],
+                        ["join", "right", [1.0, "tail"]], ["restore"],
                     ]]
                 source.write_text(json.dumps([
                     {"seed": 123, "index": 7, "operation": operation, "args": [setup, steps]}

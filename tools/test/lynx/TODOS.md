@@ -148,6 +148,25 @@ proves the callback returned, not that a signal was pending at that moment or
 that the worker stayed alive afterwards. See
 [PLAN.md](PLAN.md#unfenced-self-exit-completion).
 
+### 7. Seeded queue histories (follow-up)
+
+- [x] Extend isolated queue observations into deterministic and seeded histories
+  that cross empty/singleton boundaries and exercise front/rear rebalancing.
+- [x] Mix insertion/removal at both ends, reverse, split and asymmetric joins;
+  compare exact contents and returns, not internal queue representations.
+- [x] Include first/last exact deletion, membership, invalid split recovery,
+  empty-operation exceptions and saved immutable queues across operations/GC.
+- [x] Check both VMs against an independent ordered-list oracle and exercise
+  filtered/reordered replay and setup-preserving shrinking.
+
+This is an additional supported-behavior gap found after the original audit,
+not an unsampled Lean site or an API addition. Four boundary sequences extend
+normal seeded generation; the earlier 44 fixed queue observations remain intact.
+All 148 current histories (4,498 operations) and nine-case reordered replay
+match OTP and the independent list model in interpreter, AArch64 precompiled
+and on-demand JIT modes. No runtime fix or expected-failure entry was needed.
+See [PLAN.md](PLAN.md#seeded-queue-sequences) for the observer contract and validation.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes

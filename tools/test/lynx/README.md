@@ -22,10 +22,11 @@ runtime error/timeout, or a failed prerequisite/reference/proof check.
 
 ## Generated inputs
 
-The default is 1,000 cases, reproducible with `--seed`. Thirty-six boundary
-cases precede seeded exploration (arranged so the first 32 cover all ten
-operation families) so short runs still exercise known dangerous edges. This
-generates inputs to ten operation families, not arbitrary Erlang programs:
+The default is 1,000 cases, reproducible with `--seed`. Forty boundary
+cases precede seeded exploration. The first 32 retain the original ten operation
+families; all eleven, including queues, appear within the first 40. Short runs
+therefore still exercise known dangerous edges. This generates inputs to eleven
+operation families, not arbitrary Erlang programs:
 
 - Numeric comparison: all eight equality/order operators, signed zeros,
   subnormal/extreme finite floats, and integer/float pairs around precision and
@@ -60,6 +61,16 @@ generates inputs to ten operation families, not arbitrary Erlang programs:
   coordinates must be relative to the current binary. Every result/exception and
   intermediate binary is compared; failed operations retain the previous state.
   Shrinking deletes operations without changing setup or literal payloads.
+- Queue sequences: initial ordered contents of up to 33 items, then at most
+  69 operations. Alternate insertion/removal at both ends, drain beyond empty,
+  rebuild, reverse, split, and join asymmetric queues on either side. Observe
+  membership, first/last exact deletion, empty `get`/`drop` errors, and invalid
+  split indices. Saved queues survive subsequent operations and explicit GC;
+  restore is valid even if shrinking deletes every save. Every returned value
+  or exception, length, emptiness, ordered contents, both end peeks, and saved
+  contents are compared, never opaque queue representations. Four boundary
+  sequences precede seeded exploration. The CLI regression additionally checks
+  both VMs against an independent ordered-list model, including reordered replay.
 - Process-lifecycle sequences: stateful setups and sequences of 6 to 24
   operations (four deterministic boundary sequences up to 21 steps) across two
   worker slots, two registered-name slots, two monitor slots, and two alias slots.
@@ -89,6 +100,13 @@ Exceptions compare class/reason, not stack frames. Standalone generated tests
 use AtomVM's bundled standard library, without packaging OTP's `lists.beam`.
 Byte-list output is emitted in bounded chunks, retaining the same wire format
 without formatting the entire serialized trace as one giant list.
+
+The queue batch validates 148 current histories (4,498 operations) against OTP
+29.1.3 in interpreter, AArch64 precompiled and on-demand JIT modes, including
+independent list-model checks and nine-case reordered replay in every mode.
+The CLI harness passes 42 tests with three optional skips. See
+[queue validation details](PLAN.md#seeded-queue-sequences) for the boundary reruns
+and limits; these are finite differential checks, not new proofs.
 
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences

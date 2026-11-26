@@ -259,6 +259,60 @@ def random_lifecycle_sequence(rng, number_fn):
     ]
 
 
+def queue_sequence_boundaries():
+    def step(*items):
+        return {"tuple": list(items)}
+
+    result = []
+    for size in [0, 1, 7, 32]:
+        setup = ([1, 1.0, 1, {"tuple": ["tag", 1.0]}, {"bits": [5, 3]}] * 7)[:size]
+        steps = [step("save")]
+        # One-sided drains force rebalancing before empty, in both directions
+        # across the nontrivial setups; alternating ends could keep halves balanced.
+        steps += [step("out" if size == 7 else "out_r") for _ in range(size + 2)]
+        steps += [step(op) for op in ["get", "get_r", "drop", "drop_r"]]
+        steps += [step("in", 1), step("in", 1.0), step("in", 1),
+                  step("in_r", "front"), step("in", "back"),
+                  step("member", 1.0), step("delete", 1), step("delete_r", 1),
+                  step("member", 1), step("get"), step("get_r"),
+                  step("reverse"), step("split", 2),
+                  step("join", "left", ["left", 1]),
+                  step("join", "right", [1.0, "right"]),
+                  step("drop"), step("drop_r"), step("split", -1),
+                  step("split", 99), step("split", 1.0), step("split", "bad"),
+                  step("gc"), step("restore"), step("reverse"), step("reverse"),
+                  step("split", size), step("split", 0), step("out"),
+                  step("restore"), step("gc")]
+        result.append([setup, steps])
+    return result
+
+
+def random_queue_sequence(rng, value):
+    def step(*items):
+        return {"tuple": list(items)}
+
+    pool = [1, 1.0, "sentinel", {"tuple": ["tag", 1]},
+            {"tuple": ["tag", 1.0]}, {"map": [["key", 1]]},
+            {"map": [["key", 1.0]]}, {"bits": [5, 3]}, value()]
+    setup = [rng.choice(pool) for _ in range(rng.choice([0, 1, 2, 7, 16, 33]))]
+    steps = []
+    for _ in range(rng.randint(12, 40)):
+        op = rng.choice(["in", "in_r", "out", "out_r", "drop", "drop_r",
+                         "get", "get_r", "reverse", "split", "join", "member",
+                         "delete", "delete_r", "save", "restore", "gc"])
+        if op in ["in", "in_r", "member", "delete", "delete_r"]:
+            steps.append(step(op, rng.choice(pool)))
+        elif op == "split":
+            steps.append(step(op, rng.choice([-1, 0, 1, 2, 7, 99, 1.0, "bad"])))
+        elif op == "join":
+            steps.append(step(op, rng.choice(["left", "right"]),
+                              [rng.choice(pool) for _ in range(rng.randrange(5))]))
+        else:
+            steps.append(step(op))
+    steps += [step("gc"), step("restore"), step("gc")]
+    return [setup, steps]
+
+
 def generate(seed, count, float_encoding=False):
     rng = random.Random(seed)
     encodings = float_boundaries()
@@ -426,12 +480,15 @@ def generate(seed, count, float_encoding=False):
             boundaries.append((kind, sequence(kind, 32, *pairs[3])))
         boundaries.append(("receive_sequence", receives(*pairs[3], empty=True)))
         boundaries.append(("binary_sequence", binary_scopes(65)))
+        boundaries += [("queue_sequence", entry) for entry in queue_sequence_boundaries()]
     if float_encoding:
         boundaries = [("float_bits", args) for args in encodings]
     result = []
     for index in range(count):
         if index < len(boundaries):
             operation, args = boundaries[index]
+        elif not float_encoding and index % 20 == 13:
+            operation, args = "queue_sequence", random_queue_sequence(rng, key)
         elif float_encoding or index % 10 == 4:
             value, width = rng.choice(encodings[:-3])[:2]
             operation, args = "float_bits", [value, width, rng.choice([0, 1, 3, 7]), rng.choice(["big", "little"])]
@@ -495,7 +552,7 @@ def reductions(value):
 
 
 def candidates(case):
-    if case["operation"] in ["map_sequence", "dictionary_sequence", "receive_sequence", "binary_sequence", "lifecycle_sequence"]:
+    if case["operation"] in ["map_sequence", "dictionary_sequence", "receive_sequence", "binary_sequence", "lifecycle_sequence", "queue_sequence"]:
         setup, steps = case["args"]
         # Preserve setup and literal operation payloads. Deleting a state change
         # can expose a timeout or range error, but needs no result reference repair.

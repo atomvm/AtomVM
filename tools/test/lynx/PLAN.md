@@ -23,10 +23,10 @@ runner semantics in [README.md](README.md).
   the proved postcondition to be true on both VMs: five integer singleton sums,
   the empty sum, and thirteen protocol postconditions. Other matching
   differential results alone do not establish a property.
-- Generated testing currently covers ten operation families: comparisons,
+- Generated testing currently covers eleven operation families: comparisons,
   arithmetic, maps, integer bitstrings, float encoding, map/dictionary
-  sequences, selective-receive sequences, binary scope sequences, and
-  process-lifecycle sequences. It does
+  sequences, selective-receive sequences, binary scope sequences, queue
+  sequences, and process-lifecycle sequences. It does
   not generate arbitrary Erlang programs or enumerate scheduler interleavings.
 - Dictionary queries, invalid receive timeouts, suspended receives, signal and
   alias combinations, and dictionary/scoped-split GC regressions already have
@@ -38,6 +38,69 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Seeded queue sequences
+
+Extend the generated corpus with an eleventh operation family (2026-11-26),
+without adding an API, proof obligation or runtime/library fix. Four deterministic
+boundary histories start with 0/1/7/32 items; seeded histories start with up to 33
+items. Each contains at most 69 operations. The first 36 boundary cases and all
+saved replay inputs retain their existing meaning; queue boundaries occupy the
+next four positions. Seeded queues use one of the former arithmetic slots every
+20 cases, retaining seeded arithmetic exploration in the other slot.
+
+`queue_sequence/2` extends the existing sequence observer. It records each result
+or exception and the queue's length, emptiness, ordered contents, both end peeks
+and saved queue contents. Mutation results are normalized to lists, not opaque
+representations. Each split returns both ordered partitions and keeps the left
+partition as the current queue. Joins prepend/append an explicit second queue.
+A saved queue initially holds the input value, so deleting a save during shrinking
+does not invalidate restore. Failed operations leave both current and saved
+values unchanged. Explicit GC checks values retained across later calls.
+
+Histories mix insertion/removal at both ends, drain beyond empty and rebuild,
+reverse, split at valid/invalid indices, join asymmetric inputs on both sides,
+query membership and delete the first/last exact occurrence. Duplicates, `1` versus
+`1.0`, compound exact-distinct values and partial bitstrings distinguish wrong-end,
+loose-equality and retention mistakes. Empty `get`/`drop` errors and rejected
+splits are followed by further operations to check exception recovery. The
+7-item front-drain and 32-item rear-drain controls deliberately empty one internal
+half while several elements remain, rather than keeping both halves balanced
+by alternating removals.
+
+The public CLI regression compares full traces from **both** VMs with an independent
+ordered-list model using no queue APIs or differential helpers, then repeats a
+filtered/reordered replay. The existing forced-failure shrink/replay regression
+now includes queues, preserving setup, literal operations, seed and original index.
+The model is a finite test oracle, not a new Lynx proof.
+
+Validation against OTP 29.1.3:
+
+- All 148 current histories (4,498 operations; seeds 20261126, 20261127 and 42)
+  match in interpreter, AArch64 precompiled and on-demand JIT modes. Each VM's
+  complete traces also match the list model. The four boundary histories were
+  rerun in all modes after strengthening the initial alternating drains to
+  one-sided drains; all 144 seeded histories were unchanged. Original sweeps
+  and reruns are retained separately, with exact input correspondence checked.
+- Nine-case filtered/reordered replay passes in every mode and against the model.
+  A normal `--seed 42 --generated 40` run passes all 40 cases across eleven
+  families. The first 36 mixed cases and 200 float-only cases are unchanged for
+  all three seeds, and all nine helper copies match the final source hash.
+- Full CLI harness: 42 passed, three optional skips (45 discovered, 480.486s).
+  After strengthening the boundaries, the queue/model/replay and seeded CLI
+  reproducibility regressions were rerun and both passed. Forced-failure queue
+  shrinking/replay passed in the full harness. Python 3.9 grammar, Erlang format
+  and whitespace checks pass.
+- Independent negative controls reject identical wrong traces from both VMs
+  for swapped ends, lost saved contents and wrong split-error reasons.
+
+Evidence: `.amp/in/artifacts/lynx-queue-sequences/`, including `final-input.json`,
+`final-inventory.json`, per-mode runs/replays/boundary reruns, independent logs,
+`harness.log`, `final-targeted.log` and `final-validation.json`. Runtime recipes
+remain 6,929; fixture calls remain 2,351 across 203 exports, and attribution remains
+377/478 sites. No expected failures were added. No full runtime corpus, fresh
+Lean laws, embedded/32-bit/float32 or exhaustive operation-history validation
+is claimed.
 
 ## Unfenced self-exit completion
 

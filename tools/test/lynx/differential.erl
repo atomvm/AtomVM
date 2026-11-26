@@ -9,6 +9,7 @@
     map_sequence/2,
     dictionary_sequence/2,
     binary_sequence/2,
+    queue_sequence/2,
     bits/4,
     float_bits/4,
     call/3,
@@ -532,6 +533,11 @@ binary_sequence(Setup, Steps) ->
     Binary = list_to_binary(Setup),
     {sequence_state(binary, Binary), sequence(binary, Steps, Binary)}.
 
+queue_sequence(Setup, Steps) ->
+    Queue = queue:from_list(Setup),
+    State = {Queue, Queue},
+    {sequence_state(queue, State), sequence(queue, Steps, State)}.
+
 sequence(_Kind, [], _State) ->
     [];
 sequence(Kind, [Step | Steps], State) ->
@@ -547,6 +553,15 @@ sequence_state(map, Map) ->
     map_entries(Map);
 sequence_state(binary, Binary) ->
     {byte_size(Binary), Binary};
+sequence_state(queue, {Queue, Saved}) ->
+    {
+        queue:len(Queue),
+        queue:is_empty(Queue),
+        queue:to_list(Queue),
+        queue:peek(Queue),
+        queue:peek_r(Queue),
+        queue:to_list(Saved)
+    };
 sequence_state(dictionary, _) ->
     Entries = get(),
     Keys = get_keys(),
@@ -588,6 +603,56 @@ sequence_step(binary, {match, Patterns, Options}, Binary) ->
     {binary:match(Binary, Patterns, Options), Binary};
 sequence_step(binary, {split, Patterns, Options}, Binary) ->
     {binary:split(Binary, Patterns, Options), Binary};
+sequence_step(queue, {in, Value}, {Queue, Saved}) ->
+    Next = queue:in(Value, Queue),
+    {queue:to_list(Next), {Next, Saved}};
+sequence_step(queue, {in_r, Value}, {Queue, Saved}) ->
+    Next = queue:in_r(Value, Queue),
+    {queue:to_list(Next), {Next, Saved}};
+sequence_step(queue, {out}, {Queue, Saved}) ->
+    {Value, Next} = queue:out(Queue),
+    {Value, {Next, Saved}};
+sequence_step(queue, {out_r}, {Queue, Saved}) ->
+    {Value, Next} = queue:out_r(Queue),
+    {Value, {Next, Saved}};
+sequence_step(queue, {drop}, {Queue, Saved}) ->
+    Next = queue:drop(Queue),
+    {queue:to_list(Next), {Next, Saved}};
+sequence_step(queue, {drop_r}, {Queue, Saved}) ->
+    Next = queue:drop_r(Queue),
+    {queue:to_list(Next), {Next, Saved}};
+sequence_step(queue, {get}, {Queue, _} = State) ->
+    {queue:get(Queue), State};
+sequence_step(queue, {get_r}, {Queue, _} = State) ->
+    {queue:get_r(Queue), State};
+sequence_step(queue, {reverse}, {Queue, Saved}) ->
+    Next = queue:reverse(Queue),
+    {queue:to_list(Next), {Next, Saved}};
+sequence_step(queue, {split, N}, {Queue, Saved}) ->
+    {Left, Right} = queue:split(N, Queue),
+    {{queue:to_list(Left), queue:to_list(Right)}, {Left, Saved}};
+sequence_step(queue, {join, Side, Items}, {Queue, Saved}) ->
+    Other = queue:from_list(Items),
+    Next =
+        case Side of
+            left -> queue:join(Other, Queue);
+            right -> queue:join(Queue, Other)
+        end,
+    {queue:to_list(Next), {Next, Saved}};
+sequence_step(queue, {member, Value}, {Queue, _} = State) ->
+    {queue:member(Value, Queue), State};
+sequence_step(queue, {delete, Value}, {Queue, Saved}) ->
+    Next = queue:delete(Value, Queue),
+    {queue:to_list(Next), {Next, Saved}};
+sequence_step(queue, {delete_r, Value}, {Queue, Saved}) ->
+    Next = queue:delete_r(Value, Queue),
+    {queue:to_list(Next), {Next, Saved}};
+sequence_step(queue, {save}, {Queue, _}) ->
+    {saved, {Queue, Queue}};
+sequence_step(queue, {restore}, {_, Saved}) ->
+    {restored, {Saved, Saved}};
+sequence_step(queue, {gc}, State) ->
+    {erlang:garbage_collect(), State};
 sequence_step(dictionary, {put, K, V}, State) ->
     {put(K, V), State};
 sequence_step(dictionary, {get, K}, State) ->
