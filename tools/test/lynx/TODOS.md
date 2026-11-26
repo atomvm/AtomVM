@@ -105,18 +105,26 @@ killer/query program literally. A final receive still forces fatal reception;
 returning without one and all-schedule coverage remain outside this batch. See
 [PLAN.md](PLAN.md#livenessdead-target-queries-with-pending-notifications).
 
-### 5. Compiler-lowered receive continuations (lower priority)
+### 5. Compiler-lowered receive continuations
 
-- [ ] Investigate upstream's consecutive timeout-only receive loops and receives
+- [x] Sample upstream's consecutive timeout-only receive loops and receives
   with dropped unused clause bodies, pairing valid lowered Core with source
-  controls and checking emitted operations before adding cases.
-- [ ] Preserve skipped messages across waits and verify exception/after
-  continuations. Existing source fixtures already cover nested receives and
-  suspended exception scopes; avoid duplicating those observations.
+  controls and inspecting emitted operations.
+- [x] Preserve skipped messages across waits and check exception/after
+  continuations, exact integer-vs-float selection, mailbox-vs-clause priority,
+  captured values, once-only effects and cleanup overriding an earlier error.
+
+The batch adds 32 recipes: 16 lowered-Core cases and 16 source controls.
+Positive opaque timeouts retain actual waits. A rescan control first skips the
+whole mailbox and times out, then consumes a previously skipped match. Independent
+expected tables check each VM's results, effect trace and remaining mailbox;
+filtered/reordered replay checks Core companion reindexing. See
+[PLAN.md](PLAN.md#lowered-receive-continuations).
 
 An optimized-away `receive after 0` does not establish signal reception.
 Receive-marker instructions alone also do not establish an optimized mailbox-skip
 path: the interpreter currently treats them as no-ops apart from register clearing.
+This batch does not claim a new mailbox-skip optimization or all compiler shapes.
 
 ### Audit scope and exclusions
 

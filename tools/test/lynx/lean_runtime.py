@@ -2018,6 +2018,103 @@ def cases():
                     "expression": "differential:core_order(fun ?CORE_MODULE:entry/0)",
                 })
 
+    # Reproduce lowered receive shapes, not just source-level nested receives.
+    # Positive opaque timeouts retain real waits; dropped bodies end at removal.
+    for path in ["core", "source"]:
+        def receive_step(tag, value, fail=False):
+            if path == "core":
+                return core_step(tag, value, fail)
+            action = "error" if fail else "return"
+            return f"differential:core_step({tag},{action},{value})"
+
+        def lowered_receive(name, action, patterns=()):
+            wait = (
+                "let <Expired> = primop 'recv_wait_timeout'(T) in case Expired of "
+                f"<'true'> when 'true' -> {action} "
+                f"<'false'> when 'true' -> apply '{name}'/0() end"
+            )
+            if patterns:
+                clauses = " ".join(f"<{pattern}> when 'true' -> primop 'remove_message'()"
+                                   for pattern in patterns)
+                wait = (
+                    "let <Available,Message> = primop 'recv_peek_message'() in "
+                    f"case Available of <'true'> when 'true' -> case Message of {clauses} "
+                    f"<Other> when 'true' -> do primop 'recv_next'() apply '{name}'/0() end "
+                    f"<'false'> when 'true' -> {wait} end"
+                )
+            return (f"(letrec '{name}'/0 = fun () -> {wait} in apply '{name}'/0() "
+                    "-| ['letrec_goto','no_inline'])")
+
+        for family, modes in [
+            ("sequence", ["success", "first_error", "second_error", "join_error",
+                          "handler_error", "cleanup_error", "cleanup_overrides_error"]),
+            ("discarded", ["first", "second", "timeout", "join_error", "timeout_error",
+                           "timeout_join_error", "handler_error", "cleanup_error"]),
+            ("rescan", ["success"]),
+        ]:
+            for mode in modes:
+                capture = receive_step("capture", "{'anchor',13}")
+                first = receive_step("first", "'one'", mode in ["first_error", "handler_error"])
+                second = receive_step("second", "'two'", mode == "second_error")
+                timeout = receive_step("timeout", "'ignored'", mode in ["timeout_error", "handler_error"])
+                resumed = receive_step("resumed", "'selected'")
+                join = receive_step("join", "{Keep,B}", mode in
+                                    ["join_error", "timeout_join_error", "cleanup_overrides_error"])
+                handler = receive_step("handler", "{'caught',C,R}", mode == "handler_error")
+                cleanup = receive_step("cleanup", "'ok'", mode in
+                                       ["cleanup_error", "cleanup_overrides_error"])
+                # The float decoy must survive exact integer patterns. Two
+                # matches in opposite orders expose mailbox-vs-clause priority.
+                messages = "[sentinel,{take,7.0},{take,7},{take,9},tail]"
+                if mode == "second":
+                    messages = "[sentinel,{take,7.0},{take,9},{take,7},tail]"
+                if family == "discarded" and mode in [
+                    "timeout", "timeout_error", "timeout_join_error", "handler_error"
+                ]:
+                    messages = "[sentinel,{take,7.0},tail]"
+                if path == "core":
+                    if family == "sequence":
+                        protected = (f"do {lowered_receive('first_wait', first)} "
+                                     f"{lowered_receive('second_wait', second)}")
+                    else:
+                        scan = lowered_receive("scan", timeout, ["{'take',7}", "{'take',9}"])
+                        protected = f"do {scan} {resumed}"
+                        if family == "rescan":
+                            skip = lowered_receive("skip_scan", first, ["'absent'"])
+                            protected = f"do {skip} {protected}"
+                    inner = f"try {protected} of <B> -> {join} catch <C,R,S> -> {handler}"
+                    # Core has no source `after`: preserve both success and
+                    # exceptional continuations explicitly, including reraising.
+                    body = (f"let <T> = call 'differential':'exception_argument'(1) in "
+                            f"let <Keep> = {capture} in try {inner} of <V> -> do {cleanup} V "
+                            f"catch <AC,AR,AS> -> do {cleanup} primop 'raise'(AS,AR)")
+                else:
+                    if family == "sequence":
+                        protected = f"receive after T -> {first} end,receive after T -> {second} end"
+                    else:
+                        protected = ("receive {take,7}->discarded_first;{take,9}->discarded_second "
+                                     f"after T->{timeout} end,{resumed}")
+                        if family == "rescan":
+                            protected = f"receive absent->discarded after T->{first} end,{protected}"
+                    body = (f"T=differential:exception_argument(1),Keep={capture},"
+                            f"try (try begin {protected} end of B->{join} catch C:R->{handler} end) "
+                            f"after {cleanup} end")
+                entry = {
+                    "upstream_test": "test/lynx/core_to_leanj_test.exs#" + (
+                        "allocates distinct generated message binders for timeout-only receives"
+                        if family == "sequence" else
+                        "translates receive clauses whose unused bodies the compiler dropped"),
+                    "receive_continuation_family": family,
+                    "receive_continuation_scenario": mode,
+                    "receive_continuation_path": path,
+                    "expression": "differential:receive_continuation(" + (
+                        "fun ?CORE_MODULE:entry/0" if path == "core" else f"fun()->{body} end") +
+                        f",{messages})",
+                }
+                if path == "core":
+                    entry["core_body"] = body
+                selected.append(entry)
+
     # Upstream compiler regression, not a Lean theorem attribution. Keep the
     # same source call with either compiler-known or remotely returned operands.
     # Folded failures must retain preceding effects, but never run the body.

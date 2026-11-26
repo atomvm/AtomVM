@@ -1483,6 +1483,75 @@ class ValidationTests(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_lowered_receive_continuations_have_independent_oracles(self):
+        selected = [e for e in lean_runtime.cases() if "receive_continuation_family" in e]
+        self.assertEqual(len(selected), 32)
+        self.assertEqual(sum("core_body" in e for e in selected), 16)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            source.write_text(json.dumps(selected))
+            output = work / "results"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 32, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            saved = json.loads((output / "cases.json").read_text())
+            source.write_text(json.dumps([saved[i] for i in [31, 2, 24, 7, 27, 6]]))
+            replay = work / "replay"
+            self.assertEqual(self.invoke(replay, "--replay", source),
+                             {"laws": 0, "passed": 6, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                full = [:sentinel, {:take, 7.0}, {:take, 7}, {:take, 9}, :tail]
+                unmatched = [:sentinel, {:take, 7.0}, :tail]
+                remaining_first = [:sentinel, {:take, 7.0}, {:take, 9}, :tail]
+                remaining_second = [:sentinel, {:take, 7.0}, {:take, 7}, :tail]
+                ok = fn value, effects, mailbox -> {{:ok, value}, effects, mailbox} end
+                err = fn reason, effects, mailbox -> {{:exception, :error, reason}, effects, mailbox} end
+                sequence = [:capture, :first, :second, :join, :cleanup]
+                matched = [:capture, :resumed, :join, :cleanup]
+                timed = [:capture, :timeout, :resumed, :join, :cleanup]
+                expected = %{
+                  {"sequence", "success"} => ok.({{:anchor, 13}, :two}, sequence, full),
+                  {"sequence", "first_error"} => ok.({:caught, :error, :first}, [:capture, :first, :handler, :cleanup], full),
+                  {"sequence", "second_error"} => ok.({:caught, :error, :second}, [:capture, :first, :second, :handler, :cleanup], full),
+                  {"sequence", "join_error"} => err.(:join, sequence, full),
+                  {"sequence", "handler_error"} => err.(:handler, [:capture, :first, :handler, :cleanup], full),
+                  {"sequence", "cleanup_error"} => err.(:cleanup, sequence, full),
+                  {"sequence", "cleanup_overrides_error"} => err.(:cleanup, sequence, full),
+                  {"discarded", "first"} => ok.({{:anchor, 13}, :selected}, matched, remaining_first),
+                  {"discarded", "second"} => ok.({{:anchor, 13}, :selected}, matched, remaining_second),
+                  {"discarded", "timeout"} => ok.({{:anchor, 13}, :selected}, timed, unmatched),
+                  {"discarded", "join_error"} => err.(:join, matched, remaining_first),
+                  {"discarded", "timeout_error"} => ok.({:caught, :error, :timeout}, [:capture, :timeout, :handler, :cleanup], unmatched),
+                  {"discarded", "timeout_join_error"} => err.(:join, timed, unmatched),
+                  {"discarded", "handler_error"} => err.(:handler, [:capture, :timeout, :handler, :cleanup], unmatched),
+                  {"discarded", "cleanup_error"} => err.(:cleanup, matched, remaining_first),
+                  {"rescan", "success"} => ok.({{:anchor, 13}, :selected}, [:capture, :first, :resumed, :join, :cleanup], remaining_first)
+                }
+                for path <- System.argv() do
+                  cases = JSON.decode!(File.read!(Path.join(path, "cases.json")))
+                  values = JSON.decode!(File.read!(Path.join(path, "manifest.json")))["expected"]
+                  true = length(cases) === length(values)
+                  for {entry, encoded} <- Enum.zip(cases, values) do
+                    {outcome, trace, mailbox} = Map.fetch!(expected,
+                      {entry["receive_continuation_family"], entry["receive_continuation_scenario"]})
+                    want = {:ok, {:ok, {{outcome, trace}, mailbox}}}
+                    # Check each VM independently: equal but wrong traces must
+                    # not pass. Mailbox order and numeric types stay exact.
+                    got = :erlang.binary_to_term(Base.decode64!(encoded))
+                    log = File.read!(Path.join(path, entry["module"] <> ".log"))
+                    [[_, bytes]] = Regex.scan(~r/^LYNX_RESULT (\\[.*\\])$/m, log)
+                    actual = bytes |> JSON.decode!() |> :erlang.list_to_binary() |> :erlang.binary_to_term()
+                    if got !== want or actual !== want,
+                      do: raise(inspect({entry, want, got, actual}))
+                  end
+                end
+                """, str(output), str(replay)
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     def test_binary_construction_order_has_independent_oracles(self):
         selected = [entry for entry in lean_runtime.cases() if "binary_order_scenario" in entry]
         self.assertEqual(len(selected), 56)
@@ -2590,7 +2659,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 6879)
+        self.assertEqual(len(lean_runtime.cases()), 6911)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

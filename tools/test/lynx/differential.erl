@@ -70,6 +70,7 @@
     exception_argument/1,
     core_order/1,
     core_step/3,
+    receive_continuation/2,
     function_named/3,
     function_make/4,
     function_spawn/3,
@@ -4455,6 +4456,15 @@ core_step(Tag, Action, Value) ->
         return -> Value;
         error -> error(Tag)
     end.
+
+%% The continuation runs in a clean mailbox. Observe exact skipped/remaining
+%% messages as well as effects, even when a body, handler or cleanup raises.
+receive_continuation(Fun, Messages) ->
+    isolated(fun() ->
+        [self() ! Message || Message <- Messages],
+        Result = core_order(Fun),
+        {Result, drain()}
+    end).
 
 %% A remote call keeps paired driver arguments opaque to the compiler.
 exception_argument(Value) -> Value.

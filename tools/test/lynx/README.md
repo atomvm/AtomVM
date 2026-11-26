@@ -177,7 +177,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **6,879 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **6,911 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -742,6 +742,15 @@ Both VMs must satisfy the allowed contract; `LYNX_QUERY_TRACE` observations rema
 in saved logs and are checked against independent tables and reordered replay.
 No scheduling winner, monitor-registration barrier, or all-outcome coverage is
 assumed.
+Thirty-two [lowered-receive observations](PLAN.md#lowered-receive-continuations)
+pair manually lowered Core with source controls for consecutive timeout-only
+loops, discarded clause results and rescanning previously skipped messages.
+Positive opaque timeouts retain real waits. Exact outcomes, once-only effects,
+captured values, handler/cleanup boundaries and remaining mailbox order are
+checked independently on both VMs, with filtered/reordered Core replay.
+Representative BEAM inspection confirms wait/scan/removal sites; paired inputs
+need not produce different final opcodes. This is not new Lean proof coverage or
+a claim about an optimized mailbox-skip implementation.
 Forty-two ownership cases pass standalone aliases, plain monitor references, and
 all three monitor-alias types to a third process distinct from the monitored
 target. Foreign `unalias/1` and both

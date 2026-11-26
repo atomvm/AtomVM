@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,879 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 6,911 public-behavior recipes inspired by Lean tests
   and upstream examples (`376` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,59 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Lowered-receive continuations
+
+Add 32 recipes (2026-11-26): 16 manually lowered-Core cases and 16 source
+controls, inspired by upstream `core_to_leanj_test.exs`'s distinct timeout-only
+message binders and compiler-dropped unused receive bodies. These are runtime
+observations, not executions of the translator tests or new Lean attribution.
+
+- Two consecutive timeout-only loops use an opaque positive timeout. Effects
+  distinguish the first wait, second wait and outer continuation, while a
+  captured value must survive both. Failures in either timeout action reach
+  the protected computation's handler; a failure in its `of` continuation
+  escapes that handler. Handler failures propagate, cleanup runs exactly once,
+  and a cleanup failure overrides an earlier continuation failure.
+- Dropped-body matches end directly at Core `remove_message`, without a
+  fabricated value-producing clause body. Source controls discard distinct
+  pure clause results. Exact patterns reject `{take, 7.0}`; opposite queued
+  integer-match orders distinguish mailbox order from clause priority. The
+  first match is removed exactly once, leaving the decoy, second match and
+  sentinels in their original order. No-match cases time out, and timeout-action
+  errors are distinguished from errors in the continuation after the timeout.
+- A rescan control first selectively scans the entire prepared mailbox for an
+  absent message and times out. Its next receive must start scanning afresh
+  and consume a previously skipped match, preserving the rest of the mailbox.
+- Existing `core_order/1` records outcomes/effects; a small isolated observer
+  prepares and drains the mailbox even after caught probe exceptions. The CLI
+  regression checks each VM against handwritten expected tuples, not merely
+  against the other VM, and replays six filtered/reordered cases with reindexed
+  Core companions. Numeric types, mailbox order, exception reasons and exact
+  effect counts remain observable.
+- Emitted BEAM is inspected for representative Core and source controls:
+  two `wait_timeout` sites for the successful timeout sequence, a scan/removal
+  branch for the dropped-body case, and two scans for the rescan control.
+  The raw-Core and source controls need not produce different final opcodes;
+  they independently exercise the two compiler input routes. No new optimized
+  mailbox-skip implementation or signal-return-before-reception claim is made.
+
+Validation against OTP 29.1.3: all 32 cases pass in interpreter, AArch64
+precompiled and on-demand JIT modes, zero failures/unverified. Six-case
+filtered/reordered replay also passes in each mode. Independent tables check all
+114 saved AtomVM results and all 114 OTP expectations across those six runs.
+Representative BEAM confirms the expected wait/scan/removal sites for both
+compiler input routes. The full CLI harness passes 40 tests with three optional
+skips (43 discovered, 424.238 seconds). Erlang formatting, Python 3.9 grammar,
+whitespace and baseline preservation checks pass. No runtime fix or
+expected-failure addition was needed.
+
+All 6,879 earlier recipes and metadata are preserved: total 6,911; attribution
+remains 376/478 sites in 28 files; fixture counts stay 2,351 calls / 203 exports /
+13 modules. Local evidence is under
+`.amp/in/artifacts/lynx-receive-continuations/`. No full runtime corpus, fresh
+Lean laws, embedded/32-bit/float32 or all-schedule coverage is claimed. Runtime
+fixes and standalone Erlang regressions, if needed, remain separate.
 
 ## Liveness/dead-target queries with pending notifications
 
