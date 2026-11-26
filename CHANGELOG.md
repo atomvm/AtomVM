@@ -205,6 +205,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rebuilding its poll set was not polled until another one was registered or unregistered
 - Fixed TLS connections with `verify_none` being limited to TLS 1.2 when built
   with MbedTLS 3.6.1 or later and TLS 1.3 support enabled
+- Fixed `erlang:list_to_binary/1` and `erlang:iolist_to_binary/1` writing through a NULL
+  pointer when the resulting refc binary could not be allocated: they now raise
+  `out_of_memory`, and only the calling process crashes
 
 ## [0.7.0-beta.0] - 2026-09-28
 
