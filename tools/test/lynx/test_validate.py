@@ -865,6 +865,69 @@ class ValidationTests(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_core_try_results_and_boundaries_have_independent_oracles(self):
+        selected = [entry for entry in lean_runtime.cases() if "try_result_scenario" in entry]
+        self.assertEqual(len(selected), 56)
+        self.assertEqual(sum("core_body" in entry for entry in selected), 36)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "try.json"
+            source.write_text(json.dumps(selected))
+            output = work / "results"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 56, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            # Reindex mixed zero/pair Core and source entries from saved input.
+            saved = json.loads((output / "cases.json").read_text())
+            source.write_text(json.dumps([saved[i] for i in [55, 0, 23, 47, 50]]))
+            replay = work / "replay"
+            self.assertEqual(self.invoke(replay, "--replay", source),
+                             {"laws": 0, "passed": 5, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                for path <- System.argv() do
+                  cases = JSON.decode!(File.read!(Path.join(path, "cases.json")))
+                  values = JSON.decode!(File.read!(Path.join(path, "manifest.json")))["expected"]
+                  true = length(cases) === length(values)
+                  for {entry, encoded} <- Enum.zip(cases, values) do
+                    pair? = entry["try_result_arity"] === 2
+                    result = if pair?, do: {17, :left}, else: :empty
+                    caught = if pair?, do: {:caught, {:protected, 23}}, else: :empty
+                    prefix = if pair?, do: [:protected, :left, :right], else: [:protected]
+                    ok = fn value, rest -> {{:ok, value}, prefix ++ rest} end
+                    err = fn class, reason, rest -> {{:exception, class, reason}, prefix ++ rest} end
+                    # Distinct payloads locate the exception; traces detect a
+                    # wrongly entered handler/body or duplicated/missing effect.
+                    expected = %{
+                      "success" => ok.(result, [:body]),
+                      "protected_error" => ok.({:caught, :error, {:protected, 23}}, [:handler]),
+                      "protected_throw" => ok.({:caught, :throw, {:protected, 23}}, [:handler]),
+                      "protected_exit" => ok.({:caught, :exit, {:protected, 23}}, [:handler]),
+                      "body_error" => err.(:error, {:body, 31}, [:body]),
+                      "body_throw" => err.(:throw, {:body, 31}, [:body]),
+                      "body_exit" => err.(:exit, {:body, 31}, [:body]),
+                      "handler_error" => err.(:error, {:handler, 41}, [:handler]),
+                      "handler_throw" => err.(:throw, {:handler, 41}, [:handler]),
+                      "handler_exit" => err.(:exit, {:handler, 41}, [:handler]),
+                      "let_success" => ok.(result, [:body, :after]),
+                      "let_protected_throw" => ok.(caught, [:handler, :after]),
+                      "case_success" => ok.(result, [:body, :match, :after]),
+                      "case_protected_throw" => ok.(caught, [:handler, :match, :after]),
+                      "nested_success" => ok.(result, [:body, :outer]),
+                      "nested_protected_throw" => ok.(caught, [:handler, :outer]),
+                      "nested_body_error" => ok.({:escaped, :error, {:body, 31}}, [:body, :outer_handler]),
+                      "nested_handler_exit" => ok.({:escaped, :exit, {:handler, 41}}, [:handler, :outer_handler])
+                    }
+                    want = {:ok, Map.fetch!(expected, entry["try_result_scenario"])}
+                    got = :erlang.binary_to_term(Base.decode64!(encoded))
+                    if got !== want, do: raise(inspect({entry, want, got}))
+                  end
+                end
+                """, str(output), str(replay)
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     def test_binary_construction_order_has_independent_oracles(self):
         selected = [entry for entry in lean_runtime.cases() if "binary_order_scenario" in entry]
         self.assertEqual(len(selected), 56)
@@ -1972,7 +2035,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 6283)
+        self.assertEqual(len(lean_runtime.cases()), 6339)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,283 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 6,339 public-behavior recipes inspired by Lean tests
   and upstream examples (`369` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -37,6 +37,44 @@ The supported checkout has 28 Lean test files, including new concurrency audits
 and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` and `erlang:exit_signal/2` remain separately observed API gaps.
 Fixture validation does not establish complete runtime-model support.
+
+## Core try-result binding and exception boundaries
+
+Add 56 observations (2026-11-26), inspired by upstream's `translates zero and
+multiple Core try values` compiler test: 36 raw-Core probes and 20 source
+controls. Reuse the normal Core companion compilation/replay pipeline and the
+existing ordered-effect observer. No runtime helpers, fixes, expected-failure
+entries or Lean theorem attributions are added.
+
+- Bind genuine `<>` and `<A,B>` results in Core `try`, distinguishing these from
+  source `try ok` and `try {A,B}`, each of which produces one result. Opaque
+  effectful calls supply asymmetric atom/integer values; success swaps them.
+- Transfer zero/two results out of a `try` through `let`, multi-value `case`
+  and nested `try`, on both successful and handled-exception paths. Normalize
+  `case` as `let <X,Y> = try ... in case <X,Y> ...`: a direct multi-result
+  `try` scrutinee hits OTP 29.1.3's `sys_core_fold:case_opt/3` assumption that
+  a non-values scrutinee returns one value. Keep normal compiler optimizations
+  enabled. Pair patterns and an opaque guard keep representative matches live.
+- Exercise `error`, `throw` and `exit` in protected computations, success bodies
+  and handlers. Only protected exceptions enter that `try`'s handler; body and
+  handler exceptions escape. Nested probes distinguish inner handling from
+  propagation to the outer handler using separate payloads and effect tags.
+- The public CLI test independently specifies every value, class/reason and
+  once-only ordered trace, and replays a reindexed mixture of saved zero/pair
+  Core and source probes. These validate compiled BEAM on AtomVM, not Lynx's
+  direct raw-Core translator or model proofs. Saved assembly confirms live
+  `try`/`try_end`/`try_case`, preserved pair values and nested handler scopes.
+- Interpreter (`build`), AArch64 precompiled (`.amp/in/build-native`) and
+  on-demand JIT (`.amp/in/build-on-demand`) each match 56/56 against OTP 29.1.3
+  / ERTS 17.1.2, with zero failures/unverified. JIT uses `--timeout 60 --jobs 2`
+  to allow support-module compilation. Full harness: 32 passed, 3 optional
+  environment-gated skips (35 discovered), 270.206 seconds. Python 3.9 grammar
+  and `git diff --check` pass.
+- All 6,283 earlier recipes and metadata are unchanged. Total recipes: 6,339;
+  attribution stays 369/478 sites in 28 Lean files. Evidence is under
+  `.amp/in/artifacts/lynx-core-try/`: input, toolchain, per-mode results/build
+  hashes, representative assembly, inventory and harness log. Full runtime
+  corpus and embedded execution are outside this batch.
 
 ## Binary-construction ordering and exceptions
 

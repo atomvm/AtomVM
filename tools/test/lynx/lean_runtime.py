@@ -1658,6 +1658,110 @@ def cases():
                 entry["core_body"] = body
             selected.append(entry)
 
+    # Real Core <> and <A,B> results, not one atom or tuple result. Source
+    # controls cover the same exception boundaries without claiming Core arity.
+    for path in ["core", "source"]:
+        def try_step(tag, value):
+            return core_step(tag, value) if path == "core" else f"differential:core_step({tag},return,{value})"
+
+        for arity in [0, 2]:
+            for mode in ["success", "protected_error", "protected_throw", "protected_exit",
+                         "body_error", "body_throw", "body_exit",
+                         "handler_error", "handler_throw", "handler_exit"]:
+                stage, _, exception = mode.partition("_")
+                protected = try_step("protected", "'seed'")
+                if arity == 2:
+                    left, right = try_step("left", "'left'"), try_step("right", "17")
+                    protected = (f"do {protected} let <L> = {left} in let <R> = {right} in "
+                                 if path == "core" else f"{protected},L={left},R={right},")
+                else:
+                    protected = f"do {protected} " if path == "core" else f"{protected},"
+                result = "<L,R>" if arity else "<>"
+                if path == "source":
+                    result = "{L,R}" if arity else "ok"
+                if stage in ["protected", "handler"]:
+                    # Enter the handler first; its own exception must escape.
+                    raised = exception if stage == "protected" else "throw"
+                    protected += (f"call 'erlang':'{raised}'({{'protected',23}})" if path == "core"
+                                  else f"erlang:{raised}({{protected,23}})")
+                else:
+                    protected += result
+                body = try_step("body", "{B,A}" if arity else "'empty'")
+                if stage == "body":
+                    body = (f"do {body} call 'erlang':'{exception}'({{'body',31}})" if path == "core"
+                            else f"{body},erlang:{exception}({{body,31}})")
+                handler = try_step("handler", "{'caught',C,Reason}")
+                if stage == "handler":
+                    handler = (f"do {handler} call 'erlang':'{exception}'({{'handler',41}})" if path == "core"
+                               else f"{handler},erlang:{exception}({{handler,41}})")
+                body = (f"try {protected} of <{('A,B' if arity else '')}> -> {body} "
+                        f"catch <C,Reason,S> -> {handler}" if path == "core" else
+                        f"try begin {protected} end of {('{A,B}' if arity else 'ok')} -> {body} "
+                        f"catch C:Reason -> {handler} end")
+                entry = {
+                    "upstream_test": "test/lynx/core_to_leanj_test.exs#translates zero and multiple Core try values",
+                    "try_result_arity": arity,
+                    "try_result_scenario": mode,
+                    "try_result_path": path,
+                    "expression": "differential:core_order(fun ?CORE_MODULE:entry/0)" if path == "core"
+                                  else f"differential:core_order(fun()->{body} end)",
+                }
+                if path == "core":
+                    entry["core_body"] = body
+                selected.append(entry)
+
+    # Transport actual zero/two results out of the try through enclosing Core
+    # binds, matches and handlers. Bind before case: OTP's normal Core optimizer
+    # assumes a non-values case scrutinee produces exactly one value.
+    for arity in [0, 2]:
+        for shape in ["let", "case", "nested"]:
+            modes = ["success", "protected_throw"]
+            if shape == "nested":
+                modes += ["body_error", "handler_exit"]
+            for mode in modes:
+                result = "<B,A>" if arity else "<>"
+                caught = "<'caught',Reason>" if arity else "<>"
+                protected_step = core_step("protected", "'seed'")
+                left_step, right_step = core_step("left", "'left'"), core_step("right", "17")
+                protected = f"do {protected_step} "
+                if arity:
+                    protected += f"let <L> = {left_step} in let <R> = {right_step} in "
+                protected += ("call 'erlang':'throw'({'protected',23})" if mode in
+                              ["protected_throw", "handler_exit"] else "<L,R>" if arity else "<>")
+                body_step, handler_step = core_step("body", "'seed'"), core_step("handler", "'seed'")
+                body = f"do {body_step} " + (
+                    "call 'erlang':'error'({'body',31})" if mode == "body_error" else result)
+                handler = f"do {handler_step} " + (
+                    "call 'erlang':'exit'({'handler',41})" if mode == "handler_exit" else caught)
+                inner = (f"try {protected} of <{('A,B' if arity else '')}> -> {body} "
+                         f"catch <C,Reason,S> -> {handler}")
+                variables = "X,Y" if arity else ""
+                value = "{X,Y}" if arity else "'empty'"
+                if shape == "nested":
+                    outer_handler = core_step("outer_handler", "{'escaped',OC,OR}")
+                    body = (f"try {inner} of <{variables}> -> {core_step('outer', value)} "
+                            f"catch <OC,OR,OS> -> {outer_handler}")
+                else:
+                    continuation = core_step("after", value)
+                    if shape == "case":
+                        matched = core_step("match", "'true'")
+                        patterns = ("<17,'left'> when Flag -> " + continuation +
+                                    " <'caught',OtherReason> when Flag -> " +
+                                    core_step("after", "{'caught',OtherReason}") if arity else
+                                    "<> when Flag -> " + continuation)
+                        continuation = (f"let <Flag> = {matched} in case <{variables}> of {patterns} "
+                                        f"<{variables}> when 'true' -> "
+                                        "call 'erlang':'error'('bad_binding') end")
+                    body = f"let <{variables}> = {inner} in {continuation}"
+                selected.append({
+                    "upstream_test": "test/lynx/core_to_leanj_test.exs#translates zero and multiple Core try values",
+                    "try_result_arity": arity,
+                    "try_result_scenario": f"{shape}_{mode}",
+                    "try_result_path": "core",
+                    "core_body": body,
+                    "expression": "differential:core_order(fun ?CORE_MODULE:entry/0)",
+                })
+
     # Upstream compiler regression, not a Lean theorem attribution. Keep the
     # same source call with either compiler-known or remotely returned operands.
     # Folded failures must retain preceding effects, but never run the body.

@@ -177,7 +177,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **6,283 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **6,339 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -215,6 +215,18 @@ map replacement/removal, and dictionary keys, across worker copying and GC.
 Nested function captures and integer/float captures distinguish loose equality
 from exact keys. Maps include 2, 31, 32, and 33 keys; no raw fun identity or
 implementation-dependent ordering is compared across VMs.
+
+The [Core try-result batch](PLAN.md#core-try-result-binding-and-exception-boundaries)
+adds 56 observations: 36 raw-Core probes and 20 ordinary-source controls. Core
+probes bind actual zero or two results, rather than one atom or tuple, and pass
+those results through `let`, normalized multi-value `case` and nested `try`.
+Asymmetric values, exact exception classes/reasons and ordered effects detect
+wrong result binding, premature/duplicate effects and exceptions caught by the
+wrong handler. Source controls exercise the corresponding exception boundaries,
+not zero/multiple Core result arity. These are compiled-BEAM execution tests,
+not tests of Lynx's translator or new Lean proof coverage. All 56 match OTP
+29.1.3 in interpreter, AArch64 precompiled and on-demand JIT execution, without
+runtime fixes or expected-failure additions.
 
 The [binary-construction ordering batch](PLAN.md#binary-construction-ordering-and-exceptions)
 adds 56 observations: 28 scenarios in Erlang source and raw Core. These compare
