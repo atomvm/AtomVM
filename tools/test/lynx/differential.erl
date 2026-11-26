@@ -58,6 +58,7 @@
     trace_depth_b/1,
     function_compare/2,
     function_identity/2,
+    recursive_closure/4,
     function_apply/3,
     exception_argument/1,
     core_order/1,
@@ -3666,6 +3667,80 @@ function_identity(Kind, Padding) ->
             {dictionary, {Writes, Reads, Erased, get(A), get(B)}}
         }
     end).
+
+%% The factory returns before any call. Observe self identity only within this
+%% VM; only captured data, results and booleans escape into the wire result.
+recursive_closure(Kind, Lifetime, {Left, Right}, Items) ->
+    isolated(fun() ->
+        A = {left, Left, <<17, 34, 51>>},
+        B = {right, Right, <<5:3>>},
+        F =
+            case Lifetime of
+                creator_exit ->
+                    {ok, Escaped} = isolated(fun() -> make_recursive_closure(Kind, A, B) end),
+                    Escaped;
+                _ ->
+                    make_recursive_closure(Kind, A, B)
+            end,
+        case Lifetime of
+            message_gc ->
+                Parent = self(),
+                {Pid, Ref} = spawn_monitor(fun() ->
+                    receive
+                        {closure, Copied, Input} ->
+                            Result = core_order(fun() ->
+                                run_recursive_closure(Copied, Input, true)
+                            end),
+                            Parent ! {self(), Result}
+                    end
+                end),
+                Pid ! {closure, F, Items},
+                receive
+                    {'DOWN', Ref, process, Pid, normal} ->
+                        receive
+                            {Pid, Result} -> Result
+                        end;
+                    {'DOWN', Ref, process, Pid, Reason} ->
+                        exit(Reason)
+                end;
+            _ ->
+                core_order(fun() -> run_recursive_closure(F, Items, Lifetime =/= local) end)
+        end
+    end).
+
+make_recursive_closure(tail, A, B) ->
+    fun
+        Loop([], Acc) ->
+            core_step(base, return, {A, Acc, B, Loop});
+        Loop([X | Xs], Acc) ->
+            core_step({down, X}, return, ok),
+            Loop(Xs, [{A, X, B} | Acc])
+    end;
+make_recursive_closure(non_tail, A, B) ->
+    fun
+        Loop([], Acc) ->
+            core_step(base, return, {A, Acc, B, Loop});
+        Loop([X | Xs], Acc) ->
+            core_step({down, X}, return, ok),
+            {InnerA, Rest, InnerB, Again} = Loop(Xs, Acc),
+            core_step({up, X}, return, ok),
+            {InnerA, [{A, X, B} | Rest], InnerB, Again}
+    end.
+
+run_recursive_closure(F, Items, Collect) ->
+    case Collect of
+        true -> true = erlang:garbage_collect();
+        false -> ok
+    end,
+    core_step(first, return, ok),
+    {A, First, B, Again} = F(Items, [first]),
+    case Collect of
+        true -> true = erlang:garbage_collect();
+        false -> ok
+    end,
+    core_step(second, return, ok),
+    {NextA, Second, NextB, Last} = apply(Again, [[7, 3], [second]]),
+    {{A, First, B}, {NextA, Second, NextB}, {F =:= Again, F =:= Last}}.
 
 %% Core probes share the observer, but the computations themselves must stay
 %% nested in the supplied Core: compiling Erlang source hoists them differently.

@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,339 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 6,363 public-behavior recipes inspired by Lean tests
   and upstream examples (`369` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -37,6 +37,48 @@ The supported checkout has 28 Lean test files, including new concurrency audits
 and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` and `erlang:exit_signal/2` remain separately observed API gaps.
 Fixture validation does not establish complete runtime-model support.
+
+## Escaping recursive closures
+
+Add 24 observations (2026-11-26), inspired by upstream's `escaping local
+functions preserve captures, generated arguments, and self identity` compiler
+test and `passes captures explicitly through direct local recursion`. Unlike
+existing capture-free countdown/self-reference tests and nonrecursive identity
+probes, combine all three behaviors in escaped named recursive closures.
+
+- Two factories return tail-recursive and non-tail-recursive closures, each with
+  two runtime-supplied captures wrapped in dynamically constructed tagged
+  tuples. Profiles cover empty input, exact integer/float capture preservation,
+  and nested maps/lists/partial-bitstrings with three asymmetric input elements.
+- Four lifetime paths: local without explicit GC, explicit GC, actual mailbox
+  transfer to a monitored worker followed by GC, and return from a creator
+  process whose normal `DOWN` is consumed before invocation. GC runs before the
+  first invocation and again with the first result and returned self reference
+  live. The returned reference is invoked with different input/accumulator
+  arguments; identity is compared only within the executing VM.
+- Independent public CLI oracles check exact captured data, both accumulated
+  results, two self-equality booleans and ordered descent/base/unwind effects.
+  Tail accumulation and non-tail reconstruction have deliberately different
+  result orders. A filtered/reindexed saved-input replay covers both factories
+  and creator-exit/local execution. No raw functions, PIDs or generated function
+  names escape into cross-runtime expectations.
+- Assembly inspection confirms real two-capture `make_fun3`, indirect
+  `call_fun`, both GC calls, tail `call_last` and non-tail recursive `call`
+  followed by effectful unwinding. The source-level `apply/2` second invocation
+  optimizes to `call_fun` too; this is not distinct apply-opcode coverage or
+  a test of Lynx's translator/proofs.
+- Interpreter (`build`), AArch64 precompiled (`.amp/in/build-native`) and
+  on-demand JIT (`.amp/in/build-on-demand`) each match 24/24 against OTP 29.1.3
+  / ERTS 17.1.2, with zero failures/unverified. JIT uses `--timeout 60 --jobs 2`
+  for support-module compilation. Full harness: 33 passed, 3 optional
+  environment-gated skips (36 discovered), 293.678 seconds. Erlang formatting,
+  Python 3.9 grammar and `git diff --check` pass.
+- All 6,339 earlier recipes and metadata are unchanged. Total recipes: 6,363;
+  attribution stays 369/478 sites in 28 Lean files. No runtime fixes or
+  expected-failure entries are added. Evidence is under
+  `.amp/in/artifacts/lynx-recursive-closures/`: saved input, toolchain,
+  per-mode results/build hashes, inventory, assembly and harness log.
+  Full runtime corpus and embedded execution are outside this batch.
 
 ## Core try-result binding and exception boundaries
 

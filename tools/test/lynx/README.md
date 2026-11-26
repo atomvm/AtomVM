@@ -177,7 +177,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **6,339 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **6,363 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -215,6 +215,16 @@ map replacement/removal, and dictionary keys, across worker copying and GC.
 Nested function captures and integer/float captures distinguish loose equality
 from exact keys. Maps include 2, 31, 32, and 33 keys; no raw fun identity or
 implementation-dependent ordering is compared across VMs.
+
+The [escaping recursive-closure batch](PLAN.md#escaping-recursive-closures)
+adds 24 observations combining tail/non-tail recursion, two asymmetric captures
+and returned self references. Invoke escaped closures locally, after explicit
+GC, after mailbox transfer to a monitored worker, and after the creator has
+exited. Call the returned self reference again with different arguments, and
+compare capture contents, accumulated results, within-VM function equality and
+ordered descent/unwind effects against independent expectations. No raw fun
+identities or generated names are compared across runtimes. All 24 match OTP
+29.1.3 in interpreter, AArch64 precompiled and on-demand JIT execution.
 
 The [Core try-result batch](PLAN.md#core-try-result-binding-and-exception-boundaries)
 adds 56 observations: 36 raw-Core probes and 20 ordinary-source controls. Core

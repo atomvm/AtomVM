@@ -1090,6 +1090,22 @@ def cases():
             probe("Term/Compare", "captures_compare_as_outer" if kind == "numeric_capture"
                   else "local_and_external_functions_differ",
                   f"differential:function_identity({kind},{padding})")
+    # Combine recursion, captures and escaping self references rather than
+    # repeating capture-free recursion or nonrecursive function-key comparisons.
+    for kind in ["tail", "non_tail"]:
+        for lifetime in ["local", "gc", "message_gc", "creator_exit"]:
+            for profile, captured, items in [
+                ("empty", "{a,b}", "[]"),
+                ("numeric", "{1,1.0}", "[4]"),
+                ("compound", "{#{k=>[1,<<5:3>>]},{right,[-7|tail]}}", "[2,5,9]"),
+            ]:
+                selected.append({
+                    "upstream_test": "test/lynx/core_to_leanj_test.exs#escaping local functions preserve captures, generated arguments, and self identity",
+                    "recursive_closure_kind": kind,
+                    "recursive_closure_lifetime": lifetime,
+                    "recursive_closure_profile": profile,
+                    "expression": f"differential:recursive_closure({kind},{lifetime},{captured},{items})",
+                })
     for a, b in [("1", "make_ref()"), ("a", "make_ref()"),
                  ("make_ref()", "fun erlang:abs/1"), ("make_ref()", "fun()->ok end"),
                  ("fun erlang:abs/1", "self()"), ("fun()->ok end", "self()"),

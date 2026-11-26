@@ -865,6 +865,63 @@ class ValidationTests(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_escaping_recursive_closures_have_independent_oracles(self):
+        selected = [entry for entry in lean_runtime.cases() if "recursive_closure_kind" in entry]
+        self.assertEqual([(e["recursive_closure_kind"], e["recursive_closure_lifetime"],
+                           e["recursive_closure_profile"]) for e in selected],
+                         [(kind, lifetime, profile) for kind in ["tail", "non_tail"]
+                          for lifetime in ["local", "gc", "message_gc", "creator_exit"]
+                          for profile in ["empty", "numeric", "compound"]])
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "closures.json"
+            source.write_text(json.dumps(selected))
+            output = work / "results"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 24, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            saved = json.loads((output / "cases.json").read_text())
+            source.write_text(json.dumps([saved[i] for i in [23, 0, 14]]))
+            replay = work / "replay"
+            self.assertEqual(self.invoke(replay, "--replay", source),
+                             {"laws": 0, "passed": 3, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                for path <- System.argv() do
+                  cases = JSON.decode!(File.read!(Path.join(path, "cases.json")))
+                  values = JSON.decode!(File.read!(Path.join(path, "manifest.json")))["expected"]
+                  true = length(cases) === length(values)
+                  for {entry, encoded} <- Enum.zip(cases, values) do
+                    # Explicit orders distinguish tail accumulation from unwind
+                    # construction, rather than deriving expectations from OTP.
+                    {left, right, forward, backward} = case entry["recursive_closure_profile"] do
+                      "empty" -> {:a, :b, [], []}
+                      "numeric" -> {1, 1.0, [4], [4]}
+                      "compound" -> {%{k: [1, <<5::size(3)>>]}, {:right, [-7 | :tail]},
+                                     [2, 5, 9], [9, 5, 2]}
+                    end
+                    a = {:left, left, <<17, 34, 51>>}
+                    b = {:right, right, <<5::size(3)>>}
+                    tail? = entry["recursive_closure_kind"] === "tail"
+                    rows = fn xs, seed -> Enum.map(xs, &{a, &1, b}) ++ [seed] end
+                    first = rows.(if(tail?, do: backward, else: forward), :first)
+                    second = rows.(if(tail?, do: [3, 7], else: [7, 3]), :second)
+                    events = fn tag, xs -> Enum.map(xs, &{tag, &1}) end
+                    first_trace = [:first] ++ events.(:down, forward) ++ [:base] ++
+                                  if(tail?, do: [], else: events.(:up, backward))
+                    second_trace = [:second, {:down, 7}, {:down, 3}, :base] ++
+                                   if(tail?, do: [], else: [{:up, 3}, {:up, 7}])
+                    result = {{a, first, b}, {a, second, b}, {true, true}}
+                    want = {:ok, {:ok, {{:ok, result}, first_trace ++ second_trace}}}
+                    got = :erlang.binary_to_term(Base.decode64!(encoded))
+                    if got !== want, do: raise(inspect({entry, want, got}))
+                  end
+                end
+                """, str(output), str(replay)
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     def test_core_try_results_and_boundaries_have_independent_oracles(self):
         selected = [entry for entry in lean_runtime.cases() if "try_result_scenario" in entry]
         self.assertEqual(len(selected), 56)
@@ -2035,7 +2092,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 6339)
+        self.assertEqual(len(lean_runtime.cases()), 6363)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"
