@@ -1769,6 +1769,7 @@ schedule_in:
             jit_state.continuation = (NativeContinuation) 0;
             jit_state.module = mod;
             jit_state.remaining_reductions = remaining_reductions;
+            jit_state.terminated = false;
             // __asm__ volatile("int $0x03");
 #if JIT_ARCH_TARGET == JIT_ARCH_XTENSA
             jit_state.code_base = (const void *) mod->native_code;
@@ -1778,7 +1779,8 @@ schedule_in:
             TRACE("returning from native code at %p, ctx = %p, new_ctx = %p, jit_state.continuation = %p\n", (void *) native_pc, (void *) ctx, (void *) new_ctx, (void *) jit_state.continuation);
             remaining_reductions = jit_state.remaining_reductions;
             if (UNLIKELY(new_ctx != ctx)) {
-                ctx = new_ctx;
+                // NULL forces an unwind after termination; only now select a successor.
+                ctx = jit_state.terminated ? scheduler_run(glb) : new_ctx;
                 goto schedule_in;
             }
             if (UNLIKELY(jit_state.continuation == (NativeContinuation) 0)) {

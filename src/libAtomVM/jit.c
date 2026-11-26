@@ -300,7 +300,9 @@ static Context *jit_terminate_context(Context *ctx, JITState *jit_state)
     }
     scheduler_terminate(ctx);
     jit_state->remaining_reductions = 0;
-    return scheduler_run(global);
+    jit_state->terminated = true;
+    // Unwind native code before selecting another context: its allocation could reuse ctx.
+    return NULL;
 }
 
 static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)

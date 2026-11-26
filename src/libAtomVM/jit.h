@@ -138,7 +138,9 @@ typedef struct Module Module;
 // Entry point returns the current (or new) context
 // jit_state->remaining_reductions is updated.
 // If returned context is different from passed context, scheduler resumes in
-// schedule_in.
+// schedule_in. A terminated context returns NULL and sets terminated, so a
+// successor is selected only after native code has unwound. NULL without
+// terminated means the scheduler stopped.
 typedef Context *(*ModuleNativeEntryPoint)(Context *ctx, JITState *jit_state, const ModuleNativeInterface *p);
 
 // Type for storing a native continuation reference.
@@ -162,6 +164,7 @@ struct JITState
 #if JIT_ARCH_TARGET == JIT_ARCH_XTENSA
     const void *code_base;
 #endif
+    bool terminated;
 };
 
 // Remember to keep this struct in sync with libs/jit/src/primitives.hrl

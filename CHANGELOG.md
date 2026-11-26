@@ -88,6 +88,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed receive hangs in JIT and precompiled native execution when a new process reused a
+  terminated process's context address; interpreter execution was unaffected
 - Fixed `process_info/2` returning live information after handling an earlier fatal exit signal
 - Fixed `socket:connect/2` (and so `ssl:connect` and `gen_tcp:connect` with
   `{inet_backend, socket}`) blocking the scheduler

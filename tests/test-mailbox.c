@@ -22,8 +22,12 @@
 #include <stdlib.h>
 
 #include "context.h"
+#include "defaultatoms.h"
 #include "globalcontext.h"
+#include "jit.h"
 #include "mailbox.h"
+#include "module.h"
+#include "scheduler.h"
 #include "smp.h"
 
 void test_mailbox_send(void)
@@ -248,6 +252,63 @@ void test_mailbox_requeue_outer_signals_after_send(void)
     globalcontext_destroy(glb);
 }
 
+#ifndef AVM_NO_JIT
+static Context *native_signal_termination(Context *ctx, JITState *jit_state, const ModuleNativeInterface *primitives)
+{
+    Context *result = primitives->process_signal_messages(ctx, jit_state);
+    assert(result == ctx);
+    assert(!jit_state->terminated);
+
+    bool timed_receive = term_to_int(ctx->x[0]) != 0;
+    mailbox_send_term_signal(ctx, KillSignal, KILL_ATOM);
+    result = timed_receive
+        ? primitives->wait_timeout(ctx, jit_state, INFINITY_ATOM, 0)
+        : primitives->process_signal_messages(ctx, jit_state);
+
+    // Force an unwind, never return a successor that could reuse the destroyed ctx's address.
+    assert(result == NULL);
+    assert(jit_state->terminated);
+    return result;
+}
+
+static Context *native_handoff_successor(Context *ctx, JITState *jit_state, const ModuleNativeInterface *primitives)
+{
+    ctx->x[0] = term_from_int(42);
+    return primitives->terminate_context(ctx, jit_state);
+}
+
+void test_native_signal_termination_handoff(void)
+{
+    for (int timed_receive = 0; timed_receive < 2; timed_receive++) {
+        GlobalContext *glb = globalcontext_new();
+        Context *ctx = context_new(glb);
+        Context *successor = context_new(glb);
+        Module mod = { .native_code = native_signal_termination };
+        ctx->saved_module = &mod;
+        ctx->saved_function_ptr = native_signal_termination;
+        ctx->x[0] = term_from_int(timed_receive);
+        successor->saved_module = &mod;
+        successor->saved_function_ptr = native_handoff_successor;
+        successor->leader = true;
+
+        // Model native entry points through their public C ABI. Queue a successor without
+        // another scheduler or allocator timing: termination must unwind before selecting it.
+        scheduler_init_ready(ctx);
+        scheduler_init_ready(successor);
+#ifndef AVM_NO_SMP
+        glb->online_schedulers = 1;
+        glb->running_schedulers = 1;
+#endif
+        int result = scheduler_entry_point(glb);
+        assert(result == 0);
+        assert(successor->x[0] == term_from_int(42));
+
+        context_destroy(successor);
+        globalcontext_destroy(glb);
+    }
+}
+#endif
+
 #ifdef AVM_TASK_DRIVER_ENABLED
 static void send_from_task(GlobalContext *glb, Context *ctx, int first, int last)
 {
@@ -295,6 +356,9 @@ int main(int argc, char **argv)
     test_mailbox_next();
     test_mailbox_crashdump_keeps_signals();
     test_mailbox_requeue_outer_signals_after_send();
+#ifndef AVM_NO_JIT
+    test_native_signal_termination_handoff();
+#endif
 #ifdef AVM_TASK_DRIVER_ENABLED
     test_send_message_from_task_order();
 #endif
