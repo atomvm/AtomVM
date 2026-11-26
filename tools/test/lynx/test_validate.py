@@ -660,17 +660,32 @@ class ValidationTests(unittest.TestCase):
                 "differential:call(lists,keyfind,[1,1,[{1.0,float},{1,integer}]])",
                 "differential:call(erlang,is_process_alive,[bad])",
             ]
-            source.write_text(json.dumps([{"expression": e} for e in expressions]))
+            scenarios = ["{kill_query,false,false}", "{kill_query,false,true}",
+                         "{kill_query,true,false}", "{kill_query,true,true}",
+                         "{normal_down,false}", "{normal_down,true}",
+                         "{relink_kill,linked}", "{relink_kill,unlinked}"]
+            queue_expressions = [f"differential:signal_queue({scenario},{count})"
+                                 for scenario in scenarios for count in [1, 16, 64]]
+            by_expr = {c["expression"]: c for c in lean_runtime.cases()}
+            source.write_text(json.dumps([{"expression": e} for e in expressions]
+                                         + [by_expr[e] for e in queue_expressions]))
             output = work / "results"
-            self.assertEqual(self.invoke(output, "--replay", source),
-                             {"laws": 0, "passed": 15, "failed": 0,
-                              "unverified": 0, "uncovered": 0})
+            summary = self.invoke(output, "--replay", source)
+            # Both ordering fixes must match OTP. Keep the separate unfenced
+            # relink timeout diagnostic, not an allowlisted runtime success.
+            self.assertEqual(summary["passed"] + summary["failed"], 39)
+            self.assertEqual(summary["unverified"], 0)
+            self.assertEqual(summary["laws"], 0)
+            self.assertEqual(summary["uncovered"], 0)
+            failures = json.loads((output / "failures.json").read_text())
+            self.assertTrue(all(f["case"]["expression"].startswith(
+                "differential:signal_queue({relink_kill,") for f in failures))
             check = subprocess.run([
                 "elixir", "-e", """
                 [path] = System.argv()
                 values = JSON.decode!(File.read!(path))["expected"]
                 actual = Enum.map(values, &:erlang.binary_to_term(Base.decode64!(&1)))
-                [
+                expected = [
                   {:ok, {:ok, {:kill, :kill}}},
                   {:ok, {:exit, :boom}},
                   {:ok, {:killed, :no_reply}},
@@ -687,7 +702,21 @@ class ValidationTests(unittest.TestCase):
                   {:ok, {:returned, :badarg}},
                   {:ok, {1.0, :float}},
                   {:exception, :error, :badarg}
-                ] = actual
+                ]
+                named = {:registered_name, :lynx_signal_queue_child}
+                queue_observations = [
+                  {[], [], true, :normal, :undefined},
+                  {[], :undefined, false, :killed, :undefined},
+                  {named, named, true, :normal, :undefined},
+                  {named, :undefined, false, :killed, :undefined},
+                  {false, :none, [:retained]},
+                  {true, {:exit, :normal}, [:retained]},
+                  {:killed, {:exit, :killed}, [:retained]},
+                  {:killed, :none, [:retained]}
+                ]
+                queue_expected = for observation <- queue_observations, count <- [1, 16, 64],
+                  do: {:ok, {:ok, List.duplicate(observation, count)}}
+                true = actual === expected ++ queue_expected
                 """, str(output / "manifest.json")
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
@@ -1755,7 +1784,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 6124)
+        self.assertEqual(len(lean_runtime.cases()), 6148)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

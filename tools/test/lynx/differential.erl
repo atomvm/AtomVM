@@ -51,6 +51,7 @@
     suspended_receive/1,
     missing_link/1,
     process_liveness/0,
+    signal_queue/2,
     raise_exception/3,
     trace_depth/3,
     trace_depth_a/1,
@@ -2520,6 +2521,82 @@ process_liveness() ->
         Dead = {is_process_alive(Child), process_info(Child, registered_name)},
         {Alive, Unnamed, Named, Unregistered, Dead}
     end).
+
+%% Do not insert peer queries or acknowledgements inside the critical sequences.
+%% Repetition samples schedules; it does not force a pending unlink ack or prove
+%% every interleaving. Controls keep always-dead/always-no-EXIT results visible.
+signal_queue(Scenario, Count) ->
+    isolated(fun() -> [signal_queue_once(Scenario) || _ <- lists:seq(1, Count)] end).
+
+signal_queue_once({kill_query, Named, Kill}) ->
+    {Child, Ref} = spawn_monitor(fun() ->
+        receive
+            stop -> ok
+        end
+    end),
+    case Named of
+        true -> true = register(lynx_signal_queue_child, Child);
+        false -> ok
+    end,
+    Before = process_info(Child, registered_name),
+    case Kill of
+        true -> true = exit(Child, kill);
+        false -> ok
+    end,
+    %% This query, not a DOWN or liveness fence, must see the preceding kill.
+    After = process_info(Child, registered_name),
+    Alive = is_process_alive(Child),
+    Child ! stop,
+    Down =
+        receive
+            {'DOWN', Ref, process, Child, Reason} -> Reason
+        end,
+    {Before, After, Alive, Down, whereis(lynx_signal_queue_child)};
+signal_queue_once({normal_down, Trap}) ->
+    process_flag(trap_exit, Trap),
+    self() ! retained,
+    Parent = self(),
+    {Child, Ref} = spawn_monitor(fun() ->
+        true = link(Parent),
+        ok
+    end),
+    receive
+        {'DOWN', Ref, process, Child, normal} -> ok
+    end,
+    Previous = process_flag(trap_exit, true),
+    Exit =
+        receive
+            {'EXIT', Child, Reason} -> {exit, Reason}
+        after 0 -> none
+        end,
+    {Previous, Exit, drain()};
+signal_queue_once({relink_kill, Final}) ->
+    process_flag(trap_exit, true),
+    {Child, Ref} = spawn_monitor(fun() ->
+        receive
+            stop -> ok
+        end
+    end),
+    true = link(Child),
+    self() ! retained,
+    true = unlink(Child),
+    true = link(Child),
+    case Final of
+        linked -> ok;
+        unlinked -> true = unlink(Child)
+    end,
+    true = exit(Child, kill),
+    Down =
+        receive
+            {'DOWN', Ref, process, Child, Reason} -> Reason
+        end,
+    %% The child sends its link exit before its DOWN. No sleep is needed.
+    Exit =
+        receive
+            {'EXIT', Child, ExitReason} -> {exit, ExitReason}
+        after 0 -> none
+        end,
+    {Down, Exit, drain()}.
 
 lifecycle_sequence(Setup, Steps) ->
     isolated(fun() ->

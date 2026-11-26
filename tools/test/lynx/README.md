@@ -168,7 +168,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **6,124 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **6,148 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -206,6 +206,18 @@ map replacement/removal, and dictionary keys, across worker copying and GC.
 Nested function captures and integer/float captures distinguish loose equality
 from exact keys. Maps include 2, 31, 32, and 33 keys; no raw fun identity or
 implementation-dependent ordering is compared across VMs.
+
+The subsequent [signal-queue batch](PLAN.md#signal-queue-differential-boundaries)
+adds 24 cases for immediate post-kill process queries, trapping after normal
+`DOWN`, and unfenced unlink/relink/kill. Live, pre-trapped and final-unlinked
+controls distinguish missing behavior; 1/16/64 iterations sample schedules,
+not all interleavings. The subsequent [ordering fixes](PLAN.md#signal-queue-ordering-fixes)
+make all 24 cases match in the full interpreter corpus and a fresh sequential
+AArch64 precompiled subset. The 6,180-case interpreter run has exactly the 193
+existing manifest failures and no unexpected outcomes. The original native
+relink timeout remains unexplained. Native kill/query stress also exposes a
+timeout on the unchanged runtime control; it remains a separate unresolved
+finding, not an allowlisted match.
 
 An earlier upstream refresh added 69 cases: 25 exact list-subtraction samples,
 16 example-inspired zip/unzip observations, and 28 timer observations. Timers use

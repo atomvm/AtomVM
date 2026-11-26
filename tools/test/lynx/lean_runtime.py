@@ -1373,6 +1373,19 @@ def cases():
         probe("Modules/Signals", "link_to_missing_process",
               f"differential:missing_link({trap})")
     probe("Modules/Signals", "liveness", "differential:process_liveness()")
+    # Keep these sequences unfenced until the observation under test. Include
+    # live/trapped/unlinked controls so constant answers cannot satisfy the batch.
+    for site, scenarios in [
+        ("process_info_after_kill_is_undefined",
+         [f"{{kill_query,{named},{kill}}}" for named in ["false", "true"]
+          for kill in ["false", "true"]]),
+        ("trap_exit_after_normal_down", ["{normal_down,false}", "{normal_down,true}"]),
+        ("stale_unlink_ack_keeps_new_link", ["{relink_kill,linked}", "{relink_kill,unlinked}"]),
+    ]:
+        for scenario in scenarios:
+            for count in [1, 16, 64]:
+                probe("Modules/Signals", site,
+                      f"differential:signal_queue({scenario},{count})")
     for value in ["bad", "1", "[]", "{}", "make_ref()", "fun()->ok end"]:
         call("Modules/Signals", "liveness", "is_process_alive", value)
         call("Modules/Signals", "liveness", "process_info", value, "registered_name")

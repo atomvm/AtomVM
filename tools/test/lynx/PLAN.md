@@ -16,8 +16,8 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,124 public-behavior recipes inspired by Lean tests
-  and upstream examples (`366` of `478` Lean test sites across all 28 files). Source
+- `lean_runtime.py` selects 6,148 public-behavior recipes inspired by Lean tests
+  and upstream examples (`369` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
   the proved postcondition to be true on both VMs: five integer singleton sums,
@@ -37,6 +37,119 @@ The supported checkout has 28 Lean test files, including new concurrency audits
 and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` and `erlang:exit_signal/2` remain separately observed API gaps.
 Fixture validation does not establish complete runtime-model support.
+
+## Signal-queue ordering fixes
+
+Fix the two observed ordering differences (2026-11-26), without changing the
+relink protocol or adding expected failures:
+
+- Interpreter, precompiled and native-handler signal loops stop servicing a
+  detached batch once a fatal signal marks the process killed. Remaining signals
+  are requeued for teardown, which answers pending process-info requests only
+  after removing the process from the process table and unregistering its name.
+  Thus `undefined` cannot be followed by `is_process_alive(Pid) =:= true`.
+- Termination handles local links before monitor notifications, independent of
+  their creation order. A normal linked exit is handled before the child's
+  `DOWN`, so enabling `trap_exit` afterward cannot expose that earlier exit.
+
+Add public regressions to the existing `test_process_info` and `test_monitor`
+modules: named/unnamed children, scalar/list process-info requests, liveness
+before waiting for `DOWN`, and both trapping states with monitor-before-link
+creation. Both tests failed against the original runtime. An intermediate
+query-handler-only fix was rejected: precompiled execution caught `undefined`
+followed by live liveness. The final fix defers the reply until actual teardown.
+The lifecycle CLI test now requires both fixed families to match OTP; only the
+separate relink family may remain a reported differential failure.
+
+Final executed validation against OTP 29:
+
+- Full interpreter corpus: 6,148 recipes plus 32 generated cases, seed
+  `20261126`: 5,987 matches, 193 existing failures, zero unverified. The unchanged
+  manifest accepts exactly 193/193, with zero unexpected failures or passes;
+  all 24 signal-queue cases match.
+- AArch64 precompiled: a fresh sequential subset matches all 24 cases. The first
+  parallel run matches 23 and times out on named kill/query/64, with no value
+  mismatches. Repeated direct executions reproduce that timeout. A control built
+  with all four changed runtime files restored to baseline `94b3ece47` also times
+  out on the same case (attempt 85), establishing a pre-existing timeout, not its cause.
+  Thread samples show sleeping schedulers; debugger inspection of a fixed-build
+  hang finds a waiting process with a nonempty outer mailbox. This is a separate
+  unresolved finding, not proof of a shared cause with the earlier relink timeout.
+- Interpreter core: both affected modules pass ten repetitions; all 483 core
+  tests and mailbox/enif/struct tests pass. The two precompiled core modules each
+  return zero on three runs. The native C test harness build is independently
+  blocked by its existing missing `AVM_JIT_TARGET_ARCH_DIR` configuration; the
+  native modules were packed and executed directly instead.
+- CLI suite: 28 passed, three optional configurations skipped. Changed-line C
+  formatting, Erlang formatting and whitespace checks pass.
+
+Evidence: `.amp/in/artifacts/lynx-signal-fixes/`; final results have the `final-`
+prefix and are distinct from rejected/intermediate runs. The original relink
+and newly reproduced native kill/query timeouts remain unresolved, with no
+allowlist additions or timeout increases. No full native corpus, fresh fixture
+laws, on-demand JIT or embedded run is claimed. Runtime fixes, Erlang regressions
+and individual changelog entries are committed separately with `-s` as
+`0ffe3cfbd` (post-kill queries) and `b3abc9dfa` (exit-before-DOWN ordering).
+A three-way cherry-pick check confirms the second commit applies independently
+on the pre-fix baseline, without the first. Targeted core tests pass again after
+committing. Lynx coverage and these validation notes are kept in a separate
+commit from both runtime fixes. Nothing was pushed.
+
+## Signal-queue differential boundaries
+
+Initial coverage-only results, before the ordering fixes above.
+
+Add 24 observations (2026-11-26), extending the runtime corpus from 6,124 to
+6,148 recipes and attribution from 366 to 369 of 478 sites. Eight scenarios run
+for 1/16/64 iterations, through a monitored worker:
+
+- Kill then immediately query `process_info(Pid, registered_name)`, without a
+  `DOWN`/liveness fence in between. Named and unnamed children have live controls;
+  observations retain the live before-state, query result, subsequent liveness,
+  termination reason and final name cleanup. The initial query before the kill
+  ensures the child has handled a request, unlike the earlier spawn-then-kill
+  exploratory control that passed.
+- After a linked child's normal `DOWN`, enable `trap_exit` and poll for a late
+  normal `EXIT`. A control traps before the child exits and must retain that
+  `EXIT`; an unrelated sentinel must survive selective receives.
+- Link, unlink, relink and kill without peer queries or acknowledgments between
+  those operations. Require `EXIT(killed)` before the child's `DOWN`; a final
+  unlink control must suppress it. Receive `DOWN` first, then check the queued
+  `EXIT`, so assertions do not depend on wall-clock sleeps. Repetition creates
+  scheduling opportunities but does not prove an unlink ack was pending.
+
+The three new source sites are `process_info_after_kill_is_undefined`,
+`trap_exit_after_normal_down`, and `stale_unlink_ack_keeps_new_link`. No proofs,
+VM changes or allowlist entries were added. Existing runtime expressions remain
+unchanged. The lifecycle CLI oracle test now independently specifies all 24
+new reference results, retains strict checks for its 15 old observations, and
+allows new differences to remain reported failures rather than freezing a
+schedule-dependent failure count or requiring bugs to persist.
+
+Executed against OTP 29 with the existing interpreter and AArch64 precompiled
+builds (not on-demand JIT or embedded):
+
+- Interpreter: 17 matched, seven failed, zero unverified. Six kill/query cases
+  observe stale live information; the 64-iteration untrapped-normal case catches
+  a late `EXIT(normal)` at iteration 7.
+- Precompiled: 16 matched, eight failed, zero unverified. The same six kill/query
+  cases and late normal exit differ. One 64-iteration linked relink case also
+  hits the five-second semantic timeout. Three fresh sequential replays of that
+  case with a 30-second guard all match; the initial timeout is retained and
+  remains unexplained, not a diagnosed relink defect or dismissed as flakiness.
+- All 24 OTP reference results are identical between the two mode runs. Live,
+  pre-trapped, and final-unlinked controls match in both modes.
+- Public CLI suite: 28 passed, three optional configurations skipped. The
+  extended lifecycle test checks all 24 independent OTP oracles while preserving
+  new target mismatches as failures. Erlang formatting, Python syntax, inventory
+  attribution and whitespace checks pass.
+
+These new failures are not covered by the unchanged 193-failure manifest: the
+expanded runtime corpus is not an all-green CI baseline. The preceding full
+runtime/fixture results below predate this batch; no new full-corpus run or
+fresh law check is claimed. Evidence: `.amp/in/artifacts/lynx-signal-queue/`,
+including replay inputs, both full subset runs, decoded differences and relink
+replays. No runtime cause or fix is claimed from these observations alone.
 
 ## Latest upstream refresh
 
