@@ -5,11 +5,115 @@ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 
 # Lynx coverage TODOs
 
-Original priorities from screening 195 incoming Lynx commits after updating to
-`ff3aad6f39e196ce539a73e1f51f8c3a1b69f68c`. Status as of 2026-11-26.
+Status as of 2026-11-26, against Lynx
+`ff3aad6f39e196ce539a73e1f51f8c3a1b69f68c`. The supported-behavior priorities
+below follow an audit of the current recipes and unsampled sites. The original
+six-item shortlist from screening 195 incoming commits is retained afterwards;
+persistent terms and hashing are not the only remaining work.
 See [PLAN.md](PLAN.md) for implementation details and validation results, and
 [README.md](README.md) for runner usage. Completed items describe the targeted
 batches, not exhaustive coverage or proof of every scheduler interleaving.
+
+## Supported-behavior priorities
+
+Prefer these batches before adding APIs. Keep runtime corrections and standalone
+Erlang regressions separate from Lynx coverage.
+
+### 1. Custom map-iterator ordering and consumers
+
+- [x] Add custom deterministic total orders through `next`, `fold`, `map`,
+  `filter`, `filtermap` and `foreach`, extending the earlier predefined-order
+  recipes and basic standalone comparator regression.
+- [x] Cover partial/exhausted iterators, empty/singleton and 31/32/33-entry maps,
+  and retained iterators after updates to the original map value.
+- [x] Cover invalid ordering arguments and comparator exceptions. Compare exact
+  consumer visits, not comparator call order/count or unspecified key ties.
+- [x] Fix invalid-order exception behavior separately, with an Erlang regression.
+
+**Resolved difference:** OTP 29.1.3 raises `error:badarg`, but unchanged AtomVM
+raised `error:function_clause` for a bad atom or functions of arity 0/1/3 as the
+order, with empty/singleton/multi-entry maps. Non-map `iterator/2` inputs also
+incorrectly raised `badmap`; `iterator/1` must retain that exception. The new
+standalone regression passes OTP, fails unchanged AtomVM, and passes the fixed
+runtime in interpreter, AArch64 precompiled and on-demand JIT modes.
+
+Added 240 permanent differential recipes, with independent expected-value and
+filtered/reordered replay checks. All match OTP in interpreter, AArch64
+precompiled and on-demand JIT modes. See
+[PLAN.md](PLAN.md#custom-map-iterator-ordering-and-consumers) for scope and
+validation; no expected failures were added.
+
+### 2. Structural BIF execution paths
+
+- [ ] Extend body/dynamic-call/guard comparisons to `length/1`, `hd/1`, `tl/1`,
+  `element/2`, `tuple_size/1`, `byte_size/1` and `bit_size/1`.
+- [ ] Distinguish body/dynamic exceptions from guard rejection using opaque
+  arguments. Include empty/improper lists, invalid tuples and index boundaries,
+  partial bitstrings, heap/sub-binaries and live values across calls/GC.
+- [ ] Inspect emitted BEAM before claiming distinct opcode paths; different
+  source forms can compile identically. Avoid duplicating existing map guards.
+
+The explicit execution-path matrix currently covers arithmetic, comparisons and
+`map_get`; direct calls and fixtures already cover some structural behavior.
+All 18 exploratory structural observations matched OTP in interpreter mode.
+These were feasibility probes, not permanent tests or native-path validation.
+
+### 3. Exit reception across trap-flag changes
+
+- [ ] Combine unfenced trap-flag transitions with `exit_signal/2`, legacy
+  `exit/2` controls and alias deactivation. Existing transition cases fence
+  reception; the asynchronous-exit batch holds the flag fixed.
+- [ ] Use isolated monitored workers, exact controls and allowed outcome sets.
+  Distinguish an already converted EXIT message from a pending signal; never
+  require a particular scheduling winner or claim every allowed outcome occurred.
+
+Two exploratory legacy self-exit traces differed from OTP when compared exactly.
+These are **not confirmed bugs**: reception timing may legitimately differ.
+Build a valid allowed-outcome observer before drawing runtime conclusions.
+
+### 4. Liveness/dead-query fast paths and queued notifications
+
+- [ ] Target `alive_may_leave_monitor_parked` and
+  `process_info_of_dead_does_not_flush`: local queries need not establish that
+  the caller drained its own incoming notifications.
+- [ ] Add exact live/dead controls, allowed notification traces, retained mailbox
+  sentinels and monitor cleanup. Do not repeat the existing kill/query,
+  trap-after-DOWN, unlink/relink/kill or ending-process request batches.
+
+Source-audited candidate only; no new defect or runtime result is claimed.
+
+### 5. Compiler-lowered receive continuations (lower priority)
+
+- [ ] Investigate upstream's consecutive timeout-only receive loops and receives
+  with dropped unused clause bodies, pairing valid lowered Core with source
+  controls and checking emitted operations before adding cases.
+- [ ] Preserve skipped messages across waits and verify exception/after
+  continuations. Existing source fixtures already cover nested receives and
+  suspended exception scopes; avoid duplicating those observations.
+
+An optimized-away `receive after 0` does not establish signal reception.
+Receive-marker instructions alone also do not establish an optimized mailbox-skip
+path: the interpreter currently treats them as no-ops apart from register clearing.
+
+### Audit scope and exclusions
+
+At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes
+covering 203 exports, and attribution for 373/478 sites in 28 Lean files. The 105
+unattributed sites classify as 71 model/proof contracts, 19 blocked persistent-term
+sites, 11 represented/overlapping sites and four partially sampled signal
+behaviors. Attribution is not branch coverage: all Maps sites already had labels,
+yet custom-order differential combinations were missing. The iterator batch above
+adds 240 recipes (total 6,709), without changing attribution or fixture counts.
+
+Tagged monitors explicitly raise `unsupported`; priority exits/monitors and
+distribution require separate support work, not an assumption that the APIs are
+already implemented. Existing expected failures are compatibility work rather
+than newly missing tests. No full corpus, fresh Lean laws, JIT or embedded-target
+validation was run for this audit.
+
+Local evidence: `.amp/in/artifacts/lynx-coverage-audit/` contains the regenerated
+inventory/classification, exploratory probes, and focused interpreter/precompiled
+map results. These are audit records, not new expected-failure entries.
 
 ## 1. Function identity through real consumers
 

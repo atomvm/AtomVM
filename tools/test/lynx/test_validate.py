@@ -721,6 +721,70 @@ class ValidationTests(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_custom_iterators_have_independent_oracles_and_replay(self):
+        selected = [entry for entry in lean_runtime.cases() if "iterator_scenario" in entry]
+        self.assertEqual(len(selected), 240)
+        self.assertEqual({entry["iterator_consumer"] for entry in selected
+                          if entry["iterator_scenario"] == "consumer"},
+                         {"next", "fold", "map", "filter", "filtermap", "foreach"})
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            source.write_text(json.dumps(selected))
+            output = work / "results"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 240, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            saved = json.loads((output / "cases.json").read_text())
+            source.write_text(json.dumps([saved[i] for i in [239, 0, 213, 129, 222, 31, 228, 232]]))
+            replay = work / "replay"
+            self.assertEqual(self.invoke(replay, "--replay", source),
+                             {"laws": 0, "passed": 8, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                for path <- System.argv() do
+                  cases = JSON.decode!(File.read!(Path.join(path, "cases.json")))
+                  values = JSON.decode!(File.read!(Path.join(path, "manifest.json")))["expected"]
+                  true = length(cases) === length(values)
+                  for {entry, encoded} <- Enum.zip(cases, values) do
+                    size = entry["iterator_size"] || 0
+                    entries = if size == 0, do: [], else: (for k <- 1..size, do: {k, 7*k+3})
+                    ordered = fn pairs ->
+                      pairs = Enum.sort_by(pairs, fn {k, _} -> {rem(k, 3), k} end)
+                      if entry["iterator_order"] == "descending", do: Enum.reverse(pairs), else: pairs
+                    end
+                    want = case entry["iterator_scenario"] do
+                      invalid when invalid in ["invalid_order", "invalid_map"] ->
+                        {:exception, :error, :badarg}
+                      "comparator_exception" when size > 1 ->
+                        {:exception, String.to_existing_atom(entry["iterator_exception"]), :comparator_failed}
+                      "comparator_exception" -> {:ok, {entries, entries}}
+                      "snapshot" ->
+                        updated = [{1, :changed} | Enum.reject(entries, fn {k, _} -> k == size or k == 1 end)]
+                        {:ok, {ordered.(entries), ordered.(updated)}}
+                      "consumer" ->
+                        visits = Enum.drop(ordered.(entries), entry["iterator_skip"])
+                        result = case entry["iterator_consumer"] do
+                          "next" -> visits
+                          "fold" -> Enum.reverse(visits)
+                          "map" -> Map.new(visits, fn {k, v} -> {k, {:mapped, k, v}} end)
+                          "filter" -> Map.new(Enum.filter(visits, fn {k, _} -> rem(k, 2) == 1 end))
+                          "filtermap" ->
+                            Map.new(for {k, v} <- visits, rem(k, 3) != 0,
+                                      do: {k, if(rem(k, 3) == 1, do: v, else: {:mapped, k, v})})
+                          "foreach" -> :ok
+                        end
+                        {:ok, {result, visits}}
+                    end
+                    got = :erlang.binary_to_term(Base.decode64!(encoded))
+                    if got !== want, do: raise(inspect({entry, want, got}))
+                  end
+                end
+                """, str(output), str(replay)
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     def test_async_exit_has_independent_oracles_and_otp_gate(self):
         otp = subprocess.check_output(["elixir", "-e", "IO.write(System.otp_release())"], text=True)
         if int(otp) < 29:
@@ -2284,7 +2348,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 6469)
+        self.assertEqual(len(lean_runtime.cases()), 6709)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

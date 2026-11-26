@@ -177,7 +177,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **6,469 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **6,709 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -196,6 +196,10 @@ exercise `erlang:exit_signal/2`, not the older helpers calling `exit/2`, includi
 self-signals and alias ordering. They require an OTP 29 oracle: on older OTP,
 the reference is unverified before any worker executes, rather than counting a
 nested `undef` as a match.
+The 240 [custom-iterator observations](PLAN.md#custom-map-iterator-ordering-and-consumers)
+exercise specified consumer order, partial/exhausted cursors, retained snapshots,
+and invalid orders/comparator exceptions. They use two total orders with explicit
+key tie-breakers, never comparator call traces or VM-private iterator layouts.
 Missing functions and differing error precedence remain failures, not skips.
 For CI gating against the full corpus without hiding those differences in
 `summary.json` or `failures.json`, pass

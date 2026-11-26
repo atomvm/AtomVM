@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,469 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 6,709 public-behavior recipes inspired by Lean tests
   and upstream examples (`373` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,44 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Custom map-iterator ordering and consumers
+
+Add 240 observations (2026-11-26), extending the supported-behavior audit rather
+than adding APIs or Lean proofs. Runtime correction and standalone `test_maps`
+regressions are kept outside the Lynx harness for independent cherry-picking.
+
+- 204 consumer observations use `next`, `fold`, `map`, `filter`, `filtermap` and
+  `foreach`, two deterministic total orders, sizes 0/1/31/32/33, and fresh,
+  partially consumed, exhausted and explicit-`none` iterators. Retain exact
+  ordered key/value visits and operation results; `filtermap` exercises keep,
+  drop and transform branches. Do not assert sorting-comparator call order or
+  count, unspecified key ties, or private iterator layouts.
+- Ten snapshot cases consume retained iterators after updating/removing map
+  bindings, comparing both original and changed maps in the requested order.
+- Twelve invalid-order cases cover a bad atom and functions of arity 0/1/3
+  over empty/singleton/multi-entry maps. Five non-map cases cover valid and
+  invalid orders. Nine comparator-exception cases cover throw/error/exit,
+  including empty/singleton controls where comparison must not occur.
+- The independent CLI oracle derives expected visits and results with Elixir
+  list operations and map construction, not the Erlang observation helper.
+  Filtered, reordered replay checks eight cases with reindexed module names.
+- The new Erlang regression passes on OTP 29.1.3 and fails on unchanged AtomVM.
+  Fix `maps:iterator/2` to reject invalid arguments with `badarg`, retaining
+  `maps:iterator/1`'s `{badmap, Map}` behavior. The full `test_maps:test/0` passes
+  after the correction in interpreter, AArch64 precompiled and on-demand JIT
+  modes, and on OTP 26.0.2, 27.3.4.12 and 29.1.3.
+- Full CLI harness: 37 passed, three optional skips (40 discovered). This
+  includes the independent iterator oracle and reordered/reindexed replay.
+  Erlang formatting, Python 3.9 grammar and whitespace checks pass.
+- All 240 new recipes match OTP 29.1.3 in interpreter, AArch64 precompiled and
+  on-demand JIT modes, without expected-failure additions. All 6,469 preceding
+  recipes and metadata remain unchanged: total 6,709; attribution remains
+  373/478 sites in 28 files. Fixture recipes and API counts are unchanged. This
+  is not a rerun of the entire runtime corpus or fresh Lean laws.
+
+Local evidence: `.amp/in/artifacts/lynx-iterators/`, including before/after
+regression logs, saved input, per-mode manifests/results and harness logs.
 
 ## Asynchronous exit signals
 

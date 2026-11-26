@@ -15,6 +15,7 @@
     execution_paths/3,
     print_result/1,
     map_entries/1,
+    map_iterator/4,
     map_fold/2,
     map_callback/3,
     set_elements/1,
@@ -570,6 +571,77 @@ sequence_step(dictionary, {clear}, State) ->
 map_entries(Map) ->
     Entries = maps:to_list(Map),
     {length(Entries), maps:from_list(Entries)}.
+
+%% Preserve specified consumer order, never sorting-comparator call order.
+map_iterator(Map, Order, Skip, Operation) ->
+    Iter = map_iterator_skip(Skip, maps:iterator(Map, Order)),
+    put(iterator_visits, []),
+    Visit = fun(K, V) ->
+        put(iterator_visits, [{K, V} | get(iterator_visits)]),
+        ok
+    end,
+    Result =
+        case Operation of
+            next ->
+                map_iterator_next(Iter, []);
+            fold ->
+                maps:fold(
+                    fun(K, V, A) ->
+                        Visit(K, V),
+                        [{K, V} | A]
+                    end,
+                    [],
+                    Iter
+                );
+            map ->
+                maps:map(
+                    fun(K, V) ->
+                        Visit(K, V),
+                        {mapped, K, V}
+                    end,
+                    Iter
+                );
+            filter ->
+                maps:filter(
+                    fun(K, V) ->
+                        Visit(K, V),
+                        K rem 2 =:= 1
+                    end,
+                    Iter
+                );
+            filtermap ->
+                maps:filtermap(
+                    fun(K, V) ->
+                        Visit(K, V),
+                        case K rem 3 of
+                            0 -> false;
+                            1 -> true;
+                            2 -> {true, {mapped, K, V}}
+                        end
+                    end,
+                    Iter
+                );
+            foreach ->
+                maps:foreach(fun(K, V) -> Visit(K, V) end, Iter)
+        end,
+    {Result, lists:reverse(erase(iterator_visits))}.
+
+map_iterator_skip(0, Iter) ->
+    Iter;
+map_iterator_skip(N, Iter) ->
+    case maps:next(Iter) of
+        none -> none;
+        {_, _, Rest} -> map_iterator_skip(N - 1, Rest)
+    end.
+
+map_iterator_next(Iter, Acc) ->
+    case maps:next(Iter) of
+        none ->
+            lists:reverse(Acc);
+        {K, V, Rest} ->
+            put(iterator_visits, [{K, V} | get(iterator_visits)]),
+            map_iterator_next(Rest, [{K, V} | Acc])
+    end.
 
 map_relations(LeftPairs, RightPairs, QueryKeys) ->
     A = maps:from_list(LeftPairs),

@@ -967,6 +967,41 @@ def cases():
                 call(m, "iterator_steps", "is_iterator_valid", state, module="maps")
             if order != "undefined":
                 probe(m, "iterator_steps", "maps:fold(fun(K,V,A)->[{K,V}|A] end,[]," + iterator + ")")
+    # Custom total orders have no numeric-key ties. Observe consumer visits,
+    # not comparator calls, whose order/count depends on the sorting algorithm.
+    iterator_orders = [
+        ("residue", "fun(A,B)->{A rem 3,A}=<{B rem 3,B} end"),
+        ("descending", "fun(A,B)->{A rem 3,A}>={B rem 3,B} end"),
+    ]
+    for size in [0, 1, 31, 32, 33]:
+        value = f"maps:from_list([{{K,7*K+3}} || K<-lists:seq(1,{size})])"
+        for order_name, order in iterator_orders:
+            for skip in sorted({0, 1, size, size + 1}):
+                for consumer in ["next", "fold", "map", "filter", "filtermap", "foreach"]:
+                    probe(m, "iterator_steps",
+                          f"differential:map_iterator({value},{order},{skip},{consumer})",
+                          iterator_scenario="consumer", iterator_size=size,
+                          iterator_order=order_name, iterator_skip=skip,
+                          iterator_consumer=consumer)
+            probe(m, "iterator_steps",
+                  f"M={value}, I=maps:iterator(M,{order}), "
+                  f"Updated=maps:put(1,changed,maps:remove({size},M)), "
+                  f"{{maps:to_list(I),maps:to_list(maps:iterator(Updated,{order}))}}",
+                  iterator_scenario="snapshot", iterator_size=size, iterator_order=order_name)
+    for size, value in [(0, "#{}"), (1, "#{a=>1}"), (3, "#{a=>1,b=>2,c=>3}")]:
+        for order in ["bad", "fun()->true end", "fun(_)->true end", "fun(_,_,_)->true end"]:
+            probe(m, "iterator_steps", f"maps:iterator({value},{order})",
+                  iterator_scenario="invalid_order", iterator_size=size)
+    for order in ["undefined", "ordered", "reversed", iterator_orders[0][1], "bad"]:
+        probe(m, "iterator_steps", f"maps:iterator(bad_map,{order})",
+              iterator_scenario="invalid_map")
+    for size in [0, 1, 5]:
+        value = f"maps:from_list([{{K,7*K+3}} || K<-lists:seq(1,{size})])"
+        for mode in ["throw", "error", "exit"]:
+            order = f"fun(_,_)->{mode}(comparator_failed) end"
+            probe(m, "iterator_steps", f"differential:map_iterator({value},{order},0,next)",
+                  iterator_scenario="comparator_exception", iterator_size=size,
+                  iterator_exception=mode)
     for value in ["none", "bad", "[]", "#{a=>1}", "{a,3,none}", "{a,3,bad}"]:
         call(m, "iterator_steps", "is_iterator_valid", value, module="maps")
         probe(m, "iterator_steps", f"differential:map_entries({value})")
