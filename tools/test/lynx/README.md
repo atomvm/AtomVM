@@ -177,7 +177,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **6,779 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **6,833 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -708,6 +708,26 @@ EXIT remains unconsumed, not reconstructed or requeued. Turning trapping off mus
 not reinterpret an existing message as a fatal signal. An unfenced self-exit is
 not treated as deterministic queued-message coverage. These cases extend the
 model-inspired signal samples rather than translating a Lean proof.
+Fifty-four additional [exit-reception observations](PLAN.md#exit-reception-across-trap-flag-changes)
+combine both flag-change directions with self `exit/2`, self `exit_signal/2`, and
+async self-alias exits plus deactivation, for normal, structured and kill reasons.
+Each unfenced sample has controls that receive the signal before changing the
+flag, or send it after the change (after deactivation for aliases). Later
+same-sender markers force reception; a sentinel and real converted EXIT messages
+remain unconsumed across changes. These receives survive BEAM compilation.
+Recipes require both VMs to satisfy the allowed-outcome contract through
+`assert_true`, not to pick the same reception timing. Timeouts, missing/duplicate
+messages, unexpected exit reasons and wrong previous-flag/unalias results fail.
+Single-line `LYNX_EXIT_TRACE` ETF byte lists retain each actual observation in
+`proofs.log` (OTP) and the corresponding probe log (AtomVM). The CLI regression
+also checks these traces against independent handwritten outcome tables and
+filtered/reordered replay. Async cases require OTP 29; legacy controls do not.
+Legacy self-suicide is selected at send time: a normal self-signal sent while
+trapping can later be ignored after trapping is disabled, whereas legacy
+`exit(self(), normal)` sent while untrapped terminates before returning. An alias
+removed before reception may discard the signal, even `kill`, but removal must
+not retract an already converted EXIT message. This is finite allowed-outcome
+sampling, not a claim that all allowed outcomes or schedules were observed.
 Forty-two ownership cases pass standalone aliases, plain monitor references, and
 all three monitor-alias types to a third process distinct from the monitored
 target. Foreign `unalias/1` and both

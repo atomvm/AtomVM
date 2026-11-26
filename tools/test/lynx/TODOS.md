@@ -64,16 +64,26 @@ runtime fixes or expected failures. See
 
 ### 3. Exit reception across trap-flag changes
 
-- [ ] Combine unfenced trap-flag transitions with `exit_signal/2`, legacy
+- [x] Combine unfenced trap-flag transitions with `exit_signal/2`, legacy
   `exit/2` controls and alias deactivation. Existing transition cases fence
-  reception; the asynchronous-exit batch holds the flag fixed.
-- [ ] Use isolated monitored workers, exact controls and allowed outcome sets.
+  reception; the older asynchronous-exit batch holds the flag fixed.
+- [x] Use isolated monitored workers, exact controls and allowed outcome sets.
   Distinguish an already converted EXIT message from a pending signal; never
   require a particular scheduling winner or claim every allowed outcome occurred.
 
-Two exploratory legacy self-exit traces differed from OTP when compared exactly.
-These are **not confirmed bugs**: reception timing may legitimately differ.
-Build a valid allowed-outcome observer before drawing runtime conclusions.
+Added 54 recipes: 36 deterministic controls and 18 unfenced samples, both flag
+transitions and normal/structured/kill reasons. Require the allowed-outcome
+predicate to be true on each VM, retain actual traces, and independently check
+those traces and filtered/reordered replay. The two exploratory legacy self-exit
+trace differences are admitted by the source-checked contract: these are **not
+confirmed bugs**. Legacy self-suicide is selected at send time; queued messages
+must survive later flag changes or alias removal. See
+[PLAN.md](PLAN.md#exit-reception-across-trap-flag-changes).
+
+The final receive deliberately establishes reception before a surviving worker
+reports. This does not cover returning before any reception (the separate
+`exit_signal_self_is_handled_later` model example), all schedules or all allowed
+outcomes.
 
 ### 4. Liveness/dead-query fast paths and queued notifications
 

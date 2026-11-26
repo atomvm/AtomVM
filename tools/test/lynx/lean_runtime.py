@@ -1418,6 +1418,29 @@ def cases():
                 probe("Modules/Signals", ["trapped_exit_is_a_message", "kill_cannot_be_trapped",
                                           "normal_exit_signal_is_ignored"],
                       f"differential:trap_transition({mode},{final},{reason})")
+    # Pending self-signals may be received on either side of the flag change.
+    # Alias deactivation can instead discard an unreceived signal; never compare
+    # the scheduling winner. The helper logs traces and checks allowed outcomes.
+    for api, destination in [("exit", "pid"), ("exit_signal", "pid"), ("exit_signal", "alias")]:
+        for timing in ["before", "received", "pending"]:
+            for final in ["false", "true"]:
+                for reason in ["normal", "{shutdown,<<5:3>>}", "kill"]:
+                    entry = {
+                        "expression": f"differential:exit_reception({api},{destination},{timing},{final},{reason}) =:= {{ok,allowed}}",
+                        "assert_true": True,
+                        "exit_reception_api": api, "exit_reception_destination": destination,
+                        "exit_reception_timing": timing, "exit_reception_final": final == "true",
+                        "exit_reception_reason": reason,
+                    }
+                    if api == "exit_signal":
+                        entry["minimum_otp"] = 29
+                    if destination == "pid":
+                        # The final receive fences reception: this does NOT
+                        # sample returning before an async self-signal arrives.
+                        site = ("exit_self_trapped_is_handled_later" if api == "exit"
+                                else "exit_signal_self_ends_before_timeout")
+                        entry["lean_origins"] = [f"Modules/Signals.lean#{site}"]
+                    selected.append(entry)
     for state in ["active", "active_message", "queued", "queued_twice", "queued_other", "consumed", "unknown"]:
         for options in ["[]", "[flush]", "[info]", "[flush,info]", "[info,flush]",
                         "[bad]", "[info|bad]", "[{flush,true}]"]:

@@ -16,8 +16,8 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,779 public-behavior recipes inspired by Lean tests
-  and upstream examples (`373` of `478` Lean test sites across all 28 files). Source
+- `lean_runtime.py` selects 6,833 public-behavior recipes inspired by Lean tests
+  and upstream examples (`374` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
   the proved postcondition to be true on both VMs: five integer singleton sums,
@@ -38,6 +38,75 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Exit reception across trap-flag changes
+
+Add 54 recipes (2026-11-26): self `exit/2`, self `exit_signal/2` and async
+self-alias exits with deactivation; three timings, both flag-change directions,
+and normal, structured (`{shutdown, <<5:3>>}`) and kill reasons. There are 36
+exact controls and 18 unfenced samples. Async cases require an OTP 29 oracle.
+No new runtime API or runtime correction is part of this batch.
+
+- `received` sends a later same-sender marker and receives that marker while
+  leaving the real converted EXIT and an earlier sentinel unconsumed. Changing
+  the flag or removing an alias must not retract/reinterpret that message.
+- `before` changes the flag before sending; alias controls deactivate before
+  sending, so even kill must be dropped. `pending` changes the flag without a
+  reception fence, then deactivates aliases: reception may precede the flag
+  change, occur after it, or lose to alias deactivation. This label does not
+  assert that a signal was actually still pending on either VM.
+- A final same-sender marker forces reception before survivors report. Saved
+  BEAM contains the marker `loop_rec`/`wait` paths; these are not optimized-away
+  timeout-only receives. Monitor DOWN/report observations include the prior
+  flag value, alias-removal result and exact retained mailbox. The outer worker
+  kills/reaps a timed-out child; runner timeouts remain an additional bound.
+- The allowed sets distinguish fatal exits, ignored normal signals, trapped
+  messages and inactive aliases. OTP's legacy suicide flag is selected at send
+  time, not retroactively at reception. Legacy normal sent while untrapped
+  terminates before return; normal sent while trapping may later be ignored.
+  The initial contract incorrectly applied the legacy quirk at reception;
+  OTP 29.1.3 `bif.c:send_exit_signal_bif` establishes the corrected rule. The
+  first failed comparison is an observer-development error, not a VM defect.
+- Each recipe uses the existing `assert_true` contract: agreement on a false
+  predicate or exception cannot pass. Raw `LYNX_EXIT_TRACE` ETF byte lists are
+  saved in OTP `proofs.log` and each AtomVM probe log, including successful
+  cases. Failure observations are not normalized into success. A handwritten
+  independent table checks both VMs' raw traces, exact singleton controls,
+  six-case filtered/reordered replay and the OTP-version gate. Temporary
+  extra-message injection was rejected by both an inactive-alias and a
+  received-EXIT control; the mutated source/beam were removed.
+- OTP and AtomVM actually chose different legal outcomes for two legacy
+  true-to-false unfenced cases: normal could be ignored versus queued as EXIT;
+  a structured reason could terminate versus remain a queued EXIT. This is
+  evidence that exact trace equality would reject legal timing differences,
+  not evidence of a runtime bug or exhaustive scheduling coverage.
+- All 54 final recipes satisfy the asserted contract against OTP 29.1.3 in
+  interpreter, AArch64 precompiled and on-demand JIT modes, with zero failures
+  or unverified cases. Independently checked all three modes' raw traces;
+  final helper hashes match the source. Repeated all 54 probes 32 times in
+  each mode (1,728 worker observations per VM per mode), all allowed. Actual
+  trace frequencies are retained; this does not claim every allowed outcome.
+  Focused compilation of just the observer and its dependencies also passes
+  all 18 legacy cases on OTP 27.3.4.12. The full helper already uses the newer
+  `is_integer/3` guard and cannot be compiled wholesale by OTP 27; no whole
+  OTP-27 harness run is claimed.
+- Full CLI harness: 38 passed, three optional skips (41 discovered). The first
+  suite run exposed a stale total-count assertion (6,779); it was updated to
+  the verified 6,833 before the successful full rerun. Erlang formatting,
+  Python 3.9 grammar, baseline preservation and whitespace checks pass.
+- All 6,779 preceding recipes/metadata are preserved: total 6,833, attribution
+  374/478 sites in 28 files; fixture counts unchanged. Only the legacy pending
+  self-signal site gains attribution. Async cases end with a receive, so they
+  are attributed to the existing reception-fence site, **not** to
+  `exit_signal_self_is_handled_later`'s return-before-reception observation.
+  Returning before any receive remains outside this batch. Alias behavior is
+  an OTP extension, not modeled by Lynx.
+
+Local evidence: `.amp/in/artifacts/lynx-exit-reception/` contains original/final
+inputs, per-mode sweeps and raw traces, repeated-run observations, independent
+CLI/harness logs, source evidence for the legacy send-time rule, BEAM receive
+inspection and regenerated attribution. No all-outcome, full-corpus, fresh
+Lean-law, embedded/32-bit or float32 validation is claimed.
 
 ## Structural BIF execution paths
 

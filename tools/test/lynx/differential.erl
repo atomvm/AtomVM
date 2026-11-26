@@ -43,6 +43,7 @@
     async_exit/3,
     self_exit/4,
     trap_transition/3,
+    exit_reception/5,
     monitor_options/2,
     alias_lifetime/2,
     alias_owner/2,
@@ -2095,6 +2096,116 @@ trap_transition(Mode, Final, Reason) ->
                 end
             end,
         {Previous, Down, Message}
+    end).
+
+%% Log the actual observation, but compare a strict allowed-outcome contract.
+%% Self-signalling avoids an extra sender racing with worker initialization.
+exit_reception(Api, Destination, Timing, Final, Reason) ->
+    isolated(fun() ->
+        Parent = self(),
+        Initial = not Final,
+        {Worker, Ref} = spawn_monitor(fun() ->
+            false = process_flag(trap_exit, Initial),
+            Self = self(),
+            Target =
+                case Destination of
+                    pid -> Self;
+                    alias -> erlang:alias()
+                end,
+            Self ! sentinel,
+            case Timing of
+                before -> ok;
+                _ -> true = call(erlang, Api, [Target, Reason])
+            end,
+            case Timing of
+                received ->
+                    %% Receive a later same-sender marker, not the EXIT itself.
+                    Self ! received_fence,
+                    receive
+                        received_fence -> ok
+                    end;
+                _ ->
+                    ok
+            end,
+            Previous = process_flag(trap_exit, Final),
+            Removed =
+                case Destination of
+                    pid -> not_alias;
+                    alias -> erlang:unalias(Target)
+                end,
+            case Timing of
+                before -> true = call(erlang, Api, [Target, Reason]);
+                _ -> ok
+            end,
+            %% Force reception before reporting. Keep the sentinel and any
+            %% converted EXIT in place across the flag change/unalias.
+            Self ! final_fence,
+            receive
+                final_fence -> ok
+            end,
+            Messages = [
+                case Message of
+                    {'EXIT', Self, R} -> {exit, R};
+                    Other -> Other
+                end
+             || Message <- drain()
+            ],
+            Parent ! {Self, {Previous, Removed, Messages}}
+        end),
+        Down =
+            receive
+                {'DOWN', Ref, process, Worker, R} -> R
+            after 2000 ->
+                exit(Worker, kill),
+                receive
+                    {'DOWN', Ref, process, Worker, _} -> timeout
+                end
+            end,
+        Observation =
+            receive
+                {Worker, Value} -> Value
+            after 0 -> no_report
+            end,
+        Trace = {Down, Observation},
+        %% Single-line ETF retains both VMs' raw observations in saved logs.
+        io:format("LYNX_EXIT_TRACE ~w~n", [binary_to_list(term_to_binary(Trace))]),
+        States =
+            case {Destination, Timing} of
+                {alias, before} -> [inactive];
+                {alias, pending} -> [Initial, Final, inactive];
+                {_, before} -> [Final];
+                {_, received} -> [Initial];
+                {_, pending} -> [Initial, Final]
+            end,
+        Removed =
+            case Destination of
+                pid -> not_alias;
+                alias -> true
+            end,
+        %% OTP's legacy self-suicide flag is chosen at SEND time. When sent
+        %% while trapping, a pending normal signal can later be ignored, not
+        %% retroactively acquire that flag when trapping is turned off.
+        SendTrap =
+            case Timing of
+                before -> Final;
+                _ -> Initial
+            end,
+        Suicide = Api =:= exit andalso Destination =:= pid andalso not SendTrap,
+        Allowed = [
+            case {State, Reason, Suicide} of
+                {inactive, _, _} -> {normal, {Initial, Removed, [sentinel]}};
+                {_, kill, _} -> {killed, no_report};
+                {_, _, true} -> {Reason, no_report};
+                {true, _, false} -> {normal, {Initial, Removed, [sentinel, {exit, Reason}]}};
+                {false, normal, false} -> {normal, {Initial, Removed, [sentinel]}};
+                {false, _, false} -> {Reason, no_report}
+            end
+         || State <- States
+        ],
+        case lists:member(Trace, Allowed) of
+            true -> allowed;
+            false -> {invalid_exit_reception, Trace}
+        end
     end).
 
 monitor_options(unknown, Options) ->
