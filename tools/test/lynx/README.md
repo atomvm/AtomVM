@@ -177,7 +177,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **6,363 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **6,395 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -215,6 +215,17 @@ map replacement/removal, and dictionary keys, across worker copying and GC.
 Nested function captures and integer/float captures distinguish loose equality
 from exact keys. Maps include 2, 31, 32, and 33 keys; no raw fun identity or
 implementation-dependent ordering is compared across VMs.
+
+The [nested fallthrough batch](PLAN.md#nested-fallthrough-continuations)
+adds 32 observations: 16 annotated-Core probes and 16 ordinary-source controls.
+Check shared inner/outer fallbacks, guard false/error fallthrough, later and
+unguarded matches, pattern misses and exceptions in selected bodies and
+continuations. Independent oracles specify exact values and ordered once-only
+effects, including earlier bindings kept live across calls to a common join.
+Core uses nested nonrecursive `letrec_goto` labels; source controls need the
+same observable results, not identical instructions or preserved label names.
+All 32 match OTP 29.1.3 in interpreter, AArch64 precompiled and on-demand JIT
+modes; the full harness passes 34 tests with 3 optional skips.
 
 The [escaping recursive-closure batch](PLAN.md#escaping-recursive-closures)
 adds 24 observations combining tail/non-tail recursion, two asymmetric captures

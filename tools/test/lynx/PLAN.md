@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,363 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 6,395 public-behavior recipes inspired by Lean tests
   and upstream examples (`369` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -37,6 +37,47 @@ The supported checkout has 28 Lean test files, including new concurrency audits
 and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` and `erlang:exit_signal/2` remain separately observed API gaps.
 Fixture validation does not establish complete runtime-model support.
+
+## Nested fallthrough continuations
+
+Add 32 observations (2026-11-26): 16 annotated-Core probes and 16 ordinary-source
+controls, inspired by upstream's `preserves compiler fallthrough labels and
+their jump sites` and `preserves nested compiler labels with immediate jumps`
+tests (upstream commit `4e19bfc408c7fb9f8b962f400c16e8a8be0e49e3`). Reuse the
+existing Core compiler/replay pipeline and ordered-effect observer; no runtime
+helpers or theorem attributions are added.
+
+- Two nested nonrecursive Core `letrec` labels carry `letrec_goto` annotations.
+  Several failed alternatives share the inner continuation, which records one
+  effect and transfers to the shared outer fallback. An outer pattern miss
+  bypasses the inner continuation. Successful branches and fallbacks converge
+  at an effectful join, returning the original capture, an earlier saved value
+  and the branch result, all kept live across calls.
+- Distinguish guard false from a failing `element/2` guard, later-clause success
+  after a guard error, nested/outer pattern misses, and unguarded success.
+  Exceptions in each selected body, the inner/outer continuations, input/saved
+  evaluation or final join must propagate with the exact reason and trace;
+  they are never interpreted as another failed pattern/guard.
+- The public CLI test independently specifies all branch payloads and ordered
+  once-only effects, including suppressed bodies/continuations after failure.
+  It also replays a filtered/reindexed mixture of saved Core/source cases.
+- Saved assembly confirms live guard failure targets, shared Core fallback
+  blocks, branch jumps to the common join and values retained in stack slots
+  across calls. Ordinary source duplicates the outer fallback call sites in
+  the representative inspected case; it still reaches one common result join.
+  Compare behavior, not identical compiler layouts or preserved label names.
+  This validates compiled BEAM execution, not Lynx's direct Core translator.
+- OTP 29.1.3 / ERTS 17.1.2 comparison: interpreter, AArch64 precompiled and
+  on-demand JIT each match 32/32, with zero failures or unverified results.
+  On-demand JIT uses `--timeout 60 --jobs 2` for support-module compilation.
+  Full harness: 34 passed, 3 optional environment-gated skips (37 discovered,
+  294.003 seconds). Python 3.9 grammar and whitespace checks pass.
+- All 6,363 earlier recipes and metadata are unchanged. Total recipes: 6,395;
+  attribution stays 369/478 sites in 28 Lean files. No runtime fix or
+  expected-failure entry is added. Evidence is under
+  `.amp/in/artifacts/lynx-fallthrough/`: input, toolchain, per-mode results/build
+  hashes, inventory, representative assembly and harness log. Full runtime
+  corpus and embedded execution are outside this batch.
 
 ## Escaping recursive closures
 

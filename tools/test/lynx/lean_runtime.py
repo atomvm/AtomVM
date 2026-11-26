@@ -1579,6 +1579,74 @@ def cases():
                           f"|differential:core_step(h,{action},[tail])] end)",
         })
 
+    # Annotated nonrecursive letrec labels share fallthrough continuations.
+    # Values from before the match must survive calls on every path to the join.
+    for path in ["core", "source"]:
+        for scenario, value, failure in [
+            ("first_match", "{'group',{'tag',{'probe','yes'}},41}", None),
+            ("guard_false", "{'group',{'tag',{'probe','no'}},43}", None),
+            ("guard_error", "{'group',{'tag',{'short'}},47}", None),
+            ("later_match", "{'group',{'tag',7},53}", None),
+            ("inner_pattern_miss", "{'group',{'other',99},59}", None),
+            ("direct_match", "{'group','direct',61}", None),
+            ("outer_pattern_miss", "'not_group'", None),
+            ("first_body_error", "{'group',{'tag',{'probe','yes'}},41}", "body_first"),
+            ("later_body_error", "{'group',{'tag',7},53}", "body_second"),
+            ("direct_body_error", "{'group','direct',61}", "body_direct"),
+            ("inner_error", "{'group',{'tag',{'probe','no'}},43}", "inner"),
+            ("outer_error", "{'group',{'tag',{'short'}},47}", "outer"),
+            ("outer_direct_error", "'not_group'", "outer"),
+            ("input_error", "{'group','direct',61}", "input"),
+            ("saved_error", "{'group','direct',61}", "saved"),
+            ("join_error", "{'group',{'tag',7},53}", "join"),
+        ]:
+            def fallthrough_step(tag, result):
+                if path == "core":
+                    return core_step(tag, result, tag == failure)
+                action = "error" if tag == failure else "return"
+                return f"differential:core_step({tag},{action},{result})"
+
+            capture = fallthrough_step("capture", "{'anchor',13}")
+            input_ = fallthrough_step("input", value)
+            saved = fallthrough_step("saved", "{Keep,97}")
+            first = fallthrough_step("body_first", "{'first',V,Second}")
+            later = fallthrough_step("body_second", "{'second',V2,Second}")
+            direct = fallthrough_step("body_direct", "{'direct',Second}")
+            inner = fallthrough_step("inner", "'seed'")
+            outer = fallthrough_step("outer", "{'fallback',Input}")
+            join = fallthrough_step("join", "'seed'")
+            if path == "core":
+                body = (
+                    f"let <Keep> = {capture} in let <Input> = {input_} in let <Saved> = {saved} in "
+                    f"let <Result> = (letrec 'outer'/0 = fun () -> {outer} in "
+                    f"(letrec 'inner'/0 = fun () -> do {inner} apply 'outer'/0() in "
+                    "case Input of <{'group',First,Second}> when 'true' -> case First of "
+                    "<{'tag',V}> when call 'erlang':'=:='(call 'erlang':'element'(2,V),'yes') -> "
+                    f"{first} <{{'tag',V2}}> when call 'erlang':'is_integer'(V2) -> {later} "
+                    f"<'direct'> when 'true' -> {direct} "
+                    "<Miss> when 'true' -> apply 'inner'/0() end "
+                    "<Other> when 'true' -> apply 'outer'/0() end -| ['letrec_goto']) "
+                    f"-| ['letrec_goto']) in do {join} {{Keep,Saved,Result}}"
+                )
+            else:
+                body = (
+                    f"Keep={capture},Input={input_},Saved={saved},Result=case Input of "
+                    "{group,First,Second}->case First of "
+                    f"{{tag,V}} when element(2,V)=:=yes->{first};"
+                    f"{{tag,V2}} when is_integer(V2)->{later};direct->{direct};"
+                    f"_->{inner},{outer} end;_->{outer} end,{join},{{Keep,Saved,Result}}"
+                )
+            entry = {
+                "upstream_test": "test/lynx/core_to_leanj_test.exs#preserves nested compiler labels with immediate jumps",
+                "fallthrough_scenario": scenario,
+                "fallthrough_path": path,
+                "expression": "differential:core_order(fun ?CORE_MODULE:entry/0)" if path == "core"
+                              else f"differential:core_order(fun()->{body} end)",
+            }
+            if path == "core":
+                entry["core_body"] = body
+            selected.append(entry)
+
     # Observe construction itself, not already-evaluated segment arguments.
     # Source and raw Core may hoist a failing constructor differently.
     for path in ["source", "core"]:

@@ -865,6 +865,65 @@ class ValidationTests(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_nested_fallthrough_has_independent_oracles(self):
+        selected = [entry for entry in lean_runtime.cases() if "fallthrough_scenario" in entry]
+        self.assertEqual(len(selected), 32)
+        self.assertEqual(sum("core_body" in entry for entry in selected), 16)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "fallthrough.json"
+            source.write_text(json.dumps(selected))
+            output = work / "results"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 32, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            saved = json.loads((output / "cases.json").read_text())
+            source.write_text(json.dumps([saved[i] for i in [31, 4, 16, 12]]))
+            replay = work / "replay"
+            self.assertEqual(self.invoke(replay, "--replay", source),
+                             {"laws": 0, "passed": 4, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                keep = {:anchor, 13}
+                saved = {keep, 97}
+                prefix = [:capture, :input, :saved]
+                ok = fn value, rest -> {{:ok, {keep, saved, value}}, prefix ++ rest ++ [:join]} end
+                err = fn reason, rest -> {{:exception, :error, reason}, prefix ++ rest} end
+                # Expected branch payloads and traces are handwritten. Guard
+                # errors fall through; selected-body errors must never do so.
+                expected = %{
+                  "first_match" => ok.({:first, {:probe, :yes}, 41}, [:body_first]),
+                  "guard_false" => ok.({:fallback, {:group, {:tag, {:probe, :no}}, 43}}, [:inner, :outer]),
+                  "guard_error" => ok.({:fallback, {:group, {:tag, {:short}}, 47}}, [:inner, :outer]),
+                  "later_match" => ok.({:second, 7, 53}, [:body_second]),
+                  "inner_pattern_miss" => ok.({:fallback, {:group, {:other, 99}, 59}}, [:inner, :outer]),
+                  "direct_match" => ok.({:direct, 61}, [:body_direct]),
+                  "outer_pattern_miss" => ok.({:fallback, :not_group}, [:outer]),
+                  "first_body_error" => err.(:body_first, [:body_first]),
+                  "later_body_error" => err.(:body_second, [:body_second]),
+                  "direct_body_error" => err.(:body_direct, [:body_direct]),
+                  "inner_error" => err.(:inner, [:inner]),
+                  "outer_error" => err.(:outer, [:inner, :outer]),
+                  "outer_direct_error" => err.(:outer, [:outer]),
+                  "input_error" => {{:exception, :error, :input}, [:capture, :input]},
+                  "saved_error" => err.(:saved, []),
+                  "join_error" => err.(:join, [:body_second, :join])
+                }
+                for path <- System.argv() do
+                  cases = JSON.decode!(File.read!(Path.join(path, "cases.json")))
+                  values = JSON.decode!(File.read!(Path.join(path, "manifest.json")))["expected"]
+                  true = length(cases) === length(values)
+                  for {entry, encoded} <- Enum.zip(cases, values) do
+                    want = {:ok, Map.fetch!(expected, entry["fallthrough_scenario"])}
+                    got = :erlang.binary_to_term(Base.decode64!(encoded))
+                    if got !== want, do: raise(inspect({entry, want, got}))
+                  end
+                end
+                """, str(output), str(replay)
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     def test_escaping_recursive_closures_have_independent_oracles(self):
         selected = [entry for entry in lean_runtime.cases() if "recursive_closure_kind" in entry]
         self.assertEqual([(e["recursive_closure_kind"], e["recursive_closure_lifetime"],
@@ -2092,7 +2151,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 6363)
+        self.assertEqual(len(lean_runtime.cases()), 6395)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"
