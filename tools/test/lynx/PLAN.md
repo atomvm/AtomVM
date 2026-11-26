@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,929 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 7,082 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,75 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Queue callback combinations
+
+Add 153 supported-API recipes (2026-11-26), complementing the seeded queue
+histories rather than adding new APIs or proof obligations:
+
+- `filter/2` and `filtermap/2`: 24 cases each, including filter list expansion,
+  keep/drop/map returns, empty/singleton controls and all three public construction
+  histories (`from_list`, repeated `in`, repeated `in_r`).
+- `fold/3`: 15 cases with a noncommutative nested accumulator, exact visits and
+  accumulator inputs, exposing reversal or incorrect accumulator threading.
+- `any/2` and `all/2`: 24 cases each, checking short circuit, neutral/decisive
+  predicates, invalid returns and exception prefixes without requiring arbitrary
+  visitation order. Preserve raw ETF traces and independently check exact input
+  multiplicity and callback counts, not just the observer's validity boolean.
+- `delete_with/2` and `delete_with_r/2`: 21 cases each, distinguishing first/last
+  exact integer matches from floats and no-match queues. All families include
+  invalid callbacks, wrong arities, throw/error/exit after preceding effects and
+  empty queues whose valid callback must not run.
+
+The observer retains the original immutable queue and records callback effects
+across explicit GC inside every callback and after the operation. Normalize queue
+results to ordered lists, never private representations. The CLI regression
+checks **both** OTP and AtomVM outputs against an independent list-based model
+that invokes no queue APIs or observer helpers, then repeats a 14-case
+filtered/reordered replay. These are finite observable contracts, not Lean proofs.
+
+The first interpreter sweep found six differences: OTP raises
+`error:{case_clause,not_boolean}` after the second predicate call, while AtomVM's
+`queue:any/2` raised `badarg` and `queue:all/2` returned `false`, in all three
+construction histories. Both delegate to `lists`. A separate minimal library
+correction gives `lists:any/2` and `lists:all/2` explicit true/false cases. The
+standalone Erlang regression checks three invalid return values, retained effects
+and short circuit for both APIs; it fails unchanged AtomVM and passes OTP 29.1.3
+and the fixed interpreter, AArch64 precompiled and on-demand JIT runtimes. Full
+`test_lists` and `test_queue` also pass in each of those four environments.
+
+The new observer lives in `queue_callbacks.erl`, compiled/packaged alongside the
+unchanged `differential.erl`. Appending it to the large existing helper exposed an
+AArch64 compiler defect: `jump_to_continuation/2` attempted an out-of-range ADR to
+the module base (`-1048888`, outside the instruction's approximately 1 MiB reach).
+Keeping the coherent observer separate avoids triggering that limit; it does not
+fix the compiler defect or turn a compilation failure into an expected result.
+
+Validation against OTP 29.1.3:
+
+- All 153 cases and the 14-case filtered/reordered replay match in interpreter,
+  AArch64 precompiled and on-demand JIT modes, with zero failures or unverified
+  references. Each of the six runs also passes the independent list model and
+  raw-trace checker: 96 unordered traces per full run, ten per replay.
+- Independent negative controls reject identical wrong OTP/AtomVM reports for
+  reversed filter output, reordered callback effects and duplicate unordered
+  visits. The last control leaves the observer's returned validity boolean true;
+  the independent exact-multiplicity check rejects the raw visits.
+- Full CLI harness: 43 passed, three optional skips (46 discovered, 1,036.854s),
+  including the new callback/model/replay regression and existing shrinking,
+  failure-stage and baseline checks. Erlang format, Python 3.9 grammar and
+  whitespace checks pass. Both helper sources match their saved copies in all
+  six runs.
+
+Evidence: `.amp/in/artifacts/lynx-queue-callbacks/` contains `final-input.json`,
+`final-replay.json`, `final-inventory.json`, all six `final-*` runs, independent
+and negative-control logs, the standalone library regression's before/after logs,
+compiler-limit reproducer and the harness logs. All 6,929 previous runtime
+recipes and metadata remain unchanged: total 7,082; attribution 377/478 sites;
+fixture calls 2,351 across 203 exports. No expected failures were added. No full
+runtime corpus, fresh Lean laws, embedded/32-bit/float32 or exhaustive callback
+combination coverage is claimed. Keep the library correction and standalone
+Erlang regression separate from the Lynx coverage and notes.
 
 ## Seeded queue sequences
 

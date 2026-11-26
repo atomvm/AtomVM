@@ -347,9 +347,11 @@ def validate(args, work):
         (work / "lean-coverage.json").write_text(json.dumps(report, indent=2))
         print("Lean-inspired public-API samples; no Lean proofs or schedule coverage implied.", flush=True)
     (work / "cases.json").write_text(json.dumps(entries))
-    shutil.copyfile(Path(__file__).with_name("differential.erl"), work / "differential.erl")
+    helpers = [work / name for name in ["differential.erl", "queue_callbacks.erl"]]
+    for helper_source in helpers:
+        shutil.copyfile(Path(__file__).with_name(helper_source.name), helper_source)
     command(
-        ["erlc", "-o", str(work), str(work / "differential.erl")]
+        ["erlc", "-o", str(work)] + [str(p) for p in helpers]
         + [str(work / f"{e['module']}.erl") for e in entries],
         work, work / "compile.log",
     )
@@ -366,7 +368,7 @@ def validate(args, work):
     mode_label = f"{target['execution_mode']}/{arch}" if arch else target["execution_mode"]
     print(f"Checked {manifest['laws']} laws; running {len(entries)} cases ({mode_label}).", flush=True)
     support = manifest.get("support", [])
-    fixture_beams = [work / "differential.beam"] + [p.with_suffix(".beam") for p in core_sources] + [
+    fixture_beams = [p.with_suffix(".beam") for p in helpers + core_sources] + [
         work / f"{name}.beam" for name in manifest["fixtures"] + support]
     libraries = [library]
     precompile_only = target["precompiled"] and not target["jit"]

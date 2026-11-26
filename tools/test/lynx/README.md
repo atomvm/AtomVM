@@ -101,12 +101,13 @@ use AtomVM's bundled standard library, without packaging OTP's `lists.beam`.
 Byte-list output is emitted in bounded chunks, retaining the same wire format
 without formatting the entire serialized trace as one giant list.
 
-The queue batch validates 148 current histories (4,498 operations) against OTP
-29.1.3 in interpreter, AArch64 precompiled and on-demand JIT modes, including
-independent list-model checks and nine-case reordered replay in every mode.
-The CLI harness passes 42 tests with three optional skips. See
-[queue validation details](PLAN.md#seeded-queue-sequences) for the boundary reruns
-and limits; these are finite differential checks, not new proofs.
+The queue batches have validated 148 histories (4,498 operations) and 153 callback
+cases against OTP 29.1.3 in interpreter, AArch64 precompiled and on-demand JIT modes.
+Independent list-model checks and reordered replay (nine histories / 14 callback
+cases) pass in every mode. The CLI harness passes 43 tests with three optional
+skips. See the [history validation](PLAN.md#seeded-queue-sequences) and
+[callback validation](PLAN.md#queue-callback-combinations) for scope and limits;
+these are finite differential checks, not new proofs.
 
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
@@ -195,7 +196,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **6,929 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **7,082 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -223,6 +224,12 @@ compare body, dynamic-apply and guard behavior for list/tuple/bitstring access
 and sizes, before and after explicit GC. Inputs include improper lists, invalid
 indices and aligned/unaligned partial slices. Body and guard instructions use
 the same BIF families with different failure targets, not dedicated new opcodes.
+The 153 [queue callback observations](PLAN.md#queue-callback-combinations) cover
+filtering/expansion, filtermap, fold, short-circuit predicates and first/last
+predicate deletion through three public construction histories. Callback effects,
+invalid returns, exceptions, retained queues and GC are checked against an
+independent list model. Unspecified `any`/`all` visitation order is not compared;
+raw visits are checked for exact input multiplicity and expected call counts.
 Missing functions and differing error precedence remain failures, not skips.
 For CI gating against the full corpus without hiding those differences in
 `summary.json` or `failures.json`, pass

@@ -89,6 +89,117 @@ IO.puts("Checked #{length(expected)} queue traces against independent list model
 """
 
 
+# List-based callback contracts. No queue API or differential helper is invoked.
+QUEUE_CALLBACK_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+decode = fn decode, value ->
+  case value do
+    %{"tuple" => xs} -> xs |> Enum.map(&decode.(decode,&1)) |> List.to_tuple()
+    %{"map" => xs} -> Map.new(xs, fn [k,v] -> {decode.(decode,k),decode.(decode,v)} end)
+    %{"bits" => [v,n]} -> <<v::size(n)>>
+    xs when is_list(xs) -> Enum.map(xs,&decode.(decode,&1))
+    s when is_binary(s) -> String.to_atom(s)
+    n -> n
+  end
+end
+seed = {:seed,<<5::3>>}
+model = fn [op,_layout,items,mode] ->
+  xs = if op === :delete_with_r, do: Enum.reverse(items), else: items
+  size = length(xs)
+  {result, count} = cond do
+    mode in [:non_function,:wrong_arity] -> {{:exception,:error,:badarg},0}
+    is_tuple(mode) and elem(mode,0) === :fail and elem(mode,2) <= size ->
+      {{:exception,elem(mode,1),{:callback_failed,<<5::3>>}},elem(mode,2)}
+    mode === :invalid_return and size >= 2 ->
+      {{:exception,:error,{:case_clause,:not_boolean}},2}
+    op in [:any,:all] ->
+      {answer,n} = case {op,mode,size} do
+        {:any,_,0} -> {false,0}
+        {:all,_,0} -> {true,0}
+        {:any,m,_} when m in [:all_true,:short] -> {true,1}
+        {:all,:all_false,_} -> {false,1}
+        {:all,:short,_} -> {false,1}
+        {:any,_,_} -> {false,size}
+        {:all,_,_} -> {true,size}
+      end
+      {{:ok,answer},n}
+    op === :fold ->
+      {{:ok,Enum.reduce(items,seed,fn x,acc -> {x,acc} end)},size}
+    op in [:delete_with,:delete_with_r] ->
+      index = if mode === :normal, do: Enum.find_index(xs,&(&1 === 1)), else: nil
+      kept = if index === nil, do: xs, else: List.delete_at(xs,index)
+      output = if op === :delete_with_r, do: Enum.reverse(kept), else: kept
+      {{:ok,output},if(index === nil,do: size,else: index+1)}
+    true ->
+      output = Enum.flat_map(items, fn x ->
+        case {mode,op,x} do
+          {:all_false,_,_} -> []
+          {:transform,_,{:drop,_}} -> []
+          {:transform,:filter,{:nil,_}} -> []
+          {:transform,:filter,{:one,v}} -> [{:wrapped,v}]
+          {:transform,:filter,{:many,v}} -> [{:left,v},{:right,v}]
+          {:transform,:filtermap,{tag,_}} when tag in [:nil,:one,:many] -> [{:mapped,x}]
+          _ -> [x]
+        end
+      end)
+      {{:ok,output},size}
+  end
+  visited = Enum.take(xs,count)
+  trace = cond do
+    op in [:any,:all] -> {count,true}
+    op === :fold ->
+      {_,rows} = Enum.reduce(visited,{seed,[]},fn x,{acc,rows} -> {{x,acc},rows++[{x,acc}]} end)
+      rows
+    true -> visited
+  end
+  {result,trace,items}
+end
+cases = read.("cases.json")
+specs = Enum.map(cases, &decode.(decode,&1["queue_callback"]))
+expected = Enum.map(specs, &{:ok,model.(&1)})
+from_etf = fn s -> :erlang.binary_to_term(Base.decode64!(s)) end
+true = Enum.map(read.("manifest.json")["expected"],from_etf) === expected
+true = Enum.map(read.("actuals.json"),fn row ->
+  "ok" = row["status"]
+  from_etf.(row["value"])
+end) === expected
+
+# Verify raw unordered visits, not just the helper's validity boolean. A valid
+# trace consumes each input occurrence at most once, using exact equality.
+valid_calls = fn calls,items ->
+  Enum.reduce_while(calls,items,fn x,left ->
+    case Enum.find_index(left,&(&1 === x)) do
+      nil -> {:halt,:invalid}
+      index -> {:cont,List.delete_at(left,index)}
+    end
+  end) !== :invalid
+end
+unordered = Enum.filter(specs, fn [op|_] -> op in [:any,:all] end)
+logs = ["proofs.log"] ++ Enum.map(cases,&(&1["module"]<>".log"))
+raw = Enum.map(logs,fn name ->
+  File.read!(Path.join(path,name)) |> String.split("\\n") |> Enum.flat_map(fn line ->
+    case String.split(line,"LYNX_QUEUE_TRACE ",parts: 2) do
+      ["",bytes] -> [bytes |> JSON.decode!() |> :erlang.list_to_binary() |> :erlang.binary_to_term()]
+      _ -> []
+    end
+  end)
+end)
+check_raw = fn rows, selected ->
+  true = Enum.frequencies(Enum.map(rows,fn {op,layout,items,mode,_,_} -> [op,layout,items,mode] end))
+         === Enum.frequencies(selected)
+  Enum.each(rows,fn {op,layout,items,mode,outcome,calls} ->
+    {^outcome,{count,true},^items} = model.([op,layout,items,mode])
+    true = length(calls) === count and valid_calls.(calls,items)
+  end)
+end
+[otp_raw|target_raw] = raw
+check_raw.(otp_raw,unordered)
+check_raw.(List.flatten(target_raw),unordered)
+IO.puts("Checked #{length(cases)} callback contracts and #{length(unordered)*2} raw unordered traces")
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -333,6 +444,26 @@ class ValidationTests(unittest.TestCase):
                 """, str(output / "manifest.json")
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_queue_callbacks_have_independent_contracts_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "queue_callback" in case]
+        self.assertEqual({case["queue_callback"][0] for case in selected},
+                         {"filter", "filtermap", "fold", "any", "all", "delete_with", "delete_with_r"})
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-11])]:
+                source.write_text(json.dumps(cases))
+                output = work / name
+                self.assertEqual(self.invoke(output, "--replay", source),
+                                 {"laws": 0, "passed": len(cases), "failed": 0,
+                                  "unverified": 0, "uncovered": 0})
+                check = subprocess.run(["elixir", "-e", QUEUE_CALLBACK_MODEL, str(output)],
+                                       capture_output=True, text=True, timeout=30)
+                self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+                saved = json.loads((output / "cases.json").read_text())
+                self.assertEqual([c["queue_callback"] for c in saved],
+                                 [c["queue_callback"] for c in cases])
 
     def test_queue_sequences_match_list_model_and_reordered_replay(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -2847,7 +2978,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 6929)
+        self.assertEqual(len(lean_runtime.cases()), 7082)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

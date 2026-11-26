@@ -8,6 +8,8 @@ import hashlib
 import re
 import struct
 
+from generated import erlang
+
 
 def cases():
     selected = []
@@ -2845,6 +2847,44 @@ def cases():
                  "fun erlang:abs/1", "fun()->1 end", "live_pid", "live_ref"]:
         probe(e, ["numeric_guards_integer_identity", "numeric_guards_invalid"],
               f"differential:is_number_paths({term})")
+    # Supported queue callback combinations, not new instances of upstream laws.
+    queue_items = [1.0, {"tuple": ["keep", 1]}, {"tuple": ["drop", 1.0]},
+                   {"tuple": ["one", {"tuple": ["tag", 1]}]},
+                   {"tuple": ["many", {"bits": [5, 3]}]},
+                   {"tuple": ["nil", {"map": [["key", 1]]}]},
+                   1, {"tuple": ["keep", 1]}, 1]
+
+    def queue_probe(operation, layout, items, mode):
+        args = [operation, layout, items, mode]
+        selected.append({"otp_extension": "queue_callbacks", "queue_callback": args,
+                         "expression": "queue_callbacks:observe(" +
+                                       ",".join(map(erlang, args)) + ")"})
+
+    for operation in ["filter", "filtermap", "fold", "any", "all", "delete_with", "delete_with_r"]:
+        mode = ("transform" if operation in ["filter", "filtermap"] else
+                "all_false" if operation in ["any", "all"] else "normal")
+        for layout in ["balanced", "rear", "front"]:
+            queue_probe(operation, layout, queue_items, mode)
+            if operation in ["filter", "filtermap", "any", "all"]:
+                for extra in (["all_true", "all_false"] if operation in ["filter", "filtermap"]
+                              else ["all_true", "short"]):
+                    queue_probe(operation, layout, queue_items, extra)
+            if operation != "fold":
+                queue_probe(operation, layout, queue_items, "invalid_return")
+            if operation in ["delete_with", "delete_with_r"]:
+                queue_probe(operation, layout, [1.0, {"tuple": ["tag", 1]}, 1.0], "normal")
+        for items in [[], [1.0]]:
+            queue_probe(operation, "balanced", items, mode)
+            for bad_callback in ["non_function", "wrong_arity"]:
+                queue_probe(operation, "balanced", items, bad_callback)
+        # A valid callback that would fail if called must be ignored on empty.
+        queue_probe(operation, "balanced", [], {"tuple": ["fail", "error", 1]})
+        # Each exception class has preceding observable work. The rear-built
+        # queue crosses from its front singleton into its stored rear list.
+        for exception, layout in zip(["throw", "error", "exit"], ["balanced", "rear", "front"]):
+            queue_probe(operation, layout, queue_items, {"tuple": ["fail", exception, 2]})
+        for bad_callback in ["non_function", "wrong_arity"]:
+            queue_probe(operation, "balanced", queue_items, bad_callback)
     return selected
 
 

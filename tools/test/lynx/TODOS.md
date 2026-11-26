@@ -167,6 +167,34 @@ match OTP and the independent list model in interpreter, AArch64 precompiled
 and on-demand JIT modes. No runtime fix or expected-failure entry was needed.
 See [PLAN.md](PLAN.md#seeded-queue-sequences) for the observer contract and validation.
 
+### 8. Queue callbacks (follow-up)
+
+- [x] Cover `filter/2` list expansion, `filtermap/2`, noncommutative `fold/3`,
+  short-circuit `any/2` and `all/2`, and first/last predicate deletion.
+- [x] Use equivalent queues from `from_list`, repeated `in` and repeated `in_r`;
+  include empty/singleton, invalid callbacks, non-boolean results, each exception
+  class after preceding effects, retained original queues and explicit GC.
+- [x] Independently check both VMs' results and callback effects, including raw
+  unordered predicate visits and exact multiplicities, plus reordered replay.
+- [x] Keep the discovered `lists:any/all` error correction and standalone Erlang
+  regression separate from the Lynx coverage.
+
+Adds 153 permanent recipes (total 7,082) without changing attribution. The initial
+six mismatches were non-boolean predicate results: `any` raised `badarg`, while
+`all` returned `false`, instead of OTP's `{case_clause, Result}`. The separate
+library regression checks exact exceptions, effect prefixes and short circuit.
+All 153 cases and 14-case reordered replay now match OTP and the independent
+model in interpreter, AArch64 precompiled and on-demand JIT modes, without new
+expected failures. See [PLAN.md](PLAN.md#queue-callback-combinations) for scope
+and validation.
+
+**Separate compiler follow-up:** appending the observer to the large existing
+helper exposed an AArch64 out-of-range ADR in `jump_to_continuation/2`.
+The observer is instead a separate compiled/packaged module; the prior helper
+is unchanged. This keeps the coverage usable but does not fix the compiler limit.
+Retain `.amp/in/artifacts/lynx-queue-callbacks/native/precompile.log` and its
+combined helper source/BEAM as the reproducer for that separate investigation.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes
