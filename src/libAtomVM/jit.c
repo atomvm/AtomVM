@@ -1024,6 +1024,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
 #endif
                 break;
             }
+            case ExitSignal:
             case AliasMessageSignal:
             case NormalMessage: {
                 UNREACHABLE();

@@ -100,6 +100,7 @@ enum MessageType
     MonitorDownSignal,
     CodeServerResumeSignal,
     AliasMessageSignal,
+    ExitSignal,
 };
 
 struct MailboxMessage
@@ -254,12 +255,14 @@ MailboxMessage *mailbox_process_outer_list_native(Mailbox *mbox);
 void mailbox_requeue_outer_signals(Mailbox *mbox, MailboxMessage *signals);
 
 /**
- * @brief Process the outer list of messages, delivering alias messages in send order.
+ * @brief Process the outer list, delivering aliases and explicit exits in send order.
  *
  * @details AliasMessageSignals are validated in ctx's own monitor list and, when the alias is
  * active, converted to normal messages in place so they keep send order relative to plain
- * messages from the same sender. To be called from the process only, while not holding the
- * processes table lock (the reply_demonitor path takes it).
+ * messages from the same sender. ExitSignals likewise validate aliases and become ordered
+ * messages, fatal signals or discarded normal exits according to ctx's trap_exit flag.
+ * To be called from the process only, while not holding the processes table lock
+ * (the reply_demonitor path takes it).
  * @param ctx the context whose mailbox is processed
  * @return the remaining (non-alias) signal messages in received order.
  */

@@ -263,6 +263,7 @@ void context_destroy(Context *ctx)
             case FlushInfoMonitorSignal:
             case LinkExitSignal: // target will not be found when processing this link
             case MonitorDownSignal: // likewise
+            case ExitSignal: // process is already terminating
             case AliasMessageSignal: // process is terminating; drop the alias message
             case CodeServerResumeSignal:
                 break;

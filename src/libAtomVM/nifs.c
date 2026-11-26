@@ -182,6 +182,7 @@ static term nif_erlang_erase_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_erase_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_error(Context *ctx, int argc, term argv[]);
 static term nif_erlang_exit(Context *ctx, int argc, term argv[]);
+static term nif_erlang_exit_signal_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_fun_3(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[]);
@@ -455,6 +456,11 @@ static const struct Nif error_nif = {
 static const struct Nif exit_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_exit
+};
+
+static const struct Nif exit_signal_2_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_exit_signal_2
 };
 
 static const struct Nif insert_element_nif = {
@@ -5243,6 +5249,46 @@ static term nif_erlang_exit(Context *ctx, int argc, term argv[])
         }
         return TRUE_ATOM;
     }
+}
+
+static term nif_erlang_exit_signal_2(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term destination = argv[0];
+    if (UNLIKELY(!term_is_local_pid_or_port(destination) && !term_is_reference(destination))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    // Plain and inactive references are valid destinations, but deliver nothing.
+    if (term_is_reference(destination) && !term_is_process_reference(destination)) {
+        return TRUE_ATOM;
+    }
+    int32_t process_id = term_is_process_reference(destination)
+        ? term_process_ref_to_process_id(destination)
+        : term_to_local_process_id(destination);
+    Context *target = globalcontext_get_process_lock(ctx->global, process_id);
+    if (target) {
+        term reason = argv[1];
+        if (target->native_handler != NULL) {
+            // Ports do not trap exits or own aliases.
+            if (!term_is_reference(destination) && reason != NORMAL_ATOM) {
+                mailbox_send_term_signal(target, KillSignal, reason == KILL_ATOM ? KILLED_ATOM : reason);
+            }
+        } else {
+            BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(2) + TUPLE_SIZE(3), temp_heap)
+            term info = term_alloc_tuple(3, &temp_heap);
+            term_put_tuple_element(info, 0, EXIT_ATOM);
+            term_put_tuple_element(info, 1, term_from_local_process_id(ctx->process_id));
+            term_put_tuple_element(info, 2, reason);
+            term envelope = term_alloc_tuple(2, &temp_heap);
+            term_put_tuple_element(envelope, 0, term_is_reference(destination) ? destination : UNDEFINED_ATOM);
+            term_put_tuple_element(envelope, 1, info);
+            mailbox_send_term_signal(target, ExitSignal, envelope);
+            END_WITH_STACK_HEAP(temp_heap, ctx->global)
+        }
+        globalcontext_get_process_unlock(ctx->global, target);
+    }
+    // In particular, do not trap a self-sender as exit/2 does: reception is asynchronous.
+    return TRUE_ATOM;
 }
 
 static term nif_erlang_make_fun_3(Context *ctx, int argc, term argv[])

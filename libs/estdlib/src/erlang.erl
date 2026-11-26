@@ -131,6 +131,7 @@
     demonitor/2,
     exit/1,
     exit/2,
+    exit_signal/2,
     open_port/2,
     system_time/0,
     system_time/1,
@@ -1830,6 +1831,23 @@ exit(_Reason) ->
 %%-----------------------------------------------------------------------------
 -spec exit(Process :: pid(), Reason :: any()) -> true.
 exit(_Process, _Reason) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Destination  local process, port or process alias
+%% @param   Reason  reason for exit
+%% @returns `true'
+%% @doc     Send an asynchronous exit signal (OTP 29).
+%% A trapping process receives `{'EXIT', From, Reason}', except that `kill'
+%% unconditionally terminates the target with reason `killed'. An untrapping
+%% process ignores `normal' and otherwise terminates with `Reason'. Unlike
+%% `exit/2', sending `normal' to self does not terminate an untrapping caller.
+%% Plain or inactive references and dead targets silently discard the signal.
+%% Distributed destinations are not supported.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec exit_signal(Destination :: pid() | port() | reference(), Reason :: term()) -> true.
+exit_signal(_Destination, _Reason) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

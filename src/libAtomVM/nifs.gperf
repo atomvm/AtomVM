@@ -76,6 +76,7 @@ erlang:error/2, &error_nif
 erlang:error/3, &error_nif
 erlang:exit/1, &exit_nif
 erlang:exit/2, &exit_nif
+erlang:exit_signal/2, &exit_signal_2_nif
 erlang:display/1, &display_nif
 erlang:display_string/1, &display_string_nif
 erlang:display_string/2, &display_string_nif

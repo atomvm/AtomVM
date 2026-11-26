@@ -142,6 +142,7 @@ static void scheduler_process_native_signal_messages(Context *ctx)
             case UnlinkRemoteIDSignal: // ports can't be part of distributed links
             case UnlinkRemoteIDAckSignal: // id.
             case CodeServerResumeSignal: // ports do not wait for code server
+            case ExitSignal: // explicit port exits are sent as KillSignal
             case AliasMessageSignal: // ports cannot own aliases
                 break;
             case NormalMessage: {

@@ -908,6 +908,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                     RESUME();                                                                   \
                     break;                                                                      \
                 }                                                                               \
+                case ExitSignal:                                                                \
                 case AliasMessageSignal:                                                        \
                 case NormalMessage: {                                                           \
                     UNREACHABLE();                                                              \

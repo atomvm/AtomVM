@@ -23,6 +23,7 @@
 #include <stddef.h>
 
 #include "context.h"
+#include "defaultatoms.h"
 #include "memory.h"
 #include "scheduler.h"
 #include "synclist.h"
@@ -103,6 +104,7 @@ void mailbox_message_dispose(MailboxMessage *m, Heap *heap)
         case LinkExitSignal:
         case MonitorDownSignal:
         case AliasMessageSignal:
+        case ExitSignal:
         case UnlinkRemoteIDSignal:
         case UnlinkRemoteIDAckSignal: {
             struct TermSignal *term_signal = CONTAINER_OF(m, struct TermSignal, base);
@@ -461,6 +463,34 @@ MailboxMessage *mailbox_process_outer_list_native(Mailbox *mbox)
     return previous_signal;
 }
 
+// Resolve explicit exits in receive order before splitting messages from signals.
+// This keeps trapped EXITs between the sender's surrounding messages. Fatal exits
+// become KillSignals, so the signal loop still services earlier requests first.
+static bool mailbox_normalize_exit_signal(Context *ctx, MailboxMessage *current)
+{
+    struct TermSignal *signal = CONTAINER_OF(current, struct TermSignal, base);
+    term alias = term_get_tuple_element(signal->signal_term, 0);
+    if (alias != UNDEFINED_ATOM && context_find_alias(ctx, term_to_ref_ticks(alias)) == NULL) {
+        return false;
+    }
+    term info = term_get_tuple_element(signal->signal_term, 1);
+    term reason = term_get_tuple_element(info, 2);
+    if (reason == KILL_ATOM) {
+        current->type = KillSignal;
+        signal->signal_term = KILLED_ATOM;
+    } else if (ctx->trap_exit) {
+        // Message and TermSignal have the same layout, asserted above.
+        current->type = NormalMessage;
+        signal->signal_term = info;
+    } else if (reason != NORMAL_ATOM) {
+        current->type = KillSignal;
+        signal->signal_term = reason;
+    } else {
+        return false;
+    }
+    return true;
+}
+
 MailboxMessage *mailbox_process_outer_list(Context *ctx)
 {
     Mailbox *mbox = &ctx->mailbox;
@@ -477,7 +507,9 @@ MailboxMessage *mailbox_process_outer_list(Context *ctx)
         // treat it as unreachable.
         while (current) {
             MailboxMessage *next = current->next;
-            if (current->type == AliasMessageSignal) {
+            if (current->type == ExitSignal && !mailbox_normalize_exit_signal(ctx, current)) {
+                mailbox_message_dispose_unsent(CONTAINER_OF(current, Message, base), ctx->global, false);
+            } else if (current->type == AliasMessageSignal) {
                 mailbox_message_dispose_unsent(CONTAINER_OF(current, Message, base), ctx->global, false);
             } else if (current->type == NormalMessage) {
                 if (normal_last == NULL) {
@@ -508,6 +540,11 @@ MailboxMessage *mailbox_process_outer_list(Context *ctx)
         current = received;
         while (current) {
             MailboxMessage *next = current->next;
+            if (current->type == ExitSignal && !mailbox_normalize_exit_signal(ctx, current)) {
+                mailbox_message_dispose_unsent(CONTAINER_OF(current, Message, base), ctx->global, false);
+                current = next;
+                continue;
+            }
             if (current->type == NormalMessage) {
                 current->next = NULL;
                 if (normal_last == NULL) {

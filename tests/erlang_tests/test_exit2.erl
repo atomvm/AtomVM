@@ -28,6 +28,7 @@ start() ->
     ok = test_reason_normal_not_self(),
     ok = test_reason_normal_self(),
     ok = test_exit_dead(),
+    ok = test_exit_signal(),
     0.
 
 test_reason_other() ->
@@ -268,3 +269,169 @@ test_exit_dead() ->
     true = exit(Pid1, kill),
     true = exit(Pid1, other),
     ok.
+
+-if(?OTP_RELEASE >= 29).
+
+test_exit_signal() ->
+    Parent = self(),
+    {Pid, Ref} = spawn_opt(
+        fun() ->
+            true = erlang:exit_signal(self(), normal),
+            %% Receiving also forces reception of our own pending signal.
+            receive
+                unexpected_message -> error(unexpected_message)
+            after 0 -> Parent ! {self(), survived}
+            end
+        end,
+        [monitor]
+    ),
+    receive
+        {'DOWN', Ref, process, Pid, DownReason} -> normal = DownReason
+    end,
+    receive
+        {Pid, survived} -> ok
+    end,
+    foreach(
+        fun(Reason) ->
+            {Child, Monitor} = spawn_opt(
+                fun() ->
+                    process_flag(trap_exit, true),
+                    Parent ! {self(), ready},
+                    [before_signal, {'EXIT', Parent, Reason}, after_signal] =
+                        [
+                            receive
+                                Message -> Message
+                            end
+                         || _ <- [1, 2, 3]
+                        ]
+                end,
+                [monitor]
+            ),
+            receive
+                {Child, ready} -> ok
+            end,
+            Child ! before_signal,
+            true = erlang:exit_signal(Child, Reason),
+            Child ! after_signal,
+            receive
+                {'DOWN', Monitor, process, Child, normal} -> ok
+            end
+        end,
+        [normal, {shutdown, <<37:1024>>}]
+    ),
+    foreach(
+        fun(Trap) ->
+            foreach(
+                fun(Reason) ->
+                    {Child, Monitor} = spawn_opt(
+                        fun() ->
+                            process_flag(trap_exit, Trap),
+                            %% Fatal signals are not catchable exceptions, even for self.
+                            try
+                                erlang:exit_signal(self(), Reason)
+                            catch
+                                _:_ -> exit(caught_signal)
+                            end,
+                            receive
+                                unexpected_message -> exit(unexpected_message)
+                            after 0 -> exit(missed_signal)
+                            end
+                        end,
+                        [monitor]
+                    ),
+                    Expected =
+                        case Reason of
+                            kill -> killed;
+                            _ -> Reason
+                        end,
+                    receive
+                        {'DOWN', Monitor, process, Child, Expected} -> ok
+                    end
+                end,
+                case Trap of
+                    true -> [kill];
+                    false -> [kill, {shutdown, 37}]
+                end
+            )
+        end,
+        [false, true]
+    ),
+    foreach(
+        fun(Options) ->
+            {Child, Monitor} = spawn_opt(
+                fun() ->
+                    process_flag(trap_exit, true),
+                    Alias = alias(Options),
+                    Parent ! {self(), Alias},
+                    %% Neither exit consumes a reply alias. Messages must remain ordered.
+                    [{'EXIT', Parent, first}, {'EXIT', Parent, second}] =
+                        [
+                            receive
+                                Message -> Message
+                            end
+                         || _ <- [1, 2]
+                        ],
+                    true = unalias(Alias),
+                    true = erlang:exit_signal(Alias, kill),
+                    true = erlang:exit_signal(make_ref(), kill),
+                    receive
+                        unexpected_message -> error(unexpected_message)
+                    after 0 -> ok
+                    end
+                end,
+                [monitor]
+            ),
+            receive
+                {Child, Alias} ->
+                    true = erlang:exit_signal(Alias, first),
+                    true = erlang:exit_signal(Alias, second)
+            end,
+            receive
+                {'DOWN', Monitor, process, Child, normal} -> ok
+            end
+        end,
+        [[], [reply]]
+    ),
+    true = erlang:exit_signal(Pid, kill),
+    foreach(
+        fun(Value) ->
+            try erlang:exit_signal(Value, reason) of
+                _ -> error(accepted_invalid_destination)
+            catch
+                error:badarg -> ok
+            end
+        end,
+        [bad, 7, [], {self()}]
+    ),
+    case erlang:system_info(machine) of
+        "BEAM" -> ok;
+        _ -> test_exit_signal_port()
+    end.
+
+foreach(_Fun, []) ->
+    ok;
+foreach(Fun, [Value | Rest]) ->
+    Fun(Value),
+    foreach(Fun, Rest).
+
+test_exit_signal_port() ->
+    Port = open_port({spawn, "echo"}, []),
+    unlink(Port),
+    Ref = monitor(port, Port),
+    true = erlang:exit_signal(Port, normal),
+    Port ! {self(), signal_port_alive},
+    receive
+        signal_port_alive -> ok
+    end,
+    true = erlang:exit_signal(Port, kill),
+    receive
+        {'DOWN', Ref, port, Port, killed} -> ok
+    end,
+    true = erlang:exit_signal(Port, kill),
+    ok.
+
+-else.
+
+test_exit_signal() -> ok.
+
+-endif.
