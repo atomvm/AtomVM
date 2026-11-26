@@ -21,7 +21,7 @@ concurrency:
 
 env:
   LYNX_REPO: "josevalim/lynx"
-  LYNX_COMMIT: "6968d72cb99211eb9cab973e067f24a18cacfb3e"
+  LYNX_COMMIT: "ff3aad6f39e196ce539a73e1f51f8c3a1b69f68c"
   OTP_VERSION: "29.1.2"
   ELIXIR_VERSION: "1.20"
   REBAR3_VERSION: "3.27.0"

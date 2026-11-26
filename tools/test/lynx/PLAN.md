@@ -12,12 +12,12 @@ runner semantics in [README.md](README.md).
 ## Current baseline
 
 - The supported fixture revision is Lynx
-  `6968d72cb99211eb9cab973e067f24a18cacfb3e`, updated from
-  `b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de` in the latest upstream refresh below.
+  `ff3aad6f39e196ce539a73e1f51f8c3a1b69f68c`, requiring Lean 4.36.0; see the
+  latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,104 public-behavior recipes inspired by Lean tests
-  and upstream examples (`367` of `438` Lean test sites across all 26 files). Source
+- `lean_runtime.py` selects 6,124 public-behavior recipes inspired by Lean tests
+  and upstream examples (`366` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
   the proved postcondition to be true on both VMs: five integer singleton sums,
@@ -33,13 +33,64 @@ runner semantics in [README.md](README.md).
   coverage. Expand specific missing combinations rather than restarting these
   families. Short float formatting is outside the planned fixes.
 
-The supported checkout has 26 Lean test files, now including
-`Modules/Timers.lean` and `Modules/Hashing.lean` (batch 4 retains absent
-`erlang:phash2/1,2` support as an explicit API gap, while batch 5 adds finite
-set samples without interpreting the deliberately unmodeled theorem).
+The supported checkout has 28 Lean test files, including new concurrency audits
+and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
+`persistent_term` and `erlang:exit_signal/2` remain separately observed API gaps.
 Fixture validation does not establish complete runtime-model support.
 
 ## Latest upstream refresh
+
+Rebaseline to `ff3aad6f39e196ce539a73e1f51f8c3a1b69f68c` (2026-11-26),
+then add function-identity differential coverage:
+
+- Upstream rewrote history. The previous `6968d72` checkout is preserved at
+  local branch `backup/main-before-upstream-20261126` in the sibling repository.
+  Its functional equivalent is `4e9147b`; 195 actual incoming commits were
+  screened, rather than counting rewritten commits as new behavior. Descriptor
+  example files were removed, so these baseline trees are not byte-identical.
+- Remove attribution to the three deleted Signals sites
+  `inactive_reference_is_forced`, `active_reference_is_not_forced`, and
+  `ended_process_is_forced`. Preserve all 6,104 previous expressions, including
+  all 82 recipes with obsolete attribution, and keep their valid other origins.
+  Do not invent replacement proof premises or discard useful differential cases.
+- Add 20 `function_identity/2` observations: local and external same-MFA
+  functions at arities 0/1/2, `make_fun/3` equivalents, same-factory closures
+  capturing local/external functions, and integer/float captures. Compare loose
+  and exact equality, function type, application, exact membership versus loose
+  key search, map-key coexistence/replacement/removal/take with originals retained,
+  and dictionary writes/reads/erase. A monitored worker copies captures and
+  explicitly collects with maps and dictionary keys live. Map sizes 2/31/32/33
+  straddle OTP's flat-map boundary. No raw identities or opaque ordering escape.
+- Attribute the new cases to `local_and_external_functions_differ` and
+  `captures_compare_as_outer`. The inventory validates at 366/478 sites in
+  28 files, up from 364 surviving attributed sites after removing the deleted
+  three. These are finite samples, not theorem or branch coverage.
+
+Validation on OTP 29 / Elixir 1.20.5 / isolated Lean 4.36.0:
+
+- Lynx `mix test.all`: 172 passed (two laws, 170 tests), plus the Lean test build.
+- Full translated fixtures: nine freshly checked laws, 2,347 matched, zero
+  differential failures, four unverified zero-width-generator OTP references,
+  and zero uncovered exports (203 exports in 13 modules). These four unresolved
+  references still make the fixture command exit nonzero; they are not skips
+  or successful comparisons.
+- Full interpreter runtime corpus, seed `20261126`, 6,124 recipes plus 32
+  generated cases: 5,963 matched, 193 known failures, zero unverified. The unchanged
+  expected-failure manifest accepts exactly 193/193, with no unexpected failures
+  or passes. Failures remain recorded rather than counted as matches.
+- New function-identity subset: 20/20 match in both interpreter and aarch64
+  precompiled execution, zero failures or unverified references. A public CLI
+  regression also checks independently specified observations, not merely VM
+  agreement. No full native, on-demand JIT, 32-bit, or embedded rerun is claimed.
+- Public CLI suite: 28 passed, three optional configurations skipped. The full
+  fixture command above was run separately. Erlang formatting, Python syntax,
+  and whitespace checks pass.
+
+Evidence: `.amp/in/artifacts/lynx-identity-baseline/` (runtime manifests, target
+logs, fixture results, CLI and fresh upstream build logs). No AtomVM runtime or
+standard-library behavior was changed, and no new proof machinery was added.
+
+## Earlier upstream refresh
 
 The clean sibling Lynx checkout was fast-forwarded through 60 commits from
 `b9be5b8` to `2aa1467`. Useful executable changes and their coverage are:

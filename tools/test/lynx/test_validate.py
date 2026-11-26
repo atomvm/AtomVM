@@ -836,6 +836,52 @@ class ValidationTests(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_function_identity_preserves_exact_keys_across_copy_and_gc(self):
+        kinds = ["named_zero", "named_one", "named_two", "captured_named", "numeric_capture"]
+        expressions = [f"differential:function_identity({kind},{padding})"
+                       for kind in kinds for padding in [0, 29, 30, 31]]
+        by_expr = {c["expression"]: c for c in lean_runtime.cases()}
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            source.write_text(json.dumps([by_expr[e] for e in expressions]))
+            output = work / "identity"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 20, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                actual = JSON.decode!(File.read!(path))["expected"]
+                         |> Enum.map(&:erlang.binary_to_term(Base.decode64!(&1)))
+                expected = for kind <- [:named_zero, :named_one, :named_two,
+                                        :captured_named, :numeric_capture], padding <- [0, 29, 30, 31] do
+                  numeric = kind == :numeric_capture
+                  types = if kind in [:captured_named, :numeric_capture],
+                    do: [type: :local, type: :local, type: :local],
+                    else: [type: :local, type: :external, type: :external]
+                  # Exact membership/keys differ even when numeric captures are ==.
+                  found_a = if numeric, do: :external, else: :local
+                  found_c = if numeric, do: :local, else: :external
+                  {:ok, {:ok, {
+                    {:equality, {numeric, not numeric, false, true, true, true}},
+                    {:types, types},
+                    {:calls, [true, true, true]},
+                    {:lists, {false, true, found_a, found_c}},
+                    {:maps, {padding + 2, padding + 2, {:left, :right},
+                             {:left, :replaced, :replaced},
+                             {padding + 1, true, false},
+                             {:left, padding + 1, false, :replaced}}},
+                    {:dictionary, {{:undefined, :undefined, :right},
+                                   {:left, :replaced, :replaced, 2},
+                                   :replaced, :left, :undefined}}
+                  }}}
+                end
+                true = actual === expected
+                """, str(output / "manifest.json")
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     def test_portable_hashing_observations_have_independent_oracles(self):
         all_cases = lean_runtime.cases()
         hashing_cases = [
@@ -952,23 +998,6 @@ class ValidationTests(unittest.TestCase):
         self.assertEqual(len(upstream_await_many), 6)
         self.assertTrue(all("lean_origins" not in c and not c.get("assert_true")
                             for c in upstream_await_many))
-        lean_new = [
-            c for c in all_cases
-            if any(o in {
-                "Modules/Process.lean#many_sends",
-                "Modules/Signals.lean#inactive_reference_is_forced",
-                "Modules/Signals.lean#active_reference_is_not_forced",
-                "Modules/Signals.lean#ended_process_is_forced",
-            } for o in c.get("lean_origins", []))
-        ]
-        self.assertTrue(
-            {
-                "Modules/Process.lean#many_sends",
-                "Modules/Signals.lean#inactive_reference_is_forced",
-                "Modules/Signals.lean#active_reference_is_not_forced",
-                "Modules/Signals.lean#ended_process_is_forced",
-            }.issubset({o for c in lean_new for o in c["lean_origins"]})
-        )
         many_sends_30 = [
             c for c in all_cases
             if c["expression"].startswith("differential:many_sends(") and c["expression"].endswith(",30)")
@@ -1726,7 +1755,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 6104)
+        self.assertEqual(len(lean_runtime.cases()), 6124)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

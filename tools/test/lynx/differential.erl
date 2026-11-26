@@ -56,6 +56,7 @@
     trace_depth_a/1,
     trace_depth_b/1,
     function_compare/2,
+    function_identity/2,
     function_apply/3,
     function_named/3,
     function_make/4,
@@ -3502,6 +3503,89 @@ function_value(not_fun, Captured) -> Captured.
 
 function_compare(A, B) ->
     compare(function_value(local_one, A), function_value(local_one, B)).
+
+%% Keep identity observations within one VM: neither fun representations nor
+%% implementation-dependent ordering escape. The monitored worker copies its
+%% captures, then collects with both old/new maps and dictionary keys live.
+function_identity(Kind, Padding) ->
+    Arg = {input, <<5:3>>},
+    {A, B, C, Args, Expected} =
+        case Kind of
+            named_zero ->
+                {
+                    fun function_zero/0,
+                    fun ?MODULE:function_zero/0,
+                    erlang:make_fun(?MODULE, function_zero, 0),
+                    [],
+                    [zero, zero, zero]
+                };
+            named_one ->
+                {
+                    fun function_one/1,
+                    fun ?MODULE:function_one/1,
+                    erlang:make_fun(?MODULE, function_one, 1),
+                    [Arg],
+                    [{one, Arg}, {one, Arg}, {one, Arg}]
+                };
+            named_two ->
+                {
+                    fun function_two/2,
+                    fun ?MODULE:function_two/2,
+                    erlang:make_fun(?MODULE, function_two, 2),
+                    [Arg, 17],
+                    [{two, Arg, 17}, {two, Arg, 17}, {two, Arg, 17}]
+                };
+            numeric_capture ->
+                {
+                    function_value(local_one, 1),
+                    function_value(local_one, 1.0),
+                    function_value(local_one, 1.0),
+                    [Arg],
+                    [{1, Arg}, {1.0, Arg}, {1.0, Arg}]
+                };
+            captured_named ->
+                Local = fun function_one/1,
+                External = fun ?MODULE:function_one/1,
+                Made = erlang:make_fun(?MODULE, function_one, 1),
+                {
+                    function_value(local_one, Local),
+                    function_value(local_one, External),
+                    function_value(local_one, Made),
+                    [Arg],
+                    [{Local, Arg}, {External, Arg}, {Made, Arg}]
+                }
+        end,
+    isolated(fun() ->
+        Base = maps:from_list([{I, padding} || I <- lists:seq(1, Padding)]),
+        Original = Base#{A => left, B => right},
+        Updated = maps:put(C, replaced, Original),
+        Writes = {put(A, left), put(B, right), put(C, replaced)},
+        true = erlang:garbage_collect(),
+        Removed = maps:remove(C, Updated),
+        {Taken, Remaining} = maps:take(A, Updated),
+        Reads = {get(A), get(B), get(C), length(get_keys())},
+        Erased = erase(C),
+        {
+            {equality, {A == B, A /= B, A =:= B, A =/= B, B == C, B =:= C}},
+            {types, [erlang:fun_info(F, type) || F <- [A, B, C]]},
+            {calls, [apply(F, Args) =:= Value || {F, Value} <- lists:zip([A, B, C], Expected)]},
+            {lists, {
+                lists:member(A, [B]),
+                lists:member(C, [B]),
+                element(2, lists:keyfind(A, 1, [{B, external}, {A, local}])),
+                element(2, lists:keyfind(C, 1, [{A, local}, {B, external}]))
+            }},
+            {maps, {
+                map_size(Original),
+                map_size(Updated),
+                {maps:get(A, Original), maps:get(B, Original)},
+                {maps:get(A, Updated), maps:get(B, Updated), maps:get(C, Updated)},
+                {map_size(Removed), maps:is_key(A, Removed), maps:is_key(B, Removed)},
+                {Taken, map_size(Remaining), maps:is_key(A, Remaining), maps:get(C, Remaining)}
+            }},
+            {dictionary, {Writes, Reads, Erased, get(A), get(B)}}
+        }
+    end).
 
 function_zero() -> zero.
 function_one(X) -> {one, X}.

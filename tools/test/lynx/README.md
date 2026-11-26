@@ -168,7 +168,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **6,104 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **6,124 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -198,12 +198,21 @@ OTP is the execution oracle, not the Lean model: for example, tested OTP 29
 accepts an already queued receive match before checking an invalid timeout.
 That differs from the model test named `timeout_validation_precedes_scan`.
 
-The latest upstream refresh adds 69 cases: 25 exact list-subtraction samples,
+The [latest upstream refresh](PLAN.md#latest-upstream-refresh) preserves the
+6,104 previous expressions after removing three deleted Lean-site attributions,
+and adds 20 function-identity observations. Same-MFA local versus external
+functions and `make_fun/3` equivalents are compared through calls, list searches,
+map replacement/removal, and dictionary keys, across worker copying and GC.
+Nested function captures and integer/float captures distinguish loose equality
+from exact keys. Maps include 2, 31, 32, and 33 keys; no raw fun identity or
+implementation-dependent ordering is compared across VMs.
+
+An earlier upstream refresh added 69 cases: 25 exact list-subtraction samples,
 16 example-inspired zip/unzip observations, and 28 timer observations. Timers use
 message/monitor handshakes and validate remaining-time ranges rather than exact
 elapsed milliseconds. Invalid arguments and missing APIs remain failures, not
 skips. Zip/unzip examples are labeled separately from Lean test attribution.
-See [the upstream refresh](PLAN.md#latest-upstream-refresh) for commit selection,
+See [the earlier upstream refresh](PLAN.md#earlier-upstream-refresh) for commit selection,
 results, and model-only changes deliberately not transferred to VM requirements.
 The full expanded interpreter corpus matches 4,108 cases, with 33 failures and
 zero unverified references. The failures are four existing short-float mismatches
@@ -692,13 +701,14 @@ python3 tools/test/lynx/validate.py --lynx ../lynx --build build --generated 0 \
 
 With `--lynx`, `mix` and `lake` must also be on PATH with the Elixir/Lean versions
 required by that checkout. Mix/Lake may build their normal caches. The fixture
-API currently targets Lynx revision `6968d72cb99211eb9cab973e067f24a18cacfb3e`,
-updated from `b6ac6ea905fa5b387e33cd0b4466a6abcd9d31de`; see
-[the latest refresh](PLAN.md#latest-upstream-refresh) for current results.
+API currently targets Lynx revision `ff3aad6f39e196ce539a73e1f51f8c3a1b69f68c`,
+requiring Lean 4.36.0; see [the latest refresh](PLAN.md#latest-upstream-refresh)
+for current results.
 The current full fixture run checks nine laws and matches 2,347 calls, with no
 differential failures or uncovered exports and the same four unverified OTP
 references. All 78 protocol calls match in interpreter and aarch64 precompiled
-execution. Lynx's own suite reports 165 passed checks plus its Lean test build.
+execution in the earlier refresh. Lynx's own updated suite reports 172 passed
+checks (two laws, 170 tests) plus its Lean test build.
 
 The following rebaseline results are historical. On OTP 29
 (ERTS 17.1.1), Elixir 1.20.5, and Lean 4.35.0, the original rebaseline checked
@@ -859,7 +869,7 @@ Additional target and representation modes:
 
 Scheduler interleavings, GC stress, and bare-metal embedded boards remain outside
 the CLI runner. `.github/workflows/lynx-differential.yaml` pins upstream Lynx
-`6968d72cb99211eb9cab973e067f24a18cacfb3e` in a dedicated workflow without adding
+`ff3aad6f39e196ce539a73e1f51f8c3a1b69f68c` in a dedicated workflow without adding
 a Lynx dependency to the normal AtomVM build/test workflows. Run `--help` for
 options.
 

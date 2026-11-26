@@ -1082,6 +1082,14 @@ def cases():
         for left, right in [(a, b), (b, a), (a, a)]:
             probe("Term/Compare", "closure_captures_comparison",
                   f"differential:function_compare({left},{right})")
+    # Same MFA does not mean the same identity: local and external captures
+    # stay distinct as exact keys, including when another closure captures them.
+    # Numeric captures additionally distinguish loose equality from key equality.
+    for kind in ["named_zero", "named_one", "named_two", "captured_named", "numeric_capture"]:
+        for padding in [0, 29, 30, 31]:  # Resulting maps have 2, 31, 32 and 33 keys.
+            probe("Term/Compare", "captures_compare_as_outer" if kind == "numeric_capture"
+                  else "local_and_external_functions_differ",
+                  f"differential:function_identity({kind},{padding})")
     for a, b in [("1", "make_ref()"), ("a", "make_ref()"),
                  ("make_ref()", "fun erlang:abs/1"), ("make_ref()", "fun()->ok end"),
                  ("fun erlang:abs/1", "self()"), ("fun()->ok end", "self()"),
@@ -1152,12 +1160,10 @@ def cases():
                 probe(p, ["send_to_self", "send_to_missing_pid", "send_rejects_non_pid"],
                       f"differential:send_destination({operation},{destination},{payload})")
     for mode, origins in [
-        ("dead", ["Modules/Process.lean#many_sends", "Modules/Process.lean#send_to_missing_pid",
-                  "Modules/Signals.lean#ended_process_is_forced"]),
+        ("dead", ["Modules/Process.lean#many_sends", "Modules/Process.lean#send_to_missing_pid"]),
         ("live", ["Modules/Process.lean#many_sends", "Modules/Process.lean#send_to_self"]),
         ("self", ["Modules/Process.lean#many_sends", "Modules/Process.lean#send_to_self"]),
-        ("stale_alias", ["Modules/Process.lean#many_sends",
-                         "Modules/Signals.lean#inactive_reference_is_forced"]),
+        ("stale_alias", ["Modules/Process.lean#many_sends"]),
     ]:
         for count in [0, 1, 30]:
             selected.append({"lean_origins": origins,
@@ -1323,8 +1329,7 @@ def cases():
             for action in ["unalias", "demonitor", "{demonitor,[]}", "{demonitor,[flush]}",
                            "{demonitor,[info]}", "{demonitor,[flush,info]}", "{demonitor,[info,flush]}"]:
                 probe("Modules/Signals", ["alias_ends_with_demonitor", "demonitor_flushes_down",
-                                          "monitor_reports_normal_exit",
-                                          "inactive_reference_is_forced", "active_reference_is_not_forced"],
+                                          "monitor_reports_normal_exit"],
                       f"differential:target_cancel({mode},{state},{action})")
     for first in ["plain", "demonitor", "explicit_unalias", "reply_demonitor"]:
         for second in ["plain", "demonitor", "explicit_unalias", "reply_demonitor"]:
@@ -1356,8 +1361,6 @@ def cases():
             probe(
                 "Modules/Signals",
                 [
-                    "inactive_reference_is_forced",
-                    "active_reference_is_not_forced",
                     "alias_ends_with_demonitor",
                     "demonitor_flushes_down",
                 ],
@@ -1367,7 +1370,7 @@ def cases():
         probe(p, "timeout_handler_scope", f"differential:suspended_receive({mode})")
 
     for trap in ["true", "false"]:
-        probe("Modules/Signals", ["link_to_missing_process", "ended_process_is_forced"],
+        probe("Modules/Signals", "link_to_missing_process",
               f"differential:missing_link({trap})")
     probe("Modules/Signals", "liveness", "differential:process_liveness()")
     for value in ["bad", "1", "[]", "{}", "make_ref()", "fun()->ok end"]:
