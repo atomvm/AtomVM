@@ -1563,6 +1563,101 @@ def cases():
                           f"|differential:core_step(h,{action},[tail])] end)",
         })
 
+    # Observe construction itself, not already-evaluated segment arguments.
+    # Source and raw Core may hoist a failing constructor differently.
+    for path in ["source", "core"]:
+        def step(tag, value, fail=False):
+            if path == "core":
+                return core_step(tag, value, fail)
+            action = "error" if fail else "return"
+            return f"differential:core_step({tag},{action},{value})"
+
+        def segment(value, size="8", kind="integer", unit=1):
+            if path == "core":
+                width = "'undefined'" if kind == "utf8" else "'all'" if size is None else size
+                scale = "'undefined'" if kind == "utf8" else str(unit)
+                return f"#<{value}>({width},{scale},'{kind}',['unsigned','big'])"
+            width = "" if size is None or kind == "utf8" else f":({size})"
+            spec = kind if kind == "utf8" else f"{kind}-unit:{unit}"
+            return f"({value}){width}/{spec}"
+
+        def binary(*segments):
+            contents = ",".join(segments)
+            return f"#{{{contents}}}#" if path == "core" else f"<<{contents}>>"
+
+        bodies = {}
+        for scenario, value, size, failure in [
+            ("segments_success", "5", "3", None),
+            ("value_error", "5", "3", "v1"),
+            ("size_error", "5", "3", "s1"),
+            ("later_value_error", "5", "3", "v2"),
+            ("later_size_error", "5", "3", "s2"),
+            ("bad_value", "'bad'", "3", None),
+            ("bad_size", "5", "-1", None),
+            ("bad_value_later_error", "'bad'", "3", "v2"),
+            ("bad_size_later_error", "5", "-1", "s2"),
+            ("zero_bad_value", "'bad'", "0", None),
+            ("zero_width", "5", "0", None),
+        ]:
+            bodies[scenario] = binary(
+                segment(step("v1", value, failure == "v1"), step("s1", size, failure == "s1")),
+                segment(step("v2", "19", failure == "v2"), step("s2", "5", failure == "s2")))
+
+        for kind in ["binary", "utf8"]:
+            value = "#{#<18>(8,1,'integer',['unsigned','big'])}#" if path == "core" else "<<18>>"
+            first = (segment(step("v1", value), step("s1", "2"), "binary", 8)
+                     if kind == "binary" else segment(step("v1", "16#D800"), kind="utf8"))
+            for fail in [False, True]:
+                name = "binary_short" if kind == "binary" else "utf_bad"
+                bodies[name + ("_later_error" if fail else "")] = binary(
+                    first, segment(step("v2", "19", fail), "5"))
+
+        for scenario, prefix, kind, fail in [
+            ("append_success", "bytes", "binary", False),
+            ("append_bad_prefix", "'bad'", "binary", False),
+            ("append_bad_prefix_later_error", "'bad'", "binary", True),
+            ("append_unaligned_binary", "bits", "binary", False),
+            ("append_unaligned_bitstring", "bits", "binary", False),
+            ("append_shared_prefix", "bytes", "binary", False),
+        ]:
+            if prefix in ["bytes", "bits"]:
+                prefix = binary(segment("5", "3")) if prefix == "bits" else binary(segment("18"), segment("52"))
+            unit = 1 if scenario == "append_unaligned_bitstring" else 8
+            suffix_size = "5" if scenario == "append_unaligned_bitstring" else "8"
+            built = binary(segment("P", None, kind, unit), segment(step("v", "19", fail), suffix_size))
+            result = "{P,B}" if scenario == "append_shared_prefix" else "B"
+            bodies[scenario] = (
+                f"let <P> = {step('p', prefix)} in let <B> = {built} in {result}"
+                if path == "core" else f"P = {step('p', prefix)},B = {built},{result}")
+
+        for scenario, wrapper, bad, tail_error in [
+            ("nested_call_success", "call", False, False),
+            ("nested_call_bad_value", "call", True, False),
+            ("tuple_success", "tuple", False, False),
+            ("tuple_bad_value", "tuple", True, False),
+            ("cons_success", "cons", False, False),
+            ("cons_bad_value", "cons", True, False),
+            ("cons_bad_value_tail_error", "cons", True, True),
+        ]:
+            built = binary(segment(step("v", "'bad'" if bad else "5"), step("s", "8")))
+            if wrapper == "call":
+                bodies[scenario] = step("call", built)
+            else:
+                tail = step("tail", "['tail']" if path == "core" else "[tail]", tail_error)
+                bodies[scenario] = f"[{built}|{tail}]" if wrapper == "cons" else f"{{{built},{tail}}}"
+
+        for scenario, body in bodies.items():
+            entry = {
+                "upstream_test": "test/lynx/core_to_leanj_test.exs#binaries nested in arguments are constructed before the call",
+                "binary_order_scenario": scenario,
+                "binary_order_path": path,
+                "expression": "differential:core_order(fun ?CORE_MODULE:entry/0)" if path == "core"
+                              else f"differential:core_order(fun()->{body} end)",
+            }
+            if path == "core":
+                entry["core_body"] = body
+            selected.append(entry)
+
     # Upstream compiler regression, not a Lean theorem attribution. Keep the
     # same source call with either compiler-known or remotely returned operands.
     # Folded failures must retain preceding effects, but never run the body.

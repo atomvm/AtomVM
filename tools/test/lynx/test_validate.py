@@ -865,6 +865,73 @@ class ValidationTests(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_binary_construction_order_has_independent_oracles(self):
+        selected = [entry for entry in lean_runtime.cases() if "binary_order_scenario" in entry]
+        self.assertEqual(len(selected), 56)
+        self.assertEqual(sum("core_body" in entry for entry in selected), 28)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "binary.json"
+            source.write_text(json.dumps(selected))
+            output = work / "results"
+            self.assertEqual(self.invoke(output, "--replay", source),
+                             {"laws": 0, "passed": 56, "failed": 0,
+                              "unverified": 0, "uncovered": 0})
+            check = subprocess.run([
+                "elixir", "-e", """
+                [path] = System.argv()
+                ok = fn value, trace -> {{:ok, value}, trace} end
+                err = fn reason, trace -> {{:exception, :error, reason}, trace} end
+                all = [:v1, :s1, :v2, :s2]
+                # 101 followed by 10011 gives 10110011, not two full bytes.
+                expected = %{
+                  "segments_success" => ok.(<<179>>, all),
+                  "value_error" => err.(:v1, [:v1]),
+                  "size_error" => err.(:s1, [:v1, :s1]),
+                  "later_value_error" => err.(:v2, [:v1, :s1, :v2]),
+                  "later_size_error" => err.(:s2, all),
+                  "bad_value" => err.(:badarg, all),
+                  "bad_size" => err.(:badarg, all),
+                  "bad_value_later_error" => err.(:v2, [:v1, :s1, :v2]),
+                  "bad_size_later_error" => err.(:s2, all),
+                  "zero_bad_value" => err.(:badarg, all),
+                  "zero_width" => ok.(<<19::size(5)>>, all),
+                  "binary_short" => err.(:badarg, [:v1, :s1, :v2]),
+                  "binary_short_later_error" => err.(:v2, [:v1, :s1, :v2]),
+                  "utf_bad" => err.(:badarg, [:v1, :v2]),
+                  "utf_bad_later_error" => err.(:v2, [:v1, :v2]),
+                  "append_success" => ok.(<<18, 52, 19>>, [:p, :v]),
+                  "append_bad_prefix" => err.(:badarg, [:p, :v]),
+                  "append_bad_prefix_later_error" => err.(:v, [:p, :v]),
+                  "append_unaligned_binary" => err.(:badarg, [:p, :v]),
+                  "append_unaligned_bitstring" => ok.(<<179>>, [:p, :v]),
+                  "append_shared_prefix" => ok.({<<18, 52>>, <<18, 52, 19>>}, [:p, :v]),
+                  "nested_call_success" => ok.(<<5>>, [:v, :s, :call]),
+                  "nested_call_bad_value" => err.(:badarg, [:v, :s]),
+                  "tuple_success" => ok.({<<5>>, [:tail]}, [:v, :s, :tail]),
+                  "tuple_bad_value" => err.(:badarg, [:v, :s]),
+                  "cons_success" => ok.([<<5>>, :tail], [:v, :s, :tail]),
+                  "cons_bad_value" => err.(:badarg, [:v, :s]),
+                  "cons_bad_value_tail_error" => err.(:badarg, [:v, :s])
+                }
+                cases = JSON.decode!(File.read!(Path.join(path, "cases.json")))
+                values = JSON.decode!(File.read!(Path.join(path, "manifest.json")))["expected"]
+                # Raw Core leaves the final head construction after the tail.
+                # Ordinary source lowering binds that construction beforehand.
+                for {entry, encoded} <- Enum.zip(cases, values) do
+                  scenario = entry["binary_order_scenario"]
+                  want = case {entry["binary_order_path"], scenario} do
+                    {"core", "cons_bad_value"} -> err.(:badarg, [:v, :s, :tail])
+                    {"core", "cons_bad_value_tail_error"} -> err.(:tail, [:v, :s, :tail])
+                    _ -> Map.fetch!(expected, scenario)
+                  end
+                  got = :erlang.binary_to_term(Base.decode64!(encoded))
+                  if got !== {:ok, want}, do: raise(inspect({entry, want, got}))
+                end
+                """, str(output)
+            ], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     def test_core_evaluation_order_and_replay_have_independent_oracles(self):
         selected = [entry for entry in lean_runtime.cases() if "core_order_scenario" in entry]
         self.assertEqual(len(selected), 34)
@@ -1905,7 +1972,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 6227)
+        self.assertEqual(len(lean_runtime.cases()), 6283)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

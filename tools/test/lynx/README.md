@@ -177,7 +177,7 @@ python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
   --generated 0 --output /tmp/atomvm-lean-runtime
 ```
 
-At the pinned Lynx revision below, this selects **6,227 deterministic-result cases**:
+At the pinned Lynx revision below, this selects **6,283 deterministic-result cases**:
 numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
 search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
 process dictionaries, comparison, effectful short circuit, timeout validation
@@ -215,6 +215,16 @@ map replacement/removal, and dictionary keys, across worker copying and GC.
 Nested function captures and integer/float captures distinguish loose equality
 from exact keys. Maps include 2, 31, 32, and 33 keys; no raw fun identity or
 implementation-dependent ordering is compared across VMs.
+
+The [binary-construction ordering batch](PLAN.md#binary-construction-ordering-and-exceptions)
+adds 56 observations: 28 scenarios in Erlang source and raw Core. These compare
+exact bitstrings, exception classes/reasons and effect traces for segment values
+and sizes, competing expression/construction failures, zero-width validation,
+short binary segments, invalid UTF scalars, appending and prefix preservation,
+and binaries nested in calls, tuples and cons heads. In raw Core, a cons tail
+can run before final head construction; ordinary source binds the head first.
+All 56 match OTP 29.1.3 in interpreter, AArch64 precompiled and on-demand JIT
+execution, without runtime fixes or expected-failure additions.
 
 The [optimized Core-order batch](PLAN.md#optimized-core-evaluation-order)
 adds 34 observations: 32 Core bodies and two Erlang-source controls. Cons heads

@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 6,227 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 6,283 public-behavior recipes inspired by Lean tests
   and upstream examples (`369` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -37,6 +37,41 @@ The supported checkout has 28 Lean test files, including new concurrency audits
 and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` and `erlang:exit_signal/2` remain separately observed API gaps.
 Fixture validation does not establish complete runtime-model support.
+
+## Binary-construction ordering and exceptions
+
+Add 56 observations (2026-11-26): 28 scenarios each in Erlang source and raw
+Core, inspired by Lynx's `binaries nested in arguments are constructed before
+the call` compiler test. Reuse the existing Core compiler/replay pipeline and
+`core_order/1`/`core_step/3` observer; no runtime changes or new theorem claims.
+
+- Compare exact constructed bitstrings, exception classes/reasons and ordered
+  effects. Distinguish segment value/size errors from constructor rejection,
+  and invalid early segments from later explicit errors. Include asymmetric
+  3+5-bit construction, zero-width integer type checking, short binary inputs,
+  invalid UTF scalars, aligned/unaligned appends and retained prefix aliases.
+- Nest construction inside calls, tuples and cons heads. In the source control,
+  a bad head constructor raises before the tail runs. In raw Core its segment
+  effects precede the tail, but final construction follows it: a tail exception
+  wins, or `badarg` occurs after the tail effect. Do not impose either trace on
+  both paths. Saved assembly confirms that `bs_create_bin` placement and the
+  append form; this is not a claim about every legacy/private-append opcode.
+- The public CLI test has handwritten expected values and traces for all 56
+  observations, including path-specific exception precedence. Differential
+  agreement alone is insufficient; every freshly generated OTP oracle is also
+  checked against these independent expectations.
+- Interpreter (`build`), AArch64 precompiled (`.amp/in/build-native`) and
+  on-demand JIT (`.amp/in/build-on-demand`) each match 56/56 against OTP 29.1.3
+  / ERTS 17.1.2, with zero failures/unverified. The JIT replay uses
+  `--timeout 60 --jobs 2` to allow support-module compilation. No runtime fix
+  or expected-failure manifest change was needed. Full harness: 31 passed,
+  3 optional environment-gated skips (34 discovered). Python 3.9 grammar and
+  `git diff --check` pass.
+- All 6,227 earlier recipes and metadata are unchanged. Total recipes: 6,283;
+  attribution stays 369/478 sites in 28 Lean files. Evidence is under
+  `.amp/in/artifacts/lynx-binary-order/`: saved input, toolchain, per-mode
+  references/results/build hashes and representative source/Core assembly.
+  Full runtime corpus and embedded execution were not rerun for this batch.
 
 ## Optimized Core evaluation order
 
