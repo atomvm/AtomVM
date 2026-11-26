@@ -460,7 +460,7 @@ all(Fun, [H | T]) ->
     case Fun(H) of
         true ->
             all(Fun, T);
-        _ ->
+        false ->
             false
     end.
 
@@ -472,8 +472,15 @@ all(Fun, [H | T]) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec any(Fun :: fun((Elem :: term()) -> boolean()), List :: list()) -> boolean().
-any(Fun, L) ->
-    not all(fun(E) -> not Fun(E) end, L).
+any(_Fun, []) ->
+    false;
+any(Fun, [H | T]) ->
+    case Fun(H) of
+        true ->
+            true;
+        false ->
+            any(Fun, T)
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   L the list to flatten

@@ -40,6 +40,7 @@ test() ->
     ok = test_foldr(),
     ok = test_all(),
     ok = test_any(),
+    ok = test_predicate_results(),
     ok = test_list_match(),
     ok = test_flatten(),
     ok = test_flatmap(),
@@ -228,6 +229,43 @@ test_any() ->
     ?ASSERT_MATCH(lists:any(fun(E) -> is_atom(E) end, [a, []]), true),
     ?ASSERT_MATCH(lists:any(fun(E) -> is_atom(E) end, [[], a]), true),
     ?ASSERT_MATCH(lists:any(fun(E) -> is_atom(E) end, [[], {a}]), false),
+    ok.
+
+test_predicate_results() ->
+    lists:foreach(
+        fun({Operation, Continue, Stop}) ->
+            lists:foreach(
+                fun(Invalid) ->
+                    put(predicate_calls, []),
+                    Predicate = fun(Item) ->
+                        put(predicate_calls, [Item | get(predicate_calls)]),
+                        case Item of
+                            first -> Continue;
+                            invalid -> Invalid;
+                            later -> error(unexpected_callback)
+                        end
+                    end,
+                    ?ASSERT_ERROR(
+                        apply(lists, Operation, [Predicate, [first, invalid, later]]),
+                        {case_clause, Invalid}
+                    ),
+                    ?ASSERT_MATCH(erase(predicate_calls), [invalid, first])
+                end,
+                [not_boolean, 0, {true, mapped}]
+            ),
+            put(predicate_calls, []),
+            ShortCircuit = fun(Item) ->
+                put(predicate_calls, [Item | get(predicate_calls)]),
+                case Item of
+                    first -> Stop;
+                    later -> error(unexpected_callback)
+                end
+            end,
+            ?ASSERT_MATCH(apply(lists, Operation, [ShortCircuit, [first, later]]), Stop),
+            ?ASSERT_MATCH(erase(predicate_calls), [first])
+        end,
+        [{all, true, false}, {any, false, true}]
+    ),
     ok.
 
 test_list_match() ->
