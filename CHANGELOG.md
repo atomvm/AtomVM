@@ -89,6 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed `maps:iterator/2` raising `function_clause` for invalid ordering arguments and
+  `{badmap, Map}` for non-maps instead of OTP's `badarg`; `maps:iterator/1` retains `badmap`
 - Fixed exact map updates raising `badarg` instead of `{badkey, Key}` for missing keys
   in interpreter, JIT and precompiled execution
 - Fixed receive hangs in JIT and precompiled native execution when a new process reused a

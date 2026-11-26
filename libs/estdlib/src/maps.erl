@@ -172,8 +172,10 @@ put(_Key, _Value, Map) when not is_map(Map) ->
 
 %% @equiv iterator(Map, undefined)
 -spec iterator(Map :: #{Key => Value}) -> iterator(Key, Value).
+iterator(Map) when is_map(Map) ->
+    iterator(Map, undefined);
 iterator(Map) ->
-    iterator(Map, undefined).
+    error({badmap, Map}).
 
 %%-----------------------------------------------------------------------------
 %% @param   Map     the map
@@ -185,17 +187,20 @@ iterator(Map) ->
 %% @doc Return an iterator structure that can be used to iterate over associations
 %% in a map.
 %%
-%% This function raises a `{badmap, Map}' error if `Map' is not a map.
+%% This function raises a `badarg' error if `Map' is not a map or `Order' is
+%% neither `undefined', `ordered', `reversed' nor a function of arity 2.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec iterator(Map :: #{Key => Value}, Order :: iterator_order()) -> iterator(Key, Value).
 iterator(Map, undefined) when is_map(Map) ->
     [0 | Map];
-iterator(Map, Order) when is_map(Map) ->
+iterator(Map, Order) when
+    is_map(Map), (Order =:= ordered orelse Order =:= reversed orelse is_function(Order, 2))
+->
     Keys = iterate_keys(maps:next(maps:iterator(Map)), Order, []),
     [Keys | Map];
-iterator(Map, _Order) ->
-    error({badmap, Map}).
+iterator(_Map, _Order) ->
+    error(badarg).
 
 %%-----------------------------------------------------------------------------
 %% @param   Iterator a map iterator

@@ -40,7 +40,8 @@ test() ->
             ok = test_iterator_2_undefined(),
             ok = test_iterator_2_ordered(),
             ok = test_iterator_2_reversed(),
-            ok = test_iterator_2_f();
+            ok = test_iterator_2_f(),
+            ok = test_iterator_2_invalid();
         false ->
             ok
     end,
@@ -194,6 +195,24 @@ test_iterator_2_f() ->
     EmptyIterator = maps:iterator(EmptyMap),
     none = maps:next(EmptyIterator),
 
+    ok.
+
+test_iterator_2_invalid() ->
+    lists:foreach(
+        fun(Map) ->
+            lists:foreach(
+                fun(Order) -> ?ASSERT_ERROR(maps:iterator(id(Map), id(Order)), badarg) end,
+                [bad, fun() -> true end, fun(_) -> true end, fun(_, _, _) -> true end]
+            )
+        end,
+        [#{}, #{a => 1}, #{a => 1, b => 2, c => 3}]
+    ),
+    % iterator/1 reports badmap, but iterator/2 reports badarg for either argument.
+    ?ASSERT_ERROR(maps:iterator(id(not_a_map)), {badmap, not_a_map}),
+    lists:foreach(
+        fun(Order) -> ?ASSERT_ERROR(maps:iterator(id(not_a_map), id(Order)), badarg) end,
+        [undefined, ordered, reversed, fun(A, B) -> A =< B end, bad]
+    ),
     ok.
 
 test_keys() ->
