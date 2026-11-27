@@ -3940,7 +3940,7 @@ static term nif_binary_part_3(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    size_t heap_size = term_sub_binary_heap_size(pattern_term, len);
+    size_t heap_size = term_sub_binary_heap_size(pattern_term, slice.len);
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, 1, &pattern_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }

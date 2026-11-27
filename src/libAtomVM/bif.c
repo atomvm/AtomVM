@@ -174,7 +174,7 @@ term bif_erlang_binary_part_3(Context *ctx, uint32_t fail_label, int live, term 
 
     TERM_DEBUG_ASSERT((sizeof(ctx->x) / sizeof(ctx->x[0])) >= MAX_REG + 1);
     ctx->x[live] = arg1;
-    size_t heap_size = term_sub_binary_heap_size(arg1, len);
+    size_t heap_size = term_sub_binary_heap_size(arg1, slice.len);
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
     }

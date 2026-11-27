@@ -20,7 +20,7 @@
 
 -module(test_binary_part).
 
--export([start/0, id/1, fail_with_badarg/1, compare_bin/2, as_guard/4]).
+-export([start/0, id/1, fail_with_badarg/1, compare_bin/2, as_guard/4, pad/1]).
 -define(ID(Arg), ?MODULE:id(Arg)).
 
 start() ->
@@ -41,6 +41,7 @@ start() ->
             ?MODULE:as_guard(Bin, Pattern, Pos, Len)
         end)
     ),
+    ok = test_negative_length_heap_binary(),
     0.
 
 test_with_binary_part_fun(BinaryPart) ->
@@ -99,3 +100,40 @@ compare_bin(Bin1, Bin2, Index) ->
         B1 -> compare_bin(Bin1, Bin2, Index - 1);
         _Any -> error
     end.
+
+test_negative_length_heap_binary() ->
+    B63 = ?ID(list_to_binary(seq(1, 63))),
+    B56 = ?ID(list_to_binary(seq(10, 65))),
+    ok = check_neg_loop(63, B63, 63, -63, B63),
+    ok = check_neg_loop(63, B56, 56, -56, B56),
+    Refc = ?ID(list_to_binary(seq(1, 80))),
+    Sub = ?ID(binary:part(Refc, 10, 60)),
+    ok = check_neg_loop(15, Refc, 80, -80, Refc),
+    ok = check_neg_loop(15, Sub, 60, -60, Sub),
+    ok = fail_with_badarg(fun() -> binary:part(?ID(<<1, 2, 5:3>>), 2, -1) end),
+    ok = fail_with_badarg(fun() -> erlang:binary_part(?ID(<<1, 2, 5:3>>), 2, -1) end),
+    ok = fail_with_badarg(fun() -> erlang:binary_part(?ID(<<1, 2, 5:3>>), {2, -1}) end),
+    false = pair_guard(?ID(<<1, 2, 5:3>>), {2, -1}, <<2>>),
+    ok.
+
+check_neg_loop(-1, _Bin, _Pos, _Len, _Expected) ->
+    ok;
+check_neg_loop(K, Bin, Pos, Len, Expected) ->
+    _Pad = ?MODULE:pad(K),
+    P1 = binary:part(?ID(Bin), ?ID(Pos), ?ID(Len)),
+    P2 = erlang:binary_part(?ID(Bin), ?ID(Pos), ?ID(Len)),
+    P3 = erlang:binary_part(?ID(Bin), ?ID({Pos, Len})),
+    Expected = P1,
+    Expected = P2,
+    Expected = P3,
+    Expected = ?MODULE:as_guard(?ID(Bin), Expected, ?ID(Pos), ?ID(Len)),
+    true = pair_guard(?ID(Bin), ?ID({Pos, Len}), Expected),
+    check_neg_loop(K - 1, Bin, Pos, Len, Expected).
+
+pad(0) -> [];
+pad(N) -> [N | pad(N - 1)].
+
+seq(From, To) when From > To ->
+    [];
+seq(From, To) ->
+    [From | seq(From + 1, To)].
