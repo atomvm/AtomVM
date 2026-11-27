@@ -21,6 +21,7 @@
     binary_replace/6,
     binary_prefix/2,
     binary_access/4,
+    binary_slice/5,
     execution_paths/3,
     print_result/1,
     map_entries/1,
@@ -608,6 +609,65 @@ binary_access(Operation, Storage, Input0, Arg0) ->
         end,
     true = erlang:garbage_collect(),
     {Outcome, Input, Arg, Captured}.
+
+%% Independent binary slicing/splitting observations without calling part or split_binary to build inputs.
+binary_slice(Operation, Storage, Offset, Input0, Arg0) ->
+    {Copied, Arg} = binary_to_term(term_to_binary({Input0, Arg0})),
+    Input =
+        case {Storage, Copied} of
+            {bit_slice, B} when is_bitstring(B) ->
+                Size = bit_size(B),
+                Padding = (8 - (Offset + Size) rem 8) rem 8,
+                Parent = <<201:640, 5:Offset, B/bitstring, 0:Padding, 77>>,
+                Start = 640 + Offset,
+                <<_:Start, Slice:Size/bitstring, _/bitstring>> = Parent,
+                Slice;
+            _ ->
+                Copied
+        end,
+    Captured = {captured, Input, Offset, Arg, <<5:3>>},
+    true = erlang:garbage_collect(),
+    Outcome =
+        try
+            case Operation of
+                part3 ->
+                    {Pos, Len} = Arg,
+                    binary:part(Input, Pos, Len);
+                bif_part3 ->
+                    {Pos, Len} = Arg,
+                    erlang:binary_part(Input, Pos, Len);
+                bif_part2 ->
+                    erlang:binary_part(Input, Arg);
+                guard_part3 ->
+                    {Pos, Len, Target} = Arg,
+                    binary_part_guard3(Input, Pos, Len, Target);
+                guard_part2 ->
+                    {Range, Target} = Arg,
+                    binary_part_guard2(Input, Range, Target);
+                split_binary ->
+                    erlang:split_binary(Input, Arg)
+            end
+        of
+            Result -> {ok, Result}
+        catch
+            Class:Reason -> {exception, Class, Reason}
+        end,
+    true = erlang:garbage_collect(),
+    {Outcome, Input, Offset, Arg, Captured}.
+
+binary_part_guard3(B, P, L, Target) when binary_part(B, P, L) =:= Target ->
+    matched;
+binary_part_guard3(B, P, L, _Target) when is_binary(binary_part(B, P, L)) ->
+    other_binary;
+binary_part_guard3(_B, _P, _L, _Target) ->
+    guard_failed.
+
+binary_part_guard2(B, Range, Target) when binary_part(B, Range) =:= Target ->
+    matched;
+binary_part_guard2(B, Range, _Target) when is_binary(binary_part(B, Range)) ->
+    other_binary;
+binary_part_guard2(_B, _Range, _Target) ->
+    guard_failed.
 
 %% Compare observations, not equality between paths: guards reject errors and
 %% map patterns fail to match where body/dynamic lookups raise exceptions.

@@ -307,6 +307,16 @@ partial bitstrings. Larger-parent extraction covers bit offsets 0–7, with inpu
 and complete results retained across GC. No runtime discrepancy or new
 expected-failure entry was found; see the batch notes for results and limits.
 
+The [binary-slicing/splitting batch](PLAN.md#binary-slicing-and-splitting) adds
+834 recipes for `binary:part/3`, `erlang:binary_part/2,3` (body and guard paths)
+and `erlang:split_binary/2`, bringing the corpus to 12,707. Independent
+bit-list expectations check positive/negative lengths across heap/sub/refc
+boundaries, trailing-bit preservation in `split_binary/2`, bit offsets 0–7,
+guard outcomes, invalid inputs and GC retention. Probing exposed heap
+under-allocation on negative-length slices of 49–63-byte heap binaries in
+`binary:part/3` and `erlang:binary_part/2,3`, fixed separately with an ordinary
+regression in `test_binary_part.erl`; see the batch notes for results and limits.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen

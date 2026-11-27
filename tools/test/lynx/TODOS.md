@@ -620,6 +620,37 @@ See [PLAN.md](PLAN.md#binary-to-list-conversion) for evidence and limits. Full
 corpus/CLI/JIT matrices, the complete older-host harness, Lean fixture laws and
 embedded targets remain outside this batch; internal NIF GC is not forced.
 
+### Binary slicing and splitting
+
+- [x] Add 834 direct recipes for supported `binary:part/3`,
+  `erlang:binary_part/2,3` (body and guard paths) and `erlang:split_binary/2`,
+  preserving all previous metadata (total 12,707).
+- [x] Check positive and negative lengths across empty, 1/4/16/63/64/65/257-byte
+  inputs, crossing `SUB_BINARY_MIN` and `REFC_BINARY_MIN`, guard match/non-match/
+  reject outcomes and invalid/boxed bounds.
+- [x] Check `split_binary/2` on full binaries and partial bitstrings across
+  every trailing-bit width 1–7, verifying trailing bits remain in the second
+  half while `binary_part` rejects partial bitstrings.
+- [x] Exercise copied inputs and larger-parent extraction at bit offsets 0–7
+  without calling `part` or `split_binary` during setup, retaining operands,
+  offsets, arguments, captures and results across GC.
+- [x] Fix negative-length heap under-allocation in `nif_binary_part_3` and
+  `bif_erlang_binary_part_3` separately, with `test_negative_length_heap_binary/0`
+  in `test_binary_part.erl` and a `CHANGELOG.md` entry; preserve before-fix
+  failure evidence.
+- [x] Match 834/834 in interpreter and AArch64 precompiled modes, plus 108/108 in
+  reordered JIT replay covering all six operations, negative-length 63-byte heap
+  binaries, guards, all eight bit offsets and all seven partial widths.
+- [x] Check complete observations against an independent bit-list model,
+  validate cross-mode equality and reject thirteen wrong-result controls.
+- [x] Match all 834 observer-only host controls on OTP 27/28/29; pass eleven
+  ordinary binary suites on those hosts and all three AtomVM modes, alongside
+  targeted CLI checks for the new batch, `binary_list` and behavioral oracles.
+
+See [PLAN.md](PLAN.md#binary-slicing-and-splitting) for evidence and limits. Full
+corpus/CLI/JIT matrices, the complete older-host harness, Lean fixture laws and
+embedded/32-bit/float32 targets remain outside this batch.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes

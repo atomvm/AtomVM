@@ -1354,6 +1354,97 @@ end
 """
 
 
+# Read individual bits and slice/split bit lists without part or split_binary.
+BINARY_SLICE_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+literal = fn text ->
+  {:ok,tokens,_} = :erl_scan.string(String.to_charlist(text <> "."))
+  {:ok,value} = :erl_parse.parse_term(tokens)
+  value
+end
+bits_to_bs = fn bits ->
+  Enum.reduce(bits,<<>>,fn b,acc -> <<acc::bitstring,b::1>> end)
+end
+slice_bin = fn input,pos,len ->
+  if is_binary(input) and is_integer(pos) and is_integer(len) do
+    bits = for <<b::1 <- input>>, do: b
+    size = div(length(bits),8)
+    {p,l} = if len < 0, do: {pos + len,-len}, else: {pos,len}
+    if p >= 0 and p <= size and p + l <= size do
+      {:ok,bits_to_bs.(Enum.slice(bits,p * 8,l * 8))}
+    else
+      {:exception,:error,:badarg}
+    end
+  else
+    {:exception,:error,:badarg}
+  end
+end
+cases = read.("cases.json")
+expected = Enum.map(cases,fn c ->
+  [operation,_storage,offset_text,input_text,arg_text] = c["binary_slice"]
+  offset = literal.(offset_text)
+  input = literal.(input_text)
+  arg = literal.(arg_text)
+  outcome = case operation do
+    op when op in ["part3","bif_part3"] ->
+      {pos,len} = arg
+      slice_bin.(input,pos,len)
+    "bif_part2" ->
+      if is_tuple(arg) and tuple_size(arg) === 2 do
+        {pos,len} = arg
+        slice_bin.(input,pos,len)
+      else
+        {:exception,:error,:badarg}
+      end
+    "guard_part3" ->
+      {pos,len,target} = arg
+      case slice_bin.(input,pos,len) do
+        {:ok,val} -> if val === target, do: {:ok,:matched}, else: {:ok,:other_binary}
+        {:exception,_,_} -> {:ok,:guard_failed}
+      end
+    "guard_part2" ->
+      {range,target} = arg
+      if is_tuple(range) and tuple_size(range) === 2 do
+        {pos,len} = range
+        case slice_bin.(input,pos,len) do
+          {:ok,val} -> if val === target, do: {:ok,:matched}, else: {:ok,:other_binary}
+          {:exception,_,_} -> {:ok,:guard_failed}
+        end
+      else
+        {:ok,:guard_failed}
+      end
+    "split_binary" ->
+      if is_bitstring(input) and is_integer(arg) do
+        bits = for <<b::1 <- input>>, do: b
+        size = div(length(bits),8)
+        if arg >= 0 and arg <= size do
+          {left,right} = Enum.split(bits,arg * 8)
+          {:ok,{bits_to_bs.(left),bits_to_bs.(right)}}
+        else
+          {:exception,:error,:badarg}
+        end
+      else
+        {:exception,:error,:badarg}
+      end
+  end
+  {:ok,{outcome,input,offset,arg,{:captured,input,offset,arg,<<5::3>>}}}
+end)
+for {vm,rows} <- [otp: read.("manifest.json")["expected"],
+                  atomvm: Enum.map(read.("actuals.json"),fn row ->
+                    "ok" = row["status"]
+                    row["value"]
+                  end)] do
+  true = length(rows) === length(expected)
+  failures = Enum.zip([cases,expected,rows]) |> Enum.filter(fn {_c,want,row} ->
+    :erlang.binary_to_term(Base.decode64!(row)) !== want
+  end)
+  if failures !== [], do: raise(inspect({vm,failures},limit: 10))
+  IO.puts("#{vm}: #{length(rows)} independent binary-slice contracts")
+end
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -2007,6 +2098,26 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["binary_list"] for c in saved],
                                      [c["binary_list"] for c in cases])
                     check = subprocess.run(["elixir", "-e", BINARY_LIST_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_binary_slice_preserves_bytes_partial_tails_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "binary_slice" in case]
+        self.assertEqual(len(selected), 834)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-23])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    self.assertEqual(self.invoke(output, "--replay", source),
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["binary_slice"] for c in saved],
+                                     [c["binary_slice"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", BINARY_SLICE_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
@@ -4524,7 +4635,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 11873)
+        self.assertEqual(len(lean_runtime.cases()), 12707)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

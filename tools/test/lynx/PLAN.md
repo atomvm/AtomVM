@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 11,873 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 12,707 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,64 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Binary slicing and splitting
+
+Add 834 direct recipes for supported `binary:part/3`, `erlang:binary_part/2,3`
+(body and guard paths) and `erlang:split_binary/2`, preserving all 11,873
+preceding recipes and metadata; total 12,707. Fixture counts and Lean
+attribution are unchanged; no APIs or Lean proofs are added.
+
+- Check positive and negative lengths across empty, 1/4/16/63/64/65/257-byte
+  subjects, crossing `SUB_BINARY_MIN` (16) and heap/refc (`REFC_BINARY_MIN`, 64)
+  boundaries. Exercise exact matches, non-matching binary targets, and
+  guard-rejected failures for both `binary_part/2` and `binary_part/3`.
+- Check `split_binary/2` across full binaries and partial bitstrings of every
+  trailing-bit width 1–7 (zero, all-ones, and asymmetric tails standalone and
+  after 4/63/64/65/257 full bytes), verifying that trailing bits remain in the
+  second tuple element.
+- Exercise ETF-copied inputs and larger-parent extraction at bit offsets 0–7
+  without using `binary:part` or `split_binary` to construct operands; retain
+  inputs, offsets, arguments, captures and results across explicit GC before and
+  after each call.
+- Check invalid out-of-bounds, negative, non-integer, boxed (`1 bsl 64` /
+  `1 bsl 60`), malformed range tuple, partial-bitstring `binary_part` and
+  non-bitstring root error paths.
+- `BINARY_SLICE_MODEL` extracts and slices/splits individual bit lists directly,
+  calling neither `part` nor `split_binary`, and validates complete observations
+  on both VMs.
+- **Resolved runtime defect (kept in a separate commit/group):** initial heap
+  probing exposed that `nif_binary_part_3` and `bif_erlang_binary_part_3` (also
+  used by `bif_erlang_binary_part_2`) passed raw signed `len` to
+  `term_sub_binary_heap_size` instead of normalized `slice.len`. When `len < 0`
+  on 49–63-byte heap binaries, `(size_t)len` wrapped above `REFC_BINARY_MIN`,
+  under-allocating process heap space (8 words instead of up to 11), corrupting
+  adjacent terms and crashing (`SIGSEGV`) on both interpreter and AArch64 native
+  builds. Added `test_negative_length_heap_binary/0` to
+  `tests/erlang_tests/test_binary_part.erl` (verified to fail before the C fix
+  and pass afterward across interpreter, AArch64 precompiled, on-demand JIT and
+  OTP 29) alongside the `CHANGELOG.md` entry.
+
+Interpreter and AArch64 precompiled runs each match 834/834 against OTP.
+Reordered on-demand JIT replay matches 108/108, explicitly covering all six
+operations, negative-length 63-byte heap binaries, guards, all eight bit offsets
+and all seven partial widths, with zero failures or unverified cases. Independent
+contracts pass on both VMs, complete native/JIT observations equal interpreter
+results, and thirteen local wrong-result controls are rejected. Fresh
+observer-only controls match all 834 OTP reference observations on OTP
+27.3.4.12/28.3.1/29.1.3. Eleven ordinary binary suites (`test_binary_part`,
+`test_split_binary`, `test_sub_binaries`, `test_binary_eq`, `test_binary_copy`,
+`test_binary_replace`, `test_binary_split`, `test_binary_match`,
+`test_binary_longest_common_prefix`, `test_binary_to_list` and
+`test_bitstring_to_list`) pass on OTP 27/28/29 and all three AtomVM modes.
+Targeted CLI checks cover the new batch/replay, `binary_list` batch/replay and
+behavioral oracles.
+
+Inputs, before-fix failure logs, sources, manifests, results, reproducible
+checks and source hashes are saved under `.amp/in/artifacts/lynx-binary-slice/`.
+Full runtime corpus, full CLI/JIT matrices, complete older-host harness, Lean
+fixture laws and embedded/32-bit/float32 targets were not run. No
+allocation-failure, performance, binary-size or leak measurements are claimed.
 
 ## Binary-to-list conversion
 

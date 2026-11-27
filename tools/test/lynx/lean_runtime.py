@@ -3569,6 +3569,155 @@ def cases():
     for invalid in ["bad", "[]", "[1]", "[1|bad]", "{}", "1", "-1", "1.0"]:
         for offset in [None, 3]:
             binary_list_probe(invalid, offset)
+
+    seen_slice = set()
+
+    def binary_slice_probe(operation, subject, arg, offset=None):
+        storage = "copy" if offset is None else "bit_slice"
+        off_str = str(0 if offset is None else offset)
+        args = [operation, storage, off_str, subject, arg]
+        expr = "differential:binary_slice(" + ",".join(args) + ")"
+        if expr in seen_slice:
+            return
+        seen_slice.add(expr)
+        selected.append({"otp_extension": "binary_slice", "binary_slice": args,
+                         "expression": expr})
+
+    slice_subjects = [
+        (b"", [(0, 0)]),
+        (b"\xff", [(0, 1), (1, -1), (0, 0), (1, 0)]),
+        (b"\x00\xff\x80\x11", [(0, 4), (4, -4), (1, 2), (3, -2), (0, 0), (4, 0)]),
+        (bytes((17 * n + 128) % 256 for n in range(16)),
+         [(0, 16), (16, -16), (0, 15), (15, -15), (1, 15), (16, -15), (8, 0)]),
+        (bytes((17 * n + 128) % 256 for n in range(63)),
+         [(0, 63), (63, -63), (62, -60), (63, -49), (30, -15), (30, -16),
+          (1, 15), (1, 16), (63, 0)]),
+        (bytes((17 * n + 128) % 256 for n in range(64)),
+         [(0, 64), (64, -64), (64, -16), (64, -15), (1, 63), (63, -63), (0, 0)]),
+        (bytes((17 * n + 128) % 256 for n in range(65)),
+         [(0, 65), (65, -65), (65, -16), (65, -15), (1, 63), (64, -63), (32, 0)]),
+        (bytes((17 * n + 128) % 256 for n in range(257)),
+         [(0, 257), (257, -257), (128, -64), (128, 16), (257, -15)]),
+    ]
+    for data, ranges in slice_subjects:
+        subj = binary_literal(data)
+        for index, (pos, length) in enumerate(ranges):
+            arg = f"{{{pos},{length}}}"
+            offsets = [None, 0, 3] if len(data) in (0, 4, 63, 64, 65) and index < 2 else [None, (index % 7) + 1]
+            if len(data) == 63 and (pos, length) in [(63, -63), (63, -49), (30, -16)]:
+                offsets = [None, 0, 3, 7]
+            for offset in dict.fromkeys(offsets):
+                for op in ["part3", "bif_part3", "bif_part2"]:
+                    binary_slice_probe(op, subj, arg, offset)
+    # Exercise all 8 bit offsets on a 4-byte subject across all three part APIs.
+    four = binary_literal(b"\x00\xff\x80\x11")
+    for offset in range(8):
+        for op in ["part3", "bif_part3", "bif_part2"]:
+            binary_slice_probe(op, four, "{3,-2}", offset)
+    # Guard paths: matched, other_binary, and guard_failed across both arities.
+    b63 = bytes((17 * n + 128) % 256 for n in range(63))
+    b65 = bytes((17 * n + 128) % 256 for n in range(65))
+    guard_cases = [
+        (four, 3, -2, binary_literal(b"\x80\x11"), None),
+        (four, 3, -2, binary_literal(b"\x00\xff"), 3),
+        (binary_literal(b""), 0, 0, binary_literal(b"\x01"), None),
+        (binary_literal(b63), 63, -63, binary_literal(b63), None),
+        (binary_literal(b63), 63, -63, binary_literal(b63), 0),
+        (binary_literal(b63), 63, -63, binary_literal(b63), 3),
+        (binary_literal(b63), 63, -49, binary_literal(b63[14:]), 5),
+        (binary_literal(b63), 63, -63, binary_literal(b"\x00"), None),
+        (binary_literal(b65), 65, -65, binary_literal(b65), 3),
+        (binary_literal(b63), 63, -64, binary_literal(b63), None),
+        (binary_literal(b63), 64, -63, binary_literal(b63), None),
+        (four, 0, 5, four, None),
+        (four, -1, 2, four, None),
+        (four, 1 << 64, 0, four, None),
+        ("<<1,2,5:3>>", 0, 1, "<<1>>", None),
+        ("<<5:3>>", 0, 0, "<<>>", 3),
+        ("bad", 0, 0, "<<>>", None),
+        ("[]", 0, 0, "<<>>", None),
+        ("1", 0, 0, "<<>>", None),
+    ]
+    for subj, pos, length, target, offset in guard_cases:
+        binary_slice_probe("guard_part3", subj, f"{{{pos},{length},{target}}}", offset)
+        binary_slice_probe("guard_part2", subj, f"{{{{{pos},{length}}},{target}}}", offset)
+    for bad_range in ["bad", "[]", "{}", "{0}", "{0,0,0}", "[0|0]"]:
+        binary_slice_probe("guard_part2", four, f"{{{bad_range},<<>>}}")
+        binary_slice_probe("bif_part2", four, bad_range)
+    # Invalid part3 / bif_part3 / bif_part2 ranges, non-integers, partial tails, non-bitstrings.
+    invalid_part_ranges = [
+        (four, -1, 0), (four, 0, -1), (four, 0, 5), (four, 5, 0),
+        (four, 5, -1), (four, 5, -5), (four, 1, -2), (four, 4, -5),
+        (four, -1, 2), (four, 1 << 64, 0), (four, 0, 1 << 64),
+        (four, 0, -(1 << 64)), (four, 1 << 60, -(1 << 60)),
+        (binary_literal(b""), 0, 1), (binary_literal(b""), 1, -1),
+        (binary_literal(b63), 64, 0), (binary_literal(b63), 63, -64),
+        (four, "bad", 0), (four, 0, "bad"), (four, "1.0", 0),
+        (four, 0, "1.0"), (four, "[]", 0), (four, 0, "<<>>"),
+    ]
+    for subj, pos, length in invalid_part_ranges:
+        arg = f"{{{pos},{length}}}"
+        for op in ["part3", "bif_part3", "bif_part2"]:
+            binary_slice_probe(op, subj, arg)
+    for width in range(1, 8):
+        tail = ((1 << width) - 1) // 3
+        for subj in [f"<<{tail}:{width}>>", f"<<0,255,128,17,{tail}:{width}>>"]:
+            for op in ["part3", "bif_part3", "bif_part2"]:
+                binary_slice_probe(op, subj, "{0,0}", None if width % 2 else width)
+    for invalid in ["bad", "[]", "[1,2]", "{}", "1", "1.0"]:
+        for op in ["part3", "bif_part3", "bif_part2"]:
+            binary_slice_probe(op, invalid, "{0,0}")
+    # split_binary/2 on full binaries, partial bitstrings, bit offsets, and invalid inputs.
+    split_full = [
+        (b"", [0]),
+        (b"\x00", [0, 1]),
+        (b"\xff", [0, 1]),
+        (b"\x00\xff\x80\x11", [0, 1, 2, 3, 4]),
+        (bytes((17 * n + 128) % 256 for n in range(16)), [0, 1, 15, 16]),
+        (b63, [0, 1, 15, 16, 31, 62, 63]),
+        (bytes((17 * n + 128) % 256 for n in range(64)), [0, 15, 16, 32, 63, 64]),
+        (b65, [0, 15, 16, 32, 64, 65]),
+        (bytes((17 * n + 128) % 256 for n in range(257)), [0, 16, 128, 256, 257]),
+    ]
+    for data, positions in split_full:
+        subj = binary_literal(data)
+        for pos in positions:
+            offsets = [None, 0] + ([3] if len(data) in (4, 63, 64, 65) else [])
+            for offset in offsets:
+                binary_slice_probe("split_binary", subj, str(pos), offset)
+    for offset in range(8):
+        binary_slice_probe("split_binary", four, "2", offset)
+    for width in range(1, 8):
+        mask = (1 << width) - 1
+        for tail in dict.fromkeys([0, mask, mask // 3]):
+            binary_slice_probe("split_binary", f"<<{tail}:{width}>>", "0")
+            binary_slice_probe("split_binary", f"<<{tail}:{width}>>", "0", (width + tail) % 8)
+            subj4 = f"<<0,255,128,17,{tail}:{width}>>"
+            if tail == mask // 3:
+                for pos in [0, 1, 2, 4]:
+                    binary_slice_probe("split_binary", subj4, str(pos))
+                    binary_slice_probe("split_binary", subj4, str(pos), (pos + width) % 8)
+            else:
+                binary_slice_probe("split_binary", subj4, "2")
+                binary_slice_probe("split_binary", subj4, "2", width)
+    for size in [63, 64, 65, 257]:
+        data = bytes((17 * n + 128) % 256 for n in range(size))
+        for width in [1, 3, 7]:
+            fields = [str(b) for b in data] + [f"{((1 << width) - 1) // 3}:{width}"]
+            subj = "<<" + ",".join(fields) + ">>"
+            for pos in [0, 15, 16, size // 2, size]:
+                binary_slice_probe("split_binary", subj, str(pos), None if pos != 16 else width)
+    for subj, bad_pos in [
+        (binary_literal(b""), -1), (binary_literal(b""), 1),
+        (four, -1), (four, 5), (binary_literal(b63), 64),
+        (binary_literal(b65), 66), ("<<5:3>>", -1), ("<<5:3>>", 1),
+        ("<<0,255,128,17,5:3>>", 5), (four, 1 << 64), (four, -(1 << 64)),
+        (four, "bad"), (four, "1.0"), (four, "[]"),
+    ]:
+        binary_slice_probe("split_binary", subj, str(bad_pos))
+    for invalid in ["bad", "[]", "[1]", "[1|bad]", "{}", "1", "1.0"]:
+        for offset in [None, 3]:
+            binary_slice_probe("split_binary", invalid, "0", offset)
     return selected
 
 
