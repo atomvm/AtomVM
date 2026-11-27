@@ -3112,6 +3112,52 @@ def cases():
                          {"tuple": ["return", {"tuple": ["true", "changed"]}]}]:
                 ordering_probe(operation, "ascending", ordering_items(left, "left"),
                                ordering_items(right, "right"), mode)
+    # Key mutation uses numeric equality, unlike the keyfind precision probes.
+    # Distinct payloads expose which equal-key representative survives.
+    def keyed_probe(operation, key, position, items, shape="proper", replacement=None):
+        if replacement is None:
+            replacement = {"tuple": ["replacement", {"map": [["retained", [2**100, 7]]]}]}
+        args = [operation, key, position, shape, items, replacement]
+        selected.append({"otp_extension": "list_keys", "list_keys": args,
+                         "expression": "list_keys:observe(" +
+                                       ",".join(map(erlang, args)) + ")"})
+
+    keyed_operations = ["keydelete", "keyreplace", "keystore", "keytake", "keysort", "ukeysort"]
+    for position in [1, 2]:
+        def keyed_items(keys):
+            return [{"tuple": ([key, {"tuple": ["payload", i]}] if position == 1 else
+                               [{"tuple": ["payload", i]}, key])}
+                    for i, key in enumerate(keys)]
+
+        for operation in keyed_operations:
+            for keys in [[], [3], [1.0, 1, 2], [1, 1.0, 2], [3, -2, 3, 1, -2],
+                         [2**53, 2**53 + 1, float(2**53)],
+                         [2**53 + 1, float(2**53), 2**53],
+                         ["z", {"tuple": [1]}, -3, "a", {"tuple": [0]}]]:
+                keyed_probe(operation, 1, position, keyed_items(keys))
+            for key in [3, "absent", float(2**53), 2**53 + 1]:
+                keyed_probe(operation, key, position,
+                            keyed_items([3, float(2**53), 2**53 + 1, 3]))
+            for shape in ["improper", "non_list"]:
+                for keys in [[], [1], [2, 1], [2, 3]]:
+                    keyed_probe(operation, 1, position, keyed_items(keys), shape)
+            for items in [["not_tuple"], [{"tuple": []}],
+                          ["skip", {"tuple": []}] + keyed_items([1, 2])]:
+                keyed_probe(operation, 1, position, items)
+
+    # With no later exact key, a wrong exact-equality search silently appends
+    # in keystore rather than replacing. Keep take/delete/replace controls.
+    for operation in ["keydelete", "keyreplace", "keystore", "keytake"]:
+        keyed_probe(operation, 1, 1, [{"tuple": [1.0, "only"]}])
+        keyed_probe(operation, 1, 2, [{"tuple": ["only", 1.0]}])
+    for operation in keyed_operations:
+        for position in [0, -1, 1.0, "bad_position"]:
+            for items in [[], [{"tuple": [1, "payload"]}]]:
+                keyed_probe(operation, 1, position, items)
+    for operation in ["keyreplace", "keystore"]:
+        for replacement in ["not_tuple", [], {"tuple": []}]:
+            for items in [[], [{"tuple": [1, "first"]}, {"tuple": [1.0, "later"]}]]:
+                keyed_probe(operation, 1, 1, items, replacement=replacement)
     return selected
 
 

@@ -193,6 +193,23 @@ independent expectations or allowlists were changed to hide failures. See
 [the comparator notes](PLAN.md#comparator-driven-sort-usort-and-merge) for
 before/after results, separate ordinary regressions and limits.
 
+The [keyed-list batch](PLAN.md#keyed-list-equality-mutation-and-sorting) adds
+344 recipes for `keydelete`, `keyreplace`, `keystore`, `keytake`, `keysort` and
+`ukeysort`, bringing the corpus to 8,205. Independent first-match/rank models
+check numeric-equivalent keys, first representatives, stable ordering,
+argument/exception boundaries and GC-retained terms. OTP 27/28/29 each satisfy
+all 344 contracts. Initial interpreter and AArch64 precompiled runs exposed
+84 library differences in numeric equality, unique representatives, position
+validation and sort input exceptions. A separate library correction with
+ordinary Erlang regressions resolves them: fresh runs each match 344/344 and
+50/50 reordered cases. The same 50-case on-demand JIT subset also passes, with
+identical complete observations across modes; the full 344-case JIT matrix
+has not been run. Ordinary lists/queue/sets/maps suites and independent
+10,000-item keyed-list controls pass on OTP 27/28/29 and all three AtomVM modes.
+No recipes, model expectations or allowlists were changed to obtain these
+results. See [TODOS.md](TODOS.md#keyed-list-equality-mutation-and-sorting) and
+the batch notes for regression scope, CLI results and evidence.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen

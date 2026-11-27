@@ -674,6 +674,93 @@ end)
 """
 
 
+LIST_KEYS_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+from_etf = fn s -> :erlang.binary_to_term(Base.decode64!(s)) end
+decode = fn decode, value ->
+  case value do
+    %{"tuple" => xs} -> List.to_tuple(for x <- xs, do: decode.(decode,x))
+    %{"map" => xs} -> Map.new(xs,fn [k,v] -> {decode.(decode,k),decode.(decode,v)} end)
+    %{"bits" => [v,n]} -> <<v::size(n)>>
+    xs when is_list(xs) -> for x <- xs, do: decode.(decode,x)
+    s when is_binary(s) -> String.to_atom(s)
+    n -> n
+  end
+end
+model = fn [operation,key,position,shape,items,replacement] ->
+  tail = if shape === :improper, do: :tail, else: []
+  input = if shape === :non_list, do: {:not_a_list,items}, else: items ++ tail
+  valid_position = is_integer(position) and position > 0
+  sorting = operation in [:keysort,:ukeysort]
+  valid_element = fn x -> is_tuple(x) and tuple_size(x) >= position end
+  exception = fn reason -> {:exception,:error,reason} end
+  outcome = cond do
+    not valid_position -> exception.(:function_clause)
+    operation in [:keyreplace,:keystore] and not is_tuple(replacement) ->
+      exception.(:function_clause)
+    sorting ->
+      cond do
+        shape === :non_list or (shape === :improper and length(items) < 2) ->
+          exception.({:case_clause,input})
+        shape === :proper and length(items) < 2 -> {:ok,items}
+        not Enum.all?(items,valid_element) -> exception.(:badarg)
+        shape === :improper -> exception.(:function_clause)
+        true ->
+          indexed = Enum.with_index(items)
+          ranks = for {x,i} <- indexed do
+            rank = Enum.count(indexed,fn {y,j} ->
+              a = elem(x,position-1)
+              b = elem(y,position-1)
+              b < a or (a == b and j < i)
+            end)
+            {rank,x}
+          end
+          sorted = for rank <- Enum.take(Stream.iterate(0,&(&1+1)),length(items)),
+                       {r,x} <- ranks, r === rank, do: x
+          unique = for {x,i} <- Enum.with_index(sorted),
+                       not Enum.any?(Enum.take(sorted,i),fn y ->
+                         elem(y,position-1) == elem(x,position-1)
+                       end), do: x
+          {:ok,if(operation === :ukeysort, do: unique, else: sorted)}
+      end
+    shape === :non_list -> exception.(:function_clause)
+    true ->
+      match = Enum.find_index(items,fn x -> valid_element.(x) and elem(x,position-1) == key end)
+      cond do
+        match === nil and shape === :improper -> exception.(:function_clause)
+        match === nil and operation === :keystore -> {:ok,items ++ [replacement]}
+        match === nil and operation === :keytake -> {:ok,false}
+        match === nil -> {:ok,input}
+        true ->
+          remaining = for {x,i} <- Enum.with_index(items), i !== match, do: x
+          replaced = for {x,i} <- Enum.with_index(items), do: if(i === match, do: replacement, else: x)
+          result = case operation do
+            :keydelete -> remaining ++ tail
+            :keytake -> {:value,Enum.at(items,match),remaining ++ tail}
+            _ -> replaced ++ tail
+          end
+          {:ok,result}
+      end
+  end
+  {:ok,{outcome,input,{:captured,key,position,input,replacement,<<5::3>>,Integer.pow(2,100)}}}
+end
+cases = read.("cases.json")
+expected = for c <- cases, do: model.(decode.(decode,c["list_keys"]))
+oracle = for s <- read.("manifest.json")["expected"], do: from_etf.(s)
+actual = for row <- read.("actuals.json") do
+  "ok" = row["status"]
+  from_etf.(row["value"])
+end
+Enum.each([{"OTP",oracle},{"AtomVM",actual}],fn {vm,rows} ->
+  true = length(rows) === length(expected)
+  failures = for {{a,e},n} <- Enum.with_index(Enum.zip(rows,expected)), a !== e, do: n
+  IO.puts("#{vm}: #{length(rows)-length(failures)}/#{length(rows)} independent keyed-list contracts")
+  if failures !== [], do: raise("#{vm} contract failures at indices #{inspect(failures,limit: :infinity)}")
+end)
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -1041,6 +1128,27 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["list_ordering"] for c in saved],
                                      [c["list_ordering"] for c in cases])
                     check = subprocess.run(["elixir", "-e", LIST_ORDERING_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+                    self.assertEqual(summary,
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+
+    def test_keyed_lists_have_independent_contracts_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "list_keys" in case]
+        self.assertEqual(len(selected), 344)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-7])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    summary = self.invoke(output, "--replay", source)
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["list_keys"] for c in saved],
+                                     [c["list_keys"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", LIST_KEYS_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
                     self.assertEqual(summary,
@@ -3560,7 +3668,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 7861)
+        self.assertEqual(len(lean_runtime.cases()), 8205)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

@@ -338,6 +338,44 @@ with 30/30 reordered replays and independent checks on both VMs. The full
 [PLAN.md](PLAN.md#comparator-driven-sort-usort-and-merge) for the complete
 validation results, independent contracts and scope.
 
+### Keyed-list equality, mutation and sorting
+
+- [x] Add 344 differential recipes for `keydelete`, `keyreplace`, `keystore`,
+  `keytake`, `keysort` and `ukeysort`, preserving all 7,861 preceding recipes
+  and metadata (total 8,205; fixture counts and Lean attribution unchanged).
+- [x] Cover first numeric-equivalent matches, lone equivalent float keys,
+  duplicate representatives, 2^53 boundaries, positions one/two, malformed
+  elements, invalid arguments and reached/unreached improper tails.
+- [x] Retain inputs/replacements/captures across GC and check both VMs against
+  independent first-match/rank contracts, including reordered replay.
+- [x] Validate all contracts on OTP 27/28/29; reject seven identically wrong
+  report pairs, with a passing positive control.
+- [x] Fix numeric equality separately in `keydelete`, `keyreplace` and
+  `keystore`, with ordinary Erlang regressions for lone equivalent floats,
+  earlier float/later integer matches, nested keys and untouched improper tails.
+- [x] Fix `ukeysort` duplicate removal separately, retaining the first
+  integer/float-equivalent key representative; add ordinary Erlang regressions,
+  including the large-number precision boundary.
+- [x] Match positive-integer index validation in the five failing APIs, with
+  ordinary Erlang regressions. `keytake` retains its existing correct guard.
+- [x] Match sort entry exception reasons for non-list and one-cell improper
+  inputs separately, with ordinary Erlang regressions and lazy singleton controls.
+
+Initial interpreter and AArch64 precompiled runs each matched 260/344 and
+exposed 84 differences: 12 each in keydelete/keyreplace/keystore, 20 in keysort
+and 28 in ukeysort. All 56 keytake observations matched. Each mode's 50-case
+reordered replay matched 39 and differed on 11, as did the on-demand JIT subset.
+
+A separate library/ordinary-regression/changelog correction resolves these
+compatibility groups without changing any recipes, independent expectations
+or allowlists. Fresh interpreter and precompiled runs match 344/344 and their
+50-case replays pass, including the matching on-demand JIT subset. Ordinary
+lists/queue/sets/maps suites and 10,000-item keyed-list controls pass on OTP
+27/28/29 and all three AtomVM modes. The full CLI suite passes (49 passed,
+three optional skips). See
+[PLAN.md](PLAN.md#keyed-list-equality-mutation-and-sorting) for final JIT subset,
+CLI results and validation scope; the full on-demand JIT matrix remains unrun.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes

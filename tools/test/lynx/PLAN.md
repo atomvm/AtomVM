@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 7,861 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 8,205 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,137 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Keyed-list equality, mutation and sorting
+
+Add 344 supported-API recipes (2026-11-27): 56 each for `keydelete/3` and
+`keytake/3`, 62 each for `keyreplace/4` and `keystore/4`, and 54 each for
+`keysort/2` and `ukeysort/2`. All 7,861 preceding recipes and their metadata are
+preserved exactly; total 8,205. Fixture coverage remains 2,351 calls across 203
+exports, and attribution remains 377/478 Lean sites across 28 files. No APIs,
+Lean proofs or library/runtime fixes are added in this batch.
+
+- Check first numeric-equivalent matches, replace-or-append behavior, returned
+  removed elements, stable key sorting and first unique representatives, with
+  distinct payloads at key positions one and two. Exercise integer/float ties,
+  the 2^53 precision boundary, absent keys, duplicates and mixed term keys.
+- Distinguish an earlier float match from a later exact integer, and a lone
+  equivalent float from no match at all. The latter catches an incorrect append
+  by keystore, not just replacement of the wrong duplicate.
+- Cover non-tuples/short tuples, invalid positions and replacement terms,
+  empty/singleton controls, non-list inputs and both reached and unreached
+  improper tails. Mutations skip malformed elements; sorts return singleton
+  inputs untouched but require valid key elements when comparing a pair.
+- Retain original inputs, keys, replacement values and boxed captures across
+  explicit GC before and after calls. Compare exception class/reason, not
+  stacktraces or implementation-dependent comparison sequences.
+- Independently derive mutation results from the first matching input index,
+  and sorting results from pairwise stable ranks and first equivalence-class
+  representatives. Do not use the keyed-list APIs under test as the model.
+  Check saved OTP references and AtomVM observations separately, including
+  metadata-preserving reordered replay; known differences must remain failures.
+
+### Initial validation and identified compatibility groups
+
+OTP 27.3.4.12, 28.3.1 and 29.1.3 each satisfy **344/344** independent contracts.
+A positive control passes. Seven identically corrupted oracle/actual report
+pairs are rejected: exact rather than numeric matching, lost improper suffix,
+unstable key ordering, last unique representative, eager singleton key
+validation, accepted invalid position and lost captured terms.
+
+Initial interpreter and AArch64 precompiled runs each matched **260/344**, with
+**84 differences**, zero unverified references and no timeouts. Their 50-case
+reordered replays each match **39/50**, with 11 differences. Per API, keydelete,
+keyreplace and keystore each differ on 12 recipes, keysort on 20 and ukeysort
+on 28; **all 56 keytake cases match**. These are finite case counts, not 84
+independent bugs. These exposed four compatibility groups, subsequently fixed
+with separate library changes and ordinary Erlang regressions below:
+
+- First-match numeric equality in keydelete/keyreplace/keystore: 12 mismatches,
+  including untouched lone equivalent keys and keystore's incorrect append.
+- First numeric-equivalent ukeysort representative: eight mismatches, including
+  the large-integer/float boundary. Stable keysort positive controls pass.
+- Positive-integer index guards in those five APIs: 40 mismatches. OTP rejects
+  zero/negative/float/atom positions even on an empty or singleton list.
+  Keytake already validates the position correctly.
+- Keysort/ukeysort entry exception reasons: 24 mismatches. OTP returns
+  `error:{case_clause, Input}` for non-list and one-cell improper inputs, but
+  AtomVM reports function_clause. Longer valid-key improper-tail controls and
+  malformed-element skips/short-circuit behavior match.
+
+The on-demand AArch64 JIT runs the same 50-case reordered subset, matching
+**39/50** with the same 11 differences and no timeouts/unverified references.
+All complete decoded observations agree across interpreter/precompiled full
+runs and all three reordered subsets. Both VMs are checked independently in
+all five runs. This validates only 50 of the 344 cases under on-demand JIT,
+not the full batch or every native execution path.
+
+The full 52-method CLI run on the 336-case development matrix passes all 48
+previously enabled methods and skips the three optional checks. Only the new
+keyed-list method fails, in both full/replay subtests. Re-running the changed
+checks on the final 344-case matrix preserves the two genuine contract
+failures (344 full, 50 replay); the updated baseline-count/independent-oracle
+check passes. Python 3.9 grammar, Erlang formatting and whitespace checks pass.
+
+The initial integration assertion remained red on the genuine differences;
+no expected-failure entries, skip markers or accepted wrong counts were added.
+Library/runtime files, ordinary Erlang tests and changelog were unchanged in
+the coverage batch. Initial evidence, toolchain/build hashes, inputs, raw
+observations, cross-version/model controls and readable differences are under
+`.amp/in/artifacts/lynx-list-keys/final/`. The earlier 336-case development runs
+are retained one directory above; the final batch adds eight lone-float-key
+controls. This batch does not rerun the entire 8,205-recipe runtime corpus.
+
+### Separate library correction and ordinary Erlang regressions
+
+`lists:keydelete/3` and the shared keyreplace/keystore worker now compare keys
+using numeric equality, preserving the first match and untouched improper
+suffixes while skipping malformed elements through guard failure. Public
+keydelete/keyreplace/keystore/keysort/ukeysort validate positive integer
+positions before traversing inputs. Keytake retains its correct implementation.
+Keysort explicitly distinguishes empty/singleton/pair inputs, preserving lazy
+singleton handling and OTP's case_clause entry errors. Ukeysort removes
+numeric-equivalent duplicates while retaining the first sorted representative.
+No general sort algorithm or global numeric-comparison behavior is changed.
+
+The correction is confined to `libs/estdlib/src/lists.erl`, its changelog entry
+and ordinary `tests/libs/estdlib/test_lists.erl` regressions, independent of
+Lynx helpers. Existing public test exports stay unchanged. Extended per-API
+cases cover earlier equivalent keys, lone floats, nested tuple keys, second
+positions, exact large-number distinctions and improper-tail boundaries.
+Shared validation groups cover invalid positions/replacements, lazy singleton
+controls and malformed sort entry errors. Each affected regression group fails
+against the saved old library and passes with the fix; existing keysort and
+keytake controls pass before and after. Only the disposable isolation build
+uses `+export_all`, not the maintained tests.
+
+All ordinary lists/queue/sets/maps suites pass on OTP 27.3.4.12, 28.3.1, 29.1.3
+and interpreter, precompiled and on-demand JIT AtomVM. The precompiled run
+uses native ordinary modules and matching eavmlib first; JIT logs confirm
+compilation of the raw ordinary modules. A pack containing the fixed local
+lists source and ordinary tests compiled by OTP 27 also passes on AtomVM.
+Independent 10,000-item keyed sort/unique/mutation controls pass on all six
+runtimes, checking boxed inputs/results across GC and deriving expected stable
+ranks and first matches from original indices rather than the APIs under test.
+
+Fresh interpreter and AArch64 precompiled runs each match **344/344** and
+**50/50** reordered cases. The same on-demand AArch64 JIT subset passes
+**50/50**, with zero failures/timeouts/unverified references. Both VMs satisfy
+the unchanged independent contracts in all five runs, and complete decoded
+observations agree across modes/replay reindexing. SHA-256 checks confirm
+recipes, model expectations, helper and runner are byte-for-byte unchanged
+from the failing coverage batch. Full JIT batch, complete runtime corpus and
+embedded/32-bit/float32 targets were not run for this correction.
+
+The full 52-method CLI suite now passes: **49 enabled methods passed, three
+optional configurations skipped**, including both full/replay keyed-list
+subtests. Erlang formatting, Python 3.9 grammar and whitespace checks pass.
+No expectations, cases or allowlists were changed to make the suite green.
+
+Fix evidence is under `.amp/in/artifacts/keyed-list-fix/`, including before/
+after isolation logs, ordinary/cross-OTP/large-control logs, source hashes,
+reproducer sources and a patch of only library/ordinary-regression/changelog
+changes. Generated scratch packs/beams are disposable, not maintained tests.
 
 ## Comparator-driven sort, usort and merge
 
