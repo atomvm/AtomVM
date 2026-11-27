@@ -376,6 +376,26 @@ three optional skips). See
 [PLAN.md](PLAN.md#keyed-list-equality-mutation-and-sorting) for final JIT subset,
 CLI results and validation scope; the full on-demand JIT matrix remains unrun.
 
+### Positional-list traversal and validation
+
+- [x] Add 284 differential recipes for `nth/2`, `nthtail/2`, `sublist/2,3` and
+  `split/2`; preserve all 8,205 preceding recipes and metadata (total 8,489).
+- [x] Cover invalid indices, truncation, empty/non-list inputs, reached and
+  unreached improper tails, boxed payloads and 33-item boundary controls.
+- [x] Keep three library corrections, ordinary Erlang regressions and changelog
+  separate from differential coverage and notes. All three regression groups
+  fail before and pass afterward; no allowlist changes are needed.
+- [x] Match 284/284 in interpreter and AArch64 precompiled modes. Pass targeted
+  CLI checks for full selection, reordered replay and 15 handwritten boundary
+  expectations, and ordinary lists/queue/sets/maps suites on all three AtomVM
+  modes plus OTP 27/28/29.
+- [x] Match the 22-case reordered on-demand JIT subset, with complete decoded
+  observations identical to the interpreter and precompiled results.
+
+See [PLAN.md](PLAN.md#positional-list-traversal-and-validation) for evidence and
+scope. The full runtime corpus, full CLI suite and full JIT matrix remain unrun
+for this batch.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes

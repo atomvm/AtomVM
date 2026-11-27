@@ -1155,6 +1155,57 @@ class ValidationTests(unittest.TestCase):
                                      {"laws": 0, "passed": len(cases), "failed": 0,
                                       "unverified": 0, "uncovered": 0})
 
+    def test_positional_lists_preserve_boundaries_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "list_positions" in case]
+        self.assertEqual(len(selected), 284)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-13])]:
+                source.write_text(json.dumps(cases))
+                output = work / name
+                self.assertEqual(self.invoke(output, "--replay", source),
+                                 {"laws": 0, "passed": len(cases), "failed": 0,
+                                  "unverified": 0, "uncovered": 0})
+                saved = json.loads((output / "cases.json").read_text())
+                self.assertEqual([c["list_positions"] for c in saved],
+                                 [c["list_positions"] for c in cases])
+            # Handwritten boundaries distinguish validation from traversal:
+            # nthtail may return an improper suffix, split may preserve one,
+            # and sublist truncates but must validate its initial list shape.
+            check = subprocess.run(["elixir", "-e", """
+            [path] = System.argv()
+            read = fn name ->
+              dir = Path.join(path,name)
+              cases = JSON.decode!(File.read!(Path.join(dir,"cases.json")))
+              values = JSON.decode!(File.read!(Path.join(dir,"manifest.json")))["expected"]
+                       |> Enum.map(&:erlang.binary_to_term(Base.decode64!(&1)))
+              Map.new(Enum.zip(cases,values), fn {c,v} -> {c["list_positions"],v} end)
+            end
+            all = read.("all")
+            fc = {:exception,:error,:function_clause}
+            controls = [
+              {["nth",["1","[a,b|tail]"]], {:ok,:a}},
+              {["nth",["2","[a,b|tail]"]], {:ok,:b}},
+              {["nth",["3","[a,b|tail]"]], fc},
+              {["nth",["bad","[a,b,c]"]], fc},
+              {["nthtail",["2","[a,b|tail]"]], {:ok,:tail}},
+              {["nthtail",["3","[a,b|tail]"]], fc},
+              {["nthtail",["0","tail"]], fc},
+              {["sublist",["tail","0"]], fc},
+              {["sublist",["[a,b|tail]","2"]], {:ok,[:a,:b]}},
+              {["sublist",["[a,b|tail]","3"]], fc},
+              {["sublist",["[a,b,c]","4"]], {:ok,[:a,:b,:c]}},
+              {["sublist",["[]","4","-1"]], {:ok,[]}},
+              {["split",["2","[a,b|tail]"]], {:ok,{[:a,:b],:tail}}},
+              {["split",["4","[a,b,c]"]], {:exception,:error,:badarg}},
+              {["split",["1.0","[a,b,c]"]], {:exception,:error,:badarg}}
+            ]
+            true = Enum.all?(controls, fn {key,value} -> Map.fetch!(all,key) === value end)
+            true = Enum.all?(read.("replay"), fn {key,value} -> Map.fetch!(all,key) === value end)
+            """, str(work)], capture_output=True, text=True, timeout=30)
+            self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
     def test_queue_sequences_match_list_model_and_reordered_replay(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
@@ -3668,7 +3719,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 8205)
+        self.assertEqual(len(lean_runtime.cases()), 8489)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 8,205 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 8,489 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,40 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Positional-list traversal and validation
+
+Add 284 supported-API recipes for `nth/2`, `nthtail/2`, `sublist/2,3` and
+`split/2`. Preserve all 8,205 prior recipes and metadata exactly; total 8,489.
+Fixture counts and Lean attribution are unchanged. These are OTP differential
+extensions, not new Lean proofs or APIs. No observer helper or runner change
+is needed: direct `differential:call/3` calls preserve results and exception
+class/reason without comparing stack traces.
+
+- Distinguish zero/one-based positions, end/overrun behavior, truncation,
+  invalid numeric/non-numeric indices and large integers.
+- Use empty, proper, improper and non-list inputs. Stop before, at and beyond
+  improper tails, including zero-length slices with invalid initial inputs.
+- Retain boxed maps, bitstrings and large integers in results, and exercise
+  33-item boundaries. A CLI integration test checks the full matrix, reordered
+  replay metadata and 15 handwritten boundary expectations independent of OTP.
+
+The original interpreter run matched 278/284, exposing six differences in
+three library behaviors: `nth/2` atom-index errors, `nthtail/2` returning a
+reached improper suffix, and `sublist/2` validating non-list input for a
+zero-length request. Keep the correction in `lists.erl`, its ordinary Erlang
+regressions and changelog independently selectable from this coverage/notes.
+Each ordinary regression group fails against the saved before-library and
+passes against the rebuilt library. No allowlist or oracle changes are used.
+
+Final interpreter and AArch64 precompiled runs each match 284/284. The reordered
+on-demand JIT subset matches 22/22; complete decoded observations agree across
+all selected modes. Both targeted CLI tests pass, including the 22-case reordered
+interpreter replay and handwritten boundaries. Ordinary
+lists/queue/sets/maps suites pass on all three AtomVM modes and installed OTP
+27.3.4.12, 28.3.1 and 29.1.3. Evidence and saved inputs are under
+`.amp/in/artifacts/lynx-list-positions/`. The full runtime corpus, full CLI suite,
+full JIT matrix and embedded targets are not rerun for this batch.
 
 ## Keyed-list equality, mutation and sorting
 

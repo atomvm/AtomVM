@@ -3158,6 +3158,36 @@ def cases():
         for replacement in ["not_tuple", [], {"tuple": []}]:
             for items in [[], [{"tuple": [1, "first"]}, {"tuple": [1.0, "later"]}]]:
                 keyed_probe(operation, 1, 1, items, replacement=replacement)
+    # Positional APIs disagree deliberately on origins, truncation and invalid
+    # inputs. Stop before, at and after an improper tail instead of prevalidating
+    # the complete list; direct calls leave OTP's exception reason observable.
+    positional_inputs = ["[]", "[a]", "[a,b,c]", "[a,b|tail]", "tail", "#{a=>1}"]
+    positions = ["-1", "0", "1", "2", "3", "4", "1.0", "bad", "1 bsl 100"]
+
+    def positional_probe(function, *args):
+        selected.append({"otp_extension": "list_positions",
+                         "list_positions": [function, list(args)],
+                         "expression": f"differential:call(lists,'{function}',[{','.join(args)}])"})
+
+    for items in positional_inputs:
+        for position in positions:
+            for function in ["nth", "nthtail", "split"]:
+                positional_probe(function, position, items)
+            positional_probe("sublist", items, position)
+        for start, length in [("1", "0"), ("1", "2"), ("2", "0"), ("2", "2"),
+                              ("3", "1"), ("4", "2"), ("0", "1"), ("1.0", "1"),
+                              ("2", "bad"), ("4", "-1")]:
+            positional_probe("sublist", items, start, length)
+    # Boxed values must be preserved, not coerced or flattened. A longer list
+    # crosses the small-list samples' boundaries without adding a huge matrix.
+    boxed = "[#{1=>integer,1.0=>float},<<5:3>>,1 bsl 100,{nested,[x]}]"
+    for function, args in [("nth", ["2", boxed]), ("nthtail", ["2", boxed]),
+                           ("sublist", [boxed, "2", "2"]), ("split", ["2", boxed]),
+                           ("nth", ["33", "lists:seq(1,33)"]),
+                           ("nthtail", ["33", "lists:seq(1,33)"]),
+                           ("sublist", ["lists:seq(1,33)", "32", "4"]),
+                           ("split", ["33", "lists:seq(1,33)"])]:
+        positional_probe(function, *args)
     return selected
 
 

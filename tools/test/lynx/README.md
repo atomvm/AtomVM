@@ -210,6 +210,18 @@ No recipes, model expectations or allowlists were changed to obtain these
 results. See [TODOS.md](TODOS.md#keyed-list-equality-mutation-and-sorting) and
 the batch notes for regression scope, CLI results and evidence.
 
+The [positional-list batch](PLAN.md#positional-list-traversal-and-validation)
+adds 284 direct-call recipes for `nth/2`, `nthtail/2`, `sublist/2,3` and
+`split/2`, bringing the corpus to 8,489 without changing fixture counts or Lean
+attribution. They cover index validation, truncation, empty/non-list inputs and
+reached/unreached improper tails. Six initial mismatches resolve through three
+separate library corrections with ordinary Erlang regressions; no allowlist
+changes are needed. Interpreter and AArch64 precompiled runs each match all
+284 cases; the reordered on-demand JIT subset matches 22/22. Targeted CLI checks
+include replay and handwritten boundary expectations. Ordinary lists/queue/sets/
+maps suites pass on all three AtomVM modes and OTP 27/28/29. See the batch notes
+for validation scope and evidence.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen
