@@ -392,11 +392,17 @@ keytake(_K, _N, [], _L) ->
     Acc0 :: term(),
     List :: list()
 ) -> Acc1 :: term().
-foldl(_Fun, Acc0, []) ->
+foldl(Fun, Acc0, List) when is_function(Fun, 2) ->
+    case List of
+        [] -> Acc0;
+        [H | T] -> foldl0(Fun, Fun(H, Acc0), T)
+    end.
+
+foldl0(_Fun, Acc0, []) ->
     Acc0;
-foldl(Fun, Acc0, [H | T]) ->
+foldl0(Fun, Acc0, [H | T]) ->
     Acc1 = Fun(H, Acc0),
-    foldl(Fun, Acc1, T).
+    foldl0(Fun, Acc1, T).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun the function to apply
@@ -407,7 +413,7 @@ foldl(Fun, Acc0, [H | T]) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec mapfoldl(fun((A, Acc) -> {B, Acc}), Acc, [A]) -> {[B], Acc}.
-mapfoldl(Fun, Acc0, List1) ->
+mapfoldl(Fun, Acc0, List1) when is_function(Fun, 2) ->
     mapfoldl0(Fun, {[], Acc0}, List1).
 
 mapfoldl0(_Fun, {List1, Acc0}, []) ->
@@ -425,10 +431,13 @@ mapfoldl0(Fun, {List1, Acc0}, [H | T]) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec mapfoldr(fun((A, Acc) -> {B, Acc}), Acc, [A]) -> {[B], Acc}.
-mapfoldr(_Fun, Acc0, []) ->
+mapfoldr(Fun, Acc0, List) when is_function(Fun, 2) ->
+    mapfoldr0(Fun, Acc0, List).
+
+mapfoldr0(_Fun, Acc0, []) ->
     {[], Acc0};
-mapfoldr(Fun, Acc0, [H | T]) ->
-    {Bs, Acc1} = mapfoldr(Fun, Acc0, T),
+mapfoldr0(Fun, Acc0, [H | T]) ->
+    {Bs, Acc1} = mapfoldr0(Fun, Acc0, T),
     {B, Acc2} = Fun(H, Acc1),
     {[B | Bs], Acc2}.
 
@@ -443,8 +452,13 @@ mapfoldr(Fun, Acc0, [H | T]) ->
     Acc0 :: term(),
     List :: list()
 ) -> Acc1 :: term().
-foldr(Fun, Acc0, List) ->
-    foldl(Fun, Acc0, ?MODULE:reverse(List)).
+foldr(Fun, Acc0, List) when is_function(Fun, 2) ->
+    foldr0(Fun, Acc0, List).
+
+foldr0(_Fun, Acc0, []) ->
+    Acc0;
+foldr0(Fun, Acc0, [H | T]) ->
+    Fun(H, foldr0(Fun, Acc0, T)).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun the predicate to evaluate

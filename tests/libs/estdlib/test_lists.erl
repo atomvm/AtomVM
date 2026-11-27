@@ -38,6 +38,8 @@ test() ->
     ok = test_keytake(),
     ok = test_foldl(),
     ok = test_foldr(),
+    ok = test_fold_validation(),
+    ok = test_fold_exception_boundaries(),
     ok = test_all(),
     ok = test_any(),
     ok = test_predicate_results(),
@@ -209,6 +211,97 @@ test_foldl() ->
 test_foldr() ->
     ?ASSERT_MATCH(lists:foldr(fun(I, Accum) -> Accum + I end, 0, [1, 2, 3, 4, 5]), 15),
     ?ASSERT_MATCH(lists:foldr(fun(I, Accum) -> Accum + I end, 0, []), 0),
+    ok.
+
+test_fold_validation() ->
+    lists:foreach(
+        fun(Operation) ->
+            lists:foreach(
+                fun(Callback) ->
+                    lists:foreach(
+                        fun(Input) ->
+                            ?ASSERT_ERROR(
+                                apply(lists, Operation, [Callback, seed, Input]), function_clause
+                            )
+                        end,
+                        [[], [1.0], [3, 7 | tail], not_a_list]
+                    )
+                end,
+                [not_fun, fun(_) -> error(unexpected_callback) end]
+            )
+        end,
+        [foldl, foldr, mapfoldl, mapfoldr]
+    ),
+    ok.
+
+test_fold_exception_boundaries() ->
+    Seed = {seed, <<5:3>>},
+    LeftTrace = [{3, Seed}, {7, {3, Seed}}],
+    RightTrace = [{2, Seed}, {7, {2, Seed}}],
+    lists:foreach(
+        fun(Operation) ->
+            {Prefix, ImproperTrace} =
+                case Operation of
+                    foldl -> {LeftTrace, LeftTrace};
+                    mapfoldl -> {LeftTrace, LeftTrace};
+                    _ -> {RightTrace, []}
+                end,
+            EntryReason =
+                case Operation of
+                    foldl -> {case_clause, not_a_list};
+                    _ -> function_clause
+                end,
+            lists:foreach(
+                fun({Input, Mode, Expected, Trace}) ->
+                    put(fold_calls, []),
+                    Callback = fun(Item, Acc) ->
+                        Calls = [{Item, Acc} | get(fold_calls)],
+                        put(fold_calls, Calls),
+                        true = erlang:garbage_collect(),
+                        case {Mode, length(Calls)} of
+                            {{fail, error, Reason}, 2} ->
+                                error(Reason);
+                            {{fail, throw, Reason}, 2} ->
+                                throw(Reason);
+                            {{fail, exit, Reason}, 2} ->
+                                exit(Reason);
+                            _ ->
+                                Next = {Item, Acc},
+                                case Operation of
+                                    foldl -> Next;
+                                    foldr -> Next;
+                                    _ -> {Item, Next}
+                                end
+                        end
+                    end,
+                    Outcome =
+                        try apply(lists, Operation, [Callback, Seed, Input]) of
+                            _ -> unexpected_success
+                        catch
+                            Class:Reason -> {Class, Reason}
+                        end,
+                    ?ASSERT_MATCH(Outcome, Expected),
+                    Calls = lists:reverse(erase(fold_calls)),
+                    ?ASSERT_MATCH(Calls, Trace)
+                end,
+                [
+                    {not_a_list, normal, {error, EntryReason}, []},
+                    {[3, 7 | tail], normal, {error, function_clause}, ImproperTrace}
+                ] ++
+                    [
+                        {[3, 7, 2], {fail, Class, Reason}, {Class, Reason}, Prefix}
+                     || {Class, Reason} <- [
+                            {error, badarg},
+                            {error, function_clause},
+                            {error, {case_clause, from_callback}},
+                            {throw, callback_failed},
+                            {exit, callback_failed}
+                        ]
+                    ]
+            )
+        end,
+        [foldl, foldr, mapfoldl, mapfoldr]
+    ),
     ok.
 
 test_all() ->
