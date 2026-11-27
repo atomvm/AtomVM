@@ -3860,11 +3860,20 @@ static term nif_binary_copy(Context *ctx, int argc, term argv[])
 
     if (argc == 2) {
         term count_term = argv[1];
-        VALIDATE_VALUE(count_term, term_is_integer);
-        count = term_to_int(count_term);
+        VALIDATE_VALUE(count_term, term_is_uint64);
+        uint64_t count_value = term_to_uint64(count_term);
+        if (UNLIKELY(count_value > SIZE_MAX)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        count = count_value;
     }
 
     size_t size = term_binary_size(bin_term);
+    if (size == 0) {
+        count = 0;
+    } else if (UNLIKELY(count != 0 && count >= SIZE_MAX / 8 / size)) {
+        RAISE_ERROR(SYSTEM_LIMIT_ATOM);
+    }
     size_t dest_size = size * count;
 
     size_t alloc_heap_size = term_binary_heap_size(dest_size);

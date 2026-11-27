@@ -89,6 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed `binary:copy/2` count validation, zero-length copies looping for large counts,
+  and missing `system_limit` errors for oversized results
 - Fixed `binary:replace/3,4` rejecting empty subjects with nonempty patterns and
   `binary:replace/4` accepting improper option lists
 - Fixed `proplists:get_value/2,3` to return the default for a matching tuple with
