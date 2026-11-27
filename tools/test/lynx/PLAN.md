@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 9,847 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 10,099 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,57 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Longest common binary prefix
+
+Add 252 recipes for supported `binary:longest_common_prefix/1`, preserving all
+9,847 preceding recipes and metadata exactly; total 10,099. The batch adds
+204 valid-input observations and 48 invalid-input observations. Fixture counts
+and Lean attribution are unchanged; no APIs or Lean proofs are added.
+
+- Check singleton/identical inputs, shorter binaries in either order, and
+  three-input controls where a later input shortens the first pair's prefix.
+  Reordered input controls must preserve the prefix length.
+- Check full lengths 0/1/63/64/65/257, and mismatches at the first/middle/final
+  byte, including 62/63/64/256-byte prefixes. Use asymmetric byte contents,
+  embedded zero/high bytes, runtime-created larger-parent slices and byte-sized
+  segments extracted at a three-bit offset.
+- Preserve malformed entries and improper tails while preparing construction
+  paths. Check invalid first entries, entries after an empty binary, entries
+  after two binaries already disagree, and after a still-nonempty prefix. Check
+  invalid roots, empty input lists and partial bitstrings separately from valid
+  empty binaries.
+- Copy inputs through ETF and retain complete operands/captures across explicit
+  GC before and after the API call. Construction paths do not assert internal
+  binary representations or force GC inside the allocation-free NIF.
+- `BINARY_PREFIX_MODEL` validates every entry and the proper-list tail before
+  counting equal byte columns across all inputs. It does not reproduce the
+  NIF's pairwise scan against the first binary or call the API under test.
+  Require complete decoded observations from both VMs to satisfy this contract.
+- A targeted CLI test runs the full batch and 36 reversed/strided recipes,
+  preserving saved metadata and checking both VMs against independent results.
+
+The full batch matches 252/252 in interpreter and AArch64 precompiled execution;
+reversed/strided on-demand JIT replay matches 36/36 with a 240-second
+cold-compilation budget. Both VMs satisfy independent contracts, and complete
+native/JIT observations equal their interpreter counterparts. Both targeted CLI
+tests pass. Ten local wrong-result controls reject singleton-zero/off-by-one
+results, ignored later operands, confusion between empty binaries and empty
+input lists, invalid data hidden behind zero prefixes, partial-bitstring
+acceptance and wrong exception reasons. No semantic discrepancy was observed:
+runtime/library code, ordinary Erlang regressions, changelog, runner configuration
+and allowlists remain unchanged.
+
+Fresh observer-only host controls match all 252 complete observations on OTP
+27.3.4.12, 28.3.1 and 29.1.3. These compile the unchanged observer and `call/3`
+extracted from the helper, avoiding its unrelated OTP-29-only guards; they do
+not establish full older-OTP harness compatibility.
+
+Saved inputs, manifests, results and reproducible checks are under
+`.amp/in/artifacts/lynx-binary-prefix/`. Full runtime corpus, full CLI/JIT
+matrices, full older-OTP harness, fixture Lean laws, ordinary Erlang suites and
+embedded/32-bit/float32 targets are outside this batch. No performance,
+binary-size, leak or allocation-failure measurements are claimed.
 
 ## Binary replacement
 

@@ -3429,6 +3429,37 @@ def cases():
     for subject in ["<<>>", "<<1>>", "<<1,2,1>>"]:
         for arity, options in [(3, "[]"), (4, "[]"), (4, "[global]")]:
             binary_replace_probe(subject, "<<>>", "<<2>>", arity, options)
+
+    def binary_prefix_probe(items, storage):
+        args = [storage, items]
+        selected.append({"otp_extension": "binary_prefix", "binary_prefix": args,
+                         "expression": "differential:binary_prefix(" + ",".join(args) + ")"})
+
+    for size in [0, 1, 63, 64, 65, 257]:
+        base = bytes((17 * n) % 256 for n in range(size))
+        groups = [[base], [base, base], [base + b"\xff", base], [base, base + b"\xff"],
+                  [base + b"\x11", base + b"\x22", base[:size // 2]],
+                  [base + b"\x11", base[:size // 2], base + b"\x22"],
+                  [base, b"\x81" + base, b""]]
+        if size:
+            for position in sorted({0, size // 2, size - 1}):
+                changed = base[:position] + bytes([base[position] ^ 128]) + base[position + 1:]
+                groups.extend([[base, changed], [changed, base]])
+        for group in groups:
+            items = "[" + ",".join(map(binary_literal, group)) + "]"
+            for storage in ["copy", "slice", "unaligned"]:
+                binary_prefix_probe(items, storage)
+    invalid_inputs = ["[]", "bad", "42", "<<>>", "<<1>>", "[a|tail]"]
+    for invalid in ["bad", "42", "[]", "[1]", "<<5:3>>", "{}"]:
+        invalid_inputs.extend([
+            f"[{invalid}]", f"[<<>>,{invalid}]", f"[<<0>>,<<1>>,{invalid}]",
+            f"[<<0,1>>,<<0,2>>,{invalid}]", f"[<<0>>,{invalid},<<1>>]",
+        ])
+    for tail in ["tail", "42", "<<>>", "<<5:3>>"]:
+        for prefix in ["<<0>>", "<<>>", "<<0>>,<<1>>"]:
+            invalid_inputs.append(f"[{prefix}|{tail}]")
+    for index, items in enumerate(invalid_inputs):
+        binary_prefix_probe(items, ["copy", "slice", "unaligned"][index % 3])
     return selected
 
 

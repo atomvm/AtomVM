@@ -19,6 +19,7 @@
     proplist_lookup/4,
     proplist_transform/3,
     binary_replace/6,
+    binary_prefix/2,
     execution_paths/3,
     print_result/1,
     map_entries/1,
@@ -525,6 +526,42 @@ binary_replace(Arity, Storage, Subject0, Pattern0, Replacement0, Options) ->
         end,
     true = erlang:garbage_collect(),
     {Outcome, Subject, Pattern, Replacement, Options, Captured}.
+
+%% Preserve malformed entries/tails while preparing binary construction paths.
+%% A zero prefix must not hide invalid later operands from the actual API.
+binary_prefix(Storage, Input0) ->
+    Copied = binary_to_term(term_to_binary(Input0)),
+    Prepare = fun
+        Recur([B | Rest]) when is_binary(B) ->
+            Stored =
+                case Storage of
+                    slice ->
+                        Parent = <<(binary:copy(<<201>>, 80))/binary, B/binary, 77>>,
+                        binary:part(Parent, 80, byte_size(B));
+                    unaligned ->
+                        Size = byte_size(B),
+                        <<_:3, Slice:Size/binary, _:5>> = <<5:3, B/binary, 17:5>>,
+                        Slice;
+                    copy ->
+                        B
+                end,
+            [Stored | Recur(Rest)];
+        Recur([Other | Rest]) ->
+            [Other | Recur(Rest)];
+        Recur(Tail) ->
+            Tail
+    end,
+    Input = Prepare(Copied),
+    Captured = {captured, Input, <<5:3>>},
+    true = erlang:garbage_collect(),
+    Outcome =
+        try call(binary, longest_common_prefix, [Input]) of
+            Result -> {ok, Result}
+        catch
+            Class:Reason -> {exception, Class, Reason}
+        end,
+    true = erlang:garbage_collect(),
+    {Outcome, Input, Captured}.
 
 %% Compare observations, not equality between paths: guards reject errors and
 %% map patterns fail to match where body/dynamic lookups raise exceptions.

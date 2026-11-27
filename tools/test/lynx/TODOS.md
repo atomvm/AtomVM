@@ -520,8 +520,34 @@ Lean laws, ordinary Erlang suites and embedded targets remain unrun this batch.
 
 See [PLAN.md](PLAN.md#binary-replacement) for evidence and limits. Full corpus,
 full CLI/JIT matrices, full older-host harnesses, fixture laws, the whole ordinary
-suite and embedded targets remain unrun this batch. `binary:longest_common_prefix/1`
-remains a supported API with ordinary tests but no Lynx differential recipes.
+suite and embedded targets remain unrun this batch. The following batch covers
+`binary:longest_common_prefix/1`, which previously had only ordinary tests.
+
+### Longest common binary prefix
+
+- [x] Add 252 recipes for `binary:longest_common_prefix/1`, preserving all
+  preceding recipes and metadata (total 10,099).
+- [x] Check singleton/identical binaries, shorter inputs in either order,
+  later-shortening three-input controls and reordered input results.
+- [x] Check first/middle/final-byte differences, 0/1/63/64/65/257-byte lengths,
+  embedded zero/high bytes, copied values, larger-parent slices and byte-sized
+  segments extracted at a three-bit offset.
+- [x] Validate invalid roots/entries, partial bitstrings and improper tails,
+  including invalid data after an empty binary or zero-prefix mismatch.
+- [x] Retain complete operands/captures across GC and independently validate
+  both VMs with equal-byte columns rather than the NIF's pairwise algorithm.
+- [x] Match 252/252 in interpreter and AArch64 precompiled modes, and 36/36 in
+  reversed/strided JIT replay with a 240-second cold-compilation budget. Both
+  targeted CLI tests, independent contracts and cross-mode observations pass;
+  ten local wrong-result controls are rejected.
+- [x] Match all 252 observer-only host controls on OTP 27/28/29; this is not
+  full older-OTP harness validation.
+- [x] Leave runtime/library code, ordinary Erlang tests, changelog and allowlists
+  unchanged: no semantic discrepancy was observed.
+
+See [PLAN.md](PLAN.md#longest-common-binary-prefix) for validation results and
+limits. Full corpus/CLI/JIT matrices, the full older-host harness, fixture Lean
+laws, ordinary Erlang suites and embedded targets are outside this batch.
 
 ### Audit scope and exclusions
 

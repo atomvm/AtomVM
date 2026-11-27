@@ -1151,6 +1151,51 @@ end
 """
 
 
+# Validate every operand first, then count equal byte columns across all inputs.
+# This does not reproduce the NIF's pairwise scan against the first binary.
+BINARY_PREFIX_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+literal = fn text ->
+  {:ok,tokens,_} = :erl_scan.string(String.to_charlist(text <> "."))
+  {:ok,value} = :erl_parse.parse_term(tokens)
+  value
+end
+valid = fn
+  _rec, [] -> true
+  rec, [binary | tail] when is_binary(binary) -> rec.(rec,tail)
+  _rec, _ -> false
+end
+cases = read.("cases.json")
+expected = Enum.map(cases, fn c ->
+  [_storage,input_text] = c["binary_prefix"]
+  input = literal.(input_text)
+  outcome = if input !== [] and valid.(valid,input) do
+    size = input |> Enum.map(&:binary.bin_to_list/1) |> Enum.zip()
+                 |> Enum.take_while(fn column ->
+                      column |> Tuple.to_list() |> Enum.uniq() |> length() === 1
+                    end) |> length()
+    {:ok,size}
+  else
+    {:exception,:error,:badarg}
+  end
+  {:ok,{outcome,input,{:captured,input,<<5::3>>}}}
+end)
+for {vm,rows} <- [otp: read.("manifest.json")["expected"],
+                  atomvm: Enum.map(read.("actuals.json"), fn row ->
+                    "ok" = row["status"]
+                    row["value"]
+                  end)] do
+  true = length(rows) === length(expected)
+  failures = Enum.zip([cases,expected,rows]) |> Enum.filter(fn {_c,want,row} ->
+    :erlang.binary_to_term(Base.decode64!(row)) !== want
+  end)
+  if failures !== [], do: raise(inspect({vm,failures},limit: 10))
+  IO.puts("#{vm}: #{length(rows)} independent binary-prefix contracts")
+end
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -1713,6 +1758,26 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["binary_replace"] for c in saved],
                                      [c["binary_replace"] for c in cases])
                     check = subprocess.run(["elixir", "-e", BINARY_REPLACE_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_binary_prefix_preserves_inputs_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "binary_prefix" in case]
+        self.assertEqual(len(selected), 252)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-7])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    self.assertEqual(self.invoke(output, "--replay", source),
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["binary_prefix"] for c in saved],
+                                     [c["binary_prefix"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", BINARY_PREFIX_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
@@ -4229,7 +4294,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 9847)
+        self.assertEqual(len(lean_runtime.cases()), 10099)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

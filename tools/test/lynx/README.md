@@ -273,6 +273,13 @@ across GC. Twelve mismatching recipes exposed empty-subject and improper-option
 bugs, corrected by a separate runtime fix and ordinary Erlang regression.
 See the batch notes for before/after validation and limits.
 
+The [longest-common-prefix batch](PLAN.md#longest-common-binary-prefix)
+adds 252 recipes for `binary:longest_common_prefix/1`, bringing the corpus to
+10,099. Independent byte-column expectations check prefix boundaries, reordered
+and later-shortening inputs, binary construction paths and complete invalid-list
+validation even after the prefix becomes zero. Operands and captures remain live
+across GC. See the batch notes for execution results and validation limits.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen
