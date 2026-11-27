@@ -2954,6 +2954,58 @@ def cases():
                 for index in [1, 2]:
                     list_fold_probe(operation, "proper", fold_items,
                                     {"tuple": ["bad_return", bad, index]})
+    # Unary list consumers: ordered effects, early returns and deferred validation.
+    unary_items = [1.0, {"tuple": ["tag", {"bits": [5, 3]}]}, 1, 1,
+                   {"map": [["payload", [9, 2]]]}, 2**100]
+
+    def list_callback_probe(operation, shape, items, mode):
+        args = [operation, shape, items, mode]
+        selected.append({"otp_extension": "list_callbacks", "list_callback": args,
+                         "expression": "list_callbacks:observe(" +
+                                       ",".join(map(erlang, args)) + ")"})
+
+    for operation in ["map", "foreach", "flatmap", "filter", "filtermap", "search", "dropwhile"]:
+        for items in [[], [1.0], unary_items, list(range(17))]:
+            list_callback_probe(operation, "proper", items, "normal")
+        for exception in ["error", "throw", "exit"]:
+            for index in [1, 2, len(unary_items)]:
+                list_callback_probe(operation, "proper", unary_items,
+                                    {"tuple": ["fail", exception, index]})
+        for items in [[], [1.0]]:
+            list_callback_probe(operation, "proper", items, {"tuple": ["fail", "error", 2]})
+        for mode in ["non_function", "wrong_arity"]:
+            for shape, items in [("proper", []), ("proper", [1.0]),
+                                 ("improper", [3, 7]), ("non_list", [])]:
+                list_callback_probe(operation, shape, items, mode)
+        for shape, items in [("improper", [3]), ("improper", [3, 7]), ("non_list", [])]:
+            list_callback_probe(operation, shape, items, "normal")
+        for exception, index in [("error", 1), ("throw", 2)]:
+            list_callback_probe(operation, "improper", [3, 7, 2],
+                                {"tuple": ["fail", exception, index]})
+        if operation in ["filter", "filtermap", "search", "dropwhile"]:
+            for mode in ["all_true", "all_false", "exact"]:
+                list_callback_probe(operation, "proper", unary_items, mode)
+            for bad in ["not_boolean", [], {"tuple": ["true", "changed"]}]:
+                for index in [1, 2]:
+                    list_callback_probe(operation, "proper", unary_items,
+                                        {"tuple": ["return", bad, index]})
+        if operation in ["search", "dropwhile"]:
+            for shape in ["proper", "improper"]:
+                for index in [1, 3, len(unary_items), len(unary_items) + 1]:
+                    list_callback_probe(operation, shape, unary_items, {"tuple": ["stop", index]})
+        if operation in ["map", "foreach", "flatmap"]:
+            for value in ["not_list", {"bits": [5, 3]}, {"tuple": ["true", "changed"]}]:
+                for index in ([1, len(unary_items)] if operation == "flatmap" else [2]):
+                    list_callback_probe(operation, "proper", unary_items,
+                                        {"tuple": ["return", value, index]})
+        if operation == "flatmap":
+            for index in [1, len(unary_items)]:
+                list_callback_probe(operation, "proper", unary_items,
+                                    {"tuple": ["improper_return", index]})
+            for exception in ["error", "throw", "exit"]:
+                for value in ["not_list", {"tuple": ["true", "changed"]}]:
+                    list_callback_probe(operation, "proper", unary_items,
+                                        {"tuple": ["return_then_fail", value, 1, exception, 3]})
     return selected
 
 

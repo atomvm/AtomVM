@@ -140,6 +140,25 @@ No allowlist entries were added. See
 [the batch notes](PLAN.md#ordered-list-folds-and-mapfolds) for mode/replay results
 and limits; this batch brings the public-behavior corpus to 7,350 recipes.
 
+The unary-list batch adds 268 `map`, `foreach`, `flatmap`, `filter`, `filtermap`,
+`search` and `dropwhile` recipes. Exact results, callback indices/effects and
+GC-retained inputs distinguish short-circuiting from scanning an untouched tail,
+and deferred flatmap validation from rejection before later callbacks execute.
+An independent sequential model checks each VM; four negative controls reject
+identically wrong reports. OTP 27/28/29 each satisfy all 268 contracts.
+Initial interpreter, precompiled and on-demand JIT runs each matched 239/268,
+exposing the same 22 callback-validation cases, six invalid search predicate
+results and one map non-list-entry exception. A separate library correction and
+ordinary Erlang regressions resolve those differences while preserving callback
+exceptions, short-circuiting and deferred flatmap validation. Fresh interpreter,
+precompiled and on-demand JIT runs each match 268/268 with 21/21 reordered
+replays and independent result/trace checks. Ordinary regressions pass on OTP
+27/28/29 and all three AtomVM modes; all three regression groups fail before the
+fix. The 49-method harness passes (46 passed, three optional skips).
+No allowlist entries were added. See
+[the batch notes](PLAN.md#ordered-unary-list-callbacks) for execution-mode/replay
+results and limits. The public-behavior corpus now contains 7,618 recipes.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen

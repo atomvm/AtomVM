@@ -249,6 +249,37 @@ A 10,000-element validation of all four operations also passes in every mode.
 No expected-failure entries were added. See
 [PLAN.md](PLAN.md#ordered-list-folds-and-mapfolds) for mode/replay results and limits.
 
+### 11. Ordered unary list callbacks (follow-up)
+
+- [x] Cover `map/2`, `foreach/2`, `flatmap/2`, `filter/2`, `filtermap/2`,
+  `search/2` and `dropwhile/2` with exact output, callback visits/indices,
+  captured values and original inputs retained across explicit GC.
+- [x] Check invalid callbacks, empty/proper/improper/non-list inputs,
+  first/second/final callback exceptions and return-value validation.
+- [x] Distinguish flatmap empty/single/multiple expansion and deferred validation
+  from incorrectly preempting a later callback exception.
+- [x] Check search/dropwhile first/middle/final/absent stops, exact numeric matches,
+  and improper suffixes that must remain untouched after a short-circuit return.
+- [x] Add independent sequential contracts, positive/negative model controls
+  and filtered/reordered replay.
+- [x] Correct the observed callback-validation and map-entry exceptions, and
+  search's acceptance of non-boolean predicate results, with separate ordinary
+  Erlang regressions rather than expected-failure entries.
+
+Adds 268 recipes, preserving all 7,350 preceding cases and metadata (total 7,618;
+attribution remains 377/478). Initial interpreter, AArch64 precompiled and
+on-demand JIT runs each matched 239/268, exposing 22 callback-validation cases,
+six search predicate-result failures and one map non-list-entry failure; their
+21-case reordered replays matched 19/21. A separate library correction and
+ordinary Erlang regressions resolve those differences, preserving callback
+exceptions, short-circuiting and deferred flatmap validation. Fresh runs in all
+three modes each match 268/268 and their reordered replays match 21/21, with
+independent checks of both VMs. OTP 27.3.4.12, 28.3.1 and 29.1.3 each satisfy
+all 268 contracts and pass the ordinary regressions. The harness passes all 46
+enabled methods (three optional skips). No expected-failure entries were added. See
+[PLAN.md](PLAN.md#ordered-unary-list-callbacks) for execution-mode/replay results,
+independent checks and limits.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes

@@ -391,6 +391,137 @@ end)
 """
 
 
+# Independent sequential contracts, including flatmap's deferred append checks.
+LIST_CALLBACK_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+from_etf = fn s -> :erlang.binary_to_term(Base.decode64!(s)) end
+decode = fn decode, value ->
+  case value do
+    %{"tuple" => xs} -> List.to_tuple(for x <- xs, do: decode.(decode,x))
+    %{"map" => xs} -> Map.new(for [k,v] <- xs, do: {decode.(decode,k),decode.(decode,v)})
+    %{"bits" => [v,n]} -> <<v::size(n)>>
+    xs when is_list(xs) -> for x <- xs, do: decode.(decode,x)
+    s when is_binary(s) -> String.to_atom(s)
+    n -> n
+  end
+end
+build = fn build, xs, tail ->
+  case xs do [] -> tail; [x|rest] -> [x|build.(build,rest,tail)] end
+end
+# Validate each returned prefix only after the remaining callbacks complete.
+append = fn append, xs, tail ->
+  case xs do
+    [] -> {:ok,tail}
+    [x|rest] -> case append.(append,rest,tail) do
+      {:ok,ys} -> {:ok,[x|ys]}
+      error -> error
+    end
+    _ -> {:exception,:error,:badarg}
+  end
+end
+model = fn [op,shape,items,mode] ->
+  captured = {:captured,items,<<5::3>>}
+  tail = if shape === :proper, do: [], else: :tail
+  input = if shape === :non_list, do: :not_a_list, else: build.(build,items,tail)
+  fail = fn kind,x -> {:raised,{:exception,kind,{:callback_failed,x,<<5::3>>}}} end
+  callback = fn x,n ->
+    mapped = {:mapped,n,x,captured}
+    default = fn -> case op do
+      :map -> mapped
+      :foreach -> %{ignored: mapped}
+      :flatmap -> case rem(n,3) do 1 -> []; 2 -> [mapped]; 0 -> [mapped,{:extra,x}] end
+      :filter -> rem(n,3) !== 2
+      :filtermap -> case rem(n,3) do 1 -> false; 2 -> {true,mapped}; 0 -> true end
+      :search -> false
+      :dropwhile -> true
+    end end
+    case mode do
+      {:fail,kind,^n} -> fail.(kind,x)
+      {:return,value,^n} -> {:returned,value}
+      {:return_then_fail,_,_,kind,^n} -> fail.(kind,x)
+      {:return_then_fail,value,^n,_,_} -> {:returned,value}
+      {:improper_return,^n} -> {:returned,[x|:returned_tail]}
+      {:stop,at} when n > at -> {:raised,{:exception,:error,{:unnecessary_callback,x}}}
+      {:stop,at} -> {:returned,if(op === :search,do: n === at,else: n !== at)}
+      :all_true -> {:returned,true}
+      :all_false -> {:returned,false}
+      :exact -> {:returned,if(op === :dropwhile,do: x !== 1,else: x === 1)}
+      _ -> {:returned,default.()}
+    end
+  end
+  bad_input = fn value ->
+    reason = if op === :filter, do: {:bad_generator,value}, else: :function_clause
+    {:exception,:error,reason}
+  end
+  run = fn run, rest, n, output, trace ->
+    case rest do
+      [] ->
+        outcome = if shape === :improper do
+          bad_input.(:tail)
+        else
+          case op do
+            :foreach -> {:ok,:ok}
+            :search -> {:ok,false}
+            :dropwhile -> {:ok,[]}
+            :flatmap -> Enum.reduce_while(output,{:ok,[]},fn xs,{:ok,ys} ->
+              case append.(append,xs,ys) do
+                {:ok,_}=ok -> {:cont,ok}
+                error -> {:halt,error}
+              end
+            end)
+            _ -> {:ok,Enum.reverse(output)}
+          end
+        end
+        {outcome,trace}
+      [x|xs] ->
+        trace = [{x,n,captured}|trace]
+        case callback.(x,n) do
+          {:raised,error} -> {error,trace}
+          {:returned,value} ->
+            case {op,value} do
+              {:search,true} -> {{:ok,{:value,x}},trace}
+              {:dropwhile,false} -> {{:ok,build.(build,rest,tail)},trace}
+              {pred,v} when pred in [:filter,:filtermap,:search,:dropwhile] ->
+                cond do
+                  pred === :filtermap and is_tuple(v) and tuple_size(v) === 2 and elem(v,0) === true ->
+                    run.(run,xs,n+1,[elem(v,1)|output],trace)
+                  v === true or v === false ->
+                    next = if pred in [:filter,:filtermap] and v === true, do: [x|output], else: output
+                    run.(run,xs,n+1,next,trace)
+                  true ->
+                    reason = if pred === :filter, do: {:bad_filter,v}, else: {:case_clause,v}
+                    {{:exception,:error,reason},trace}
+                end
+              _ -> run.(run,xs,n+1,[value|output],trace)
+            end
+        end
+    end
+  end
+  {outcome,trace} = cond do
+    mode in [:non_function,:wrong_arity] -> {{:exception,:error,:function_clause},[]}
+    shape === :non_list and op === :map -> {{:exception,:error,{:case_clause,:not_a_list}},[]}
+    shape === :non_list -> {bad_input.(:not_a_list),[]}
+    true -> run.(run,items,1,[],[])
+  end
+  {outcome,Enum.reverse(trace),input,captured}
+end
+cases = read.("cases.json")
+expected = for c <- cases, do: {:ok,model.(decode.(decode,c["list_callback"]))}
+oracle = for s <- read.("manifest.json")["expected"], do: from_etf.(s)
+actual = for row <- read.("actuals.json") do
+  "ok" = row["status"]
+  from_etf.(row["value"])
+end
+Enum.each([{"OTP",oracle},{"AtomVM",actual}],fn {vm,rows} ->
+  true = length(rows) === length(expected)
+  failures = for {{a,e},n} <- Enum.with_index(Enum.zip(rows,expected)), a !== e, do: n
+  IO.puts("#{vm}: #{length(rows)-length(failures)}/#{length(rows)} independent unary list contracts")
+  if failures !== [], do: raise("#{vm} contract failures at indices #{inspect(failures,limit: :infinity)}")
+end)
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -694,6 +825,28 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["list_fold"] for c in saved],
                                      [c["list_fold"] for c in cases])
                     check = subprocess.run(["elixir", "-e", LIST_FOLD_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+                    self.assertEqual(summary,
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+
+    def test_unary_list_callbacks_have_independent_contracts_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "list_callback" in case]
+        self.assertEqual({case["list_callback"][0] for case in selected},
+                         {"map", "foreach", "flatmap", "filter", "filtermap", "search", "dropwhile"})
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-13])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    summary = self.invoke(output, "--replay", source)
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["list_callback"] for c in saved],
+                                     [c["list_callback"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", LIST_CALLBACK_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
                     self.assertEqual(summary,
@@ -3213,7 +3366,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 7350)
+        self.assertEqual(len(lean_runtime.cases()), 7618)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

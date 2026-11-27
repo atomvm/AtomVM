@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 7,350 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 7,618 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,133 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Ordered unary list callbacks
+
+Add 268 supported-API observations (2026-11-27): 31 each for `map/2` and
+`foreach/2`, 42 for `flatmap/2`, 37 each for `filter/2` and `filtermap/2`, and
+45 each for `search/2` and `dropwhile/2`. Preserve all 7,350 previous recipes and
+metadata; total 7,618, attribution unchanged at 377/478 sites. Fixture coverage
+remains 2,351 calls across 203 exports. No APIs or Lean proofs are added.
+
+- Observe exact callback visits, invocation indices and captured data, results,
+  original inputs and explicit GC inside callbacks and before reporting.
+  Asymmetric inputs include integer/float distinctions, duplicates, maps, boxed
+  integers, partial bitstrings, empty/singleton and 17-element lists.
+- Check first/second/final callback errors, throws and exits; unused failing
+  callbacks; invalid functions/arities; initial non-list and recursive improper
+  tails. Retain exception class/reason, normalizing only badarity's embedded
+  function to same-runtime identity while preserving its argument list.
+- Check filtering, all three filtermap return forms, and flatmap empty/single/
+  multiple-element expansion. Map accepts arbitrary returned terms; foreach
+  ignores them. Invalid predicate/flatmap returns follow preceding effects.
+- Search/dropwhile controls stop at the first, middle or final element, or never
+  stop. The callback raises if called beyond the designated stop. Proper and
+  improper inputs distinguish a retained untouched suffix from an incorrectly
+  scanned tail. Exact predicates distinguish `1` from `1.0` and duplicate matches.
+- Flatmap checks non-list/improper returned chunks and invalid early chunks
+  followed by later callback errors/throws/exits. Deferred append validation must
+  not preempt those later exceptions. These are source-checked observations of
+  OTP 27/28/29, not universal claims about every implementation/version.
+
+`list_callbacks.erl` is a standalone observer, avoiding enlargement of the large
+existing helper. An independent Elixir sequential model computes both VMs'
+expected results/traces without calling these seven APIs or the observer.
+Its separate list constructor and append validator model early returns and
+post-callback validation independently of the runtime traversal. A positive
+control passes; four negative controls reject identically wrong reports with
+reversed visits, reversed output, early flatmap validation or a scanned
+short-circuit tail. Filtered/reordered replay retains recipe metadata and
+reindexes the generated modules.
+
+### Initial library differences — correction kept separate
+
+Before correction, interpreter, AArch64 precompiled and on-demand JIT runs each
+matched **239/268**, with **29 failures** and zero unverified references. Exact
+failing recipes agreed across modes; no additional JIT-only failure was found.
+Cold JIT uses `--timeout 120`
+for per-process compilation of the existing large helper.
+OTP **27.3.4.12, 28.3.1 and 29.1.3** each satisfy all 268 independent contracts,
+using an observer freshly compiled by that OTP and an Erlang-only launcher for
+cross-version controls.
+
+1. **22 callback-validation cases:** `map/2` exposes `badfun`/`badarity` on
+   nonempty inputs instead of OTP's `function_clause` (four cases).
+   `foreach/2`, `flatmap/2` and `search/2` also accept bad callbacks on empty
+   inputs, returning `ok`, `[]` and `false` respectively, and expose
+   `badfun`/`badarity` on nonempty inputs (six each). Invalid-callback/non-list
+   combinations already match OTP's `function_clause`.
+2. **Six search predicate-result cases:** non-boolean returns are treated as
+   false, continuing to the end and returning `false`, instead of OTP's
+   `{case_clause, Result}` at the offending callback. These also have extra
+   callback effects, unlike the validation-only differences.
+3. **One map non-list entry:** a valid callback with `not_a_list` raises
+   `function_clause` rather than OTP's `{case_clause,not_a_list}`. Reached
+   improper tails retain `function_clause` and must remain distinct.
+
+All 268 input/capture snapshots agree between VMs. Trace differences are confined
+to the six invalid search predicate results; the other 23 failures concern only
+exception outcomes. Valid traversal/output, short-circuit controls, callback
+exception propagation, malformed filter/filtermap results and flatmap deferred
+validation match. The initial coverage included no library/runtime correction
+or expected-failure entry. Keep the separate correction below and ordinary
+Erlang regressions outside the Lynx coverage files; do not broadly catch/relabel
+callback exceptions.
+
+Before correction, all three 21-case filtered/reordered replays matched **19/21**, reproducing the
+same two sampled validation differences after reindexing. Independent result/
+trace checks reproduce those failures; saved recipes retain their metadata.
+Six direct calls without this observer reproduce the exception differences,
+with four passing controls for exact search, retained improper dropwhile
+suffixes, deferred flatmap failure and filter's invalid-result exception.
+
+The initial full CLI suite executed 49 tests: all **45 other enabled tests passed**,
+three optional configurations were skipped, and the new unary-callback test was
+red in its full and replay subtests on the real library differences. Erlang
+formatting, Python 3.9 grammar and whitespace checks passed.
+
+### Separate unary library correction and ordinary Erlang regressions
+
+`map/2`, `foreach/2`, `flatmap/2` and `search/2` now validate arity-one callbacks
+at their public entries. `map/2` distinguishes its initial case check from
+recursive malformed tails, and `search/2` accepts only boolean predicate results.
+Private workers retain traversal, short-circuiting and deferred flatmap append
+validation. No callback exception catch/relabel or unrelated API change is needed.
+
+Three ordinary regressions extend `test_lists.erl`, outside Lynx: invalid
+callbacks on empty/proper/improper/non-list inputs; entry/tail exceptions and
+callback-raised errors/throws/exits after preceding effects and GC; and invalid
+search returns stopping before later effects, with exact numeric/improper-suffix
+search and deferred flatmap controls. All three regression groups independently
+fail on the unchanged library and pass after correction. The test driver uses
+`foldl/3` rather than depending on `foreach/2`, which is itself under test.
+Library source, ordinary tests and changelog remain separate from the Lynx
+observer, recipes, harness and notes.
+
+Full ordinary `test_lists`, `test_queue`, `test_sets` and `test_maps` pass on OTP
+27.3.4.12, 28.3.1 and 29.1.3, and in AtomVM interpreter, AArch64 precompiled and
+on-demand JIT modes. Fixed local lists source and ordinary tests compiled with
+OTP 27 also pass in the interpreter. A 10,000-element validation of all four
+changed APIs passes in every AtomVM mode, checking exact outputs, every visit,
+count, independently calculated sum and explicit GC. Fresh interpreter,
+precompiled and on-demand JIT differential runs each match **268/268**, with
+**21/21** reordered replays, zero failures/unverified references and independent
+result/trace checks of both VMs. Complete observations are identical across modes
+for both inputs. The full 49-method CLI harness passes: **46 passed, three optional
+skips**. No expected-failure entries were added.
+
+Correction evidence: `.amp/in/artifacts/list-callback-fix/` retains final per-mode
+runs, independent checks, ordinary before/after logs, cross-OTP and large-list
+controls, validated-source hashes, a separate library/ordinary-regression patch
+and small reproducers. `VALIDATION.md` records commands and the corrected JIT
+bootstrap archive selection; disposable scratch packs and beams were removed.
+
+Baseline evidence: `.amp/in/artifacts/lynx-list-callbacks/` contains saved inputs/replay,
+per-mode sources, manifests, actual results, build hashes and independent checks,
+cross-OTP controls, positive/negative model controls, failure classification,
+direct public-call controls, regenerated inventory and the preservation hash.
+The complete runtime corpus, embedded/32-bit/float32 targets, fresh Lean proofs
+and exhaustive callback/input combinations are outside this batch.
 
 ## Ordered list folds and mapfolds
 
