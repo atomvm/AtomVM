@@ -14,6 +14,7 @@
     float_bits/4,
     call/3,
     deep_list/3,
+    list_selection/3,
     execution_paths/3,
     print_result/1,
     map_entries/1,
@@ -399,6 +400,27 @@ deep_list(Operation, Input0, Tail0) ->
         end,
     true = erlang:garbage_collect(),
     {Outcome, Input, Tail, Captured}.
+
+%% Return the selected term itself, retaining integer/float and signed-zero
+%% identity rather than weakening the observation to numeric equality.
+list_selection(Operation, Key0, Input0) ->
+    {Key, Input} = binary_to_term(term_to_binary({Key0, Input0})),
+    Captured = {captured, Key, Input, <<5:3>>},
+    true = erlang:garbage_collect(),
+    Outcome =
+        try
+            case Operation of
+                min -> lists:min(Input);
+                max -> lists:max(Input);
+                delete -> lists:delete(Key, Input)
+            end
+        of
+            Result -> {ok, Result}
+        catch
+            Class:Reason -> {exception, Class, Reason}
+        end,
+    true = erlang:garbage_collect(),
+    {Outcome, Key, Input, Captured}.
 
 %% Compare observations, not equality between paths: guards reject errors and
 %% map patterns fail to match where body/dynamic lookups raise exceptions.

@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 8,674 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 8,883 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,46 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## List-selection identity and traversal
+
+Add 209 supported-API recipes: 66 each for `lists:min/1` and `lists:max/1`,
+and 77 for `lists:delete/2`. Preserve all 8,674 preceding recipes and metadata
+exactly; total 8,883. Fixture counts and Lean attribution are unchanged; no
+APIs or Lean proofs are added.
+
+- Extrema retain the first ordering-equivalent representative. Check reversed
+  and repeated integer/float ties, signed zeros, positive/negative 2^53
+  boundaries, nested list/tuple/map values, exact map keys and bitstrings.
+- Delete only the first exact match, preserving later duplicates and ignoring
+  numerically equal but non-exact terms. Distinguish reached invalid tails
+  from untouched suffixes, including atom/integer/map/bitstring tails.
+- Reject malformed outer lists while accepting improper lists as elements.
+  Add 65-item controls with first/middle/last/missing deletion targets.
+- Copy input/key terms through ETF and retain full inputs, captures and results
+  across explicit GC. Compare complete terms with strict equality, not just
+  numeric equality or successful execution.
+- `LIST_SELECTION_MODEL` chooses the first globally extremal candidate rather
+  than reproducing the running-accumulator implementation. Its deletion model
+  checks exact first matches without prevalidating an untouched suffix. Neither
+  expectation calculation calls the tested list APIs.
+
+Interpreter and AArch64 precompiled runs match 209/209; the reordered on-demand
+JIT subset matches 30/30. Both VMs satisfy the independent contracts in all three
+saved runs, and complete decoded observations agree across modes. Both targeted
+CLI tests pass, including full selection and the metadata-preserving replay.
+No defect is observed: runtime/library code, ordinary Erlang tests, changelog
+and allowlists remain unchanged.
+
+Fresh OTP 27.3.4.12, 28.3.1 and 29.1.3 host runs also match all 209 observations.
+These controls compile the unchanged selection observer extracted from the
+helper: the full helper contains an unrelated OTP-29-only `is_integer/3` guard
+and cannot compile on OTP 27. This is not a full older-OTP harness validation.
+
+Saved inputs, result logs and reproducible checks are under
+`.amp/in/artifacts/lynx-list-selection/`. This batch does not rerun the full
+runtime corpus, full CLI suite, full JIT matrix, fixture Lean laws or embedded
+targets.
 
 ## Deep-list flattening and concatenation
 

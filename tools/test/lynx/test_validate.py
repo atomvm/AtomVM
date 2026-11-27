@@ -825,6 +825,64 @@ end
 """
 
 
+# Extrema use the first globally extremal input, not the library's running fold.
+LIST_SELECTION_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+literal = fn text ->
+  {:ok,tokens,_} = :erl_scan.string(String.to_charlist(text <> "."))
+  {:ok,value} = :erl_parse.parse_term(tokens)
+  value
+end
+proper = fn
+  _rec, [] -> []
+  rec, [head | rest] -> [head | rec.(rec,rest)]
+  _rec, _ -> throw(:model_function_clause)
+end
+delete = fn
+  _rec, _key, [] -> []
+  rec, key, [head | rest] ->
+    if head === key, do: rest, else: [head | rec.(rec,key,rest)]
+  _rec, _key, _ -> throw(:model_function_clause)
+end
+cases = read.("cases.json")
+expected = Enum.map(cases, fn c ->
+  [operation,key_text,input_text] = c["list_selection"]
+  key = literal.(key_text)
+  input = literal.(input_text)
+  outcome = try do
+    result = case operation do
+      "delete" -> delete.(delete,key,input)
+      operation when operation in ["min","max"] ->
+        values = proper.(proper,input)
+        if values === [], do: throw(:model_function_clause)
+        Enum.find(values, fn candidate ->
+          Enum.all?(values, fn other ->
+            if operation === "min", do: not(other < candidate), else: not(other > candidate)
+          end)
+        end)
+    end
+    {:ok,result}
+  catch
+    :throw, :model_function_clause -> {:exception,:error,:function_clause}
+  end
+  {:ok,{outcome,key,input,{:captured,key,input,<<5::3>>}}}
+end)
+for {vm,rows} <- [otp: read.("manifest.json")["expected"],
+                  atomvm: Enum.map(read.("actuals.json"), fn row ->
+                    "ok" = row["status"]
+                    row["value"]
+                  end)] do
+  true = length(rows) === length(expected)
+  failures = Enum.zip([cases,expected,rows]) |> Enum.filter(fn {_c,want,row} ->
+    :erlang.binary_to_term(Base.decode64!(row)) !== want
+  end)
+  if failures !== [], do: raise(inspect({vm,failures},limit: 10))
+  IO.puts("#{vm}: #{length(rows)} independent list-selection contracts")
+end
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -1287,6 +1345,26 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["deep_lists"] for c in saved],
                                      [c["deep_lists"] for c in cases])
                     check = subprocess.run(["elixir", "-e", DEEP_LIST_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_list_selection_preserves_exact_identity_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "list_selection" in case]
+        self.assertEqual(len(selected), 209)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-7])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    self.assertEqual(self.invoke(output, "--replay", source),
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["list_selection"] for c in saved],
+                                     [c["list_selection"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", LIST_SELECTION_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
@@ -3803,7 +3881,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 8674)
+        self.assertEqual(len(lean_runtime.cases()), 8883)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

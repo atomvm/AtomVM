@@ -418,6 +418,26 @@ See [PLAN.md](PLAN.md#deep-list-flattening-and-concatenation) for evidence and
 limits. The full corpus, full CLI harness, full JIT matrix and embedded targets
 remain unrun for this batch; allocation-failure paths are not fault-injected.
 
+### List-selection identity and traversal
+
+- [x] Add 209 recipes for `lists:min/1`, `lists:max/1` and `lists:delete/2`,
+  preserving all preceding recipes and metadata (total 8,883).
+- [x] Check first ordering-equivalent extrema and first exact deletion matches,
+  signed zeros, 2^53 boundaries, nested/boxed terms and mixed term ordering.
+- [x] Distinguish improper elements from invalid outer lists and preserve
+  untouched deletion suffixes; retain copied inputs/results/captures across GC.
+- [x] Match 209/209 in interpreter/precompiled modes and the 30-case reordered
+  JIT subset, with independent contracts on both VMs and complete decoded
+  observations identical across selected modes.
+- [x] Pass both targeted CLI integration tests and all 209 observer-only host
+  controls on OTP 27/28/29. See the plan for the older-host helper limitation.
+- [x] Leave runtime/library code, ordinary Erlang tests, changelog and allowlists
+  unchanged: no defect was found in the selected cases.
+
+See [PLAN.md](PLAN.md#list-selection-identity-and-traversal) for evidence and
+limits. The full corpus, full CLI suite, full JIT matrix, fixture Lean laws and
+embedded targets remain unrun for this batch.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes

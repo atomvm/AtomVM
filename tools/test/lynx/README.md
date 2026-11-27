@@ -232,6 +232,15 @@ ordinary Erlang regressions. Interpreter and precompiled runs match 185/185;
 the reordered JIT subset matches 27/27. The measured flatten leak disappears;
 unrelated existing leaks remain. See the batch notes for evidence and limits.
 
+The [list-selection batch](PLAN.md#list-selection-identity-and-traversal) adds
+209 recipes for `lists:min/1`, `lists:max/1` and `lists:delete/2`, bringing the
+corpus to 8,883. Independent contracts check first extrema representatives,
+exact first-match deletion, numeric precision, signed zeros, reached/unreached
+improper tails and GC-retained terms. Interpreter/precompiled runs match
+209/209 and the reordered JIT subset matches 30/30. Observer-only host runs
+agree on OTP 27/28/29. No discrepancy was found; runtime/library code, ordinary
+Erlang tests and changelog remain unchanged. See the batch notes for limits.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen

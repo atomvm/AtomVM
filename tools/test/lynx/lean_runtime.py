@@ -3225,6 +3225,51 @@ def cases():
         for tail in ["[]", "[x,y]", "tail", "[x|tail]", "#{a=>1}", "<<5:3>>"]:
             for operation in ["append_pair", "concat", "concat_apply"]:
                 deep_probe(operation, items, tail)
+    # Extrema keep the first ordering-equivalent term; deletion instead uses
+    # exact equality and can stop before an invalid suffix is inspected.
+    def selection_probe(operation, items, key="unused"):
+        selected.append({"otp_extension": "list_selection",
+                         "list_selection": [operation, key, items],
+                         "expression": f"differential:list_selection({operation},{key},{items})"})
+
+    for left, right in [("1", "1.0"), ("0.0", "-0.0"),
+                        ("9007199254740993", "9007199254740992.0"),
+                        ("9007199254740992", "9007199254740992.0"),
+                        ("-9007199254740993", "-9007199254740992.0"),
+                        ("{1}", "{1.0}"), ("[1]", "[1.0]"),
+                        ("#{a=>1}", "#{a=>1.0}"), ("#{1=>a}", "#{1.0=>a}"),
+                        ("{a,9}", "{b,-7}"), ("[1,9]", "[2,-7]"),
+                        ("<<1:1>>", "<<0,255>>")]:
+        for items in [f"[{left},{right}]", f"[{right},{left}]",
+                      f"[{left},{right},{left}]", f"[{right},{left},{right}]"]:
+            for operation in ["min", "max"]:
+                selection_probe(operation, items)
+    for items in ["[1]", "[1.0]", "[a]", "[#{a=>[boxed]}]", "[<<5:3>>]",
+                  "[[a|tail]]", "[#{},[z],{},[],<<5:3>>,a,-7]",
+                  "[-7,a,<<5:3>>,[],{},[z],#{}]", "[3,-7,2,-7,9,9]",
+                  "[]", "tail", "42", "#{a=>1}", "<<5:3>>", "[a|tail]",
+                  "[0,a|tail]", "[a|#{bad=>tail}]"]:
+        for operation in ["min", "max"]:
+            selection_probe(operation, items)
+    for key, near in [("1", "1.0"), ("1.0", "1"), ("0.0", "-0.0"),
+                      ("-0.0", "0.0"), ("{1}", "{1.0}"), ("[1]", "[1.0]"),
+                      ("#{a=>1}", "#{a=>1.0}"),
+                      ("9007199254740993", "9007199254740992.0"),
+                      ("<<5:3>>", "<<5:8>>")]:
+        for items in ["[]", f"[{near}]", f"[{near},{key},{key},{near}]",
+                      f"[{key},{near}|tail]", f"[skip,{key},{near}|tail]",
+                      f"[skip,{near}|tail]"]:
+            selection_probe("delete", items, key)
+    for tail in ["[]", "tail", "42", "#{a=>1}", "<<5:3>>"]:
+        for prefix in ["a", "b,a", "b,c"]:
+            selection_probe("delete", f"[{prefix}|{tail}]", "a")
+    for items in ["tail", "42", "#{a=>1}", "<<5:3>>"]:
+        selection_probe("delete", items, "a")
+    long_items = "[" + ",".join(str(n) for n in range(1, 66)) + "]"
+    for operation in ["min", "max"]:
+        selection_probe(operation, long_items)
+    for key in ["1", "33", "65", "99"]:
+        selection_probe("delete", long_items, key)
     return selected
 
 
