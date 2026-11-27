@@ -89,6 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed `lists:flatten/1` to raise `function_clause` for invalid input as OTP does,
+  and free its dynamically allocated traversal stack on success and error paths
 - Fixed positional list compatibility with OTP: `lists:nth/2` rejects non-integer
   indices with `function_clause`, `lists:nthtail/2` can return an improper suffix,
   and `lists:sublist/2` rejects non-list input even for a zero-length result

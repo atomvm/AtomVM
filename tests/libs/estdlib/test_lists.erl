@@ -50,6 +50,7 @@ test() ->
     ok = test_predicate_results(),
     ok = test_list_match(),
     ok = test_flatten(),
+    ok = test_flatten_deep(),
     ok = test_flatmap(),
     ok = test_filter(),
     ok = test_join(),
@@ -618,9 +619,26 @@ test_flatten() ->
         lists:flatten([[a, b, c], [d, e, f], [g, h, i]]),
         [a, b, c, d, e, f, g, h, i]
     ),
-    ?ASSERT_ERROR(lists:flatten([7 | {}])),
-    ?ASSERT_ERROR(lists:flatten([[] | [5 | 5]])),
-    ?ASSERT_ERROR(lists:flatten([[7 | 4], 2])),
+    ?ASSERT_ERROR(lists:flatten([7 | {}]), function_clause),
+    ?ASSERT_ERROR(lists:flatten([[] | [5 | 5]]), function_clause),
+    ?ASSERT_ERROR(lists:flatten([[7 | 4], 2]), function_clause),
+    ?ASSERT_ERROR(lists:flatten(not_a_list), function_clause),
+    ?ASSERT_ERROR(lists:flatten(#{a => 1}), function_clause),
+    ?ASSERT_ERROR(lists:flatten(<<1>>), function_clause),
+    ok.
+
+test_flatten_deep() ->
+    Leaf = binary_to_term(term_to_binary({boxed, #{1 => integer, 1.0 => float}, <<5:3>>})),
+    Levels = lists:seq(1, 33),
+    Nest = fun(I, Acc) -> [Acc, {level, I}] end,
+    Deep = lists:foldl(Nest, [Leaf], Levels),
+    Bad = lists:foldl(Nest, [Leaf | tail], Levels),
+    Expected = [Leaf | [{level, I} || I <- Levels]],
+    Result = lists:flatten(Deep),
+    true = erlang:garbage_collect(),
+    ?ASSERT_MATCH(Result, Expected),
+    ?ASSERT_MATCH(lists:flatten(Deep), Expected),
+    ?ASSERT_ERROR(lists:flatten(Bad), function_clause),
     ok.
 
 test_flatmap() ->

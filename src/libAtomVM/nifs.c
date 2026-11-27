@@ -7826,13 +7826,16 @@ static term nif_lists_flatten(Context *ctx, int argc, term argv[])
         return list;
     }
 
-    VALIDATE_VALUE(list, term_is_nonempty_list);
+    if (UNLIKELY(!term_is_nonempty_list(list))) {
+        RAISE_ERROR(FUNCTION_CLAUSE_ATOM);
+    }
 
     struct TempStack temp_stack;
     if (UNLIKELY(temp_stack_init(&temp_stack) != TempStackOk)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     if (UNLIKELY(temp_stack_push(&temp_stack, list) != TempStackOk)) {
+        temp_stack_destroy(&temp_stack);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     while (!temp_stack_is_empty(&temp_stack)) {
@@ -7843,15 +7846,17 @@ static term nif_lists_flatten(Context *ctx, int argc, term argv[])
         do {
             term t_head = term_get_list_head(t);
             term t_tail = term_get_list_tail(t);
-            // Exit if t is not a proper list
+            // OTP rejects improper tails with function_clause.
             if (!term_is_list(t_tail)) {
-                RAISE_ERROR(BADARG_ATOM);
+                temp_stack_destroy(&temp_stack);
+                RAISE_ERROR(FUNCTION_CLAUSE_ATOM);
             }
 
             if (term_is_nonempty_list(t_head)) {
                 tail_len = 0;
                 if (term_is_nonempty_list(t_tail)) {
                     if (UNLIKELY(temp_stack_push(&temp_stack, t_tail) != TempStackOk)) {
+                        temp_stack_destroy(&temp_stack);
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 }
@@ -7871,6 +7876,7 @@ static term nif_lists_flatten(Context *ctx, int argc, term argv[])
     // Allocate flattened list and build it.
     if (result_len > tail_len) {
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, CONS_SIZE * (result_len - tail_len), 1, &list, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            temp_stack_destroy(&temp_stack);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
     }
@@ -7879,6 +7885,7 @@ static term nif_lists_flatten(Context *ctx, int argc, term argv[])
     term *prev_term = NULL;
 
     if (UNLIKELY(temp_stack_push(&temp_stack, list) != TempStackOk)) {
+        temp_stack_destroy(&temp_stack);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     while (!temp_stack_is_empty(&temp_stack)) {
@@ -7890,6 +7897,7 @@ static term nif_lists_flatten(Context *ctx, int argc, term argv[])
             if (term_is_nonempty_list(t_head)) {
                 if (term_is_nonempty_list(t_tail)) {
                     if (UNLIKELY(temp_stack_push(&temp_stack, t_tail) != TempStackOk)) {
+                        temp_stack_destroy(&temp_stack);
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 }
@@ -7924,6 +7932,7 @@ static term nif_lists_flatten(Context *ctx, int argc, term argv[])
         } while (!term_is_nil(t));
     }
 
+    temp_stack_destroy(&temp_stack);
     return result;
 }
 
