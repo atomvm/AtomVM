@@ -16,6 +16,7 @@
     deep_list/3,
     list_selection/3,
     list_construction/3,
+    proplist_lookup/4,
     execution_paths/3,
     print_result/1,
     map_entries/1,
@@ -442,6 +443,26 @@ list_construction(Operation, Left0, Right0) ->
         end,
     true = erlang:garbage_collect(),
     {Outcome, Left, Right, Captured}.
+
+%% Observe complete property entries, defaults and retained inputs, not just
+%% whether a key exists. Malformed matching tuples can shadow later values.
+proplist_lookup(Operation, Key0, Input0, Default0) ->
+    {Key, Input, Default} = binary_to_term(term_to_binary({Key0, Input0, Default0})),
+    Captured = {captured, Key, Input, Default, <<5:3>>},
+    true = erlang:garbage_collect(),
+    Outcome =
+        try
+            case Operation of
+                get_value_default -> proplists:get_value(Key, Input, Default);
+                _ -> call(proplists, Operation, [Key, Input])
+            end
+        of
+            Result -> {ok, Result}
+        catch
+            Class:Reason -> {exception, Class, Reason}
+        end,
+    true = erlang:garbage_collect(),
+    {Outcome, Key, Input, Default, Captured}.
 
 %% Compare observations, not equality between paths: guards reject errors and
 %% map patterns fail to match where body/dynamic lookups raise exceptions.

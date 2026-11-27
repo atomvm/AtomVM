@@ -934,6 +934,84 @@ end
 """
 
 
+# Classify the finite prefix once; first-entry queries need not reach its tail.
+# Never call proplists or a tested API to calculate expected observations.
+PROPLIST_LOOKUP_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+literal = fn text ->
+  {:ok,tokens,_} = :erl_scan.string(String.to_charlist(text <> "."))
+  {:ok,value} = :erl_parse.parse_term(tokens)
+  value
+end
+split = fn
+  rec, [head | rest] -> {prefix,tail} = rec.(rec,rest); {[head | prefix],tail}
+  _rec, tail -> {[],tail}
+end
+cases = read.("cases.json")
+expected = Enum.map(cases, fn c ->
+  [operation,key_text,input_text,default_text] = c["proplist_lookup"]
+  key = literal.(key_text)
+  input = literal.(input_text)
+  default = literal.(default_text)
+  missing = case operation do
+    "get_value" -> :undefined
+    "get_value_default" -> default
+    "lookup" -> :none
+    _ -> false
+  end
+  entry = fn property ->
+    cond do
+      is_atom(property) and property === key -> {key,true}
+      is_tuple(property) and tuple_size(property) > 0 and elem(property,0) === key -> property
+      true -> nil
+    end
+  end
+  {prefix,tail} = split.(split,input)
+  entries = Enum.flat_map(prefix, fn property ->
+    case entry.(property) do nil -> []; value -> [value] end
+  end)
+  outcome = try do
+    result = if operation in ["get_all_values","lookup_all","delete"] do
+      if tail !== [], do: throw(:model_function_clause)
+      case operation do
+        "lookup_all" -> entries
+        "get_all_values" -> for value <- entries, tuple_size(value) === 2, do: elem(value,1)
+        "delete" -> Enum.reject(prefix, fn property -> entry.(property) !== nil end)
+      end
+    else
+      case entries do
+        [first | _] ->
+          case operation do
+            "lookup" -> first
+            "is_defined" -> true
+            "get_bool" -> tuple_size(first) === 2 and elem(first,1) === true
+            _ -> if tuple_size(first) === 2, do: elem(first,1), else: missing
+          end
+        [] -> if tail === [], do: missing, else: throw(:model_function_clause)
+      end
+    end
+    {:ok,result}
+  catch
+    :throw, :model_function_clause -> {:exception,:error,:function_clause}
+  end
+  {:ok,{outcome,key,input,default,{:captured,key,input,default,<<5::3>>}}}
+end)
+for {vm,rows} <- [otp: read.("manifest.json")["expected"],
+                  atomvm: Enum.map(read.("actuals.json"), fn row ->
+                    "ok" = row["status"]
+                    row["value"]
+                  end)] do
+  true = length(rows) === length(expected)
+  failures = Enum.zip([cases,expected,rows]) |> Enum.filter(fn {_c,want,row} ->
+    :erlang.binary_to_term(Base.decode64!(row)) !== want
+  end)
+  if failures !== [], do: raise(inspect({vm,failures},limit: 10))
+  IO.puts("#{vm}: #{length(rows)} independent proplist-lookup contracts")
+end
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -1436,6 +1514,26 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["list_construction"] for c in saved],
                                      [c["list_construction"] for c in cases])
                     check = subprocess.run(["elixir", "-e", LIST_CONSTRUCTION_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_proplist_lookup_preserves_precedence_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "proplist_lookup" in case]
+        self.assertEqual(len(selected), 352)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-7])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    self.assertEqual(self.invoke(output, "--replay", source),
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["proplist_lookup"] for c in saved],
+                                     [c["proplist_lookup"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", PROPLIST_LOOKUP_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
@@ -3952,7 +4050,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 9092)
+        self.assertEqual(len(lean_runtime.cases()), 9444)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

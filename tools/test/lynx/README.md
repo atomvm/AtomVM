@@ -249,6 +249,14 @@ and precompiled runs match 209/209 against OTP 29.1.3; reordered JIT replay
 matches 30/30. No discrepancy was found; no runtime/library fixes or ordinary
 Erlang regressions were needed. See the batch notes for validation limits.
 
+The [proplist-lookup batch](PLAN.md#proplist-lookup-and-precedence) adds 352
+recipes across eight supported entry points, bringing the corpus to 9,444.
+Independent expectations check first-entry precedence, exact keys, atom shorthand,
+malformed tuple entries, defaults, ordered collectors/deletion and reached versus
+untouched improper tails. Eight mismatching recipes expose a `get_value/2,3`
+precedence bug, corrected by a separate library fix and ordinary Erlang regression.
+See the batch notes for before/after validation and limits.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen

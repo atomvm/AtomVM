@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 9,092 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 9,444 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,53 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Proplist lookup and precedence
+
+Add 352 supported-API recipes, 44 each for `get_value/2`, `get_value/3`,
+`get_bool/2`, `is_defined/2`, `lookup/2`, `get_all_values/2`, `lookup_all/2`
+and `delete/2`. Preserve all 9,092 preceding recipes and metadata exactly;
+total 9,444. Fixture counts and Lean attribution are unchanged; no APIs or
+Lean proofs are added.
+
+- Check atom shorthand, first-entry precedence, duplicate keys, missing
+  defaults and malformed tuple entries, including zero/one/three-element tuples.
+- Distinguish exact integer/float, signed-zero and compound keys. Observe
+  complete entries versus values, all-match deletion and ordered collections.
+- Separate queries that stop at a match from collectors that reach invalid
+  tails, with improper and non-list inputs and first/middle/last/missing controls.
+- Copy input/key/default through ETF; preserve full outcomes, inputs and
+  captures across explicit GC, including nested maps and partial bitstrings.
+- `PROPLIST_LOOKUP_MODEL` classifies the finite prefix and unmatched tail, then
+  calculates expectations without calling `proplists`. Do not infer shared
+  semantics between first-entry queries and full-traversal consumers.
+
+**Resolved difference:** unchanged AtomVM skips matching tuples whose arity
+is not two in `get_value/2,3`, instead of returning the default as OTP does.
+Eight recipes expose a later value being returned or a previously unvisited
+improper tail raising `function_clause`. Add a matching-tuple guard after the
+normal pair/atom clauses; do not prevalidate the list or alter other consumers.
+The separate ordinary regression fails against the unchanged library and passes
+with the correction, including nonmatching numeric-key and empty-tuple controls.
+Library fix, ordinary regression and changelog are separate from Lynx files.
+
+Interpreter and AArch64 precompiled runs match 352/352 against OTP 29.1.3;
+the reversed/strided on-demand JIT subset matches 51/51. Both VMs satisfy
+independent contracts in all three saved runs, and complete observations agree
+across modes. Both targeted CLI tests pass, including full coverage and
+metadata-preserving replay. Ten local wrong-result controls are rejected,
+including last-match precedence, numeric key equality, lost defaults,
+incomplete deletion, reversed collectors and incorrect tail validation.
+
+The complete ordinary proplists/lists/maps/sets/queue suites pass in interpreter,
+precompiled and on-demand JIT modes, and fresh host builds pass OTP 27.3.4.12,
+28.3.1 and 29.1.3. These older-host runs cover the ordinary suites, not the full
+differential harness.
+
+Saved inputs, before/after results and reproducible checks are under
+`.amp/in/artifacts/lynx-proplist-lookup/`. This batch does not rerun the full
+runtime corpus, full CLI suite, full differential JIT matrix, fixture Lean
+laws or embedded/32-bit/float32 targets.
 
 ## List construction without flattening
 

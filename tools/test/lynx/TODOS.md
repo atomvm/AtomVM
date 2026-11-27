@@ -457,6 +457,26 @@ limits. The full corpus, full CLI suite, full JIT matrix, older-OTP controls,
 fixture Lean laws, allocation-exhaustion and embedded targets remain untested
 for this batch.
 
+### Proplist lookup and precedence
+
+- [x] Add 352 recipes across eight supported `proplists` entry points,
+  preserving all preceding recipes and metadata (total 9,444).
+- [x] Cover atom shorthand, first-entry precedence, exact numeric/compound keys,
+  malformed tuples, defaults, ordered collection and all-match deletion.
+- [x] Distinguish early queries from full traversal of improper/non-list inputs;
+  retain copied keys, inputs, defaults, captures and outcomes across GC.
+- [x] Fix `get_value/2,3` skipping malformed matching tuples in a separate
+  library/ordinary-regression/changelog group: eight mismatching recipes resolve.
+- [x] Match 352/352 in interpreter/precompiled modes and 51/51 in reordered JIT
+  replay, with independent contracts and exact cross-mode observations.
+- [x] Pass both targeted CLI tests and reject ten local wrong-result controls.
+- [x] Pass complete ordinary proplists/lists/maps/sets/queue suites in all three
+  AtomVM modes and fresh host builds on OTP 27/28/29.
+
+See [PLAN.md](PLAN.md#proplist-lookup-and-precedence) for before/after evidence
+and limits. Full corpus/CLI/JIT matrices, fixture Lean laws and embedded targets
+remain unrun for this batch; older hosts ran ordinary suites, not the harness.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes

@@ -3298,6 +3298,40 @@ def cases():
                   "#{n=>1}", "<<1>>", "-1267650600228229401496703205376"]:
         for value in ["a", "[x|tail]", "#{1=>integer,1.0=>float}"]:
             construction_probe("duplicate", count, value)
+    # Property lookup is exact-key, first-entry precedence, not tuple-list
+    # numeric equality or map last-write precedence. Collectors traverse all.
+    def proplist_probe(operation, key, items):
+        default = "{default,#{retained=>[1,1.0]},<<5:3>>}"
+        args = [operation, key, items, default]
+        selected.append({"otp_extension": "proplist_lookup", "proplist_lookup": args,
+                         "expression": "differential:proplist_lookup(" + ",".join(args) + ")"})
+
+    for operation in ["get_value", "get_value_default", "get_bool", "is_defined", "lookup",
+                      "get_all_values", "lookup_all", "delete"]:
+        for items in ["[]", "[k]", "[{k,true}]", "[{k,false},k]", "[k,{k,false}]",
+                      "[{k,first},{k,second}]", "[{k},{k,later}]",
+                      "[{k,ignored,extra},{k,later}]",
+                      "[{},42,[],{other,x},{k,#{1=>integer,1.0=>float}}]", "[{other,x}]",
+                      "[k,{k,v},{k},{k,x,y},other]", "[{k,false},{k,true}]"]:
+            proplist_probe(operation, "k", items)
+        for key, near in [("1", "1.0"), ("1.0", "1"), ("0.0", "-0.0"),
+                          ("-0.0", "0.0"), ("{1}", "{1.0}"), ("[1]", "[1.0]"),
+                          ("#{a=>1}", "#{a=>1.0}"), ("<<5:3>>", "<<5>>"),
+                          ("1267650600228229401496703205376", "1267650600228229401496703205377")]:
+            for items in [f"[{{{near},near}},{{{key},first}},{{{key},later}}]",
+                          f"[{near},{{{near},only}}]"]:
+                proplist_probe(operation, key, items)
+        for items in ["[k|tail]", "[{k}|tail]", "[{k,v,x}|tail]", "[{other,v}|tail]",
+                      "[skip,{k,v}|#{bad=>tail}]", "[skip|<<1>>]",
+                      "tail", "42", "#{}", "<<5:3>>"]:
+            proplist_probe(operation, "k", items)
+        values = [f"{{skip,{n}}}" for n in range(33)]
+        payload = "{boxed,[1,1.0,0.0,-0.0],#{1=>integer,1.0=>float},<<5:3>>}"
+        for index in [0, 16, 33, None]:
+            items = values[:]
+            if index is not None:
+                items.insert(index, "{k," + payload + "}")
+            proplist_probe(operation, "k", "[" + ",".join(items) + "]")
     return selected
 
 
