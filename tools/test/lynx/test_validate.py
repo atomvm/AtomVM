@@ -1445,6 +1445,96 @@ end
 """
 
 
+# Recursive bit-list flattening without list_to_binary/bin/bitstring or iolist_to_binary/size.
+BINARY_IODATA_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+literal = fn text ->
+  {:ok,tokens,_} = :erl_scan.string(String.to_charlist(text <> "."))
+  {:ok,value} = :erl_parse.parse_term(tokens)
+  value
+end
+build_deep = fn
+  0,leaf,tail,_self -> [leaf|tail]
+  n,leaf,tail,self -> [self.(n - 1,leaf,tail,self),rem(n * 17,256)]
+end
+push_bits = fn bs,acc ->
+  for <<b::1 <- bs>>, reduce: acc do
+    a -> [b|a]
+  end
+end
+push_byte = fn n,acc ->
+  Enum.reduce(7..0//-1,acc,fn i,a -> [Bitwise.band(Bitwise.bsr(n,i),1)|a] end)
+end
+walk = fn
+  [],_allow,acc,_self -> {:ok,acc}
+  [h|t],allow,acc,self ->
+    res = cond do
+      is_integer(h) and h >= 0 and h <= 255 -> {:ok,push_byte.(h,acc)}
+      is_list(h) -> self.(h,allow,acc,self)
+      is_bitstring(h) and (allow or is_binary(h)) -> {:ok,push_bits.(h,acc)}
+      true -> :badarg
+    end
+    case res do
+      {:ok,acc2} -> self.(t,allow,acc2,self)
+      :badarg -> :badarg
+    end
+  tail,allow,acc,_self ->
+    if is_bitstring(tail) and (allow or is_binary(tail)) do
+      {:ok,push_bits.(tail,acc)}
+    else
+      :badarg
+    end
+end
+bits_to_bs = fn bits ->
+  Enum.reduce(bits,<<>>,fn b,acc -> <<acc::bitstring,b::1>> end)
+end
+cases = read.("cases.json")
+expected = Enum.map(cases,fn c ->
+  [operation,mode,offset_text,spec_text] = c["binary_iodata"]
+  offset = literal.(offset_text)
+  spec = literal.(spec_text)
+  input = case mode do
+    "deep" ->
+      {depth,leaf,tail} = spec
+      build_deep.(depth,leaf,tail,build_deep)
+    _ ->
+      spec
+  end
+  allow_bits = operation === "list_to_bitstring"
+  allow_bare_bin = operation in ["iolist_to_binary","iolist_size"]
+  flat = cond do
+    is_list(input) -> walk.(input,allow_bits,[],walk)
+    allow_bare_bin and is_binary(input) -> {:ok,push_bits.(input,[])}
+    true -> :badarg
+  end
+  outcome = case flat do
+    :badarg -> {:exception,:error,:badarg}
+    {:ok,rev_bits} ->
+      bits = Enum.reverse(rev_bits)
+      if operation === "iolist_size" do
+        {:ok,div(length(bits),8)}
+      else
+        {:ok,bits_to_bs.(bits)}
+      end
+  end
+  {:ok,{outcome,input,offset,{:captured,input,offset,<<5::3>>}}}
+end)
+for {vm,rows} <- [otp: read.("manifest.json")["expected"],
+                  atomvm: Enum.map(read.("actuals.json"),fn row ->
+                    "ok" = row["status"]
+                    row["value"]
+                  end)] do
+  true = length(rows) === length(expected)
+  failures = Enum.zip([cases,expected,rows]) |> Enum.filter(fn {_c,want,row} ->
+    :erlang.binary_to_term(Base.decode64!(row)) !== want
+  end)
+  if failures !== [], do: raise(inspect({vm,failures},limit: 10))
+  IO.puts("#{vm}: #{length(rows)} independent binary-iodata contracts")
+end
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -2118,6 +2208,26 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["binary_slice"] for c in saved],
                                      [c["binary_slice"] for c in cases])
                     check = subprocess.run(["elixir", "-e", BINARY_SLICE_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_binary_iodata_preserves_bytes_bits_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "binary_iodata" in case]
+        self.assertEqual(len(selected), 840)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-23])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    self.assertEqual(self.invoke(output, "--replay", source),
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["binary_iodata"] for c in saved],
+                                     [c["binary_iodata"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", BINARY_IODATA_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
@@ -4635,7 +4745,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 12707)
+        self.assertEqual(len(lean_runtime.cases()), 13547)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

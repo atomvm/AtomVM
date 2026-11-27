@@ -317,6 +317,15 @@ under-allocation on negative-length slices of 49–63-byte heap binaries in
 `binary:part/3` and `erlang:binary_part/2,3`, fixed separately with an ordinary
 regression in `test_binary_part.erl`; see the batch notes for results and limits.
 
+The [iodata/bitstring-list batch](PLAN.md#iodata-and-bitstring-list-conversion)
+adds 840 recipes for `binary:list_to_bin/1`, `erlang:list_to_binary/1`,
+`iolist_to_binary/1`, `iolist_size/1` and `list_to_bitstring/1`, bringing the
+corpus to 13,547. Independent recursive bit-list expectations check bare-binary
+vs list root rules, nested/deep lists, improper binary/bitstring tails, bit
+packing across widths 1–7, bit offsets 0–7, invalid elements and GC retention.
+No runtime discrepancy or new expected-failure entry was found; see the batch
+notes for results and limits.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen

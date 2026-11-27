@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 12,707 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 13,547 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,60 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Iodata and bitstring-list conversion
+
+Add 840 direct recipes for supported `binary:list_to_bin/1`,
+`erlang:list_to_binary/1`, `erlang:iolist_to_binary/1`, `erlang:iolist_size/1`
+and `erlang:list_to_bitstring/1`, preserving all 12,707 preceding recipes and
+metadata; total 13,547. Fixture counts and Lean attribution are unchanged; no
+APIs, runtime fixes or Lean proofs are added.
+
+- Check root grammar distinctions: bare binaries (including empty, 1/4/63/64/65/
+  257-byte and bit-sliced binaries) are accepted by `iolist_to_binary/1` and
+  `iolist_size/1` and rejected with `badarg` by `list_to_bin/1`,
+  `list_to_binary/1` and `list_to_bitstring/1`.
+- Check proper, nested, empty and depth-33/65 nested lists across all 256 byte
+  values and output lengths crossing 63/64/65/257 bytes.
+- Check improper binary tails (accepted by all five APIs), improper
+  partial-bitstring tails (accepted only by `list_to_bitstring/1`), and invalid
+  integer/atom tails (rejected by all five APIs).
+- Check bit-level concatenation in `list_to_bitstring/1` across every
+  trailing-bit width 1–7 (zero, all-ones and asymmetric values), byte-aligned
+  complement sums, and multi-fragment cross-byte packing, while verifying all
+  four byte-oriented APIs reject partial bitstrings in head, nested or tail
+  positions.
+- Exercise ETF-copied inputs and larger-parent binary/bitstring leaf extraction
+  at bit offsets 0–7 without calling any of the five APIs to construct
+  operands; retain inputs, offsets, captures and results across explicit GC
+  before and after each conversion.
+- Reject out-of-range integers (`-1`, `256`, `1 bsl 64`, `-(1 bsl 64)`), floats,
+  atoms, tuples and invalid roots.
+- `BINARY_IODATA_MODEL` flattens recursive lists into bit lists directly
+  without calling any conversion/size API and validates complete observations on
+  both VMs.
+
+Interpreter and AArch64 precompiled runs each match 840/840 against OTP.
+Reordered on-demand JIT replay matches 158/158, explicitly covering all five
+operations, bare binaries, improper binary and bitstring tails, all eight bit
+offsets, all seven partial widths, cross-byte bit packing and deep nesting,
+with zero failures or unverified cases. Independent contracts pass on both VMs,
+complete native/JIT observations equal interpreter results, and thirteen local
+wrong-result controls are rejected. Fresh observer-only controls match all 840
+OTP reference observations on OTP 27.3.4.12/28.3.1/29.1.3. Eight ordinary
+binary/iodata suites (`test_list_to_binary`, `test_list_to_bitstring`,
+`test_binary_to_list`, `test_bitstring_to_list`, `test_binary_part`,
+`test_split_binary`, `test_sub_binaries` and `test_binary_eq`) pass on OTP
+27/28/29 and all three AtomVM modes. Targeted CLI checks cover the new
+batch/replay, `binary_slice` batch/replay and behavioral oracles.
+
+No semantic discrepancy was found: runtime/library code, ordinary Erlang tests,
+changelog and expected-failure manifest remain unchanged. Inputs, sources,
+manifests, results, reproducible checks and source hashes are saved under
+`.amp/in/artifacts/lynx-binary-iodata/`. Full runtime corpus, full CLI/JIT
+matrices, complete older-host harness, Lean fixture laws and
+embedded/32-bit/float32 targets were not run. No allocation-failure,
+performance, binary-size or leak measurements are claimed.
 
 ## Binary slicing and splitting
 

@@ -651,6 +651,36 @@ See [PLAN.md](PLAN.md#binary-slicing-and-splitting) for evidence and limits. Ful
 corpus/CLI/JIT matrices, the complete older-host harness, Lean fixture laws and
 embedded/32-bit/float32 targets remain outside this batch.
 
+### Iodata and bitstring-list conversion
+
+- [x] Add 840 direct recipes for supported `binary:list_to_bin/1`,
+  `erlang:list_to_binary/1`, `erlang:iolist_to_binary/1`, `erlang:iolist_size/1`
+  and `erlang:list_to_bitstring/1`, preserving all previous metadata (total 13,547).
+- [x] Distinguish bare-binary roots accepted by `iolist_to_binary/1` and
+  `iolist_size/1` from list-only roots required by the other three APIs.
+- [x] Check proper, empty, depth-33/65 nested lists, all 256 byte values,
+  63/64/65/257-byte result boundaries, improper binary/bitstring tails,
+  cross-byte bit packing across widths 1–7 and invalid elements/roots.
+- [x] Exercise copied inputs and larger-parent binary/bitstring leaf extraction
+  at bit offsets 0–7 without calling any of the five APIs during setup,
+  retaining inputs, offsets, captures and results across GC.
+- [x] Match 840/840 in interpreter and AArch64 precompiled modes, plus 158/158 in
+  reordered JIT replay covering all five operations, bare binaries, improper
+  tails, all eight bit offsets, all seven partial widths, bit packing and deep
+  nesting.
+- [x] Check complete observations against an independent recursive bit-list
+  model, validate cross-mode equality and reject thirteen wrong-result controls.
+- [x] Match all 840 observer-only host controls on OTP 27/28/29; pass eight
+  ordinary binary/iodata suites on those hosts and all three AtomVM modes,
+  alongside targeted CLI checks for the new batch, `binary_slice` and
+  behavioral oracles.
+- [x] Leave runtime/library code, ordinary Erlang regressions, changelog and
+  expected-failure manifest unchanged: no semantic discrepancy was found.
+
+See [PLAN.md](PLAN.md#iodata-and-bitstring-list-conversion) for evidence and
+limits. Full corpus/CLI/JIT matrices, the complete older-host harness, Lean
+fixture laws and embedded/32-bit/float32 targets remain outside this batch.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes

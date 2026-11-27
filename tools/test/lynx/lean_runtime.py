@@ -3718,6 +3718,133 @@ def cases():
     for invalid in ["bad", "[]", "[1]", "[1|bad]", "{}", "1", "1.0"]:
         for offset in [None, 3]:
             binary_slice_probe("split_binary", invalid, "0", offset)
+
+    seen_iodata = set()
+    iodata_ops = ["list_to_bin", "list_to_binary", "iolist_to_binary", "iolist_size", "list_to_bitstring"]
+
+    def binary_iodata_probe(operation, spec, mode="copy", offset=0):
+        args = [operation, mode, str(offset), spec]
+        expr = "differential:iodata_convert(" + ",".join(args) + ")"
+        if expr in seen_iodata:
+            return
+        seen_iodata.add(expr)
+        selected.append({"otp_extension": "binary_iodata", "binary_iodata": args,
+                         "expression": expr})
+
+    b62 = binary_literal(bytes((17 * n + 128) % 256 for n in range(62)))
+    b64 = binary_literal(bytes((17 * n + 128) % 256 for n in range(64)))
+    b130 = binary_literal(bytes((17 * n + 128) % 256 for n in range(130)))
+    bare_bins = [binary_literal(b""), binary_literal(b"\x00"), binary_literal(b"\xff"),
+                 four, binary_literal(b63), b64, binary_literal(b65),
+                 binary_literal(bytes((17 * n + 128) % 256 for n in range(257)))]
+    for spec in bare_bins:
+        for op in iodata_ops:
+            binary_iodata_probe(op, spec)
+            binary_iodata_probe(op, spec, "bit_slice", 0 if spec != four else 3)
+    for offset in range(8):
+        for op in iodata_ops:
+            binary_iodata_probe(op, four, "bit_slice", offset)
+
+    all_bytes = "[" + ",".join(str(b) for b in range(256)) + "]"
+    proper_iolists = [
+        "[]", "[[]]", "[[],<<>>,[[]]]", "[0,255,128,17]", all_bytes,
+        "[<<0,255>>,128,[17,<<1,2>>]]", "[<<>>,0,<<>>,255,<<>>]",
+        f"[{four},{four}]", f"[{b62},255]", f"[{binary_literal(b63)},255]",
+        f"[{b64},255]", f"[{binary_literal(b63)},<<>>,{b64},{b130}]",
+    ]
+    for index, spec in enumerate(proper_iolists):
+        for op in iodata_ops:
+            binary_iodata_probe(op, spec)
+            binary_iodata_probe(op, spec, "bit_slice", index % 8)
+    for offset in range(8):
+        binary_iodata_probe("list_to_bin", f"[{four},17]", "bit_slice", offset)
+        binary_iodata_probe("list_to_bitstring", f"[{four},17]", "bit_slice", offset)
+
+    byte_tails = [
+        "[1|<<2>>]", "[0,255|<<128,17>>]", "[[]|<<>>]", "[[]|<<255>>]",
+        "[[1|<<2>>],[3|<<4,5>>]|<<6>>]", f"[{binary_literal(b63)}|{b64}]",
+    ]
+    for spec in byte_tails:
+        for op in iodata_ops:
+            binary_iodata_probe(op, spec)
+            binary_iodata_probe(op, spec, "bit_slice", 3)
+
+    bit_tails = [
+        "[<<1:1>>|<<0:1>>]", "[[]|<<5:3>>]", "[1|<<5:3>>]",
+        "[[1|<<2>>]|<<7:3>>]", "[[1|<<5:3>>],<<2:5>>|<<7:3>>]",
+        f"[{binary_literal(b63)}|<<5:3>>]", f"[{b64}|<<127:7>>]",
+    ]
+    for spec in bit_tails:
+        for op in iodata_ops:
+            binary_iodata_probe(op, spec)
+            binary_iodata_probe(op, spec, "bit_slice", 5)
+
+    bad_tails = [
+        "[1|2]", "[1,2|3]", "[<<1>>|2]", "[[1|2]]", "[[[]]|1]",
+        "[[]|bad]", "[1|bad]", "[<<1:1>>|2]", "[<<1:1>>|bad]",
+    ]
+    for spec in bad_tails:
+        for op in iodata_ops:
+            binary_iodata_probe(op, spec)
+
+    for width in range(1, 8):
+        mask = (1 << width) - 1
+        comp_w = 8 - width
+        for tail in dict.fromkeys([0, mask, mask // 3]):
+            comp = ((1 << comp_w) - 1) // 3
+            s_single = f"[<<{tail}:{width}>>]"
+            s_pair = f"[<<{tail}:{width}>>,<<{comp}:{comp_w}>>]"
+            if tail == mask // 3:
+                for op in iodata_ops:
+                    binary_iodata_probe(op, s_single)
+                    binary_iodata_probe(op, s_pair)
+                    binary_iodata_probe(op, s_single, "bit_slice", width)
+                    binary_iodata_probe(op, s_pair, "bit_slice", (width + 3) % 8)
+            else:
+                for op in ["list_to_bitstring", "list_to_bin"]:
+                    binary_iodata_probe(op, s_single)
+                    binary_iodata_probe(op, s_single, "bit_slice", width)
+                for op in ["list_to_bitstring", "iolist_to_binary"]:
+                    binary_iodata_probe(op, s_pair)
+
+    bit_packs = [
+        "[<<5:3>>,17,<<3:2>>]",
+        "[65,<<1:1>>,66,<<3:7>>,67]",
+        "[<<1:1>>,<<0,255,128,17>>,<<5:3>>]",
+        "[<<7:3>>,<<255,0,128>>,<<1:1>>,<<17>>,<<3:4>>]",
+        f"[<<5:3>>,{binary_literal(b63)}]",
+        f"[{binary_literal(b63)},<<5:3>>,{b64},<<2:5>>]",
+        f"[{b64},<<127:7>>]",
+    ]
+    for spec in bit_packs:
+        for op in iodata_ops:
+            binary_iodata_probe(op, spec)
+    for offset in range(8):
+        binary_iodata_probe("list_to_bitstring", "[<<5:3>>,17,<<3:2>>]", "bit_slice", offset)
+        binary_iodata_probe("list_to_bitstring", f"[<<5:3>>,{binary_literal(b63)}]", "bit_slice", offset)
+
+    deep_specs = [
+        "{33,<<17,42>>,<<99>>}", "{65,<<17,42>>,<<99>>}",
+        "{33,<<5:3>>,<<7:3>>}", "{65,<<5:3>>,<<7:3>>}",
+        "{33,<<17>>,19}", "{33,<<17>>,bad}",
+    ]
+    for spec in deep_specs:
+        for op in iodata_ops:
+            binary_iodata_probe(op, spec, "deep", 0)
+
+    invalid_elements = [
+        "[-1]", "[256]", "[1,256,3]", "[0,-1]",
+        f"[{1 << 64}]", f"[{-(1 << 64)}]", "[1,[2,256],3]", "[<<1,2>>,256]",
+        "[bad]", "[1.0]", "[{}]", "[1,[2,bad],3]", "[<<1:1>>,3.14]", "[<<>>,[bad]]",
+    ]
+    for spec in invalid_elements:
+        for op in iodata_ops:
+            binary_iodata_probe(op, spec)
+
+    invalid_roots = ["bad", "0", "-1", "255", "1.0", "{}", "{1,2}", "<<5:3>>", "<<0,255,5:3>>"]
+    for spec in invalid_roots:
+        for op in iodata_ops:
+            binary_iodata_probe(op, spec)
     return selected
 
 

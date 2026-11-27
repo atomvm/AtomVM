@@ -22,6 +22,7 @@
     binary_prefix/2,
     binary_access/4,
     binary_slice/5,
+    iodata_convert/4,
     execution_paths/3,
     print_result/1,
     map_entries/1,
@@ -668,6 +669,55 @@ binary_part_guard2(B, Range, _Target) when is_binary(binary_part(B, Range)) ->
     other_binary;
 binary_part_guard2(_B, _Range, _Target) ->
     guard_failed.
+
+%% Independent iodata/bitstring-list conversion observer without calling conversion APIs to build inputs.
+iodata_convert(Operation, Mode, Offset, Spec0) ->
+    Copied = binary_to_term(term_to_binary(Spec0)),
+    Input =
+        case Mode of
+            copy ->
+                Copied;
+            bit_slice ->
+                slice_iodata_leaves(Copied, Offset);
+            deep ->
+                {Depth, Leaf, Tail} = Copied,
+                build_deep_iodata(Depth, Leaf, Tail)
+        end,
+    Captured = {captured, Input, Offset, <<5:3>>},
+    true = erlang:garbage_collect(),
+    Outcome =
+        try
+            case Operation of
+                list_to_bin -> binary:list_to_bin(Input);
+                list_to_binary -> erlang:list_to_binary(Input);
+                iolist_to_binary -> erlang:iolist_to_binary(Input);
+                iolist_size -> erlang:iolist_size(Input);
+                list_to_bitstring -> erlang:list_to_bitstring(Input)
+            end
+        of
+            Result -> {ok, Result}
+        catch
+            Class:Reason -> {exception, Class, Reason}
+        end,
+    true = erlang:garbage_collect(),
+    {Outcome, Input, Offset, Captured}.
+
+slice_iodata_leaves(B, Offset) when is_bitstring(B) ->
+    Size = bit_size(B),
+    Padding = (8 - (Offset + Size) rem 8) rem 8,
+    Parent = <<201:640, 5:Offset, B/bitstring, 0:Padding, 77>>,
+    Start = 640 + Offset,
+    <<_:Start, Slice:Size/bitstring, _/bitstring>> = Parent,
+    Slice;
+slice_iodata_leaves([H | T], Offset) ->
+    [slice_iodata_leaves(H, Offset) | slice_iodata_leaves(T, Offset)];
+slice_iodata_leaves(Other, _Offset) ->
+    Other.
+
+build_deep_iodata(0, Leaf, Tail) ->
+    [Leaf | Tail];
+build_deep_iodata(N, Leaf, Tail) ->
+    [build_deep_iodata(N - 1, Leaf, Tail), (N * 17) rem 256].
 
 %% Compare observations, not equality between paths: guards reject errors and
 %% map patterns fail to match where body/dynamic lookups raise exceptions.
