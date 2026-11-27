@@ -347,7 +347,7 @@ def validate(args, work):
         (work / "lean-coverage.json").write_text(json.dumps(report, indent=2))
         print("Lean-inspired public-API samples; no Lean proofs or schedule coverage implied.", flush=True)
     (work / "cases.json").write_text(json.dumps(entries))
-    helpers = [work / name for name in ["differential.erl", "queue_callbacks.erl"]]
+    helpers = [work / name for name in ["differential.erl", "queue_callbacks.erl", "set_callbacks.erl"]]
     for helper_source in helpers:
         shutil.copyfile(Path(__file__).with_name(helper_source.name), helper_source)
     command(

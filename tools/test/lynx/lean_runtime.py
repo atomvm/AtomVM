@@ -2885,6 +2885,41 @@ def cases():
             queue_probe(operation, layout, queue_items, {"tuple": ["fail", exception, 2]})
         for bad_callback in ["non_function", "wrong_arity"]:
             queue_probe(operation, "balanced", queue_items, bad_callback)
+    # Unordered set callbacks: normalize results, retain raw visits for checking.
+    set_items = [1, 1.0, 1, {"tuple": ["keep", {"bits": [5, 3]}]},
+                 {"tuple": ["drop", {"map": [["key", 1]]}]},
+                 {"tuple": ["merge", "a"]}, {"tuple": ["merge", "b"]},
+                 {"map": [[1, "integer"]]}, {"map": [[1.0, "float"]]},
+                 {"bits": [5, 3]}, 2**100]
+
+    def set_probe(operation, history, items, mode):
+        args = [operation, history, items, mode]
+        selected.append({"otp_extension": "set_callbacks", "set_callback": args,
+                         "expression": "set_callbacks:observe(" +
+                                       ",".join(map(erlang, args)) + ")"})
+
+    for operation in ["fold", "filter", "map", "filtermap"]:
+        mode = "normal" if operation == "fold" else "transform"
+        for history in ["from_list", "added", "reinserted"]:
+            for items in [[], [1.0], set_items]:
+                set_probe(operation, history, items, mode)
+            for size in [31, 32, 33]:
+                items = list(range(size - 2)) + [1.0, {"bits": [5, 3]}]
+                set_probe(operation, history, items, mode)
+            extras = (["identity", "constant"] if operation == "map" else
+                      ["all_true", "all_false"] if operation != "fold" else [])
+            for extra in extras:
+                set_probe(operation, history, set_items, extra)
+            if operation in ["filter", "filtermap"]:
+                set_probe(operation, history, set_items, "invalid_return")
+        for items in [[], [1.0], set_items]:
+            for bad in ["non_function", "wrong_arity"]:
+                set_probe(operation, "from_list", items, bad)
+        for exception, history in zip(["error", "throw", "exit"],
+                                      ["from_list", "added", "reinserted"]):
+            set_probe(operation, history, set_items, {"tuple": ["fail", exception, 2]})
+        for items in [[], [1.0]]:
+            set_probe(operation, "from_list", items, {"tuple": ["fail", "error", 1]})
     return selected
 
 

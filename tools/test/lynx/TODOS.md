@@ -195,6 +195,32 @@ is unchanged. This keeps the coverage usable but does not fix the compiler limit
 Retain `.amp/in/artifacts/lynx-queue-callbacks/native/precompile.log` and its
 combined helper source/BEAM as the reproducer for that separate investigation.
 
+### 9. Set callbacks (follow-up)
+
+- [x] Cover supported v2 `fold/3`, `filter/2`, `map/2` and `filtermap/2` through
+  `from_list`, repeated additions and deletion/reinsertion histories.
+- [x] Include exact numeric keys, mapping collisions, duplicates, empty/singleton
+  and 31/32/33-element sets, invalid callbacks, non-boolean predicate results,
+  each exception class after preceding effects, and original sets retained across GC.
+- [x] Independently check exact result membership, cardinality, callback counts,
+  raw visit multiplicities and fold accumulator threading. Accept unspecified
+  traversal orders and exception prefixes; include filtered/reordered replay.
+- [x] Correct `sets:filter/2`'s non-boolean predicate exception separately, with
+  an ordinary Erlang regression in `test_sets.erl`, outside the Lynx coverage.
+
+Adds 140 permanent differential recipes, preserving all 7,082 previous cases
+and metadata (total 7,222). Initial interpreter, AArch64 precompiled and on-demand
+JIT sweeps each matched 137/140, isolating one filter exception defect across
+three construction histories, not a visit-order difference. The separate library
+correction now raises OTP's `bad_filter` for non-boolean results while preserving
+predicate-thrown exceptions and `maps:filter/2`'s behavior. Interpreter and
+precompiled reruns match 140/140 with 16/16 replays; JIT reruns match 38/38 filter
+recipes and a 16/16 mixed replay. The other 102 JIT recipes passed before the
+filter-only fix and were not rerun afterward. The new CLI regression passes.
+Ordinary `test_sets`/`test_maps` pass on OTP 27.3.4.12, 28.3.1 and 29.1.3 and in
+all three AtomVM modes. No expected-failure entries were added.
+See [PLAN.md](PLAN.md#set-callback-combinations) for execution-mode results and scope.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes

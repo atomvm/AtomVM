@@ -200,6 +200,116 @@ IO.puts("Checked #{length(cases)} callback contracts and #{length(unordered)*2} 
 """
 
 
+# Independent exact-key/list contracts, with no sets or observer API calls.
+SET_CALLBACK_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+decode = fn decode, value ->
+  case value do
+    %{"tuple" => xs} -> xs |> Enum.map(&decode.(decode,&1)) |> List.to_tuple()
+    %{"map" => xs} -> Map.new(xs, fn [k,v] -> {decode.(decode,k),decode.(decode,v)} end)
+    %{"bits" => [v,n]} -> <<v::size(n)>>
+    xs when is_list(xs) -> Enum.map(xs,&decode.(decode,&1))
+    s when is_binary(s) -> String.to_atom(s)
+    n -> n
+  end
+end
+members = fn xs -> Map.new(xs,&{&1,:present}) end
+snapshot = fn xs ->
+  m = members.(xs)
+  n = map_size(m)
+  {n,n === 0,n,m}
+end
+seed = {{:seed,<<5::3>>},7,%{}}
+advance = fn x,{tag,n,seen} -> {tag,n+1,Map.put(seen,x,:present)} end
+model = fn [op,_history,items,mode] ->
+  keys = items |> members.() |> Map.keys()
+  size = length(keys)
+  {outcome,count} = cond do
+    mode in [:non_function,:wrong_arity] -> {{:exception,:error,:function_clause},0}
+    is_tuple(mode) and elem(mode,0) === :fail and elem(mode,2) <= size ->
+      {{:exception,elem(mode,1),{:callback_failed,<<5::3>>}},elem(mode,2)}
+    mode === :invalid_return and size >= 2 ->
+      reason = if op === :filter, do: :bad_filter, else: :case_clause
+      {{:exception,:error,{reason,:not_boolean}},2}
+    op === :fold -> {{:ok,{{:seed,<<5::3>>},7+size,members.(keys)}},size}
+    true ->
+      values = Enum.flat_map(keys, fn x ->
+        case {op,mode,x} do
+          {:map,:identity,_} -> [x]
+          {:map,:constant,_} -> [:collision]
+          {:map,_,{:merge,_}} -> [:collision]
+          {:map,_,v} when v === 1 or v === 1.0 -> [v]
+          {:map,_,_} -> [{:wrapped,x}]
+          {_,:all_false,_} -> []
+          {_,:all_true,_} -> [x]
+          {:filter,_,1} -> []
+          {:filter,_,_} -> [x]
+          {:filtermap,_,{:drop,_}} -> []
+          {:filtermap,_,{:keep,_}} -> [x]
+          {:filtermap,_,{:merge,_}} -> [:collision]
+          {:filtermap,_,_} -> [{:wrapped,x}]
+        end
+      end)
+      {{:ok,snapshot.(values)},size}
+  end
+  {outcome,{count,true},snapshot.(keys)}
+end
+cases = read.("cases.json")
+specs = Enum.map(cases,&decode.(decode,&1["set_callback"]))
+expected = Enum.map(specs,&{:ok,model.(&1)})
+from_etf = fn s -> :erlang.binary_to_term(Base.decode64!(s)) end
+oracle = Enum.map(read.("manifest.json")["expected"],from_etf)
+actual = Enum.map(read.("actuals.json"),fn row ->
+  "ok" = row["status"]
+  from_etf.(row["value"])
+end)
+
+# Independently check each VM's arbitrary visitation order, including fold's
+# accumulator inputs. Repeated visits cannot hide behind a true helper boolean.
+logs = ["proofs.log"] ++ Enum.map(cases,&(&1["module"]<>".log"))
+raw = Enum.map(logs,fn name ->
+  File.read!(Path.join(path,name)) |> String.split("\\n") |> Enum.flat_map(fn line ->
+    case String.split(line,"LYNX_SET_TRACE ",parts: 2) do
+      ["",bytes] -> [bytes |> JSON.decode!() |> :erlang.list_to_binary() |> :erlang.binary_to_term()]
+      _ -> []
+    end
+  end)
+end)
+check_raw = fn rows, reports ->
+  true = Enum.frequencies(Enum.map(rows,fn {op,history,items,mode,_,_} -> [op,history,items,mode] end))
+         === Enum.frequencies(specs)
+  outcomes = Map.new(Enum.zip(specs,reports),fn {spec,{:ok,{outcome,_,_}}} -> {spec,outcome} end)
+  Enum.each(rows,fn {op,history,items,mode,outcome,calls} ->
+    spec = [op,history,items,mode]
+    {_,{count,true},_} = model.(spec)
+    true = outcome === Map.fetch!(outcomes,spec)
+    visits = if op === :fold, do: Enum.map(calls,&elem(&1,0)), else: calls
+    true = length(visits) === count and map_size(members.(visits)) === count
+    true = Enum.all?(visits,&Map.has_key?(members.(items),&1))
+    if op === :fold do
+      last = Enum.reduce(calls,seed,fn {x,acc},previous ->
+        true = acc === previous
+        advance.(x,previous)
+      end)
+      case outcome do
+        {:ok,result} -> true = result === last
+        {:exception,_,_} -> :ok
+      end
+    end
+  end)
+end
+[otp_raw|target_raw] = raw
+check_raw.(otp_raw,oracle)
+check_raw.(List.flatten(target_raw),actual)
+IO.puts("Checked #{length(cases)*2} raw set traces and fold accumulator threading")
+true = oracle === expected
+IO.puts("Checked #{length(cases)} OTP set callback contracts")
+true = actual === expected
+IO.puts("Checked #{length(cases)} AtomVM set callback contracts")
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -464,6 +574,28 @@ class ValidationTests(unittest.TestCase):
                 saved = json.loads((output / "cases.json").read_text())
                 self.assertEqual([c["queue_callback"] for c in saved],
                                  [c["queue_callback"] for c in cases])
+
+    def test_set_callbacks_have_independent_contracts_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "set_callback" in case]
+        self.assertEqual({case["set_callback"][0] for case in selected},
+                         {"fold", "filter", "map", "filtermap"})
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-9])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    summary = self.invoke(output, "--replay", source)
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["set_callback"] for c in saved],
+                                     [c["set_callback"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", SET_CALLBACK_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+                    self.assertEqual(summary,
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
 
     def test_queue_sequences_match_list_model_and_reordered_replay(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -2978,7 +3110,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 7082)
+        self.assertEqual(len(lean_runtime.cases()), 7222)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

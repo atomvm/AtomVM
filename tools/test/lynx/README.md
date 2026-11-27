@@ -104,10 +104,26 @@ without formatting the entire serialized trace as one giant list.
 The queue batches have validated 148 histories (4,498 operations) and 153 callback
 cases against OTP 29.1.3 in interpreter, AArch64 precompiled and on-demand JIT modes.
 Independent list-model checks and reordered replay (nine histories / 14 callback
-cases) pass in every mode. The CLI harness passes 43 tests with three optional
-skips. See the [history validation](PLAN.md#seeded-queue-sequences) and
+cases) pass in every mode. The queue batch's CLI harness passed 43 tests with three
+optional skips. See the [history validation](PLAN.md#seeded-queue-sequences) and
 [callback validation](PLAN.md#queue-callback-combinations) for scope and limits;
 these are finite differential checks, not new proofs.
+
+The set-callback batch adds 140 v2 `fold`, `filter`, `map` and `filtermap` recipes
+across three construction histories, including exact numeric keys, mapping
+collisions, invalid callbacks, exception effects and 31/32/33-element boundaries.
+Results use normalized exact-key elements and counts. Raw `LYNX_SET_TRACE` records
+allow the independent CLI checker to validate each VM's visit multiplicities and
+fold accumulator inputs without requiring a shared traversal order or exception
+prefix. Initial interpreter, AArch64 precompiled and on-demand JIT runs each
+matched 137/140, exposing `sets:filter/2` raising `case_clause` instead of OTP's
+`bad_filter` for a non-boolean predicate result. A separate library correction
+and ordinary Erlang regression resolve that mismatch without changing
+`maps:filter/2` or rewriting predicate-thrown exceptions. Interpreter and
+precompiled reruns match 140/140 and their 16-case replays pass. Cold-JIT
+validation uses `--timeout 120` to allow compilation of the existing large helper
+in each isolated process. No allowlist entries were added; see
+[the batch notes](PLAN.md#set-callback-combinations) for JIT scope and evidence.
 
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences

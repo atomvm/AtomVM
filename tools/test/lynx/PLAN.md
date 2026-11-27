@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 7,082 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 7,222 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,102 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Set callback combinations
+
+Add 140 supported-v2 callback recipes (2026-11-27), without new APIs, fresh Lean
+laws or new source attribution. Preserve all 7,082 earlier recipes and metadata;
+total 7,222, still 377/478 attributed sites and 2,351 fixture calls across 203 exports.
+
+- `fold/3`: 29 cases, with an exact-key accumulator seeded with a partial
+  bitstring, nonzero count and empty membership map. Check the final accumulated
+  members/count and every raw accumulator input, not a shared traversal order.
+- `filter/2` and `filtermap/2`: 38 cases each, including keep/drop/transform
+  results, true/false controls, invalid callbacks and non-boolean results.
+- `map/2`: 35 cases, including identity, constant mappings and two distinct tagged
+  inputs mapping to one result, while integer `1` and float `1.0` remain distinct.
+- All four operations exercise `from_list`, repeated additions and full
+  deletion/reinsertion histories. Inputs include duplicates, compound exact keys,
+  boxed integers and partial bitstrings, empty/singleton and 31/32/33-element sets,
+  wrong arities/non-functions, and error/throw/exit after preceding effects.
+
+`set_callbacks.erl` is a separate coherent observer, compiled/packaged alongside
+the existing helpers. It reuses `differential:set_elements/1` for public result
+normalization: size, emptiness, enumeration count and exact-key membership. The
+original set remains observable after GC inside each callback and after the
+operation. Raw `LYNX_SET_TRACE` records retain callback visits and fold inputs;
+returned traces compare count and validity, never arbitrary visit order. A
+failure on the second invocation admits any two distinct input elements, not
+identical prefixes across VMs.
+
+The CLI regression checks both VMs against an independent list/exact-key-map
+model that invokes neither `sets` nor observer APIs. It checks all raw effects,
+not just the helper's returned boolean, and repeats a 16-case filtered/reordered
+replay. Independent negative controls reject identically forged OTP/AtomVM
+results that lose the float key, duplicate raw visits despite a true validity
+boolean, and broken fold accumulator threading. A positive control reverses
+only AtomVM's raw visits (rethreading fold inputs correctly) and is accepted.
+
+### Exposed library difference — kept separate
+
+Before the library correction, interpreter, AArch64 precompiled and on-demand
+JIT sweeps each matched **137/140**,
+with zero unverified references. All three failures are `sets:filter/2` in
+`invalid_return` mode, across the three construction histories. OTP raises
+`error:{bad_filter,not_boolean}` after the second predicate invocation; AtomVM
+raises `error:{case_clause,not_boolean}`. Every OTP result matches the independent
+model; all 280 raw traces and accumulator checks pass in each full run,
+so this is not a claimed visitation-order mismatch.
+
+AtomVM delegated this operation to `maps:filter/2`, whose explicit true/false
+case produces `case_clause`. OTP's v2 set implementation instead evaluates the
+predicate as a comprehension filter. Direct OTP 27.3.4.12, 28.3.1 and 29.1.3
+controls all raise `bad_filter` for `not_boolean`, `[]` and `{true,x}` after two
+calls, retaining the original three-element set. The initial full-batch CLI
+regression was red on this real exception-contract difference; no expected-failure
+entry was added. Four existing CLI tests passed: map callbacks, queue callbacks,
+seed/replay and independent behavioral oracles.
+
+### Separate library correction and ordinary Erlang regression
+
+`sets:filter/2` now uses a list-comprehension predicate over `maps:keys/1`, then
+reconstructs the set with `maps:from_keys/2`. This naturally raises `bad_filter`
+without catching/relabeling user exceptions or changing `maps:filter/2`.
+The fix, ordinary `test_sets.erl` regression and changelog are outside the Lynx
+coverage files so they can be committed independently.
+
+The new regression fails on the unchanged library and passes after correction.
+It checks three non-boolean results after preceding callback work, stopping at
+the failure without assuming traversal order, original set preservation,
+callback-raised `case_clause`, throw/exit propagation, no callback on empty sets,
+and exact integer/float membership in the successful result.
+
+Full `test_sets:test()` and `test_maps:test()` pass on OTP 27.3.4.12, 28.3.1 and
+29.1.3, and in AtomVM interpreter, AArch64 precompiled and on-demand JIT modes.
+A separate control confirms `maps:filter/2` still raises `case_clause`.
+An OTP-27-compiled local `sets` module and regression also pass in the interpreter.
+Fresh interpreter and precompiled differential runs match **140/140** and each
+16-case filtered/reordered replay passes, including independent result/raw-trace
+checks. On-demand JIT reruns match all **38/38 filter recipes** and the **16/16
+mixed replay**, with independent checks passing. The other 102 JIT recipes
+passed before this filter-only library correction; they were not rerun afterward.
+The maintained set-callback CLI test now passes. The full CLI/runtime
+corpora were not rerun. Erlang formatting, Python 3.9 grammar and whitespace
+checks pass.
+
+The initial on-demand run's default five-second limit timed out compiling the
+existing large helper (over 16 seconds in a completed control). Explicit
+`--timeout 120` allows cold compilation in each isolated case; this was not a
+new JIT defect.
+
+Evidence: `.amp/in/artifacts/lynx-set-callbacks/` contains saved input/replay,
+per-mode runs, independent checks, positive/negative controls, cross-OTP error
+controls, inventory, preservation hash and harness logs. Separate fix evidence
+under `.amp/in/artifacts/sets-filter-fix/` retains the failing baseline, per-mode
+ordinary regressions, fresh differential runs, independent checks and replayable
+regression packs. No full runtime corpus, fresh Lean laws, v1 sets,
+embedded/32-bit/float32 targets, exhaustive callback combinations or all traversal
+orders are claimed.
 
 ## Queue callback combinations
 
