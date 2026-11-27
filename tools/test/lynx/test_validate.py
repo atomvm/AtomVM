@@ -1097,6 +1097,60 @@ end
 """
 
 
+# A byte-list transducer, not binary search/split/replace or a round trip.
+BINARY_REPLACE_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+literal = fn text ->
+  {:ok,tokens,_} = :erl_scan.string(String.to_charlist(text <> "."))
+  {:ok,value} = :erl_parse.parse_term(tokens)
+  value
+end
+valid_options = fn
+  _rec, [] -> true
+  rec, [:global | tail] -> rec.(rec,tail)
+  _rec, _ -> false
+end
+replace = fn
+  _rec, [], _pattern, _replacement, _global -> []
+  rec, [head | tail] = remaining, pattern, replacement, global ->
+    if Enum.take(remaining,length(pattern)) === pattern do
+      rest = Enum.drop(remaining,length(pattern))
+      replacement ++ if(global, do: rec.(rec,rest,pattern,replacement,global), else: rest)
+    else
+      [head | rec.(rec,tail,pattern,replacement,global)]
+    end
+end
+cases = read.("cases.json")
+expected = Enum.map(cases, fn c ->
+  [arity,_storage,subject,pattern,replacement,options] = Enum.map(c["binary_replace"],literal)
+  valid = is_binary(subject) and is_binary(pattern) and byte_size(pattern) > 0 and
+          is_binary(replacement) and (arity === 3 or valid_options.(valid_options,options))
+  outcome = if valid do
+    result = replace.(replace,:binary.bin_to_list(subject),:binary.bin_to_list(pattern),
+                      :binary.bin_to_list(replacement),arity === 4 and options !== [])
+    {:ok,:erlang.list_to_binary(result)}
+  else
+    {:exception,:error,:badarg}
+  end
+  {:ok,{outcome,subject,pattern,replacement,options,
+        {:captured,subject,pattern,replacement,options,<<5::3>>}}}
+end)
+for {vm,rows} <- [otp: read.("manifest.json")["expected"],
+                  atomvm: Enum.map(read.("actuals.json"), fn row ->
+                    "ok" = row["status"]
+                    row["value"]
+                  end)] do
+  true = length(rows) === length(expected)
+  failures = Enum.zip([cases,expected,rows]) |> Enum.filter(fn {_c,want,row} ->
+    :erlang.binary_to_term(Base.decode64!(row)) !== want
+  end)
+  if failures !== [], do: raise(inspect({vm,failures},limit: 10))
+  IO.puts("#{vm}: #{length(rows)} independent binary-replacement contracts")
+end
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -1639,6 +1693,26 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["proplist_transform"] for c in saved],
                                      [c["proplist_transform"] for c in cases])
                     check = subprocess.run(["elixir", "-e", PROPLIST_TRANSFORM_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_binary_replacement_preserves_bytes_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "binary_replace" in case]
+        self.assertEqual(len(selected), 157)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-7])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    self.assertEqual(self.invoke(output, "--replay", source),
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["binary_replace"] for c in saved],
+                                     [c["binary_replace"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", BINARY_REPLACE_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
@@ -4155,7 +4229,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 9690)
+        self.assertEqual(len(lean_runtime.cases()), 9847)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

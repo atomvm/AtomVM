@@ -499,6 +499,30 @@ See [PLAN.md](PLAN.md#proplist-normalization-and-map-conversion) for evidence
 and limits. Full corpus/CLI/JIT matrices, full older-host harnesses, fixture
 Lean laws, ordinary Erlang suites and embedded targets remain unrun this batch.
 
+### Binary replacement
+
+- [x] Add 157 recipes for the supported binary-pattern/binary-replacement
+  `binary:replace/3,4` contract, preserving all preceding recipes (total 9,847).
+- [x] Check exact first/global outputs, non-overlapping candidates, retained
+  suffixes, output containing the pattern, growing/shrinking/deleting results,
+  empty subjects and invalid operands/options.
+- [x] Exercise copied inputs, larger-parent slices and three-bit-offset extraction,
+  boundary sizes and live operands/results across GC, with an independent
+  byte-list model and filtered/reordered replay.
+- [x] Resolve ten empty-subject and two improper-option mismatches in a separate
+  runtime/ordinary-regression group; preserve the failing baseline evidence.
+- [x] Match 157/157 in interpreter and AArch64 precompiled modes, and 33/33 in
+  reversed/strided JIT replay including all previously failing cases. Independent
+  contracts, complete cross-mode observations and both targeted CLI tests pass;
+  nine local wrong-result controls are rejected.
+- [x] Run seven ordinary binary suites on OTP 27/28/29 and all three VM modes.
+  No expected failures or unsupported replacement options are added.
+
+See [PLAN.md](PLAN.md#binary-replacement) for evidence and limits. Full corpus,
+full CLI/JIT matrices, full older-host harnesses, fixture laws, the whole ordinary
+suite and embedded targets remain unrun this batch. `binary:longest_common_prefix/1`
+remains a supported API with ordinary tests but no Lynx differential recipes.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes

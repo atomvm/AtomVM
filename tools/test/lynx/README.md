@@ -265,6 +265,14 @@ bindings, exact keys and exception reasons. Map extraction checks entry count
 and exact bindings without relying on list order or a conversion round trip.
 See the batch notes for execution results and validation limits.
 
+The [binary-replacement batch](PLAN.md#binary-replacement) adds 157 recipes
+for supported `binary:replace/3,4` behavior, bringing the corpus to 9,847.
+Independent byte-list expectations check exact bytes, non-overlapping first/global
+replacement, empty subjects, malformed options and retained operands/results
+across GC. Twelve mismatching recipes exposed empty-subject and improper-option
+bugs, corrected by a separate runtime fix and ordinary Erlang regression.
+See the batch notes for before/after validation and limits.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen

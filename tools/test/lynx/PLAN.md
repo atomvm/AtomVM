@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 9,690 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 9,847 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,68 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Binary replacement
+
+Add 157 recipes for supported `binary:replace/3,4`: binary subjects, single
+binary patterns, binary replacements and empty/`global` option lists. Preserve
+all 9,690 preceding recipes and metadata exactly; total 9,847. Fixture counts
+and Lean attribution are unchanged; no APIs or Lean proofs are added.
+
+- Check first-only versus global replacement, adjacent/non-overlapping matches,
+  overlap candidates, preserved suffixes and replacements containing the pattern
+  without rescanning the output.
+- Check growing/shrinking/deleting matches, empty subjects, missing and oversized
+  patterns, embedded zero/high bytes and a 70-byte replacement.
+- Copy inputs through ETF, create slices of larger runtime binaries and extract
+  byte-sized segments at a three-bit offset. Check subject sizes 0/1/63/64/65/257
+  and retain exact results, operands and captures across explicit GC. These are
+  construction paths, not assertions about internal binary representation.
+- Check invalid operands, partial bitstrings, empty patterns and malformed
+  options, including improper tails after accepted prefixes and repeated global
+  options. Pattern lists, compiled patterns, scoped replacement and
+  `insert_replaced` remain outside the supported contract.
+- `BINARY_REPLACE_MODEL` uses a byte-list transducer, not binary search/split/
+  replacement or a round trip. It independently checks complete observations on
+  both VMs. A CLI test executes all cases plus 23 reversed/strided recipes and
+  checks saved metadata and the independent contract.
+
+The initial interpreter run matches 145/157, with twelve semantic mismatches:
+
+- Ten empty-subject cases: OTP returns the empty binary with a nonempty pattern,
+  while AtomVM incorrectly raises `badarg`.
+- Two nonempty-subject cases with `[global|tail]` or `[global,global|tail]`:
+  OTP raises `badarg`, while AtomVM ignores the improper tail and replaces bytes.
+  Empty-subject malformed-option controls already raise correctly.
+
+A separate runtime/regression group changes only `nif_binary_replace` and the
+ordinary `test_binary_replace` suite, with its changelog entry. Validate the
+option tail before early return, and reject only the empty pattern, not an empty
+subject. Invalid operands/options remain errors even on empty/no-match inputs.
+The extended ordinary suite passes OTP and fails unchanged AtomVM; the initial
+differential matrix separately records both failure groups.
+
+After rebuilding all three runtimes, all 157 cases match OTP in interpreter and
+AArch64 precompiled modes. Reversed/strided on-demand JIT replay includes every
+previously failing recipe and matches 33/33, with a 240-second cold-compilation
+budget. Both VMs satisfy independent contracts; complete native/JIT observations
+match their interpreter counterparts. Nine local wrong-result controls reject
+empty-subject errors, ignored global options, global-by-default, overlapping
+replacement, rescanned output, dropped suffixes, accepted improper options,
+accepted empty patterns and wrong exception reasons. Both targeted CLI tests pass.
+No expected-failure entries are added.
+
+Seven ordinary binary suites (replace, match, split, part, copy, longest common
+prefix and equality) pass on OTP 27.3.4.12/28.3.1/29.1.3 and interpreter,
+AArch64 precompiled and on-demand JIT execution. These older-host runs validate
+ordinary suites, not the full Lynx harness. Equality retains its registered
+expected result of 1; the other six suites return 0.
+
+Evidence, saved inputs/results and reproducible checks are under
+`.amp/in/artifacts/lynx-binary-replace/`. This batch does not rerun the full
+runtime corpus, full CLI suite, full JIT matrix, full older-OTP harness,
+fixture Lean laws, whole ordinary suite or embedded/32-bit/float32 targets.
+No binary-size, performance or allocation-failure measurements are claimed.
 
 ## Proplist normalization and map conversion
 

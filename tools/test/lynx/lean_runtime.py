@@ -3382,6 +3382,53 @@ def cases():
     for size in [31, 32, 33, 65]:
         value = "#{" + ",".join(f"{n}=>{{{n},{boxed_property}}}" for n in range(size)) + "}"
         proplist_transform_probe("from_map", value)
+
+    # Single binary patterns and binary replacements are the supported contract;
+    # pattern lists, compiled patterns and extra OTP options are separate APIs.
+    def binary_replace_probe(subject, pattern, replacement, arity=4, options="[]", storage="copy"):
+        args = [str(arity), storage, subject, pattern, replacement, options]
+        selected.append({"otp_extension": "binary_replace", "binary_replace": args,
+                         "expression": "differential:binary_replace(" + ",".join(args) + ")"})
+
+    def binary_literal(data):
+        return "<<" + ",".join(map(str, data)) + ">>"
+
+    for subject, pattern, replacement in [
+        (b"", b"a", b"z"), (b"abc", b"x", b"z"), (b"ab", b"abc", b"z"),
+        (b"abc", b"abc", b""), (b"abc", b"a", b"XYZ"), (b"abc", b"c", b"Z"),
+        (b"ababa", b"aba", b"X"), (b"aaaaa", b"aa", b"X"),
+        (b"aaaa", b"aa", b""), (b"ababxabab", b"ab", b"Q"),
+        (b"abxab", b"ab", b"abab"), (b"abxab", b"ab", b"cab"),
+        (b"abxab", b"ab", b"ab"), (b"aababa", b"aba", b"WXYZ"),
+        (b"\x00\xff\x00\xff\x00", b"\x00\xff", b"\xff\x00\x01"),
+        (b"abcabc", b"bc", b""), (b"a", b"a", b""),
+        (b"abcab", b"abc", b"Z"), (b"abccabc", b"abc", b"\x00"),
+        (b"xyzxyz", b"yz", bytes(range(70))),
+    ]:
+        for arity, options in [(3, "[]"), (4, "[]"), (4, "[global]")]:
+            binary_replace_probe(binary_literal(subject), binary_literal(pattern),
+                                 binary_literal(replacement), arity, options)
+    for size in [0, 1, 63, 64, 65, 257]:
+        subject = bytes((17 * n + 3) % 256 for n in range(size))
+        for storage in ["copy", "slice", "unaligned"]:
+            for options in ["[]", "[global]"]:
+                binary_replace_probe(binary_literal(subject), "<<3>>", "<<0,255,3>>",
+                                     options=options, storage=storage)
+    for subject in ["<<>>", "<<1,2,1>>"]:
+        for index in range(3):
+            if index == 0 and subject == "<<>>":
+                continue  # Invalid subjects do not depend on the replaced subject.
+            for invalid in ["bad", "[]", "[1]", "<<1:1>>"]:
+                args = [subject, "<<1>>", "<<2>>"]
+                args[index] = invalid
+                for arity, options in [(3, "[]"), (4, "[global]")]:
+                    binary_replace_probe(*args, arity=arity, options=options)
+        for options in ["bad", "[bad]", "[global,bad]", "[global|tail]",
+                        "[global,global]", "[global,global|tail]"]:
+            binary_replace_probe(subject, "<<1>>", "<<2>>", options=options)
+    for subject in ["<<>>", "<<1>>", "<<1,2,1>>"]:
+        for arity, options in [(3, "[]"), (4, "[]"), (4, "[global]")]:
+            binary_replace_probe(subject, "<<>>", "<<2>>", arity, options)
     return selected
 
 

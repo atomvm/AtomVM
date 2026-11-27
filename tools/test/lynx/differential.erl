@@ -18,6 +18,7 @@
     list_construction/3,
     proplist_lookup/4,
     proplist_transform/3,
+    binary_replace/6,
     execution_paths/3,
     print_result/1,
     map_entries/1,
@@ -490,6 +491,40 @@ proplist_transform(Operation, Input0, Value0) ->
             _ -> RawOutcome
         end,
     {Outcome, Input, Value, Captured}.
+
+%% Exercise replacement on copied inputs and slices, retaining all operands
+%% and the exact result across collection. Storage never changes input bytes.
+binary_replace(Arity, Storage, Subject0, Pattern0, Replacement0, Options) ->
+    {Subject1, Pattern, Replacement} = binary_to_term(
+        term_to_binary({Subject0, Pattern0, Replacement0})
+    ),
+    Subject =
+        case {Storage, Subject1} of
+            {slice, B} when is_binary(B) ->
+                Parent = <<(binary:copy(<<201>>, 80))/binary, B/binary, 77>>,
+                binary:part(Parent, 80, byte_size(B));
+            {unaligned, B} when is_binary(B) ->
+                Size = byte_size(B),
+                <<_:3, Slice:Size/binary, _:5>> = <<5:3, B/binary, 17:5>>,
+                Slice;
+            _ ->
+                Subject1
+        end,
+    Captured = {captured, Subject, Pattern, Replacement, Options, <<5:3>>},
+    true = erlang:garbage_collect(),
+    Outcome =
+        try
+            case Arity of
+                3 -> binary:replace(Subject, Pattern, Replacement);
+                4 -> binary:replace(Subject, Pattern, Replacement, Options)
+            end
+        of
+            Result -> {ok, Result}
+        catch
+            Class:Reason -> {exception, Class, Reason}
+        end,
+    true = erlang:garbage_collect(),
+    {Outcome, Subject, Pattern, Replacement, Options, Captured}.
 
 %% Compare observations, not equality between paths: guards reject errors and
 %% map patterns fail to match where body/dynamic lookups raise exceptions.
