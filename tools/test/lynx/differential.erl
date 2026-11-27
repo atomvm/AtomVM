@@ -20,6 +20,7 @@
     proplist_transform/3,
     binary_replace/6,
     binary_prefix/2,
+    binary_access/4,
     execution_paths/3,
     print_result/1,
     map_entries/1,
@@ -562,6 +563,40 @@ binary_prefix(Storage, Input0) ->
         end,
     true = erlang:garbage_collect(),
     {Outcome, Input, Captured}.
+
+%% Independent access/copy observations, including live slices and results.
+%% Do not use binary:copy to construct operands for testing binary:copy itself.
+binary_access(Operation, Storage, Input0, Arg0) ->
+    {Copied, Arg} = binary_to_term(term_to_binary({Input0, Arg0})),
+    Input =
+        case {Storage, Copied} of
+            {slice, B} when is_binary(B) ->
+                Parent = <<201:640, B/binary, 77>>,
+                binary:part(Parent, 80, byte_size(B));
+            {unaligned, B} when is_binary(B) ->
+                Size = byte_size(B),
+                <<_:3, Slice:Size/binary, _:5>> = <<5:3, B/binary, 17:5>>,
+                Slice;
+            _ ->
+                Copied
+        end,
+    Captured = {captured, Input, Arg, <<5:3>>},
+    true = erlang:garbage_collect(),
+    Outcome =
+        try
+            case Operation of
+                at -> binary:at(Input, Arg);
+                copy -> binary:copy(Input, Arg);
+                copy_default -> binary:copy(Input);
+                _ -> call(binary, Operation, [Input])
+            end
+        of
+            Result -> {ok, Result}
+        catch
+            Class:Reason -> {exception, Class, Reason}
+        end,
+    true = erlang:garbage_collect(),
+    {Outcome, Input, Arg, Captured}.
 
 %% Compare observations, not equality between paths: guards reject errors and
 %% map patterns fail to match where body/dynamic lookups raise exceptions.

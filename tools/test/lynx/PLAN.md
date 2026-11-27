@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 10,099 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 10,467 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,57 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Binary access and copying
+
+Add 368 recipes for supported `binary:at/2`, `first/1`, `last/1` and `copy/1,2`,
+preserving all 10,099 preceding recipes and metadata; total 10,467. Fixture counts
+and Lean attribution are unchanged; no APIs or Lean proofs are added.
+
+- Check exact unsigned high bytes, empty/singleton/asymmetric subjects,
+  63/64/65/257-byte lengths and negative/start/middle/end/out-of-range indices.
+- Check default copying and counts 0/1/2/3, invalid argument types, partial
+  bitstrings even at zero count, negative/boxed/unsigned/over-word counts and
+  guaranteed oversized-result boundaries. Large count literals require a
+  matching-word-size OTP oracle; this batch targets 64-bit hosts.
+- Exercise ETF-copied operands, larger-parent slices and byte-sized segments
+  extracted at a three-bit offset. Retain complete inputs, arguments, captures
+  and results across GC before/after each API. Construct operands without
+  calling `binary:copy`; construction paths do not assert internal layouts.
+- Independently index/repeat ordinary byte lists with `BINARY_ACCESS_MODEL`,
+  checking complete observations on both VMs rather than only equality.
+- A CLI integration test runs all 368 plus 34 reversed/strided recipes, checking
+  independent contracts and saved metadata.
+
+Empty-source probes on unchanged AtomVM exhausted a two-second CPU budget for
+negative and large immediate counts; valid boxed/unsigned counts incorrectly
+raised `badarg`. The expanded ordinary `test_binary_copy` passed OTP 29 but
+failed unchanged AtomVM on a boxed-count control. Baseline probes used empty
+sources only: no dangerous nonempty huge allocations were attempted. A separate
+runtime fix validates unsigned machine-word counts before the empty-source fast
+path and checks OTP's bit-size limit before multiplication/allocation. Following
+OTP 29.1.3's `do_binary_copy`, a nonempty source rejects counts greater than or
+**equal to** the unsigned-word maximum divided by source bit size, raising
+`system_limit`. Ordinary Erlang regressions derive these boundaries from word
+size and cover exact repetition bytes, invalid counts and partial sources.
+
+The fixed batch matches 368/368 in interpreter and AArch64 precompiled modes;
+45 reversed/strided JIT recipes, including all large-count controls, match with
+a 240-second cold-compilation budget. No failures or unverified references.
+Independent contracts pass on both VMs and complete native/JIT observations
+equal interpreter results. Both targeted CLI tests pass. Twelve local wrong-result
+controls reject signed high bytes, wrong indices/endpoints, ignored zero counts,
+reversed copies, invalid-source/count acceptance, rejected valid boxed counts,
+wrong oversized-result exceptions and wrapped result sizes. The four isolated
+empty-source count probes finish with correct outcomes after the fix.
+
+Ten ordinary binary suites pass on OTP 27.3.4.12/28.3.1/29.1.3 and interpreter,
+AArch64 precompiled and on-demand JIT. This is not full older-OTP harness or
+full JIT differential validation. Source, inputs, results, build/configuration
+metadata and reproducible checks are saved under
+`.amp/in/artifacts/lynx-binary-access/`. Full runtime corpus, full CLI/JIT
+matrices, fixture Lean laws and embedded/32-bit/float32 targets were not run.
+No allocation-failure, performance, binary-size or leak measurements are claimed.
 
 ## Longest common binary prefix
 

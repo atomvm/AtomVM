@@ -3460,6 +3460,42 @@ def cases():
             invalid_inputs.append(f"[{prefix}|{tail}]")
     for index, items in enumerate(invalid_inputs):
         binary_prefix_probe(items, ["copy", "slice", "unaligned"][index % 3])
+
+    def binary_access_probe(operation, subject, arg="unused", storage="copy"):
+        args = [operation, storage, subject, arg]
+        selected.append({"otp_extension": "binary_access", "binary_access": args,
+                         "expression": "differential:binary_access(" + ",".join(args) + ")"})
+
+    subjects = [b"", b"\x00", b"\x80", b"\xff", b"\x00\xff\x80\x11"]
+    subjects += [bytes((17 * n + 128) % 256 for n in range(size))
+                 for size in [63, 64, 65, 257]]
+    for data in subjects:
+        subject = binary_literal(data)
+        for storage in ["copy", "slice", "unaligned"]:
+            for operation in ["first", "last", "copy_default"]:
+                binary_access_probe(operation, subject, storage=storage)
+            for index in sorted({-1, 0, len(data) // 2, len(data) - 1, len(data)}):
+                binary_access_probe("at", subject, str(index), storage)
+            for count in [0, 1, 2, 3]:
+                binary_access_probe("copy", subject, str(count), storage)
+    for index, invalid in enumerate(["bad", "[]", "[1]", "{}", "<<5:3>>", "<<0,5:3>>"]):
+        for operation in ["at", "first", "last", "copy", "copy_default"]:
+            binary_access_probe(operation, invalid, "0", ["copy", "slice", "unaligned"][index % 3])
+    for subject in ["<<>>", "<<0,255,128>>"]:
+        for arg in ["bad", "[]", "0.0", "1.0", str(-(1 << 100)), str(1 << 100)]:
+            binary_access_probe("at", subject, arg)
+        for arg in ["bad", "[]", "0.0", "1.0", "-1", str(-(1 << 100)),
+                    str(1 << 64), str(1 << 100)]:
+            binary_access_probe("copy", subject, arg)
+    # These count boundaries need an OTP oracle with the same word size.
+    # Empty sources never request huge allocations, even with large counts.
+    for count in [1 << 28, 1 << 40, (1 << 60) - 1, 1 << 60,
+                  (1 << 63) - 1, 1 << 63, (1 << 64) - 1]:
+        binary_access_probe("copy", "<<>>", str(count))
+    for data in [b"\x01", bytes(range(8))]:
+        limit = ((1 << 64) - 1) // (8 * len(data))
+        for count in [limit, limit + 1, (1 << 64) - 1]:
+            binary_access_probe("copy", binary_literal(data), str(count))
     return selected
 
 

@@ -280,6 +280,15 @@ and later-shortening inputs, binary construction paths and complete invalid-list
 validation even after the prefix becomes zero. Operands and captures remain live
 across GC. See the batch notes for execution results and validation limits.
 
+The [binary-access/copy batch](PLAN.md#binary-access-and-copying) adds 368
+recipes for `binary:at/2`, `first/1`, `last/1` and `copy/1,2`, bringing the corpus
+to 10,467. Independent byte-list expectations check unsigned bytes, index/count
+boundaries, malformed arguments and exact copies across construction paths/GC.
+Empty-source probes exposed count-validation and excessive-loop bugs; a separate
+runtime fix and ordinary Erlang regression also enforce OTP's oversized-result
+`system_limit` boundary. Large-count recipes need matching-word-size VMs. See the
+batch notes for execution results and validation limits.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen

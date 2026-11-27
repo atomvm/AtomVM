@@ -1196,6 +1196,60 @@ end
 """
 
 
+# Index and repeat ordinary byte lists, never the binary APIs under test.
+BINARY_ACCESS_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+literal = fn text ->
+  {:ok,tokens,_} = :erl_scan.string(String.to_charlist(text <> "."))
+  {:ok,value} = :erl_parse.parse_term(tokens)
+  value
+end
+max_count = :erlang.bsl(1,8 * :erlang.system_info(:wordsize)) - 1
+cases = read.("cases.json")
+expected = Enum.map(cases,fn c ->
+  [operation,_storage,input_text,arg_text] = c["binary_access"]
+  input = literal.(input_text)
+  arg = literal.(arg_text)
+  outcome = cond do
+    not is_binary(input) -> {:exception,:error,:badarg}
+    operation in ["copy","copy_default"] ->
+      count = if operation === "copy_default", do: 1, else: arg
+      cond do
+        not is_integer(count) or count < 0 or count > max_count -> {:exception,:error,:badarg}
+        count === 0 or byte_size(input) === 0 -> {:ok,<<>>}
+        count >= div(max_count,8 * byte_size(input)) -> {:exception,:error,:system_limit}
+        true ->
+          bytes = :binary.bin_to_list(input)
+          {:ok,bytes |> List.duplicate(count) |> List.flatten() |> :erlang.list_to_binary()}
+      end
+    operation === "at" ->
+      if is_integer(arg) and arg >= 0 and arg < byte_size(input) do
+        {:ok,Enum.at(:binary.bin_to_list(input),arg)}
+      else
+        {:exception,:error,:badarg}
+      end
+    input === <<>> -> {:exception,:error,:badarg}
+    operation === "first" -> {:ok,List.first(:binary.bin_to_list(input))}
+    operation === "last" -> {:ok,List.last(:binary.bin_to_list(input))}
+  end
+  {:ok,{outcome,input,arg,{:captured,input,arg,<<5::3>>}}}
+end)
+for {vm,rows} <- [otp: read.("manifest.json")["expected"],
+                  atomvm: Enum.map(read.("actuals.json"),fn row ->
+                    "ok" = row["status"]
+                    row["value"]
+                  end)] do
+  true = length(rows) === length(expected)
+  failures = Enum.zip([cases,expected,rows]) |> Enum.filter(fn {_c,want,row} ->
+    :erlang.binary_to_term(Base.decode64!(row)) !== want
+  end)
+  if failures !== [], do: raise(inspect({vm,failures},limit: 10))
+  IO.puts("#{vm}: #{length(rows)} independent binary-access contracts")
+end
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -1778,6 +1832,26 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["binary_prefix"] for c in saved],
                                      [c["binary_prefix"] for c in cases])
                     check = subprocess.run(["elixir", "-e", BINARY_PREFIX_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_binary_access_preserves_bytes_counts_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "binary_access" in case]
+        self.assertEqual(len(selected), 368)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-11])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    self.assertEqual(self.invoke(output, "--replay", source),
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["binary_access"] for c in saved],
+                                     [c["binary_access"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", BINARY_ACCESS_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
@@ -4294,7 +4368,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 10099)
+        self.assertEqual(len(lean_runtime.cases()), 10467)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

@@ -549,6 +549,27 @@ See [PLAN.md](PLAN.md#longest-common-binary-prefix) for validation results and
 limits. Full corpus/CLI/JIT matrices, the full older-host harness, fixture Lean
 laws, ordinary Erlang suites and embedded targets are outside this batch.
 
+### Binary access and copying
+
+- [x] Add 368 recipes for `binary:at/2`, `first/1`, `last/1` and `copy/1,2`,
+  preserving previous metadata (total 10,467).
+- [x] Check unsigned high bytes, asymmetric/empty inputs, index boundaries,
+  default/zero/repeated copies, invalid types and partial bitstrings.
+- [x] Exercise copied inputs, larger-parent slices and three-bit-offset byte
+  segments; retain complete operands, captures and results across GC.
+- [x] Check large empty-source counts and guaranteed oversized-result boundaries
+  on matching-word-size VMs; independently validate complete byte-list outcomes.
+- [x] Reproduce empty-source count loops and rejected valid boxed counts; keep
+  the runtime fix/changelog and ordinary `test_binary_copy` regression separate.
+- [x] Match 368/368 in interpreter and AArch64 precompiled modes and 45/45 in
+  reversed/strided JIT replay. Both targeted CLI tests and independent/cross-mode
+  checks pass; twelve local wrong-result controls are rejected.
+- [x] Pass ten ordinary binary suites on OTP 27/28/29 and all three AtomVM modes.
+
+See [PLAN.md](PLAN.md#binary-access-and-copying) for evidence and limits. Large
+count literals target 64-bit hosts; full corpus/CLI/JIT matrices, full older-OTP
+harness, fixture Lean laws and embedded targets remain outside this batch.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes
