@@ -241,6 +241,14 @@ improper tails and GC-retained terms. Interpreter/precompiled runs match
 agree on OTP 27/28/29. No discrepancy was found; runtime/library code, ordinary
 Erlang tests and changelog remain unchanged. See the batch notes for limits.
 
+The [list-construction batch](PLAN.md#list-construction-without-flattening)
+adds 209 recipes for `lists:join/2` and `lists:duplicate/2`, bringing the corpus
+to 9,092. Independent contracts check whole-term insertion/repetition, empty
+and malformed inputs, exact numeric/boxed values and GC retention. Interpreter
+and precompiled runs match 209/209 against OTP 29.1.3; reordered JIT replay
+matches 30/30. No discrepancy was found; no runtime/library fixes or ordinary
+Erlang regressions were needed. See the batch notes for validation limits.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen

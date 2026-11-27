@@ -438,6 +438,25 @@ See [PLAN.md](PLAN.md#list-selection-identity-and-traversal) for evidence and
 limits. The full corpus, full CLI suite, full JIT matrix, fixture Lean laws and
 embedded targets remain unrun for this batch.
 
+### List construction without flattening
+
+- [x] Add 110 `lists:join/2` and 99 `lists:duplicate/2` recipes, preserving all
+  preceding recipes and metadata (total 9,092).
+- [x] Preserve whole list-valued separators/elements, exact numeric and boxed
+  terms, and copied arguments/results/captures across GC.
+- [x] Check empty/singleton and longer inputs, zero/one/larger bounded counts,
+  malformed outer lists, negative counts and non-integer count errors.
+- [x] Match 209/209 in interpreter/precompiled modes and 30/30 in reordered
+  on-demand JIT replay, with independent contracts and cross-mode comparisons.
+- [x] Pass both targeted CLI tests and reject seven local wrong-result controls.
+- [x] Leave runtime/library code, ordinary Erlang tests, changelog and allowlists
+  unchanged: no discrepancy was observed in the selected cases.
+
+See [PLAN.md](PLAN.md#list-construction-without-flattening) for evidence and
+limits. The full corpus, full CLI suite, full JIT matrix, older-OTP controls,
+fixture Lean laws, allocation-exhaustion and embedded targets remain untested
+for this batch.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes

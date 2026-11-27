@@ -3270,6 +3270,34 @@ def cases():
         selection_probe(operation, long_items)
     for key in ["1", "33", "65", "99"]:
         selection_probe("delete", long_items, key)
+    # Construction preserves separators/elements as whole terms, not lists to
+    # splice or flatten. Bound all successful repetition counts to avoid OOM.
+    def construction_probe(operation, left, right):
+        selected.append({"otp_extension": "list_construction",
+                         "list_construction": [operation, left, right],
+                         "expression": f"differential:list_construction({operation},{left},{right})"})
+
+    construction_values = ["a", "1", "1.0", "0.0", "-0.0", "[]", "[x,y]", "[x|tail]",
+                           "{boxed,[x],1267650600228229401496703205376}",
+                           "#{1=>integer,1.0=>float}", "<<5:3>>"]
+    for separator in construction_values:
+        for items in ["[]", "[a]", "[a,b,c]", "[[],[a,b],[]]", "[1,1.0,0.0,-0.0]",
+                      "[#{k=>[boxed]},<<5:3>>]", "[[a|tail],{nested,[x]}]"]:
+            construction_probe("join", separator, items)
+    for separator in ["[]", "[x,y]", "#{1=>integer,1.0=>float}"]:
+        for items in ["tail", "42", "#{a=>1}", "<<5:3>>", "[a|tail]", "[a,b|tail]",
+                      "[a|#{bad=>tail}]", "[a|<<5:3>>]"]:
+            construction_probe("join", separator, items)
+        for length in [17, 33, 65]:
+            items = "[" + ",".join(str(n) for n in range(length)) + "]"
+            construction_probe("join", separator, items)
+    for value in construction_values:
+        for count in [0, 1, 2, 17, 33, 65]:
+            construction_probe("duplicate", str(count), value)
+    for count in ["-1", "-33", "1.0", "0.0", "-0.0", "bad", "[]", "[1]",
+                  "#{n=>1}", "<<1>>", "-1267650600228229401496703205376"]:
+        for value in ["a", "[x|tail]", "#{1=>integer,1.0=>float}"]:
+            construction_probe("duplicate", count, value)
     return selected
 
 

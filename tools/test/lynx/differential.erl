@@ -15,6 +15,7 @@
     call/3,
     deep_list/3,
     list_selection/3,
+    list_construction/3,
     execution_paths/3,
     print_result/1,
     map_entries/1,
@@ -421,6 +422,26 @@ list_selection(Operation, Key0, Input0) ->
         end,
     true = erlang:garbage_collect(),
     {Outcome, Key, Input, Captured}.
+
+%% Separators and repeated elements remain individual terms, including lists.
+%% Copy boxed arguments and retain both arguments and results across collection.
+list_construction(Operation, Left0, Right0) ->
+    {Left, Right} = binary_to_term(term_to_binary({Left0, Right0})),
+    Captured = {captured, Left, Right, <<5:3>>},
+    true = erlang:garbage_collect(),
+    Outcome =
+        try
+            case Operation of
+                join -> lists:join(Left, Right);
+                duplicate -> lists:duplicate(Left, Right)
+            end
+        of
+            Result -> {ok, Result}
+        catch
+            Class:Reason -> {exception, Class, Reason}
+        end,
+    true = erlang:garbage_collect(),
+    {Outcome, Left, Right, Captured}.
 
 %% Compare observations, not equality between paths: guards reject errors and
 %% map patterns fail to match where body/dynamic lookups raise exceptions.

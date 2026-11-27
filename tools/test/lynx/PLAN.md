@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 8,883 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 9,092 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,41 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## List construction without flattening
+
+Add 209 supported-API recipes: 110 for `lists:join/2` and 99 for
+`lists:duplicate/2`. Preserve all 8,883 preceding recipes and metadata exactly;
+total 9,092. Fixture counts and Lean attribution are unchanged; no APIs or
+Lean proofs are added.
+
+- Insert separators as individual terms, including empty, proper and improper
+  lists. Distinguish nested elements from malformed outer lists, and check
+  empty/singleton inputs and 17/33/65-element traversal controls.
+- Repeat whole elements at counts 0/1/2/17/33/65, including lists, tuples,
+  exact numeric map keys, bignums, partial bitstrings and signed zeros.
+- Reject negative counts (including a negative bignum), floats and non-numeric
+  terms with exact exception class/reason. Successful counts are bounded;
+  this does not test allocation exhaustion or oversized positive counts.
+- Copy both arguments through ETF and retain complete arguments, captures and
+  outcomes across explicit GC. Strict comparisons retain term identity.
+- `LIST_CONSTRUCTION_MODEL` calculates expected results by indexed placement,
+  without calling either tested API. Both VMs must satisfy the contracts.
+  Seven local wrong-result controls are rejected: flattened separator/element,
+  zero-count off-by-one, numeric coercion, lost zero sign, wrong exception and
+  accepted improper outer list.
+
+Interpreter and AArch64 precompiled runs match 209/209 against OTP 29.1.3;
+the reversed/strided on-demand JIT subset matches 30/30. Complete decoded
+observations agree across these modes, and both targeted CLI tests pass,
+including full construction and metadata-preserving replay. No discrepancy
+was found: runtime/library code, ordinary Erlang tests, changelog and allowlists
+remain unchanged.
+
+Saved inputs, results and reproducible independent checks are under
+`.amp/in/artifacts/lynx-list-construction/`. This batch does not rerun the full
+runtime corpus, full CLI suite, full JIT matrix, older-OTP controls, fixture
+Lean laws or embedded/32-bit/float32 targets.
 
 ## List-selection identity and traversal
 
