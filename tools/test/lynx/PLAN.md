@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 9,444 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 9,690 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,56 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Proplist normalization and map conversion
+
+Add 246 supported-API recipes: 22 for `property/1`, 77 for `property/2`,
+30 each for `compact/1` and `unfold/1`, 66 for `to_map/1` and 21 for
+`from_map/1`. Preserve all 9,444 preceding recipes and metadata exactly;
+total 9,690. Fixture counts and Lean attribution are unchanged; no APIs or
+Lean proofs are added.
+
+- Collapse only `{Atom,true}` to atom shorthand. Preserve non-atom keys,
+  false/non-boolean values, malformed tuples and unrelated nested terms.
+- Check first-entry map precedence, malformed tuples suppressing later values,
+  and absent bindings versus bindings whose value is `undefined`.
+- Preserve exact numeric/compound keys, signed zeros, partial bitstrings,
+  bignums and boxed payloads. Maps at 31/32/33/65 entries and longer list
+  controls use distinct values so misplaced values cannot hide behind equal payloads.
+- Check complete exception class/reason for non-list and improper generators,
+  including `compact/1`'s `{bad_generator,Tail}` versus `function_clause`, and
+  `from_map/1`'s `{badmap,Input}`.
+- Copy arguments through ETF and retain raw results, inputs and captures across
+  explicit GC. Observe `from_map/1` as entry count plus exact bindings, without
+  assuming list order or using `proplists:to_map/1` as a round-trip oracle.
+- `PROPLIST_TRANSFORM_MODEL` calculates shallow normalization and scans map
+  entries left-to-right, independently of the library's right-fold conversion.
+  It checks both VMs against complete expected observations.
+
+Final asymmetric-matrix runs match 246/246 in interpreter and AArch64
+precompiled execution, and the reversed/strided on-demand JIT subset matches
+36/36. Both VMs satisfy independent contracts, complete decoded observations
+agree across modes, and both targeted CLI tests pass. Twelve local wrong-result
+controls reject incorrect normalization, first-entry precedence, suppression,
+exact keys, entry counts/bindings and exception reasons. No discrepancy was
+observed: runtime/library code, ordinary Erlang tests, changelog and allowlists
+remain unchanged.
+
+Initial JIT replay records four 120-second timeouts while compiling the shared
+observer module, not semantic mismatches. Successful initial observer compilations
+include 55–75-second timings. The final 36-case replay passes with a 240-second
+per-case budget. Original timeout logs remain saved.
+
+Fresh observer-only host controls match all 246 observations on OTP 27.3.4.12,
+28.3.1 and 29.1.3. They compile the unchanged observer and `call/3` extracted
+from the helper, avoiding its unrelated OTP-29-only guards. These controls do
+not establish full older-OTP harness compatibility.
+
+Saved inputs, results and reproducible checks are under
+`.amp/in/artifacts/lynx-proplist-transform/`; `final/` holds the asymmetric
+matrix. This batch does not rerun the full runtime corpus, full CLI suite,
+full JIT matrix, full older-OTP harness, fixture Lean laws, ordinary Erlang
+suites or embedded/32-bit/float32 targets.
 
 ## Proplist lookup and precedence
 

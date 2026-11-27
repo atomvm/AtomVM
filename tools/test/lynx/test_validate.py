@@ -1012,6 +1012,91 @@ end
 """
 
 
+# Normalize shallow entries directly and scan map bindings left-to-right.
+# Unordered extraction must preserve both exact bindings and entry count.
+PROPLIST_TRANSFORM_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+literal = fn text ->
+  {:ok,tokens,_} = :erl_scan.string(String.to_charlist(text <> "."))
+  {:ok,value} = :erl_parse.parse_term(tokens)
+  value
+end
+split = fn
+  rec, [head | rest] -> {prefix,tail} = rec.(rec,rest); {[head | prefix],tail}
+  _rec, tail -> {[],tail}
+end
+normalize = fn
+  {key,true} when is_atom(key) -> key
+  property -> property
+end
+cases = read.("cases.json")
+expected = Enum.map(cases, fn c ->
+  [operation,input_text,value_text] = c["proplist_transform"]
+  input = literal.(input_text)
+  value = literal.(value_text)
+  outcome = try do
+    result = case operation do
+      "property" -> normalize.(input)
+      "property_pair" -> normalize.({input,value})
+      "from_map" ->
+        if not is_map(input), do: throw({:model_error,{:badmap,input}})
+        {map_size(input),input}
+      operation when operation in ["compact","unfold","to_map"] ->
+        {prefix,tail} = split.(split,input)
+        if tail !== [] do
+          reason = if operation === "compact", do: {:bad_generator,tail}, else: :function_clause
+          throw({:model_error,reason})
+        end
+        case operation do
+          "compact" -> Enum.map(prefix,normalize)
+          "unfold" -> Enum.map(prefix, fn entry ->
+            if is_atom(entry), do: {entry,true}, else: entry
+          end)
+          "to_map" ->
+            {_seen,bindings} = Enum.reduce(prefix,{%{},%{}},fn entry,{seen,bindings} ->
+              candidate = cond do
+                is_atom(entry) -> {entry,true,true}
+                is_tuple(entry) and tuple_size(entry) > 0 ->
+                  keep = tuple_size(entry) === 2
+                  {elem(entry,0),keep,if(keep, do: elem(entry,1), else: nil)}
+                true -> :ignore
+              end
+              case candidate do
+                :ignore -> {seen,bindings}
+                {key,keep,item} ->
+                  if Map.has_key?(seen,key) do
+                    {seen,bindings}
+                  else
+                    next = if keep, do: Map.put(bindings,key,item), else: bindings
+                    {Map.put(seen,key,true),next}
+                  end
+              end
+            end)
+            bindings
+        end
+    end
+    {:ok,result}
+  catch
+    :throw, {:model_error,reason} -> {:exception,:error,reason}
+  end
+  {:ok,{outcome,input,value,{:captured,input,value,<<5::3>>}}}
+end)
+for {vm,rows} <- [otp: read.("manifest.json")["expected"],
+                  atomvm: Enum.map(read.("actuals.json"), fn row ->
+                    "ok" = row["status"]
+                    row["value"]
+                  end)] do
+  true = length(rows) === length(expected)
+  failures = Enum.zip([cases,expected,rows]) |> Enum.filter(fn {_c,want,row} ->
+    :erlang.binary_to_term(Base.decode64!(row)) !== want
+  end)
+  if failures !== [], do: raise(inspect({vm,failures},limit: 10))
+  IO.puts("#{vm}: #{length(rows)} independent proplist-transform contracts")
+end
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -1534,6 +1619,26 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["proplist_lookup"] for c in saved],
                                      [c["proplist_lookup"] for c in cases])
                     check = subprocess.run(["elixir", "-e", PROPLIST_LOOKUP_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_proplist_transforms_preserve_exact_terms_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "proplist_transform" in case]
+        self.assertEqual(len(selected), 246)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-7])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    self.assertEqual(self.invoke(output, "--replay", source),
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["proplist_transform"] for c in saved],
+                                     [c["proplist_transform"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", PROPLIST_TRANSFORM_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
@@ -4050,7 +4155,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 9444)
+        self.assertEqual(len(lean_runtime.cases()), 9690)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

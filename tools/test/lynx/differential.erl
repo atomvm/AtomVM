@@ -17,6 +17,7 @@
     list_selection/3,
     list_construction/3,
     proplist_lookup/4,
+    proplist_transform/3,
     execution_paths/3,
     print_result/1,
     map_entries/1,
@@ -463,6 +464,32 @@ proplist_lookup(Operation, Key0, Input0, Default0) ->
         end,
     true = erlang:garbage_collect(),
     {Outcome, Key, Input, Default, Captured}.
+
+%% Collect with the raw result still live before normalizing unordered entries.
+%% Count plus exact bindings detects duplicate/missing entries without using
+%% proplists:to_map/1 as the oracle for proplists:from_map/1.
+proplist_transform(Operation, Input0, Value0) ->
+    {Input, Value} = binary_to_term(term_to_binary({Input0, Value0})),
+    Captured = {captured, Input, Value, <<5:3>>},
+    true = erlang:garbage_collect(),
+    RawOutcome =
+        try
+            case Operation of
+                property_pair -> proplists:property(Input, Value);
+                _ -> call(proplists, Operation, [Input])
+            end
+        of
+            Result -> {ok, Result}
+        catch
+            Class:Reason -> {exception, Class, Reason}
+        end,
+    true = erlang:garbage_collect(),
+    Outcome =
+        case {Operation, RawOutcome} of
+            {from_map, {ok, Entries}} -> {ok, {length(Entries), maps:from_list(Entries)}};
+            _ -> RawOutcome
+        end,
+    {Outcome, Input, Value, Captured}.
 
 %% Compare observations, not equality between paths: guards reject errors and
 %% map patterns fail to match where body/dynamic lookups raise exceptions.

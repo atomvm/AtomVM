@@ -477,6 +477,28 @@ See [PLAN.md](PLAN.md#proplist-lookup-and-precedence) for before/after evidence
 and limits. Full corpus/CLI/JIT matrices, fixture Lean laws and embedded targets
 remain unrun for this batch; older hosts ran ordinary suites, not the harness.
 
+### Proplist normalization and map conversion
+
+- [x] Add 246 recipes across the six remaining supported `proplists` entry
+  points, preserving all preceding recipes and metadata (total 9,690).
+- [x] Check shallow normalization, exact keys, malformed-entry suppression,
+  absent versus `undefined` bindings and exact exception reasons.
+- [x] Use asymmetric larger inputs and retain raw results/arguments across GC;
+  compare `from_map/1` entry counts and exact bindings without assuming order.
+- [x] Match 246/246 in interpreter/precompiled modes and 36/36 in reordered JIT
+  replay, with independent contracts, exact cross-mode observations and both
+  targeted CLI tests passing. Reject twelve local wrong-result controls.
+- [x] Match all 246 observer-only host controls on OTP 27/28/29; this is not
+  full older-OTP harness validation.
+- [x] Preserve four initial JIT compiler timeouts at 120 seconds; the final
+  replay passes with a 240-second budget. See the plan for compilation timings.
+- [x] Leave runtime/library code, ordinary Erlang tests, changelog and allowlists
+  unchanged: no semantic discrepancy was observed.
+
+See [PLAN.md](PLAN.md#proplist-normalization-and-map-conversion) for evidence
+and limits. Full corpus/CLI/JIT matrices, full older-host harnesses, fixture
+Lean laws, ordinary Erlang suites and embedded targets remain unrun this batch.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes

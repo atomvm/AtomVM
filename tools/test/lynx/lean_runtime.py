@@ -3332,6 +3332,56 @@ def cases():
             if index is not None:
                 items.insert(index, "{k," + payload + "}")
             proplist_probe(operation, "k", "[" + ",".join(items) + "]")
+    # Normalization is shallow, and map conversion keeps the first defining
+    # entry, including malformed tuples that suppress a later binding.
+    def proplist_transform_probe(operation, items, value="unused"):
+        args = [operation, items, value]
+        selected.append({"otp_extension": "proplist_transform", "proplist_transform": args,
+                         "expression": "differential:proplist_transform(" + ",".join(args) + ")"})
+
+    boxed_property = "{boxed,[1,1.0,0.0,-0.0],<<5:3>>,1267650600228229401496703205376}"
+    for value in ["a", "true", "false", "undefined", "1", "1.0", "0.0", "-0.0", "[]",
+                  "[a|tail]", "{}", "{a}", "{a,true}", "{a,false}", "{a,1}",
+                  "{a,true,extra}", "{1,true}", "{1.0,true}", "{[],true}", "#{a=>1}",
+                  "<<5:3>>", boxed_property]:
+        proplist_transform_probe("property", value)
+    for key in ["a", "true", "false", "1", "1.0", "0.0", "-0.0", "[]", "{key,1}",
+                "#{1=>integer,1.0=>float}", "<<5:3>>"]:
+        for value in ["true", "false", "1", "undefined", "[]", boxed_property, "[x|tail]"]:
+            proplist_transform_probe("property_pair", key, value)
+    for operation in ["compact", "unfold", "to_map"]:
+        for items in ["[]", "[a]", "[a,b,a]", "[{a,true}]", "[{a,false},a]", "[a,{a,false}]",
+                      "[{a,first},{a,last}]", "[{a},{a,later}]", "[{a,undefined},{a}]",
+                      "[{a},{a,undefined}]", "[{a,x,y},a]", "[a,{a,x,y}]",
+                      "[{},42,[],[x|tail],<<5:3>>]", f"[{{a,{boxed_property}}},{{b,[]}}]",
+                      "[true,false,undefined,{true,false}]",
+                      "[{1,true},{1.0,false},{0.0,a},{-0.0,b}]",
+                      "[{{key,1},true},{#{a=>1},[x,y]}]",
+                      "tail", "42", "#{}", "<<5:3>>", "[a|tail]", "[{a,true}|tail]",
+                      "[a,b|42]", "[a|#{bad=>tail}]", "[a|<<1>>]"]:
+            proplist_transform_probe(operation, items)
+        for size in [31, 32, 33, 65]:
+            items = [f"{{{n},{{{n},{boxed_property}}}}}" for n in range(size)]
+            items = ["flag", "{shadow}"] + items + ["{flag,false}", "{shadow,later}"]
+            proplist_transform_probe(operation, "[" + ",".join(items) + "]")
+    for key, near in [("1", "1.0"), ("1.0", "1"), ("0.0", "-0.0"), ("-0.0", "0.0"),
+                      ("{1}", "{1.0}"), ("[1]", "[1.0]"), ("#{a=>1}", "#{a=>1.0}"),
+                      ("<<5:3>>", "<<5>>"), ("1267650600228229401496703205376",
+                                             "1267650600228229401496703205377")]:
+        for items in [f"[{{{key},first}},{{{near},near}},{{{key},last}}]",
+                      f"[{{{key}}},{{{near},keep}},{{{key},last}}]",
+                      f"[{{{key},undefined}},{{{key}}},{{{near},keep}}]",
+                      f"[{{{key},x,y}},{{{key},undefined}},{{{near},keep}}]"]:
+            proplist_transform_probe("to_map", items)
+    for value in ["#{}", "#{a=>true}", "#{a=>false}", "#{a=>undefined}",
+                  "#{1=>integer,1.0=>float,0.0=>positive,-0.0=>negative}",
+                  "#{[]=>[],[a|tail]=>{nested,<<5:3>>}}", f"#{{<<5:3>>=>{boxed_property}}}",
+                  "#{#{a=>1}=>integer,#{a=>1.0}=>float}",
+                  "tail", "42", "[]", "[a]", "[{a,1}]", "{a,1}", "<<5:3>>", "1.0", "[a|tail]"]:
+        proplist_transform_probe("from_map", value)
+    for size in [31, 32, 33, 65]:
+        value = "#{" + ",".join(f"{n}=>{{{n},{boxed_property}}}" for n in range(size)) + "}"
+        proplist_transform_probe("from_map", value)
     return selected
 
 
