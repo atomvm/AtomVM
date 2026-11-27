@@ -7051,7 +7051,7 @@ static term nif_code_server_is_loaded(Context *ctx, int argc, term argv[])
         return FALSE_ATOM;
     }
 
-#ifndef AVM_NO_JIT
+#ifdef AVM_NO_EMU
     if (IS_NULL_PTR(found_module->native_code)) {
         return FALSE_ATOM;
     }
