@@ -222,6 +222,16 @@ include replay and handwritten boundary expectations. Ordinary lists/queue/sets/
 maps suites pass on all three AtomVM modes and OTP 27/28/29. See the batch notes
 for validation scope and evidence.
 
+The [deep-list batch](PLAN.md#deep-list-flattening-and-concatenation) adds 185
+recipes for `flatten/1`, `append/1,2`, source `++` and dynamic `erlang:'++'/2`,
+bringing the corpus to 8,674. A structural oracle checks both VMs without using
+these APIs to calculate expectations, including input/result survival across
+GC, arbitrary final tails and asymmetric nesting. Separate native flatten fixes
+correct 16 exception mismatches and a confirmed traversal-stack leak, with
+ordinary Erlang regressions. Interpreter and precompiled runs match 185/185;
+the reordered JIT subset matches 27/27. The measured flatten leak disappears;
+unrelated existing leaks remain. See the batch notes for evidence and limits.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen

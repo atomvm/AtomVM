@@ -3188,6 +3188,43 @@ def cases():
                            ("sublist", ["lists:seq(1,33)", "32", "4"]),
                            ("split", ["33", "lists:seq(1,33)"])]:
         positional_probe(function, *args)
+    # Deep-list operations have different contracts: flatten descends into list
+    # heads, append/1 removes just one level, and concatenation accepts any tail.
+    def deep_probe(operation, items, tail="[]"):
+        selected.append({"otp_extension": "deep_lists",
+                         "deep_lists": [operation, items, tail],
+                         "expression": f"differential:deep_list({operation},{items},{tail})"})
+
+    boxed_leaf = "{boxed,#{1=>integer,1.0=>float},<<5:3>>,1267650600228229401496703205376}"
+    for items in ["[]", "[[]]", "[[],[],[]]", "[a]", "[a,b,c]", "[[a,b],c]",
+                  "[a,[b,c]]", "[[a],[b,[c]],d]", "[[],[a],[],[b,[]],[]]",
+                  f"[{boxed_leaf}]", f"[[{boxed_leaf}],[],[z]]",
+                  "[<<>>,<<1,2>>,<<5:3>>]", "[1,1.0,0.0,-0.0]",
+                  "tail", "42", "#{a=>1}", "<<1>>", "[a|tail]", "[[]|tail]",
+                  "[[a|tail]]", "[a,[b|tail],c]", "[[a],b|tail]",
+                  "[[a|<<1>>],b]", "[[a|#{bad=>tail}],b]"]:
+        deep_probe("flatten", items)
+    for depth in [7, 8, 9, 17, 33]:
+        for leaf in [f"[{boxed_leaf}]", "[a|bad_tail]"]:
+            nested = leaf
+            for level in range(depth):
+                nested = f"[{nested},{{level,{level}}}]"
+            deep_probe("flatten", nested)
+    for count in [8, 33, 65]:
+        deep_probe("flatten", "[" + ",".join(f"[{n},[],[{n + 100}]]" for n in range(count)) + "]")
+    for items in ["[]", "[[]]", "[[],[]]", "[[a,b]]", "[[[a]],[[b,c]]]",
+                  "[[a,b],[c,d],[e]]", "[[],[a],[],[b],[]]", "[tail]",
+                  "[#{a=>1}]", "[<<5:3>>]", "[[a],tail]", "[[],tail]",
+                  "[[a],[b|tail]]", "[[a|tail],[b]]", "[tail,[]]",
+                  "[tail,not_an_outer_list|bad_outer]", "[[a]|bad_outer]",
+                  "[[]|bad_outer]", "tail", "#{a=>1}",
+                  f"[[{boxed_leaf}],[z]]", f"[[a],{boxed_leaf}]"]:
+        deep_probe("append_list", items)
+    for items in ["[]", "[a]", "[a,b,c]", f"[{boxed_leaf},[nested],z]",
+                  "[a|bad_tail]", "bad_prefix", "#{a=>1}"]:
+        for tail in ["[]", "[x,y]", "tail", "[x|tail]", "#{a=>1}", "<<5:3>>"]:
+            for operation in ["append_pair", "concat", "concat_apply"]:
+                deep_probe(operation, items, tail)
     return selected
 
 

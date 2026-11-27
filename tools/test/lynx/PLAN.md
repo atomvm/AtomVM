@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 8,489 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 8,674 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,50 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Deep-list flattening and concatenation
+
+Add 185 supported-API recipes: 37 for `flatten/1`, 22 for `append/1`, and 42
+each for `append/2`, source `++` and dynamically applied `erlang:'++'/2`.
+Preserve all 8,489 preceding recipes and metadata exactly; total 8,674. Fixture
+counts and Lean attribution are unchanged; no APIs or Lean proofs are added.
+
+- Contrast recursive flattening with one-level append. Check empty sublists,
+  asymmetric nesting, atomic tuple/map/bitstring leaves and numeric identity.
+- Check arbitrary final tails, singleton `append/1`, malformed intermediate
+  lists, improper outer lists and the precedence of outer-list failure over
+  an invalid prefix. Concatenation accepts any tail but requires a proper prefix.
+- Copy inputs out of the literal pool through ETF, retain inputs/captures and
+  complete outcomes across explicit GC, and exercise flatten's copying and
+  reusable-tail paths. Nesting depths 7/8/9/17/33 retain pending siblings;
+  wider 8/33/65-element structures distinguish traversal order and empty nodes.
+- `DEEP_LIST_MODEL` computes results structurally without the APIs under test
+  or `++`. It checks both OTP and AtomVM's complete observations, including
+  exception class/reason and GC-retained data. CLI coverage includes full
+  selection and a 27-case reversed/strided replay with unchanged metadata.
+
+The initial interpreter run matched 169/185: all 16 differences were flatten
+`badarg` versus OTP `function_clause` on non-list roots or improper tails.
+All concatenation paths matched. A separate correction in `nifs.c`, ordinary
+Erlang regressions and changelog fixes those exceptions and traversal-stack
+cleanup; the differential cases and expectations are unchanged by the fix.
+Both ordinary flatten regression groups fail against the saved old runtime
+and pass afterward. No allowlist changes are used.
+
+A 100-iteration successful/failing depth-33 stress run confirms the cleanup:
+macOS `leaks` reports 200 flatten allocations (64,000 bytes) before and none
+after. Total reported leaks drop from 258/65,856 bytes to 58/1,856 bytes; the
+unrelated existing allocations remain and are not fixed or called leak-free.
+
+Interpreter and AArch64 precompiled runs each match 185/185; the reordered
+on-demand JIT subset matches 27/27. Independent contracts pass on both VMs in
+all three runs, and complete decoded observations agree across modes. Both
+targeted CLI tests pass, including the structural model and interpreter replay.
+Ordinary lists/queue/sets/maps suites pass on all three AtomVM modes and OTP
+27.3.4.12, 28.3.1 and 29.1.3. Saved inputs, logs, before-runtime snapshot and
+reproducers are under `.amp/in/artifacts/lynx-deep-lists/`. Full runtime corpus,
+full CLI suite, full JIT matrix and embedded targets are not rerun for this batch;
+allocation-failure cleanup is inspected but not fault-injected.
 
 ## Positional-list traversal and validation
 

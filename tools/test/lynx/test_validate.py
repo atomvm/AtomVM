@@ -761,6 +761,70 @@ end)
 """
 
 
+# Structural oracle: no lists:flatten/append or ++ to calculate expectations.
+DEEP_LIST_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+literal = fn text ->
+  {:ok,tokens,_} = :erl_scan.string(String.to_charlist(text <> "."))
+  {:ok,value} = :erl_parse.parse_term(tokens)
+  value
+end
+concat = fn
+  _rec, [], tail -> tail
+  rec, [head | rest], tail -> [head | rec.(rec,rest,tail)]
+  _rec, _, _ -> throw({:model_error,:badarg})
+end
+flatten = fn
+  _rec, [] -> []
+  rec, [head | rest] ->
+    left = case head do
+      [] -> []
+      [_ | _] -> rec.(rec,head)
+      leaf -> [leaf]
+    end
+    concat.(concat,left,rec.(rec,rest))
+  _rec, _ -> throw({:model_error,:function_clause})
+end
+append_list = fn
+  _rec, [] -> []
+  _rec, [last] -> last
+  rec, [head | rest] -> concat.(concat,head,rec.(rec,rest))
+  _rec, _ -> throw({:model_error,:function_clause})
+end
+cases = read.("cases.json")
+expected = Enum.map(cases, fn c ->
+  [operation,input_text,tail_text] = c["deep_lists"]
+  input = literal.(input_text)
+  tail = literal.(tail_text)
+  result = try do
+    value = case operation do
+      "flatten" -> flatten.(flatten,input)
+      "append_list" -> append_list.(append_list,input)
+      operation when operation in ["append_pair","concat","concat_apply"] ->
+        concat.(concat,input,tail)
+    end
+    {:ok,value}
+  catch
+    :throw, {:model_error,reason} -> {:exception,:error,reason}
+  end
+  {:ok,{result,input,tail,{:captured,input,tail,%{retained: <<5::3>>}}}}
+end)
+for {vm,rows} <- [otp: read.("manifest.json")["expected"],
+                  atomvm: Enum.map(read.("actuals.json"), fn row ->
+                    "ok" = row["status"]
+                    row["value"]
+                  end)] do
+  true = length(rows) === length(expected)
+  failures = Enum.zip([cases,expected,rows]) |> Enum.filter(fn {_c,want,row} ->
+    :erlang.binary_to_term(Base.decode64!(row)) !== want
+  end)
+  if failures !== [], do: raise(inspect({vm,failures},limit: 10))
+  IO.puts("#{vm}: #{length(rows)} independent deep-list contracts")
+end
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -1205,6 +1269,26 @@ class ValidationTests(unittest.TestCase):
             true = Enum.all?(read.("replay"), fn {key,value} -> Map.fetch!(all,key) === value end)
             """, str(work)], capture_output=True, text=True, timeout=30)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_deep_lists_have_structural_contracts_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "deep_lists" in case]
+        self.assertEqual(len(selected), 185)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-7])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    self.assertEqual(self.invoke(output, "--replay", source),
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["deep_lists"] for c in saved],
+                                     [c["deep_lists"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", DEEP_LIST_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_queue_sequences_match_list_model_and_reordered_replay(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -3719,7 +3803,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 8489)
+        self.assertEqual(len(lean_runtime.cases()), 8674)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

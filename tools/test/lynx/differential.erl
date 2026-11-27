@@ -13,6 +13,7 @@
     bits/4,
     float_bits/4,
     call/3,
+    deep_list/3,
     execution_paths/3,
     print_result/1,
     map_entries/1,
@@ -375,6 +376,29 @@ timer_options_delivered(Ref, Token, Deadline) ->
 
 %% Inputs cross a module boundary to prevent constant-folded operations.
 call(Module, Function, Args) -> apply(Module, Function, Args).
+
+%% Decode fresh heap terms so GC checks are not limited to module literals.
+%% Keep both inputs and the complete result live across the final collection.
+deep_list(Operation, Input0, Tail0) ->
+    {Input, Tail} = binary_to_term(term_to_binary({Input0, Tail0})),
+    Captured = {captured, Input, Tail, #{retained => <<5:3>>}},
+    true = erlang:garbage_collect(),
+    Outcome =
+        try
+            case Operation of
+                flatten -> lists:flatten(Input);
+                append_list -> lists:append(Input);
+                append_pair -> lists:append(Input, Tail);
+                concat -> Input ++ Tail;
+                concat_apply -> call(erlang, '++', [Input, Tail])
+            end
+        of
+            Result -> {ok, Result}
+        catch
+            Class:Reason -> {exception, Class, Reason}
+        end,
+    true = erlang:garbage_collect(),
+    {Outcome, Input, Tail, Captured}.
 
 %% Compare observations, not equality between paths: guards reject errors and
 %% map patterns fail to match where body/dynamic lookups raise exceptions.

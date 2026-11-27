@@ -396,6 +396,28 @@ See [PLAN.md](PLAN.md#positional-list-traversal-and-validation) for evidence and
 scope. The full runtime corpus, full CLI suite and full JIT matrix remain unrun
 for this batch.
 
+### Deep-list flattening and concatenation
+
+- [x] Add 185 recipes for `flatten/1`, `append/1,2`, source `++` and dynamic
+  `erlang:'++'/2`, retaining all prior recipes/metadata (total 8,674).
+- [x] Cover asymmetric nesting, empty nodes, atomic boxed leaves, arbitrary final
+  tails, malformed outer/intermediate lists and exception precedence.
+- [x] Retain copied heap inputs, captures and complete outcomes across GC;
+  exercise depth 7/8/9/17/33 and width 8/33/65 traversal boundaries.
+- [x] Check both VMs against independent recursive contracts and reordered
+  replay; match 185/185 in interpreter/precompiled modes and 27/27 in the JIT
+  subset, with identical complete decoded observations across selected modes.
+- [x] Keep native flatten exception/cleanup fixes and ordinary Erlang regressions
+  separate. Both ordinary regression groups fail before and pass after; measured
+  flatten leaks fall from 200 allocations/64,000 bytes to none. Unrelated
+  existing leaks remain; no allowlist changes are used.
+- [x] Pass both targeted CLI tests and ordinary lists/queue/sets/maps suites
+  on all three AtomVM modes and OTP 27/28/29.
+
+See [PLAN.md](PLAN.md#deep-list-flattening-and-concatenation) for evidence and
+limits. The full corpus, full CLI harness, full JIT matrix and embedded targets
+remain unrun for this batch; allocation-failure paths are not fault-injected.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes
