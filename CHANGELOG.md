@@ -89,6 +89,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed stable equal-key ordering in `lists:sort/2` and `lists:merge/3`,
+  first-representative retention in `lists:usort/1,2`, and comparator validation
+  in `lists:sort/2` and `lists:merge/3` to match OTP
 - Fixed callback validation in `lists:map/2`, `foreach/2`, `flatmap/2` and `search/2`,
   non-list entry exceptions in `map/2`, and non-boolean predicate results in `search/2`
   to match OTP

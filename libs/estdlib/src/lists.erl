@@ -334,7 +334,7 @@ keyreplace(Key, N, [H | Tail], OrigL, NewTuple, Acc) ->
 %%-----------------------------------------------------------------------------
 -spec keysort(N :: pos_integer(), L :: [tuple()]) -> [tuple()].
 keysort(N, TupleList) ->
-    sort(fun(E1, E2) -> element(N, E1) < element(N, E2) end, TupleList).
+    sort(fun(E1, E2) -> element(N, E1) =< element(N, E2) end, TupleList).
 
 %%-----------------------------------------------------------------------------
 %% @param   Key         the key to match
@@ -681,18 +681,22 @@ seq_r(From, To, Incr, Acc) -> seq_r(From, To - Incr, Incr, [To | Acc]).
 %%-----------------------------------------------------------------------------
 -spec sort(List :: [T]) -> [T].
 sort(List) when is_list(List) ->
-    sort(fun lt/2, List).
+    sort(fun leq/2, List).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun sort function
 %% @param   List a list
-%% @returns Sorted list, ordered by Fun(A, B) : boolean() such that A "less than" B.
+%% @returns Sorted list, ordered by Fun(A, B) : boolean() such that A "less than or equal to" B.
 %% @doc     Returns a sorted list, using Fun(A, B) to determine sort order.
 %%
 %% @end
 %%-----------------------------------------------------------------------------
 -spec sort(Fun :: fun((T, T) -> boolean()), List :: [T]) -> [T].
-sort(Fun, List) when is_function(Fun, 2), is_list(List) ->
+sort(Fun, []) when is_function(Fun, 2) ->
+    [];
+sort(Fun, [_] = List) when is_function(Fun, 2) ->
+    List;
+sort(Fun, [_, _ | _] = List) ->
     merge_sort(Fun, List).
 
 merge_sort(_Fun, []) ->
@@ -752,7 +756,7 @@ split(_, [], _) ->
 %% @end
 %%-----------------------------------------------------------------------------
 merge(List1, List2) ->
-    merge(fun lt/2, List1, List2, []).
+    merge(fun leq/2, List1, List2, []).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun ordering function
@@ -763,7 +767,7 @@ merge(List1, List2) ->
 %%          order. If elements compare equal, element from List1 is picked first
 %% @end
 %%-----------------------------------------------------------------------------
-merge(Fun, List1, List2) ->
+merge(Fun, List1, List2) when is_function(Fun, 2) ->
     merge(Fun, List1, List2, []).
 
 merge(_Fun, [], Right, Acc) ->
@@ -771,14 +775,14 @@ merge(_Fun, [], Right, Acc) ->
 merge(_Fun, Left, [], Acc) ->
     lists:reverse(Acc, Left);
 merge(Fun, [A | As], [B | Bs], Acc) ->
-    % keep sort stable, if B < A, put it first, otherwise keep A first
-    case Fun(B, A) of
-        true -> merge(Fun, [A | As], Bs, [B | Acc]);
-        false -> merge(Fun, As, [B | Bs], [A | Acc])
+    % A non-strict comparator keeps the left item first on equal keys.
+    case Fun(A, B) of
+        true -> merge(Fun, As, [B | Bs], [A | Acc]);
+        false -> merge(Fun, [A | As], Bs, [B | Acc])
     end.
 
 %% @private
-lt(A, B) -> A < B.
+leq(A, B) -> A =< B.
 
 %%-----------------------------------------------------------------------------
 %% @param   List a list
@@ -801,7 +805,7 @@ usort(List) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec usort(Fun :: fun((T, T) -> boolean()), List :: [T]) -> [T].
-usort(Fun, List) ->
+usort(Fun, List) when is_function(Fun, 2) ->
     Sorted = sort(Fun, List),
     unique(Sorted, Fun).
 
@@ -817,7 +821,7 @@ unique([X], _Fun) ->
 unique([X, Y | Tail], Fun) ->
     case Fun(X, Y) andalso Fun(Y, X) of
         true ->
-            unique([Y | Tail], Fun);
+            unique([X | Tail], Fun);
         false ->
             [X | unique([Y | Tail], Fun)]
     end.

@@ -53,6 +53,8 @@ test() ->
     ok = test_join(),
     ok = test_seq(),
     ok = test_sort(),
+    ok = test_merge(),
+    ok = test_ordering_validation(),
     ok = test_split(),
     ok = test_usort(),
     ok = test_ukeysort(),
@@ -631,6 +633,95 @@ test_sort() ->
     ?ASSERT_ERROR(lists:sort(fun(A, B) -> A > B end, 1), function_clause),
     ?ASSERT_ERROR(lists:sort(1, [1]), function_clause),
 
+    Items = [{2, a}, {1, first}, {2, b}, {1.0, second}, {3, z}, {2, c}],
+    ?ASSERT_MATCH(
+        lists:sort(fun({A, _}, {B, _}) -> A =< B end, Items),
+        [{1, first}, {1.0, second}, {2, a}, {2, b}, {2, c}, {3, z}]
+    ),
+    ?ASSERT_MATCH(
+        lists:sort(fun({A, _}, {B, _}) -> A >= B end, Items),
+        [{3, z}, {2, a}, {2, b}, {2, c}, {1, first}, {1.0, second}]
+    ),
+    ?ASSERT_MATCH(lists:sort([1.0, 1, 1.0, 1]), [1.0, 1, 1.0, 1]),
+    ok.
+
+test_merge() ->
+    Ascending = fun({A, _}, {B, _}) -> A =< B end,
+    Descending = fun({A, _}, {B, _}) -> A >= B end,
+    ?ASSERT_MATCH(
+        lists:merge(Ascending, [{1, a}, {1, b}, {3, c}], [{1.0, d}, {2, e}, {3, f}]),
+        [{1, a}, {1, b}, {1.0, d}, {2, e}, {3, c}, {3, f}]
+    ),
+    ?ASSERT_MATCH(
+        lists:merge(Descending, [{3, c}, {1, a}, {1, b}], [{3, f}, {2, e}, {1.0, d}]),
+        [{3, c}, {3, f}, {2, e}, {1, a}, {1, b}, {1.0, d}]
+    ),
+    ?ASSERT_MATCH(lists:merge([1, 1.0, 3], [1.0, 2, 3.0]), [1, 1.0, 1.0, 2, 3, 3.0]),
+    ok.
+
+test_ordering_validation() ->
+    lists:foreach(
+        fun(Callback) ->
+            ?ASSERT_ERROR(lists:sort(Callback, []), function_clause),
+            ?ASSERT_ERROR(lists:sort(Callback, [3]), function_clause),
+            Reason =
+                case is_function(Callback) of
+                    true -> {badarity, {Callback, [3, 1]}};
+                    false -> {badfun, Callback}
+                end,
+            ?ASSERT_ERROR(lists:sort(Callback, [3, 1]), Reason),
+            lists:foreach(
+                fun(Items) ->
+                    ?ASSERT_ERROR(lists:usort(Callback, Items), function_clause)
+                end,
+                [[], [3], [3, 1]]
+            ),
+            lists:foreach(
+                fun({Left, Right}) ->
+                    ?ASSERT_ERROR(lists:merge(Callback, Left, Right), function_clause)
+                end,
+                [{[], []}, {[3], []}, {[], [1]}, {[3], [1]}]
+            )
+        end,
+        [id(not_fun), fun() -> wrong end, fun(_) -> wrong end, fun(_, _, _) -> wrong end]
+    ),
+    Unused = fun(_, _) -> error(unexpected_comparison) end,
+    ?ASSERT_MATCH(lists:sort(Unused, []), []),
+    ?ASSERT_MATCH(lists:sort(Unused, [3]), [3]),
+    ?ASSERT_MATCH(lists:usort(Unused, []), []),
+    ?ASSERT_MATCH(lists:usort(Unused, [3]), [3]),
+    ?ASSERT_MATCH(lists:merge(Unused, [], []), []),
+    ?ASSERT_MATCH(lists:merge(Unused, [3], []), [3]),
+    ?ASSERT_MATCH(lists:merge(Unused, [], [1]), [1]),
+    lists:foreach(
+        fun(Operation) ->
+            Arguments =
+                case Operation of
+                    merge -> [[3], [1]];
+                    _ -> [[3, 1]]
+                end,
+            lists:foreach(
+                fun(Class) ->
+                    Callback = fun(_, _) ->
+                        case Class of
+                            error -> error(comparator_failed);
+                            throw -> throw(comparator_failed);
+                            exit -> exit(comparator_failed)
+                        end
+                    end,
+                    ?ASSERT_EXCEPTION(
+                        apply(lists, Operation, [Callback | Arguments]), Class, comparator_failed
+                    )
+                end,
+                [error, throw, exit]
+            ),
+            ?ASSERT_ERROR(
+                apply(lists, Operation, [fun(_, _) -> not_boolean end | Arguments]),
+                {case_clause, not_boolean}
+            )
+        end,
+        [sort, usort, merge]
+    ),
     ok.
 
 test_split() ->
@@ -666,6 +757,17 @@ test_usort() ->
     ?ASSERT_ERROR(lists:usort(1), function_clause),
     ?ASSERT_ERROR(lists:usort(fun(A, B) -> A > B end, 1), function_clause),
     ?ASSERT_ERROR(lists:usort(1, [1]), function_clause),
+    Items = [{2, first}, {1, a}, {2, second}, {1.0, b}, {3, z}, {2, third}],
+    ?ASSERT_MATCH(
+        lists:usort(fun({A, _}, {B, _}) -> A =< B end, Items),
+        [{1, a}, {2, first}, {3, z}]
+    ),
+    ?ASSERT_MATCH(
+        lists:usort(fun({A, _}, {B, _}) -> A >= B end, Items),
+        [{3, z}, {2, first}, {1, a}]
+    ),
+    ?ASSERT_MATCH(lists:usort([1.0, 1, 1]), [1.0]),
+    ?ASSERT_MATCH(lists:usort([1, 1.0, 1.0]), [1]),
     ok.
 
 test_ukeysort() ->
