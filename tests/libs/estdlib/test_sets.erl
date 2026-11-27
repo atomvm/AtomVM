@@ -40,6 +40,7 @@ test() ->
     ok = test_is_disjoint(),
     ok = test_is_subset(),
     ok = test_filter(),
+    ok = test_filter_predicate_results(),
     ok = test_map(),
     ok = test_filtermap(),
     ok.
@@ -209,6 +210,63 @@ test_filter() ->
         ),
         true
     ),
+    ok.
+
+test_filter_predicate_results() ->
+    Items = [1, 1.0, {tag, <<5:3>>}],
+    Set = sets:from_list(Items, [{version, 2}]),
+    Failures = [
+        {fun() -> Bad end, {error, {bad_filter, Bad}}}
+     || Bad <- [not_boolean, [], {true, mapped}]
+    ],
+    lists:foreach(
+        fun({Action, Expected}) ->
+            put(set_filter_calls, []),
+            Predicate = fun(Item) ->
+                Calls = [Item | get(set_filter_calls)],
+                put(set_filter_calls, Calls),
+                case length(Calls) of
+                    1 -> true;
+                    2 -> Action();
+                    _ -> error(unexpected_callback)
+                end
+            end,
+            Outcome =
+                try sets:filter(Predicate, Set) of
+                    _ -> unexpected_success
+                catch
+                    Class:Reason -> {Class, Reason}
+                end,
+            ?ASSERT_MATCH(Outcome, Expected),
+            % Traversal order is unspecified, but no call may follow the failure.
+            [First, Second] = erase(set_filter_calls),
+            ?ASSERT_TRUE(First =/= Second),
+            ?ASSERT_TRUE(sets:is_element(First, Set)),
+            ?ASSERT_TRUE(sets:is_element(Second, Set)),
+            ?ASSERT_TRUE(sets:is_equal(Set, sets:from_list(Items, [{version, 2}])))
+        end,
+        Failures ++
+            [
+                {
+                    fun() -> error({case_clause, from_callback}) end,
+                    {error, {case_clause, from_callback}}
+                },
+                {
+                    fun() -> throw({callback_failed, <<5:3>>}) end,
+                    {throw, {callback_failed, <<5:3>>}}
+                },
+                {fun() -> exit({callback_failed, <<5:3>>}) end, {exit, {callback_failed, <<5:3>>}}}
+            ]
+    ),
+    ?ASSERT_TRUE(
+        sets:is_empty(
+            sets:filter(fun(_) -> error(unexpected_callback) end, sets:new([{version, 2}]))
+        )
+    ),
+    Filtered = sets:filter(fun(Item) -> Item =:= 1 end, Set),
+    ?ASSERT_MATCH(sets:size(Filtered), 1),
+    ?ASSERT_TRUE(sets:is_element(1, Filtered)),
+    ?ASSERT_MATCH(sets:is_element(1.0, Filtered), false),
     ok.
 
 test_map() ->

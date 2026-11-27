@@ -519,10 +519,7 @@ fold_1(Fun, Acc, Iter) ->
     Set1 :: set(Element),
     Set2 :: set(Element).
 filter(F, #{} = D) when is_function(F, 1) ->
-    %    %% For this purpose, it is more efficient to use
-    %    %% maps:from_keys than a map comprehension.
-    %    maps:from_keys([K || K := _ <- D, F(K)], ?VALUE).
-    maps:filter(fun(K, _V) -> F(K) end, D).
+    maps:from_keys([K || K <- maps:keys(D), F(K)], ?VALUE).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun the mapping function
