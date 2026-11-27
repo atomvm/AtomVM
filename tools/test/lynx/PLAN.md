@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 7,713 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 7,861 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,100 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Comparator-driven sort, usort and merge
+
+Add 148 supported-API observations (2026-11-27): 46 each for `lists:sort/2`
+and `usort/2`, and 56 for `merge/3`. Preserve all 7,713 preceding recipes and
+metadata; total 7,861, attribution unchanged at 377/478 Lean sites and fixture
+coverage unchanged at 2,351 calls across 203 exports. No APIs or proofs are added.
+
+- Use valid non-strict key comparators (`=<` and `>=`), ascending/descending
+  inputs, distinguishable equal-key elements, numeric-equivalent integer/float
+  keys, empty/singleton controls and a 17-element mixed ordering case.
+- Require stable sort results, the first representative of each comparator
+  equivalence group for usort, and left-before-right merge ties. Merge inputs
+  are already sorted in the chosen direction; their concatenation defines the
+  independent equal-key precedence.
+- Exercise invalid callbacks and arities 1/3, constant error/throw/exit reasons,
+  non-boolean atom/tuple returns, and controls where no comparison is needed.
+  OTP validates callbacks differently: sort invokes an invalid callback when
+  at least two elements are present (`badfun`/`badarity`), whereas usort and
+  merge reject invalid callbacks at entry (`function_clause`).
+- Explicit GC inside comparisons and before reporting retains original inputs,
+  boxed tagged results and captured maps, integers and partial bitstrings.
+  Report a capture/argument-retention invariant, not pair visits or call counts.
+  Normalize badarity's embedded function to an identity check, omitting its
+  algorithm-dependent compared arguments. No ordering/count of comparator
+  invocations or argument-dependent exception prefix is asserted.
+
+`list_ordering.erl` is a standalone observer. The independent Elixir contract
+ranks each item by strictly preceding keys plus earlier equivalent keys; it
+calls no sorting/merging API and does not reproduce either implementation's
+algorithm. Both VMs must satisfy it, so agreement on a wrong stable result is
+not accepted. A positive control passes; six identically wrong report pairs
+are rejected (unstable sort, last usort representative, right-first merge tie,
+lost capture, failed GC invariant and eager sort callback validation).
+OTP 27.3.4.12, 28.3.1 and 29.1.3 each satisfy all 148 contracts with the observer
+freshly compiled under that version. Cross-OTP saved results are checked using
+Elixir 29; these are OTP-only controls, not additional AtomVM runs.
+
+Initial interpreter, AArch64 precompiled and on-demand JIT runs each matched
+**113/148**, with **35 mismatches**, zero timeouts and zero unverified references.
+Sort matched 34/46, usort 46/46 and merge 33/56. The differences were six unstable
+sort cases, eight right-before-left merge tie cases, six sort callback-validation
+cases and fifteen merge callback-validation cases. Reordered 30-case replays
+matched **22/30**, exposing the same eight selected differences after module
+reindexing. Complete observations agreed across modes; independent checks
+validated OTP and identified the same AtomVM failures in all six runs.
+The initial 51-method CLI suite passed all 47 preceding enabled methods, skipped
+three optional configurations and failed only the new comparator method's two
+subtests. That process used an exploratory 17-case subset; the final richer
+30-case replay was separately rerun. No expected-failure entry was added.
+
+### Separate library correction and ordinary Erlang regressions
+
+The shared merge worker now tests the left item against the right and selects
+it when the non-strict comparator returns true. Natural sorting/merging and
+keysort use non-strict comparisons too, preserving stable default and key
+ordering. Duplicate removal retains the first equivalent item, preserving
+custom usort results after the sorting correction and correcting default
+usort's integer/float representative choice.
+
+Sort validates callbacks on empty/singleton lists but invokes them when a pair
+is present. Merge validates arity two at entry even when one list is empty.
+Usort retains its entry validation independently of sort. Callback exceptions
+and non-boolean returns are not caught or translated by the library.
+
+The correction lives in `libs/estdlib/src/lists.erl`, with changelog and ordinary
+regressions in `tests/libs/estdlib/test_lists.erl`, separate from this Lynx batch.
+Sort, merge, validation and default-usort regression groups each fail against
+the unchanged library and pass afterward; existing keysort/ukeysort controls
+remain green. The maintained tests use only public APIs and keep their exports
+unchanged; isolation uses `+export_all` only in a disposable validation build.
+Full ordinary lists, queue, sets and maps suites pass on OTP 27.3.4.12, 28.3.1,
+29.1.3 and all three AtomVM modes. An OTP-27-compiled local library/test pack
+also passes on AtomVM. Independent 10,000-item stable sort/usort/merge controls
+pass on all three OTP hosts and AtomVM modes, with periodic GC and retained
+inputs/captures.
+
+Fresh interpreter, AArch64 precompiled and on-demand JIT runs each match
+**148/148**, with **30/30** reordered replays, zero failures and zero unverified
+references. Both VMs satisfy the independent contracts in all six runs, with
+identical complete observations across modes and replay reindexing. The full
+51-method CLI suite now passes: **48 passed, three optional skips**, including
+the comparator integration test's full and final 30-case replay. Erlang
+formatting, Python 3.9 grammar and whitespace checks pass. No cases, model
+expectations or expected-failure entries were changed to obtain these results.
+
+Evidence: `.amp/in/artifacts/lynx-list-ordering/` retains the initial failures,
+inputs/replay, independent/cross-OTP/mutation controls, inventory and recipe
+preservation hashes. `.amp/in/artifacts/list-ordering-fix/` records the separate
+library correction, ordinary before/after controls and fresh validation.
+Cold JIT uses `--timeout 120` for per-process compilation of the existing large
+helper. The complete runtime corpus, fresh Lean proofs, embedded/32-bit/float32
+targets, arbitrary comparator laws, malformed lists, strict/non-transitive
+comparators and exhaustive input combinations are outside this batch.
 
 ## Paired-list zipwith callbacks
 

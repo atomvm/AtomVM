@@ -170,10 +170,28 @@ An independent two-list model checks both VMs and rejects five kinds of
 identically wrong reports. All three execution modes match 95/95 cases and
 14/14 reordered replays; the 50-method harness passes (47 passed, three optional
 skips). All 7,618 previous recipes and metadata are preserved;
-the corpus now contains 7,713 recipes. See
+that batch brought the corpus to 7,713 recipes. See
 [the batch notes](PLAN.md#paired-list-zipwith-callbacks) for per-mode results,
 reordered replay, cross-OTP controls and scope. No new APIs, library/runtime fixes
 or expected-failure entries are included.
+
+The comparator batch adds 148 `lists:sort/2`, `usort/2` and `merge/3` recipes,
+bringing the corpus to 7,861. Independent ranks check stable ordering, first
+representatives and left-before-right merge ties with valid non-strict
+comparators. Constant exceptions, invalid callbacks and GC-retained terms are
+also checked without prescribing the implementation's comparison sequence.
+OTP 27/28/29 each satisfy all contracts. Initial runs in all three modes matched
+113/148, exposing fourteen tie-order and twenty-one callback-validation
+mismatches. A separate library correction and ordinary Erlang regressions fix
+these differences while preserving stable natural/key sorting and first usort
+representatives. Fresh interpreter, AArch64 precompiled and on-demand JIT runs
+each match 148/148 and 30/30 reordered cases, with independent checks on both
+VMs and identical observations across modes. Ordinary collection suites and
+10,000-item ordering controls pass on OTP 27/28/29 and all three AtomVM modes.
+The 51-method CLI suite passes (48 passed, three optional skips). No cases,
+independent expectations or allowlists were changed to hide failures. See
+[the comparator notes](PLAN.md#comparator-driven-sort-usort-and-merge) for
+before/after results, separate ordinary regressions and limits.
 
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences

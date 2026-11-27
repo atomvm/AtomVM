@@ -3073,6 +3073,45 @@ def cases():
         for exception in ["error", "throw", "exit"]:
             for index in [2, 3]:
                 zipwith_probe(*args, {"tuple": ["fail", exception, index]})
+    # Comparator algorithms may visit different pairs; compare stable results,
+    # constant exception reasons and retained terms, not invocation sequences.
+    def ordering_items(keys, side):
+        return [{"tuple": [key, {"tuple": [side, index]},
+                           {"map": [["payload", [index, 2**100, {"bits": [5, 3]}]]]}]}
+                for index, key in enumerate(keys)]
+
+    def ordering_probe(operation, direction, left, right=None, mode="normal"):
+        args = [operation, direction, left, right or [], mode]
+        selected.append({"otp_extension": "list_ordering", "list_ordering": args,
+                         "expression": "list_ordering:observe(" +
+                                       ",".join(map(erlang, args)) + ")"})
+
+    for direction in ["ascending", "descending"]:
+        for operation in ["sort", "usort"]:
+            for keys in [[], [2], [1, 1.0, 1, 1.0], [1, 2, 3, 4], [4, 3, 2, 1],
+                         [3, 1.0, 2, 1, 3, -2, 2, 1.0],
+                         [7, 0, 4, 7, -2, 1, 4, 0, 9, 3, 7, 1, -2, 5, 3, 4, 9]]:
+                ordering_probe(operation, direction, ordering_items(keys, "left"))
+        for left, right in [([], []), ([2], []), ([], [2]), ([1], [1.0]),
+                            ([1, 1, 3], [1.0, 2, 3, 3]),
+                            ([-3, 1, 4, 7], [-2, 0, 4, 4, 9]),
+                            ([1, 1, 1], [1.0, 1, 1.0]),
+                            ([1, 3, 5, 7, 9], [2, 4, 6, 8])]:
+            if direction == "descending":
+                left, right = left[::-1], right[::-1]
+            ordering_probe("merge", direction, ordering_items(left, "left"),
+                           ordering_items(right, "right"))
+    for operation in ["sort", "usort", "merge"]:
+        shapes = [([], []), ([2], []), ([2, 1], []), ([1, 1.0], [])]
+        if operation == "merge":
+            shapes = [([], []), ([2], []), ([], [3]), ([1], [2]), ([1], [1.0])]
+        for left, right in shapes:
+            for mode in ["non_function", "arity_one", "arity_three",
+                         {"tuple": ["fail", "error"]}, {"tuple": ["fail", "throw"]},
+                         {"tuple": ["fail", "exit"]}, {"tuple": ["return", "not_boolean"]},
+                         {"tuple": ["return", {"tuple": ["true", "changed"]}]}]:
+                ordering_probe(operation, "ascending", ordering_items(left, "left"),
+                               ordering_items(right, "right"), mode)
     return selected
 
 

@@ -603,6 +603,77 @@ end)
 """
 
 
+# Rank each tagged item by all strictly preceding keys plus earlier equal keys.
+# This does not call sorting/merging APIs or reproduce either VM's algorithm.
+LIST_ORDERING_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+from_etf = fn s -> :erlang.binary_to_term(Base.decode64!(s)) end
+decode = fn decode, value ->
+  case value do
+    %{"tuple" => xs} -> List.to_tuple(for x <- xs, do: decode.(decode,x))
+    %{"map" => xs} -> Map.new(xs,fn [k,v] -> {decode.(decode,k),decode.(decode,v)} end)
+    %{"bits" => [v,n]} -> <<v::size(n)>>
+    xs when is_list(xs) -> for x <- xs, do: decode.(decode,x)
+    s when is_binary(s) -> String.to_atom(s)
+    n -> n
+  end
+end
+model = fn [operation,direction,left,right,mode] ->
+  captured = {:captured,left,right,<<5::3>>,Integer.pow(2,100)}
+  items = if operation === :merge, do: left ++ right, else: left
+  ordered = fn ->
+    indexed = Enum.with_index(items)
+    ranks = for {x,i} <- indexed do
+      rank = Enum.count(indexed,fn {y,j} ->
+        a = elem(x,0)
+        b = elem(y,0)
+        before = if direction === :ascending, do: b < a, else: b > a
+        before or (a == b and j < i)
+      end)
+      {rank,x}
+    end
+    sorted = for rank <- Enum.take(Stream.iterate(0,&(&1+1)),length(items)),
+                 {r,x} <- ranks, r === rank, do: x
+    if operation === :usort do
+      for {x,i} <- Enum.with_index(sorted),
+          not Enum.any?(Enum.take(sorted,i),fn y -> elem(y,0) == elem(x,0) end), do: x
+    else
+      sorted
+    end
+  end
+  invoked = if operation === :merge, do: left !== [] and right !== [], else: length(left) > 1
+  outcome = cond do
+    mode in [:non_function,:arity_one,:arity_three] ->
+      reason = if operation === :sort and invoked do
+        if mode === :non_function, do: {:badfun,:not_fun}, else: {:badarity,true}
+      else
+        :function_clause
+      end
+      {:exception,:error,reason}
+    not invoked -> {:ok,items}
+    match?({:fail,_},mode) -> {:exception,elem(mode,1),{:comparator_failed,<<5::3>>}}
+    match?({:return,_},mode) -> {:exception,:error,{:case_clause,elem(mode,1)}}
+    true -> {:ok,ordered.()}
+  end
+  {:ok,{outcome,true,left,right,captured}}
+end
+cases = read.("cases.json")
+expected = for c <- cases, do: model.(decode.(decode,c["list_ordering"]))
+oracle = for s <- read.("manifest.json")["expected"], do: from_etf.(s)
+actual = for row <- read.("actuals.json") do
+  "ok" = row["status"]
+  from_etf.(row["value"])
+end
+Enum.each([{"OTP",oracle},{"AtomVM",actual}],fn {vm,rows} ->
+  true = length(rows) === length(expected)
+  failures = for {{a,e},n} <- Enum.with_index(Enum.zip(rows,expected)), a !== e, do: n
+  IO.puts("#{vm}: #{length(rows)-length(failures)}/#{length(rows)} independent ordering contracts")
+  if failures !== [], do: raise("#{vm} contract failures at indices #{inspect(failures,limit: :infinity)}")
+end)
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -949,6 +1020,27 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["list_zipwith"] for c in saved],
                                      [c["list_zipwith"] for c in cases])
                     check = subprocess.run(["elixir", "-e", LIST_ZIPWITH_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+                    self.assertEqual(summary,
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+
+    def test_comparator_ordering_has_independent_contracts_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "list_ordering" in case]
+        self.assertEqual(len(selected), 148)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-5])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    summary = self.invoke(output, "--replay", source)
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["list_ordering"] for c in saved],
+                                     [c["list_ordering"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", LIST_ORDERING_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
                     self.assertEqual(summary,
@@ -3468,7 +3560,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 7713)
+        self.assertEqual(len(lean_runtime.cases()), 7861)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

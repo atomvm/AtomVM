@@ -305,6 +305,39 @@ No library/runtime fix or expected-failure entry is included. See
 [PLAN.md](PLAN.md#paired-list-zipwith-callbacks) for execution-mode results,
 independent checks and limits.
 
+### Comparator-driven sort, usort and merge
+
+- [x] Add 148 recipes with non-strict ascending/descending comparators, stable
+  equal-key ordering, first usort representatives and left-before-right merge
+  ties. Preserve all 7,713 previous recipes and metadata (total 7,861).
+- [x] Cover invalid callbacks/arities, non-boolean returns, constant
+  errors/throws/exits and no-comparison controls, without asserting algorithm-
+  dependent invocation counts, pair order or argument-dependent failures.
+- [x] Retain original inputs, captures and boxed results across explicit GC;
+  check both VMs against independent ranks and exercise reordered replay.
+- [x] Check all 148 contracts on OTP 27/28/29 and reject six identically wrong
+  report pairs with a passing positive model control.
+- [x] Fix stable ties in `sort/2` and `merge/3`, with ordinary Erlang regressions
+  separate from this coverage. Initial runs exposed six sort and eight merge
+  tie mismatches. Keep natural/key sorting stable with non-strict comparators.
+- [x] Match OTP's callback-validation boundaries for `sort/2` and `merge/3`,
+  with separate ordinary Erlang regressions. Initial runs exposed six sort
+  and fifteen merge validation mismatches. Keep usort entry validation and
+  first representatives independent of the sorting correction; fix default
+  usort's integer/float representative choice too.
+
+Initial runs matched 113/148 and 22/30 reordered cases in all three modes.
+A separate library/ordinary-regression/changelog correction resolves the
+observed differences without an allowlist. Sort, merge, validation and default-
+usort regression groups each fail against the old library and pass afterward;
+existing keysort/ukeysort controls remain green. Ordinary lists/queue/sets/maps
+suites and independent 10,000-item controls pass on OTP 27/28/29 and all three
+AtomVM modes. Fresh interpreter, precompiled and JIT runs each match 148/148,
+with 30/30 reordered replays and independent checks on both VMs. The full
+51-method CLI suite passes (48 passed, three optional skips). See
+[PLAN.md](PLAN.md#comparator-driven-sort-usort-and-merge) for the complete
+validation results, independent contracts and scope.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes
