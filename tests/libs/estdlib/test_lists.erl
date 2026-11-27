@@ -40,6 +40,9 @@ test() ->
     ok = test_foldr(),
     ok = test_fold_validation(),
     ok = test_fold_exception_boundaries(),
+    ok = test_unary_validation(),
+    ok = test_unary_exception_boundaries(),
+    ok = test_search_results(),
     ok = test_all(),
     ok = test_any(),
     ok = test_predicate_results(),
@@ -302,6 +305,136 @@ test_fold_exception_boundaries() ->
         end,
         [foldl, foldr, mapfoldl, mapfoldr]
     ),
+    ok.
+
+test_unary_validation() ->
+    % Keep the regression driver independent of foreach/2, which is under test.
+    lists:foldl(
+        fun(Operation, ok) ->
+            lists:foldl(
+                fun(Callback, ok) ->
+                    lists:foldl(
+                        fun(Input, ok) ->
+                            ?ASSERT_ERROR(
+                                apply(lists, Operation, [Callback, Input]), function_clause
+                            )
+                        end,
+                        ok,
+                        [[], [1.0], [3, 7 | tail], not_a_list]
+                    )
+                end,
+                ok,
+                [not_fun, fun(_, _) -> error(unexpected_callback) end]
+            )
+        end,
+        ok,
+        [map, foreach, flatmap, search]
+    ),
+    ok.
+
+test_unary_exception_boundaries() ->
+    lists:foldl(
+        fun(Operation, ok) ->
+            EntryReason =
+                case Operation of
+                    map -> {case_clause, not_a_list};
+                    _ -> function_clause
+                end,
+            lists:foldl(
+                fun({Input, Mode, Expected, Trace}, ok) ->
+                    put(unary_calls, []),
+                    Callback = fun(Item) ->
+                        put(unary_calls, [Item | get(unary_calls)]),
+                        true = erlang:garbage_collect(),
+                        case {Mode, Item} of
+                            {{fail, error, Reason}, 7} ->
+                                error(Reason);
+                            {{fail, throw, Reason}, 7} ->
+                                throw(Reason);
+                            {{fail, exit, Reason}, 7} ->
+                                exit(Reason);
+                            _ ->
+                                case Operation of
+                                    flatmap -> [Item];
+                                    search -> false;
+                                    _ -> {Item, <<5:3>>}
+                                end
+                        end
+                    end,
+                    Outcome =
+                        try apply(lists, Operation, [Callback, Input]) of
+                            _ -> unexpected_success
+                        catch
+                            Class:Reason -> {Class, Reason}
+                        end,
+                    ?ASSERT_MATCH(Outcome, Expected),
+                    Calls = lists:reverse(erase(unary_calls)),
+                    ?ASSERT_MATCH(Calls, Trace)
+                end,
+                ok,
+                [
+                    {not_a_list, normal, {error, EntryReason}, []},
+                    {[3, 7 | tail], normal, {error, function_clause}, [3, 7]}
+                ] ++
+                    [
+                        {[3, 7, 2], {fail, Class, Reason}, {Class, Reason}, [3, 7]}
+                     || {Class, Reason} <- [
+                            {error, badarg},
+                            {error, function_clause},
+                            {error, {case_clause, from_callback}},
+                            {throw, callback_failed},
+                            {exit, callback_failed}
+                        ]
+                    ]
+            )
+        end,
+        ok,
+        [map, foreach, flatmap, search]
+    ),
+    Deferred =
+        try
+            lists:flatmap(
+                fun
+                    (3) -> not_a_list;
+                    (7) -> throw(later)
+                end,
+                [3, 7]
+            )
+        of
+            _ -> unexpected_success
+        catch
+            Class:Reason -> {Class, Reason}
+        end,
+    ?ASSERT_MATCH(Deferred, {throw, later}),
+    ok.
+
+test_search_results() ->
+    lists:foldl(
+        fun(Bad, ok) ->
+            put(search_calls, []),
+            Callback = fun(Item) ->
+                put(search_calls, [Item | get(search_calls)]),
+                true = erlang:garbage_collect(),
+                case Item of
+                    3 -> false;
+                    7 -> Bad;
+                    _ -> error(unnecessary_callback)
+                end
+            end,
+            Outcome =
+                try lists:search(Callback, [3, 7, 2]) of
+                    _ -> unexpected_success
+                catch
+                    Class:Reason -> {Class, Reason}
+                end,
+            ?ASSERT_MATCH(Outcome, {error, {case_clause, Bad}}),
+            Calls = lists:reverse(erase(search_calls)),
+            ?ASSERT_MATCH(Calls, [3, 7])
+        end,
+        ok,
+        [not_boolean, [], {true, changed}]
+    ),
+    ?ASSERT_MATCH(lists:search(fun(X) -> X =:= 1 end, [1.0, 1 | tail]), {value, 1}),
     ok.
 
 test_all() ->

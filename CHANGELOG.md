@@ -89,6 +89,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed callback validation in `lists:map/2`, `foreach/2`, `flatmap/2` and `search/2`,
+  non-list entry exceptions in `map/2`, and non-boolean predicate results in `search/2`
+  to match OTP
 - Fixed callback validation and malformed-list exceptions in `lists:foldl/3`,
   `foldr/3`, `mapfoldl/3` and `mapfoldr/3` to match OTP
 - Fixed `sets:filter/2` raising `{case_clause, Result}` instead of `{bad_filter, Result}`

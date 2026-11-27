@@ -89,9 +89,15 @@
 %% @end
 %%-----------------------------------------------------------------------------
 -spec map(Fun :: fun((Elem :: term()) -> Out :: term()), List :: list()) -> OutList :: term().
-map(F, [H | T]) ->
-    [F(H) | map(F, T)];
-map(F, []) when is_function(F, 1) ->
+map(F, List) when is_function(F, 1) ->
+    case List of
+        [] -> [];
+        [H | T] -> [F(H) | map0(F, T)]
+    end.
+
+map0(F, [H | T]) ->
+    [F(H) | map0(F, T)];
+map0(_F, []) ->
     [].
 
 %%-----------------------------------------------------------------------------
@@ -227,11 +233,14 @@ reverse(_L, _T) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec foreach(Fun :: fun((Elem :: term()) -> term()), List :: list()) -> ok.
-foreach(_Fun, []) ->
+foreach(Fun, List) when is_function(Fun, 1) ->
+    foreach0(Fun, List).
+
+foreach0(_Fun, []) ->
     ok;
-foreach(Fun, [H | T]) ->
+foreach0(Fun, [H | T]) ->
     Fun(H),
-    foreach(Fun, T).
+    foreach0(Fun, T).
 
 %%-----------------------------------------------------------------------------
 %% @param   K the key to match
@@ -515,7 +524,7 @@ flatten(_L) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec flatmap(F :: fun((Elem :: term()) -> [term()]), List :: [term()]) -> [term()].
-flatmap(F, L) when is_list(L) ->
+flatmap(F, L) when is_function(F, 1) ->
     flatmap_1(F, L).
 
 flatmap_1(_F, []) ->
@@ -533,14 +542,17 @@ flatmap_1(F, [H | T]) ->
 %%-----------------------------------------------------------------------------
 -spec search(Pred :: fun((Elem :: term()) -> boolean()), List :: list()) ->
     {value, Value :: term()} | false.
-search(_Pred, []) ->
+search(Pred, List) when is_function(Pred, 1) ->
+    search0(Pred, List).
+
+search0(_Pred, []) ->
     false;
-search(Pred, [H | T]) ->
+search0(Pred, [H | T]) ->
     case Pred(H) of
         true ->
             {value, H};
-        _ ->
-            search(Pred, T)
+        false ->
+            search0(Pred, T)
     end.
 
 %%-----------------------------------------------------------------------------
