@@ -89,6 +89,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed numeric-equivalent key matching in `lists:keydelete/3`, `lists:keyreplace/4`
+  and `lists:keystore/4`, first-representative retention in `lists:ukeysort/2`,
+  and keyed-list position validation and key-sort input exceptions to match OTP
 - Fixed stable equal-key ordering in `lists:sort/2` and `lists:merge/3`,
   first-representative retention in `lists:usort/1,2`, and comparator validation
   in `lists:sort/2` and `lists:merge/3` to match OTP

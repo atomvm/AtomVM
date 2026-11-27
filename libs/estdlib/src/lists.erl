@@ -251,24 +251,14 @@ foreach0(Fun, [H | T]) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec keydelete(K :: term(), I :: pos_integer(), L :: list()) -> list().
-keydelete(K, I, L) ->
+keydelete(K, I, L) when is_integer(I), I > 0 ->
     keydelete(K, I, L, []).
 
 %% @private
 keydelete(_K, _I, [], L) ->
     ?MODULE:reverse(L);
-keydelete(K, I, [H | T], L2) when is_tuple(H) ->
-    case I =< tuple_size(H) of
-        true ->
-            case element(I, H) of
-                K ->
-                    ?MODULE:reverse(L2, T);
-                _ ->
-                    keydelete(K, I, T, [H | L2])
-            end;
-        false ->
-            keydelete(K, I, T, [H | L2])
-    end;
+keydelete(K, I, [H | T], L2) when element(I, H) == K ->
+    ?MODULE:reverse(L2, T);
 keydelete(K, I, [H | T], L2) ->
     keydelete(K, I, T, [H | L2]).
 
@@ -311,7 +301,7 @@ keymember(_K, _I, []) ->
     TupleList :: [tuple()],
     NewTuple :: tuple()
 ) -> [tuple()].
-keyreplace(Key, N, TupleList, NewTuple) when is_tuple(NewTuple) ->
+keyreplace(Key, N, TupleList, NewTuple) when is_integer(N), N > 0, is_tuple(NewTuple) ->
     case keyreplace(Key, N, TupleList, TupleList, NewTuple, []) of
         {false, _Reversed} -> TupleList;
         {value, Updated} -> Updated
@@ -320,7 +310,7 @@ keyreplace(Key, N, TupleList, NewTuple) when is_tuple(NewTuple) ->
 %% @private
 keyreplace(_Key, _N, [], _OrigL, _NewTuple, Acc) ->
     {false, Acc};
-keyreplace(Key, N, [H | Tail], _OrigL, NewTuple, Acc) when element(N, H) =:= Key ->
+keyreplace(Key, N, [H | Tail], _OrigL, NewTuple, Acc) when element(N, H) == Key ->
     {value, ?MODULE:reverse(Acc, [NewTuple | Tail])};
 keyreplace(Key, N, [H | Tail], OrigL, NewTuple, Acc) ->
     keyreplace(Key, N, Tail, OrigL, NewTuple, [H | Acc]).
@@ -333,8 +323,12 @@ keyreplace(Key, N, [H | Tail], OrigL, NewTuple, Acc) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec keysort(N :: pos_integer(), L :: [tuple()]) -> [tuple()].
-keysort(N, TupleList) ->
-    sort(fun(E1, E2) -> element(N, E1) =< element(N, E2) end, TupleList).
+keysort(N, TupleList) when is_integer(N), N > 0 ->
+    case TupleList of
+        [] -> TupleList;
+        [_] -> TupleList;
+        [_, _ | _] -> sort(fun(E1, E2) -> element(N, E1) =< element(N, E2) end, TupleList)
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   Key         the key to match
@@ -354,7 +348,7 @@ keysort(N, TupleList) ->
     TupleList :: [tuple()],
     NewTuple :: tuple()
 ) -> [tuple()].
-keystore(Key, N, TupleList, NewTuple) when is_tuple(NewTuple) ->
+keystore(Key, N, TupleList, NewTuple) when is_integer(N), N > 0, is_tuple(NewTuple) ->
     case keyreplace(Key, N, TupleList, TupleList, NewTuple, []) of
         {false, Reversed} -> ?MODULE:reverse(Reversed, [NewTuple]);
         {value, Updated} -> Updated
@@ -835,7 +829,7 @@ unique([X, Y | Tail], Fun) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec ukeysort(N :: pos_integer(), L :: [tuple()]) -> [tuple()].
-ukeysort(N, TupleList) ->
+ukeysort(N, TupleList) when is_integer(N), N > 0 ->
     Sorted = keysort(N, TupleList),
     unique_key(Sorted, N).
 
@@ -844,7 +838,7 @@ unique_key([], _N) ->
     [];
 unique_key([X], _N) ->
     [X];
-unique_key([X, Y | Tail], N) when element(N, X) =:= element(N, Y) ->
+unique_key([X, Y | Tail], N) when element(N, X) == element(N, Y) ->
     unique_key([X | Tail], N);
 unique_key([X, Y | Tail], N) ->
     [X | unique_key([Y | Tail], N)].

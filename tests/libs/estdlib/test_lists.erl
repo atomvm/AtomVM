@@ -36,6 +36,8 @@ test() ->
     ok = test_keysort(),
     ok = test_keystore(),
     ok = test_keytake(),
+    ok = test_keyed_validation(),
+    ok = test_keysort_inputs(),
     ok = test_foldl(),
     ok = test_foldr(),
     ok = test_fold_validation(),
@@ -124,6 +126,69 @@ test_keydelete() ->
         lists:keydelete(a, 1, [b, {a, x}, {a, x}, {a, x}, []]),
         [b, {a, x}, {a, x}, []]
     ),
+    ?ASSERT_MATCH(
+        lists:keydelete(1, 1, [skip, {}, {1.0, first}, {1, later} | tail]),
+        [skip, {}, {1, later} | tail]
+    ),
+    ?ASSERT_MATCH(lists:keydelete(1, 2, [{only, 1.0}]), []),
+    ?ASSERT_MATCH(lists:keydelete({1}, 1, [{{1.0}, first}, {{1}, later}]), [{{1}, later}]),
+    ?ASSERT_MATCH(
+        lists:keydelete(9007199254740993, 1, [
+            {9007199254740992.0, keep}, {9007199254740993, remove}
+        ]),
+        [{9007199254740992.0, keep}]
+    ),
+    ?ASSERT_ERROR(lists:keydelete(missing, 1, [{1, first} | tail]), function_clause),
+    ok.
+
+test_keyed_validation() ->
+    lists:foreach(
+        fun(Position) ->
+            lists:foreach(
+                fun(Items) ->
+                    ?ASSERT_ERROR(lists:keydelete(a, Position, Items), function_clause),
+                    ?ASSERT_ERROR(lists:keyreplace(a, Position, Items, {}), function_clause),
+                    ?ASSERT_ERROR(lists:keystore(a, Position, Items, {}), function_clause),
+                    ?ASSERT_ERROR(lists:keytake(a, Position, Items), function_clause),
+                    ?ASSERT_ERROR(lists:keysort(Position, Items), function_clause),
+                    ?ASSERT_ERROR(lists:ukeysort(Position, Items), function_clause)
+                end,
+                [[], [{a, first}]]
+            )
+        end,
+        [id(0), id(-1), id(1.0), id(bad_position)]
+    ),
+    lists:foreach(
+        fun(Replacement) ->
+            ?ASSERT_ERROR(lists:keyreplace(a, 1, [], Replacement), function_clause),
+            ?ASSERT_ERROR(lists:keystore(a, 1, [], Replacement), function_clause)
+        end,
+        [id(not_tuple), id([])]
+    ),
+    ok.
+
+test_keysort_inputs() ->
+    lists:foreach(
+        fun(Operation) ->
+            ?ASSERT_MATCH(apply(lists, Operation, [3, []]), []),
+            ?ASSERT_MATCH(apply(lists, Operation, [3, [not_tuple]]), [not_tuple]),
+            ?ASSERT_MATCH(apply(lists, Operation, [3, [{}]]), [{}]),
+            ?ASSERT_ERROR(apply(lists, Operation, [3, [{a}, {b}]]), badarg),
+            lists:foreach(
+                fun(Input) ->
+                    ?ASSERT_ERROR(
+                        apply(lists, Operation, [1, Input]), {case_clause, Input}
+                    )
+                end,
+                [id(not_list), id({not_a, list}), id([{a, first} | tail])]
+            ),
+            ?ASSERT_ERROR(
+                apply(lists, Operation, [1, [{a, first}, {b, second} | tail]]),
+                function_clause
+            )
+        end,
+        [keysort, ukeysort]
+    ),
     ok.
 
 test_keyreplace() ->
@@ -138,6 +203,16 @@ test_keyreplace() ->
         lists:keyreplace(a, 3, [b, {a, x}, {a, x}, {a, x}, []], {1, 2}),
         [b, {a, x}, {a, x}, {a, x}, []]
     ),
+    ?ASSERT_MATCH(
+        lists:keyreplace(1, 1, [skip, {}, {1.0, first}, {1, later} | tail], {changed, value}),
+        [skip, {}, {changed, value}, {1, later} | tail]
+    ),
+    ?ASSERT_MATCH(lists:keyreplace(1, 2, [{only, 1.0}], {}), [{}]),
+    ?ASSERT_MATCH(
+        lists:keyreplace({1}, 2, [{first, {1.0}}, {later, {1}}], {changed, value}),
+        [{changed, value}, {later, {1}}]
+    ),
+    ?ASSERT_ERROR(lists:keyreplace(missing, 1, [{1, first} | tail], {}), function_clause),
     ok.
 
 test_keysort() ->
@@ -192,6 +267,16 @@ test_keystore() ->
         lists:keystore(a, 3, [b, {a, x}, {a, x}, {a, x}, []], {1, 2}),
         [b, {a, x}, {a, x}, {a, x}, [], {1, 2}]
     ),
+    ?ASSERT_MATCH(
+        lists:keystore(1, 1, [skip, {}, {1.0, first}, {1, later} | tail], {changed, value}),
+        [skip, {}, {changed, value}, {1, later} | tail]
+    ),
+    ?ASSERT_MATCH(lists:keystore(1, 2, [{only, 1.0}], {}), [{}]),
+    ?ASSERT_MATCH(
+        lists:keystore({1}, 2, [{first, {1.0}}, {later, {1}}], {changed, value}),
+        [{changed, value}, {later, {1}}]
+    ),
+    ?ASSERT_ERROR(lists:keystore(missing, 1, [{1, first} | tail], {}), function_clause),
     ok.
 
 test_keytake() ->
@@ -807,6 +892,20 @@ test_ukeysort() ->
     ?ASSERT_MATCH(
         lists:ukeysort(1, [{2, first}, {1, x}, {2, second}, {2, third}]),
         [{1, x}, {2, first}]
+    ),
+    ?ASSERT_MATCH(
+        lists:ukeysort(1, [{2, last}, {1.0, first}, {1, later}, {2.0, duplicate}]),
+        [{1.0, first}, {2, last}]
+    ),
+    ?ASSERT_MATCH(
+        lists:ukeysort(2, [{first, 1}, {later, 1.0}, {keep, 2}]),
+        [{first, 1}, {keep, 2}]
+    ),
+    ?ASSERT_MATCH(
+        lists:ukeysort(1, [
+            {9007199254740993, keep}, {9007199254740992.0, first}, {9007199254740992, later}
+        ]),
+        [{9007199254740992.0, first}, {9007199254740993, keep}]
     ),
 
     ok.
