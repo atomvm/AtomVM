@@ -310,6 +310,87 @@ IO.puts("Checked #{length(cases)} AtomVM set callback contracts")
 """
 
 
+# Independent ordered equations; do not call any of the four lists fold APIs.
+LIST_FOLD_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+from_etf = fn s -> :erlang.binary_to_term(Base.decode64!(s)) end
+decode = fn decode, value ->
+  case value do
+    %{"tuple" => xs} -> xs |> Enum.map(&decode.(decode,&1)) |> List.to_tuple()
+    %{"map" => xs} -> Map.new(xs, fn [k,v] -> {decode.(decode,k),decode.(decode,v)} end)
+    %{"bits" => [v,n]} -> <<v::size(n)>>
+    xs when is_list(xs) -> Enum.map(xs,&decode.(decode,&1))
+    s when is_binary(s) -> String.to_atom(s)
+    n -> n
+  end
+end
+model = fn [op,shape,items,mode] ->
+  captured = {:captured,items,<<5::3>>}
+  seed = {:seed,7,<<3::2>>}
+  right = op in [:foldr,:mapfoldr]
+  mapping = op in [:mapfoldl,:mapfoldr]
+  input = case shape do
+    :proper -> items
+    :improper -> Enum.reduce(Enum.reverse(items),:tail,fn x,t -> [x|t] end)
+    :non_list -> :not_a_list
+  end
+  {outcome,trace} = if mode in [:non_function,:wrong_arity] or
+                         shape === :non_list or (right and shape === :improper) do
+    # foldl's guarded entry uses a case on the original argument; recursive
+    # malformed tails and the other entry points fail a function clause.
+    reason = if op === :foldl and shape === :non_list and
+                   mode not in [:non_function,:wrong_arity],
+                do: {:case_clause,:not_a_list}, else: :function_clause
+    {{:exception,:error,reason},[]}
+  else
+    visits = if right, do: Enum.reverse(items), else: items
+    state = Enum.reduce_while(Enum.with_index(visits,1),{seed,[],[]},
+      fn {x,n},{acc,ys,trace} ->
+        trace = [{x,acc,captured}|trace]
+        case mode do
+          {:fail,kind,^n} ->
+            {:halt,{:failed,{:exception,kind,{:callback_failed,x,<<5::3>>}},trace}}
+          {:bad_return,bad,^n} ->
+            {:halt,{:failed,{:exception,:error,{:badmatch,bad}},trace}}
+          _ ->
+            next = if mode === :replace_acc and n === 2,
+                      do: {:replacement,<<5::3>>}, else: {x,acc}
+            {:cont,{next,[{:mapped,x,acc,captured}|ys],trace}}
+        end
+      end)
+    case state do
+      {:failed,failure,trace} -> {failure,Enum.reverse(trace)}
+      {acc,ys,trace} ->
+        outcome = cond do
+          shape !== :proper -> {:exception,:error,:function_clause}
+          mapping -> {:ok,{if(right,do: ys,else: Enum.reverse(ys)),acc}}
+          true -> {:ok,acc}
+        end
+        {outcome,Enum.reverse(trace)}
+    end
+  end
+  {outcome,trace,input,captured}
+end
+cases = read.("cases.json")
+expected = Enum.map(cases,&{:ok,model.(decode.(decode,&1["list_fold"]))})
+oracle = Enum.map(read.("manifest.json")["expected"],from_etf)
+actual = Enum.map(read.("actuals.json"),fn row ->
+  "ok" = row["status"]
+  from_etf.(row["value"])
+end)
+Enum.each([{"OTP",oracle},{"AtomVM",actual}],fn {vm,rows} ->
+  true = length(rows) === length(expected)
+  failures = Enum.zip(rows,expected) |> Enum.with_index() |> Enum.flat_map(fn
+    {{a,e},n} when a !== e -> [n]
+    _ -> []
+  end)
+  IO.puts("#{vm}: #{length(rows)-length(failures)}/#{length(rows)} independent ordered fold contracts")
+  if failures !== [], do: raise("#{vm} contract failures at indices #{inspect(failures,limit: :infinity)}")
+end)
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -591,6 +672,28 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["set_callback"] for c in saved],
                                      [c["set_callback"] for c in cases])
                     check = subprocess.run(["elixir", "-e", SET_CALLBACK_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+                    self.assertEqual(summary,
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+
+    def test_ordered_list_folds_have_independent_contracts_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "list_fold" in case]
+        self.assertEqual({case["list_fold"][0] for case in selected},
+                         {"foldl", "foldr", "mapfoldl", "mapfoldr"})
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-9])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    summary = self.invoke(output, "--replay", source)
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["list_fold"] for c in saved],
+                                     [c["list_fold"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", LIST_FOLD_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
                     self.assertEqual(summary,
@@ -3110,7 +3213,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 7222)
+        self.assertEqual(len(lean_runtime.cases()), 7350)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

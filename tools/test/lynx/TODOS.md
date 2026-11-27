@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 
 # Lynx coverage TODOs
 
-Status as of 2026-11-26, against Lynx
+Status as of 2026-11-27, against Lynx
 `ff3aad6f39e196ce539a73e1f51f8c3a1b69f68c`. The supported-behavior priorities
 below follow an audit of the current recipes and unsampled sites. The original
 six-item shortlist from screening 195 incoming commits is retained afterwards;
@@ -220,6 +220,34 @@ filter-only fix and were not rerun afterward. The new CLI regression passes.
 Ordinary `test_sets`/`test_maps` pass on OTP 27.3.4.12, 28.3.1 and 29.1.3 and in
 all three AtomVM modes. No expected-failure entries were added.
 See [PLAN.md](PLAN.md#set-callback-combinations) for execution-mode results and scope.
+
+### 10. Ordered list folds and mapfolds (follow-up)
+
+- [x] Cover `foldl/3`, `foldr/3`, `mapfoldl/3` and `mapfoldr/3` with exact
+  callback order and every incoming accumulator, not just final sums.
+- [x] Check mapped output order separately from right-to-left invocation order;
+  include accumulator replacement, duplicate/exact numeric and compound elements,
+  boxed values, captured data, and original inputs retained across explicit GC.
+- [x] Include error/throw/exit on the first, second and final callback, unused
+  failing callbacks, malformed mapfold returns, invalid callbacks and improper tails.
+- [x] Check independent ordered contracts and filtered/reordered replay; reject
+  identically wrong reports with reversed visits, broken threading or reversed output.
+- [x] Correct callback validation and malformed-list exception differences
+  separately, with ordinary Erlang regressions in `test_lists.erl`, outside Lynx.
+
+Adds 128 recipes (29 per fold, 35 per mapfold), preserving all 7,222 previous
+recipes and metadata; total 7,350, attribution unchanged at 377/478 sites.
+Initial interpreter, AArch64 precompiled and on-demand JIT runs each matched
+98/128, exposing 24 callback-validation differences, five `foldr/3` malformed-input
+exceptions and one `foldl/3` non-list-entry exception. The separate library fix
+adds entry guards and proper recursive exception boundaries without changing
+`reverse/1` or translating callback exceptions. Interpreter, precompiled and
+on-demand JIT reruns each match 128/128 with 15/15 reordered replays.
+Full list/queue/set/map ordinary
+tests pass on OTP 27.3.4.12, 28.3.1 and 29.1.3 and in all three AtomVM modes.
+A 10,000-element validation of all four operations also passes in every mode.
+No expected-failure entries were added. See
+[PLAN.md](PLAN.md#ordered-list-folds-and-mapfolds) for mode/replay results and limits.
 
 ### Audit scope and exclusions
 

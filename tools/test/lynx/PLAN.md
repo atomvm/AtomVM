@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 7,222 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 7,350 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,115 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Ordered list folds and mapfolds
+
+Add 128 supported-API observations (2026-11-27): 29 each for `foldl/3` and
+`foldr/3`, 35 each for `mapfoldl/3` and `mapfoldr/3`. These are supported-behavior
+extensions, not fresh Lean proofs or newly attributed sites. All 7,222 previous
+recipes and metadata are unchanged (total 7,350; attribution remains 377/478).
+
+- Use asymmetric inputs, duplicates, exact integer/float distinctions, compound
+  elements, boxed integers and partial bitstrings, empty/singleton and 17-item lists.
+- Return exact ordered callback traces with every incoming accumulator and
+  captured value. Noncommutative nested accumulators distinguish direction,
+  argument swaps and stale inputs. A replacement accumulator changes its shape
+  after the second callback. Mapping depends on the incoming accumulator, and
+  mapped result order is checked independently of callback execution order.
+- Exercise error/throw/exit on the first, second and final invocation, callbacks
+  that would fail only after an empty/singleton input has ended, malformed
+  mapfold returns, non-functions, wrong arities, improper tails and non-list inputs.
+  An improper input with a failing callback distinguishes left-side effects
+  from right-side traversal failing before any invocation.
+- Collect explicitly inside each callback and before returning the observation;
+  retain captured data, intermediate accumulators, effects and original inputs.
+
+`list_folds.erl` is a separate observer, avoiding growth of the existing large
+helper. It calls the public API via `apply/3`, catches exact exception class/reason,
+returns exact traces and does not use the fold APIs to construct its inputs.
+Only badarity's embedded function is represented by same-runtime identity;
+its argument list remains exact. An independent Elixir ordered-equation model
+checks both VMs without calling any of these four fold APIs or the observer.
+Three negative controls reject identically wrong OTP/AtomVM results with reversed
+visits, an incorrect intermediate accumulator and reversed mapped output; an
+unchanged positive control passes. Filtered/reordered replay checks recipe
+metadata retention and reindexing.
+
+### Initial library differences — correction kept separate
+
+Initially, interpreter, AArch64 precompiled and on-demand JIT runs each matched
+**98/128**, with **30 failures** and zero unverified references. Cold JIT uses `--timeout 120`
+for the existing large helper's per-process compilation. All valid-input traversal,
+accumulator and mapped result checks agree; malformed mapfold results also match.
+The initial failures were:
+
+1. **24 callback-validation cases:** all four entry points lacked OTP's arity-two
+   guard. Empty lists wrongly accepted invalid callbacks; nonempty lists could raise
+   `badfun`/`badarity` instead of `function_clause`. In `foldr/3`, reversing a
+   malformed input could also preempt the invalid-callback check with `badarg`.
+2. **Five `foldr/3` malformed-input cases:** valid callbacks with improper lists
+   or a non-list raised `badarg` from the delegated reverse, versus OTP's
+   `function_clause`. Neither VM invoked a callback; this was not an effect-order bug.
+3. **One `foldl/3` non-list entry:** OTP's guarded entry checks the initial list
+   with a case and raises `{case_clause,not_a_list}`; AtomVM raised
+   `function_clause`. An improper tail reached recursively remains
+   `function_clause`, so these boundaries must not be conflated.
+
+OTP **27.3.4.12, 28.3.1 and 29.1.3** each match all 128 independent contracts,
+using an observer compiled by the corresponding OTP. The model initially assumed
+all non-list entries raised `function_clause`; actual OTP output and source
+identified `foldl/3`'s distinct entry boundary, and the model was corrected.
+These are observed compatibility differences, not inferred from source alone.
+The initial coverage contained no library/runtime correction or expected-failure
+entry. Keep the separate correction below outside the coverage files; do not catch
+and relabel arbitrary callback exceptions or change `lists:reverse/1` globally.
+
+Before correction, all three modes' 15-case filtered/reordered replays each
+matched 12 and reproduced three of the same failures. Exact callback traces, retained inputs and captures
+agree on all 128 full-run cases and all 15 replay cases in every mode; the
+mismatches are exception outcomes, not invocation/GC differences. Four direct
+public calls without the observer reproduce the validation/input differences.
+The initial full-batch CLI test was red on the real library differences, as was
+its replay subtest. Five existing CLI tests passed: set callbacks, queue callbacks,
+map callbacks, seed/replay and independent behavioral oracles.
+
+### Separate library correction and ordinary Erlang regressions
+
+All four public entry points now validate arity-two callbacks before processing
+any list. `foldl/3` distinguishes its initial case check from recursive tail
+matching. `foldr/3` traverses directly rather than delegating to `reverse/1`, so
+malformed inputs naturally raise `function_clause` before invoking callbacks.
+The mapfold workers retain their established traversal/result construction.
+No callback exception translation or global `reverse/1` change is needed.
+
+Two ordinary regressions extend `test_lists.erl`: callback validation on empty,
+proper, improper and non-list inputs, and exact entry/tail exceptions and
+ordered preceding effects. User errors (`badarg`, `function_clause`, and a
+structured `case_clause`), throws and exits propagate unchanged after preceding
+callback work and explicit GC. The new regression fails on the unchanged library.
+Fix, ordinary tests and changelog are outside the Lynx coverage files.
+
+Full `test_lists`, `test_queue`, `test_sets` and `test_maps` pass on OTP 27.3.4.12,
+28.3.1 and 29.1.3, and in AtomVM interpreter, AArch64 precompiled and on-demand
+JIT execution. An additional interpreter control uses the fixed local library
+and ordinary tests compiled by OTP 27. A separate target control confirms
+`reverse/1`'s existing malformed-input behavior is unchanged. A 10,000-element
+validation of all four operations passes in all three AtomVM modes, checking
+count, independently calculated sum, first/last visits, mapped positions and GC.
+Fresh interpreter, precompiled and on-demand JIT differential runs each match
+**128/128**, with **15/15** reordered replays, including independent expected-result
+and trace checks. The complete CLI suite passes **45 tests**, with three optional
+environment-gated skips (48 total). No expected-failure entries were added.
+The full runtime corpus was not rerun; embedded/32-bit/float32 execution, all
+input shapes, fresh Lean proofs and exhaustive callback combinations are not claimed.
+
+Evidence: `.amp/in/artifacts/lynx-list-folds/` contains saved input/replay,
+per-mode sources, manifests, logs and build hashes, independent checks,
+cross-OTP controls, negative/positive model controls, direct public-call controls,
+regenerated inventory and the previous-recipes preservation hash.
+`.amp/in/artifacts/list-fold-fix/` contains the failing baseline, fixed per-mode
+runs and independent checks, ordinary/cross-OTP and 10,000-element validation,
+CLI suite log, build logs and standalone reproducers.
 
 ## Set callback combinations
 

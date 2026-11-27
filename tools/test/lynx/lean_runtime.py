@@ -2920,6 +2920,40 @@ def cases():
             set_probe(operation, history, set_items, {"tuple": ["fail", exception, 2]})
         for items in [[], [1.0]]:
             set_probe(operation, "from_list", items, {"tuple": ["fail", "error", 1]})
+    # Ordered list folds: exact callback/accumulator traces, not just final sums.
+    fold_items = [1, 1.0, {"tuple": ["tag", {"bits": [5, 3]}]}, 1,
+                  {"map": [["payload", [9, 2]]]}, 2**100]
+
+    def list_fold_probe(operation, shape, items, mode):
+        args = [operation, shape, items, mode]
+        selected.append({"otp_extension": "list_folds", "list_fold": args,
+                         "expression": "list_folds:observe(" +
+                                       ",".join(map(erlang, args)) + ")"})
+
+    for operation in ["foldl", "foldr", "mapfoldl", "mapfoldr"]:
+        for items in [[], [1.0], fold_items, list(range(17))]:
+            list_fold_probe(operation, "proper", items, "normal")
+        list_fold_probe(operation, "proper", fold_items, "replace_acc")
+        for exception in ["error", "throw", "exit"]:
+            for index in [1, 2, len(fold_items)]:
+                list_fold_probe(operation, "proper", fold_items,
+                                {"tuple": ["fail", exception, index]})
+        for items in [[], [1.0]]:
+            list_fold_probe(operation, "proper", items, {"tuple": ["fail", "error", 2]})
+        for mode in ["non_function", "wrong_arity"]:
+            for shape, items in [("proper", []), ("proper", [1.0]),
+                                 ("improper", [3, 7]), ("non_list", [])]:
+                list_fold_probe(operation, shape, items, mode)
+        for shape, items in [("improper", [3]), ("improper", [3, 7]), ("non_list", [])]:
+            list_fold_probe(operation, shape, items, "normal")
+        for exception, index in [("error", 1), ("throw", 2)]:
+            list_fold_probe(operation, "improper", [3, 7, 2],
+                            {"tuple": ["fail", exception, index]})
+        if operation in ["mapfoldl", "mapfoldr"]:
+            for bad in ["not_pair", [], {"tuple": ["too", "many", "fields"]}]:
+                for index in [1, 2]:
+                    list_fold_probe(operation, "proper", fold_items,
+                                    {"tuple": ["bad_return", bad, index]})
     return selected
 
 

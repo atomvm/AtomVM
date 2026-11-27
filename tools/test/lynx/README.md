@@ -125,6 +125,21 @@ validation uses `--timeout 120` to allow compilation of the existing large helpe
 in each isolated process. No allowlist entries were added; see
 [the batch notes](PLAN.md#set-callback-combinations) for JIT scope and evidence.
 
+The ordered-list batch adds 128 `foldl`, `foldr`, `mapfoldl` and `mapfoldr`
+recipes with exact invocation/accumulator traces, mapped output order, exception
+prefixes, invalid callbacks, malformed inputs and explicit GC retention. An
+independent ordered-equation model validates both VMs; it rejects reversed visits,
+broken accumulator threading and reversed mapped output even if both VMs report
+the same wrong result. Initial interpreter, AArch64 precompiled and on-demand
+JIT runs each matched 98/128, exposing callback-validation/malformed-input
+exception differences. A separate library fix and ordinary Erlang regressions
+resolve those boundaries without changing `reverse/1` or translating callback
+exceptions. Interpreter, precompiled and on-demand JIT reruns each match 128/128
+with 15/15 replays; OTP 27/28/29 each satisfy all 128 independent contracts.
+No allowlist entries were added. See
+[the batch notes](PLAN.md#ordered-list-folds-and-mapfolds) for mode/replay results
+and limits; this batch brings the public-behavior corpus to 7,350 recipes.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen
