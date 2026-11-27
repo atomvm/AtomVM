@@ -1,6 +1,13 @@
 {
   "areas": [
     {
+      "name": "binary_hex_partial_bitstring",
+      "reason": "AtomVM deliberately rejects partial bitstrings with badarg; OTP 27/28/29 decode_hex leaks {badmatch, Input} when the rounded byte size is even",
+      "expressions": [
+        "differential:binary_access(decode_hex,unaligned,<<48,5:3>>,unused)"
+      ]
+    },
+    {
       "name": "phash2",
       "reason": "erlang:phash2/1,2 is not implemented in AtomVM (error:undef)",
       "expression_prefix": "differential:phash2_"

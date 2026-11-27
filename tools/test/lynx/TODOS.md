@@ -570,6 +570,32 @@ See [PLAN.md](PLAN.md#binary-access-and-copying) for evidence and limits. Large
 count literals target 64-bit hosts; full corpus/CLI/JIT matrices, full older-OTP
 harness, fixture Lean laws and embedded targets remain outside this batch.
 
+### Hex conversion
+
+- [x] Add 726 recipes for supported `binary:encode_hex/1,2` and `decode_hex/1`,
+  preserving all previous recipes/metadata (total 11,193).
+- [x] Check exact uppercase/lowercase/default encoding and mixed-case decoding,
+  all byte values, leading zeroes, asymmetric contents and larger binaries.
+- [x] Reject every non-hex byte in either nibble position, odd lengths, signed
+  pairs, nonbinary/partial sources and invalid modes even for empty inputs.
+- [x] Exercise copied inputs, larger-parent slices, three-bit-offset byte
+  segments and complete live operands/results across GC, with an independent
+  digit-table/byte-list model rather than round trips.
+- [x] Fix signed-pair acceptance separately with ordinary Erlang regressions.
+- [x] Keep the deliberate partial-source `badarg` validation. Record one exact
+  expected failure against OTP 27/28/29's leaked `{badmatch, Input}` instead
+  of changing AtomVM or normalizing the difference away.
+- [x] Observe 725 matches plus one known difference in interpreter/precompiled
+  modes and 46 plus the same difference in reordered JIT replay. Independent
+  per-VM contracts, cross-mode checks and thirteen wrong-result controls pass.
+- [x] Check all 726 observer-only host controls on OTP 27/28/29; pass ordinary
+  `test_binary` plus ten runtime binary suites on those hosts and all three
+  AtomVM modes. Exercise targeted CLI checks, including strict failure handling.
+
+See [PLAN.md](PLAN.md#hex-conversion) for raw results and evidence. Full corpus,
+full CLI/JIT matrices, the complete older-OTP harness, Lean fixture laws and
+embedded targets remain outside this batch.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes

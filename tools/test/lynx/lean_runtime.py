@@ -3496,6 +3496,47 @@ def cases():
         limit = ((1 << 64) - 1) // (8 * len(data))
         for count in [limit, limit + 1, (1 << 64) - 1]:
             binary_access_probe("copy", binary_literal(data), str(count))
+
+    def binary_hex_probe(operation, subject, arg="unused", storage="copy"):
+        args = [operation, storage, subject, arg]
+        selected.append({"otp_extension": "binary_hex", "binary_hex": args,
+                         "expression": "differential:binary_access(" + ",".join(args) + ")"})
+
+    subjects = [b"", b"\x00", b"\x0f", b"\x10", b"\xff", b"\x00\xff\x80\x11",
+                bytes(range(256))]
+    subjects += [bytes((17 * n + 128) % 256 for n in range(size))
+                 for size in [63, 64, 65, 257]]
+    for data in subjects:
+        lower = data.hex().encode("ascii")
+        upper = lower.upper()
+        mixed = bytes(upper[n] if n % 2 else lower[n] for n in range(len(lower)))
+        for storage in ["copy", "slice", "unaligned"]:
+            for operation, mode in [("encode_hex_default", "unused"),
+                                    ("encode_hex", "uppercase"), ("encode_hex", "lowercase")]:
+                binary_hex_probe(operation, binary_literal(data), mode, storage)
+            for text in dict.fromkeys([lower, upper, mixed]):
+                binary_hex_probe("decode_hex", binary_literal(text), storage=storage)
+    # Reject every non-hex byte in each nibble position. Move the bad pair
+    # before, between and after valid pairs instead of testing round trips only.
+    for byte in range(256):
+        if byte in b"0123456789abcdefABCDEF":
+            continue
+        for nibble in [0, 1]:
+            pair = bytes([byte, ord("1")]) if nibble == 0 else bytes([ord("a"), byte])
+            text = [pair + b"00aF", b"00" + pair + b"aF", b"00aF" + pair][byte % 3]
+            binary_hex_probe("decode_hex", binary_literal(text),
+                             storage=["copy", "slice", "unaligned"][(byte + nibble) % 3])
+    for text in [b"+0", b"+1", b"+F", b"-0", b"-1", b"-F",
+                 b"0", b"abc", b"00aF0", b"F" * 63, b"0" * 65, b"0" * 129]:
+        for storage in ["copy", "slice", "unaligned"]:
+            binary_hex_probe("decode_hex", binary_literal(text), storage=storage)
+    for index, invalid in enumerate(["bad", "[]", "[48,49]", "{}", "<<5:3>>", "<<48,5:3>>"]):
+        for operation, mode in [("decode_hex", "unused"), ("encode_hex_default", "unused"),
+                                ("encode_hex", "uppercase"), ("encode_hex", "lowercase")]:
+            binary_hex_probe(operation, invalid, mode, ["copy", "slice", "unaligned"][index % 3])
+    for mode in ["bad", "[]", "{}", "1", "1.0", "<<117,112,112,101,114,99,97,115,101>>", "true"]:
+        for subject in ["<<>>", "<<0,255,128>>", "<<5:3>>"]:
+            binary_hex_probe("encode_hex", subject, mode)
     return selected
 
 

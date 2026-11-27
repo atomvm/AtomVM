@@ -289,6 +289,16 @@ runtime fix and ordinary Erlang regression also enforce OTP's oversized-result
 `system_limit` boundary. Large-count recipes need matching-word-size VMs. See the
 batch notes for execution results and validation limits.
 
+The [hex-conversion batch](PLAN.md#hex-conversion) adds 726 recipes for
+`binary:encode_hex/1,2` and `decode_hex/1`, bringing the corpus to 11,193.
+Independent digit-table expectations check exact encodings/decoded bytes,
+all byte values, invalid characters in either nibble, malformed inputs, case
+options and retained values across construction paths/GC. Twenty signed-pair
+mismatches are fixed separately with an ordinary Erlang regression. One existing
+exception-reason difference for a partial bitstring remains explicit in
+`expected_failures.json`: AtomVM keeps `badarg` rather than OTP's leaked
+`{badmatch, Input}`. See the batch notes for raw results and validation limits.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen
@@ -414,14 +424,15 @@ Missing functions and differing error precedence remain failures, not skips.
 For CI gating against the full corpus without hiding those differences in
 `summary.json` or `failures.json`, pass
 `--expected-failures tools/test/lynx/expected_failures.json` to run all cases
-and strictly expect failures only in the fourteen documented areas (`phash2`,
+and strictly expect failures only in the fifteen documented areas (`phash2`,
 short-float `float_text`, invalid-input `lists:reverse/1`, `1 bsl 64`
 bitstring segment size `badarg` vs `system_limit`,
 `binary:encode_unsigned/1`, `erlang:fun_info_mfa/1`,
 `base64_invalid_error_reason`, `base64_iolist_whitespace_and_byte_range`,
 `calendar_date_range_guards`, `calendar_negative_subsecond_system_time`,
 `calendar_unimplemented_functions`, `array_module_unimplemented`,
-`gb_trees_module_unimplemented`, and `rand_module_unimplemented`).
+`gb_trees_module_unimplemented`, `rand_module_unimplemented`, and
+`binary_hex_partial_bitstring`).
 OTP is the execution oracle, not the Lean model: for example, tested OTP 29
 accepts an already queued receive match before checking an invalid timeout.
 That differs from the model test named `timeout_validation_precedes_scan`.

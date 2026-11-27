@@ -564,7 +564,7 @@ binary_prefix(Storage, Input0) ->
     true = erlang:garbage_collect(),
     {Outcome, Input, Captured}.
 
-%% Independent access/copy observations, including live slices and results.
+%% Independent binary access/conversion observations with live slices/results.
 %% Do not use binary:copy to construct operands for testing binary:copy itself.
 binary_access(Operation, Storage, Input0, Arg0) ->
     {Copied, Arg} = binary_to_term(term_to_binary({Input0, Arg0})),
@@ -588,6 +588,8 @@ binary_access(Operation, Storage, Input0, Arg0) ->
                 at -> binary:at(Input, Arg);
                 copy -> binary:copy(Input, Arg);
                 copy_default -> binary:copy(Input);
+                encode_hex -> binary:encode_hex(Input, Arg);
+                encode_hex_default -> binary:encode_hex(Input);
                 _ -> call(binary, Operation, [Input])
             end
         of

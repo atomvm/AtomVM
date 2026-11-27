@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 10,467 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 11,193 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,70 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Hex conversion
+
+Add 726 recipes for supported `binary:encode_hex/1,2` and `decode_hex/1`,
+preserving all 10,467 preceding recipes and metadata; total 11,193. Fixture counts
+and Lean attribution are unchanged. This expands the 16 existing upstream-example
+recipes rather than replacing them; no APIs or Lean proofs are added.
+
+- Check exact default/uppercase/lowercase outputs for all 256 byte values,
+  leading zeroes, high bytes, asymmetric inputs and 63/64/65/257-byte lengths.
+  Decode uppercase/lowercase/mixed-case strings to exact bytes independently
+  of encoder round trips.
+- Reject every non-hex byte in both nibble positions, moving invalid pairs
+  before/between/after valid pairs. Include signed pairs, odd lengths,
+  whitespace, non-ASCII bytes, nonbinary/partial-bitstring sources and invalid
+  case options, including on empty inputs.
+- Reuse the access observer's ETF copying, larger-parent slices and three-bit
+  offset extraction, retaining complete operands, mode, captures and results
+  across GC. No hex conversion prepares an observed runtime operand.
+- `BINARY_HEX_MODEL` uses literal digit tables and ordinary byte-list pairs,
+  not the tested APIs or integer parsing. Check complete observations against
+  each VM's explicit contract, including the exception difference below.
+- A CLI test runs all 726 plus 32 reversed/strided recipes and preserves metadata.
+
+The unchanged library produced 705 matches and 21 differences: 20 signed-pair
+acceptances and one pre-existing partial-bitstring exception difference. The
+ordinary `test_binary` regression also failed on unchanged AtomVM. A separate
+library fix replaces permissive two-character integer parsing with strict
+hex-digit decoding; signs now raise `badarg` instead of becoming byte values,
+including truncated negative integers. The ordinary regression retains exact
+mixed-case/zero-byte controls and rejects signed pairs alone and in longer input.
+
+Do not change AtomVM's deliberate nonbinary-input `badarg` validation to mimic
+OTP's leaked `{badmatch, Input}` for partial bitstrings whose rounded byte size
+is even (`<<48,5:3>>` here). This raw exception was verified on OTP
+27.3.4.12/28.3.1/29.1.3 and traced to OTP's `decode_hex1` pattern match. Register
+exactly this expression as `binary_hex_partial_bitstring`, keeping the true
+failure in results. The corpus manifest now selects 194 cases across 15 areas;
+these are inventory counts, not a new full-corpus execution claim.
+
+After the fix, interpreter and AArch64 precompiled runs each have 725 exact OTP
+matches plus the one known exception difference. Reordered JIT replay has 46
+matches plus the same difference, including all 20 formerly failing signed-pair
+recipes. Strict saved-result classification has zero unexpected failures/passes
+and zero unverified cases. Independent contracts pass on both VMs; complete
+native/JIT observations equal interpreter results. Thirteen local wrong-result
+controls reject wrong case/defaults, dropped zeroes, swapped nibbles, wrong output
+types, invalid-pair acceptance, truncation, skipped empty-input mode validation
+and copying OTP's exception into AtomVM. Targeted CLI checks cover the new batch,
+old access recipes, upstream stdlib examples, behavioral oracles and strict
+expected-failure classification.
+
+Fresh observer-only host controls match all 726 OTP reference observations on
+OTP 27/28/29. Ordinary `test_binary` and ten runtime binary suites pass on those
+hosts and all three AtomVM modes. The older-host controls compile only the
+unchanged observer and `call/3`, avoiding unrelated OTP-29-only helper guards;
+this is not full older-OTP harness validation. Host build targets succeed; the
+native build's unrelated all-target rule references a missing RISC-V archive,
+so validation uses the required `AtomVM`, `atomvmlib` and `etest` targets.
+
+Evidence, manifests, results, configuration, source hashes and reproducible
+checks are under `.amp/in/artifacts/lynx-hex/`. Full runtime corpus, full CLI/JIT
+matrices, fixture Lean laws and embedded/32-bit/float32 targets were not run.
+No allocation-failure, performance, binary-size or leak measurements are claimed.
 
 ## Binary access and copying
 

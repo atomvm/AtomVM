@@ -1250,6 +1250,66 @@ end
 """
 
 
+# Literal digit tables and byte-list pairs, not the hex APIs or integer parsers.
+BINARY_HEX_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+literal = fn text ->
+  {:ok,tokens,_} = :erl_scan.string(String.to_charlist(text <> "."))
+  {:ok,value} = :erl_parse.parse_term(tokens)
+  value
+end
+upper = ~c"0123456789ABCDEF"
+lower = ~c"0123456789abcdef"
+digits = Map.new(Enum.zip(upper,0..15) ++ Enum.zip(lower,0..15))
+cases = read.("cases.json")
+expected = Enum.map(cases,fn c ->
+  [operation,_storage,input_text,arg_text] = c["binary_hex"]
+  input = literal.(input_text)
+  arg = literal.(arg_text)
+  invalid = {:exception,:error,:badarg}
+  outcome = cond do
+    not is_binary(input) -> invalid
+    operation === "decode_hex" ->
+      chars = :binary.bin_to_list(input)
+      if rem(length(chars),2) !== 0 or Enum.any?(chars,&(not Map.has_key?(digits,&1))) do
+        invalid
+      else
+        bytes = chars |> Enum.chunk_every(2) |> Enum.map(fn [a,b] ->
+          16 * Map.fetch!(digits,a) + Map.fetch!(digits,b)
+        end)
+        {:ok,:erlang.list_to_binary(bytes)}
+      end
+    operation === "encode_hex" and arg not in [:uppercase,:lowercase] -> invalid
+    true ->
+      table = if operation === "encode_hex" and arg === :lowercase, do: lower, else: upper
+      chars = for b <- :binary.bin_to_list(input), n <- [div(b,16),rem(b,16)], do: Enum.at(table,n)
+      {:ok,:erlang.list_to_binary(chars)}
+  end
+  {operation,{:ok,{outcome,input,arg,{:captured,input,arg,<<5::3>>}}}}
+end)
+for {vm,rows} <- [otp: read.("manifest.json")["expected"],
+                  atomvm: Enum.map(read.("actuals.json"),fn row ->
+                    "ok" = row["status"]
+                    row["value"]
+                  end)] do
+  wants = Enum.map(expected,fn {operation,{:ok,{outcome,input,arg,captured}}} ->
+    # Keep the known OTP partial-bitstring exception visible, not normalized.
+    outcome = if vm === :otp and operation === "decode_hex" and is_bitstring(input) and
+                 not is_binary(input) and rem(div(bit_size(input)+7,8),2) === 0,
+              do: {:exception,:error,{:badmatch,input}}, else: outcome
+    {:ok,{outcome,input,arg,captured}}
+  end)
+  true = length(rows) === length(wants)
+  failures = Enum.zip([cases,wants,rows]) |> Enum.filter(fn {_c,want,row} ->
+    :erlang.binary_to_term(Base.decode64!(row)) !== want
+  end)
+  if failures !== [], do: raise(inspect({vm,failures},limit: 10))
+  IO.puts("#{vm}: #{length(rows)} independent binary-hex contracts")
+end
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -1852,6 +1912,37 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["binary_access"] for c in saved],
                                      [c["binary_access"] for c in cases])
                     check = subprocess.run(["elixir", "-e", BINARY_ACCESS_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_binary_hex_preserves_exact_bytes_errors_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "binary_hex" in case]
+        self.assertEqual(len(selected), 726)
+        manifest = Path(__file__).with_name("expected_failures.json")
+        known = {expr for area in json.loads(manifest.read_text())["areas"]
+                 for expr in area.get("expressions", [])}
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-23])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    expected = sum(c["expression"] in known for c in cases)
+                    result = subprocess.run(
+                        [sys.executable, str(SCRIPT), "--build", str(ROOT / "build"),
+                         "--output", str(output), "--replay", str(source),
+                         "--expected-failures", str(manifest)],
+                        capture_output=True, text=True, timeout=900,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(json.loads((output / "summary.json").read_text()),
+                                     {"laws": 0, "passed": len(cases) - expected, "failed": expected,
+                                      "unverified": 0, "uncovered": 0})
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["binary_hex"] for c in saved],
+                                     [c["binary_hex"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", BINARY_HEX_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
@@ -4153,6 +4244,7 @@ class ValidationTests(unittest.TestCase):
                 "lists_reverse_invalid": 2,
                 "bitstring_size_system_limit": 3,
                 "binary_encode_unsigned": 13,
+                "binary_hex_partial_bitstring": 1,
                 "fun_info_mfa": 13,
                 "base64_invalid_error_reason": 15,
                 "base64_iolist_whitespace_and_byte_range": 4,
@@ -4164,7 +4256,7 @@ class ValidationTests(unittest.TestCase):
                 "rand_module_unimplemented": 3,
             },
         )
-        self.assertEqual(total_expected, 193)
+        self.assertEqual(total_expected, 194)
         all_exprs = {c["expression"] for c in all_entries}
         for area in areas:
             for expr in area["expressions"]:
@@ -4368,7 +4460,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 10467)
+        self.assertEqual(len(lean_runtime.cases()), 11193)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"
