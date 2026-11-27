@@ -325,12 +325,12 @@ static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
             // catch label is in native code.
             jit_state->continuation = JIT_CONTINUATION_FOR_LABEL(jit_state->module, target_label);
         } else {
-            // Native case
-            // jit_state->continuation = jit_state->module->labels[target_label];
-
-            // JIT case
-            // (catch label necessarily is native)
+#ifndef AVM_NO_EMU
+            jit_state->continuation_pc = jit_state->module->labels[target_label];
+#else
+            // Interpreter-free builds can only catch in native code.
             assert(false);
+#endif
         }
         return ctx;
     }

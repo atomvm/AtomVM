@@ -29,6 +29,11 @@ run(Parent) ->
     24 = tail(4),
     {wrapped, 120} = non_tail(5),
     720 = framed_tail(3),
+    Reason = {reason, 23},
+    ok = check_exception(arithmetic, Reason, {error, badarith}),
+    ok = check_exception(error, Reason, {error, Reason}),
+    ok = check_exception(throw, Reason, {throw, Reason}),
+    ok = check_exception(exit, Reason, {exit, Reason}),
     Parent ! {self(), ok}.
 
 tail(N) ->
@@ -40,3 +45,35 @@ non_tail(N) ->
 framed_tail(N) ->
     Value = export_test_module:exported_func(N),
     export_test_module:exported_func(Value).
+
+check_exception(Kind, Value, Expected) ->
+    % Catching inside native code is a control. The same exception must also
+    % reach the bytecode catch, survive re-raising, and leave its frame usable.
+    Expected = export_test_module:catch_exception(Kind, Value),
+    Result =
+        try
+            try
+                export_test_module:raise_exception(Kind, Value)
+            catch
+                InnerClass:InnerReason:InnerStack ->
+                    ok = check_stacktrace(InnerStack),
+                    erlang:raise(InnerClass, InnerReason, InnerStack)
+            end
+        of
+            Unexpected -> {unexpected, Unexpected}
+        catch
+            Class:Reason:Stack ->
+                ok = check_stacktrace(Stack),
+                {Class, Reason}
+        end,
+    Expected = Result,
+    24 = tail(4),
+    ok.
+
+check_stacktrace(undefined) ->
+    % AVM_CREATE_STACKTRACES=OFF
+    ok;
+check_stacktrace([{export_test_module, raise_exception, 2, _} | _]) ->
+    ok;
+check_stacktrace([_ | Rest]) ->
+    check_stacktrace(Rest).
