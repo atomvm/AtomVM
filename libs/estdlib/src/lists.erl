@@ -114,7 +114,7 @@ map0(_F, []) ->
 -spec nth(N :: non_neg_integer(), L :: list()) -> term().
 nth(1, [H | _T]) ->
     H;
-nth(Index, [_H | T]) when Index > 1 ->
+nth(Index, [_H | T]) when is_integer(Index), Index > 1 ->
     nth(Index - 1, T).
 
 %%-----------------------------------------------------------------------------
@@ -130,6 +130,8 @@ nth(Index, [_H | T]) when Index > 1 ->
 -spec nthtail(N :: non_neg_integer(), L :: list()) -> list().
 nthtail(0, L) when is_list(L) ->
     L;
+nthtail(1, [_H | T]) ->
+    T;
 nthtail(N, [_H | T]) when is_integer(N) andalso N > 0 ->
     nthtail(N - 1, T).
 
@@ -892,7 +894,7 @@ duplicate(Count, Elem, Acc) -> duplicate(Count - 1, Elem, [Elem | Acc]).
 %% @end
 %%-----------------------------------------------------------------------------
 -spec sublist([Elem], integer()) -> [Elem].
-sublist(List, Len) when is_integer(Len) andalso Len >= 0 ->
+sublist(List, Len) when is_list(List), is_integer(Len), Len >= 0 ->
     sublist0(List, Len).
 
 %% @private

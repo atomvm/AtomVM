@@ -89,6 +89,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed positional list compatibility with OTP: `lists:nth/2` rejects non-integer
+  indices with `function_clause`, `lists:nthtail/2` can return an improper suffix,
+  and `lists:sublist/2` rejects non-list input even for a zero-length result
 - Fixed numeric-equivalent key matching in `lists:keydelete/3`, `lists:keyreplace/4`
   and `lists:keystore/4`, first-representative retention in `lists:ukeysort/2`,
   and keyed-list position validation and key-sort input exceptions to match OTP

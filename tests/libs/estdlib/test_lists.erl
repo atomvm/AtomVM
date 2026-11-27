@@ -68,6 +68,7 @@ test() ->
     ok = test_append(),
     ok = test_min(),
     ok = test_max(),
+    ok = test_sublist(),
     ok = test_sublist3(),
     ok = test_droplast(),
     ok = test_zip(),
@@ -81,6 +82,10 @@ test_nth() ->
     ?ASSERT_MATCH(lists:nth(2, [a, b, c]), b),
     ?ASSERT_MATCH(lists:nth(3, [a, b, c]), c),
     ?ASSERT_ERROR(lists:nth(-1, [a, b, c]), function_clause),
+    ?ASSERT_ERROR(lists:nth(bad, [a]), function_clause),
+    ?ASSERT_ERROR(lists:nth({bad, index}, [a, b]), function_clause),
+    ?ASSERT_ERROR(lists:nth(2.0, [a, b]), function_clause),
+    ?ASSERT_MATCH(lists:nth(2, [a, b | tail]), b),
     ok.
 
 test_nthtail() ->
@@ -90,6 +95,11 @@ test_nthtail() ->
     ?ASSERT_MATCH(lists:nthtail(3, [a, b, c]), []),
     ?ASSERT_ERROR(lists:nthtail(-1, [a, b, c]), function_clause),
     ?ASSERT_ERROR(lists:nthtail(4, [a, b, c]), function_clause),
+    ?ASSERT_MATCH(lists:nthtail(1, [a | tail]), tail),
+    ?ASSERT_MATCH(lists:nthtail(2, [a, b | tail]), tail),
+    ?ASSERT_MATCH(lists:nthtail(1, [a, b | tail]), [b | tail]),
+    ?ASSERT_ERROR(lists:nthtail(3, [a, b | tail]), function_clause),
+    ?ASSERT_ERROR(lists:nthtail(0, tail), function_clause),
     ok.
 
 test_member() ->
@@ -1001,6 +1011,16 @@ test_max() ->
     ?ASSERT_MATCH(lists:max([a, b, c]), c),
     ?ASSERT_MATCH(lists:max([c, b, a]), c),
     ?ASSERT_ERROR(lists:max([]), function_clause),
+    ok.
+
+test_sublist() ->
+    ?ASSERT_MATCH(lists:sublist([], 0), []),
+    ?ASSERT_MATCH(lists:sublist([a, b], 0), []),
+    ?ASSERT_MATCH(lists:sublist([a, b], 3), [a, b]),
+    ?ASSERT_MATCH(lists:sublist([a, b | tail], 2), [a, b]),
+    ?ASSERT_ERROR(lists:sublist([a, b | tail], 3), function_clause),
+    ?ASSERT_ERROR(lists:sublist(tail, 0), function_clause),
+    ?ASSERT_ERROR(lists:sublist(#{a => 1}, 0), function_clause),
     ok.
 
 test_sublist3() ->
