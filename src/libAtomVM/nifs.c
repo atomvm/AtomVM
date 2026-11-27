@@ -4238,11 +4238,13 @@ static term nif_binary_replace(Context *ctx, int argc, term argv[])
         options = term_get_list_tail(options);
     }
 
+    VALIDATE_VALUE(options, term_is_nil);
+
     size_t bin_size = term_binary_size(bin_term);
     size_t pattern_size = term_binary_size(pattern);
     size_t repl_size = term_binary_size(replacement);
 
-    if (UNLIKELY(pattern_size == 0 || bin_size == 0)) {
+    if (UNLIKELY(pattern_size == 0)) {
         RAISE_ERROR(BADARG_ATOM);
     }
 

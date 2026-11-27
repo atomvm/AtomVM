@@ -89,6 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed `binary:replace/3,4` rejecting empty subjects with nonempty patterns and
+  `binary:replace/4` accepting improper option lists
 - Fixed `proplists:get_value/2,3` to return the default for a matching tuple with
   arity other than two, rather than searching later entries, as OTP does
 - Fixed `lists:flatten/1` to raise `function_clause` for invalid input as OTP does,
