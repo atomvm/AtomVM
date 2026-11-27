@@ -1310,6 +1310,50 @@ end
 """
 
 
+# Read individual bits and group them, without either conversion API or its inverse.
+BINARY_LIST_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+literal = fn text ->
+  {:ok,tokens,_} = :erl_scan.string(String.to_charlist(text <> "."))
+  {:ok,value} = :erl_parse.parse_term(tokens)
+  value
+end
+cases = read.("cases.json")
+expected = Enum.map(cases,fn c ->
+  [operation,_storage,input_text,offset_text] = c["binary_list"]
+  input = literal.(input_text)
+  offset = literal.(offset_text)
+  outcome = if is_bitstring(input) and (operation === "bitstring_to_list" or is_binary(input)) do
+    bits = for <<b::1 <- input>>, do: b
+    elements = bits |> Enum.chunk_every(8) |> Enum.map(fn chunk ->
+      if length(chunk) === 8 do
+        Enum.reduce(chunk,0,fn b,n -> n * 2 + b end)
+      else
+        Enum.reduce(chunk,<<>>,fn b,acc -> <<acc::bitstring,b::1>> end)
+      end
+    end)
+    {:ok,elements}
+  else
+    {:exception,:error,:badarg}
+  end
+  {:ok,{outcome,input,offset,{:captured,input,offset,<<5::3>>}}}
+end)
+for {vm,rows} <- [otp: read.("manifest.json")["expected"],
+                  atomvm: Enum.map(read.("actuals.json"),fn row ->
+                    "ok" = row["status"]
+                    row["value"]
+                  end)] do
+  true = length(rows) === length(expected)
+  failures = Enum.zip([cases,expected,rows]) |> Enum.filter(fn {_c,want,row} ->
+    :erlang.binary_to_term(Base.decode64!(row)) !== want
+  end)
+  if failures !== [], do: raise(inspect({vm,failures},limit: 10))
+  IO.puts("#{vm}: #{length(rows)} independent binary-list contracts")
+end
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -1943,6 +1987,26 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["binary_hex"] for c in saved],
                                      [c["binary_hex"] for c in cases])
                     check = subprocess.run(["elixir", "-e", BINARY_HEX_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_binary_list_preserves_bytes_partial_tails_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "binary_list" in case]
+        self.assertEqual(len(selected), 680)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-19])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    self.assertEqual(self.invoke(output, "--replay", source),
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["binary_list"] for c in saved],
+                                     [c["binary_list"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", BINARY_LIST_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
@@ -4460,7 +4524,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 11193)
+        self.assertEqual(len(lean_runtime.cases()), 11873)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

@@ -299,6 +299,14 @@ exception-reason difference for a partial bitstring remains explicit in
 `expected_failures.json`: AtomVM keeps `badarg` rather than OTP's leaked
 `{badmatch, Input}`. See the batch notes for raw results and validation limits.
 
+The [binary-to-list batch](PLAN.md#binary-to-list-conversion) adds 680 recipes
+for `erlang:binary_to_list/1` and `bitstring_to_list/1`, bringing the corpus to
+11,873. Independent bit-by-bit expectations check exact unsigned byte lists,
+all partial-tail widths, invalid roots and both APIs' differing acceptance of
+partial bitstrings. Larger-parent extraction covers bit offsets 0–7, with inputs
+and complete results retained across GC. No runtime discrepancy or new
+expected-failure entry was found; see the batch notes for results and limits.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen

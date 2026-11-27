@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 11,193 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 11,873 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,58 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Binary-to-list conversion
+
+Add 680 direct recipes for supported `erlang:binary_to_list/1` and
+`erlang:bitstring_to_list/1`, preserving all 11,193 preceding recipes and metadata;
+total 11,873. Fixture counts and Lean attribution are unchanged; no APIs or Lean
+proofs are added. Existing incidental conversion calls in helpers are not counted
+as direct coverage of the conversion contract.
+
+- Check exact unsigned byte lists, including all 256 values, empty/singleton
+  and asymmetric inputs, and 63/64/65/257-byte lengths.
+- Check every trailing-bit width 1–7, with zero/all-one/asymmetric tails alone
+  and after full bytes. `bitstring_to_list/1` must return full-byte integers
+  followed by one final partial-bitstring element; `binary_to_list/1` must
+  reject the same partial input with `badarg`.
+- Exercise ETF-copied inputs and larger-parent extraction at bit offsets 0–7,
+  including byte-aligned slices of partial inputs. Reuse the access observer,
+  retaining inputs, offsets, captures and complete results over GC before/after
+  each conversion. These are construction paths, not asserted internal layouts;
+  GC inside the NIF's allocation check is not instrumented or guaranteed.
+- Reject atoms, numbers, tuples and proper/improper list roots rather than
+  accepting an iodata input or treating it as an empty bitstring.
+- `BINARY_LIST_MODEL` reads individual bits, groups them in eights and sums
+  full-byte values; it constructs the final short bitstring directly. It calls
+  neither API nor its inverse, and checks complete observations on both VMs,
+  not just length, round trips or cross-VM equality.
+- A CLI test runs all 680 plus 36 reversed/strided recipes, preserving metadata
+  and independently checking both VMs.
+
+Interpreter and AArch64 precompiled runs each match 680/680 against OTP. Reordered
+on-demand JIT replay matches 54/54, explicitly covering every bit offset and tail
+width, with a 240-second cold-compilation budget. There are zero failures or
+unverified cases. Independent contracts pass on both VMs and complete native/JIT
+observations equal interpreter results. Thirteen local wrong-result controls
+reject signed/reversed bytes, nonempty empty-results, dropped/padded/wrong-width
+or shifted partial tails, improper result lists, accepted invalid inputs and
+wrong exception reasons. The targeted CLI checks cover the new batch/replay,
+existing access and hex batches/replay, and behavioral oracles.
+
+Fresh observer-only controls match all 680 OTP reference observations on OTP
+27.3.4.12/28.3.1/29.1.3; this compiles only the unchanged observer and `call/3`,
+not the unrelated OTP-29-only parts of the helper. Four existing ordinary suites
+(`test_binary_to_list`, `test_bitstring_to_list`, `test_list_to_binary` and
+`test_list_to_bitstring`) pass on those hosts and all three AtomVM modes.
+No semantic discrepancy was found: runtime/library code, ordinary Erlang tests,
+changelog, expected-failure manifest and runner configuration remain unchanged.
+
+Inputs, sources, manifests, results, configuration, reproducible checks and source
+hashes are saved under `.amp/in/artifacts/lynx-binary-list/`. Full runtime corpus,
+full CLI/JIT matrices, complete older-host harness, Lean fixture laws and
+embedded/32-bit/float32 targets were not run. No allocation-failure, performance,
+binary-size or leak measurements are claimed.
 
 ## Hex conversion
 

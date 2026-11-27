@@ -577,6 +577,13 @@ binary_access(Operation, Storage, Input0, Arg0) ->
                 Size = byte_size(B),
                 <<_:3, Slice:Size/binary, _:5>> = <<5:3, B/binary, 17:5>>,
                 Slice;
+            {bit_slice, B} when is_bitstring(B) ->
+                Size = bit_size(B),
+                Padding = (8 - (Arg + Size) rem 8) rem 8,
+                Parent = <<201:640, 5:Arg, B/bitstring, 0:Padding, 77>>,
+                Start = 640 + Arg,
+                <<_:Start, Slice:Size/bitstring, _/bitstring>> = Parent,
+                Slice;
             _ ->
                 Copied
         end,
@@ -590,6 +597,8 @@ binary_access(Operation, Storage, Input0, Arg0) ->
                 copy_default -> binary:copy(Input);
                 encode_hex -> binary:encode_hex(Input, Arg);
                 encode_hex_default -> binary:encode_hex(Input);
+                binary_to_list -> erlang:binary_to_list(Input);
+                bitstring_to_list -> erlang:bitstring_to_list(Input);
                 _ -> call(binary, Operation, [Input])
             end
         of

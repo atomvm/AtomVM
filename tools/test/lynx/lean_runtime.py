@@ -3537,6 +3537,38 @@ def cases():
     for mode in ["bad", "[]", "{}", "1", "1.0", "<<117,112,112,101,114,99,97,115,101>>", "true"]:
         for subject in ["<<>>", "<<0,255,128>>", "<<5:3>>"]:
             binary_hex_probe("encode_hex", subject, mode)
+
+    def binary_list_probe(subject, offset=None):
+        storage = "copy" if offset is None else "bit_slice"
+        for operation in ["binary_to_list", "bitstring_to_list"]:
+            args = [operation, storage, subject, str(0 if offset is None else offset)]
+            selected.append({"otp_extension": "binary_list", "binary_list": args,
+                             "expression": "differential:binary_access(" + ",".join(args) + ")"})
+
+    subjects = [b"", b"\x00", b"\x80", b"\xff", b"\x00\xff\x80\x11", bytes(range(256))]
+    subjects += [bytes((17 * n + 128) % 256 for n in range(size))
+                 for size in [63, 64, 65, 257]]
+    for data in subjects:
+        for offset in [None] + list(range(8)):
+            binary_list_probe(binary_literal(data), offset)
+    for data in [b"", b"\x00\xff\x80\x11"]:
+        for width in range(1, 8):
+            mask = (1 << width) - 1
+            for tail in dict.fromkeys([0, mask, mask // 3]):
+                fields = [str(byte) for byte in data] + [f"{tail}:{width}"]
+                subject = "<<" + ",".join(fields) + ">>"
+                offsets = list(range(8)) if tail == mask // 3 else [(width + tail) % 8]
+                for offset in [None] + offsets:
+                    binary_list_probe(subject, offset)
+    for size in [63, 64, 65, 257]:
+        data = bytes((17 * n + 128) % 256 for n in range(size))
+        for width in range(1, 8):
+            fields = [str(byte) for byte in data] + [f"{((1 << width) - 1) // 3}:{width}"]
+            for offset in [None, width]:
+                binary_list_probe("<<" + ",".join(fields) + ">>", offset)
+    for invalid in ["bad", "[]", "[1]", "[1|bad]", "{}", "1", "-1", "1.0"]:
+        for offset in [None, 3]:
+            binary_list_probe(invalid, offset)
     return selected
 
 

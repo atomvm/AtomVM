@@ -596,6 +596,30 @@ See [PLAN.md](PLAN.md#hex-conversion) for raw results and evidence. Full corpus,
 full CLI/JIT matrices, the complete older-OTP harness, Lean fixture laws and
 embedded targets remain outside this batch.
 
+### Binary-to-list conversion
+
+- [x] Add 680 direct recipes for supported `erlang:binary_to_list/1` and
+  `bitstring_to_list/1`, preserving all previous metadata (total 11,873).
+- [x] Check exact unsigned bytes, all byte values, empty/asymmetric inputs and
+  63/64/65/257-byte boundaries.
+- [x] Check every partial-tail width 1–7, zero/all-one/asymmetric values, final
+  bitstring element shape and `binary_to_list/1` rejection of partial sources.
+- [x] Exercise copied inputs and larger-parent extraction at bit offsets 0–7,
+  invalid roots and retained operands/captures/complete results across GC.
+- [x] Match 680/680 in interpreter and AArch64 precompiled modes, plus 54/54
+  reordered JIT recipes explicitly covering every offset and tail width.
+- [x] Check complete observations against an independent bit-by-bit model;
+  validate replay metadata, cross-mode equality and thirteen wrong-result controls.
+- [x] Match all 680 observer-only host controls on OTP 27/28/29; pass four
+  existing conversion suites on those hosts and all three AtomVM modes, alongside
+  targeted CLI checks for the new batch and existing shared-observer paths.
+- [x] Leave runtime/library code, ordinary Erlang regressions, changelog and
+  expected-failure manifest unchanged: no semantic discrepancy was found.
+
+See [PLAN.md](PLAN.md#binary-to-list-conversion) for evidence and limits. Full
+corpus/CLI/JIT matrices, the complete older-host harness, Lean fixture laws and
+embedded targets remain outside this batch; internal NIF GC is not forced.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes
