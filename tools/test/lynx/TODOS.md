@@ -280,6 +280,31 @@ enabled methods (three optional skips). No expected-failure entries were added. 
 [PLAN.md](PLAN.md#ordered-unary-list-callbacks) for execution-mode/replay results,
 independent checks and limits.
 
+### 12. Paired-list zipwith callbacks (follow-up)
+
+- [x] Cover `lists:zipwith/3` with asymmetric paired inputs, exact argument and
+  result order, duplicates, numeric distinctions and arbitrary returned terms.
+- [x] Check unequal lengths in both directions, non-list inputs and improper
+  tails on either/both sides, preserving effects from the matching prefix.
+- [x] Distinguish invalid functions and arities 0/1/3 on empty, matching and
+  unmatched inputs. Do not import unary APIs' entry-validation contract.
+- [x] Check first/second/final callback errors/throws/exits, unused failing
+  callbacks and exceptions that precede a later length/tail failure.
+- [x] Retain both inputs, captures and boxed results across explicit GC;
+  independently check both VMs and exercise filtered/reordered replay.
+
+Adds 95 recipes, preserving all 7,618 preceding cases and metadata (total 7,713;
+fixture calls/exports and Lean attribution unchanged). OTP 27.3.4.12, 28.3.1
+and 29.1.3 each satisfy all 95 independent contracts. A positive model control
+passes; five controls reject identically wrong reports with swapped arguments,
+reversed visits/output or eager input/callback validation. Interpreter,
+precompiled and on-demand JIT each match 95/95, with 14/14 reordered replays and
+identical complete observations. Independent checks pass for both VMs in all six
+runs. The full 50-method harness passes (47 passed, three optional skips).
+No library/runtime fix or expected-failure entry is included. See
+[PLAN.md](PLAN.md#paired-list-zipwith-callbacks) for execution-mode results,
+independent checks and limits.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes

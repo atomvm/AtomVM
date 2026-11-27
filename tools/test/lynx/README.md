@@ -157,7 +157,23 @@ replays and independent result/trace checks. Ordinary regressions pass on OTP
 fix. The 49-method harness passes (46 passed, three optional skips).
 No allowlist entries were added. See
 [the batch notes](PLAN.md#ordered-unary-list-callbacks) for execution-mode/replay
-results and limits. The public-behavior corpus now contains 7,618 recipes.
+results and limits; that batch brought the public-behavior corpus to 7,618 recipes.
+
+The paired-list batch adds 95 `lists:zipwith/3` recipes, checking exact paired
+visits, output order, arbitrary returned terms, input/capture retention across GC,
+invalid callbacks and error/throw/exit boundaries before later input failures.
+Unequal lengths and improper/non-list inputs distinguish effects from the matching
+prefix from an incorrectly eager length check. OTP's callback validation differs
+from the unary APIs: a nonempty pair can raise `badfun`/`badarity`, whereas empty
+or unmatched inputs can raise `function_clause` without invoking the callback.
+An independent two-list model checks both VMs and rejects five kinds of
+identically wrong reports. All three execution modes match 95/95 cases and
+14/14 reordered replays; the 50-method harness passes (47 passed, three optional
+skips). All 7,618 previous recipes and metadata are preserved;
+the corpus now contains 7,713 recipes. See
+[the batch notes](PLAN.md#paired-list-zipwith-callbacks) for per-mode results,
+reordered replay, cross-OTP controls and scope. No new APIs, library/runtime fixes
+or expected-failure entries are included.
 
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences

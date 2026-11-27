@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 7,618 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 7,713 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,65 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Paired-list zipwith callbacks
+
+Add 95 supported-API observations (2026-11-27) for `lists:zipwith/3`, preserving
+all 7,618 preceding recipes and metadata. Total 7,713; attribution remains
+377/478 Lean sites, fixtures 2,351 calls across 203 exports. This is additional
+supported-behavior coverage, not a new API or fresh Lean proof batch. Existing
+zip/unzip round-trip observations remain unchanged.
+
+- Observe exact paired arguments, invocation indices, output order, original
+  inputs and captures. Asymmetric lists contain duplicates, integer/float
+  distinctions, maps, boxed integers and partial bitstrings, with empty/singleton
+  and 17-element controls. A pair-returning callback checks zip-style output.
+- Check arbitrary callback returns, including non-list atoms, maps, tuples,
+  partial bitstrings and improper lists. A later callback exception must not be
+  preempted by treating earlier output as a flatmap chunk requiring validation.
+- Check errors/throws/exits on the first, second and final pair, unused failing
+  callbacks, unequal lengths in both directions and malformed inputs on either
+  or both sides. Preserve exact matching-prefix effects before failure; a callback
+  exception can win before a later length/tail failure, or remain unreached.
+- Check invalid callbacks and arities 0/1/3 on empty, matching and unmatched
+  inputs. Unlike the unary entry guards, OTP's `zipwith/3` delegates to the
+  fail-mode worker, invoking callbacks on available pairs before checking the
+  rest. Nonempty pairs expose `badfun`/`badarity`; empty or unmatched inputs raise
+  `function_clause` without callback effects. Source and executable controls
+  agree on OTP 27.3.4.12, 28.3.1 and 29.1.3.
+- Run explicit GC inside callbacks and before reporting. Retain both original
+  lists, captured data and returned boxed values, including improper terms.
+  Normalize only the function identity embedded in badarity, retaining its
+  same-runtime identity check and exact argument list.
+
+`list_zipwith.erl` is a standalone observer, rather than enlarging the existing
+large helper. An independent Elixir two-list model derives both VMs' results,
+exception boundaries and ordered traces without calling zip/zipwith or this
+observer. A positive control passes; five negative controls reject identically
+wrong reports with swapped arguments, reversed visits, reversed output, eager
+length validation or eager callback validation. The 14-case filtered/reordered
+replay checks saved parameters and generated-module reindexing.
+
+Interpreter, AArch64 precompiled and on-demand JIT runs each match **95/95**,
+with **14/14** reordered replays, zero failures and zero unverified references.
+Independent result/trace checks pass for both VMs in all six runs. Complete
+observations agree across execution modes for both full and reordered inputs.
+Cold JIT uses `--timeout 120` for per-process compilation of the existing large
+helper.
+Each of OTP **27.3.4.12, 28.3.1 and 29.1.3** also satisfies all 95 independent
+contracts using an observer freshly compiled with that OTP. Cross-version
+execution uses Erlang directly, then Elixir 29 to decode/check saved results.
+The full 50-method CLI harness passes: **47 passed, three optional skips**,
+including the new all-cases/replay integration test. Erlang formatting, Python
+3.9 grammar and whitespace checks pass.
+
+Evidence: `.amp/in/artifacts/lynx-list-zipwith/` contains saved inputs/replay,
+per-mode generated sources/manifests/results and build hashes, independent
+checks, cross-OTP controls, positive/negative model checks, regenerated inventory
+and matching prior-recipe preservation hashes. No library/runtime correction or
+expected-failure entry is included. The complete runtime corpus, embedded,
+32-bit/float32 targets, fresh Lean proofs, trim/pad APIs and exhaustive
+callback/input combinations are outside this batch.
 
 ## Ordered unary list callbacks
 

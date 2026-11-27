@@ -3006,6 +3006,73 @@ def cases():
                 for value in ["not_list", {"tuple": ["true", "changed"]}]:
                     list_callback_probe(operation, "proper", unary_items,
                                         {"tuple": ["return_then_fail", value, 1, exception, 3]})
+    # Paired-list callbacks: matching prefixes precede later shape failures.
+    zip_left = [1.0, {"tuple": ["left", {"bits": [5, 3]}]}, 1, 1,
+                {"map": [["payload", [9, 2]]]}, 2**100]
+    zip_right = [7, 2**90, {"map": [["right", [4, 8]]]}, 1.0,
+                 {"bits": [3, 2]}, {"tuple": ["last", 9]}]
+
+    def zipwith_probe(left_shape, left, right_shape, right, mode="normal"):
+        args = [left_shape, left, right_shape, right, mode]
+        selected.append({"otp_extension": "list_zipwith", "list_zipwith": args,
+                         "expression": "list_zipwith:observe(" +
+                                       ",".join(map(erlang, args)) + ")"})
+
+    for left, right in [([], []), ([1.0], [7]), (zip_left, zip_right),
+                        (list(range(17)), list(range(100, 117)))]:
+        zipwith_probe("proper", left, "proper", right)
+    zipwith_probe("proper", zip_right, "proper", zip_left)
+    zipwith_probe("proper", zip_left, "proper", zip_right, "pair")
+    for exception in ["error", "throw", "exit"]:
+        for index in [1, 2, len(zip_left)]:
+            zipwith_probe("proper", zip_left, "proper", zip_right,
+                          {"tuple": ["fail", exception, index]})
+    for left, right in [([], []), ([1], [2])]:
+        zipwith_probe("proper", left, "proper", right, {"tuple": ["fail", "error", 2]})
+    for value in ["not_list", {"bits": [5, 3]}, {"tuple": ["true", "changed"]},
+                  {"map": [["result", [7, 3]]]}]:
+        zipwith_probe("proper", zip_left, "proper", zip_right,
+                      {"tuple": ["return", value, 2]})
+    for index in [1, len(zip_left)]:
+        zipwith_probe("proper", zip_left, "proper", zip_right,
+                      {"tuple": ["improper_return", index]})
+    for exception in ["error", "throw", "exit"]:
+        zipwith_probe("proper", zip_left, "proper", zip_right,
+                      {"tuple": ["return_then_fail", "not_list", 1, exception, 3]})
+    for left, right in [([], [7]), ([3], []), ([3, 7, 2], [9, 4]),
+                        ([3, 7], [9, 4, 8]), (zip_left, zip_right[:-1]),
+                        (zip_left[:-1], zip_right)]:
+        zipwith_probe("proper", left, "proper", right)
+    malformed_pairs = [
+        ("non_list", [], "proper", []), ("proper", [], "non_list", []),
+        ("non_list", [], "proper", [9]), ("proper", [3], "non_list", []),
+        ("non_list", [], "non_list", []),
+        ("improper", [3], "proper", []), ("proper", [], "improper", [9]),
+        ("improper", [3, 7], "proper", [9, 4]),
+        ("proper", [3, 7], "improper", [9, 4]),
+        ("improper", [3, 7], "proper", [9, 4, 8]),
+        ("proper", [3, 7, 2], "improper", [9, 4]),
+        ("improper", [3, 7], "improper", [9, 4]),
+        ("improper", [3, 7, 2], "improper", [9, 4]),
+    ]
+    for args in malformed_pairs:
+        zipwith_probe(*args)
+    for mode in ["non_function", "arity_zero", "arity_one", "arity_three"]:
+        for args in [("proper", [], "proper", []),
+                     ("proper", [3], "proper", [9]),
+                     ("proper", zip_left, "proper", zip_right),
+                     ("proper", [], "proper", [9]),
+                     ("proper", [3], "proper", []),
+                     ("non_list", [], "proper", [9]),
+                     ("proper", [3], "non_list", []),
+                     ("improper", [3, 7], "proper", [9, 4])]:
+            zipwith_probe(*args, mode)
+    for args in [("proper", [3, 7], "proper", [9, 4, 8]),
+                 ("improper", [3, 7], "proper", [9, 4, 8]),
+                 ("proper", [3, 7, 2], "improper", [9, 4])]:
+        for exception in ["error", "throw", "exit"]:
+            for index in [2, 3]:
+                zipwith_probe(*args, {"tuple": ["fail", exception, index]})
     return selected
 
 

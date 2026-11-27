@@ -522,6 +522,87 @@ end)
 """
 
 
+# Paired traversal model: no zip/zipwith API or observer is used to derive results.
+LIST_ZIPWITH_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+from_etf = fn s -> :erlang.binary_to_term(Base.decode64!(s)) end
+decode = fn decode, value ->
+  case value do
+    %{"tuple" => xs} -> List.to_tuple(for x <- xs, do: decode.(decode,x))
+    %{"map" => xs} -> Map.new(xs,fn [k,v] -> {decode.(decode,k),decode.(decode,v)} end)
+    %{"bits" => [v,n]} -> <<v::size(n)>>
+    xs when is_list(xs) -> for x <- xs, do: decode.(decode,x)
+    s when is_binary(s) -> String.to_atom(s)
+    n -> n
+  end
+end
+build = fn build, xs, tail ->
+  case xs do [] -> tail; [x|rest] -> [x|build.(build,rest,tail)] end
+end
+input = fn shape, items, tail ->
+  case shape do
+    :proper -> items
+    :improper -> build.(build,items,tail)
+    :non_list -> {:not_a_list,tail}
+  end
+end
+model = fn [ls,left,rs,right,mode] ->
+  left = input.(ls,left,:left_tail)
+  right = input.(rs,right,:right_tail)
+  captured = {:captured,left,right,<<5::3>>}
+  invalid = mode in [:non_function,:arity_zero,:arity_one,:arity_three]
+  error = fn reason -> {:exception,:error,reason} end
+  effect = fn a,b,n ->
+    raised = fn kind -> {:raised,{:exception,kind,{:callback_failed,n,a,b,<<5::3>>}}} end
+    case mode do
+      {:fail,kind,^n} -> raised.(kind)
+      {:return_then_fail,_,_,kind,^n} -> raised.(kind)
+      {:return_then_fail,value,^n,_,_} -> {:returned,value}
+      {:return,value,^n} -> {:returned,value}
+      {:improper_return,^n} -> {:returned,[a|b]}
+      :pair -> {:returned,{a,b}}
+      _ -> {:returned,{:combined,n,a,b,captured}}
+    end
+  end
+  run = fn run, l, r, n, output, trace ->
+    case {l,r} do
+      {[],[]} ->
+        outcome = if invalid, do: error.(:function_clause), else: {:ok,Enum.reverse(output)}
+        {outcome,trace}
+      {[a|xs],[b|ys]} ->
+        if invalid do
+          reason = if mode === :non_function, do: {:badfun,:not_fun}, else: {:badarity,true,[a,b]}
+          {error.(reason),trace}
+        else
+          trace = [{a,b,n,captured}|trace]
+          case effect.(a,b,n) do
+            {:raised,exception} -> {exception,trace}
+            {:returned,value} -> run.(run,xs,ys,n+1,[value|output],trace)
+          end
+        end
+      _ -> {error.(:function_clause),trace}
+    end
+  end
+  {outcome,trace} = run.(run,left,right,1,[],[])
+  {outcome,Enum.reverse(trace),left,right,captured}
+end
+cases = read.("cases.json")
+expected = for c <- cases, do: {:ok,model.(decode.(decode,c["list_zipwith"]))}
+oracle = for s <- read.("manifest.json")["expected"], do: from_etf.(s)
+actual = for row <- read.("actuals.json") do
+  "ok" = row["status"]
+  from_etf.(row["value"])
+end
+Enum.each([{"OTP",oracle},{"AtomVM",actual}],fn {vm,rows} ->
+  true = length(rows) === length(expected)
+  failures = for {{a,e},n} <- Enum.with_index(Enum.zip(rows,expected)), a !== e, do: n
+  IO.puts("#{vm}: #{length(rows)-length(failures)}/#{length(rows)} independent zipwith contracts")
+  if failures !== [], do: raise("#{vm} contract failures at indices #{inspect(failures,limit: :infinity)}")
+end)
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -847,6 +928,27 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["list_callback"] for c in saved],
                                      [c["list_callback"] for c in cases])
                     check = subprocess.run(["elixir", "-e", LIST_CALLBACK_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+                    self.assertEqual(summary,
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+
+    def test_paired_list_zipwith_has_independent_contracts_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "list_zipwith" in case]
+        self.assertEqual(len(selected), 95)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-7])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    summary = self.invoke(output, "--replay", source)
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["list_zipwith"] for c in saved],
+                                     [c["list_zipwith"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", LIST_ZIPWITH_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
                     self.assertEqual(summary,
@@ -3366,7 +3468,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 7618)
+        self.assertEqual(len(lean_runtime.cases()), 7713)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"
