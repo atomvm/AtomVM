@@ -103,11 +103,16 @@ copy(_Binary, _N) ->
 -spec decode_hex(Data :: <<_:_*16>>) -> binary().
 decode_hex(Data) when is_binary(Data) ->
     case byte_size(Data) rem 2 of
-        0 -> <<<<(binary_to_integer(B, 16))>> || <<B:2/binary>> <= Data>>;
+        0 -> <<<<(decode_hex_digit(A)):4, (decode_hex_digit(B)):4>> || <<A, B>> <= Data>>;
         _ -> erlang:error(badarg)
     end;
 decode_hex(_Data) ->
     erlang:error(badarg).
+
+decode_hex_digit(C) when C >= $0, C =< $9 -> C - $0;
+decode_hex_digit(C) when C >= $A, C =< $F -> C - $A + 10;
+decode_hex_digit(C) when C >= $a, C =< $f -> C - $a + 10;
+decode_hex_digit(_) -> erlang:error(badarg).
 
 %%-----------------------------------------------------------------------------
 %% @param   Data binary data to convert into hex encoded binary

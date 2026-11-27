@@ -112,6 +112,22 @@ test_hex() ->
     ?ASSERT_MATCH(RawBinary, binary:decode_hex(<<"48656C6C6F2C2041746F6D564D21">>)),
     ?ASSERT_EXCEPTION(binary:decode_hex(<<"48656C6C6F2C2041746F6D564D2">>), error, badarg),
     ?ASSERT_EXCEPTION(binary:decode_hex(<<"ABCDEFGH">>), error, badarg),
+    ?ASSERT_MATCH(binary:decode_hex(<<"00aFfF10">>), <<0, 175, 255, 16>>),
+    % A sign is not a hex digit, even if integer parsing accepts the pair.
+    lists:foreach(
+        fun(Hex) -> ?ASSERT_EXCEPTION(binary:decode_hex(Hex), error, badarg) end,
+        [
+            <<"+0">>,
+            <<"+1">>,
+            <<"+F">>,
+            <<"-0">>,
+            <<"-1">>,
+            <<"-f">>,
+            <<"00+1ff">>,
+            <<"00-0ff">>,
+            <<"00ff-F">>
+        ]
+    ),
     % bitstrings that are not a whole number of bytes are rejected rather than
     % silently truncated
     ?ASSERT_EXCEPTION(binary:decode_hex(<<1:4>>), error, badarg),
