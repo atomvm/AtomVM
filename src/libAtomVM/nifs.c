@@ -8307,20 +8307,23 @@ static term nif_erlang_crc32(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
+    uint32_t crc = old_crc_val;
+    if (data_size > 0) {
 #ifdef WITH_ZLIB
-    uLong zcrc = old_crc_val;
-    const Bytef *p = (const Bytef *) data_ptr;
-    size_t remaining = data_size;
+        uLong zcrc = old_crc_val;
+        const Bytef *p = (const Bytef *) data_ptr;
+        size_t remaining = data_size;
 
-    while (remaining > UINT_MAX) {
-        zcrc = crc32(zcrc, p, UINT_MAX);
-        p += UINT_MAX;
-        remaining -= UINT_MAX;
-    }
-    uint32_t crc = (uint32_t) crc32(zcrc, p, (uInt) remaining);
+        while (remaining > UINT_MAX) {
+            zcrc = crc32(zcrc, p, UINT_MAX);
+            p += UINT_MAX;
+            remaining -= UINT_MAX;
+        }
+        crc = (uint32_t) crc32(zcrc, p, (uInt) remaining);
 #else
-    uint32_t crc = crc32_uint(old_crc_val, data_ptr, data_size);
+        crc = crc32_uint(old_crc_val, data_ptr, data_size);
 #endif
+    }
     free(alloc_ptr);
 
     return make_maybe_boxed_int64(ctx, crc);
@@ -8339,16 +8342,11 @@ static term nif_erlang_crc32_combine_3(Context *ctx, int argc, term argv[])
     uint32_t crc1_val = term_to_uint32(crc1_term);
     uint32_t crc2_val = term_to_uint32(crc2_term);
 
-#ifdef WITH_ZLIB
-    VALIDATE_VALUE(size2_term, term_is_int64);
-    int64_t size2_val = term_to_int64(size2_term);
-    if (UNLIKELY(size2_val < 0)) {
-        RAISE_ERROR(BADARG_ATOM);
-    }
-    uLong crc = crc32_combine(crc1_val, crc2_val, (z_off_t) size2_val);
-#else
     VALIDATE_VALUE(size2_term, term_is_uint32);
     uint32_t size2_val = term_to_uint32(size2_term);
+#ifdef WITH_ZLIB
+    uLong crc = crc32_combine(crc1_val, crc2_val, (z_off_t) size2_val);
+#else
     uint32_t crc = crc32_combine_uint(crc1_val, crc2_val, size2_val);
 #endif
 

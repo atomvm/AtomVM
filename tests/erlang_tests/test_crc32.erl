@@ -37,6 +37,7 @@ start() ->
     ok = test_crc32_nested_iodata(),
     ok = test_crc32_float_badarg(),
     ok = test_crc32_cross_check(),
+    ok = test_crc32_empty_iolist_and_combine_bounds(),
     0.
 
 test_crc32_binary() ->
@@ -166,6 +167,34 @@ test_crc32_cross_check() ->
     erlang:crc32_combine(erlang:crc32(E), erlang:crc32(F), byte_size(F)) =:=
         erlang:crc32(<<E/binary, F/binary>>) orelse error(cross_check_combine3),
     ok.
+
+test_crc32_empty_iolist_and_combine_bounds() ->
+    foreach(
+        fun(Old) ->
+            foreach(
+                fun(Empty) ->
+                    Old = erlang:crc32(?MODULE:id(Old), ?MODULE:id(Empty))
+                end,
+                [[], [[]], [<<>>], [[] | <<>>]]
+            )
+        end,
+        [12345, 16#FFFFFFFF]
+    ),
+    4027488629 = erlang:crc32_combine(?MODULE:id(12345), ?MODULE:id(67890), ?MODULE:id(1 bsl 31)),
+    80139 = erlang:crc32_combine(?MODULE:id(12345), ?MODULE:id(67890), ?MODULE:id((1 bsl 32) - 1)),
+    ok = expect_badarg(fun() ->
+        erlang:crc32_combine(?MODULE:id(12345), ?MODULE:id(67890), ?MODULE:id(1 bsl 32))
+    end),
+    ok = expect_badarg(fun() ->
+        erlang:crc32_combine(?MODULE:id(12345), ?MODULE:id(67890), ?MODULE:id((1 bsl 63) - 1))
+    end),
+    ok.
+
+foreach(_Fun, []) ->
+    ok;
+foreach(Fun, [H | T]) ->
+    Fun(H),
+    foreach(Fun, T).
 
 expect_badarg(F) ->
     try

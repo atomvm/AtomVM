@@ -89,6 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed `erlang:crc32/2` resetting the checksum to `0` on empty iolists when built with zlib,
+  and `erlang:crc32_combine/3` accepting lengths `>= 2^32` instead of raising `badarg`
 - Fixed `binary:part/3` and `erlang:binary_part/2,3` under-allocating process heap space for negative-length slices
 - Fixed `binary:decode_hex/1` accepting signed pairs instead of raising `badarg`
 - Fixed `binary:copy/2` count validation, zero-length copies looping for large counts,
