@@ -1257,6 +1257,10 @@ static int calculate_simple_heap_usage(const uint8_t *external_term_buf, size_t 
             if (UNLIKELY(remaining < NEW_FLOAT_EXT_SIZE)) {
                 return INVALID_TERM_SIZE;
             }
+            uint64_t raw_bits = READ_64_UNALIGNED(external_term_buf + 1);
+            if (UNLIKELY((raw_bits & 0x7FF0000000000000ULL) == 0x7FF0000000000000ULL)) {
+                return INVALID_TERM_SIZE;
+            }
             *eterm_size = NEW_FLOAT_EXT_SIZE;
             return FLOAT_SIZE;
         }

@@ -175,6 +175,7 @@ start() ->
     ok = test_map_ext_duplicate_keys(),
     ok = test_invalid_bit_binary(),
     ok = test_bitstring_used_offset(),
+    ok = test_options_and_non_finite_floats(),
     0.
 
 % A bitstring embedded in a compound term: the decoder must advance past the
@@ -1623,3 +1624,31 @@ descending(K) -> [{K, K} | descending(K - 1)].
 
 from_pairs([], Map) -> Map;
 from_pairs([{K, V} | Pairs], Map) -> from_pairs(Pairs, Map#{K => V}).
+
+test_options_and_non_finite_floats() ->
+    FortyTwo = ?MODULE:id(<<131, 97, 42>>),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(FortyTwo, ?MODULE:id([bad])) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(FortyTwo, ?MODULE:id([used | bad])) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(FortyTwo, ?MODULE:id([{used, true}])) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(FortyTwo, ?MODULE:id([{safe, true}])) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(FortyTwo, ?MODULE:id(used)) end),
+    {42, 3} = erlang:binary_to_term(FortyTwo, ?MODULE:id([used, safe, used])),
+    {42, 3} = erlang:binary_to_term(FortyTwo, ?MODULE:id([safe, used])),
+    42 = erlang:binary_to_term(FortyTwo, ?MODULE:id([safe, safe])),
+
+    PlusInf = ?MODULE:id(<<131, 70, 127, 240, 0, 0, 0, 0, 0, 0>>),
+    MinusInf = ?MODULE:id(<<131, 70, 255, 240, 0, 0, 0, 0, 0, 0>>),
+    QNaN = ?MODULE:id(<<131, 70, 127, 248, 0, 0, 0, 0, 0, 0>>),
+    SNaN = ?MODULE:id(<<131, 70, 127, 240, 0, 0, 0, 0, 0, 1>>),
+    NegNaN = ?MODULE:id(<<131, 70, 255, 255, 255, 255, 255, 255, 255, 255>>),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(PlusInf) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(MinusInf) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(QNaN) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(SNaN) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(NegNaN) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(PlusInf, ?MODULE:id([used])) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(QNaN, ?MODULE:id([safe])) end),
+
+    NegZeroExt = ?MODULE:id(<<131, 70, 128, 0, 0, 0, 0, 0, 0, 0>>),
+    NegZeroExt = erlang:term_to_binary(erlang:binary_to_term(NegZeroExt)),
+    ok.

@@ -3697,11 +3697,20 @@ static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
     uint8_t return_used = 0;
     external_term_read_opts_t read_opts = ExternalTermReadNoOpts;
     if (argc == 2) {
-        if (interop_proplist_get_value_default(argv[1], USED_ATOM, FALSE_ATOM) == TRUE_ATOM) {
-            return_used = 1;
+        term opts = argv[1];
+        while (term_is_nonempty_list(opts)) {
+            term opt = term_get_list_head(opts);
+            if (opt == USED_ATOM) {
+                return_used = 1;
+            } else if (opt == SAFE_ATOM) {
+                read_opts |= ExternalTermReadSafe;
+            } else {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            opts = term_get_list_tail(opts);
         }
-        if (interop_proplist_get_value_default(argv[1], SAFE_ATOM, FALSE_ATOM) == TRUE_ATOM) {
-            read_opts |= ExternalTermReadSafe;
+        if (!term_is_nil(opts)) {
+            RAISE_ERROR(BADARG_ATOM);
         }
     }
 
