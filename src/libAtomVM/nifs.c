@@ -2724,23 +2724,31 @@ static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[])
         }
         return term_from_const_binary(atom_data, atom_len, &ctx->heap, glb);
     } else {
-        if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(atom_len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-        size_t encoded_len = unicode_buf_utf8_len(atom_data, atom_len);
-        term binary = term_create_uninitialized_binary(encoded_len, &ctx->heap, glb);
-        char *binary_data = (char *) term_binary_data(binary);
+        size_t encoded_len = 0;
         size_t in_pos = 0;
-        for (size_t i = 0; i < encoded_len; i++) {
+        while (in_pos < atom_len) {
             size_t codepoint_size;
             uint32_t codepoint;
             if (UNLIKELY(unicode_utf8_decode(
-                             &atom_data[in_pos], 2, &codepoint, &codepoint_size)
+                             &atom_data[in_pos], atom_len - in_pos, &codepoint, &codepoint_size)
                         != UnicodeTransformDecodeSuccess
                     || (codepoint > 255))) {
                 RAISE_ERROR(BADARG_ATOM);
             }
-            binary_data[i] = codepoint;
+            encoded_len++;
+            in_pos += codepoint_size;
+        }
+        if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(encoded_len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term binary = term_create_uninitialized_binary(encoded_len, &ctx->heap, glb);
+        char *binary_data = (char *) term_binary_data(binary);
+        in_pos = 0;
+        for (size_t i = 0; i < encoded_len; i++) {
+            size_t codepoint_size;
+            uint32_t codepoint;
+            unicode_utf8_decode(&atom_data[in_pos], atom_len - in_pos, &codepoint, &codepoint_size);
+            binary_data[i] = (char) codepoint;
             in_pos += codepoint_size;
         }
         return binary;

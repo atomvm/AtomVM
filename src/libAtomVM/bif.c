@@ -2169,31 +2169,61 @@ static term list_to_atom(Context *ctx, term a_list, bool create_new, term *error
         return term_invalid_term();
     }
 
-    int ok;
-    avm_int_t len = term_list_length(a_list, &ok);
-    if (UNLIKELY(!ok)) {
+    // Match OTP's 255-character atom limit before validating any trailing elements or tail.
+    size_t atom_string_len = 0;
+    size_t char_count = 0;
+    term t = a_list;
+    while (term_is_nonempty_list(t)) {
+        if (UNLIKELY(char_count == 255)) {
+            *error_reason = create_new ? SYSTEM_LIMIT_ATOM : BADARG_ATOM;
+            return term_invalid_term();
+        }
+        term head = term_get_list_head(t);
+        if (UNLIKELY(!term_is_integer(head))) {
+            *error_reason = BADARG_ATOM;
+            return term_invalid_term();
+        }
+        avm_int_t codepoint = term_to_int(head);
+        if (UNLIKELY(codepoint < 0)) {
+            *error_reason = BADARG_ATOM;
+            return term_invalid_term();
+        } else if (codepoint <= 127) {
+            atom_string_len++;
+        } else {
+            size_t codepoint_size;
+            if (UNLIKELY(!bitstring_utf8_encode(codepoint, NULL, &codepoint_size))) {
+                *error_reason = BADARG_ATOM;
+                return term_invalid_term();
+            }
+            atom_string_len += codepoint_size;
+        }
+        char_count++;
+        t = term_get_list_tail(t);
+    }
+
+    if (UNLIKELY(!term_is_nil(t))) {
         *error_reason = BADARG_ATOM;
         return term_invalid_term();
     }
-    if (len > 255) {
-        *error_reason = SYSTEM_LIMIT_ATOM;
+
+    uint8_t *atom_string = malloc(atom_string_len > 0 ? atom_string_len : 1);
+    if (IS_NULL_PTR(atom_string)) {
+        *error_reason = OUT_OF_MEMORY_ATOM;
         return term_invalid_term();
     }
 
-    size_t atom_string_len;
-    interop_utf8_string_result_t utf8_result;
-    char *atom_string = interop_list_to_utf8_string(a_list, &atom_string_len, &utf8_result);
-    if (UNLIKELY(IS_NULL_PTR(atom_string))) {
-        switch (utf8_result) {
-            case InteropUTF8StringBadArg:
-                *error_reason = BADARG_ATOM;
-                break;
-            case InteropUTF8StringMemoryAllocFail:
-            default:
-                *error_reason = OUT_OF_MEMORY_ATOM;
-                break;
+    t = a_list;
+    size_t i = 0;
+    while (i < atom_string_len) {
+        term codepoint_term = term_get_list_head(t);
+        size_t codepoint_size;
+        if (UNLIKELY(!bitstring_utf8_encode(term_to_int(codepoint_term), &atom_string[i], &codepoint_size))) {
+            free(atom_string);
+            *error_reason = BADARG_ATOM;
+            return term_invalid_term();
         }
-        return term_invalid_term();
+        t = term_get_list_tail(t);
+        i += codepoint_size;
     }
 
     enum AtomTableCopyOpt atom_opts = AtomTableCopyAtom;
@@ -2201,7 +2231,7 @@ static term list_to_atom(Context *ctx, term a_list, bool create_new, term *error
         atom_opts |= AtomTableAlreadyExisting;
     }
     atom_index_t global_atom_index;
-    enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atom(ctx->global->atom_table, (const uint8_t *) atom_string, atom_string_len, atom_opts, &global_atom_index);
+    enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atom(ctx->global->atom_table, atom_string, atom_string_len, atom_opts, &global_atom_index);
     free(atom_string);
     switch (ensure_result) {
         case AtomTableEnsureAtomNotFound:

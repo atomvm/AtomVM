@@ -1134,7 +1134,6 @@ int intn_parse(
         int parsed_digits = int64_parse_ascii_buf(
             buf + pos, MIN(buf_len - pos, max_digits), base, buf_to_int64_opts, &parsed_chunk);
         if (parsed_chunk < 0) {
-            parsed_chunk = -parsed_chunk;
             *out_sign = IntNNegativeInteger;
         }
 
@@ -1155,8 +1154,8 @@ int intn_parse(
             // TODO: check overflows
             intn_mulu(out, out_len, mult, 2, new_out);
             new_out_len = MAX(2, intn_count_digits(new_out, INTN_MUL_OUT_LEN(out_len, 2)));
-            if (UNLIKELY(out_len > INTN_MAX_IN_LEN)) {
-                assert(out_len <= INTN_MAX_RES_LEN);
+            if (UNLIKELY(new_out_len > INTN_MAX_IN_LEN)) {
+                assert(new_out_len <= INTN_MAX_RES_LEN);
                 // we are above the allowed 256 bits, so it is going to be overflow
                 // if still have some room in our buffer, so we are safe
                 return -1;

@@ -453,6 +453,9 @@ int int64_parse_ascii_buf(const char buf[], size_t buf_len, unsigned int base,
         } else if (buf[0] == '+') {
             i = 1;
         }
+        if (UNLIKELY(i == buf_len)) {
+            return -1;
+        }
     }
 
     while ((i < buf_len - 1) && (buf[i] == '0')) {

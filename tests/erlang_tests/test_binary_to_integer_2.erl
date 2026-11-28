@@ -67,7 +67,25 @@ start() ->
     ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<" -0xAB">>), 16) end),
     ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<" +0xAB">>), 16) end),
 
+    ok = test_sign_only_and_bigints(),
+
     0.
+
+test_sign_only_and_bigints() ->
+    [
+        begin
+            ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"+">>), Base) end),
+            ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"-">>), Base) end)
+        end
+     || Base <- [2, 8, 10, 16, 36]
+    ],
+    -92233720368547758080 = binary_to_integer(?MODULE:id(<<"-92233720368547758080">>), 10),
+    -147573952589676412928 = binary_to_integer(?MODULE:id(<<"-80000000000000000">>), 16),
+    -18446744073709551616 = binary_to_integer(
+        ?MODULE:id(<<"-10000000000000000000000000000000000000000000000000000000000000000">>),
+        2
+    ),
+    ok.
 
 assert_badarg(F) ->
     try

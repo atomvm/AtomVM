@@ -20,10 +20,11 @@
 
 -module(test_list_to_integer).
 
--export([start/0, sum_integers/2, append_0/1]).
+-export([start/0, sum_integers/2, append_0/1, id/1]).
 
 start() ->
     ok = test_embedded_nul(),
+    ok = test_sign_only_and_bigints(),
     sum_integers(append_0("10"), "-1") +
         safe_list_to_integer("--") - 5 +
         safe_list_to_integer(nan) - 5 +
@@ -57,6 +58,32 @@ test_embedded_nul() ->
      || String <- [[49, 0], [49, 0, 50], [0, 49], [43, 49, 0, 50]]
     ],
     ok.
+
+test_sign_only_and_bigints() ->
+    [
+        begin
+            ok =
+                try
+                    _ = list_to_integer(?MODULE:id("+"), Base),
+                    accepted
+                catch
+                    error:badarg -> ok
+                end,
+            ok =
+                try
+                    _ = list_to_integer(?MODULE:id("-"), Base),
+                    accepted
+                catch
+                    error:badarg -> ok
+                end
+        end
+     || Base <- [2, 8, 10, 16, 36]
+    ],
+    -92233720368547758080 = list_to_integer(?MODULE:id("-92233720368547758080")),
+    ok.
+
+id(X) ->
+    X.
 
 append_0(L) ->
     L ++ "0".
