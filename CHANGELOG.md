@@ -89,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed `string:to_upper/1` and `string:to_lower/1` ISO-8859-1 letter mapping and non-integer element pass-through, `string:split/2,3` and `string:find/2,3` `trailing` and empty-pattern handling, `string:trim/1,2` full Unicode whitespace and binary handling, and `string:length/1` nested and improper chardata handling
 - Fixed `erlang:binary_to_integer/1,2` and `erlang:list_to_integer/1,2` returning `0` (and reading past sign-only buffers in base 10) for `"+"`/`"-"` inputs, `erlang:list_to_atom/1` and `erlang:list_to_existing_atom/1` 255-character limit and element/improper-tail precedence, `erlang:atom_to_binary/2` Latin-1 heap sizing and validation, and `intn_parse` `INT64_MIN` negation/overflow handling
 - Fixed `unicode:characters_to_list/1,2` and `unicode:characters_to_binary/1,2,3` accepting `latin1` code points `> 255` and UTF-16 surrogates, bigint elements causing `badarg`/memory corruption instead of `{error, ...}`, and trailing empty chardata flipping `{incomplete, ...}` to `{error, ...}`
 - Fixed `ets:update_counter/3,4` crashing on non-tuple elements inside operation lists, `ets:update_element/4` and `ets:update_counter/4` skipping default-tuple arity checks when the key exists, and `ets:new/2` option-list validation and precedence
