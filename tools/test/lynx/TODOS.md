@@ -754,6 +754,42 @@ evidence and limits. Full runtime corpus, full CLI/JIT matrices, the complete
 older-host harness, Lean fixture laws and embedded/32-bit/float32 targets remain
 outside this batch.
 
+### ETS tables (`ets`)
+
+- [x] Add 237 direct recipes covering all 15 `ets` exports (`new/2`,
+  `insert/2`, `insert_new/2`, `lookup/2`, `lookup_element/3,4`, `member/2`,
+  `update_element/3,4`, `update_counter/3,4`, `take/2`, `delete/1,2`, and
+  `delete_object/2`) via `tools/test/lynx/ets_tables.erl`, preserving all
+  14,811 preceding recipes (total 15,048).
+- [x] Check `ets:new/2` option validation, precedence, `named_table`
+  collisions/recreation, `set`/`bag`/`duplicate_bag` semantics across `keypos`
+  `1..3`, exact/numeric/`-0.0`/bigint/bitstring/sliced keys (`0..7`),
+  `update_element/3,4`, `update_counter/3,4`, `take/2`, `delete/1,2`,
+  `delete_object/2`, cross-process `private`/`protected`/`public` access,
+  owner-exit cleanup and GC retention.
+- [x] Fix `apply_op` non-tuple crash and `lookup_or_default` eager default-arity
+  validation in `src/libAtomVM/ets.c`, plus `nif_ets_new` strict option
+  validation/precedence in `src/libAtomVM/nifs.c`, with
+  `test_option_validation_and_bad_counter_ops/0` in `tests/erlang_tests/test_ets.erl`
+  and a `CHANGELOG.md` entry; preserve before-fix crash logs.
+- [x] Match 237/237 in interpreter and AArch64 precompiled modes, plus 92/92 in
+  reordered JIT replay covering all 15 operations, table types, option
+  precedence, `named_table`, `-0.0`, bit offsets `0..7`, cross-process access
+  and owner-exit cleanup.
+- [x] Check complete observations against pure-Elixir `ETS_MODEL` without
+  calling `:ets`, validate cross-mode equality and reject sixteen wrong-result
+  controls.
+- [x] Match all 237 observer-only host controls on OTP `27.3.4.12`/`28.3.1`/
+  `29.1.3`; pass nine ordinary ETS/binary/map suites on those hosts and all
+  three AtomVM modes plus `build/tests/test-erlang` (`Success.`), alongside
+  targeted CLI checks for `ets_table`, `binary_etf` and behavioral oracles.
+
+See [PLAN.md](PLAN.md#ets-tables-ets) for evidence and limits. Default tuples
+shorter than `keypos` on existing keys stay gated in `test_ets.erl` for OTP 29+
+due to OTP 27/28 divergence (`otp/issues/10603`). Full runtime corpus, full
+CLI/JIT matrices, complete older-host harness, Lean fixture laws and
+embedded/32-bit/float32 targets remain outside this batch.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes

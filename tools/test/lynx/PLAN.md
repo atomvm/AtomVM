@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 14,811 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 15,048 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,70 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## ETS tables (`ets`)
+
+Add 237 direct recipes for all 15 exported functions in `ets` (`new/2`,
+`insert/2`, `insert_new/2`, `lookup/2`, `lookup_element/3,4`, `member/2`,
+`update_element/3,4`, `update_counter/3,4`, `take/2`, `delete/1,2`, and
+`delete_object/2`) via standalone helper `ets_tables:ets_table/4`, preserving
+all 14,811 preceding recipes and metadata; total 15,048. Keeping the observer in
+`tools/test/lynx/ets_tables.erl` avoids exceeding AArch64 `jit_aarch64_asm`'s
+`±1 MiB` `adr` branch range on `differential.erl`. Fixture counts and Lean
+attribution are unchanged; no new APIs or Lean proofs are added.
+
+- Check `ets:new/2` option validation, invalid/non-atom names, improper lists,
+  option precedence across `[public,private]`, `[private,protected]`,
+  `[public,protected]`, `[set,bag]`, `[bag,set]`, `[bag,duplicate_bag]`,
+  `[duplicate_bag,bag]`, and `[{keypos,1},{keypos,2}]`, `named_table`
+  collisions, `delete/1`, and recreation.
+- Check `set`, `bag`, and `duplicate_bag` CRUD semantics across `keypos` `1..3`,
+  atomic multi-tuple `insert_new/2` rollback and trailing element validation,
+  `update_element/3,4`, `update_counter/3,4` threshold clamping and bad op lists,
+  `lookup_element/3,4` missing/default/bounds behavior, `take/2`, `delete/2`,
+  `delete_object/2`, post-delete access, and invalid table handles.
+- Check exact vs numeric keys (`1` vs `1.0`, `0.0` vs `-0.0`, `>64`-bit
+  bigints, maps, improper lists, bitstrings, and bit-sliced binaries at bit
+  offsets `0..7`), cross-process `private`/`protected`/`public` access, and
+  table cleanup on owner exit, retaining operands, options, modes and captures
+  across explicit GC before and after step execution.
+- `ETS_MODEL` implements a pure-Elixir ETS table state machine directly without
+  calling `:ets`, checking complete observations on both VMs.
+- **Resolved runtime defects (kept cleanly separable):** probing exposed three
+  bugs in `src/libAtomVM/ets.c` and `src/libAtomVM/nifs.c`: (1) `apply_op`
+  used `assert(term_is_tuple(op))`, crashing the VM instead of raising
+  `badarg` on non-tuple entries inside `update_counter/3,4` operation lists;
+  (2) `lookup_or_default` only checked `tuple_arity(default) <= key_index`
+  when inserting a missing key instead of checking before lookup; (3)
+  `nif_ets_new` accepted unknown options and improper lists and applied wrong
+  conflict precedence (`public > private`, `duplicate_bag > bag`). Added
+  `test_option_validation_and_bad_counter_ops/0` to
+  `tests/erlang_tests/test_ets.erl` (verified to fail before the C fixes and
+  pass afterward on interpreter, AArch64 precompiled, on-demand JIT and OTP 29)
+  alongside a `CHANGELOG.md` entry.
+
+Interpreter and AArch64 precompiled runs each match 237/237 against OTP.
+Reordered on-demand JIT replay matches 92/92, covering all 15 operations, all
+three table types, option validation/precedence, `named_table`, `-0.0`, bit
+offsets `0..7`, `update_counter` bad op lists, cross-process access, and
+owner-exit cleanup, with zero failures or unverified cases. Independent
+contracts pass on all three VMs, complete native and JIT observations equal
+interpreter results, and sixteen local wrong-result controls are rejected.
+Observer-only controls match all 237 OTP reference observations on OTP
+`27.3.4.12`, `28.3.1` and `29.1.3`. Nine ordinary suites (`test_ets`,
+`test_binary_to_term`, `test_crc32`, `maps_nifs`, `test_list_to_binary`,
+`test_list_to_bitstring`, `test_binary_part`, `test_split_binary` and
+`test_binary_eq`) pass on OTP 27/28/29 and all three AtomVM modes, and
+`build/tests/test-erlang` prints `Success.`. Targeted CLI checks cover the new
+batch/replay, `binary_etf` batch/replay and behavioral oracles.
+
+Inputs, before-fix failure logs, sources, manifests, results, reproducible
+checks and source hashes are saved under `.amp/in/artifacts/lynx-ets/`. Default
+tuples shorter than `keypos` when the key already exists are gated under OTP 29
+in `test_ets.erl` due to OTP 27/28 vs 29 divergence (`otp/issues/10603`). Full
+runtime corpus, full CLI/JIT matrices, complete older-host harness, Lean
+fixture laws, integer overflow beyond `avm_int_t` in `update_counter`, and
+embedded/32-bit/float32 targets remain outside this batch.
 
 ## External term format (`term_to_binary` and `binary_to_term`)
 

@@ -4142,6 +4142,304 @@ def cases():
         for opts in ["none", "[compressed]", "[{minor_version,1}]"]:
             binary_etf_probe("roundtrip_2", "{1,1.0,<<255,5:3>>}", opts, "deep", depth)
 
+    seen_ets = set()
+
+    def ets_probe(name, options, access_mode, steps):
+        args = [name, options, access_mode, steps]
+        expr = "ets_tables:ets_table(" + ",".join(args) + ")"
+        if expr in seen_ets:
+            return
+        seen_ets.add(expr)
+        selected.append({"otp_extension": "ets_table", "ets_table": args, "expression": expr})
+
+    # 1. Invalid names and new/2 option validation
+    for bad_name in ["0", "<<\"bad\">>", "[not_atom]", "{bad}", "1.5"]:
+        ets_probe(bad_name, "[]", "owner", "[{lookup,k}]")
+
+    for bad_opt in [
+        "bad_options",
+        "[bad_opt]",
+        "[set|bad]",
+        "[{named_table,true}]",
+        "[{named_table,false}]",
+        "[{keypos,0}]",
+        "[{keypos,-1}]",
+        f"[{{keypos,{1 << 64}}}]",
+        "[{keypos,bad}]",
+        "[{read_concurrency,bad}]",
+        "[{write_concurrency,bad}]",
+        "[{decentralized_counters,bad}]",
+        "[{heir,bad}]",
+        "[{heir,not_pid,data}]",
+        "[{ordered_set,true}]",
+    ]:
+        ets_probe("lynx_ets_bad", bad_opt, "owner", "[]")
+
+    # 2. Compatible and conflicting option precedence across OTP 27/28/29
+    for opt in [
+        "[]",
+        "[set]",
+        "[bag]",
+        "[duplicate_bag]",
+        "[ordered_set]",
+        "[compressed]",
+        "[protected]",
+        "[private]",
+        "[public]",
+        "[{keypos,1}]",
+        "[{keypos,2}]",
+        "[{heir,none}]",
+        "[{write_concurrency,true}]",
+        "[{write_concurrency,auto}]",
+        "[{read_concurrency,false}]",
+        "[{decentralized_counters,true}]",
+        "[public,private]",
+        "[private,public]",
+        "[private,protected]",
+        "[public,protected]",
+        "[set,bag]",
+        "[bag,set]",
+        "[set,duplicate_bag]",
+        "[duplicate_bag,set]",
+        "[bag,duplicate_bag]",
+        "[duplicate_bag,bag]",
+        "[{keypos,1},{keypos,2}]",
+    ]:
+        ets_probe(
+            "lynx_ets_opts",
+            opt,
+            "owner",
+            "[{insert,[{k,1},{k,1},{k,2}]},{lookup,k},{member,k},{insert,{a,b}},{lookup,b}]",
+        )
+        ets_probe(
+            "lynx_ets_opts",
+            opt,
+            "{other_process,[{k,1},{k,2}]}",
+            "[{lookup,k},{member,k},{insert,{k2,3}},{lookup,k2}]",
+        )
+
+    # 3. Named table collisions, delete/1, recreate, and owner-exit cleanup
+    for extra_opt in ["", ",public", ",private", ",bag", ",duplicate_bag"]:
+        ets_probe(
+            "lynx_ets_named",
+            f"[named_table{extra_opt}]",
+            "owner",
+            "[{insert,{k,1}},{lookup,k},dup_named,delete_table,{lookup,k},dup_named]",
+        )
+        ets_probe(
+            "lynx_ets_named_exit",
+            f"[named_table{extra_opt}]",
+            "{owner_exited,[{k,1}]}",
+            "[{lookup,k},{insert,{k,2}},dup_named]",
+        )
+    for acc_opt in ["[]", "[private]", "[protected]", "[public]", "[bag]", "[duplicate_bag]"]:
+        ets_probe(
+            "lynx_ets_exit",
+            acc_opt,
+            "{owner_exited,[{k,1}]}",
+            "[{lookup,k},{member,k},{insert,{k,2}},delete_table]",
+        )
+
+    # 4. Cross-process access matrix across all read/write/delete ops
+    cross_ops = [
+        "[{lookup,k},{lookup,missing},{member,k},{member,missing}]",
+        "[{lookup_element,k,2},{lookup_element,missing,2},{lookup_element4,missing,2,def}]",
+        "[{lookup_element,k,0},{lookup_element,k,9},{lookup_element4,k,9,def}]",
+        "[{insert,{k2,9}},{lookup,k2},{insert_new,{k,99}},{insert_new,{k3,7}}]",
+        "[{update_element,k,{2,99}},{update_element4,k2,{2,88},{k2,0}},{lookup,k}]",
+        "[{update_counter,k,5},{update_counter4,k2,{2,3},{k2,10}},{lookup,k}]",
+        "[{take,k},{lookup,k},{delete_key,k},{delete_object,{k,10}}]",
+        "[delete_table,{lookup,k}]",
+    ]
+    for acc_opt in ["[private]", "[protected]", "[public]"]:
+        for step_list in cross_ops:
+            ets_probe("lynx_ets_cross", acc_opt, "{other_process,[{k,10}]}", step_list)
+            ets_probe("lynx_ets_cross_named", f"[named_table,{acc_opt[1:]}", "{other_process,[{k,10}]}", step_list)
+
+    # 5. set / bag / duplicate_bag CRUD across keypos 1, 2, 3
+    for ttype in ["set", "bag", "duplicate_bag"]:
+        ets_probe(
+            "lynx_ets_crud",
+            f"[{ttype}]",
+            "owner",
+            "[{insert,[]},{insert,{k,1}},{insert,{k,1}},{insert,{k,2}},{lookup,k},"
+            "{insert,[{k2,10},{k2,10},{k2,20}]},{lookup,k2},{member,k2},{member,miss}]",
+        )
+        ets_probe(
+            "lynx_ets_inew",
+            f"[{ttype}]",
+            "owner",
+            "[{insert_new,[]},{insert_new,{k,1}},{insert_new,{k,2}},{lookup,k},"
+            "{insert_new,[{k2,10},{k3,20}]},{insert_new,[{k3,99},{k4,40}]},{lookup,k4},"
+            "{insert_new,[{k5,1},{k6,2},{k5,3}]},{lookup,k5}]",
+        )
+        ets_probe(
+            "lynx_ets_del",
+            f"[{ttype}]",
+            "owner",
+            "[{insert,[{k,1},{k,1},{k,2},{k2,9}]},{take,k},{take,miss},{lookup,k},"
+            "{insert,[{k,1},{k,1},{k,2}]},{delete_object,{k,1}},{lookup,k},"
+            "{delete_object,{k,miss}},{delete_key,k},{lookup,k},{delete_key,k2},{lookup,k2}]",
+        )
+        ets_probe(
+            "lynx_ets_kp2",
+            f"[{ttype},{{keypos,2}}]",
+            "owner",
+            "[{insert,{v1,k,v3}},{insert,{v1b,k,v3b}},{lookup,k},{lookup_element,k,1},"
+            "{lookup_element,k,3},{lookup_element4,miss,1,def},{delete_object,{v1,k,v3}},"
+            "{lookup,k},{take,k},{lookup,k}]",
+        )
+        ets_probe(
+            "lynx_ets_kp3",
+            f"[{ttype},{{keypos,3}}]",
+            "owner",
+            "[{insert,{a,b,k}},{lookup,k},{lookup_element,k,2},{member,k},{insert,{}}]",
+        )
+        for bad_entry in ["{}", "[{}]", "not_tuple", "[{k,1},bad]", "[{k,1}|{k,2}]"]:
+            ets_probe("lynx_ets_badi", f"[{ttype}]", "owner", f"[{{insert,{bad_entry}}}]")
+            ets_probe(
+                "lynx_ets_badin",
+                f"[{ttype}]",
+                "owner",
+                f"[{{insert,{{k,0}}}},{{insert_new,{bad_entry}}},{{lookup,k}}]",
+            )
+        ets_probe(
+            "lynx_ets_bad_bag",
+            f"[{ttype}]",
+            "owner",
+            "[{insert,[{k,1,2},{k,3}]},{lookup_element,k,3},{lookup_element4,k,3,def},"
+            "{delete_object,{}},{delete_object,not_tuple}]",
+        )
+
+    # 6. lookup_element / update_element / update_counter detailed edges
+    for kp in [1, 2]:
+        ets_probe(
+            "lynx_ets_le",
+            f"[{{keypos,{kp}}}]",
+            "owner",
+            "[{insert,{10,20,30}},{lookup_element,10,1},{lookup_element,20,3},"
+            "{lookup_element,miss,1},{lookup_element4,miss,1,fallback},"
+            "{lookup_element,10,0},{lookup_element,10,-1},{lookup_element,10,4},"
+            "{lookup_element4,10,4,fallback},{lookup_element4,miss,0,fallback}]",
+        )
+
+    ue_steps = [
+        "[{insert,{k,10,20}},{update_element,k,{2,99}},{update_element,k,[{3,77},{2,55},{3,66}]},{update_element,k,[]},{lookup,k}]",
+        "[{insert,{k,10,20}},{update_element,miss,{2,99}},{update_element,miss,[]},{update_element,miss,bad},{update_element,miss,[{1,x}|bad]},{lookup,miss}]",
+        "[{update_element4,k,{2,99},{k,1,2}},{update_element4,k2,[{2,5},{3,6},{2,7}],{other,0,0}},{lookup,k},{lookup,k2},{lookup,other}]",
+        "[{insert,{k,10,20}},{update_element,k,{1,new_k}},{update_element,k,{4,past}},{update_element,k,{0,zero}},{update_element,k,{-1,neg}},{update_element,k,[-1,neg]},{update_element,k,[{2,88},bad]},{update_element,k,bad},{update_element,k,[{2,88}|bad]},{lookup,k}]",
+        "[{insert,{k,10,20}},{update_element4,k,[{2,88},{1,new_k}],{k,0,0}},{update_element4,miss,[{2,88},{4,past}],{miss,0,0}},{lookup,k},{lookup,miss}]",
+    ]
+    for step_list in ue_steps:
+        ets_probe("lynx_ets_ue", "[set]", "owner", step_list)
+    ets_probe(
+        "lynx_ets_ue_kp2",
+        "[{keypos,2}]",
+        "owner",
+        "[{insert,{10,k,20}},{update_element,k,{1,99}},{update_element,k,{2,bad_kp}},"
+        "{update_element4,k2,[{1,5},{3,6}],{0,other,0}},{lookup,k},{lookup,k2}]",
+    )
+    for ttype in ["bag", "duplicate_bag"]:
+        ets_probe(
+            "lynx_ets_ue_nonset",
+            f"[{ttype}]",
+            "owner",
+            "[{insert,{k,10}},{update_element,k,{2,20}},{update_element4,miss,{2,20},{miss,0}}]",
+        )
+
+    uc_steps = [
+        "[{insert,{k,10,not_num,30}},{update_counter,k,5},{update_counter,k,-2},{update_counter,k,0},{lookup,k}]",
+        "[{insert,{k,10,20,30}},{update_counter,k,{3,5}},{update_counter,k,[]},{update_counter,k,[{2,-5},{2,3},{3,10}]},{lookup,k}]",
+        "[{insert,{k,10,20}},{update_counter,k,{2,0,10,99}},{update_counter,k,{2,0,9,99}},{update_counter,k,{2,-1,98,50}},{update_counter,k,{2,-1,98,50}},{update_counter,k,{2,5,25,100}},{update_counter,k,{2,5,104,7}},{lookup,k}]",
+        "[{update_counter4,k,5,{k,10}},{update_counter4,k2,[{2,3},{3,4}],{other,1,2}},{update_counter4,k3,[],{k3,7}},{lookup,k},{lookup,k2},{lookup,k3}]",
+        "[{insert,{k,10,a}},{update_counter,k,bad},{update_counter,k,[bad]},{update_counter,k,[{2,1},bad]},{update_counter,k,[{2,1}|bad]},{update_counter,k,{2,1,20}},{update_counter,k,{1,1}},{update_counter,k,{3,1}},{update_counter,k,{4,1}},{update_counter,k,[{2,1},{99,1}]},{update_counter4,k,[bad],{k,0,0}},{update_counter,miss,1},{update_counter,miss,bad},{lookup,k}]",
+    ]
+    for step_list in uc_steps:
+        ets_probe("lynx_ets_uc", "[set]", "owner", step_list)
+    ets_probe(
+        "lynx_ets_uc_kp2",
+        "[{keypos,2}]",
+        "owner",
+        "[{insert,{10,k,20}},{update_counter,k,5},{update_counter,k,{1,-3}},{update_counter,k,{2,1}},{lookup,k}]",
+    )
+    for ttype in ["bag", "duplicate_bag"]:
+        ets_probe(
+            "lynx_ets_uc_nonset",
+            f"[{ttype}]",
+            "owner",
+            "[{insert,{k,10}},{update_counter,k,1},{update_counter4,miss,1,{miss,0}}]",
+        )
+
+    # 7. Rich keys: 1 vs 1.0, 0.0 vs -0.0, bigints, tuples/lists/maps, bitstrings & slice offsets 0..7
+    big_a = str(1 << 80)
+    big_b = str((1 << 80) + 1)
+    neg_big = str(-(1 << 80))
+    for ttype in ["set", "bag"]:
+        ets_probe(
+            "lynx_ets_keys",
+            f"[{ttype}]",
+            "owner",
+            f"[{{insert,{{1,int_one}}}},{{insert,{{1.0,float_one}}}},{{insert,{{0.0,pos_zero}}}},"
+            f"{{insert_neg0,neg_zero}},{{insert,{{{big_a},ba}}}},{{insert,{{{big_b},bb}}}},"
+            f"{{insert,{{{neg_big},negb}}}},{{insert,{{[1|2],imp}}}},{{insert,{{#{{1=>a,1.0=>b}},mp}}}},"
+            f"{{lookup,1}},{{lookup,1.0}},{{lookup,0.0}},lookup_neg0,"
+            f"{{lookup,{big_a}}},{{lookup,{big_b}}},{{lookup,{neg_big}}},{{lookup,[1|2]}},"
+            f"{{lookup,#{{1=>a,1.0=>b}}}}]",
+        )
+
+    bit_keys = ["<<>>", "<<0:1>>", "<<1:1>>", "<<0:2>>", "<<0:3>>", "<<1:3>>", "<<1,2,5:3>>", "<<171,205>>"]
+    for ttype in ["set", "bag"]:
+        ets_probe(
+            "lynx_ets_bits",
+            f"[{ttype}]",
+            "owner",
+            "".join([
+                "[",
+                ",".join([f"{{insert,{{{k},{idx}}}}}" for idx, k in enumerate(bit_keys)]),
+                ",",
+                ",".join([f"{{lookup,{k}}}" for k in bit_keys]),
+                "]",
+            ]),
+        )
+    for off in range(8):
+        for bkey in ["<<171,205>>", "<<171,205,3:2>>", "<<5:3>>"]:
+            ets_probe(
+                "lynx_ets_slice",
+                "[set]",
+                "owner",
+                f"[{{insert,{{{bkey},plain}}}},{{slice_lookup,{off},{bkey}}},"
+                f"{{slice_insert,{off},<<1,2,3,4>>,sliced}},{{lookup,<<1,2,3,4>>}}]",
+            )
+
+    # 8. Post-delete operations and invalid table handles
+    ets_probe(
+        "lynx_ets_postdel",
+        "[named_table]",
+        "owner",
+        "[{insert,{k,1}},delete_table,{lookup,k},{member,k},{insert,{k,2}},{insert_new,{k,2}},"
+        "{lookup_element,k,2},{lookup_element4,k,2,def},{update_element,k,{2,3}},"
+        "{update_counter,k,1},{take,k},{delete_key,k},{delete_object,{k,1}},delete_table]",
+    )
+    bad_tab_calls = [
+        ("lookup", "k"),
+        ("member", "k"),
+        ("insert", "{k,1}"),
+        ("insert_new", "{k,1}"),
+        ("lookup_element", "{k,2}"),
+        ("lookup_element4", "{k,2,def}"),
+        ("update_element", "{k,{2,1}}"),
+        ("update_element4", "{k,{2,1},{k,0}}"),
+        ("update_counter", "{k,1}"),
+        ("update_counter4", "{k,1,{k,0}}"),
+        ("take", "k"),
+        ("delete1", "none"),
+        ("delete2", "k"),
+        ("delete_object", "{k,1}"),
+    ]
+    for bad_tab in ["bad_ets_name", "0", "[]", "{}"]:
+        step_items = ",".join([f"{{bad_tab_op,{op},{bad_tab},{arg}}}" for op, arg in bad_tab_calls])
+        ets_probe("lynx_ets_badhandle", "[]", "owner", f"[{step_items}]")
+
     return selected
 
 

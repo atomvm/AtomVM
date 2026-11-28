@@ -1941,6 +1941,418 @@ end
 """
 
 
+# Pure-Elixir ETS state-machine model without calling :ets to compute contracts.
+ETS_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+literal = fn text ->
+  {:ok,tokens,_} = :erl_scan.string(String.to_charlist(text <> "."))
+  {:ok,value} = :erl_parse.parse_term(tokens)
+  value
+end
+<<neg_zero::float-64>> = <<128,0,0,0,0,0,0,0>>
+parse_new_opts = fn name,opts ->
+  if is_atom(name) and is_list(opts) do
+    walk = fn
+      [],st,_self -> {:ok,st}
+      [opt|t],st,self ->
+        st2 = cond do
+          opt === :named_table -> {:ok,%{st | named: true}}
+          opt === :private -> {:ok,%{st | access: :private}}
+          opt === :public -> {:ok,%{st | access: :public}}
+          opt === :protected -> {:ok,st}
+          opt === :set or opt === :ordered_set -> {:ok,st}
+          opt === :bag -> {:ok,%{st | type: :bag}}
+          opt === :duplicate_bag -> {:ok,%{st | type: :duplicate_bag}}
+          opt === :compressed -> {:ok,st}
+          match?({:keypos,v} when is_integer(v) and v >= 1 and v <= 0x7FFFFFFFFFFFFFFF,opt) ->
+            {:keypos,v} = opt
+            {:ok,%{st | keypos: v}}
+          match?({:heir,:none},opt) -> {:ok,st}
+          match?({:heir,p,_} when is_pid(p),opt) -> {:ok,st}
+          match?({:write_concurrency,v} when v in [true,false,:auto],opt) -> {:ok,st}
+          match?({:read_concurrency,v} when is_boolean(v),opt) -> {:ok,st}
+          match?({:decentralized_counters,v} when is_boolean(v),opt) -> {:ok,st}
+          true -> :badarg
+        end
+        case st2 do
+          {:ok,nxt} -> self.(t,nxt,self)
+          :badarg -> :badarg
+        end
+      _,_st,_self -> :badarg
+    end
+    walk.(opts,%{name: name,named: false,type: :set,access: :protected,keypos: 1,alive: true,entries: []},walk)
+  else
+    :badarg
+  end
+end
+proper_list_elems = fn l ->
+  walk = fn
+    [],acc,_self -> {:ok,Enum.reverse(acc)}
+    [h|t],acc,self -> self.(t,[h|acc],self)
+    _,_acc,_self -> :badarg
+  end
+  if is_list(l), do: walk.(l,[],walk), else: :badarg
+end
+insert_one = fn st,tup ->
+  k = elem(tup,st.keypos - 1)
+  entries2 = case st.type do
+    :set ->
+      idx = Enum.find_index(st.entries,&(elem(&1,st.keypos - 1) === k))
+      if idx === nil, do: st.entries ++ [tup], else: List.replace_at(st.entries,idx,tup)
+    :bag ->
+      if Enum.any?(st.entries,&(&1 === tup)), do: st.entries, else: st.entries ++ [tup]
+    :duplicate_bag ->
+      st.entries ++ [tup]
+  end
+  %{st | entries: entries2}
+end
+do_insert = fn st,obj,new_only? ->
+  res = cond do
+    is_tuple(obj) ->
+      if tuple_size(obj) >= st.keypos, do: {:ok,[obj]}, else: :badarg
+    is_list(obj) ->
+      with {:ok,items} <- proper_list_elems.(obj) do
+        if Enum.all?(items,&(is_tuple(&1) and tuple_size(&1) >= st.keypos)), do: {:ok,items}, else: :badarg
+      end
+    true -> :badarg
+  end
+  case res do
+    :badarg -> :badarg
+    {:ok,items} ->
+      if new_only? and Enum.any?(items,fn t ->
+        k = elem(t,st.keypos - 1)
+        Enum.any?(st.entries,&(elem(&1,st.keypos - 1) === k))
+      end) do
+        {:ok,false,st}
+      else
+        st2 = Enum.reduce(items,st,fn t,acc -> insert_one.(acc,t) end)
+        {:ok,true,st2}
+      end
+  end
+end
+do_lookup = fn st,key ->
+  Enum.filter(st.entries,&(elem(&1,st.keypos - 1) === key))
+end
+do_lookup_elt = fn st,key,pos,def_val,has_def? ->
+  if not (is_integer(pos) and pos >= 1) do
+    :badarg
+  else
+    matches = do_lookup.(st,key)
+    cond do
+      matches === [] ->
+        if has_def?, do: {:ok,def_val}, else: :badarg
+      Enum.any?(matches,&(tuple_size(&1) < pos)) ->
+        :badarg
+      st.type === :set ->
+        [m] = matches
+        {:ok,elem(m,pos - 1)}
+      true ->
+        {:ok,Enum.map(matches,&elem(&1,pos - 1))}
+    end
+  end
+end
+apply_ue_spec = fn tup,keypos,spec ->
+  apply_pair = fn
+    {pos,val},t when is_integer(pos) and pos >= 1 and pos <= tuple_size(t) and pos !== keypos ->
+      {:ok,put_elem(t,pos - 1,val)}
+    _,_t -> :badarg
+  end
+  cond do
+    is_tuple(spec) -> apply_pair.(spec,tup)
+    is_list(spec) ->
+      with {:ok,pairs} <- proper_list_elems.(spec) do
+        Enum.reduce_while(pairs,{:ok,tup},fn p,{:ok,acc} ->
+          case apply_pair.(p,acc) do
+            {:ok,nxt} -> {:cont,{:ok,nxt}}
+            :badarg -> {:halt,:badarg}
+          end
+        end)
+      end
+    true -> :badarg
+  end
+end
+apply_uc_op = fn tup,keypos,op ->
+  case op do
+    {pos,incr} when is_integer(pos) and is_integer(incr)
+        and pos >= 1 and pos <= tuple_size(tup) and pos !== keypos ->
+      cur = elem(tup,pos - 1)
+      if is_integer(cur) do
+        nv = cur + incr
+        {:ok,nv,put_elem(tup,pos - 1,nv)}
+      else
+        :badarg
+      end
+    {pos,incr,thresh,setval} when is_integer(pos) and is_integer(incr)
+        and is_integer(thresh) and is_integer(setval)
+        and pos >= 1 and pos <= tuple_size(tup) and pos !== keypos ->
+      cur = elem(tup,pos - 1)
+      if is_integer(cur) do
+        nv = cur + incr
+        nv2 = if (incr >= 0 and nv > thresh) or (incr < 0 and nv < thresh), do: setval, else: nv
+        {:ok,nv2,put_elem(tup,pos - 1,nv2)}
+      else
+        :badarg
+      end
+    _ -> :badarg
+  end
+end
+can_op? = fn st,role,kind ->
+  if not st.alive do
+    false
+  else
+    case role do
+      :owner -> true
+      :other ->
+        case st.access do
+          :private -> false
+          :protected -> kind === :read
+          :public -> true
+        end
+    end
+  end
+end
+run_step = fn st,role,step ->
+  case step do
+    {:bad_tab_op,_op,_bad_tab,_args} -> {{:exception,:error,:badarg},st}
+    :dup_named ->
+      if st.named and st.alive, do: {{:exception,:error,:badarg},st}, else: {{:ok,{:named,st.name}},st}
+    {:lookup,key} ->
+      if can_op?.(st,role,:read), do: {{:ok,do_lookup.(st,key)},st}, else: {{:exception,:error,:badarg},st}
+    :lookup_neg0 ->
+      if can_op?.(st,role,:read), do: {{:ok,do_lookup.(st,neg_zero)},st}, else: {{:exception,:error,:badarg},st}
+    {:slice_lookup,_off,key} ->
+      if can_op?.(st,role,:read), do: {{:ok,do_lookup.(st,key)},st}, else: {{:exception,:error,:badarg},st}
+    {:member,key} ->
+      if can_op?.(st,role,:read), do: {{:ok,do_lookup.(st,key) !== []},st}, else: {{:exception,:error,:badarg},st}
+    {:lookup_element,key,pos} ->
+      res = if can_op?.(st,role,:read), do: do_lookup_elt.(st,key,pos,nil,false), else: :badarg
+      case res do
+        {:ok,v} -> {{:ok,v},st}
+        :badarg -> {{:exception,:error,:badarg},st}
+      end
+    {:lookup_element4,key,pos,def_val} ->
+      res = if can_op?.(st,role,:read), do: do_lookup_elt.(st,key,pos,def_val,true), else: :badarg
+      case res do
+        {:ok,v} -> {{:ok,v},st}
+        :badarg -> {{:exception,:error,:badarg},st}
+      end
+    {:insert,obj} ->
+      if can_op?.(st,role,:write) do
+        case do_insert.(st,obj,false) do
+          {:ok,res,st2} -> {{:ok,res},st2}
+          :badarg -> {{:exception,:error,:badarg},st}
+        end
+      else
+        {{:exception,:error,:badarg},st}
+      end
+    {:insert_neg0,val} ->
+      if can_op?.(st,role,:write) do
+        case do_insert.(st,{neg_zero,val},false) do
+          {:ok,res,st2} -> {{:ok,res},st2}
+          :badarg -> {{:exception,:error,:badarg},st}
+        end
+      else
+        {{:exception,:error,:badarg},st}
+      end
+    {:slice_insert,_off,key,val} ->
+      if can_op?.(st,role,:write) do
+        case do_insert.(st,{key,val},false) do
+          {:ok,res,st2} -> {{:ok,res},st2}
+          :badarg -> {{:exception,:error,:badarg},st}
+        end
+      else
+        {{:exception,:error,:badarg},st}
+      end
+    {:insert_new,obj} ->
+      if can_op?.(st,role,:write) do
+        case do_insert.(st,obj,true) do
+          {:ok,res,st2} -> {{:ok,res},st2}
+          :badarg -> {{:exception,:error,:badarg},st}
+        end
+      else
+        {{:exception,:error,:badarg},st}
+      end
+    {:update_element,key,spec} ->
+      res = if can_op?.(st,role,:write) and st.type === :set do
+        case do_lookup.(st,key) do
+          [] -> {:ok,false,st}
+          [tup] ->
+            with {:ok,tup2} <- apply_ue_spec.(tup,st.keypos,spec),
+                 {:ok,true,st2} <- do_insert.(st,tup2,false) do
+              {:ok,true,st2}
+            end
+        end
+      else
+        :badarg
+      end
+      case res do
+        {:ok,b,st2} -> {{:ok,b},st2}
+        :badarg -> {{:exception,:error,:badarg},st}
+      end
+    {:update_element4,key,spec,def_tup} ->
+      res = if can_op?.(st,role,:write) and st.type === :set and is_tuple(def_tup) and tuple_size(def_tup) >= st.keypos do
+        base = case do_lookup.(st,key) do
+          [] -> put_elem(def_tup,st.keypos - 1,key)
+          [tup] -> tup
+        end
+        with {:ok,tup2} <- apply_ue_spec.(base,st.keypos,spec),
+             {:ok,true,st2} <- do_insert.(st,tup2,false) do
+          {:ok,true,st2}
+        end
+      else
+        :badarg
+      end
+      case res do
+        {:ok,b,st2} -> {{:ok,b},st2}
+        :badarg -> {{:exception,:error,:badarg},st}
+      end
+    {:update_counter,key,op} ->
+      res = if can_op?.(st,role,:write) and st.type === :set do
+        case do_lookup.(st,key) do
+          [] -> :badarg
+          [tup] ->
+            cond do
+              is_integer(op) ->
+                with {:ok,nv,tup2} <- apply_uc_op.(tup,st.keypos,{st.keypos + 1,op}),
+                     {:ok,true,st2} <- do_insert.(st,tup2,false) do
+                  {:ok,nv,st2}
+                end
+              is_tuple(op) ->
+                with {:ok,nv,tup2} <- apply_uc_op.(tup,st.keypos,op),
+                     {:ok,true,st2} <- do_insert.(st,tup2,false) do
+                  {:ok,nv,st2}
+                end
+              is_list(op) ->
+                with {:ok,ops} <- proper_list_elems.(op),
+                     {:ok,vals,tup2} <- Enum.reduce_while(ops,{:ok,[],tup},fn one,{:ok,acc,cur} ->
+                       case apply_uc_op.(cur,st.keypos,one) do
+                         {:ok,nv,nxt} -> {:cont,{:ok,[nv|acc],nxt}}
+                         :badarg -> {:halt,:badarg}
+                       end
+                     end),
+                     {:ok,true,st2} <- do_insert.(st,tup2,false) do
+                  {:ok,Enum.reverse(vals),st2}
+                end
+              true -> :badarg
+            end
+        end
+      else
+        :badarg
+      end
+      case res do
+        {:ok,v,st2} -> {{:ok,v},st2}
+        :badarg -> {{:exception,:error,:badarg},st}
+      end
+    {:update_counter4,key,op,def_tup} ->
+      res = if can_op?.(st,role,:write) and st.type === :set and is_tuple(def_tup) and tuple_size(def_tup) >= st.keypos do
+        base = case do_lookup.(st,key) do
+          [] -> put_elem(def_tup,st.keypos - 1,key)
+          [tup] -> tup
+        end
+        cond do
+          is_integer(op) ->
+            with {:ok,nv,tup2} <- apply_uc_op.(base,st.keypos,{st.keypos + 1,op}),
+                 {:ok,true,st2} <- do_insert.(st,tup2,false) do
+              {:ok,nv,st2}
+            end
+          is_tuple(op) ->
+            with {:ok,nv,tup2} <- apply_uc_op.(base,st.keypos,op),
+                 {:ok,true,st2} <- do_insert.(st,tup2,false) do
+              {:ok,nv,st2}
+            end
+          is_list(op) ->
+            with {:ok,ops} <- proper_list_elems.(op),
+                 {:ok,vals,tup2} <- Enum.reduce_while(ops,{:ok,[],base},fn one,{:ok,acc,cur} ->
+                   case apply_uc_op.(cur,st.keypos,one) do
+                     {:ok,nv,nxt} -> {:cont,{:ok,[nv|acc],nxt}}
+                     :badarg -> {:halt,:badarg}
+                   end
+                 end),
+                 {:ok,true,st2} <- do_insert.(st,tup2,false) do
+              {:ok,Enum.reverse(vals),st2}
+            end
+          true -> :badarg
+        end
+      else
+        :badarg
+      end
+      case res do
+        {:ok,v,st2} -> {{:ok,v},st2}
+        :badarg -> {{:exception,:error,:badarg},st}
+      end
+    {:take,key} ->
+      if can_op?.(st,role,:write) do
+        {taken,kept} = Enum.split_with(st.entries,&(elem(&1,st.keypos - 1) === key))
+        {{:ok,taken},%{st | entries: kept}}
+      else
+        {{:exception,:error,:badarg},st}
+      end
+    {:delete_key,key} ->
+      if can_op?.(st,role,:write) do
+        kept = Enum.reject(st.entries,&(elem(&1,st.keypos - 1) === key))
+        {{:ok,true},%{st | entries: kept}}
+      else
+        {{:exception,:error,:badarg},st}
+      end
+    {:delete_object,obj} ->
+      if can_op?.(st,role,:write) and is_tuple(obj) and tuple_size(obj) >= st.keypos do
+        kept = Enum.reject(st.entries,&(&1 === obj))
+        {{:ok,true},%{st | entries: kept}}
+      else
+        {{:exception,:error,:badarg},st}
+      end
+    :delete_table ->
+      if can_op?.(st,role,:write) do
+        {{:ok,true},%{st | alive: false,named: false,entries: []}}
+      else
+        {{:exception,:error,:badarg},st}
+      end
+  end
+end
+cases = read.("cases.json")
+expected = Enum.map(cases,fn c ->
+  [name_text,opts_text,mode_text,steps_text] = c["ets_table"]
+  name = literal.(name_text)
+  opts = literal.(opts_text)
+  mode = literal.(mode_text)
+  steps = literal.(steps_text)
+  {c_out,s_outs} = case parse_new_opts.(name,opts) do
+    :badarg -> {{:exception,:error,:badarg},[]}
+    {:ok,st0} ->
+      created = {:ok,if(st0.named, do: {:named,name}, else: :ref)}
+      {role,st1} = case mode do
+        :owner -> {:owner,st0}
+        {:other_process,[]} -> {:other,st0}
+        {:other_process,seed} ->
+          {:ok,true,s} = do_insert.(st0,seed,false)
+          {:other,s}
+        {:owner_exited,_seed} ->
+          {:owner,%{st0 | alive: false,named: false,entries: []}}
+      end
+      {rev_outs,_} = Enum.reduce(steps,{[],st1},fn step,{acc,cur} ->
+        {out,nxt} = run_step.(cur,role,step)
+        {[out|acc],nxt}
+      end)
+      {created,Enum.reverse(rev_outs)}
+  end
+  {:ok,{c_out,s_outs,name,opts,mode,{:captured,name,opts,mode,<<5::3>>}}}
+end)
+for {vm,rows} <- [otp: read.("manifest.json")["expected"],
+                  atomvm: Enum.map(read.("actuals.json"),fn row ->
+                    "ok" = row["status"]
+                    row["value"]
+                  end)] do
+  true = length(rows) === length(expected)
+  failures = Enum.zip([cases,expected,rows]) |> Enum.filter(fn {_c,want,row} ->
+    :erlang.binary_to_term(Base.decode64!(row)) !== want
+  end)
+  if failures !== [], do: raise(inspect({vm,failures},limit: 10))
+  IO.puts("#{vm}: #{length(rows)} independent ets contracts")
+end
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -2674,6 +3086,26 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["binary_etf"] for c in saved],
                                      [c["binary_etf"] for c in cases])
                     check = subprocess.run(["elixir", "-e", BINARY_ETF_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_ets_preserves_table_semantics_access_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "ets_table" in case]
+        self.assertEqual(len(selected), 237)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-17])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    self.assertEqual(self.invoke(output, "--replay", source),
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["ets_table"] for c in saved],
+                                     [c["ets_table"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", ETS_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
@@ -5191,7 +5623,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 14811)
+        self.assertEqual(len(lean_runtime.cases()), 15048)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

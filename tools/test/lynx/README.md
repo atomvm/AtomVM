@@ -348,6 +348,19 @@ validation in `src/libAtomVM/nifs.c` and non-finite `NEW_FLOAT_EXT` payloads in
 `src/libAtomVM/external_term.c`), fixed separately with an ordinary regression
 in `test_binary_to_term.erl`; see the batch notes for results and limits.
 
+The [ETS tables batch](PLAN.md#ets-tables-ets) adds 237 recipes covering all 15
+exported functions in `ets` via standalone helper `ets_tables:ets_table/4`,
+bringing the corpus to 15,048. Independent pure-Elixir ETS state-machine
+expectations check `set`/`bag`/`duplicate_bag` semantics, `named_table`
+collisions and deletion, option validation and precedence, numeric/exact/`-0.0`
+keys, bit-sliced keys (`0..7`), cross-process access, owner-exit cleanup and GC
+retention. Probing exposed three runtime bugs (`ets:update_counter/3,4`
+crashing on non-tuple op list items, `ets:update_element/4`/`update_counter/4`
+skipping default-arity validation on existing keys in `src/libAtomVM/ets.c`, and
+`ets:new/2` option validation/precedence in `src/libAtomVM/nifs.c`), fixed
+separately with an ordinary regression in `test_ets.erl`; see the batch notes
+for results and limits.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen
