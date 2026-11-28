@@ -4628,38 +4628,74 @@ static term nif_ets_new(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(name, term_is_atom);
     VALIDATE_VALUE(options, term_is_list);
 
-    term is_named_term = interop_kv_get_value_default(options, ATOM_STR("\xB", "named_table"), FALSE_ATOM, ctx->global);
-    term keypos = interop_kv_get_value_default(options, ATOM_STR("\x6", "keypos"), term_from_int(1), ctx->global);
-
-    VALIDATE_VALUE(is_named_term, atom_is_boolean);
-    VALIDATE_VALUE(keypos, term_is_pos_int);
-
-    bool is_named = is_named_term == TRUE_ATOM;
-
-    size_t key_index = term_to_int(keypos) - 1;
-
-    term private = interop_kv_get_value(options, ATOM_STR("\x7", "private"), ctx->global);
-    term public = interop_kv_get_value(options, ATOM_STR("\x6", "public"), ctx->global);
-
-    // NOTE: If multiple accesses are specified, the precedence is: public > private > protected
+    bool is_named = false;
+    size_t key_index = 0;
     ets_table_access_t access = EtsTableAccessProtected;
-    if (!term_is_invalid_term(private)) {
-        access = EtsTableAccessPrivate;
-    }
-    if (!term_is_invalid_term(public)) {
-        access = EtsTableAccessPublic;
-    }
-
-    term bag = interop_kv_get_value(options, ATOM_STR("\x3", "bag"), ctx->global);
-    term duplicate_bag = interop_kv_get_value(options, ATOM_STR("\xd", "duplicate_bag"), ctx->global);
-
-    // NOTE: If multiple table types are specified, the precedence is: duplicate_bag > bag > set
     ets_table_type_t type = EtsTableSet;
-    if (!term_is_invalid_term(bag)) {
-        type = EtsTableBag;
+
+    term opts = options;
+    while (term_is_nonempty_list(opts)) {
+        term opt = term_get_list_head(opts);
+        if (term_is_atom(opt)) {
+            if (globalcontext_is_term_equal_to_atom_string(ctx->global, opt, ATOM_STR("\xB", "named_table"))) {
+                is_named = true;
+            } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, opt, ATOM_STR("\x7", "private"))) {
+                access = EtsTableAccessPrivate;
+            } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, opt, ATOM_STR("\x6", "public"))) {
+                access = EtsTableAccessPublic;
+            } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, opt, ATOM_STR("\x9", "protected"))) {
+                // Default access; does not override explicit private/public in OTP.
+            } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, opt, ATOM_STR("\x3", "set"))
+                || globalcontext_is_term_equal_to_atom_string(ctx->global, opt, ATOM_STR("\xB", "ordered_set"))) {
+                // Default type (ordered_set accepted for compatibility); does not override bag/duplicate_bag in OTP.
+            } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, opt, ATOM_STR("\x3", "bag"))) {
+                type = EtsTableBag;
+            } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, opt, ATOM_STR("\xD", "duplicate_bag"))) {
+                type = EtsTableDuplicateBag;
+            } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, opt, ATOM_STR("\xA", "compressed"))) {
+                // Accepted for OTP compatibility.
+            } else {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+        } else if (term_is_tuple(opt) && term_get_tuple_arity(opt) == 2) {
+            term key = term_get_tuple_element(opt, 0);
+            term val = term_get_tuple_element(opt, 1);
+            if (globalcontext_is_term_equal_to_atom_string(ctx->global, key, ATOM_STR("\x6", "keypos"))) {
+                if (UNLIKELY(!term_is_pos_int(val))) {
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+                key_index = term_to_int(val) - 1;
+            } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, key, ATOM_STR("\x4", "heir"))) {
+                if (UNLIKELY(!globalcontext_is_term_equal_to_atom_string(ctx->global, val, ATOM_STR("\x4", "none")))) {
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+            } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, key, ATOM_STR("\x11", "write_concurrency"))) {
+                if (UNLIKELY(!atom_is_boolean(val)
+                        && !globalcontext_is_term_equal_to_atom_string(ctx->global, val, ATOM_STR("\x4", "auto")))) {
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+            } else if (globalcontext_is_term_equal_to_atom_string(ctx->global, key, ATOM_STR("\x10", "read_concurrency"))
+                || globalcontext_is_term_equal_to_atom_string(ctx->global, key, ATOM_STR("\x16", "decentralized_counters"))) {
+                if (UNLIKELY(!atom_is_boolean(val))) {
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+            } else {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+        } else if (term_is_tuple(opt) && term_get_tuple_arity(opt) == 3) {
+            term key = term_get_tuple_element(opt, 0);
+            term pid = term_get_tuple_element(opt, 1);
+            if (UNLIKELY(!globalcontext_is_term_equal_to_atom_string(ctx->global, key, ATOM_STR("\x4", "heir"))
+                    || !term_is_pid(pid))) {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+        } else {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        opts = term_get_list_tail(opts);
     }
-    if (!term_is_invalid_term(duplicate_bag)) {
-        type = EtsTableDuplicateBag;
+    if (UNLIKELY(!term_is_nil(opts))) {
+        RAISE_ERROR(BADARG_ATOM);
     }
 
     term table = term_invalid_term();

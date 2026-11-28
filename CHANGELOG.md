@@ -89,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed `ets:update_counter/3,4` crashing on non-tuple elements inside operation lists, `ets:update_element/4` and `ets:update_counter/4` skipping default-tuple arity checks when the key exists, and `ets:new/2` option-list validation and precedence
 - Fixed `erlang:binary_to_term/1,2` accepting non-finite `NEW_FLOAT_EXT` payloads and `erlang:binary_to_term/2` accepting invalid or improper option lists instead of raising `badarg`
 - Fixed `erlang:crc32/2` resetting the checksum to `0` on empty iolists when built with zlib,
   and `erlang:crc32_combine/3` accepting lengths `>= 2^32` instead of raising `badarg`
