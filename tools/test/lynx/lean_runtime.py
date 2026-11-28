@@ -4440,6 +4440,180 @@ def cases():
         step_items = ",".join([f"{{bad_tab_op,{op},{bad_tab},{arg}}}" for op, arg in bad_tab_calls])
         ets_probe("lynx_ets_badhandle", "[]", "owner", f"[{step_items}]")
 
+    seen_unicode = set()
+
+    def unicode_probe(op, input_spec, enc="none", mode="copy", offset=0):
+        args = [op, mode, str(offset), input_spec, enc]
+        expr = "unicode_conv:observe(" + ",".join(args) + ")"
+        if expr in seen_unicode:
+            return
+        seen_unicode.add(expr)
+        selected.append({"otp_extension": "unicode_conv", "unicode_conv": args, "expression": expr})
+
+    uni_encs = ["utf8", "unicode", "latin1"]
+    valid_utf8_bins = [
+        binary_literal(b""),
+        binary_literal(b"hello"),
+        binary_literal(b"\x00\x7f"),
+        binary_literal("\u0080".encode("utf-8")),
+        binary_literal("\u00e9".encode("utf-8")),
+        binary_literal("\u07ff".encode("utf-8")),
+        binary_literal("\u0800".encode("utf-8")),
+        binary_literal("\ud7ff".encode("utf-8")),
+        binary_literal("\ue000".encode("utf-8")),
+        binary_literal("\uffff".encode("utf-8")),
+        binary_literal("\U00010000".encode("utf-8")),
+        binary_literal("\U0010ffff".encode("utf-8")),
+        binary_literal("h\u00e9-\u20ac-\U0001f600".encode("utf-8")),
+    ]
+    valid_latin1_bins = [
+        binary_literal(b""),
+        binary_literal(b"abc"),
+        binary_literal(bytes([0, 127, 128, 160, 233, 255])),
+    ]
+    valid_lists = [
+        "[]",
+        "[[]]",
+        "[<<>>]",
+        "[[]|<<>>]",
+        "\"hello\"",
+        "[$a,233,8364,128512]",
+        "[0,127,128,2047,2048,55295,57344,65535,65536,1114111]",
+        "[$a|<<\"b\">>]",
+        "[[\"foo\",[104,233|<<\"!\"/utf8>>]],<<>>]",
+    ]
+    latin1_only_lists = [
+        "[]",
+        "[[]|<<>>]",
+        "[0,127,128,233,255]",
+        f"[{binary_literal(bytes([104, 233]))},[255]|{binary_literal(bytes([33]))}]",
+    ]
+
+    for idx, spec in enumerate(valid_utf8_bins + valid_lists):
+        unicode_probe("to_list_1", spec)
+        unicode_probe("to_binary_1", spec)
+        unicode_probe("to_list_1", spec, mode="bit_slice", offset=idx % 8)
+        unicode_probe("to_binary_1", spec, mode="bit_slice", offset=(idx + 3) % 8)
+        for enc in ["utf8", "unicode"]:
+            unicode_probe("to_list_2", spec, enc)
+            unicode_probe("to_binary_2", spec, enc)
+        unicode_probe("to_binary_3", spec, "{utf8,latin1}")
+        unicode_probe("to_binary_3", spec, "{unicode,latin1}")
+
+    for idx, spec in enumerate(valid_latin1_bins + latin1_only_lists):
+        unicode_probe("to_list_2", spec, "latin1")
+        unicode_probe("to_list_2", spec, "latin1", "bit_slice", idx % 8)
+        unicode_probe("to_binary_2", spec, "latin1")
+        for out_enc in uni_encs:
+            unicode_probe("to_binary_3", spec, f"{{latin1,{out_enc}}}")
+            unicode_probe("to_binary_3", spec, f"{{latin1,{out_enc}}}", "bit_slice", idx % 8)
+
+    for off in range(8):
+        b_utf8 = binary_literal("h\u00e9\U0001f600".encode("utf-8"))
+        unicode_probe("to_list_1", b_utf8, mode="bit_slice", offset=off)
+        unicode_probe("to_binary_1", b_utf8, mode="bit_slice", offset=off)
+        unicode_probe("to_list_2", "[<<\"h\">>,195,<<169>>]", "latin1", "bit_slice", off)
+        unicode_probe("to_binary_3", "[<<\"h\">>,233]", "{latin1,utf8}", "bit_slice", off)
+
+    for depth in [1, 2, 3, 5, 8]:
+        unicode_probe("to_list_1", "[104,233|<<\"!\"/utf8>>]", mode="deep", offset=depth)
+        unicode_probe("to_binary_1", "[104,233|<<\"!\"/utf8>>]", mode="deep", offset=depth)
+        unicode_probe("to_binary_3", "[104,233]", "{latin1,utf8}", "deep", depth)
+        unicode_probe("to_binary_3", binary_literal("h\u00e9!".encode("utf-8")), "{utf8,latin1}", "deep", depth)
+
+    invalid_utf8_bins = [
+        binary_literal(bytes([0x80])),
+        binary_literal(bytes([0xA0, 0xA1])),
+        binary_literal(bytes([192, 175])),
+        binary_literal(bytes([224, 128, 175])),
+        binary_literal(bytes([240, 128, 128, 175])),
+        binary_literal(bytes([237, 160, 128])),
+        binary_literal(bytes([237, 191, 191])),
+        binary_literal(bytes([244, 144, 128, 128])),
+        binary_literal(bytes([245, 128, 128, 128])),
+        binary_literal(bytes([255])),
+        binary_literal(b"hi" + bytes([255]) + b"z"),
+        binary_literal(b"h" + bytes([237, 160, 128])),
+    ]
+    for idx, spec in enumerate(invalid_utf8_bins):
+        unicode_probe("to_list_1", spec)
+        unicode_probe("to_binary_1", spec)
+        unicode_probe("to_list_2", spec, "utf8", "bit_slice", idx % 8)
+        unicode_probe("to_binary_3", spec, "{utf8,latin1}")
+        unicode_probe("to_binary_3", spec, "{unicode,utf8}", "bit_slice", idx % 8)
+
+    incomplete_utf8_bins = [
+        binary_literal(bytes([195])),
+        binary_literal(bytes([226])),
+        binary_literal(bytes([226, 130])),
+        binary_literal(bytes([240])),
+        binary_literal(bytes([240, 159])),
+        binary_literal(bytes([240, 159, 152])),
+        binary_literal(b"h" + bytes([195])),
+        binary_literal(b"h" + bytes([240, 159])),
+    ]
+    for idx, spec in enumerate(incomplete_utf8_bins):
+        unicode_probe("to_list_1", spec)
+        unicode_probe("to_binary_1", spec)
+        unicode_probe("to_binary_3", spec, "{utf8,latin1}")
+        unicode_probe("to_list_1", spec, mode="bit_slice", offset=idx % 8)
+        unicode_probe("to_binary_1", spec, mode="bit_slice", offset=idx % 8)
+
+    # Incomplete vs error across nested trailing chardata
+    inc_pfx = binary_literal(b"h" + bytes([195]))
+    for nested_inc in [
+        f"[{inc_pfx}]",
+        f"[{inc_pfx},[]]",
+        f"[{inc_pfx},<<>>]",
+        f"[{inc_pfx},[[],<<>>]]",
+        f"[\"foo\",[{inc_pfx},[[]|<<>>]]]",
+        f"[{inc_pfx},<<\"a\">>]",
+        f"[{inc_pfx},$a]",
+    ]:
+        unicode_probe("to_list_1", nested_inc)
+        unicode_probe("to_binary_1", nested_inc)
+        unicode_probe("to_binary_3", nested_inc, "{utf8,latin1}")
+
+    # Integer / code point error cases
+    for bad_cp in ["55296", "57343", "1114112", str(1 << 64)]:
+        spec = f"[$h,{bad_cp},$i]"
+        unicode_probe("to_list_1", spec)
+        unicode_probe("to_binary_1", spec)
+        unicode_probe("to_list_2", spec, "latin1")
+        unicode_probe("to_binary_2", spec, "latin1")
+        unicode_probe("to_binary_3", spec, "{latin1,latin1}")
+        unicode_probe("to_binary_3", spec, "{utf8,latin1}")
+    for bad_neg in ["-1", str(-(1 << 64))]:
+        spec = f"[$h,{bad_neg}|<<\"ok\">>]"
+        unicode_probe("to_list_1", spec)
+        unicode_probe("to_binary_1", spec)
+        unicode_probe("to_list_2", spec, "latin1")
+        unicode_probe("to_binary_2", spec, "latin1")
+    for lat_over in ["256", "2000", "1114111"]:
+        spec = f"[\"ok\",[$h,{lat_over}]]"
+        unicode_probe("to_list_2", spec, "latin1")
+        unicode_probe("to_binary_2", spec, "latin1")
+        unicode_probe("to_binary_3", spec, "{latin1,latin1}")
+        unicode_probe("to_binary_3", spec, "{utf8,latin1}")
+        unicode_probe("to_binary_3", f"[$h,{lat_over},$i]", "{latin1,utf8}")
+
+    # badarg inputs and encodings
+    for bad_root in ["foo", "42", "1.5", "{1,2}", "<<1:1>>", "<<\"a\",1:1>>"]:
+        unicode_probe("to_list_1", bad_root)
+        unicode_probe("to_list_2", bad_root, "latin1")
+        unicode_probe("to_binary_1", bad_root)
+        unicode_probe("to_binary_3", bad_root, "{latin1,latin1}")
+    for bad_elem in ["[$a|$b]", "[$a|bad]", "[[$a|$b]]", "[$a|<<1:1>>]", "[$a,foo]", "[$a,<<1:1>>]", "[$a,{}]"]:
+        unicode_probe("to_list_1", bad_elem)
+        unicode_probe("to_list_2", bad_elem, "latin1")
+        unicode_probe("to_binary_1", bad_elem)
+        unicode_probe("to_binary_3", bad_elem, "{latin1,latin1}")
+    for bad_enc in ["bad_enc", "ascii", "0", "[]"]:
+        unicode_probe("to_list_2", "<<\"a\">>", bad_enc)
+        unicode_probe("to_binary_2", "<<\"a\">>", bad_enc)
+        unicode_probe("to_binary_3", "<<\"a\">>", f"{{{bad_enc},utf8}}")
+        unicode_probe("to_binary_3", "<<\"a\">>", f"{{utf8,{bad_enc}}}")
+
     return selected
 
 

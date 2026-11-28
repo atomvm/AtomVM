@@ -790,6 +790,42 @@ due to OTP 27/28 divergence (`otp/issues/10603`). Full runtime corpus, full
 CLI/JIT matrices, complete older-host harness, Lean fixture laws and
 embedded/32-bit/float32 targets remain outside this batch.
 
+### Unicode conversions (`unicode`)
+
+- [x] Add 571 direct recipes covering all 5 `unicode` exports
+  (`characters_to_list/1,2` and `characters_to_binary/1,2,3`) via
+  `tools/test/lynx/unicode_conv.erl`, preserving all 15,048 preceding recipes
+  (total 15,619).
+- [x] Check valid UTF-8/`unicode`/`latin1` conversions across multi-byte
+  boundaries, nested chardata, improper binary tails, invalid UTF-8 sequences
+  (overlongs, surrogates, `> 0x10FFFF`), `incomplete` vs `error` on truncated
+  sequences and trailing empty chardata, out-of-range integers/bigints, bad
+  encodings, bit offsets `0..7`, deep nesting and GC retention.
+- [x] Fix `latin1` `> 255` validation/heap sizing, UTF-16 surrogate rejection,
+  bigint element `{error, ...}` handling and trailing empty chardata
+  `incomplete` preservation in `src/libAtomVM/interop.c` (plus defensive
+  `term_is_binary` guard in `src/libAtomVM/otp_crypto.c`), with
+  `test_latin1_range_surrogates_bigints_and_trailing_empty/0` in
+  `tests/erlang_tests/test_unicode.erl` and a `CHANGELOG.md` entry; preserve
+  before-fix failure logs.
+- [x] Match 571/571 in interpreter and AArch64 precompiled modes, plus 94/94 in
+  reordered JIT replay covering all five functions, encodings, error/incomplete
+  cases, surrogates, bigints, bit offsets `0..7` and deep nesting.
+- [x] Check complete observations against pure-Elixir `UNICODE_MODEL` without
+  calling `:unicode`, validate cross-mode equality and reject fifteen
+  wrong-result controls.
+- [x] Match all 571 observer-only host controls on OTP `27.3.4.12`/`28.3.1`/
+  `29.1.3`; pass nine ordinary Unicode/ETS/binary suites on those hosts and
+  all three AtomVM modes plus `build/tests/test-erlang` (`Success.`), alongside
+  targeted CLI checks for `unicode_conv`, `ets_table` and behavioral oracles.
+
+See [PLAN.md](PLAN.md#unicode-conversions-unicode) for evidence and limits.
+Documented AtomVM-vs-OTP differences (`latin1, latin1` negative integers in
+`test_unicode.erl`, split multi-byte UTF-8 across separate list binaries, and
+UTF-16/UTF-32 encodings), full runtime corpus, full CLI/JIT matrices, complete
+older-host harness, Lean fixture laws and embedded/32-bit/float32 targets remain
+outside this batch.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes

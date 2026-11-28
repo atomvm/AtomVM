@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 15,048 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 15,619 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,67 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Unicode conversions (`unicode`)
+
+Add 571 direct recipes for all 5 exported functions in `unicode`
+(`characters_to_list/1,2` and `characters_to_binary/1,2,3`) via standalone
+helper `unicode_conv:observe/5`, preserving all 15,048 preceding recipes and
+metadata; total 15,619. Fixture counts and Lean attribution are unchanged; no
+new APIs or Lean proofs are added.
+
+- Check valid UTF-8, `unicode`, and `latin1` conversions across ASCII, Latin-1
+  (`0..255`), 2/3/4-byte UTF-8 boundaries (`0x7F`, `0x80`, `0x7FF`, `0x800`,
+  `0xD7FF`, `0xE000`, `0xFFFF`, `0x10000`, `0x10FFFF`), empty chardata, nested
+  lists, and improper binary tails (`[$a | <<"b">>]`).
+- Check invalid UTF-8 decoding (stray continuations, overlong 2/3/4-byte forms,
+  UTF-16 surrogates, `> 0x10FFFF`), truncated UTF-8 (`incomplete` vs `error`
+  classification, including trailing empty lists/binaries preserving
+  `incomplete` vs trailing non-empty data), out-of-range integer elements
+  (negatives, surrogates `0xD800..0xDFFF`, `> 0x10FFFF`, `latin1` `> 255`,
+  bigints), non-chardata roots/elements/tails, and invalid encoding atoms.
+- Exercise copied, nested `deep`, and bit-sliced binary leaves (`0..7`) with
+  operands, offsets, encodings, captures and results retained across explicit GC
+  before and after each call.
+- `UNICODE_MODEL` implements RFC 3629 UTF-8 encoding/decoding, Latin-1 checks,
+  and recursive chardata traversal directly in pure Elixir without calling
+  `:unicode`, checking complete observations on both VMs.
+- **Resolved runtime defects (kept cleanly separable):** probing exposed bugs in
+  `src/libAtomVM/interop.c` (plus a defensive `term_is_binary` guard in
+  `src/libAtomVM/otp_crypto.c`): (1) `latin1` `characters_to_list/2` did not
+  reject code points `> 255` in size calculation, causing uninitialized garbage
+  output and heap overflow; (2) `latin1` `characters_to_binary/2,3` accepted
+  integers `> 255`; (3) UTF-8/unicode conversions accepted UTF-16 surrogates
+  (`0xD800..0xDFFF`) as list elements; (4) `interop_chardata_fold` raised
+  `badarg` on bigint elements (`term_is_integer` vs `term_is_any_integer`)
+  instead of `{error, ...}`; (5) trailing empty chardata (`[]`, `<<>>`,
+  `[[], <<>>]`) after truncated UTF-8 flipped `{incomplete, ...}` to
+  `{error, ...}`. Added `test_latin1_range_surrogates_bigints_and_trailing_empty/0`
+  to `tests/erlang_tests/test_unicode.erl` (verified to fail before the C fixes
+  and pass afterward across interpreter, AArch64 precompiled, on-demand JIT and
+  OTP 29) alongside a `CHANGELOG.md` entry.
+
+Interpreter and AArch64 precompiled runs each match 571/571 against OTP.
+Reordered on-demand JIT replay matches 94/94, covering all five exports,
+encodings, error/incomplete paths, surrogates, bigints, bit offsets `0..7`, and
+`deep` nesting, with zero failures or unverified cases. Independent contracts
+pass on all three VMs, complete native and JIT observations equal interpreter
+results, and fifteen local wrong-result controls are rejected. Observer-only
+controls match all 571 OTP reference observations on OTP `27.3.4.12`, `28.3.1`
+and `29.1.3`. Nine ordinary suites (`test_unicode`, `test_ets`,
+`test_binary_to_term`, `test_crc32`, `test_list_to_binary`,
+`test_list_to_bitstring`, `test_binary_part`, `test_split_binary` and
+`test_binary_eq`) pass on OTP 27/28/29 and all three AtomVM modes, and
+`build/tests/test-erlang` prints `Success.`. Targeted CLI checks cover the new
+batch/replay, `ets_table` batch/replay and behavioral oracles.
+
+Inputs, before-fix failure logs, sources, manifests, results, reproducible
+checks and source hashes are saved under `.amp/in/artifacts/lynx-unicode/`.
+OTP-vs-AtomVM documented differences (`latin1, latin1` negative integers in
+`test_unicode.erl`, split multi-byte UTF-8 sequences across separate list
+binaries, and OTP UTF-16/UTF-32 encodings) remain outside this batch alongside
+the full runtime corpus, full CLI/JIT matrices, complete older-host harness,
+Lean fixture laws and embedded/32-bit/float32 targets.
 
 ## ETS tables (`ets`)
 

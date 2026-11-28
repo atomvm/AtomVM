@@ -361,6 +361,18 @@ skipping default-arity validation on existing keys in `src/libAtomVM/ets.c`, and
 separately with an ordinary regression in `test_ets.erl`; see the batch notes
 for results and limits.
 
+The [Unicode conversions batch](PLAN.md#unicode-conversions-unicode) adds 571
+recipes covering all 5 exported functions in `unicode` via standalone helper
+`unicode_conv:observe/5`, bringing the corpus to 15,619. Independent
+pure-Elixir RFC 3629 UTF-8/Latin-1 and chardata traversal expectations check
+boundary code points, surrogates, overlong/truncated sequences, trailing empty
+chardata preservation on `incomplete`, bit offsets 0–7, deep trees and GC
+retention. Probing exposed five bugs in `src/libAtomVM/interop.c` (`latin1`
+`> 255` list heap corruption and binary acceptance, surrogate acceptance,
+bigint `badarg` instead of `{error, ...}`, and trailing empty chardata flipping
+`incomplete` to `error`), fixed separately with an ordinary regression in
+`test_unicode.erl`; see the batch notes for results and limits.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen
