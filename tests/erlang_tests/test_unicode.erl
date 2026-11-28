@@ -29,6 +29,7 @@ start() ->
     ok = test_to_binary_utf8(),
     ok = test_improper_tail(),
     ok = test_non_chardata_argument(),
+    ok = test_latin1_range_surrogates_bigints_and_trailing_empty(),
     0.
 
 % A top-level term that is not chardata is rejected with badarg, rather than
@@ -214,4 +215,24 @@ test_to_binary_utf8() ->
     {error, <<"fooh">>, Expected2} = unicode:characters_to_binary([
         "foo", [<<"hé">>, ["bar"], "foobar"]
     ]),
+    ok.
+
+test_latin1_range_surrogates_bigints_and_trailing_empty() ->
+    {error, "h", _} = unicode:characters_to_list(id([$h, 256]), latin1),
+    {error, "h", _} = unicode:characters_to_list(id([$h, 256, $i]), latin1),
+    {error, <<"h">>, _} = unicode:characters_to_binary(id([$h, 256]), latin1, utf8),
+    {error, "h", _} = unicode:characters_to_list(id([$h, 16#D800])),
+    {error, "h", _} = unicode:characters_to_list(id([$h, 16#DFFF])),
+    {error, <<"h">>, _} = unicode:characters_to_binary(id([$h, 16#D800])),
+    {error, <<"h">>, _} = unicode:characters_to_binary(id([$h, 16#DFFF])),
+    {error, "h", _} = unicode:characters_to_list(id([$h, 1 bsl 64])),
+    {error, "h", _} = unicode:characters_to_list(id([$h, -(1 bsl 64)])),
+    {error, <<"h">>, _} = unicode:characters_to_binary(id([$h, 1 bsl 64])),
+    {error, <<"h">>, _} = unicode:characters_to_binary(id([$h, -(1 bsl 64)])),
+    {error, <<"h">>, _} = unicode:characters_to_binary(id([$h, 1 bsl 64]), latin1, latin1),
+    {incomplete, "h", _} = unicode:characters_to_list(id([<<"h", 195>>, []])),
+    {incomplete, "h", _} = unicode:characters_to_list(id([<<"h", 195>>, <<>>])),
+    {incomplete, "h", _} = unicode:characters_to_list(id([<<"h", 195>>, [[], <<>>]])),
+    {incomplete, <<"h">>, _} = unicode:characters_to_binary(id([<<"h", 195>>, []])),
+    {incomplete, <<"h">>, _} = unicode:characters_to_binary(id([<<"h", 195>>, <<>>])),
     ok.

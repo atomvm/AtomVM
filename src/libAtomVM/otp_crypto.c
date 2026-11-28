@@ -128,10 +128,12 @@ static const AtomStringIntPair crypto_algorithm_table[] = {
             if (UNLIKELY(mbedtls_##ALGORITHM##_update##SUFFIX(md_ctx, &val, 1) != 0)) {                                              \
                 return InteropBadArg;                                                                                                \
             }                                                                                                                        \
-        } else /* term_is_binary(t) */ {                                                                                             \
+        } else if (term_is_binary(t)) {                                                                                              \
             if (UNLIKELY(mbedtls_##ALGORITHM##_update##SUFFIX(md_ctx, (uint8_t *) term_binary_data(t), term_binary_size(t)) != 0)) { \
                 return InteropBadArg;                                                                                                \
             }                                                                                                                        \
+        } else {                                                                                                                     \
+            return InteropBadArg;                                                                                                    \
         }                                                                                                                            \
         return InteropOk;                                                                                                            \
     }
@@ -147,8 +149,10 @@ static const AtomStringIntPair crypto_algorithm_table[] = {
             }                                                                                                   \
             uint8_t val = (uint8_t) tmp;                                                                        \
             mbedtls_##ALGORITHM##_update##SUFFIX(md_ctx, &val, 1);                                              \
-        } else /* term_is_binary(t) */ {                                                                        \
+        } else if (term_is_binary(t)) {                                                                         \
             mbedtls_##ALGORITHM##_update##SUFFIX(md_ctx, (uint8_t *) term_binary_data(t), term_binary_size(t)); \
+        } else {                                                                                                \
+            return InteropBadArg;                                                                               \
         }                                                                                                       \
         return InteropOk;                                                                                       \
     }

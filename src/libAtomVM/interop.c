@@ -275,7 +275,7 @@ InteropFunctionResult interop_chardata_fold(term t, interop_chardata_fold_fun fo
     bool tail_position = true;
 
     while (!temp_stack_is_empty(&temp_stack)) {
-        if ((term_is_integer(t) && !tail_position) || term_is_binary(t)) {
+        if ((term_is_any_integer(t) && !tail_position) || term_is_binary(t)) {
             InteropFunctionResult result = fold_fun(t, accum);
             if (UNLIKELY(result != InteropOk)) {
                 if (rest_fun) {
@@ -338,8 +338,10 @@ static inline InteropFunctionResult size_fold_fun(term t, void *accum)
             return InteropBadArg;
         }
         *size += 1;
-    } else /* term_is_binary(t) */ {
+    } else if (term_is_binary(t)) {
         *size += term_binary_size(t);
+    } else {
+        return InteropBadArg;
     }
     return InteropOk;
 }
@@ -360,12 +362,12 @@ static inline InteropFunctionResult write_string_fold_fun(term t, void *accum)
         }
         **p = value;
         (*p)++;
-    } else {
-        assert(term_is_binary(t));
-
+    } else if (term_is_binary(t)) {
         int len = term_binary_size(t);
         memcpy(*p, term_binary_data(t), len);
         *p += len;
+    } else {
+        return InteropBadArg;
     }
     return InteropOk;
 }
@@ -466,6 +468,75 @@ struct CharDataToBytesSizeAcc
     bool incomplete_transform;
 };
 
+static bool is_empty_chardata(term t)
+{
+    if (term_is_nil(t)) {
+        return true;
+    }
+    if (term_is_binary(t)) {
+        return term_binary_size(t) == 0;
+    }
+    if (!term_is_nonempty_list(t)) {
+        return false;
+    }
+
+    struct TempStack temp_stack;
+    if (UNLIKELY(temp_stack_init(&temp_stack) != TempStackOk)) {
+        return false;
+    }
+    if (UNLIKELY(temp_stack_push(&temp_stack, t) != TempStackOk)) {
+        temp_stack_destroy(&temp_stack);
+        return false;
+    }
+    while (!temp_stack_is_empty(&temp_stack)) {
+        term cur = temp_stack_pop(&temp_stack);
+        while (term_is_nonempty_list(cur)) {
+            term head = term_get_list_head(cur);
+            cur = term_get_list_tail(cur);
+            if (term_is_binary(head)) {
+                if (term_binary_size(head) != 0) {
+                    temp_stack_destroy(&temp_stack);
+                    return false;
+                }
+            } else if (term_is_nonempty_list(head)) {
+                if (UNLIKELY(temp_stack_push(&temp_stack, cur) != TempStackOk)) {
+                    temp_stack_destroy(&temp_stack);
+                    return false;
+                }
+                cur = head;
+            } else if (!term_is_nil(head)) {
+                temp_stack_destroy(&temp_stack);
+                return false;
+            }
+        }
+        if (term_is_binary(cur)) {
+            if (term_binary_size(cur) != 0) {
+                temp_stack_destroy(&temp_stack);
+                return false;
+            }
+        } else if (!term_is_nil(cur)) {
+            temp_stack_destroy(&temp_stack);
+            return false;
+        }
+    }
+    temp_stack_destroy(&temp_stack);
+    return true;
+}
+
+static inline bool is_valid_unicode_int(term t, enum CharDataEncoding in_encoding, avm_int_t *out)
+{
+    if (!term_is_integer(t)) {
+        return false;
+    }
+    avm_int_t c = term_to_int(t);
+    if (c < 0 || c > UNICODE_CHAR_MAX || (c >= 0xD800 && c <= 0xDFFF)
+        || (in_encoding == Latin1Encoding && c > 255)) {
+        return false;
+    }
+    *out = c;
+    return true;
+}
+
 static InteropFunctionResult chardata_to_bytes_size_fold_fun(term t, void *accum)
 {
     struct CharDataToBytesSizeAcc *acc = (struct CharDataToBytesSizeAcc *) accum;
@@ -479,9 +550,9 @@ static InteropFunctionResult chardata_to_bytes_size_fold_fun(term t, void *accum
             acc->incomplete_transform = conv_result == UnicodeIncompleteTransform;
             return InteropBadArg;
         }
-    } else /* term_is_integer(t) */ {
-        avm_int_t c = term_to_int(t);
-        if (c < 0 || c > UNICODE_CHAR_MAX) {
+    } else /* term_is_any_integer(t) */ {
+        avm_int_t c;
+        if (!is_valid_unicode_int(t, acc->in_encoding, &c)) {
             return InteropBadArg;
         }
         switch (acc->out_encoding) {
@@ -513,7 +584,7 @@ static void chardata_to_bytes_size_rest_fun(term t, void *accum)
         acc->badarg = true;
     }
     if (!acc->badarg) {
-        if (!term_is_nil(t)) {
+        if (acc->incomplete_transform && !is_empty_chardata(t)) {
             acc->incomplete_transform = false;
         }
         acc->rest_size += CONS_SIZE;
@@ -575,9 +646,9 @@ static InteropFunctionResult chardata_to_bytes_fold_fun(term t, void *accum)
             }
             return InteropBadArg;
         }
-    } else /* term_is_integer(t) */ {
-        avm_int_t c = term_to_int(t);
-        if (c < 0 || c > UNICODE_CHAR_MAX) {
+    } else /* term_is_any_integer(t) */ {
+        avm_int_t c;
+        if (!is_valid_unicode_int(t, acc->in_encoding, &c)) {
             if (acc->rest) {
                 *acc->rest = t;
             }
@@ -604,13 +675,6 @@ static InteropFunctionResult chardata_to_bytes_fold_fun(term t, void *accum)
                 acc->output += char_size;
             } break;
             case UCS4NativeEncoding: {
-                // Special case: if input encoding is latin1, only accept characters < 256.
-                if (acc->in_encoding == Latin1Encoding && c > 255) {
-                    if (acc->rest) {
-                        *acc->rest = t;
-                    }
-                    return InteropBadArg;
-                }
                 *((uint32_t *) acc->output) = (uint32_t) c;
                 acc->output += sizeof(uint32_t);
             } break;
@@ -626,7 +690,7 @@ static void chardata_to_bytes_rest_fun(term t, void *accum)
         acc->badarg = true;
     }
     if (!acc->badarg) {
-        if (!term_is_nil(t)) {
+        if (acc->incomplete_transform && !is_empty_chardata(t)) {
             acc->incomplete_transform = false;
         }
         if (acc->rest) {

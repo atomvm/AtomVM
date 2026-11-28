@@ -73,6 +73,7 @@ test_hash() ->
     ok = expect(badarg, fun() -> crypto:hash(sha, ["not", "a", "byte", -1]) end),
     ok = expect(badarg, fun() -> crypto:hash(sha, ["not", "a", "byte", 32768]) end),
     ok = expect(badarg, fun() -> crypto:hash(sha, ["not", "a", "byte", 34359738367]) end),
+    ok = expect(badarg, fun() -> crypto:hash(sha, ["not", "a", "byte", 1 bsl 64]) end),
 
     ok.
 

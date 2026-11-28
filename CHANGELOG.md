@@ -89,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `r22` or `r23` compiler options
 
 ### Fixed
+- Fixed `unicode:characters_to_list/1,2` and `unicode:characters_to_binary/1,2,3` accepting `latin1` code points `> 255` and UTF-16 surrogates, bigint elements causing `badarg`/memory corruption instead of `{error, ...}`, and trailing empty chardata flipping `{incomplete, ...}` to `{error, ...}`
 - Fixed `ets:update_counter/3,4` crashing on non-tuple elements inside operation lists, `ets:update_element/4` and `ets:update_counter/4` skipping default-tuple arity checks when the key exists, and `ets:new/2` option-list validation and precedence
 - Fixed `erlang:binary_to_term/1,2` accepting non-finite `NEW_FLOAT_EXT` payloads and `erlang:binary_to_term/2` accepting invalid or improper option lists instead of raising `badarg`
 - Fixed `erlang:crc32/2` resetting the checksum to `0` on empty iolists when built with zlib,
