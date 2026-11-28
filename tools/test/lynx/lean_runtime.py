@@ -3942,6 +3942,206 @@ def cases():
         binary_crc32_probe("crc32_combine", f"{{{bad},0}}", "0")
         binary_crc32_probe("crc32_combine", f"{{0,{bad}}}", "0")
         binary_crc32_probe("crc32_combine", "{12345,67890}", bad)
+
+    seen_etf = set()
+
+    def binary_etf_probe(operation, input_spec, arg="none", mode="copy", offset=0):
+        args = [operation, mode, str(offset), input_spec, arg]
+        expr = "differential:binary_etf(" + ",".join(args) + ")"
+        if expr in seen_etf:
+            return
+        seen_etf.add(expr)
+        selected.append({"otp_extension": "binary_etf", "binary_etf": args,
+                         "expression": expr})
+
+    def etf_atom(tag, name):
+        raw = name.encode("utf-8")
+        if tag == 119:
+            return bytes([119, len(raw)]) + raw
+        return bytes([118]) + struct.pack(">H", len(raw)) + raw
+
+    def etf_float_raw(raw8):
+        return bytes([131, 70]) + raw8
+
+    etf_valid_decode = [
+        binary_literal(bytes([131, 97, 0])),
+        binary_literal(bytes([131, 97, 42])),
+        binary_literal(bytes([131, 97, 255])),
+        binary_literal(bytes([131, 98]) + struct.pack(">i", -1)),
+        binary_literal(bytes([131, 98]) + struct.pack(">i", -32768)),
+        binary_literal(bytes([131, 98]) + struct.pack(">i", 256)),
+        binary_literal(bytes([131, 98]) + struct.pack(">i", 2147483647)),
+        binary_literal(bytes([131, 98]) + struct.pack(">i", -2147483648)),
+        binary_literal(bytes([131, 110, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])),
+        binary_literal(bytes([131, 110, 9, 1, 5, 0, 0, 0, 0, 0, 0, 0, 1])),
+        binary_literal(etf_float_raw(struct.pack(">d", 0.0))),
+        binary_literal(etf_float_raw(struct.pack(">d", 1.5))),
+        binary_literal(etf_float_raw(struct.pack(">d", -3.25))),
+        binary_literal(etf_float_raw(b"\x80\x00\x00\x00\x00\x00\x00\x00")),
+        binary_literal(etf_float_raw(b"\x00\x00\x00\x00\x00\x00\x00\x01")),
+        binary_literal(bytes([131]) + etf_atom(119, "ok")),
+        binary_literal(bytes([131]) + etf_atom(119, "true")),
+        binary_literal(bytes([131]) + etf_atom(118, "error")),
+        binary_literal(bytes([131, 106])),
+        binary_literal(bytes([131, 107, 0, 0])),
+        binary_literal(bytes([131, 107, 0, 3, 65, 66, 67])),
+        binary_literal(bytes([131, 108, 0, 0, 0, 2, 97, 1, 97, 2, 106])),
+        binary_literal(bytes([131, 108, 0, 0, 0, 1, 97, 7, 119, 2, 111, 107])),
+        binary_literal(bytes([131, 104, 0])),
+        binary_literal(bytes([131, 104, 2]) + etf_atom(119, "ok") + bytes([97, 9])),
+        binary_literal(bytes([131, 105, 0, 0, 0, 2, 97, 10, 97, 20])),
+        binary_literal(bytes([131, 109, 0, 0, 0, 0])),
+        binary_literal(bytes([131, 109, 0, 0, 0, 3, 97, 98, 99])),
+        binary_literal(bytes([131, 116, 0, 0, 0, 0])),
+        binary_literal(bytes([131, 116, 0, 0, 0, 2, 97, 1]) + etf_atom(119, "ok") +
+                       bytes([70]) + struct.pack(">d", 1.0) + etf_atom(119, "error")),
+        binary_literal(bytes([131, 104, 2, 77, 0, 0, 0, 1, 3, 160]) + etf_atom(119, "ok") + bytes([99])),
+        binary_literal(bytes([131, 97, 42, 99, 100])),
+    ]
+    for bits in range(1, 9):
+        etf_valid_decode.append(binary_literal(bytes([131, 77, 0, 0, 0, 1, bits, 0xFF])))
+        etf_valid_decode.append(binary_literal(bytes([131, 77, 0, 0, 0, 2, bits, 0xAA, 0x55])))
+
+    valid_b2t_opts = ["[]", "[used]", "[safe]", "[used,safe]", "[safe,used]", "[used,safe,used]", "[safe,safe]"]
+    for idx, spec in enumerate(etf_valid_decode):
+        binary_etf_probe("b2t_1", spec)
+        binary_etf_probe("b2t_1", spec, mode="bit_slice", offset=idx % 8)
+        for opts in ["[]", "[used]", "[safe]", "[used,safe]", "[used,safe,used]"]:
+            binary_etf_probe("b2t_2", spec, opts)
+    for offset in range(8):
+        binary_etf_probe("b2t_1", binary_literal(bytes([131, 97, 42])), mode="bit_slice", offset=offset)
+        binary_etf_probe("b2t_2", binary_literal(bytes([131, 77, 0, 0, 0, 1, 3, 255])), "[used]", "bit_slice", offset)
+        binary_etf_probe("b2t_2", binary_literal(bytes([131, 104, 2, 77, 0, 0, 0, 1, 3, 160]) + etf_atom(119, "ok") + bytes([99])), "[used,safe]", "bit_slice", offset)
+    for opts in valid_b2t_opts:
+        binary_etf_probe("b2t_2", binary_literal(bytes([131, 97, 42])), opts)
+        binary_etf_probe("b2t_2", binary_literal(bytes([131, 97, 42, 99, 100])), opts)
+    binary_etf_probe("b2t_1", binary_literal(bytes([131]) + etf_atom(119, "lynx_etf_fresh_utf8_αβγ")))
+    binary_etf_probe("b2t_2", binary_literal(bytes([131]) + etf_atom(119, "lynx_etf_fresh_utf8_αβγ")), "[used]")
+
+    for raw8 in [
+        struct.pack(">d", 0.0),
+        b"\x80\x00\x00\x00\x00\x00\x00\x00",
+        struct.pack(">d", 1.5),
+        struct.pack(">d", -3.25),
+        b"\x00\x00\x00\x00\x00\x00\x00\x01",
+        b"\x7f\xef\xff\xff\xff\xff\xff\xff",
+    ]:
+        f_spec = binary_literal(etf_float_raw(raw8))
+        binary_etf_probe("b2t_float_bits", f_spec)
+        binary_etf_probe("b2t_float_bits", f_spec, "[used]")
+        binary_etf_probe("b2t_float_bits", f_spec, "[used,safe]", "bit_slice", 3)
+
+    non_finite_raws = [
+        b"\x7f\xf0\x00\x00\x00\x00\x00\x00",
+        b"\xff\xf0\x00\x00\x00\x00\x00\x00",
+        b"\x7f\xf8\x00\x00\x00\x00\x00\x00",
+        b"\x7f\xf0\x00\x00\x00\x00\x00\x01",
+        b"\xff\xff\xff\xff\xff\xff\xff\xff",
+    ]
+    for raw8 in non_finite_raws:
+        nf_spec = binary_literal(etf_float_raw(raw8))
+        binary_etf_probe("b2t_1", nf_spec)
+        binary_etf_probe("b2t_float_bits", nf_spec)
+        for opts in ["[]", "[used]", "[safe]", "[used,safe]"]:
+            binary_etf_probe("b2t_2", nf_spec, opts)
+        wrapped = binary_literal(bytes([131, 104, 2]) + etf_atom(119, "ok") + bytes([70]) + raw8)
+        binary_etf_probe("b2t_1", wrapped)
+        binary_etf_probe("b2t_2", wrapped, "[safe]")
+        listed = binary_literal(bytes([131, 108, 0, 0, 0, 2, 97, 1, 70]) + raw8 + bytes([106]))
+        binary_etf_probe("b2t_1", listed)
+
+    for bad_opts in ["[bad]", "[used|bad]", "[safe|bad]", "[{used,true}]", "[{safe,true}]",
+                     "used", "safe", "0", "{}", "[used,{safe,false}]", "[{used,false}]"]:
+        binary_etf_probe("b2t_2", binary_literal(bytes([131, 97, 42])), bad_opts)
+        binary_etf_probe("b2t_2", binary_literal(bytes([131, 97, 42])), bad_opts, "bit_slice", 5)
+
+    for never_tag in [119, 118]:
+        for idx, never_name in enumerate(["lynx_etf_never_atom_1", "lynx_etf_never_atom_2"]):
+            never_spec = binary_literal(bytes([131]) + etf_atom(never_tag, never_name))
+            never_tuple = binary_literal(bytes([131, 104, 2, 97, 1]) + etf_atom(never_tag, never_name))
+            for opts in ["[safe]", "[used,safe]", "[safe,used]"]:
+                binary_etf_probe("b2t_2", never_spec, opts)
+                binary_etf_probe("b2t_2", never_tuple, opts)
+            binary_etf_probe("b2t_2", never_spec, "[safe]", "bit_slice", (idx + 1) % 8)
+
+    malformed_etf = [
+        binary_literal(b""),
+        binary_literal(bytes([130, 97, 42])),
+        binary_literal(bytes([132, 97, 42])),
+        binary_literal(bytes([131])),
+        binary_literal(bytes([131, 97])),
+        binary_literal(bytes([131, 98, 0, 0])),
+        binary_literal(bytes([131, 70, 63, 240, 0])),
+        binary_literal(bytes([131, 109, 0, 0, 0, 5, 1, 2])),
+        binary_literal(bytes([131, 104, 2, 97, 1])),
+        binary_literal(bytes([131, 108, 0, 0, 0, 1, 97, 1])),
+        binary_literal(bytes([131, 107, 0, 3, 65, 66])),
+        binary_literal(bytes([131, 119, 2, 255, 254])),
+        binary_literal(bytes([131, 118, 0, 2, 195, 40])),
+        binary_literal(bytes([131, 77, 0, 0, 0, 1, 0, 42])),
+        binary_literal(bytes([131, 77, 0, 0, 0, 1, 9, 42])),
+        binary_literal(bytes([131, 77, 0, 0, 0, 0, 5])),
+        binary_literal(bytes([131, 77, 0, 0, 0, 5, 3, 1, 2])),
+        binary_literal(bytes([131, 116, 0, 0, 0, 2, 97, 1, 119, 1, 97, 97, 1, 119, 1, 98])),
+        binary_literal(bytes([131, 255])),
+        "<<131,97,42,1:1>>",
+        "<<131,5:3>>",
+        "bad",
+        "0",
+        "[]",
+        "{}",
+    ]
+    for idx, spec in enumerate(malformed_etf):
+        binary_etf_probe("b2t_1", spec)
+        binary_etf_probe("b2t_2", spec, "[used]")
+        binary_etf_probe("b2t_2", spec, "[safe]")
+        if spec.startswith("<<"):
+            binary_etf_probe("b2t_1", spec, mode="bit_slice", offset=(idx + 1) % 8)
+
+    t2b_wire_terms = [
+        "0", "42", "255", "-1", "-32768", "256", "2147483647", "-2147483648",
+        str((1 << 64) + 7), str(-((1 << 64) + 7)),
+        "0.0", "1.5", "-3.25", "ok", "true", "[]",
+        "[65,66,67]", "[256,257]", "[1|2]", "{}", "{ok,1,<<2,3>>}",
+        "<<>>", "<<1,2,3>>", "<<5:3>>", "<<255,5:7>>", "<<1:1>>",
+        "#{}", "#{ok => 1}",
+    ]
+    for idx, spec in enumerate(t2b_wire_terms):
+        binary_etf_probe("t2b_wire", spec)
+        binary_etf_probe("t2b_wire", spec, "[deterministic]")
+        if idx % 2 == 0:
+            binary_etf_probe("t2b_wire", spec, "[{minor_version,2}]")
+            binary_etf_probe("t2b_wire", spec, "[{compressed,0}]")
+    for offset in range(8):
+        binary_etf_probe("t2b_wire", "<<5:3>>", "none", "bit_slice", offset)
+        binary_etf_probe("t2b_wire", "<<1,2,3>>", "[deterministic]", "bit_slice", offset)
+        binary_etf_probe("roundtrip_2", "<<255,5:7>>", "[compressed]", "bit_slice", offset)
+
+    for bad_t2b_opt in [
+        "[bad]", "[deterministic|bad]", "[{minor_version,-1}]", "[{minor_version,3}]",
+        "[{compressed,-1}]", "[{compressed,10}]", "compressed", "0", "{}", "[used]"
+    ]:
+        binary_etf_probe("t2b_wire", "{ok,42}", bad_t2b_opt)
+        binary_etf_probe("roundtrip_2", "{ok,42}", bad_t2b_opt)
+
+    roundtrip_terms = [
+        "{foo,[1,2,3],#{1 => a,1.0 => b},<<5:3>>,3.14}",
+        "#{1 => one,1.0 => float_one,ok => <<255,3:2>>}",
+        "[1,256,<<1,2,3>>,<<5:3>>|tail]",
+        f"{{0,-{(1 << 64) + 9}}}",
+    ]
+    for wbits in range(1, 8):
+        roundtrip_terms.append(f"<<255,{wbits}:{wbits}>>")
+    for spec in roundtrip_terms:
+        for opts in ["none", "[]", "[deterministic]", "[compressed]", "[{compressed,6}]",
+                     "[{compressed,9}]", "[{minor_version,0}]", "[{minor_version,1}]",
+                     "[{minor_version,2}]", "[compressed,deterministic]"]:
+            binary_etf_probe("roundtrip_2", spec, opts)
+
+    for depth in [1, 2, 3, 4, 5, 6, 8, 12]:
+        for opts in ["none", "[compressed]", "[{minor_version,1}]"]:
+            binary_etf_probe("roundtrip_2", "{1,1.0,<<255,5:3>>}", opts, "deep", depth)
+
     return selected
 
 

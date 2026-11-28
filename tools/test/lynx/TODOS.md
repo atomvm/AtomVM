@@ -713,6 +713,47 @@ Full corpus/CLI/JIT matrices, the complete older-host harness, Lean fixture
 laws, `#ifndef WITH_ZLIB` builds and embedded/32-bit/float32 targets remain
 outside this batch.
 
+### External term format (`term_to_binary` and `binary_to_term`)
+
+- [x] Add 836 direct recipes for `erlang:term_to_binary/1,2` and
+  `erlang:binary_to_term/1,2`, preserving all 13,975 preceding recipes (total
+  14,811).
+- [x] Check ETF decoding across integers (`SMALL_INTEGER_EXT`, `INTEGER_EXT`,
+  signed `SMALL_BIG_EXT`), floats (`NEW_FLOAT_EXT` finite values and `-0.0` sign
+  bits), UTF-8 atoms, lists (proper/improper/`STRING_EXT`), tuples
+  (`SMALL_TUPLE_EXT`/`LARGE_TUPLE_EXT`), `BINARY_EXT`, `BIT_BINARY_EXT` (widths
+  `1..8`, tail padding masking, embedded `[used]` progression), and `MAP_EXT`
+  (`1` vs `1.0` key distinction and duplicate-key rejection).
+- [x] Check `binary_to_term/2` options (`[]`, `[used]`, `[safe]`, combinations,
+  and strict invalid/improper option rejection), `[safe]` existing vs never-created
+  atom rejection, invalid UTF-8 atoms, malformed inputs, canonical `t2b_wire`
+  encoding and `roundtrip_2` compression/minor-version/deep-tree contracts.
+- [x] Exercise copied inputs and larger-parent leaves sliced at bit offsets 0–7
+  as well as nested `deep` compound trees, retaining operands, offsets,
+  arguments, captures and results across GC.
+- [x] Fix `nif_erlang_binary_to_term` option-list validation in
+  `src/libAtomVM/nifs.c` and non-finite `NEW_FLOAT_EXT` rejection in
+  `src/libAtomVM/external_term.c`, with `test_options_and_non_finite_floats/0`
+  in `tests/erlang_tests/test_binary_to_term.erl` and a `CHANGELOG.md` entry;
+  preserve before-fix failure logs.
+- [x] Match 836/836 in interpreter and AArch64 precompiled modes, plus 94/94 in
+  reordered JIT replay covering all five operations, options, non-finite floats,
+  `-0.0`, `[safe]`, `[used]`, bit offsets `0..7`, bitstring widths `1..7` and
+  `deep` round-trips.
+- [x] Check complete observations against pure-Elixir `BINARY_ETF_MODEL`
+  without calling `:erlang.binary_to_term`/`:erlang.term_to_binary` for
+  contracts, validate cross-mode equality and reject fifteen wrong-result
+  controls.
+- [x] Match all 836 observer-only host controls on OTP `27.3.4.12`/`28.3.1`/
+  `29.1.3`; pass nine ordinary binary/ETF suites on those hosts and all three
+  AtomVM modes plus `build/tests/test-erlang` (`Success.`), alongside targeted
+  CLI checks for the new batch, `binary_crc32` and behavioral oracles.
+
+See [PLAN.md](PLAN.md#external-term-format-term_to_binary-and-binary_to_term) for
+evidence and limits. Full runtime corpus, full CLI/JIT matrices, the complete
+older-host harness, Lean fixture laws and embedded/32-bit/float32 targets remain
+outside this batch.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes

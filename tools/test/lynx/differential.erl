@@ -24,6 +24,7 @@
     binary_slice/5,
     iodata_convert/4,
     binary_crc32/5,
+    binary_etf/5,
     execution_paths/3,
     print_result/1,
     map_entries/1,
@@ -749,6 +750,67 @@ binary_crc32(Operation, Mode, Offset, Input0, Arg0) ->
                             erlang:crc32(A), erlang:crc32(B), erlang:iolist_size(B)
                         )
                     }
+            end
+        of
+            Result -> {ok, Result}
+        catch
+            Class:Reason -> {exception, Class, Reason}
+        end,
+    true = erlang:garbage_collect(),
+    {Outcome, Input, Offset, Arg, Captured}.
+
+build_deep_etf(0, Leaf) ->
+    Leaf;
+build_deep_etf(N, Leaf) ->
+    case N rem 3 of
+        0 -> [N, build_deep_etf(N - 1, Leaf) | ok];
+        1 -> {tag, N, build_deep_etf(N - 1, Leaf)};
+        2 -> #{N => build_deep_etf(N - 1, Leaf), leaf => <<N:7>>}
+    end.
+
+%% Independent External Term Format (term_to_binary/binary_to_term) observer with GC retention.
+binary_etf(Operation, Mode, Offset, Input0, Arg0) ->
+    {Copied, Arg} = binary_to_term(term_to_binary({Input0, Arg0})),
+    Input =
+        case Mode of
+            bit_slice -> slice_iodata_leaves(Copied, Offset);
+            deep -> build_deep_etf(Offset, Copied);
+            copy -> Copied
+        end,
+    Captured = {captured, Input, Offset, Arg, <<5:3>>},
+    true = erlang:garbage_collect(),
+    Outcome =
+        try
+            case Operation of
+                b2t_1 ->
+                    erlang:binary_to_term(Input);
+                b2t_2 ->
+                    erlang:binary_to_term(Input, Arg);
+                b2t_float_bits ->
+                    case Arg of
+                        none ->
+                            F = erlang:binary_to_term(Input),
+                            <<F/float>>;
+                        Opts ->
+                            case erlang:binary_to_term(Input, Opts) of
+                                {F, Used} -> {<<F/float>>, Used};
+                                F -> <<F/float>>
+                            end
+                    end;
+                t2b_wire ->
+                    case Arg of
+                        none -> erlang:term_to_binary(Input);
+                        Opts -> erlang:term_to_binary(Input, Opts)
+                    end;
+                roundtrip_2 ->
+                    Encoded =
+                        case Arg of
+                            none -> erlang:term_to_binary(Input);
+                            Opts -> erlang:term_to_binary(Input, Opts)
+                        end,
+                    {Decoded, Used} = erlang:binary_to_term(Encoded, [used]),
+                    true = Used =:= byte_size(Encoded),
+                    Decoded
             end
         of
             Result -> {ok, Result}

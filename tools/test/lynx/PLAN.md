@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 13,975 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 14,811 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,75 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## External term format (`term_to_binary` and `binary_to_term`)
+
+Add 836 direct recipes for `erlang:term_to_binary/1,2` and
+`erlang:binary_to_term/1,2`, preserving all 13,975 preceding recipes and
+metadata; total 14,811. Fixture counts and Lean attribution are unchanged; no
+new APIs or Lean proofs are added.
+
+- Check external term decoding across `SMALL_INTEGER_EXT`, `INTEGER_EXT`,
+  `SMALL_BIG_EXT` (positive and negative `> 64`-bit integers), `NEW_FLOAT_EXT`
+  (including subnormals and negative zero sign-bit preservation via
+  `b2t_float_bits`), `ATOM_UTF8_EXT`/`SMALL_ATOM_UTF8_EXT`, `NIL_EXT`,
+  `STRING_EXT`, `LIST_EXT` (proper and improper tails), `SMALL_TUPLE_EXT`,
+  `LARGE_TUPLE_EXT`, `BINARY_EXT`, `BIT_BINARY_EXT` (widths `1..8`, dirty tail
+  bit masking, and embedded `[used]` offset advancement), `MAP_EXT` (numeric
+  key distinction `1` vs `1.0` and duplicate-key rejection), and trailing bytes.
+- Check `binary_to_term/2` option handling (`[]`, `[used]`, `[safe]`,
+  `[used,safe]`, `[safe,used]`, `[used,safe,used]`, `[safe,safe]`, and strict
+  rejection of invalid/improper option lists), `[safe]` existing-vs-unknown
+  atom rejection (`lynx_etf_never_atom_1`/`lynx_etf_never_atom_2`), invalid
+  UTF-8 atoms, malformed `BIT_BINARY_EXT`, truncated/malformed headers, and
+  non-byte-aligned bitstrings.
+- Check canonical wire output (`t2b_wire`) across scalar/compound terms and
+  `term_to_binary/2` option validation (`[]`, `[deterministic]`,
+  `[{minor_version,0..2}]`, `[compressed]`, `[{compressed,0..9}]`, and invalid
+  or improper option lists), plus full round-trip invariants (`roundtrip_2`)
+  across deep mixed improper-list/tuple/map trees (`deep` mode) and bitstring
+  widths `1..7`.
+- Exercise copied inputs and larger-parent binary/bitstring leaves sliced at bit
+  offsets `0..7` with operands, offsets, arguments, captures and results retained
+  across explicit GC before and after each call.
+- `BINARY_ETF_MODEL` implements pure-Elixir ETF wire encoding/decoding, option
+  validation and deep-tree modeling directly without calling
+  `:erlang.binary_to_term/1,2` or `:erlang.term_to_binary/1,2` to compute
+  contracts, checking complete observations on both VMs.
+- **Resolved runtime defects (kept cleanly separable):** probing exposed two OTP
+  29 compatibility bugs: (1) `nif_erlang_binary_to_term` in
+  `src/libAtomVM/nifs.c` used `interop_proplist_get_value_default`, accepting
+  unknown options, `{opt,bool}` tuples, improper option lists and non-list tail
+  garbage instead of raising `badarg`; (2) `calculate_simple_heap_usage`
+  (`NEW_FLOAT_EXT`) in `src/libAtomVM/external_term.c` accepted IEEE-754
+  non-finite exponent `0x7FF` payloads (`+inf`, `-inf`, quiet/signaling NaN)
+  instead of raising `badarg`. Added `test_options_and_non_finite_floats/0` to
+  `tests/erlang_tests/test_binary_to_term.erl` (verified to fail before the C
+  fix and pass afterward across interpreter, AArch64 precompiled, on-demand JIT
+  and OTP 29) alongside a `CHANGELOG.md` entry.
+
+Interpreter and AArch64 precompiled runs each match 836/836 against OTP.
+Reordered on-demand JIT replay matches 94/94, covering all five operations,
+option validation, non-finite floats, `-0.0`, `[safe]` existing and unknown
+atoms, `[used]`, bit offsets `0..7`, partial bitstrings `1..7` and `deep`
+round-trips, with zero failures or unverified cases. Independent contracts pass
+on all three VMs, complete native and JIT observations equal interpreter
+results, and fifteen local wrong-result controls are rejected. Fresh
+observer-only controls match all 836 OTP reference observations on OTP
+`27.3.4.12`, `28.3.1` and `29.1.3`. Nine ordinary suites (`test_binary_to_term`,
+`test_crc32`, `test_binary_part`, `test_split_binary`, `test_binary_copy`,
+`test_binary_replace`, `test_list_to_binary`, `test_list_to_bitstring` and
+`test_binary_eq`) pass on OTP 27/28/29 and all three AtomVM modes, and
+`build/tests/test-erlang` prints `Success.`. Targeted CLI checks cover the new
+batch/replay, `binary_crc32` batch/replay and behavioral oracles.
+
+Inputs, before-fix failure logs, sources, manifests, results, reproducible
+checks and source hashes are saved under `.amp/in/artifacts/lynx-binary-etf/`.
+Zero-length `BIT_BINARY_EXT` (`<<131,77,0,0,0,0,0>>`) is left to
+`test_binary_to_term.erl`'s ERTS version guard due to OTP 27.3.4.12/28.3.1 vs
+29.1.3 divergence (`CVE-2026-54890`). Full runtime corpus, full CLI/JIT
+matrices, complete older-host harness, Lean fixture laws and
+embedded/32-bit/float32 targets remain outside this batch.
 
 ## CRC32 checksums and combination
 

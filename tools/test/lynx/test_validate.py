@@ -1674,6 +1674,273 @@ end
 """
 
 
+# Pure Elixir ETF wire encoder/decoder without calling :erlang.binary_to_term or :erlang.term_to_binary for contracts.
+BINARY_ETF_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+literal = fn text ->
+  {:ok,tokens,_} = :erl_scan.string(String.to_charlist(text <> "."))
+  {:ok,value} = :erl_parse.parse_term(tokens)
+  value
+end
+build_deep = fn
+  0,leaf,_self -> leaf
+  n,leaf,self ->
+    case rem(n,3) do
+      0 -> [n,self.(n - 1,leaf,self) | :ok]
+      1 -> {:tag,n,self.(n - 1,leaf,self)}
+      2 -> %{n => self.(n - 1,leaf,self),:leaf => <<n::7>>}
+    end
+end
+parse_b2t_opts = fn opts ->
+  walk = fn
+    [],used?,safe?,_self -> {:ok,used?,safe?}
+    [:used|t],_used?,safe?,self -> self.(t,true,safe?,self)
+    [:safe|t],used?,_safe?,self -> self.(t,used?,true,self)
+    _,_used?,_safe?,_self -> :badarg
+  end
+  if is_list(opts), do: walk.(opts,false,false,walk), else: :badarg
+end
+parse_t2b_opts = fn
+  :none -> :ok
+  opts when is_list(opts) ->
+    walk = fn
+      [],_self -> :ok
+      [:deterministic|t],self -> self.(t,self)
+      [:compressed|t],self -> self.(t,self)
+      [{:minor_version,v}|t],self when is_integer(v) and v >= 0 and v <= 2 -> self.(t,self)
+      [{:compressed,c}|t],self when is_integer(c) and c >= 0 and c <= 9 -> self.(t,self)
+      _,_self -> :badarg
+    end
+    walk.(opts,walk)
+  _ -> :badarg
+end
+decode_one = fn
+  <<97,v::8,rest::binary>>, _safe, _self -> {:ok,v,rest}
+  <<98,v::signed-big-32,rest::binary>>, _safe, _self -> {:ok,v,rest}
+  <<110,n::8,sign::8,digits::binary-size(n),rest::binary>>, _safe, _self when sign === 0 or sign === 1 ->
+    <<mag::little-unsigned-integer-size(n * 8)>> = digits
+    val = if sign === 1, do: -mag, else: mag
+    {:ok,val,rest}
+  <<70,_s::1,0x7FF::11,_frac::52,_rest::binary>>, _safe, _self -> :badarg
+  <<70,raw::binary-size(8),rest::binary>>, _safe, _self ->
+    <<f::float-64>> = raw
+    {:ok,f,rest}
+  <<118,len::big-16,name::binary-size(len),rest::binary>>, safe, _self ->
+    if String.valid?(name) and len <= 255 do
+      if safe do
+        try do
+          {:ok,String.to_existing_atom(name),rest}
+        rescue
+          ArgumentError -> :badarg
+        end
+      else
+        if name in ["lynx_etf_never_atom_1","lynx_etf_never_atom_2"], do: raise("safe atom leak")
+        {:ok,String.to_atom(name),rest}
+      end
+    else
+      :badarg
+    end
+  <<119,len::8,name::binary-size(len),rest::binary>>, safe, _self ->
+    if String.valid?(name) do
+      if safe do
+        try do
+          {:ok,String.to_existing_atom(name),rest}
+        rescue
+          ArgumentError -> :badarg
+        end
+      else
+        if name in ["lynx_etf_never_atom_1","lynx_etf_never_atom_2"], do: raise("safe atom leak")
+        {:ok,String.to_atom(name),rest}
+      end
+    else
+      :badarg
+    end
+  <<106,rest::binary>>, _safe, _self -> {:ok,[],rest}
+  <<107,len::big-16,chars::binary-size(len),rest::binary>>, _safe, _self ->
+    {:ok,:binary.bin_to_list(chars),rest}
+  <<108,len::big-32,rest::binary>>, safe, self ->
+    loop_list = fn
+      0,cur,acc,_loop -> {:ok,Enum.reverse(acc),cur}
+      k,cur,acc,loop ->
+        case self.(cur,safe,self) do
+          {:ok,v,nxt} -> loop.(k - 1,nxt,[v|acc],loop)
+          :badarg -> :badarg
+        end
+    end
+    with {:ok,elems,after_elems} <- loop_list.(len,rest,[],loop_list),
+         {:ok,tail,after_tail} <- self.(after_elems,safe,self) do
+      build = fn
+        [],t,_b -> t
+        [h|more],t,b -> [h|b.(more,t,b)]
+      end
+      {:ok,build.(elems,tail,build),after_tail}
+    end
+  <<104,arity::8,rest::binary>>, safe, self ->
+    loop_t = fn
+      0,cur,acc,_loop -> {:ok,List.to_tuple(Enum.reverse(acc)),cur}
+      k,cur,acc,loop ->
+        case self.(cur,safe,self) do
+          {:ok,v,nxt} -> loop.(k - 1,nxt,[v|acc],loop)
+          :badarg -> :badarg
+        end
+    end
+    loop_t.(arity,rest,[],loop_t)
+  <<105,arity::big-32,rest::binary>>, safe, self ->
+    loop_t = fn
+      0,cur,acc,_loop -> {:ok,List.to_tuple(Enum.reverse(acc)),cur}
+      k,cur,acc,loop ->
+        case self.(cur,safe,self) do
+          {:ok,v,nxt} -> loop.(k - 1,nxt,[v|acc],loop)
+          :badarg -> :badarg
+        end
+    end
+    loop_t.(arity,rest,[],loop_t)
+  <<109,len::big-32,bin::binary-size(len),rest::binary>>, _safe, _self ->
+    {:ok,bin,rest}
+  <<77,len::big-32,bits::8,data::binary-size(len),rest::binary>>, _safe, _self
+      when len >= 1 and bits >= 1 and bits <= 8 ->
+    bit_count = (len - 1) * 8 + bits
+    <<val::bitstring-size(bit_count),_pad::bitstring>> = data
+    {:ok,val,rest}
+  <<116,len::big-32,rest::binary>>, safe, self ->
+    loop_m = fn
+      0,cur,acc,_loop -> {:ok,acc,cur}
+      k,cur,acc,loop ->
+        with {:ok,key,r1} <- self.(cur,safe,self),
+             {:ok,val,r2} <- self.(r1,safe,self) do
+          if Map.has_key?(acc,key), do: :badarg, else: loop.(k - 1,r2,Map.put(acc,key,val),loop)
+        end
+    end
+    loop_m.(len,rest,%{},loop_m)
+  _, _safe, _self -> :badarg
+end
+decode_etf = fn bin, used?, safe? ->
+  case bin do
+    <<131,payload::binary>> ->
+      case decode_one.(payload,safe?,decode_one) do
+        {:ok,val,rest} ->
+          used = byte_size(bin) - byte_size(rest)
+          if used?, do: {:ok,{val,used}}, else: {:ok,val}
+        :badarg -> :badarg
+      end
+    _ -> :badarg
+  end
+end
+encode_one = fn
+  i, _self when is_integer(i) and i >= 0 and i <= 255 -> <<97,i::8>>
+  i, _self when is_integer(i) and i >= -2147483648 and i <= 2147483647 -> <<98,i::signed-big-32>>
+  i, _self when is_integer(i) ->
+    sign = if i < 0, do: 1, else: 0
+    mag = abs(i)
+    bytes = fn
+      0,acc,_f -> IO.iodata_to_binary(Enum.reverse(acc))
+      n,acc,f -> f.(Bitwise.bsr(n,8),[Bitwise.band(n,0xFF)|acc],f)
+    end
+    digits = bytes.(mag,[],bytes)
+    <<110,byte_size(digits)::8,sign::8,digits::binary>>
+  f, _self when is_float(f) -> <<70,f::float-64>>
+  a, _self when is_atom(a) ->
+    s = Atom.to_string(a)
+    <<119,byte_size(s)::8,s::binary>>
+  [], _self -> <<106>>
+  l, self when is_list(l) ->
+    collect = fn
+      [],len,acc,_c -> {:proper,len,acc}
+      [h|t],len,acc,c -> c.(t,len + 1,[h|acc],c)
+      tail,len,acc,_c -> {:improper,len,acc,tail}
+    end
+    case collect.(l,0,[],collect) do
+      {:proper,len,rev} when len <= 65535 ->
+        elems = Enum.reverse(rev)
+        if Enum.all?(elems,&(is_integer(&1) and &1 >= 0 and &1 <= 255)) do
+          <<107,len::big-16,:binary.list_to_bin(elems)::binary>>
+        else
+          body = Enum.map(elems,&self.(&1,self)) |> IO.iodata_to_binary()
+          <<108,len::big-32,body::binary,106>>
+        end
+      {:proper,len,rev} ->
+        body = rev |> Enum.reverse() |> Enum.map(&self.(&1,self)) |> IO.iodata_to_binary()
+        <<108,len::big-32,body::binary,106>>
+      {:improper,len,rev,tail} ->
+        body = rev |> Enum.reverse() |> Enum.map(&self.(&1,self)) |> IO.iodata_to_binary()
+        <<108,len::big-32,body::binary,self.(tail,self)::binary>>
+    end
+  t, self when is_tuple(t) ->
+    elems = Tuple.to_list(t) |> Enum.map(&self.(&1,self)) |> IO.iodata_to_binary()
+    <<104,tuple_size(t)::8,elems::binary>>
+  b, _self when is_binary(b) -> <<109,byte_size(b)::big-32,b::binary>>
+  bs, _self when is_bitstring(bs) ->
+    sz = bit_size(bs)
+    byte_len = div(sz + 7,8)
+    last_bits = rem(sz,8)
+    pad = 8 - last_bits
+    <<77,byte_len::big-32,last_bits::8,bs::bitstring,0::size(pad)>>
+  m, self when is_map(m) ->
+    pairs = Enum.map(Map.to_list(m),fn {k,v} -> [self.(k,self),self.(v,self)] end) |> IO.iodata_to_binary()
+    <<116,map_size(m)::big-32,pairs::binary>>
+end
+encode_etf = fn term -> <<131,encode_one.(term,encode_one)::binary>> end
+cases = read.("cases.json")
+expected = Enum.map(cases,fn c ->
+  [operation,mode,offset_text,input_text,arg_text] = c["binary_etf"]
+  offset = literal.(offset_text)
+  raw_input = literal.(input_text)
+  input = if mode === "deep", do: build_deep.(offset,raw_input,build_deep), else: raw_input
+  arg = literal.(arg_text)
+  outcome = case operation do
+    "b2t_1" ->
+      case decode_etf.(input,false,false) do
+        {:ok,val} -> {:ok,val}
+        :badarg -> {:exception,:error,:badarg}
+      end
+    "b2t_2" ->
+      with {:ok,used?,safe?} <- parse_b2t_opts.(arg),
+           {:ok,val} <- decode_etf.(input,used?,safe?) do
+        {:ok,val}
+      else
+        :badarg -> {:exception,:error,:badarg}
+      end
+    "b2t_float_bits" ->
+      opt_res = if arg === :none, do: {:ok,false,false}, else: parse_b2t_opts.(arg)
+      with {:ok,used?,safe?} <- opt_res,
+           {:ok,decoded} <- decode_etf.(input,used?,safe?) do
+        case decoded do
+          {f,used} when is_float(f) -> {:ok,{<<f::float-64>>,used}}
+          f when is_float(f) -> {:ok,<<f::float-64>>}
+          _ -> {:exception,:error,:badarg}
+        end
+      else
+        :badarg -> {:exception,:error,:badarg}
+      end
+    "t2b_wire" ->
+      case parse_t2b_opts.(arg) do
+        :ok -> {:ok,encode_etf.(input)}
+        :badarg -> {:exception,:error,:badarg}
+      end
+    "roundtrip_2" ->
+      case parse_t2b_opts.(arg) do
+        :ok -> {:ok,input}
+        :badarg -> {:exception,:error,:badarg}
+      end
+  end
+  {:ok,{outcome,input,offset,arg,{:captured,input,offset,arg,<<5::3>>}}}
+end)
+for {vm,rows} <- [otp: read.("manifest.json")["expected"],
+                  atomvm: Enum.map(read.("actuals.json"),fn row ->
+                    "ok" = row["status"]
+                    row["value"]
+                  end)] do
+  true = length(rows) === length(expected)
+  failures = Enum.zip([cases,expected,rows]) |> Enum.filter(fn {_c,want,row} ->
+    :erlang.binary_to_term(Base.decode64!(row)) !== want
+  end)
+  if failures !== [], do: raise(inspect({vm,failures},limit: 10))
+  IO.puts("#{vm}: #{length(rows)} independent binary-etf contracts")
+end
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -2387,6 +2654,26 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["binary_crc32"] for c in saved],
                                      [c["binary_crc32"] for c in cases])
                     check = subprocess.run(["elixir", "-e", BINARY_CRC32_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_binary_etf_preserves_wire_options_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "binary_etf" in case]
+        self.assertEqual(len(selected), 836)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-17])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    self.assertEqual(self.invoke(output, "--replay", source),
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["binary_etf"] for c in saved],
+                                     [c["binary_etf"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", BINARY_ETF_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
@@ -4904,7 +5191,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 13975)
+        self.assertEqual(len(lean_runtime.cases()), 14811)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

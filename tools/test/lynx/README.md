@@ -336,6 +336,18 @@ iolists and `crc32_combine/3` accepting `size2 >= 2^32`), fixed separately with
 an ordinary regression in `test_crc32.erl`; see the batch notes for results
 and limits.
 
+The [External Term Format batch](PLAN.md#external-term-format-term_to_binary-and-binary_to_term)
+adds 836 recipes for `erlang:term_to_binary/1,2` and `erlang:binary_to_term/1,2`,
+bringing the corpus to 14,811. Independent pure-Elixir ETF wire encoding and
+decoding expectations check scalar/compound wire tags, negative-zero bit
+patterns, `[safe]`/`[used]` and option-list validation, `[compressed]` and
+`{minor_version,0..2}` round-trips, `MAP_EXT` numeric/duplicate keys,
+bitstring widths 1–7, bit offsets 0–7, deep compound trees and GC retention.
+Probing exposed two OTP 29 compatibility bugs (`binary_to_term/2` option list
+validation in `src/libAtomVM/nifs.c` and non-finite `NEW_FLOAT_EXT` payloads in
+`src/libAtomVM/external_term.c`), fixed separately with an ordinary regression
+in `test_binary_to_term.erl`; see the batch notes for results and limits.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen
