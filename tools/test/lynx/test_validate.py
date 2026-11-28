@@ -3027,6 +3027,457 @@ end
 """
 
 
+# Pure-Elixir string model without calling :string, String, or :unicode.
+STRING_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path, name))) end
+literal = fn text ->
+  {:ok, tokens, _} = :erl_scan.string(String.to_charlist(text <> "."))
+  {:ok, value} = :erl_parse.parse_term(tokens)
+  value
+end
+build_deep = fn
+  0, leaf, _self -> leaf
+  n, leaf, self ->
+    case rem(n, 3) do
+      0 -> [self.(n - 1, leaf, self)]
+      1 -> [<<>>, self.(n - 1, leaf, self), []]
+      2 -> [self.(n - 1, leaf, self) | <<>>]
+    end
+end
+encode_utf8_cp = fn cp ->
+  cond do
+    cp <= 0x7F -> <<cp::8>>
+    cp <= 0x7FF -> <<0xC0 + Bitwise.bsr(cp, 6)::8, 0x80 + Bitwise.band(cp, 0x3F)::8>>
+    cp <= 0xFFFF ->
+      <<0xE0 + Bitwise.bsr(cp, 12)::8,
+        0x80 + Bitwise.band(Bitwise.bsr(cp, 6), 0x3F)::8,
+        0x80 + Bitwise.band(cp, 0x3F)::8>>
+    true ->
+      <<0xF0 + Bitwise.bsr(cp, 18)::8,
+        0x80 + Bitwise.band(Bitwise.bsr(cp, 12), 0x3F)::8,
+        0x80 + Bitwise.band(Bitwise.bsr(cp, 6), 0x3F)::8,
+        0x80 + Bitwise.band(cp, 0x3F)::8>>
+  end
+end
+decode_utf8_one = fn bin ->
+  case bin do
+    <<b1::8, r::binary>> when b1 <= 0x7F -> {:ok, b1, <<b1::8>>, r}
+    <<b1::8, b2::8, r::binary>> when b1 in 0xC2..0xDF ->
+      if Bitwise.band(b2, 0xC0) === 0x80 do
+        cp = Bitwise.bor(Bitwise.bsl(Bitwise.band(b1, 0x1F), 6), Bitwise.band(b2, 0x3F))
+        {:ok, cp, <<b1::8, b2::8>>, r}
+      else
+        :error
+      end
+    <<b1::8, b2::8, b3::8, r::binary>> when b1 in 0xE0..0xEF ->
+      valid2 = cond do
+        b1 === 0xE0 -> b2 in 0xA0..0xBF
+        b1 === 0xED -> b2 in 0x80..0x9F
+        true -> b2 in 0x80..0xBF
+      end
+      if valid2 and Bitwise.band(b3, 0xC0) === 0x80 do
+        cp = Bitwise.band(b1, 0x0F) |> Bitwise.bsl(12)
+             |> Bitwise.bor(Bitwise.bsl(Bitwise.band(b2, 0x3F), 6))
+             |> Bitwise.bor(Bitwise.band(b3, 0x3F))
+        {:ok, cp, <<b1::8, b2::8, b3::8>>, r}
+      else
+        :error
+      end
+    <<b1::8, b2::8, b3::8, b4::8, r::binary>> when b1 in 0xF0..0xF4 ->
+      valid2 = cond do
+        b1 === 0xF0 -> b2 in 0x90..0xBF
+        b1 === 0xF4 -> b2 in 0x80..0x8F
+        true -> b2 in 0x80..0xBF
+      end
+      if valid2 and Bitwise.band(b3, 0xC0) === 0x80 and Bitwise.band(b4, 0xC0) === 0x80 do
+        cp = Bitwise.band(b1, 0x07) |> Bitwise.bsl(18)
+             |> Bitwise.bor(Bitwise.bsl(Bitwise.band(b2, 0x3F), 12))
+             |> Bitwise.bor(Bitwise.bsl(Bitwise.band(b3, 0x3F), 6))
+             |> Bitwise.bor(Bitwise.band(b4, 0x3F))
+        {:ok, cp, <<b1::8, b2::8, b3::8, b4::8>>, r}
+      else
+        :error
+      end
+    _ -> :error
+  end
+end
+decode_utf8_chunks = fn bin ->
+  loop = fn
+    <<>>, acc, _self -> {:ok, Enum.reverse(acc)}
+    b, acc, self ->
+      case decode_utf8_one.(b) do
+        {:ok, cp, raw, r} -> self.(r, [{cp, raw} | acc], self)
+        :error -> :error
+      end
+  end
+  loop.(bin, [], loop)
+end
+upper_cp = fn c ->
+  if is_integer(c) and ((c >= ?a and c <= ?z) or (c >= 224 and c <= 246) or (c >= 248 and c <= 254)),
+    do: c - 32,
+    else: c
+end
+lower_cp = fn c ->
+  if is_integer(c) and ((c >= ?A and c <= ?Z) or (c >= 192 and c <= 214) or (c >= 216 and c <= 222)),
+    do: c + 32,
+    else: c
+end
+map_list_strict = fn list, f ->
+  walk = fn
+    [], _self -> {:ok, []}
+    [h | t], self ->
+      with {:ok, rest} <- self.(t, self), do: {:ok, [f.(h) | rest]}
+    bad_tail, _self -> {:exception, :error, {:bad_generator, bad_tail}}
+  end
+  walk.(list, walk)
+end
+ws_cps = MapSet.new([9, 10, 11, 12, 13, 32, 133, 8206, 8207, 8232, 8233])
+trim_model = fn input, dir ->
+  if not (dir in [:leading, :trailing, :both]) do
+    {:exception, :error, :function_clause}
+  else
+    cond do
+      is_list(input) ->
+        drop_l = fn
+          [h | t], self -> if is_integer(h) and MapSet.member?(ws_cps, h), do: self.(t, self), else: [h | t]
+          other, _self -> other
+        end
+        res = case dir do
+          :leading -> drop_l.(input, drop_l)
+          :trailing -> Enum.reverse(drop_l.(Enum.reverse(input), drop_l))
+          :both -> Enum.reverse(drop_l.(Enum.reverse(drop_l.(input, drop_l)), drop_l))
+        end
+        {:ok, res}
+      is_binary(input) ->
+        {:ok, chunks} = decode_utf8_chunks.(input)
+        dl = fn
+          [], _self -> []
+          [{cp, _raw} | t] = xs, self -> if MapSet.member?(ws_cps, cp), do: self.(t, self), else: xs
+        end
+        kept = case dir do
+          :leading -> dl.(chunks, dl)
+          :trailing -> Enum.reverse(dl.(Enum.reverse(chunks), dl))
+          :both -> Enum.reverse(dl.(Enum.reverse(dl.(chunks, dl)), dl))
+        end
+        {:ok, Enum.reduce(kept, <<>>, fn {_cp, raw}, acc -> acc <> raw end)}
+    end
+  end
+end
+pat_to_bin = fn
+  b when is_binary(b) -> b
+  cps when is_list(cps) -> Enum.reduce(cps, <<>>, fn cp, acc -> acc <> encode_utf8_cp.(cp) end)
+end
+pat_to_list = fn
+  cps when is_list(cps) -> cps
+  b when is_binary(b) ->
+    {:ok, chunks} = decode_utf8_chunks.(b)
+    Enum.map(chunks, fn {cp, _raw} -> cp end)
+end
+find_bin_pos = fn bin, pat, dir ->
+  blen = byte_size(bin)
+  plen = byte_size(pat)
+  if plen === 0 do
+    {:ok, 0}
+  else
+    if blen < plen do
+      :nomatch
+    else
+      range = if dir === :leading, do: 0..(blen - plen), else: (blen - plen)..0//-1
+      found = Enum.find(range, fn pos -> :binary.part(bin, pos, plen) === pat end)
+      if found === nil, do: :nomatch, else: {:ok, found}
+    end
+  end
+end
+find_list_all = fn list, pat ->
+  plen = Kernel.length(pat)
+  walk = fn
+    _xs, _idx, _acc, _self when plen === 0 -> [0]
+    [], _idx, acc, _self -> Enum.reverse(acc)
+    [_ | t] = xs, idx, acc, self ->
+      acc2 = if Enum.take(xs, plen) === pat, do: [idx | acc], else: acc
+      self.(t, idx + 1, acc2, self)
+  end
+  walk.(list, 0, [], walk)
+end
+find_model = fn input, pat, dir ->
+  empty_pat? = pat === "" or pat === [] or pat === <<>>
+  cond do
+    empty_pat? -> {:ok, input}
+    not (dir in [:leading, :trailing]) -> {:exception, :error, :function_clause}
+    is_binary(input) ->
+      pbin = pat_to_bin.(pat)
+      case find_bin_pos.(input, pbin, dir) do
+        :nomatch -> {:ok, :nomatch}
+        {:ok, pos} -> {:ok, :binary.part(input, pos, byte_size(input) - pos)}
+      end
+    is_list(input) ->
+      plist = pat_to_list.(pat)
+      case find_list_all.(input, plist) do
+        [] -> {:ok, :nomatch}
+        idxs ->
+          pos = if dir === :leading, do: hd(idxs), else: List.last(idxs)
+          {:ok, Enum.drop(input, pos)}
+      end
+  end
+end
+split_model = fn input, pat, where ->
+  empty_pat? = pat === "" or pat === [] or pat === <<>>
+  cond do
+    empty_pat? -> {:ok, [input]}
+    is_binary(input) ->
+      pbin = pat_to_bin.(pat)
+      plen = byte_size(pbin)
+      blen = byte_size(input)
+      case where do
+        :leading ->
+          case find_bin_pos.(input, pbin, :leading) do
+            :nomatch -> {:ok, [input]}
+            {:ok, pos} -> {:ok, [:binary.part(input, 0, pos), :binary.part(input, pos + plen, blen - pos - plen)]}
+          end
+        :trailing ->
+          case find_bin_pos.(input, pbin, :trailing) do
+            :nomatch -> {:ok, [input]}
+            {:ok, pos} -> {:ok, [:binary.part(input, 0, pos), :binary.part(input, pos + plen, blen - pos - plen)]}
+          end
+        :all ->
+          loop = fn pos, start, acc, self ->
+            cond do
+              pos + plen > blen -> Enum.reverse([:binary.part(input, start, blen - start) | acc])
+              :binary.part(input, pos, plen) === pbin ->
+                self.(pos + plen, pos + plen, [:binary.part(input, start, pos - start) | acc], self)
+              true ->
+                self.(pos + 1, start, acc, self)
+            end
+          end
+          {:ok, loop.(0, 0, [], loop)}
+      end
+    is_list(input) ->
+      plist = pat_to_list.(pat)
+      plen = Kernel.length(plist)
+      case where do
+        :leading ->
+          case find_list_all.(input, plist) do
+            [] -> {:ok, [input]}
+            [pos | _] -> {:ok, [Enum.take(input, pos), Enum.drop(input, pos + plen)]}
+          end
+        :trailing ->
+          case find_list_all.(input, plist) do
+            [] -> {:ok, [input]}
+            idxs ->
+              pos = List.last(idxs)
+              {:ok, [Enum.take(input, pos), Enum.drop(input, pos + plen)]}
+          end
+        :all ->
+          loop = fn xs, cur, acc, self ->
+            cond do
+              xs === [] -> Enum.reverse([Enum.reverse(cur) | acc])
+              Kernel.length(xs) >= plen and Enum.take(xs, plen) === plist ->
+                self.(Enum.drop(xs, plen), [], [Enum.reverse(cur) | acc], self)
+              true ->
+                [h | t] = xs
+                self.(t, [h | cur], acc, self)
+            end
+          end
+          {:ok, loop.(input, [], [], loop)}
+      end
+  end
+end
+length_model = fn root ->
+  walk = fn
+    [], acc, _self -> {:ok, acc}
+    <<>>, acc, _self -> {:ok, acc}
+    [h | t], acc, self when is_integer(h) and h >= 0 and h <= 0x10FFFF ->
+      self.(t, acc + 1, self)
+    [h | t], acc, self when is_binary(h) or is_list(h) ->
+      with {:ok, a1} <- self.(h, acc, self), do: self.(t, a1, self)
+    b, acc, self when is_binary(b) ->
+      case decode_utf8_one.(b) do
+        {:ok, _cp, _raw, r} -> self.(r, acc + 1, self)
+        :error -> {:exception, :error, {:badarg, b}}
+      end
+    other, _acc, _self -> {:exception, :error, {:badarg, other}}
+  end
+  walk.(root, 0, walk)
+end
+parse_dec_digits = fn ds ->
+  Enum.reduce(ds, 0, fn c, acc -> acc * 10 + (c - ?0) end)
+end
+empty_cd? = fn
+  [], _self -> true
+  b, _self when is_binary(b) -> byte_size(b) === 0
+  [h | t], self -> self.(h, self) and self.(t, self)
+  _, _self -> false
+end
+next_cp = fn
+  [], _self -> :empty
+  <<>>, _self -> :empty
+  [h | t], _self when is_integer(h) ->
+    if h >= 0 and h <= 0x10FFFF and (is_list(t) or is_binary(t)) do
+      {:cp, h, t}
+    else
+      :badarg
+    end
+  [h | t], self when is_binary(h) ->
+    cond do
+      not (is_list(t) or is_binary(t)) -> :badarg
+      h === <<>> -> self.(t, self)
+      true ->
+        case decode_utf8_one.(h) do
+          {:ok, c, _raw, rh} ->
+            rest = cond do
+              rh === <<>> -> t
+              t === [] -> rh
+              true -> [rh | t]
+            end
+            {:cp, c, rest}
+          :error -> :badarg
+        end
+    end
+  [h | t], self when is_list(h) ->
+    if not (is_list(t) or is_binary(t)) do
+      :badarg
+    else
+      case self.(h, self) do
+        :empty -> self.(t, self)
+        :badarg -> :badarg
+        {:cp, c, rh} ->
+          rest = cond do
+            rh === [] or rh === <<>> -> t
+            t === [] -> rh
+            true -> [rh | t]
+          end
+          {:cp, c, rest}
+      end
+    end
+  b, _self when is_binary(b) ->
+    case decode_utf8_one.(b) do
+      {:ok, c, _raw, r} -> {:cp, c, r}
+      :error -> :badarg
+    end
+  _, _self -> :badarg
+end
+to_integer_model = fn input ->
+  cond do
+    is_binary(input) ->
+      take_set = fn
+        <<c::8, r::binary>>, acc, self when c === ?+ or c === ?- or (c >= ?0 and c <= ?9) ->
+          self.(r, [c | acc], self)
+        rest, acc, _self -> {Enum.reverse(acc), rest}
+      end
+      {pref, tail} = take_set.(input, [], take_set)
+      tail_ok = case tail do
+        <<>> -> true
+        <<c::8, _::binary>> when c <= 0x7F -> true
+        b -> decode_utf8_one.(b) !== :error
+      end
+      cond do
+        not tail_ok -> {:ok, {:error, :badarg}}
+        pref === [] -> {:ok, {:error, :no_integer}}
+        true ->
+          {sign, after_s} = case pref do
+            [?+ | r] -> {1, r}
+            [?- | r] -> {-1, r}
+            r -> {1, r}
+          end
+          take_d = fn
+            [c | r], ds, self when c >= ?0 and c <= ?9 -> self.(r, [c | ds], self)
+            r, ds, _self -> {Enum.reverse(ds), r}
+          end
+          {ds, leftover} = take_d.(after_s, [], take_d)
+          if ds === [] do
+            {:ok, {:error, :no_integer}}
+          else
+            rest_bin = (for c <- leftover, into: <<>>, do: <<c::8>>) <> tail
+            {:ok, {sign * parse_dec_digits.(ds), rest_bin}}
+          end
+      end
+    is_list(input) ->
+      take_cd = fn cd, acc, self ->
+        case next_cp.(cd, next_cp) do
+          :badarg -> :badarg
+          :empty -> {:ok, Enum.reverse(acc), cd}
+          {:cp, c, rest} when c === ?+ or c === ?- or (c >= ?0 and c <= ?9) ->
+            self.(rest, [c | acc], self)
+          {:cp, _c, _rest} ->
+            {:ok, Enum.reverse(acc), cd}
+        end
+      end
+      case take_cd.(input, [], take_cd) do
+        :badarg -> {:ok, {:error, :badarg}}
+        {:ok, [], _tail} -> {:ok, {:error, :no_integer}}
+        {:ok, pref, tail0} ->
+          tail = if empty_cd?.(tail0, empty_cd?), do: [], else: tail0
+          {sign, after_s} = case pref do
+            [?+ | r] -> {1, r}
+            [?- | r] -> {-1, r}
+            r -> {1, r}
+          end
+          take_d = fn
+            [c | r], ds, self when c >= ?0 and c <= ?9 -> self.(r, [c | ds], self)
+            r, ds, _self -> {Enum.reverse(ds), r}
+          end
+          {ds, leftover} = take_d.(after_s, [], take_d)
+          if ds === [] do
+            {:ok, {:error, :no_integer}}
+          else
+            rest = if leftover === [], do: tail, else: leftover ++ tail
+            {:ok, {sign * parse_dec_digits.(ds), rest}}
+          end
+      end
+    true -> {:ok, {:error, :badarg}}
+  end
+end
+cases = read.("cases.json")
+expected = Enum.map(cases, fn c ->
+  [op, mode, off_text, inp_text, extra_text] = c["string_ops"]
+  offset = literal.(off_text)
+  raw_in = literal.(inp_text)
+  input = if mode === "deep", do: build_deep.(offset, raw_in, build_deep), else: raw_in
+  extra = literal.(extra_text)
+  outcome = case op do
+    "to_upper_1" ->
+      cond do
+        is_list(input) -> map_list_strict.(input, upper_cp)
+        is_integer(input) -> {:ok, upper_cp.(input)}
+        true -> {:exception, :error, :function_clause}
+      end
+    "to_lower_1" ->
+      cond do
+        is_list(input) -> map_list_strict.(input, lower_cp)
+        is_integer(input) -> {:ok, lower_cp.(input)}
+        true -> {:exception, :error, :function_clause}
+      end
+    "split_2" -> split_model.(input, extra, :leading)
+    "split_3" ->
+      {pat, where} = extra
+      split_model.(input, pat, where)
+    "trim_1" -> trim_model.(input, :both)
+    "trim_2" -> trim_model.(input, extra)
+    "find_2" -> find_model.(input, extra, :leading)
+    "find_3" ->
+      {pat, dir} = extra
+      find_model.(input, pat, dir)
+    "length_1" -> length_model.(input)
+    "to_integer_1" -> to_integer_model.(input)
+  end
+  {:ok, {outcome, input, offset, extra, {:captured, input, offset, extra, <<5::3>>}}}
+end)
+for {vm, rows} <- [otp: read.("manifest.json")["expected"],
+                   atomvm: Enum.map(read.("actuals.json"), fn row ->
+                     "ok" = row["status"]
+                     row["value"]
+                   end)] do
+  true = length(rows) === length(expected)
+  failures = Enum.zip([cases, expected, rows]) |> Enum.filter(fn {_c, want, row} ->
+    :erlang.binary_to_term(Base.decode64!(row)) !== want
+  end)
+  if failures !== [], do: raise(inspect({vm, failures}, limit: 10))
+  IO.puts("#{vm}: #{length(rows)} independent string contracts")
+end
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -3820,6 +4271,26 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["int_atom_conv"] for c in saved],
                                      [c["int_atom_conv"] for c in cases])
                     check = subprocess.run(["elixir", "-e", INT_ATOM_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_string_ops_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "string_ops" in case]
+        self.assertEqual(len(selected), 701)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-17])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    self.assertEqual(self.invoke(output, "--replay", source),
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["string_ops"] for c in saved],
+                                     [c["string_ops"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", STRING_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
@@ -6337,7 +6808,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 16990)
+        self.assertEqual(len(lean_runtime.cases()), 17691)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

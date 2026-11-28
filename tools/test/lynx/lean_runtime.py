@@ -4960,6 +4960,197 @@ def cases():
         int_atom_probe("b2a_2", "<<\"ok\">>", bad_enc)
         int_atom_probe("b2ea_2", "<<\"ok\">>", bad_enc)
 
+    seen_string_ops = set()
+
+    def string_probe(op, input_spec, extra_spec="none", mode="copy", offset=0):
+        args = [op, mode, str(offset), input_spec, extra_spec]
+        expr = "string_ops:observe(" + ",".join(args) + ")"
+        if expr in seen_string_ops:
+            return
+        seen_string_ops.add(expr)
+        selected.append({"otp_extension": "string_ops", "string_ops": args, "expression": expr})
+
+    # 1. to_upper/1 & to_lower/1
+    case_boundary_cps = [
+        -1, 0, 64, 65, 90, 91, 96, 97, 122, 123,
+        191, 192, 214, 215, 216, 222, 223, 224, 246, 247, 248, 254, 255,
+        256, 8364, 128512,
+    ]
+    for cp in case_boundary_cps:
+        string_probe("to_upper_1", str(cp))
+        string_probe("to_lower_1", str(cp))
+    for s in [
+        "\"\"", "\"abc\"", "\"aBc123!Z\"",
+        "[192,201,214,215,216,222,223,224,233,246,247,248,254,255]",
+        "[256,8364,128512]",
+        "[$a,bad]", "[$A,bad]",
+    ]:
+        string_probe("to_upper_1", s)
+        string_probe("to_lower_1", s)
+    for bad_case in ["<<\"abc\">>", "abc", "1.5", "[$a|$b]"]:
+        string_probe("to_upper_1", bad_case)
+        string_probe("to_lower_1", bad_case)
+
+    # 2. split/2 & split/3
+    def erl_cp_list(txt):
+        if all(32 <= ord(c) < 127 and c not in {'"', '\\'} for c in txt):
+            return f"\"{txt}\""
+        return "[" + ",".join(str(ord(c)) for c in txt) + "]"
+
+    split_pairs = [
+        ("", ""),
+        ("", " "),
+        ("a", ""),
+        ("a", "a"),
+        ("foo bar", " "),
+        ("foo bar", "XXX"),
+        ("ab..bc..cd", ".."),
+        ("aaa", "aa"),
+        ("aaaa", "aa"),
+        ("aaaaa", "aa"),
+        ("fooXXXXXXbar", "XXX"),
+        ("a\u00e9\u2014b\u00e9\u2014c", "\u00e9\u2014"),
+        ("a\u00e9\u2014b\u00e9\u2014c", "z"),
+    ]
+    for s_txt, p_txt in split_pairs:
+        ls, bs = erl_cp_list(s_txt), binary_literal(s_txt.encode("utf-8"))
+        lp, bp = erl_cp_list(p_txt), binary_literal(p_txt.encode("utf-8"))
+        for si in [ls, bs]:
+            for pi in [lp, bp]:
+                string_probe("split_2", si, pi)
+                for w in ["leading", "trailing", "all"]:
+                    string_probe("split_3", si, f"{{{pi},{w}}}")
+    for off in range(8):
+        bsub = binary_literal("a\u00e9\u2014b\u00e9\u2014c".encode("utf-8"))
+        bpat = binary_literal("\u00e9\u2014".encode("utf-8"))
+        string_probe("split_2", bsub, bpat, mode="bit_slice", offset=off)
+        for w in ["leading", "trailing", "all"]:
+            string_probe("split_3", bsub, f"{{{bpat},{w}}}", mode="bit_slice", offset=off)
+
+    # 3. trim/1 & trim/2
+    ws_cps = [9, 10, 11, 12, 13, 32, 133, 8206, 8207, 8232, 8233]
+    for cp in ws_cps:
+        string_probe("trim_1", f"[{cp},$a,{cp}]")
+        b = chr(cp).encode("utf-8")
+        bspec = binary_literal(b + b"a" + b)
+        string_probe("trim_1", bspec)
+        for d in ["leading", "trailing", "both"]:
+            string_probe("trim_2", f"[{cp},$a,{cp}]", d)
+            string_probe("trim_2", bspec, d)
+    for non_ws in [0, 8, 160, 12288]:
+        string_probe("trim_1", f"[{non_ws},$a,{non_ws}]")
+        nb = chr(non_ws).encode("utf-8")
+        string_probe("trim_1", binary_literal(nb + b"a" + nb))
+    trim_extra = [
+        ("[]", binary_literal(b"")),
+        ("[13,10,97,13,10]", binary_literal(b"\r\na\r\n")),
+        ("[9,10,13,32,32,10,9]", binary_literal(b"\t\n\r  \n\t")),
+        ("[32,9,104,105,32,233,8212,128512,32,10]", binary_literal(" \thi \u00e9\u2014\U0001f600 \n".encode("utf-8"))),
+    ]
+    for idx, (ls, bs) in enumerate(trim_extra):
+        string_probe("trim_1", ls)
+        string_probe("trim_1", bs)
+        string_probe("trim_1", bs, mode="bit_slice", offset=idx % 8)
+        for d in ["leading", "trailing", "both"]:
+            string_probe("trim_2", ls, d)
+            string_probe("trim_2", bs, d)
+            string_probe("trim_2", bs, d, mode="bit_slice", offset=(idx + 3) % 8)
+    for off in range(8):
+        bs = binary_literal("\t \r\n\u00e9\u2014 \n\t".encode("utf-8"))
+        string_probe("trim_2", bs, "both", mode="bit_slice", offset=off)
+        string_probe("trim_2", bs, "trailing", mode="bit_slice", offset=off)
+    string_probe("trim_2", "\"hi\"", "bogus")
+    string_probe("trim_2", "<<\"hi\">>", "bogus")
+
+    # 4. find/2 & find/3
+    find_pairs = [
+        ("", ""),
+        ("", "z"),
+        ("foo", ""),
+        ("foo", "oo"),
+        ("foo", "z"),
+        ("ab..bc..cd", ".."),
+        ("aaa", "aa"),
+        ("a\u00e9\u2014b\u00e9\u2014c", "\u00e9\u2014"),
+        ("a\u00e9\u2014b\u00e9\u2014c", "z"),
+    ]
+    for s_txt, p_txt in find_pairs:
+        ls, bs = erl_cp_list(s_txt), binary_literal(s_txt.encode("utf-8"))
+        lp, bp = erl_cp_list(p_txt), binary_literal(p_txt.encode("utf-8"))
+        for si in [ls, bs]:
+            for pi in [lp, bp]:
+                string_probe("find_2", si, pi)
+                for d in ["leading", "trailing"]:
+                    string_probe("find_3", si, f"{{{pi},{d}}}")
+    for off in range(8):
+        bs = binary_literal("a\u00e9\u2014b\u00e9\u2014c".encode("utf-8"))
+        bp = binary_literal("\u00e9\u2014".encode("utf-8"))
+        string_probe("find_3", bs, f"{{{bp},leading}}", mode="bit_slice", offset=off)
+        string_probe("find_3", bs, f"{{{bp},trailing}}", mode="bit_slice", offset=off)
+    string_probe("find_3", "\"abc\"", "{\"\",bogus}")
+    string_probe("find_3", "\"abc\"", "{\"b\",bogus}")
+    string_probe("find_3", "<<\"abc\">>", "{<<\"b\">>,bogus}")
+
+    # 5. length/1
+    len_inputs = [
+        "\"\"",
+        binary_literal(b""),
+        "[[]]",
+        "[<<>>]",
+        "\"hello\"",
+        binary_literal(b"hello"),
+        binary_literal("\u007f\u0080\u00e9\u07ff\u0800\u20ac\ud7ff\ue000\uffff\U00010000\U0001f600\U0010ffff".encode("utf-8")),
+        "[127,128,233,2047,2048,8364,55295,57344,65535,65536,128512,1114111]",
+        f"[\"ab\",{binary_literal('é'.encode('utf-8'))},[99|{binary_literal('🌑'.encode('utf-8'))}]]",
+        binary_literal(bytes([255])),
+        f"[<<\"a\">>,{binary_literal(bytes([255]))}]",
+    ]
+    for spec in len_inputs:
+        string_probe("length_1", spec)
+    for off in range(8):
+        string_probe("length_1", binary_literal("h\u00e9\U0001f600".encode("utf-8")), mode="bit_slice", offset=off)
+    for depth in [1, 2, 3, 5, 8]:
+        string_probe("length_1", f"[97|{binary_literal('é🌑'.encode('utf-8'))}]", mode="deep", offset=depth)
+
+    # 6. to_integer/1
+    ti_specs = [
+        "\"0\"", "\"-0\"", "\"+0\"", "\"00042\"", "\"27\"", "\"12abc\"", "\"-5x\"", "\"+42\"",
+        "\"0001+2\"", "\"+" + ("9" * 77) + "\"", "\"-" + ("9" * 77) + "\"",
+        binary_literal(b"0"), binary_literal(b"-0"), binary_literal(b"+0"),
+        binary_literal(b"123x"), binary_literal(b"-5x"), binary_literal(b"1+2"),
+        binary_literal(("12\u00e9").encode("utf-8")),
+        binary_literal(b"9" * 77), binary_literal(b"-" + b"9" * 77),
+        "[$1|<<\"2x\">>]", "[[<<\"12\">>],\"3x\"]", "[[],<<\"12x\">>]", "[<<\"12\">>,[],[]]",
+        "\"abc\"", "\"\"", binary_literal(b"+"), "\"+\"", "\"--1\"", "\"++1\"",
+        "[<<\"abc\">>,1048575]", "[[],[<<>>],[]]", "[[$-],[],<<>>]",
+        binary_literal(b"a" + bytes([255])),
+        f"[<<\"abc\">>,{binary_literal(bytes([255]))}]",
+        binary_literal(b"1x" + bytes([255])),
+        f"[<<\"1x\">>,{binary_literal(bytes([255]))}]",
+        "foo", "[$3,hello]", "[49,50|bad]",
+        binary_literal(bytes([51, 255])),
+        f"[<<\"12\">>,{binary_literal(bytes([255]))}]",
+        binary_literal(bytes([255])),
+        binary_literal(bytes([194])),
+        binary_literal(bytes([43, 255])),
+        binary_literal(bytes([49, 237, 160, 128])),
+        "[1114112]", "[$1,1114112]", "[55296]", "[$1,55296]", "[$1,43,55296]",
+        f"[$1,{1 << 64}]", "[$1,-1]",
+        binary_literal(bytes([49, 43, 255])),
+        f"[$1,$+,{binary_literal(bytes([255]))}]",
+        binary_literal(bytes([45, 45, 255])),
+        f"[<<\"1+\">>,{binary_literal(bytes([255]))}]",
+        "[$a|foo]", "[$1,$x|foo]", "[<<\"1x\">>|foo]", "[$1|foo]",
+        "<<49,1:3>>", "<<1:1>>",
+    ]
+    for spec in ti_specs:
+        string_probe("to_integer_1", spec)
+    for off in range(8):
+        string_probe("to_integer_1", binary_literal("-12345é".encode("utf-8")), mode="bit_slice", offset=off)
+    string_probe("to_integer_1", "\"-99\"", mode="deep", offset=1)
+    string_probe("to_integer_1", "[[\"-99\"],[]]")
+    string_probe("to_integer_1", "[<<>>,[[\"-99\"],[]]]")
+
     return selected
 
 

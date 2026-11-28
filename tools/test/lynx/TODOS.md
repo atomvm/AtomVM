@@ -863,6 +863,41 @@ limits. Integers outside AtomVM's 256-bit `intn` limit, full runtime corpus,
 full CLI/JIT matrices, complete older-host harness, Lean fixture laws and
 embedded/32-bit/float32 targets remain outside this batch.
 
+### String operations (`string`)
+
+- [x] Add 701 direct recipes covering all 10 non-stub `string` exports
+  (`to_upper/1`, `to_lower/1`, `split/2,3`, `trim/1,2`, `find/2,3`, `length/1`,
+  `to_integer/1`) via `tools/test/lynx/string_ops.erl`, preserving all 16,990
+  preceding recipes (total 17,691). Keep `jaro_similarity/2` excluded as an
+  intentional stub per `doc/src/stubbed-functions.md`.
+- [x] Check ISO-8859-1 upper/lower casing, non-integer element pass-through,
+  `split`/`find` `leading`/`trailing`/`all` and empty/overlapping patterns, all
+  11 OTP whitespace code points and binary/list trimming, chardata `length`,
+  `to_integer` signs/`no_integer`/`badarg`, bit offsets `0..7`, and GC
+  retention.
+- [x] Fix ISO-8859-1 casing, `trailing` and empty-pattern `split`/`find`,
+  Unicode/binary `trim`, and nested/improper chardata `length` in
+  `libs/estdlib/src/string.erl`, with extended regressions in
+  `tests/libs/estdlib/test_string.erl` and a `CHANGELOG.md` entry; preserve
+  before-fix failure logs.
+- [x] Match 701/701 in interpreter and AArch64 precompiled modes, plus 101/101
+  in reordered JIT replay covering all 10 tested exports, `trailing`/`all`/
+  `both`, ISO-8859-1 casing, all 11 whitespace code points, chardata `length`/
+  `to_integer`, and bit offsets `0..7`.
+- [x] Check complete observations against pure-Elixir `STRING_MODEL` without
+  calling `:string`, `String`, or `:unicode`, validate cross-mode equality and
+  reject fifteen wrong-result controls.
+- [x] Match all 701 observer-only host controls on OTP `27.3.4.12`/`28.3.1`/
+  `29.1.3`; pass `test_string` on those hosts and all three AtomVM modes (plus
+  all non-socat suites in `test_estdlib.avm` including `{test_string,ok}`),
+  alongside targeted CLI checks (`Ran 3 tests in 329.490s -> OK`).
+
+See [PLAN.md](PLAN.md#string-operations-string) for evidence and limits.
+`jaro_similarity/2`, extended grapheme clusters, integers outside AtomVM's
+256-bit `intn` limit, full runtime corpus, full CLI/JIT matrices, complete
+older-host harness, Lean fixture laws and embedded/32-bit/float32 targets
+remain outside this batch.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes

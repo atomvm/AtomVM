@@ -388,6 +388,19 @@ retention. Probing exposed four C runtime defects across `src/libAtomVM/utils.c`
 fixed separately with ordinary Erlang regressions; see the batch notes for
 results and limits.
 
+The [String operations batch](PLAN.md#string-operations-string) adds 701 recipes
+covering all 10 non-stub exported functions in `string` (`to_upper/1`,
+`to_lower/1`, `split/2,3`, `trim/1,2`, `find/2,3`, `length/1`, `to_integer/1`)
+via standalone helper `string_ops:observe/5`, bringing the corpus to 17,691
+(`jaro_similarity/2` remains an intentional stub per
+`doc/src/stubbed-functions.md`). Independent pure-Elixir ISO-8859-1, RFC 3629
+UTF-8, whitespace, pattern, chardata length, and integer-parsing expectations
+check `leading`/`trailing`/`all`/`both` modes, empty patterns, overlapping
+matches, nested/improper chardata, bit offsets 0–7 and GC retention. Probing
+exposed stdlib gaps in `libs/estdlib/src/string.erl`, fixed separately with an
+extended ordinary regression in `tests/libs/estdlib/test_string.erl`; see the
+batch notes for results and limits.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen

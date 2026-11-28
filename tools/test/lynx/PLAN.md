@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 16,990 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 17,691 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,72 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## String operations (`string`)
+
+Add 701 direct recipes for all 10 non-stub exported functions in `string`
+(`to_upper/1`, `to_lower/1`, `split/2,3`, `trim/1,2`, `find/2,3`, `length/1`,
+and `to_integer/1`) via standalone helper `string_ops:observe/5`, preserving all
+16,990 preceding recipes and metadata; total 17,691. Intentionally stubbed
+`jaro_similarity/2` remains excluded per `doc/src/stubbed-functions.md`. Fixture
+counts and Lean attribution are unchanged; no new APIs or Lean proofs are added.
+
+- Check `to_upper/1` and `to_lower/1` across ASCII and ISO-8859-1 boundaries
+  (`224..246`, `248..254`, `192..214`, `216..222`), unchanged `215`/`223`/`247`/`255`,
+  code points `> 255` and `-1`, non-integer element pass-through, and improper-list
+  comprehension exceptions.
+- Check `split/2,3` and `find/2,3` across `leading`, `trailing`, and `all` (`split/3`),
+  empty patterns `""`/`<<>>` (`[String]`/`String`), overlapping matches
+  (`"aaa"`/`"aa"`, `"aaaaa"`/`"aa"`), mixed list/binary inputs and patterns,
+  UTF-8 multi-byte code points (`é`, `—`, `€`), bit-sliced binary inputs (`0..7`),
+  and invalid directions (`bogus`).
+- Check `trim/1,2` across `leading`, `trailing`, and `both`, all 11 OTP whitespace
+  code points (`9..13`, `32`, `133`, `8206`, `8207`, `8232`, `8233`), non-trimmed
+  controls/NBSP (`0`, `8`, `160`, `12288`), CRLF, UTF-8 binaries, bit slices
+  (`0..7`), and invalid directions.
+- Check `length/1` across flat lists, UTF-8 binaries (`0..0x10FFFF`), bit slices
+  (`0..7`), nested and `deep` chardata lists, improper binary tails, and
+  `{badarg, Bin}` invalid UTF-8 errors.
+- Check `to_integer/1` across signs, leading zeros, leftover sign boundaries
+  (`"0001+2"`), 77-digit integers, nested proper chardata, bit slices (`0..7`),
+  `no_integer` and `badarg` boundaries (surrogates, `16#110000`, invalid UTF-8,
+  improper list spines, partial bitstrings).
+- `STRING_MODEL` implements ISO-8859-1 casing, RFC 3629 UTF-8 codecs,
+  11-codepoint whitespace trimming, `find`, `split`, chardata codepoint `length`,
+  and decimal `to_integer` directly in pure Elixir without calling `:string`,
+  `String`, or `:unicode`, checking complete observations on both VMs.
+- **Resolved stdlib defects (kept cleanly separable):** probing exposed gaps in
+  `libs/estdlib/src/string.erl`: (1) `to_upper/1` and `to_lower/1` ignored
+  ISO-8859-1 letters and rejected non-integer list elements; (2) `find/2,3` and
+  `split/2,3` lacked `trailing` clauses and broke on empty patterns (`""`/`<<>>`);
+  (3) `trim/1,2` only stripped leading/trailing `$ ` on lists and rejected binaries;
+  (4) `length/1` rejected nested and improper chardata. Extended
+  `tests/libs/estdlib/test_string.erl` (passing OTP `29.1.3` and failing before
+  the stdlib fixes on `build` and `.amp/in/build-native`) alongside a
+  `CHANGELOG.md` entry.
+
+Interpreter and AArch64 precompiled runs each match 701/701 against OTP.
+Reordered on-demand JIT replay matches 101/101, covering all 10 tested exports,
+`trailing` / `all` / `both` modes, ISO-8859-1 casing, all 11 whitespace code
+points, chardata `length`/`to_integer`, and bit offsets `0..7`, with zero
+failures or unverified cases. Independent contracts pass on all three VMs,
+complete native and JIT observations equal interpreter results, and fifteen local
+wrong-result controls are rejected. Observer-only controls match all 701 OTP
+reference observations on OTP `27.3.4.12`, `28.3.1` and `29.1.3`. `test_string`
+passes on OTP `27/28/29` and all three AtomVM modes, and all non-socat suites in
+`build/tests/libs/estdlib/test_estdlib.avm` (including `{test_string,ok}`) pass.
+Targeted CLI tests (`test_string_ops_and_replay`,
+`test_int_atom_conversions_and_replay`, and
+`test_remaining_behavioral_probes_have_independent_oracles`) pass (`Ran 3 tests
+in 329.490s -> OK`).
+
+Inputs, before-fix failure logs, sources, manifests, results, reproducible
+checks and source hashes are saved under `.amp/in/artifacts/lynx-string/`.
+Intentional stub `string:jaro_similarity/2`, extended grapheme-cluster behavior
+(`\r\n`, combining marks), and integers beyond AtomVM's 256-bit `intn` magnitude
+remain excluded alongside the full runtime corpus, full CLI/JIT matrices,
+complete older-host harness, Lean fixture laws and embedded/32-bit/float32
+targets.
 
 ## Integer and atom conversions (`erlang`)
 
