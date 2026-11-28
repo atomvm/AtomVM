@@ -3845,6 +3845,103 @@ def cases():
     for spec in invalid_roots:
         for op in iodata_ops:
             binary_iodata_probe(op, spec)
+
+    seen_crc32 = set()
+
+    def binary_crc32_probe(operation, input_spec, arg="unused", mode="copy", offset=0):
+        args = [operation, mode, str(offset), input_spec, arg]
+        expr = "differential:binary_crc32(" + ",".join(args) + ")"
+        if expr in seen_crc32:
+            return
+        seen_crc32.add(expr)
+        selected.append({"otp_extension": "binary_crc32", "binary_crc32": args,
+                         "expression": expr})
+
+    crc_binaries = [
+        binary_literal(b""), binary_literal(b"\x00"), binary_literal(b"\x01"),
+        binary_literal(b"\x80"), binary_literal(b"\xff"),
+        binary_literal(b"123456789"), four,
+        binary_literal(bytes(range(256))),
+        binary_literal(b63), b64, binary_literal(b65),
+        binary_literal(bytes((17 * n + 128) % 256 for n in range(257))),
+    ]
+    crc_iolists = [
+        "[]", "[[]]", "[<<>>]", "[[]|<<>>]", all_bytes,
+        "[<<0,255>>,128,[17|<<1,2>>]]", "[1|<<2>>]",
+        f"[{binary_literal(b63)}|{b64}]",
+    ]
+    for index, spec in enumerate(crc_binaries + crc_iolists):
+        binary_crc32_probe("crc32_1", spec)
+        binary_crc32_probe("crc32_1", spec, mode="bit_slice", offset=index % 8)
+    for offset in range(8):
+        binary_crc32_probe("crc32_1", four, mode="bit_slice", offset=offset)
+        binary_crc32_probe("crc32_1", "[<<0,255>>,128,[17|<<1,2>>]]", mode="bit_slice", offset=offset)
+
+    crc_seeds = ["0", "1", "12345", str(1 << 31), str((1 << 32) - 1)]
+    crc2_subjects = [
+        binary_literal(b""), "[]", "[[]]", "[<<>>]", "[[]|<<>>]",
+        four, "[<<0,255>>,128,[17|<<1,2>>]]",
+        binary_literal(b63), b64, binary_literal(b65),
+        binary_literal(bytes((17 * n + 128) % 256 for n in range(257))),
+    ]
+    for old_crc in crc_seeds:
+        for index, spec in enumerate(crc2_subjects):
+            binary_crc32_probe("crc32_2", spec, old_crc)
+            if spec in (binary_literal(b""), "[]", four, binary_literal(b63)):
+                binary_crc32_probe("crc32_2", spec, old_crc, "bit_slice", index % 8)
+    for offset in range(8):
+        binary_crc32_probe("crc32_2", four, "12345", "bit_slice", offset)
+        binary_crc32_probe("crc32_2", "[<<0,255>>,128,[17|<<1,2>>]]", str((1 << 32) - 1), "bit_slice", offset)
+
+    crc_vals = [0, 1, 12345, 67890, 1 << 31, (1 << 32) - 1]
+    combine_sizes = [0, 1, 2, 3, 7, 8, 15, 16, 63, 64, 65, 257, 1024, 65535, 65536,
+                     (1 << 31) - 1, 1 << 31, (1 << 32) - 1]
+    for idx, (c1, c2) in enumerate([(0, 0), (0, (1 << 32) - 1), ((1 << 32) - 1, 0),
+                                    ((1 << 32) - 1, (1 << 32) - 1), (12345, 67890),
+                                    (1 << 31, 12345)]):
+        for sz in combine_sizes:
+            binary_crc32_probe("crc32_combine", f"{{{c1},{c2}}}", str(sz))
+    for c1 in crc_vals:
+        for c2 in [0, 12345, (1 << 32) - 1]:
+            for sz in [0, 5, 64, (1 << 32) - 1]:
+                binary_crc32_probe("crc32_combine", f"{{{c1},{c2}}}", str(sz))
+
+    split_pairs = [
+        (binary_literal(b""), binary_literal(b"")),
+        (binary_literal(b""), four),
+        (four, binary_literal(b"")),
+        ("[]", four),
+        (four, "[[]|<<>>]"),
+        (binary_literal(b"\x00"), binary_literal(b"\xff")),
+        (four, binary_literal(b63)),
+        (binary_literal(b63), b64),
+        (binary_literal(b65), binary_literal(bytes((17 * n + 128) % 256 for n in range(257)))),
+        ("[<<0,255>>,128,[17|<<1,2>>]]", "[1|<<2,3>>]"),
+    ]
+    for index, (a_spec, b_spec) in enumerate(split_pairs):
+        binary_crc32_probe("crc32_split_combine", f"{{{a_spec},{b_spec}}}")
+        binary_crc32_probe("crc32_split_combine", f"{{{a_spec},{b_spec}}}", mode="bit_slice", offset=index % 8)
+    for offset in range(8):
+        binary_crc32_probe("crc32_split_combine", f"{{{four},{binary_literal(b63)}}}", mode="bit_slice", offset=offset)
+
+    bad_iodata = [
+        "<<5:3>>", "[<<5:3>>]", "[1|<<5:3>>]", "[-1]", "[256]", f"[{1 << 64}]",
+        "[1|2]", "[<<1>>|2]", "[1|bad]", "bad", "0", "1.0", "{}",
+    ]
+    for spec in bad_iodata:
+        binary_crc32_probe("crc32_1", spec)
+        binary_crc32_probe("crc32_2", spec, "12345")
+
+    bad_u32 = [
+        "-1", str(1 << 32), str((1 << 32) + 7), str((1 << 63) - 1),
+        str(1 << 63), str(1 << 64), str(-(1 << 64)), "bad", "1.0", "[]", "{}",
+    ]
+    for bad in bad_u32:
+        for spec in [binary_literal(b""), "[]", four]:
+            binary_crc32_probe("crc32_2", spec, bad)
+        binary_crc32_probe("crc32_combine", f"{{{bad},0}}", "0")
+        binary_crc32_probe("crc32_combine", f"{{0,{bad}}}", "0")
+        binary_crc32_probe("crc32_combine", "{12345,67890}", bad)
     return selected
 
 

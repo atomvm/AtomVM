@@ -23,6 +23,7 @@
     binary_access/4,
     binary_slice/5,
     iodata_convert/4,
+    binary_crc32/5,
     execution_paths/3,
     print_result/1,
     map_entries/1,
@@ -718,6 +719,44 @@ build_deep_iodata(0, Leaf, Tail) ->
     [Leaf | Tail];
 build_deep_iodata(N, Leaf, Tail) ->
     [build_deep_iodata(N - 1, Leaf, Tail), (N * 17) rem 256].
+
+%% Independent IEEE 802.3 CRC32 and combine observer with GC retention.
+binary_crc32(Operation, Mode, Offset, Input0, Arg0) ->
+    {Copied, Arg} = binary_to_term(term_to_binary({Input0, Arg0})),
+    Input =
+        case Mode of
+            bit_slice -> slice_iodata_leaves(Copied, Offset);
+            copy -> Copied
+        end,
+    Captured = {captured, Input, Offset, Arg, <<5:3>>},
+    true = erlang:garbage_collect(),
+    Outcome =
+        try
+            case Operation of
+                crc32_1 ->
+                    erlang:crc32(Input);
+                crc32_2 ->
+                    erlang:crc32(Arg, Input);
+                crc32_combine ->
+                    {Crc1, Crc2} = Input,
+                    erlang:crc32_combine(Crc1, Crc2, Arg);
+                crc32_split_combine ->
+                    {A, B} = Input,
+                    {
+                        erlang:crc32([A, B]),
+                        erlang:crc32(erlang:crc32(A), B),
+                        erlang:crc32_combine(
+                            erlang:crc32(A), erlang:crc32(B), erlang:iolist_size(B)
+                        )
+                    }
+            end
+        of
+            Result -> {ok, Result}
+        catch
+            Class:Reason -> {exception, Class, Reason}
+        end,
+    true = erlang:garbage_collect(),
+    {Outcome, Input, Offset, Arg, Captured}.
 
 %% Compare observations, not equality between paths: guards reject errors and
 %% map patterns fail to match where body/dynamic lookups raise exceptions.

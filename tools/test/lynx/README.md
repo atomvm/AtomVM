@@ -326,6 +326,16 @@ packing across widths 1–7, bit offsets 0–7, invalid elements and GC retentio
 No runtime discrepancy or new expected-failure entry was found; see the batch
 notes for results and limits.
 
+The [CRC32 batch](PLAN.md#crc32-checksums-and-combination) adds 428 recipes for
+`erlang:crc32/1`, `erlang:crc32/2` and `erlang:crc32_combine/3`, bringing the
+corpus to 13,975. Independent IEEE 802.3 (`0xEDB88320`) and GF(2) combine
+expectations check empty binaries/iolists, incremental chaining, split-combine
+identities, 32-bit bounds, bit offsets 0–7, invalid inputs and GC retention.
+Probing exposed two `WITH_ZLIB` bugs (`crc32/2` resetting to `0` on empty
+iolists and `crc32_combine/3` accepting `size2 >= 2^32`), fixed separately with
+an ordinary regression in `test_crc32.erl`; see the batch notes for results
+and limits.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen

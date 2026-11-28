@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 13,547 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 13,975 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,64 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## CRC32 checksums and combination
+
+Add 428 direct recipes for supported `erlang:crc32/1`, `erlang:crc32/2` and
+`erlang:crc32_combine/3`, preserving all 13,547 preceding recipes and metadata;
+total 13,975. Fixture counts and Lean attribution are unchanged; no APIs or Lean
+proofs are added.
+
+- Check exact IEEE 802.3 CRC32 checksums across empty binaries/iolists (`<<>>`,
+  `[]`, `[[]]`, `[<<>>]`, `[[]|<<>>]`), single/all-256 byte values, standard
+  vector `<<"123456789">>`, nested/improper-tail iolists and 63/64/65/257-byte
+  inputs.
+- Check incremental chaining (`crc32/2`) across seeds `0`, `1`, `12345`,
+  `2^31` and `2^32 - 1`, including empty iolists and split-vs-whole
+  equivalence.
+- Check `crc32_combine/3` across `len2 = 0`, small/power-of-two/65536 lengths,
+  `2^31 - 1`, `2^31` and `2^32 - 1`, and split-message algebraic equivalence
+  (`crc32_combine(crc32(A), crc32(B), iolist_size(B))`).
+- Exercise ETF-copied inputs and larger-parent binary leaves sliced at bit
+  offsets `0..7` with operands, offsets, arguments, captures and results retained
+  across explicit GC before and after each call.
+- Reject partial bitstrings, out-of-range byte elements, invalid improper tails,
+  non-iodata roots, and negative, non-integer or `>= 2^32` CRC/length bounds.
+- `BINARY_CRC32_MODEL` implements IEEE 802.3 (`0xEDB88320`) bit-by-bit,
+  recursive iodata flattening and GF(2) matrix-squaring `crc32_combine`
+  directly without calling `erlang:crc32*` or `zlib`, checking complete
+  observations on both VMs.
+- **Resolved runtime defects (kept in a separate commit/group):** initial probing
+  exposed two `WITH_ZLIB` bugs in `src/libAtomVM/nifs.c`: (1) `nif_erlang_crc32`
+  passed `NULL, 0` to zlib's `crc32` for empty iolists, resetting `OldCrc` to
+  `0` instead of preserving it; (2) `nif_erlang_crc32_combine_3` validated
+  `size2` with `term_is_int64` under `WITH_ZLIB`, accepting `>= 2^32` instead of
+  raising `badarg` like OTP 27/28/29 and AtomVM's non-zlib path. Added
+  `test_crc32_empty_iolist_and_combine_bounds/0` to
+  `tests/erlang_tests/test_crc32.erl` (verified to fail before the C fix and
+  pass afterward on interpreter, AArch64 precompiled, on-demand JIT and OTP 29)
+  alongside the `CHANGELOG.md` entry.
+
+Interpreter and AArch64 precompiled runs each match 428/428 against OTP.
+Reordered on-demand JIT replay matches 109/109, explicitly covering all four
+operations, empty-iolist `crc32/2`, `2^31`/`2^32 - 1`/`2^32` combine bounds,
+split-combine identities and all eight bit offsets, with zero failures or
+unverified cases. Independent contracts pass on both VMs, complete native/JIT
+observations equal interpreter results, and thirteen local wrong-result controls
+are rejected. Fresh observer-only controls match all 428 OTP reference
+observations on OTP 27.3.4.12/28.3.1/29.1.3. Eight ordinary suites
+(`test_crc32`, `test_list_to_binary`, `test_list_to_bitstring`,
+`test_binary_to_list`, `test_bitstring_to_list`, `test_binary_part`,
+`test_split_binary` and `test_binary_eq`) pass on OTP 27/28/29 and all three
+AtomVM modes. Targeted CLI checks cover the new batch/replay, `binary_iodata`
+batch/replay and behavioral oracles.
+
+Inputs, before-fix failure logs, sources, manifests, results, reproducible
+checks and source hashes are saved under `.amp/in/artifacts/lynx-binary-crc32/`.
+Full runtime corpus, full CLI/JIT matrices, complete older-host harness, Lean
+fixture laws, non-zlib (`#ifndef WITH_ZLIB`) builds and embedded/32-bit/float32
+targets were not run. No allocation-failure, performance, binary-size or leak
+measurements are claimed.
 
 ## Iodata and bitstring-list conversion
 

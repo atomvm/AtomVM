@@ -1535,6 +1535,145 @@ end
 """
 
 
+# Direct IEEE 802.3 CRC32 (0xEDB88320) and GF(2) combine without erlang:crc32/zlib.
+BINARY_CRC32_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path,name))) end
+literal = fn text ->
+  {:ok,tokens,_} = :erl_scan.string(String.to_charlist(text <> "."))
+  {:ok,value} = :erl_parse.parse_term(tokens)
+  value
+end
+push_bin = fn bin,acc ->
+  for <<b::8 <- bin>>, reduce: acc do
+    a -> [b|a]
+  end
+end
+walk_iodata = fn
+  [],acc,_self -> {:ok,acc}
+  [h|t],acc,self ->
+    res = cond do
+      is_integer(h) and h >= 0 and h <= 255 -> {:ok,[h|acc]}
+      is_list(h) -> self.(h,acc,self)
+      is_binary(h) -> {:ok,push_bin.(h,acc)}
+      true -> :badarg
+    end
+    case res do
+      {:ok,acc2} -> self.(t,acc2,self)
+      :badarg -> :badarg
+    end
+  tail,acc,_self ->
+    if is_binary(tail), do: {:ok,push_bin.(tail,acc)}, else: :badarg
+end
+flatten = fn x ->
+  cond do
+    is_binary(x) -> {:ok,Enum.reverse(push_bin.(x,[]))}
+    is_list(x) ->
+      case walk_iodata.(x,[],walk_iodata) do
+        {:ok,rev} -> {:ok,Enum.reverse(rev)}
+        :badarg -> :badarg
+      end
+    true -> :badarg
+  end
+end
+crc32_bytes = fn init,bytes ->
+  c = Bitwise.bxor(init,0xFFFFFFFF)
+  c = Enum.reduce(bytes,c,fn b,acc ->
+    acc = Bitwise.bxor(acc,b)
+    Enum.reduce(0..7,acc,fn _,x ->
+      if Bitwise.band(x,1) === 1,
+        do: Bitwise.bxor(Bitwise.bsr(x,1),0xEDB88320),
+        else: Bitwise.bsr(x,1)
+    end)
+  end)
+  Bitwise.bxor(c,0xFFFFFFFF)
+end
+gf2_times = fn mat,vec ->
+  mat |> Enum.with_index() |> Enum.reduce(0,fn {row,k},sum ->
+    if Bitwise.band(Bitwise.bsr(vec,k),1) === 1, do: Bitwise.bxor(sum,row), else: sum
+  end)
+end
+gf2_square = fn mat -> Enum.map(mat,fn v -> gf2_times.(mat,v) end) end
+combine_loop = fn
+  c1,_even,_odd,0,_self -> c1
+  c1,_even,odd,len2,self ->
+    even2 = gf2_square.(odd)
+    c1b = if Bitwise.band(len2,1) === 1, do: gf2_times.(even2,c1), else: c1
+    len2b = Bitwise.bsr(len2,1)
+    if len2b === 0 do
+      c1b
+    else
+      odd2 = gf2_square.(even2)
+      c1c = if Bitwise.band(len2b,1) === 1, do: gf2_times.(odd2,c1b), else: c1b
+      self.(c1c,even2,odd2,Bitwise.bsr(len2b,1),self)
+    end
+end
+combine_crc = fn c1,c2,len2 ->
+  if len2 === 0 do
+    Bitwise.bxor(c1,c2)
+  else
+    odd0 = [0xEDB88320|Enum.map(0..30,fn k -> Bitwise.bsl(1,k) end)]
+    even0 = gf2_square.(odd0)
+    odd1 = gf2_square.(even0)
+    Bitwise.bxor(combine_loop.(c1,even0,odd1,len2,combine_loop),c2)
+  end
+end
+is_u32 = fn x -> is_integer(x) and x >= 0 and x <= 0xFFFFFFFF end
+cases = read.("cases.json")
+expected = Enum.map(cases,fn c ->
+  [operation,_mode,offset_text,input_text,arg_text] = c["binary_crc32"]
+  offset = literal.(offset_text)
+  input = literal.(input_text)
+  arg = literal.(arg_text)
+  outcome = case operation do
+    "crc32_1" ->
+      case flatten.(input) do
+        {:ok,bytes} -> {:ok,crc32_bytes.(0,bytes)}
+        :badarg -> {:exception,:error,:badarg}
+      end
+    "crc32_2" ->
+      if is_u32.(arg) do
+        case flatten.(input) do
+          {:ok,bytes} -> {:ok,crc32_bytes.(arg,bytes)}
+          :badarg -> {:exception,:error,:badarg}
+        end
+      else
+        {:exception,:error,:badarg}
+      end
+    "crc32_combine" ->
+      {c1,c2} = input
+      if is_u32.(c1) and is_u32.(c2) and is_u32.(arg) do
+        {:ok,combine_crc.(c1,c2,arg)}
+      else
+        {:exception,:error,:badarg}
+      end
+    "crc32_split_combine" ->
+      {a,b} = input
+      with {:ok,ba} <- flatten.(a), {:ok,bb} <- flatten.(b) do
+        ca = crc32_bytes.(0,ba)
+        cb = crc32_bytes.(0,bb)
+        {:ok,{crc32_bytes.(0,ba ++ bb),crc32_bytes.(ca,bb),combine_crc.(ca,cb,length(bb))}}
+      else
+        :badarg -> {:exception,:error,:badarg}
+      end
+  end
+  {:ok,{outcome,input,offset,arg,{:captured,input,offset,arg,<<5::3>>}}}
+end)
+for {vm,rows} <- [otp: read.("manifest.json")["expected"],
+                  atomvm: Enum.map(read.("actuals.json"),fn row ->
+                    "ok" = row["status"]
+                    row["value"]
+                  end)] do
+  true = length(rows) === length(expected)
+  failures = Enum.zip([cases,expected,rows]) |> Enum.filter(fn {_c,want,row} ->
+    :erlang.binary_to_term(Base.decode64!(row)) !== want
+  end)
+  if failures !== [], do: raise(inspect({vm,failures},limit: 10))
+  IO.puts("#{vm}: #{length(rows)} independent binary-crc32 contracts")
+end
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -2228,6 +2367,26 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["binary_iodata"] for c in saved],
                                      [c["binary_iodata"] for c in cases])
                     check = subprocess.run(["elixir", "-e", BINARY_IODATA_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_binary_crc32_preserves_checksums_combine_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "binary_crc32" in case]
+        self.assertEqual(len(selected), 428)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-17])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    self.assertEqual(self.invoke(output, "--replay", source),
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["binary_crc32"] for c in saved],
+                                     [c["binary_crc32"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", BINARY_CRC32_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
@@ -4745,7 +4904,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 13547)
+        self.assertEqual(len(lean_runtime.cases()), 13975)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

@@ -681,6 +681,38 @@ See [PLAN.md](PLAN.md#iodata-and-bitstring-list-conversion) for evidence and
 limits. Full corpus/CLI/JIT matrices, the complete older-host harness, Lean
 fixture laws and embedded/32-bit/float32 targets remain outside this batch.
 
+### CRC32 checksums and combination
+
+- [x] Add 428 direct recipes for supported `erlang:crc32/1`, `erlang:crc32/2`
+  and `erlang:crc32_combine/3`, preserving all previous metadata (total 13,975).
+- [x] Check IEEE 802.3 checksums across empty binaries/iolists, all 256 byte
+  values, standard vector `<<"123456789">>`, nested/improper-tail iolists and
+  63/64/65/257-byte lengths.
+- [x] Check incremental `crc32/2` chaining (including empty iolists),
+  `crc32_combine/3` across `0..2^32-1` lengths, split-combine algebraic
+  identities and invalid/out-of-range inputs.
+- [x] Exercise copied inputs and larger-parent binary leaves sliced at bit
+  offsets 0–7, retaining operands, offsets, arguments, captures and results
+  across GC.
+- [x] Fix `WITH_ZLIB` empty-iolist `crc32/2` reset and `crc32_combine/3`
+  `size2 >= 2^32` acceptance separately, with
+  `test_crc32_empty_iolist_and_combine_bounds/0` in `test_crc32.erl` and a
+  `CHANGELOG.md` entry; preserve before-fix failure evidence.
+- [x] Match 428/428 in interpreter and AArch64 precompiled modes, plus 109/109 in
+  reordered JIT replay covering all four operations, empty-iolist `crc32/2`,
+  32-bit combine bounds, split-combine identities and all eight bit offsets.
+- [x] Check complete observations against an independent IEEE 802.3 and GF(2)
+  model, validate cross-mode equality and reject thirteen wrong-result controls.
+- [x] Match all 428 observer-only host controls on OTP 27/28/29; pass eight
+  ordinary binary/CRC32 suites on those hosts and all three AtomVM modes,
+  alongside targeted CLI checks for the new batch, `binary_iodata` and
+  behavioral oracles.
+
+See [PLAN.md](PLAN.md#crc32-checksums-and-combination) for evidence and limits.
+Full corpus/CLI/JIT matrices, the complete older-host harness, Lean fixture
+laws, `#ifndef WITH_ZLIB` builds and embedded/32-bit/float32 targets remain
+outside this batch.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes
