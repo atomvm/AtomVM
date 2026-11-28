@@ -16,7 +16,7 @@ runner semantics in [README.md](README.md).
   latest upstream refresh below.
 - `fixtures.py` selects 2,351 calls with metadata for all 203 exports in 13
   translation-fixture modules. This is direct-call coverage, not branch coverage.
-- `lean_runtime.py` selects 15,619 public-behavior recipes inspired by Lean tests
+- `lean_runtime.py` selects 16,990 public-behavior recipes inspired by Lean tests
   and upstream examples (`377` of `478` Lean test sites across all 28 files). Source
   attribution is not an assertion of theorem premises or proof coverage.
 - `--lynx` freshly checks nine fixture laws. Nineteen finite instances require
@@ -38,6 +38,77 @@ and `Modules/PersistentTerm.lean`. New model files do not imply runtime support:
 `persistent_term` remains an observed API gap. Local `erlang:exit_signal/2` is
 implemented with the separate regression and differential batch below.
 Fixture validation does not establish complete runtime-model support.
+
+## Integer and atom conversions (`erlang`)
+
+Add 1,371 direct recipes for all 17 exported integer and atom conversion
+functions in `erlang` (`integer_to_list/1,2`, `integer_to_binary/1,2`,
+`list_to_integer/1,2`, `binary_to_integer/1,2`, `atom_to_list/1`,
+`atom_to_binary/1,2`, `list_to_atom/1`, `list_to_existing_atom/1`,
+`binary_to_atom/1,2` and `binary_to_existing_atom/1,2`) via standalone helper
+`int_atom_conv:observe/5`, preserving all 15,619 preceding recipes and metadata;
+total 16,990. Fixture counts and Lean attribution are unchanged; no new APIs or
+Lean proofs are added.
+
+- Check signed and unsigned integer formatting and parsing across bases `2..36`,
+  leading signs/zeros (`+0`, `-0`, 300 leading zeros), `INT64_MIN`/`INT64_MAX`
+  and `INT64_MIN * Base` boundaries, multi-chunk bigints up to `±(2^256 - 1)`,
+  ASCII digit/punctuation boundaries, embedded NUL, improper lists, partial
+  bitstrings, invalid bases, and `bit_slice` binary inputs (`0..7`).
+- Check atom conversions across `utf8`, `unicode`, and `latin1`, empty/ASCII/
+  NUL-containing/Latin-1 high-byte/UTF-8 multi-byte boundaries (`0..0x10FFFF`),
+  32/40/63/64/255-char Latin-1 and 255-emoji (`1020`-byte) atoms, `latin1`
+  non-representable code-point errors, 255/256-character limit vs element and
+  improper-tail validation precedence, and disjoint pre-existing vs
+  never-created atoms.
+- Exercise ETF-copied inputs, bit-sliced binary inputs (`0..7`), repeated
+  list/binary builders (`rep_list`, `rep_bin`), and dynamic atoms (`rep_atom`)
+  with operands, offsets, arguments, captures and results retained across
+  explicit GC before and after each call.
+- `INT_ATOM_MODEL` implements base-`2..36` integer conversion, byte-list
+  validation, RFC 3629 UTF-8/Latin-1 conversion, and atom ETF inspection
+  directly in pure Elixir without calling any tested `erlang` conversion BIF/NIF
+  or `:unicode`, checking complete observations on both VMs.
+- **Resolved runtime defects (kept cleanly separable):** probing exposed four C
+  runtime bugs: (1) `int64_parse_ascii_buf` in `src/libAtomVM/utils.c` read
+  past `buf[0]` for sign-only `"+"`/`"-"` inputs (returning `0` instead of
+  `badarg` in bases `2..9, 11..36` and reading `buf[1]` OOB in base 10);
+  (2) `list_to_atom` in `src/libAtomVM/bif.c` ran unbounded `term_list_length`
+  before checking the 255-character limit and used `SYSTEM_LIMIT_ATOM` for
+  `list_to_existing_atom/1` as well as trailing elements beyond 255 chars;
+  (3) `nif_erlang_atom_to_binary` in `src/libAtomVM/nifs.c` sized heap
+  allocation from UTF-8 `atom_len` instead of decoded `encoded_len` (risking
+  heap under-allocation when `atom_len >= 64` and `encoded_len < 64`) and
+  decoded with a fixed length `2` after only checking partial UTF-8;
+  (4) `intn_parse` in `src/libAtomVM/intn.c` negated signed `INT64_MIN` chunk
+  values (`parsed_chunk = -parsed_chunk`) and checked `out_len` instead of
+  `new_out_len` on overflow. Extended `test_binary_to_integer_2`,
+  `test_list_to_integer`, `test_list_to_atom`, `test_list_to_existing_atom`,
+  and `test_atom_to_binary` (verified against OTP 29 and before-fix failures
+  on `build` and `.amp/in/build-native`) alongside a `CHANGELOG.md` entry.
+
+Interpreter and AArch64 precompiled runs each match 1,371/1,371 against OTP.
+Reordered on-demand JIT replay matches 104/104, covering all 17 functions,
+sign-only inputs, `INT64_MIN` bigints, 255/256 atom boundaries, Latin-1 heap
+boundaries, and all eight bit offsets `0..7`, with zero failures or unverified
+cases. Independent contracts pass on all three VMs, complete native and JIT
+observations equal interpreter results, and fifteen local wrong-result controls
+are rejected. Observer-only controls match all 1,371 OTP reference observations
+on OTP `27.3.4.12`, `28.3.1` and `29.1.3`. Twelve ordinary suites
+(`test_binary_to_integer`, `test_binary_to_integer_2`, `test_list_to_integer`,
+`test_integer_to_binary`, `test_integer_to_list`, `test_list_to_atom`,
+`test_list_to_existing_atom`, `test_binary_to_atom`,
+`test_binary_to_existing_atom`, `test_atom_to_binary`, `test_atom_to_list` and
+`test_utf8_atoms`) pass on OTP 27/28/29 and all three AtomVM modes, and
+`./build/tests/test-erlang` prints `Success.`. Targeted CLI tests
+(`test_int_atom_conversions_and_replay`, `test_unicode_preserves_encodings_errors_and_replay`,
+and `test_remaining_behavioral_probes_have_independent_oracles`) pass (`Ran 3 tests in 326.438s -> OK`).
+
+Inputs, before-fix failure logs, sources, manifests, results, reproducible
+checks and source hashes are saved under `.amp/in/artifacts/lynx-int-atom/`.
+Values outside AtomVM's 256-bit `intn` range remain excluded alongside the full
+runtime corpus, full CLI/JIT matrices, complete older-host harness, Lean fixture
+laws and embedded/32-bit/float32 targets.
 
 ## Unicode conversions (`unicode`)
 

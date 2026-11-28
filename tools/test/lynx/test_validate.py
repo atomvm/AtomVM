@@ -2661,6 +2661,372 @@ end
 """
 
 
+# Pure-Elixir integer/atom conversion model without calling tested BIFs/NIFs.
+INT_ATOM_MODEL = """
+[path] = System.argv()
+read = fn name -> JSON.decode!(File.read!(Path.join(path, name))) end
+literal = fn text ->
+  {:ok, tokens, _} = :erl_scan.string(String.to_charlist(text <> "."))
+  {:ok, value} = :erl_parse.parse_term(tokens)
+  value
+end
+append_tail = fn
+  [], tail, _self -> tail
+  [h | t], tail, self -> [h | self.(t, tail, self)]
+end
+encode_utf8_cp = fn cp ->
+  cond do
+    cp <= 0x7F -> <<cp::8>>
+    cp <= 0x7FF -> <<0xC0 + Bitwise.bsr(cp, 6)::8, 0x80 + Bitwise.band(cp, 0x3F)::8>>
+    cp <= 0xFFFF ->
+      <<0xE0 + Bitwise.bsr(cp, 12)::8,
+        0x80 + Bitwise.band(Bitwise.bsr(cp, 6), 0x3F)::8,
+        0x80 + Bitwise.band(cp, 0x3F)::8>>
+    true ->
+      <<0xF0 + Bitwise.bsr(cp, 18)::8,
+        0x80 + Bitwise.band(Bitwise.bsr(cp, 12), 0x3F)::8,
+        0x80 + Bitwise.band(Bitwise.bsr(cp, 6), 0x3F)::8,
+        0x80 + Bitwise.band(cp, 0x3F)::8>>
+  end
+end
+encode_utf8_list = fn cps ->
+  Enum.reduce(cps, <<>>, fn cp, acc -> acc <> encode_utf8_cp.(cp) end)
+end
+atom_utf8_bytes = fn a when is_atom(a) ->
+  case :erlang.term_to_binary(a) do
+    <<131, 119, len::8, utf8::binary-size(len)>> -> utf8
+    <<131, 118, len::16, utf8::binary-size(len)>> -> utf8
+  end
+end
+decode_utf8_one = fn bin ->
+  case bin do
+    <<b1::8, r::binary>> when b1 <= 0x7F -> {:ok, b1, r}
+    <<b1::8, b2::8, r::binary>> when b1 in 0xC2..0xDF ->
+      if Bitwise.band(b2, 0xC0) === 0x80 do
+        {:ok, Bitwise.bor(Bitwise.bsl(Bitwise.band(b1, 0x1F), 6), Bitwise.band(b2, 0x3F)), r}
+      else
+        :error
+      end
+    <<b1::8, b2::8, b3::8, r::binary>> when b1 in 0xE0..0xEF ->
+      valid2 = cond do
+        b1 === 0xE0 -> b2 in 0xA0..0xBF
+        b1 === 0xED -> b2 in 0x80..0x9F
+        true -> b2 in 0x80..0xBF
+      end
+      if valid2 and Bitwise.band(b3, 0xC0) === 0x80 do
+        cp = Bitwise.band(b1, 0x0F) |> Bitwise.bsl(12)
+             |> Bitwise.bor(Bitwise.bsl(Bitwise.band(b2, 0x3F), 6))
+             |> Bitwise.bor(Bitwise.band(b3, 0x3F))
+        {:ok, cp, r}
+      else
+        :error
+      end
+    <<b1::8, b2::8, b3::8, b4::8, r::binary>> when b1 in 0xF0..0xF4 ->
+      valid2 = cond do
+        b1 === 0xF0 -> b2 in 0x90..0xBF
+        b1 === 0xF4 -> b2 in 0x80..0x8F
+        true -> b2 in 0x80..0xBF
+      end
+      if valid2 and Bitwise.band(b3, 0xC0) === 0x80 and Bitwise.band(b4, 0xC0) === 0x80 do
+        cp = Bitwise.band(b1, 0x07) |> Bitwise.bsl(18)
+             |> Bitwise.bor(Bitwise.bsl(Bitwise.band(b2, 0x3F), 12))
+             |> Bitwise.bor(Bitwise.bsl(Bitwise.band(b3, 0x3F), 6))
+             |> Bitwise.bor(Bitwise.band(b4, 0x3F))
+        {:ok, cp, r}
+      else
+        :error
+      end
+    _ -> :error
+  end
+end
+decode_utf8_all = fn bin ->
+  walk = fn
+    <<>>, acc, _self -> {:ok, Enum.reverse(acc)}
+    b, acc, self ->
+      case decode_utf8_one.(b) do
+        {:ok, cp, r} -> self.(r, [cp | acc], self)
+        :error -> :error
+      end
+  end
+  walk.(bin, [], walk)
+end
+existing_utf8_set = MapSet.new([
+  "",
+  "ok",
+  "true",
+  "false",
+  "badarg",
+  "utf8",
+  "unicode",
+  "latin1",
+  "lynx_ia_ex_ascii",
+  "lynx_ia_ex_0",
+  "0",
+  encode_utf8_list.([0xE9, 0xFF]),
+  encode_utf8_list.([0x30A2, 0x30C8, 0x30E0]),
+  encode_utf8_list.([0x20AC]),
+  encode_utf8_list.([0x1F311]),
+  "lynx_ia_ex_255_" <> String.duplicate("z", 240),
+])
+digits = ~c"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+format_int = fn val, base ->
+  if is_integer(val) and is_integer(base) and base >= 2 and base <= 36 do
+    neg = val < 0
+    v = if neg, do: -val, else: val
+    loop = fn
+      0, acc, _self -> acc
+      n, acc, self ->
+        d = Enum.at(digits, rem(n, base))
+        self.(div(n, base), [d | acc], self)
+    end
+    body = if v === 0, do: [?0], else: loop.(v, [], loop)
+    {:ok, (if neg, do: [?- | body], else: body)}
+  else
+    {:exception, :error, :badarg}
+  end
+end
+parse_bytes = fn bytes, base ->
+  {neg, rest} = case bytes do
+    [?- | r] -> {true, r}
+    [?+ | r] -> {false, r}
+    r -> {false, r}
+  end
+  if rest === [] do
+    {:exception, :error, :badarg}
+  else
+    step = fn
+      [], acc, _self -> {:ok, (if neg, do: -acc, else: acc)}
+      [b | t], acc, self ->
+        d = cond do
+          b >= ?0 and b <= ?9 -> b - ?0
+          b >= ?A and b <= ?Z -> b - ?A + 10
+          b >= ?a and b <= ?z -> b - ?a + 10
+          true -> 99
+        end
+        if d < base, do: self.(t, acc * base + d, self), else: {:exception, :error, :badarg}
+    end
+    step.(rest, 0, step)
+  end
+end
+check_byte_list = fn
+  [_ | _] = list ->
+    walk = fn
+      [], acc, _self -> {:ok, Enum.reverse(acc)}
+      [h | t], acc, self when is_integer(h) and h >= 0 and h <= 255 -> self.(t, [h | acc], self)
+      _, _acc, _self -> :badarg
+    end
+    walk.(list, [], walk)
+  _ -> :badarg
+end
+norm_enc = fn
+  :utf8 -> {:ok, :utf8}
+  :unicode -> {:ok, :utf8}
+  :latin1 -> {:ok, :latin1}
+  _ -> :badarg
+end
+list_to_atom_model = fn input, create? ->
+  if not is_list(input) do
+    {:exception, :error, :badarg}
+  else
+    walk = fn
+      [], _cnt, acc, _self -> {:ok_atom_utf8, encode_utf8_list.(Enum.reverse(acc))}
+      [_ | _], 255, _acc, _self ->
+        {:exception, :error, (if create?, do: :system_limit, else: :badarg)}
+      [h | t], cnt, acc, self ->
+        if is_integer(h) and h >= 0 and h <= 0x10FFFF and not (h in 0xD800..0xDFFF) do
+          self.(t, cnt + 1, [h | acc], self)
+        else
+          {:exception, :error, :badarg}
+        end
+      _, _cnt, _acc, _self -> {:exception, :error, :badarg}
+    end
+    case walk.(input, 0, [], walk) do
+      {:ok_atom_utf8, utf8} ->
+        if create? or MapSet.member?(existing_utf8_set, utf8) do
+          {:ok_atom_utf8, utf8}
+        else
+          {:exception, :error, :badarg}
+        end
+      err -> err
+    end
+  end
+end
+bin_to_atom_model = fn input, enc, create? ->
+  case {is_binary(input), norm_enc.(enc)} do
+    {true, {:ok, :latin1}} ->
+      if byte_size(input) > 255 do
+        {:exception, :error, (if create?, do: :system_limit, else: :badarg)}
+      else
+        utf8 = for <<b::8 <- input>>, into: <<>>, do: encode_utf8_cp.(b)
+        if create? or MapSet.member?(existing_utf8_set, utf8) do
+          {:ok_atom_utf8, utf8}
+        else
+          {:exception, :error, :badarg}
+        end
+      end
+    {true, {:ok, :utf8}} ->
+      walk = fn
+        <<>>, _cnt, _self -> :ok
+        _b, 255, _self -> (if create?, do: :system_limit, else: :badarg)
+        b, cnt, self ->
+          case decode_utf8_one.(b) do
+            {:ok, _cp, r} -> self.(r, cnt + 1, self)
+            :error -> :badarg
+          end
+      end
+      case walk.(input, 0, walk) do
+        :ok ->
+          if create? or MapSet.member?(existing_utf8_set, input) do
+            {:ok_atom_utf8, input}
+          else
+            {:exception, :error, :badarg}
+          end
+        err -> {:exception, :error, err}
+      end
+    _ -> {:exception, :error, :badarg}
+  end
+end
+cases = read.("cases.json")
+expected = Enum.map(cases, fn c ->
+  [op, mode, off_text, inp_text, extra_text] = c["int_atom_conv"]
+  offset = literal.(off_text)
+  raw_in = literal.(inp_text)
+  extra = literal.(extra_text)
+  {input_check, input_val, input_cps} = case mode do
+    "rep_list" ->
+      built = case raw_in do
+        {pfx, cnt, elem, sfx} -> pfx ++ List.duplicate(elem, cnt) ++ sfx
+        {pfx, cnt, elem, sfx, tail} -> pfx ++ List.duplicate(elem, cnt) ++ append_tail.(sfx, tail, append_tail)
+      end
+      {{:term, built}, built, nil}
+    "rep_bin" ->
+      {pfx, cnt, chunk, sfx} = raw_in
+      body = Enum.reduce(1..cnt, <<>>, fn _, acc -> acc <> chunk end)
+      built = pfx <> body <> sfx
+      {{:term, built}, built, nil}
+    "rep_atom" ->
+      {cnt, cp, sfx} = raw_in
+      cps = List.duplicate(cp, cnt) ++ sfx
+      utf8 = encode_utf8_list.(cps)
+      {{:atom_utf8, utf8}, :rep_atom, {cps, utf8}}
+    _ ->
+      {{:term, raw_in}, raw_in, nil}
+  end
+  want_outcome = case op do
+    "i2l_1" -> format_int.(input_val, 10)
+    "i2l_2" -> format_int.(input_val, extra)
+    "i2b_1" ->
+      with {:ok, cs} <- format_int.(input_val, 10) do
+        {:ok, for(c <- cs, into: <<>>, do: <<c::8>>)}
+      end
+    "i2b_2" ->
+      with {:ok, cs} <- format_int.(input_val, extra) do
+        {:ok, for(c <- cs, into: <<>>, do: <<c::8>>)}
+      end
+    "l2i_1" ->
+      case check_byte_list.(input_val) do
+        {:ok, bs} -> parse_bytes.(bs, 10)
+        :badarg -> {:exception, :error, :badarg}
+      end
+    "l2i_2" ->
+      if is_integer(extra) and extra >= 2 and extra <= 36 do
+        case check_byte_list.(input_val) do
+          {:ok, bs} -> parse_bytes.(bs, extra)
+          :badarg -> {:exception, :error, :badarg}
+        end
+      else
+        {:exception, :error, :badarg}
+      end
+    "b2i_1" ->
+      if is_binary(input_val) do
+        parse_bytes.((for <<b::8 <- input_val>>, do: b), 10)
+      else
+        {:exception, :error, :badarg}
+      end
+    "b2i_2" ->
+      if is_binary(input_val) and is_integer(extra) and extra >= 2 and extra <= 36 do
+        parse_bytes.((for <<b::8 <- input_val>>, do: b), extra)
+      else
+        {:exception, :error, :badarg}
+      end
+    "a2l_1" ->
+      cond do
+        mode === "rep_atom" ->
+          {cps, _utf8} = input_cps
+          {:ok, cps}
+        is_atom(input_val) ->
+          {:ok, cps} = decode_utf8_all.(atom_utf8_bytes.(input_val))
+          {:ok, cps}
+        true -> {:exception, :error, :badarg}
+      end
+    "a2b_1" ->
+      cond do
+        mode === "rep_atom" ->
+          {_cps, utf8} = input_cps
+          {:ok, utf8}
+        is_atom(input_val) -> {:ok, atom_utf8_bytes.(input_val)}
+        true -> {:exception, :error, :badarg}
+      end
+    "a2b_2" ->
+      atom_info = cond do
+        mode === "rep_atom" -> {:ok, input_cps}
+        is_atom(input_val) ->
+          utf8 = atom_utf8_bytes.(input_val)
+          {:ok, cps} = decode_utf8_all.(utf8)
+          {:ok, {cps, utf8}}
+        true -> :badarg
+      end
+      case {atom_info, norm_enc.(extra)} do
+        {{:ok, {_cps, utf8}}, {:ok, :utf8}} -> {:ok, utf8}
+        {{:ok, {cps, _utf8}}, {:ok, :latin1}} ->
+          if Enum.all?(cps, &(&1 <= 255)) do
+            {:ok, for(cp <- cps, into: <<>>, do: <<cp::8>>)}
+          else
+            {:exception, :error, :badarg}
+          end
+        _ -> {:exception, :error, :badarg}
+      end
+    "l2a_1" -> list_to_atom_model.(input_val, true)
+    "l2ea_1" -> list_to_atom_model.(input_val, false)
+    "b2a_1" -> bin_to_atom_model.(input_val, :utf8, true)
+    "b2a_2" -> bin_to_atom_model.(input_val, extra, true)
+    "b2ea_1" -> bin_to_atom_model.(input_val, :utf8, false)
+    "b2ea_2" -> bin_to_atom_model.(input_val, extra, false)
+  end
+  {want_outcome, input_check, offset, extra}
+end)
+for {vm, rows} <- [otp: read.("manifest.json")["expected"],
+                   atomvm: Enum.map(read.("actuals.json"), fn row ->
+                     "ok" = row["status"]
+                     row["value"]
+                   end)] do
+  true = length(rows) === length(expected)
+  failures = Enum.zip([cases, expected, rows]) |> Enum.filter(fn {_c, {want_out, inp_chk, off, ext}, row} ->
+    decoded = :erlang.binary_to_term(Base.decode64!(row))
+    case decoded do
+      {:ok, {out, act_in, ^off, ^ext, {:captured, act_in, ^off, ^ext, <<5::3>>}}} ->
+        in_ok = case inp_chk do
+          {:term, want_in} -> act_in === want_in
+          {:atom_utf8, want_utf8} -> is_atom(act_in) and atom_utf8_bytes.(act_in) === want_utf8
+        end
+        out_ok = case want_out do
+          {:ok_atom_utf8, want_utf8} ->
+            case out do
+              {:ok, a} when is_atom(a) -> atom_utf8_bytes.(a) === want_utf8
+              _ -> false
+            end
+          _ -> out === want_out
+        end
+        not (in_ok and out_ok)
+      _ -> true
+    end
+  end)
+  if failures !== [], do: raise(inspect({vm, failures}, limit: 10))
+  IO.puts("#{vm}: #{length(rows)} independent int/atom contracts")
+end
+"""
+
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = Path(__file__).with_name("validate.py")
 
@@ -3434,6 +3800,26 @@ class ValidationTests(unittest.TestCase):
                     self.assertEqual([c["unicode_conv"] for c in saved],
                                      [c["unicode_conv"] for c in cases])
                     check = subprocess.run(["elixir", "-e", UNICODE_MODEL, str(output)],
+                                           capture_output=True, text=True, timeout=30)
+                    self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
+
+    def test_int_atom_conversions_and_replay(self):
+        selected = [case for case in lean_runtime.cases() if "int_atom_conv" in case]
+        self.assertEqual(len(selected), 1371)
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            source = work / "input.json"
+            for name, cases in [("all", selected), ("replay", selected[::-19])]:
+                with self.subTest(name=name):
+                    source.write_text(json.dumps(cases))
+                    output = work / name
+                    self.assertEqual(self.invoke(output, "--replay", source),
+                                     {"laws": 0, "passed": len(cases), "failed": 0,
+                                      "unverified": 0, "uncovered": 0})
+                    saved = json.loads((output / "cases.json").read_text())
+                    self.assertEqual([c["int_atom_conv"] for c in saved],
+                                     [c["int_atom_conv"] for c in cases])
+                    check = subprocess.run(["elixir", "-e", INT_ATOM_MODEL, str(output)],
                                            capture_output=True, text=True, timeout=30)
                     self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
@@ -5951,7 +6337,7 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
     def test_remaining_behavioral_probes_have_independent_oracles(self):
-        self.assertEqual(len(lean_runtime.cases()), 15619)
+        self.assertEqual(len(lean_runtime.cases()), 16990)
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             source = work / "behavioral_oracles.json"

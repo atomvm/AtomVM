@@ -373,6 +373,21 @@ bigint `badarg` instead of `{error, ...}`, and trailing empty chardata flipping
 `incomplete` to `error`), fixed separately with an ordinary regression in
 `test_unicode.erl`; see the batch notes for results and limits.
 
+The [Integer and atom conversions batch](PLAN.md#integer-and-atom-conversions-erlang)
+adds 1,371 recipes covering all 17 exported integer and atom conversion
+functions in `erlang` (`integer_to_list/1,2`, `integer_to_binary/1,2`,
+`list_to_integer/1,2`, `binary_to_integer/1,2`, `atom_to_list/1`,
+`atom_to_binary/1,2`, `list_to_atom/1`, `list_to_existing_atom/1`,
+`binary_to_atom/1,2`, `binary_to_existing_atom/1,2`) via standalone helper
+`int_atom_conv:observe/5`, bringing the corpus to 16,990. Independent
+pure-Elixir base-`2..36`, UTF-8/Latin-1, and ETF expectations check bigint
+boundaries up to `±(2^256 - 1)`, sign-only inputs, 255/256-character atom
+limit and error precedence, existing vs missing atoms, bit offsets 0–7 and GC
+retention. Probing exposed four C runtime defects across `src/libAtomVM/utils.c`,
+`src/libAtomVM/bif.c`, `src/libAtomVM/nifs.c`, and `src/libAtomVM/intn.c`,
+fixed separately with ordinary Erlang regressions; see the batch notes for
+results and limits.
+
 Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
 interpreter and aarch64 precompiled execution, including 112 binary sequences
 with 3,497 operations. There are zero failures or unverified references. Thirteen

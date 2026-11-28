@@ -826,6 +826,43 @@ UTF-16/UTF-32 encodings), full runtime corpus, full CLI/JIT matrices, complete
 older-host harness, Lean fixture laws and embedded/32-bit/float32 targets remain
 outside this batch.
 
+### Integer and atom conversions (`erlang`)
+
+- [x] Add 1,371 direct recipes covering all 17 `erlang` integer and atom
+  conversion exports (`integer_to_list/1,2`, `integer_to_binary/1,2`,
+  `list_to_integer/1,2`, `binary_to_integer/1,2`, `atom_to_list/1`,
+  `atom_to_binary/1,2`, `list_to_atom/1`, `list_to_existing_atom/1`,
+  `binary_to_atom/1,2`, `binary_to_existing_atom/1,2`) via
+  `tools/test/lynx/int_atom_conv.erl`, preserving all 15,619 preceding recipes
+  (total 16,990).
+- [x] Check base-`2..36` formatting/parsing, bigints up to `±(2^256 - 1)`,
+  sign-only inputs, embedded NUL, `utf8`/`unicode`/`latin1` atom encodings,
+  255/256-char length vs invalid element/improper-tail precedence, existing vs
+  never-created atoms, bit offsets `0..7`, and GC retention.
+- [x] Fix sign-only non-base-10 parsing and base-10 OOB read in
+  `src/libAtomVM/utils.c`, `list_to_atom`/`list_to_existing_atom` 255-char
+  limit and precedence in `src/libAtomVM/bif.c`, `atom_to_binary/2` Latin-1
+  heap sizing/validation in `src/libAtomVM/nifs.c`, and `intn_parse`
+  `INT64_MIN`/overflow handling in `src/libAtomVM/intn.c`, with ordinary Erlang
+  regressions across five `tests/erlang_tests/` suites and a `CHANGELOG.md`
+  entry; preserve before-fix failure logs.
+- [x] Match 1,371/1,371 in interpreter and AArch64 precompiled modes, plus
+  104/104 in reordered JIT replay covering all 17 exports, sign-only inputs,
+  `INT64_MIN` bigints, 255/256 limits, Latin-1 boundaries, and bit offsets
+  `0..7`.
+- [x] Check complete observations against pure-Elixir `INT_ATOM_MODEL` without
+  calling any tested conversion BIF/NIF or `:unicode`, validate cross-mode
+  equality and reject fifteen wrong-result controls.
+- [x] Match all 1,371 observer-only host controls on OTP `27.3.4.12`/`28.3.1`/
+  `29.1.3`; pass twelve ordinary integer/atom suites on those hosts and all
+  three AtomVM modes plus `./build/tests/test-erlang` (`Success.`), alongside
+  targeted CLI checks (`Ran 3 tests in 326.438s -> OK`).
+
+See [PLAN.md](PLAN.md#integer-and-atom-conversions-erlang) for evidence and
+limits. Integers outside AtomVM's 256-bit `intn` limit, full runtime corpus,
+full CLI/JIT matrices, complete older-host harness, Lean fixture laws and
+embedded/32-bit/float32 targets remain outside this batch.
+
 ### Audit scope and exclusions
 
 At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes

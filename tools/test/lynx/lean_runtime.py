@@ -4614,6 +4614,352 @@ def cases():
         unicode_probe("to_binary_3", "<<\"a\">>", f"{{{bad_enc},utf8}}")
         unicode_probe("to_binary_3", "<<\"a\">>", f"{{utf8,{bad_enc}}}")
 
+    seen_int_atom = set()
+
+    def int_atom_probe(op, input_spec, extra_spec="none", mode="copy", offset=0):
+        args = [op, mode, str(offset), input_spec, extra_spec]
+        expr = "int_atom_conv:observe(" + ",".join(args) + ")"
+        if expr in seen_int_atom:
+            return
+        seen_int_atom.add(expr)
+        selected.append({"otp_extension": "int_atom_conv", "int_atom_conv": args, "expression": expr})
+
+    # 1. Integer formatting: integer_to_list/1,2 & integer_to_binary/1,2
+    sample_ints = [
+        0, 1, -1, 9, -9, 10, -10, 35, -35, 36, -36, 255, -256,
+        (1 << 27) - 1, -(1 << 27), (1 << 31) - 1, -(1 << 31),
+        (1 << 59) - 1, -(1 << 59), (1 << 63) - 1, -(1 << 63),
+        1 << 63, -(1 << 63) - 1, -(1 << 63) * 10,
+        (1 << 128) + 12345, -((1 << 190) + 12345678901234567890123456789),
+        (1 << 255) - 1, -(1 << 255), (1 << 256) - 1, -((1 << 256) - 1),
+    ]
+    fmt_core_bases = [2, 8, 10, 16, 36]
+    fmt_extra_bases = [3, 7, 11, 17, 32, 35]
+    extra_base_ints = {0, 1, -1, 35, -(1 << 63), (1 << 128) + 12345, (1 << 255) - 1, -((1 << 256) - 1)}
+    for n in sample_ints:
+        s = str(n)
+        int_atom_probe("i2l_1", s)
+        int_atom_probe("i2b_1", s)
+        bases = fmt_core_bases + (fmt_extra_bases if n in extra_base_ints else [])
+        for b in bases:
+            int_atom_probe("i2l_2", s, str(b))
+            int_atom_probe("i2b_2", s, str(b))
+    for b in range(2, 37):
+        pos_b = str((1 << 190) + 9876543210987654321)
+        neg_b = str(-((1 << 200) + 77777777777777777777))
+        int_atom_probe("i2l_2", pos_b, str(b))
+        int_atom_probe("i2b_2", neg_b, str(b))
+    for bad_int in ["1.0", "foo", "<<\"1\">>", "\"1\"", "{1}"]:
+        int_atom_probe("i2l_1", bad_int)
+        int_atom_probe("i2b_1", bad_int)
+        int_atom_probe("i2l_2", bad_int, "10")
+        int_atom_probe("i2b_2", bad_int, "16")
+    for bad_base in ["-10", "0", "1", "37", "256", str(1 << 64), "10.0", "bad"]:
+        int_atom_probe("i2l_2", "1", bad_base)
+        int_atom_probe("i2b_2", "0", bad_base)
+
+    # 2. Integer parsing: list_to_integer/1,2 & binary_to_integer/1,2
+    valid_base10_strs = [
+        "0", "-0", "+0", "0000", "-0000", "+0000",
+        "1", "+1", "-1", "42", "+42", "-42",
+        "9223372036854775807", "-9223372036854775808",
+        "9223372036854775808", "-9223372036854775809",
+        "-92233720368547758080", "-92233720368547758081", "+92233720368547758080",
+        "-000092233720368547758080", "+0000092233720368547758080",
+        "99999999999999999991", "-99999999999999999991",
+        str((1 << 255) - 1), str(-(1 << 255)),
+        str((1 << 256) - 1), str(-((1 << 256) - 1)),
+    ]
+    for s in valid_base10_strs:
+        lspec = f"\"{s}\""
+        bspec = binary_literal(s.encode("ascii"))
+        int_atom_probe("l2i_1", lspec)
+        int_atom_probe("l2i_2", lspec, "10")
+        int_atom_probe("b2i_1", bspec)
+        int_atom_probe("b2i_2", bspec, "10")
+
+    base_samples = [
+        ("0", 2), ("-0", 2), ("+0", 36),
+        ("1010", 2), ("-1010", 2), ("+00101", 2),
+        ("1000000000000000000000000000000000000000000000000000000000000000", 2),
+        ("-1000000000000000000000000000000000000000000000000000000000000000", 2),
+        ("-10000000000000000000000000000000000000000000000000000000000000000", 2),
+        ("777", 8), ("-0777", 8), ("+AAA", 11), ("-0000AAA", 11),
+        ("0a", 16), ("-0A", 16), ("+0000deadBEEF0123456789abcdefABCDEF", 16),
+        ("-8000000000000000", 16), ("-8000000000000001", 16), ("-80000000000000000", 16),
+        ("zZz0123456789aBc", 36), ("-zzzzzzzzzzzzzzzzzzzzzzzz", 36),
+    ]
+    for s, b in base_samples:
+        int_atom_probe("l2i_2", f"\"{s}\"", str(b))
+        int_atom_probe("b2i_2", binary_literal(s.encode("ascii")), str(b))
+
+    # Multi-chunk and long-zero integer strings/binaries (base 2/10/16/36)
+    int_atom_probe("b2i_2", "{<<>> ,255, <<\"1\">>, <<>>}", "2", mode="rep_bin")
+    int_atom_probe("b2i_2", "{<<\"-\">>, 256, <<\"1\">>, <<>>}", "2", mode="rep_bin")
+    int_atom_probe("b2i_2", "{<<>>, 300, <<\"0\">>, <<\"101\">>}", "2", mode="rep_bin")
+    int_atom_probe("b2i_2", "{<<\"-\">>, 300, <<\"0\">>, <<\"101\">>}", "2", mode="rep_bin")
+    int_atom_probe("b2i_2", "{<<\"-\">>, 40, <<\"0\">>, <<\"0\">>}", "16", mode="rep_bin")
+    int_atom_probe("b2i_1", "{<<>>, 57, <<\"9\">>, <<>>}", mode="rep_bin")
+    int_atom_probe("b2i_1", "{<<\"-\">>, 57, <<\"9\">>, <<>>}", mode="rep_bin")
+    int_atom_probe("b2i_1", "{<<\"-1\">>, 60, <<\"0\">>, <<>>}", mode="rep_bin")
+    int_atom_probe("l2i_1", "{\"-\", 57, 57, []}", mode="rep_list")
+    int_atom_probe("l2i_2", "{\"-\", 300, 48, \"101\"}", "2", mode="rep_list")
+
+    # Full base 2..36 sweep for a big negative binary/list integer
+    def py_int_to_base(val, b):
+        digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        neg = val < 0
+        v = -val if neg else val
+        out = []
+        while v:
+            out.append(digits[v % b])
+            v //= b
+        if not out:
+            out.append("0")
+        if neg:
+            out.append("-")
+        return "".join(reversed(out))
+
+    sweep_neg = -((1 << 190) + 12345678901234567890123456789)
+    for b in range(2, 37):
+        enc_s = py_int_to_base(sweep_neg, b)
+        int_atom_probe("b2i_2", binary_literal(enc_s.encode("ascii")), str(b))
+        int_atom_probe("l2i_2", f"\"{enc_s}\"", str(b))
+
+    # Bit-sliced binary_to_integer across all 8 offsets
+    for off in range(8):
+        int_atom_probe("b2i_1", binary_literal(b"-12345678901234567890123456789"), mode="bit_slice", offset=off)
+        int_atom_probe("b2i_2", binary_literal(b"-zZz0123456789aBc"), "36", mode="bit_slice", offset=off)
+
+    # Sign-only, invalid syntax, embedded NUL, invalid elements/roots/bases
+    for b in [2, 8, 10, 16, 36]:
+        for sign_s in ["+", "-"]:
+            if b == 10:
+                int_atom_probe("l2i_1", f"\"{sign_s}\"")
+                int_atom_probe("b2i_1", binary_literal(sign_s.encode("ascii")))
+            int_atom_probe("l2i_2", f"\"{sign_s}\"", str(b))
+            int_atom_probe("b2i_2", binary_literal(sign_s.encode("ascii")), str(b))
+
+    bad_parse_strs = [
+        ("", 10), (" ", 10), (" 1", 10), ("1 ", 10),
+        ("++1", 10), ("--1", 10), ("+-1", 10), ("-+1", 10), ("1+2", 10),
+        ("12345678901234567890-1", 10), ("92233720368547758080x", 10),
+        ("123456789012345678x0", 10), ("1234567890123456789x", 10),
+        ("0x10", 16), ("-0xAB", 16), ("123g", 16), ("1234567890abcdef1234g", 16),
+        ("102", 2), ("8", 8), ("a", 10),
+    ]
+    for s, b in bad_parse_strs:
+        if b == 10:
+            int_atom_probe("l2i_1", f"\"{s}\"")
+            int_atom_probe("b2i_1", binary_literal(s.encode("ascii")))
+        int_atom_probe("l2i_2", f"\"{s}\"", str(b))
+        int_atom_probe("b2i_2", binary_literal(s.encode("ascii")), str(b))
+
+    for byte_val in [0, 32, 47, 58, 64, 91, 96, 123, 127, 128, 193, 255]:
+        int_atom_probe("b2i_2", binary_literal(bytes([byte_val])), "36")
+        int_atom_probe("l2i_2", f"[{byte_val}]", "36")
+    for nul_spec, bnul_spec in [
+        ("[49,0]", "<<49,0>>"),
+        ("[49,0,50]", "<<49,0,50>>"),
+        ("[0,49]", "<<0,49>>"),
+        ("[43,49,0,50]", "<<43,49,0,50>>"),
+    ]:
+        int_atom_probe("l2i_1", nul_spec)
+        int_atom_probe("l2i_2", nul_spec, "16")
+        int_atom_probe("b2i_1", bnul_spec)
+        int_atom_probe("b2i_2", bnul_spec, "16")
+
+    for bad_list in ["[$1|$2]", "[49,256]", "[49,-1]", f"[49,{1 << 64}]", "42", "<<\"1\">>", "{1}"]:
+        int_atom_probe("l2i_1", bad_list)
+        int_atom_probe("l2i_2", bad_list, "10")
+    for bad_bin in ["\"1\"", "42", "[]", "<<49,1:3>>", "<<1:1>>"]:
+        int_atom_probe("b2i_1", bad_bin)
+        int_atom_probe("b2i_2", bad_bin, "10")
+    for bad_base in ["-10", "0", "1", "37", "256", str(1 << 64), "10.0", "bad"]:
+        int_atom_probe("l2i_2", "\"1\"", bad_base)
+        int_atom_probe("b2i_2", "<<\"1\">>", bad_base)
+
+    # 3. Atom formatting: atom_to_list/1 & atom_to_binary/1,2
+    literal_atoms = [
+        "''", "ok", "true", "false", "'0'", "lynx_ia_ex_ascii", "'lynx_ia_ex_0'",
+        "'lynx_ia_ex_255_" + ("z" * 240) + "'",
+    ]
+    for a in literal_atoms:
+        int_atom_probe("a2l_1", a)
+        int_atom_probe("a2b_1", a)
+        for enc in ["utf8", "unicode", "latin1"]:
+            int_atom_probe("a2b_2", a, enc)
+
+    # Dynamic atoms built via rep_atom (latin1 high bytes, embedded NUL, mixed UTF-8, 255-char boundaries)
+    rep_atom_specs = [
+        ("{1,0,[65]}", True),
+        ("{1,233,[255]}", True),
+        ("{32,233,[]}", True),
+        ("{40,233,[]}", True),
+        ("{63,233,[]}", True),
+        ("{64,233,[]}", True),
+        ("{255,233,[]}", True),
+        ("{1,233,[256]}", False),
+        ("{1,8364,[]}", False),
+        ("{1,128512,[]}", False),
+        ("{63,233,[256]}", False),
+        ("{1,0,[65,127,128,255,256,55295,57344,65535,65536,1114111]}", False),
+        ("{255,8364,[]}", False),
+        ("{255,128512,[]}", False),
+    ]
+    for spec, is_latin1_ok in rep_atom_specs:
+        int_atom_probe("a2l_1", spec, mode="rep_atom")
+        int_atom_probe("a2b_1", spec, mode="rep_atom")
+        for enc in ["utf8", "unicode", "latin1"]:
+            int_atom_probe("a2b_2", spec, enc, mode="rep_atom")
+        _ = is_latin1_ok
+
+    for bad_atom in ["42", "\"ok\"", "<<\"ok\">>", "{ok}"]:
+        int_atom_probe("a2l_1", bad_atom)
+        int_atom_probe("a2b_1", bad_atom)
+        int_atom_probe("a2b_2", bad_atom, "utf8")
+    for bad_enc in ["ascii", "bad_enc", "0", "[]"]:
+        int_atom_probe("a2b_2", "ok", bad_enc)
+        int_atom_probe("a2b_2", "42", bad_enc)
+
+    # 4. List/Binary -> Atom & Existing Atom
+    # Positive existing-atom lookups (ONLY literals from int_atom_conv:existing_atoms/0)
+    existing_atom_inputs = [
+        ("\"\"", binary_literal(b""), True),
+        ("\"ok\"", binary_literal(b"ok"), True),
+        ("\"0\"", binary_literal(b"0"), True),
+        ("\"lynx_ia_ex_ascii\"", binary_literal(b"lynx_ia_ex_ascii"), True),
+        ("\"lynx_ia_ex_0\"", binary_literal(b"lynx_ia_ex_0"), True),
+        ("\"lynx_ia_ex_255_" + ("z" * 240) + "\"", binary_literal(b"lynx_ia_ex_255_" + (b"z" * 240)), True),
+        ("[233,255]", binary_literal(bytes([233, 255])), "latin1_only"),
+        ("[233,255]", binary_literal("\u00e9\u00ff".encode("utf-8")), "utf8_existing"),
+        ("[12450,12488,12512]", binary_literal("\u30a2\u30c8\u30e0".encode("utf-8")), "utf8_only"),
+        ("[8364]", binary_literal("\u20ac".encode("utf-8")), "utf8_only"),
+        ("[127761]", binary_literal("\U0001f311".encode("utf-8")), "utf8_only"),
+    ]
+    for idx, (lspec, bspec, kind) in enumerate(existing_atom_inputs):
+        int_atom_probe("l2ea_1", lspec)
+        if kind == "latin1_only":
+            int_atom_probe("b2ea_2", bspec, "latin1")
+            int_atom_probe("b2ea_2", bspec, "latin1", mode="bit_slice", offset=idx % 8)
+        else:
+            int_atom_probe("b2ea_1", bspec)
+            int_atom_probe("b2ea_2", bspec, "utf8")
+            int_atom_probe("b2ea_2", bspec, "unicode")
+            if kind is True:
+                int_atom_probe("b2ea_2", bspec, "latin1")
+            int_atom_probe("b2ea_1", bspec, mode="bit_slice", offset=idx % 8)
+
+    # Disjoint missing atoms for *_to_existing_atom (prefix lynx_ia_never_ NEVER created anywhere)
+    never_inputs = [
+        ("\"lynx_ia_never_1\"", binary_literal(b"lynx_ia_never_1")),
+        ("\"lynx_ia_never_utf8_2\"", binary_literal("lynx_ia_never_\u00e9\u20ac".encode("utf-8"))),
+    ]
+    for lspec, bspec in never_inputs:
+        int_atom_probe("l2ea_1", lspec)
+        int_atom_probe("b2ea_1", bspec)
+        int_atom_probe("b2ea_2", bspec, "utf8")
+        int_atom_probe("b2ea_2", bspec, "unicode")
+        int_atom_probe("b2ea_2", binary_literal(b"lynx_ia_never_" + bytes([233, 255])), "latin1")
+
+    # Disjoint creation atoms for *_to_atom (prefix lynx_ia_mk_ NEVER passed to *_to_existing_atom)
+    mk_list_inputs = [
+        "[0,65]",
+        "[127,128,255,256,55295,57344,65535,65536,1114111]",
+        "\"lynx_ia_mk_ascii\"",
+        "{\"lynx_ia_mk_\",243,97,[]}",
+    ]
+    for spec in mk_list_inputs:
+        mode = "rep_list" if spec.startswith("{") else "copy"
+        int_atom_probe("l2a_1", spec, mode=mode)
+    int_atom_probe("l2a_1", "{[],255,128512,[]}", mode="rep_list")
+
+    mk_bin_inputs = [
+        binary_literal(b""),
+        binary_literal(b"lynx_ia_mk_bin"),
+        binary_literal(bytes([0, 65])),
+        binary_literal("lynx_ia_mk_\u00e9\u20ac\U0001f600".encode("utf-8")),
+    ]
+    for off in range(8):
+        int_atom_probe("b2a_1", binary_literal(b"lynx_ia_mk_slice"), mode="bit_slice", offset=off)
+        int_atom_probe("b2a_2", binary_literal(b"lynx_ia_mk_slice"), "utf8", mode="bit_slice", offset=off)
+        int_atom_probe("b2a_2", binary_literal(b"lynx_ia_mk_" + bytes([233, 255])), "latin1", mode="bit_slice", offset=off)
+        int_atom_probe("b2ea_1", binary_literal(b"lynx_ia_ex_ascii"), mode="bit_slice", offset=off)
+        int_atom_probe("b2ea_2", binary_literal(bytes([233, 255])), "latin1", mode="bit_slice", offset=off)
+    for bspec in mk_bin_inputs:
+        int_atom_probe("b2a_1", bspec)
+        int_atom_probe("b2a_2", bspec, "utf8")
+        int_atom_probe("b2a_2", bspec, "unicode")
+    int_atom_probe("b2a_2", binary_literal(b"lynx_ia_mk_" + bytes([233, 255])), "latin1")
+    int_atom_probe("b2a_2", "{<<>>,255,<<233>> ,<<>>}".replace(" ,", ","), "latin1", mode="rep_bin")
+    int_atom_probe("b2a_2", "{<<>>,255,<<226,130,172>>,<<>>}", "utf8", mode="rep_bin")
+
+    # 255/256 length, invalid element, surrogate, negative, bigint, and improper tail precedence
+    limit_rep_lists = [
+        "{[],255,97,[]}",
+        "{[],256,97,[]}",
+        "{[bad],255,97,[]}",
+        "{[],254,97,[bad,97]}",
+        "{[],254,97,[-1,97]}",
+        "{[],254,97,[55296,97]}",
+        "{[],255,97,[bad]}",
+        "{[],255,97,[-1]}",
+        "{[],255,97,[55296]}",
+        "{[],254,97,[],bad}",
+        "{[],255,97,[],bad}",
+        "{[],256,97,[],bad}",
+    ]
+    for spec in limit_rep_lists:
+        int_atom_probe("l2a_1", spec, mode="rep_list")
+        if spec != "{[],255,97,[]}":
+            int_atom_probe("l2ea_1", spec, mode="rep_list")
+    int_atom_probe("l2ea_1", "{[],255,98,[]}", mode="rep_list")
+
+    for bad_elem in ["[-1]", "[55296]", "[57343]", "[1114112]", f"[{1 << 64}]", "[bad]", "[97|bad]", "42", "<<\"ok\">>"]:
+        int_atom_probe("l2a_1", bad_elem)
+        int_atom_probe("l2ea_1", bad_elem)
+
+    limit_rep_bins = [
+        "{<<>>,256,<<97>>,<<>>}",
+        "{<<>>,255,<<233>>,<<97>>}",
+        "{<<255>>,255,<<97>>,<<>>}",
+        "{<<>>,254,<<97>>,<<255,97>>}",
+        "{<<>>,255,<<97>>,<<255>>}",
+        "{<<>>,256,<<226,130,172>>,<<>>}",
+    ]
+    for spec in limit_rep_bins:
+        int_atom_probe("b2a_1", spec, mode="rep_bin")
+        int_atom_probe("b2a_2", spec, "utf8", mode="rep_bin")
+        int_atom_probe("b2a_2", spec, "unicode", mode="rep_bin")
+        int_atom_probe("b2a_2", spec, "latin1", mode="rep_bin")
+        int_atom_probe("b2ea_1", spec, mode="rep_bin")
+        int_atom_probe("b2ea_2", spec, "utf8", mode="rep_bin")
+        int_atom_probe("b2ea_2", spec, "latin1", mode="rep_bin")
+
+    invalid_utf8_atom_bins = [
+        binary_literal(bytes([0x80])),
+        binary_literal(bytes([0xC0, 0xAF])),
+        binary_literal(bytes([0xED, 0xA0, 0x80])),
+        binary_literal(bytes([0xF4, 0x90, 0x80, 0x80])),
+        binary_literal(bytes([0xC3])),
+        binary_literal(bytes([0xFF])),
+    ]
+    for bspec in invalid_utf8_atom_bins:
+        int_atom_probe("b2a_1", bspec)
+        int_atom_probe("b2a_2", bspec, "utf8")
+        int_atom_probe("b2ea_1", bspec)
+        int_atom_probe("b2ea_2", bspec, "utf8")
+
+    for bad_root in ["\"ok\"", "42", "<<97,1:3>>", "<<1:1>>"]:
+        int_atom_probe("b2a_1", bad_root)
+        int_atom_probe("b2a_2", bad_root, "utf8")
+        int_atom_probe("b2a_2", bad_root, "bad_enc")
+        int_atom_probe("b2ea_1", bad_root)
+        int_atom_probe("b2ea_2", bad_root, "utf8")
+    for bad_enc in ["ascii", "bad_enc", "0", "[]"]:
+        int_atom_probe("b2a_2", "<<\"ok\">>", bad_enc)
+        int_atom_probe("b2ea_2", "<<\"ok\">>", bad_enc)
+
     return selected
 
 
