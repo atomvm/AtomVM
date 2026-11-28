@@ -37,6 +37,7 @@ start() ->
     ok = isolated(fun test_take/0),
     ok = isolated(fun test_delete/0),
     ok = isolated(fun test_delete_object/0),
+    ok = isolated(fun test_option_validation_and_bad_counter_ops/0),
     0.
 
 test_ets_new() ->
@@ -875,3 +876,74 @@ if_atomvm(Fun) ->
         atomvm -> Fun();
         _ -> ok
     end.
+
+test_option_validation_and_bad_counter_ops() ->
+    S = new_table({k, 10, a}),
+    assert_badarg(fun() -> ets:update_counter(S, k, [bad]) end),
+    assert_badarg(fun() -> ets:update_counter(S, k, [{2, 1}, bad]) end),
+    assert_badarg(fun() -> ets:update_counter(S, k, [{2, 1} | bad]) end),
+    assert_badarg(fun() -> ets:update_counter(S, k, [bad], {k, 0, a}) end),
+    [{k, 10, a}] = ets:lookup(S, k),
+
+    S2 = new_table(2, [{10, k, 20}]),
+    if_otp_version(29, fun() ->
+        assert_badarg(fun() -> ets:update_element(S2, k, {1, 99}, {only}) end),
+        assert_badarg(fun() -> ets:update_element(S2, k, {1, 99}, {}) end),
+        assert_badarg(fun() -> ets:update_counter(S2, k, {1, 5}, {only}) end),
+        assert_badarg(fun() -> ets:update_counter(S2, k, {1, 5}, {}) end)
+    end),
+    [{10, k, 20}] = ets:lookup(S2, k),
+
+    assert_badarg(fun() -> ets:new(tbad, [bad_opt]) end),
+    assert_badarg(fun() -> ets:new(tbad, [set | bad]) end),
+    assert_badarg(fun() -> ets:new(tbad, [{named_table, true}]) end),
+    assert_badarg(fun() -> ets:new(tbad, [{named_table, false}]) end),
+    assert_badarg(fun() -> ets:new(tbad, [{read_concurrency, bad}]) end),
+    assert_badarg(fun() -> ets:new(tbad, [{write_concurrency, bad}]) end),
+    assert_badarg(fun() -> ets:new(tbad, [{decentralized_counters, bad}]) end),
+    assert_badarg(fun() -> ets:new(tbad, [{heir, bad}]) end),
+    assert_badarg(fun() -> ets:new(tbad, [{heir, not_pid, data}]) end),
+    assert_badarg(fun() -> ets:new(tbad, [{keypos, 18446744073709551616}]) end),
+
+    TPubPriv = ets:new(t_pub_priv, [public, private]),
+    isolated(fun() ->
+        assert_operation(TPubPriv, lookup, [badarg]),
+        assert_operation(TPubPriv, insert, [badarg])
+    end),
+
+    TPrivPub = ets:new(t_priv_pub, [private, public]),
+    isolated(fun() ->
+        assert_operation(TPrivPub, lookup, []),
+        assert_operation(TPrivPub, insert, [])
+    end),
+
+    TPrivProt = ets:new(t_priv_prot, [private, protected]),
+    isolated(fun() ->
+        assert_operation(TPrivProt, lookup, [badarg])
+    end),
+
+    TPubProt = ets:new(t_pub_prot, [public, protected]),
+    isolated(fun() ->
+        assert_operation(TPubProt, insert, [])
+    end),
+
+    TBag1 = ets:new(t_bag1, [set, bag]),
+    true = ets:insert(TBag1, [{k, 1}, {k, 2}]),
+    [{k, 1}, {k, 2}] = ets:lookup(TBag1, k),
+
+    TBag2 = ets:new(t_bag2, [bag, set]),
+    true = ets:insert(TBag2, [{k, 1}, {k, 2}]),
+    [{k, 1}, {k, 2}] = ets:lookup(TBag2, k),
+
+    TDupBag = ets:new(t_dupbag, [bag, duplicate_bag]),
+    true = ets:insert(TDupBag, [{k, 1}, {k, 1}]),
+    [{k, 1}, {k, 1}] = ets:lookup(TDupBag, k),
+
+    TBagAfterDup = ets:new(t_bag_after_dup, [duplicate_bag, bag]),
+    true = ets:insert(TBagAfterDup, [{k, 1}, {k, 1}]),
+    [{k, 1}] = ets:lookup(TBagAfterDup, k),
+
+    TKeypos2 = ets:new(t_kp2, [{keypos, 1}, {keypos, 2}]),
+    true = ets:insert(TKeypos2, {a, b}),
+    [{a, b}] = ets:lookup(TKeypos2, b),
+    ok.

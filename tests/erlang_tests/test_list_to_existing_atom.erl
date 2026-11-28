@@ -20,9 +20,10 @@
 
 -module(test_list_to_existing_atom).
 
--export([start/0, f/1, g/1, h/1, i/1, j/0]).
+-export([start/0, f/1, g/1, h/1, i/1, j/0, id/1]).
 
 start() ->
+    ok = test_over_limit_and_invalid(),
     f(i(h(g(2)))) + f(i(h(g(10)))) + f(i(h(g(20)))).
 
 f(missing_atom) ->
@@ -62,3 +63,26 @@ i(A) ->
 
 j() ->
     this_will_be_a_new_atom.
+
+test_over_limit_and_invalid() ->
+    A255 = duplicate("a", 255, ""),
+    A256 = [$a | A255],
+    ok = assert_badarg(fun() -> list_to_existing_atom(id(A256)) end),
+    ok = assert_badarg(fun() -> list_to_existing_atom(id(A255 ++ [bad])) end),
+    ok = assert_badarg(fun() -> list_to_existing_atom(id(A256 ++ bad)) end),
+    ok = assert_badarg(fun() -> list_to_existing_atom(id([16#D800])) end),
+    ok.
+
+assert_badarg(F) ->
+    try
+        R = F(),
+        {should_have_raised, R}
+    catch
+        error:badarg -> ok
+    end.
+
+id(X) ->
+    X.
+
+duplicate(_List, 0, Acc) -> Acc;
+duplicate(List, N, Acc) -> duplicate(List, N - 1, List ++ Acc).

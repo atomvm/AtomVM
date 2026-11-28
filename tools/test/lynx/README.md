@@ -1,0 +1,1390 @@
+<!--
+Copyright 2026 Peter Madsen-Mygdal <petermm@gmail.com>
+SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+-->
+
+# Host-driven differential testing
+
+See [PLAN.md](PLAN.md) for the coverage baseline, remaining gaps, and next batches.
+
+From the AtomVM checkout, use a freshly built native AtomVM:
+
+```sh
+python3 tools/test/lynx/validate.py --build build --seed 1 --generated 1000 \
+  --output /tmp/atomvm-differential-1 --shrink
+```
+
+Requires Python 3.9+, `erl`, `erlc`, and `elixir` on PATH. Lynx, Lean, Mix, and
+AtomVM's `spawn_executable` support are **not required** for generated tests.
+The runner installs nothing, builds no AtomVM targets, and edits no repository
+sources. Validation currently uses OTP 29. A nonzero exit means a mismatch,
+runtime error/timeout, or a failed prerequisite/reference/proof check.
+
+## Generated inputs
+
+The default is 1,000 cases, reproducible with `--seed`. Forty boundary
+cases precede seeded exploration. The first 32 retain the original ten operation
+families; all eleven, including queues, appear within the first 40. Short runs
+therefore still exercise known dangerous edges. This generates inputs to eleven
+operation families, not arbitrary Erlang programs:
+
+- Numeric comparison: all eight equality/order operators, signed zeros,
+  subnormal/extreme finite floats, and integer/float pairs around precision and
+  representation boundaries, including 2^53 and 2^63.
+- Integer arithmetic, division/remainder, shifts, bitwise operations, and floating
+  division. Generated integer results stay within AtomVM's documented 256-bit
+  magnitude; divide-by-zero errors are compared, not silently discarded.
+- Maps: scalar, tuple, map, and partial-bitstring keys; duplicate and signed-zero
+  keys; insertion, lookup, removal, update, and comparison; sizes near 32 entries.
+- Map and process-dictionary sequences: an explicit initial binding list and
+  at most 72 operations, with every returned value/exception and intermediate
+  state compared. Include overwrites, missing entries, deletion/reinsertion,
+  clearing, stored `undefined`, exact-value key selection, unrelated sentinels,
+  and repeated growth/shrinkage across 32 entries. Keys include integer/float
+  and signed-zero pairs, compound terms, and seeded partial bitstrings. Map
+  sequences also exercise successful/rejected updates and takes. Enumeration
+  order is ignored, but exact-key bindings and counts are retained.
+- Selective-receive sequences: empty or mixed initial mailboxes, self-sends,
+  exact/tuple-tag matches, guarded receives, multiple clauses, and catch-all
+  receives. Include misses followed by new sends, duplicates, exact numeric and
+  compound terms, guard errors/false results, and competing clause matches.
+  Each sequence has at most 30 operations; all receives use timeout zero.
+  Each prefix runs uninterrupted in a fresh monitored worker, then returns its
+  last result and drains the remaining messages in order. This observes every
+  intermediate mailbox without a drain/requeue snapshot resetting receive
+  scanning between operations. Only the worker sends to itself; no cross-sender
+  ordering, wall-clock timing, or scheduler outcome is used as an oracle.
+- Binary scope sequences: at most 32 operations starting from explicit byte lists
+  of up to 96 bytes. Search/split overlapping patterns in both orders, with paired
+  positive/negative scopes, duplicate scopes, zero-width ranges, and optional
+  global/trim/trim-all flags. Nested parts and appends change the subject so later
+  coordinates must be relative to the current binary. Every result/exception and
+  intermediate binary is compared; failed operations retain the previous state.
+  Shrinking deletes operations without changing setup or literal payloads.
+- Queue sequences: initial ordered contents of up to 33 items, then at most
+  69 operations. Alternate insertion/removal at both ends, drain beyond empty,
+  rebuild, reverse, split, and join asymmetric queues on either side. Observe
+  membership, first/last exact deletion, empty `get`/`drop` errors, and invalid
+  split indices. Saved queues survive subsequent operations and explicit GC;
+  restore is valid even if shrinking deletes every save. Every returned value
+  or exception, length, emptiness, ordered contents, both end peeks, and saved
+  contents are compared, never opaque queue representations. Four boundary
+  sequences precede seeded exploration. The CLI regression additionally checks
+  both VMs against an independent ordered-list model, including reordered replay.
+- Process-lifecycle sequences: stateful setups and sequences of 6 to 24
+  operations (four deterministic boundary sequences up to 21 steps) across two
+  worker slots, two registered-name slots, two monitor slots, and two alias slots.
+  Steps cover `register/2`, `unregister/1`, `whereis/1`, local and peer links and
+  unlinks, dead-process links under both `trap_exit` settings, fenced queued
+  `'EXIT'` signals preserved across `trap_exit = false` transitions, monitor and
+  demonitor options (`default`, `flush`, `info`, `flush_info`, and invalid
+  options), standalone and monitor aliases, fenced cross-process/self alias
+  sends, controlled child exits and respawns, and bounded unlink/exit and
+  demonitor/exit race steps validating documented allowed-outcome predicates.
+  Every step summary and intermediate snapshot is compared using symbolic slot
+  labels rather than raw PIDs or references.
+- Bitstrings: signed big/little-endian construction and matching at varied bit
+  offsets and widths through 255 bits, including zero-width and invalid-size
+  controls. Full bitstrings and decoded results are compared.
+- Float encoding: float16/32 halfway values and their adjacent double values,
+  subnormal/normal and overflow boundaries, signed zero, both signs and byte
+  orders, and aligned/unaligned segments. Full bitstrings and extracted payload
+  bytes are compared, without decoding floats that could hide rounding errors.
+
+Inputs cross a module boundary before operations execute, preventing OTP's
+compiler from precomputing the expressions being tested. OTP and AtomVM use the
+same compiled probe/operation BEAMs. Each reference runs in a fresh OTP process;
+each target case runs in a separate AtomVM process with a timeout. Serialized
+results are compared **on OTP**, so AtomVM's own comparator cannot hide a bug.
+Exceptions compare class/reason, not stack frames. Standalone generated tests
+use AtomVM's bundled standard library, without packaging OTP's `lists.beam`.
+Byte-list output is emitted in bounded chunks, retaining the same wire format
+without formatting the entire serialized trace as one giant list.
+
+The queue batches have validated 148 histories (4,498 operations) and 153 callback
+cases against OTP 29.1.3 in interpreter, AArch64 precompiled and on-demand JIT modes.
+Independent list-model checks and reordered replay (nine histories / 14 callback
+cases) pass in every mode. The queue batch's CLI harness passed 43 tests with three
+optional skips. See the [history validation](PLAN.md#seeded-queue-sequences) and
+[callback validation](PLAN.md#queue-callback-combinations) for scope and limits;
+these are finite differential checks, not new proofs.
+
+The set-callback batch adds 140 v2 `fold`, `filter`, `map` and `filtermap` recipes
+across three construction histories, including exact numeric keys, mapping
+collisions, invalid callbacks, exception effects and 31/32/33-element boundaries.
+Results use normalized exact-key elements and counts. Raw `LYNX_SET_TRACE` records
+allow the independent CLI checker to validate each VM's visit multiplicities and
+fold accumulator inputs without requiring a shared traversal order or exception
+prefix. Initial interpreter, AArch64 precompiled and on-demand JIT runs each
+matched 137/140, exposing `sets:filter/2` raising `case_clause` instead of OTP's
+`bad_filter` for a non-boolean predicate result. A separate library correction
+and ordinary Erlang regression resolve that mismatch without changing
+`maps:filter/2` or rewriting predicate-thrown exceptions. Interpreter and
+precompiled reruns match 140/140 and their 16-case replays pass. Cold-JIT
+validation uses `--timeout 120` to allow compilation of the existing large helper
+in each isolated process. No allowlist entries were added; see
+[the batch notes](PLAN.md#set-callback-combinations) for JIT scope and evidence.
+
+The ordered-list batch adds 128 `foldl`, `foldr`, `mapfoldl` and `mapfoldr`
+recipes with exact invocation/accumulator traces, mapped output order, exception
+prefixes, invalid callbacks, malformed inputs and explicit GC retention. An
+independent ordered-equation model validates both VMs; it rejects reversed visits,
+broken accumulator threading and reversed mapped output even if both VMs report
+the same wrong result. Initial interpreter, AArch64 precompiled and on-demand
+JIT runs each matched 98/128, exposing callback-validation/malformed-input
+exception differences. A separate library fix and ordinary Erlang regressions
+resolve those boundaries without changing `reverse/1` or translating callback
+exceptions. Interpreter, precompiled and on-demand JIT reruns each match 128/128
+with 15/15 replays; OTP 27/28/29 each satisfy all 128 independent contracts.
+No allowlist entries were added. See
+[the batch notes](PLAN.md#ordered-list-folds-and-mapfolds) for mode/replay results
+and limits; this batch brings the public-behavior corpus to 7,350 recipes.
+
+The unary-list batch adds 268 `map`, `foreach`, `flatmap`, `filter`, `filtermap`,
+`search` and `dropwhile` recipes. Exact results, callback indices/effects and
+GC-retained inputs distinguish short-circuiting from scanning an untouched tail,
+and deferred flatmap validation from rejection before later callbacks execute.
+An independent sequential model checks each VM; four negative controls reject
+identically wrong reports. OTP 27/28/29 each satisfy all 268 contracts.
+Initial interpreter, precompiled and on-demand JIT runs each matched 239/268,
+exposing the same 22 callback-validation cases, six invalid search predicate
+results and one map non-list-entry exception. A separate library correction and
+ordinary Erlang regressions resolve those differences while preserving callback
+exceptions, short-circuiting and deferred flatmap validation. Fresh interpreter,
+precompiled and on-demand JIT runs each match 268/268 with 21/21 reordered
+replays and independent result/trace checks. Ordinary regressions pass on OTP
+27/28/29 and all three AtomVM modes; all three regression groups fail before the
+fix. The 49-method harness passes (46 passed, three optional skips).
+No allowlist entries were added. See
+[the batch notes](PLAN.md#ordered-unary-list-callbacks) for execution-mode/replay
+results and limits; that batch brought the public-behavior corpus to 7,618 recipes.
+
+The paired-list batch adds 95 `lists:zipwith/3` recipes, checking exact paired
+visits, output order, arbitrary returned terms, input/capture retention across GC,
+invalid callbacks and error/throw/exit boundaries before later input failures.
+Unequal lengths and improper/non-list inputs distinguish effects from the matching
+prefix from an incorrectly eager length check. OTP's callback validation differs
+from the unary APIs: a nonempty pair can raise `badfun`/`badarity`, whereas empty
+or unmatched inputs can raise `function_clause` without invoking the callback.
+An independent two-list model checks both VMs and rejects five kinds of
+identically wrong reports. All three execution modes match 95/95 cases and
+14/14 reordered replays; the 50-method harness passes (47 passed, three optional
+skips). All 7,618 previous recipes and metadata are preserved;
+that batch brought the corpus to 7,713 recipes. See
+[the batch notes](PLAN.md#paired-list-zipwith-callbacks) for per-mode results,
+reordered replay, cross-OTP controls and scope. No new APIs, library/runtime fixes
+or expected-failure entries are included.
+
+The comparator batch adds 148 `lists:sort/2`, `usort/2` and `merge/3` recipes,
+bringing the corpus to 7,861. Independent ranks check stable ordering, first
+representatives and left-before-right merge ties with valid non-strict
+comparators. Constant exceptions, invalid callbacks and GC-retained terms are
+also checked without prescribing the implementation's comparison sequence.
+OTP 27/28/29 each satisfy all contracts. Initial runs in all three modes matched
+113/148, exposing fourteen tie-order and twenty-one callback-validation
+mismatches. A separate library correction and ordinary Erlang regressions fix
+these differences while preserving stable natural/key sorting and first usort
+representatives. Fresh interpreter, AArch64 precompiled and on-demand JIT runs
+each match 148/148 and 30/30 reordered cases, with independent checks on both
+VMs and identical observations across modes. Ordinary collection suites and
+10,000-item ordering controls pass on OTP 27/28/29 and all three AtomVM modes.
+The 51-method CLI suite passes (48 passed, three optional skips). No cases,
+independent expectations or allowlists were changed to hide failures. See
+[the comparator notes](PLAN.md#comparator-driven-sort-usort-and-merge) for
+before/after results, separate ordinary regressions and limits.
+
+The [keyed-list batch](PLAN.md#keyed-list-equality-mutation-and-sorting) adds
+344 recipes for `keydelete`, `keyreplace`, `keystore`, `keytake`, `keysort` and
+`ukeysort`, bringing the corpus to 8,205. Independent first-match/rank models
+check numeric-equivalent keys, first representatives, stable ordering,
+argument/exception boundaries and GC-retained terms. OTP 27/28/29 each satisfy
+all 344 contracts. Initial interpreter and AArch64 precompiled runs exposed
+84 library differences in numeric equality, unique representatives, position
+validation and sort input exceptions. A separate library correction with
+ordinary Erlang regressions resolves them: fresh runs each match 344/344 and
+50/50 reordered cases. The same 50-case on-demand JIT subset also passes, with
+identical complete observations across modes; the full 344-case JIT matrix
+has not been run. Ordinary lists/queue/sets/maps suites and independent
+10,000-item keyed-list controls pass on OTP 27/28/29 and all three AtomVM modes.
+No recipes, model expectations or allowlists were changed to obtain these
+results. See [TODOS.md](TODOS.md#keyed-list-equality-mutation-and-sorting) and
+the batch notes for regression scope, CLI results and evidence.
+
+The [positional-list batch](PLAN.md#positional-list-traversal-and-validation)
+adds 284 direct-call recipes for `nth/2`, `nthtail/2`, `sublist/2,3` and
+`split/2`, bringing the corpus to 8,489 without changing fixture counts or Lean
+attribution. They cover index validation, truncation, empty/non-list inputs and
+reached/unreached improper tails. Six initial mismatches resolve through three
+separate library corrections with ordinary Erlang regressions; no allowlist
+changes are needed. Interpreter and AArch64 precompiled runs each match all
+284 cases; the reordered on-demand JIT subset matches 22/22. Targeted CLI checks
+include replay and handwritten boundary expectations. Ordinary lists/queue/sets/
+maps suites pass on all three AtomVM modes and OTP 27/28/29. See the batch notes
+for validation scope and evidence.
+
+The [deep-list batch](PLAN.md#deep-list-flattening-and-concatenation) adds 185
+recipes for `flatten/1`, `append/1,2`, source `++` and dynamic `erlang:'++'/2`,
+bringing the corpus to 8,674. A structural oracle checks both VMs without using
+these APIs to calculate expectations, including input/result survival across
+GC, arbitrary final tails and asymmetric nesting. Separate native flatten fixes
+correct 16 exception mismatches and a confirmed traversal-stack leak, with
+ordinary Erlang regressions. Interpreter and precompiled runs match 185/185;
+the reordered JIT subset matches 27/27. The measured flatten leak disappears;
+unrelated existing leaks remain. See the batch notes for evidence and limits.
+
+The [list-selection batch](PLAN.md#list-selection-identity-and-traversal) adds
+209 recipes for `lists:min/1`, `lists:max/1` and `lists:delete/2`, bringing the
+corpus to 8,883. Independent contracts check first extrema representatives,
+exact first-match deletion, numeric precision, signed zeros, reached/unreached
+improper tails and GC-retained terms. Interpreter/precompiled runs match
+209/209 and the reordered JIT subset matches 30/30. Observer-only host runs
+agree on OTP 27/28/29. No discrepancy was found; runtime/library code, ordinary
+Erlang tests and changelog remain unchanged. See the batch notes for limits.
+
+The [list-construction batch](PLAN.md#list-construction-without-flattening)
+adds 209 recipes for `lists:join/2` and `lists:duplicate/2`, bringing the corpus
+to 9,092. Independent contracts check whole-term insertion/repetition, empty
+and malformed inputs, exact numeric/boxed values and GC retention. Interpreter
+and precompiled runs match 209/209 against OTP 29.1.3; reordered JIT replay
+matches 30/30. No discrepancy was found; no runtime/library fixes or ordinary
+Erlang regressions were needed. See the batch notes for validation limits.
+
+The [proplist-lookup batch](PLAN.md#proplist-lookup-and-precedence) adds 352
+recipes across eight supported entry points, bringing the corpus to 9,444.
+Independent expectations check first-entry precedence, exact keys, atom shorthand,
+malformed tuple entries, defaults, ordered collectors/deletion and reached versus
+untouched improper tails. Eight mismatching recipes expose a `get_value/2,3`
+precedence bug, corrected by a separate library fix and ordinary Erlang regression.
+See the batch notes for before/after validation and limits.
+
+The [proplist-transform batch](PLAN.md#proplist-normalization-and-map-conversion)
+adds 246 recipes for `property/1,2`, `compact/1`, `unfold/1`, `to_map/1` and
+`from_map/1`, bringing the corpus to 9,690. Independent expectations distinguish
+shallow normalization, malformed-entry precedence, absent versus `undefined`
+bindings, exact keys and exception reasons. Map extraction checks entry count
+and exact bindings without relying on list order or a conversion round trip.
+See the batch notes for execution results and validation limits.
+
+The [binary-replacement batch](PLAN.md#binary-replacement) adds 157 recipes
+for supported `binary:replace/3,4` behavior, bringing the corpus to 9,847.
+Independent byte-list expectations check exact bytes, non-overlapping first/global
+replacement, empty subjects, malformed options and retained operands/results
+across GC. Twelve mismatching recipes exposed empty-subject and improper-option
+bugs, corrected by a separate runtime fix and ordinary Erlang regression.
+See the batch notes for before/after validation and limits.
+
+The [longest-common-prefix batch](PLAN.md#longest-common-binary-prefix)
+adds 252 recipes for `binary:longest_common_prefix/1`, bringing the corpus to
+10,099. Independent byte-column expectations check prefix boundaries, reordered
+and later-shortening inputs, binary construction paths and complete invalid-list
+validation even after the prefix becomes zero. Operands and captures remain live
+across GC. See the batch notes for execution results and validation limits.
+
+The [binary-access/copy batch](PLAN.md#binary-access-and-copying) adds 368
+recipes for `binary:at/2`, `first/1`, `last/1` and `copy/1,2`, bringing the corpus
+to 10,467. Independent byte-list expectations check unsigned bytes, index/count
+boundaries, malformed arguments and exact copies across construction paths/GC.
+Empty-source probes exposed count-validation and excessive-loop bugs; a separate
+runtime fix and ordinary Erlang regression also enforce OTP's oversized-result
+`system_limit` boundary. Large-count recipes need matching-word-size VMs. See the
+batch notes for execution results and validation limits.
+
+The [hex-conversion batch](PLAN.md#hex-conversion) adds 726 recipes for
+`binary:encode_hex/1,2` and `decode_hex/1`, bringing the corpus to 11,193.
+Independent digit-table expectations check exact encodings/decoded bytes,
+all byte values, invalid characters in either nibble, malformed inputs, case
+options and retained values across construction paths/GC. Twenty signed-pair
+mismatches are fixed separately with an ordinary Erlang regression. One existing
+exception-reason difference for a partial bitstring remains explicit in
+`expected_failures.json`: AtomVM keeps `badarg` rather than OTP's leaked
+`{badmatch, Input}`. See the batch notes for raw results and validation limits.
+
+The [binary-to-list batch](PLAN.md#binary-to-list-conversion) adds 680 recipes
+for `erlang:binary_to_list/1` and `bitstring_to_list/1`, bringing the corpus to
+11,873. Independent bit-by-bit expectations check exact unsigned byte lists,
+all partial-tail widths, invalid roots and both APIs' differing acceptance of
+partial bitstrings. Larger-parent extraction covers bit offsets 0–7, with inputs
+and complete results retained across GC. No runtime discrepancy or new
+expected-failure entry was found; see the batch notes for results and limits.
+
+The [binary-slicing/splitting batch](PLAN.md#binary-slicing-and-splitting) adds
+834 recipes for `binary:part/3`, `erlang:binary_part/2,3` (body and guard paths)
+and `erlang:split_binary/2`, bringing the corpus to 12,707. Independent
+bit-list expectations check positive/negative lengths across heap/sub/refc
+boundaries, trailing-bit preservation in `split_binary/2`, bit offsets 0–7,
+guard outcomes, invalid inputs and GC retention. Probing exposed heap
+under-allocation on negative-length slices of 49–63-byte heap binaries in
+`binary:part/3` and `erlang:binary_part/2,3`, fixed separately with an ordinary
+regression in `test_binary_part.erl`; see the batch notes for results and limits.
+
+The [iodata/bitstring-list batch](PLAN.md#iodata-and-bitstring-list-conversion)
+adds 840 recipes for `binary:list_to_bin/1`, `erlang:list_to_binary/1`,
+`iolist_to_binary/1`, `iolist_size/1` and `list_to_bitstring/1`, bringing the
+corpus to 13,547. Independent recursive bit-list expectations check bare-binary
+vs list root rules, nested/deep lists, improper binary/bitstring tails, bit
+packing across widths 1–7, bit offsets 0–7, invalid elements and GC retention.
+No runtime discrepancy or new expected-failure entry was found; see the batch
+notes for results and limits.
+
+The [CRC32 batch](PLAN.md#crc32-checksums-and-combination) adds 428 recipes for
+`erlang:crc32/1`, `erlang:crc32/2` and `erlang:crc32_combine/3`, bringing the
+corpus to 13,975. Independent IEEE 802.3 (`0xEDB88320`) and GF(2) combine
+expectations check empty binaries/iolists, incremental chaining, split-combine
+identities, 32-bit bounds, bit offsets 0–7, invalid inputs and GC retention.
+Probing exposed two `WITH_ZLIB` bugs (`crc32/2` resetting to `0` on empty
+iolists and `crc32_combine/3` accepting `size2 >= 2^32`), fixed separately with
+an ordinary regression in `test_crc32.erl`; see the batch notes for results
+and limits.
+
+The [External Term Format batch](PLAN.md#external-term-format-term_to_binary-and-binary_to_term)
+adds 836 recipes for `erlang:term_to_binary/1,2` and `erlang:binary_to_term/1,2`,
+bringing the corpus to 14,811. Independent pure-Elixir ETF wire encoding and
+decoding expectations check scalar/compound wire tags, negative-zero bit
+patterns, `[safe]`/`[used]` and option-list validation, `[compressed]` and
+`{minor_version,0..2}` round-trips, `MAP_EXT` numeric/duplicate keys,
+bitstring widths 1–7, bit offsets 0–7, deep compound trees and GC retention.
+Probing exposed two OTP 29 compatibility bugs (`binary_to_term/2` option list
+validation in `src/libAtomVM/nifs.c` and non-finite `NEW_FLOAT_EXT` payloads in
+`src/libAtomVM/external_term.c`), fixed separately with an ordinary regression
+in `test_binary_to_term.erl`; see the batch notes for results and limits.
+
+The [ETS tables batch](PLAN.md#ets-tables-ets) adds 237 recipes covering all 15
+exported functions in `ets` via standalone helper `ets_tables:ets_table/4`,
+bringing the corpus to 15,048. Independent pure-Elixir ETS state-machine
+expectations check `set`/`bag`/`duplicate_bag` semantics, `named_table`
+collisions and deletion, option validation and precedence, numeric/exact/`-0.0`
+keys, bit-sliced keys (`0..7`), cross-process access, owner-exit cleanup and GC
+retention. Probing exposed three runtime bugs (`ets:update_counter/3,4`
+crashing on non-tuple op list items, `ets:update_element/4`/`update_counter/4`
+skipping default-arity validation on existing keys in `src/libAtomVM/ets.c`, and
+`ets:new/2` option validation/precedence in `src/libAtomVM/nifs.c`), fixed
+separately with an ordinary regression in `test_ets.erl`; see the batch notes
+for results and limits.
+
+The [Unicode conversions batch](PLAN.md#unicode-conversions-unicode) adds 571
+recipes covering all 5 exported functions in `unicode` via standalone helper
+`unicode_conv:observe/5`, bringing the corpus to 15,619. Independent
+pure-Elixir RFC 3629 UTF-8/Latin-1 and chardata traversal expectations check
+boundary code points, surrogates, overlong/truncated sequences, trailing empty
+chardata preservation on `incomplete`, bit offsets 0–7, deep trees and GC
+retention. Probing exposed five bugs in `src/libAtomVM/interop.c` (`latin1`
+`> 255` list heap corruption and binary acceptance, surrogate acceptance,
+bigint `badarg` instead of `{error, ...}`, and trailing empty chardata flipping
+`incomplete` to `error`), fixed separately with an ordinary regression in
+`test_unicode.erl`; see the batch notes for results and limits.
+
+The [Integer and atom conversions batch](PLAN.md#integer-and-atom-conversions-erlang)
+adds 1,371 recipes covering all 17 exported integer and atom conversion
+functions in `erlang` (`integer_to_list/1,2`, `integer_to_binary/1,2`,
+`list_to_integer/1,2`, `binary_to_integer/1,2`, `atom_to_list/1`,
+`atom_to_binary/1,2`, `list_to_atom/1`, `list_to_existing_atom/1`,
+`binary_to_atom/1,2`, `binary_to_existing_atom/1,2`) via standalone helper
+`int_atom_conv:observe/5`, bringing the corpus to 16,990. Independent
+pure-Elixir base-`2..36`, UTF-8/Latin-1, and ETF expectations check bigint
+boundaries up to `±(2^256 - 1)`, sign-only inputs, 255/256-character atom
+limit and error precedence, existing vs missing atoms, bit offsets 0–7 and GC
+retention. Probing exposed four C runtime defects across `src/libAtomVM/utils.c`,
+`src/libAtomVM/bif.c`, `src/libAtomVM/nifs.c`, and `src/libAtomVM/intn.c`,
+fixed separately with ordinary Erlang regressions; see the batch notes for
+results and limits.
+
+The [String operations batch](PLAN.md#string-operations-string) adds 701 recipes
+covering all 10 non-stub exported functions in `string` (`to_upper/1`,
+`to_lower/1`, `split/2,3`, `trim/1,2`, `find/2,3`, `length/1`, `to_integer/1`)
+via standalone helper `string_ops:observe/5`, bringing the corpus to 17,691
+(`jaro_similarity/2` remains an intentional stub per
+`doc/src/stubbed-functions.md`). Independent pure-Elixir ISO-8859-1, RFC 3629
+UTF-8, whitespace, pattern, chardata length, and integer-parsing expectations
+check `leading`/`trailing`/`all`/`both` modes, empty patterns, overlapping
+matches, nested/improper chardata, bit offsets 0–7 and GC retention. Probing
+exposed stdlib gaps in `libs/estdlib/src/string.erl`, fixed separately with an
+extended ordinary regression in `tests/libs/estdlib/test_string.erl`; see the
+batch notes for results and limits.
+
+Seed `20261113` matches all 1,000 mixed cases against OTP 29 in both host
+interpreter and aarch64 precompiled execution, including 112 binary sequences
+with 3,497 operations. There are zero failures or unverified references. Thirteen
+enabled CLI tests pass (one optional fixture test skipped), including independent
+scope/split/state oracles and shrinking/replay with unchanged binary setup.
+
+Seed `20261114` (after fixing `erlang:register/2` to reject processes and ports
+already registered under another name) matches all 1,000 mixed cases against OTP 29
+in both host interpreter and aarch64 precompiled execution, including 101
+`lifecycle_sequence` cases with 1,561 operations. There are zero failures or
+unverified references, with pre-fix boundary failure and minimized 2-step reproducer
+artifacts preserved. Eighteen enabled CLI tests pass (one optional fixture test
+skipped), including independent fenced lifecycle/race oracles and contract-preserving
+shrinking/replay.
+See [PLAN.md](PLAN.md) for evidence and execution-mode limitations.
+
+## Focused float encoding checks
+
+```sh
+python3 tools/test/lynx/validate.py --build build --float-encoding \
+  --seed 1 --generated 256 --output /tmp/atomvm-float-encoding
+```
+
+This mode starts with 189 fixed encoding/error cases, then samples those values
+with seeded offsets and byte orders. Use at least 189 cases for the entire fixed
+matrix; a six-case smoke run includes float16's `6546.0`, `1.0e-6`, and
+`6546.0001`, plus float32 even/odd and underflow ties. These detect the known
+float16 rounding defect fixed by [PR #2457](https://github.com/atomvm/AtomVM/pull/2457).
+The regular mixed generator includes those six smoke cases too.
+
+Both modes use runtime arguments, including a dynamic float-segment width.
+Overflow is checked as infinity's **encoded bytes**, not by constructing an OTP
+infinity term. Invalid widths compare exception class/reason. Encoding failures
+are neither skipped nor allowlisted: an unfixed runtime should exit nonzero.
+`--shrink` reduces the float value while preserving width, offset, and byte order.
+
+## Replay, shrinking, and evidence
+
+Use `--output` with a new or empty directory to retain generated sources/BEAMs,
+case definitions, OTP references, runtime logs, summaries, and failure records.
+`run.json` records the runtime/library paths and SHA-256 hashes. Without
+`--output`, successful runs clean their temporary directory; **failed runs keep
+it and print its path**.
+
+Replay all cases, just failures, or a reduced case, without regenerating inputs:
+
+```sh
+python3 tools/test/lynx/validate.py --build build \
+  --replay /tmp/atomvm-differential-1/failures.json
+```
+
+Seeds reproduce a given generator revision; use saved case files to compare
+builds across generator changes. `--replay` overrides generated-case selection,
+including `--float-encoding`.
+
+`--shrink` attempts at most 30 reductions of the first generated failure and
+writes `minimized.json`. It simplifies numbers and nested keys and reruns each
+candidate against both real runtimes; compilation/oracle errors are not accepted
+as reductions. Sequence reduction deletes chunks of operations while keeping
+initial bindings/mailbox, remaining operation payloads, seed, and index unchanged.
+Keys/values are literal terms, not references to previous operation results;
+an operation rejected after deletion is still observed, and execution continues.
+Deleting a send may turn a later receive into an observed zero-timeout miss.
+It preserves the distinction between value mismatches and target
+errors. This is a bounded greedy reduction, **not a guarantee of a globally
+minimal case or the same underlying root cause**. Original failures remain intact.
+Replay files are trusted local input: they contain Erlang expressions or Core
+Erlang bodies to compile and execute.
+
+Cases with `core_body` additionally emit a companion `.core` module exporting
+`entry/0`, compiled with `erlc +from_core`. Their Erlang `expression` can call it
+through `fun ?CORE_MODULE:entry/0`; the runner defines that macro for each driver.
+Both VMs execute the same compiled BEAM, with companions included in native
+precompilation when needed. `cases.json` and `failures.json` retain the Core body,
+so filtered/reordered replays regenerate correctly named companions. These are
+OTP/AtomVM differential observations, not Lean translations or proof checks.
+
+## Lean runtime test inventory
+
+Sample additional public behaviors inspired by `Lean/LynxTest`, without running
+Lean, Mix, or proofs:
+
+```sh
+python3 tools/test/lynx/validate.py --lean-runtime ../lynx --build build \
+  --generated 0 --output /tmp/atomvm-lean-runtime
+```
+
+At the pinned Lynx revision below, this selects **7,082 deterministic-result cases**:
+numeric BIFs, rounding/conversions/formatting, tuple/list/bitstring APIs, binary
+search/split, maps, version-2 set algebra, portable hashing (`erlang:phash2/1,2`),
+process dictionaries, comparison, effectful short circuit, timeout validation
+with retained mailboxes, monitored process/reference/dictionary handshakes, lifecycle
+combinations, UTF-8/16/32 construction/matching, and comprehensive bitstring
+construction and matching (unit/alignment checks, sub-byte and partial-byte
+endianness, large/unit-scaled truncation, float16/32/64 IEEE-754 encodings,
+dynamic previous-segment sizes, unaligned binary captures, and partial/literal
+patterns). UTF cases include malformed,
+incomplete, unaligned, and valid codepoints with invalid suffixes. Child and
+runtime-specific process/reference/closure hash identities are compared within each
+run, never serialized as cross-runtime expectations.
+This mode uses **AtomVM's bundled standard library**, not OTP's `lists.beam`.
+The 56 [asynchronous-exit observations](PLAN.md#asynchronous-exit-signals)
+exercise `erlang:exit_signal/2`, not the older helpers calling `exit/2`, including
+self-signals and alias ordering. They require an OTP 29 oracle: on older OTP,
+the reference is unverified before any worker executes, rather than counting a
+nested `undef` as a match.
+The 240 [custom-iterator observations](PLAN.md#custom-map-iterator-ordering-and-consumers)
+exercise specified consumer order, partial/exhausted cursors, retained snapshots,
+and invalid orders/comparator exceptions. They use two total orders with explicit
+key tie-breakers, never comparator call traces or VM-private iterator layouts.
+The 70 [structural BIF path observations](PLAN.md#structural-bif-execution-paths)
+compare body, dynamic-apply and guard behavior for list/tuple/bitstring access
+and sizes, before and after explicit GC. Inputs include improper lists, invalid
+indices and aligned/unaligned partial slices. Body and guard instructions use
+the same BIF families with different failure targets, not dedicated new opcodes.
+The 153 [queue callback observations](PLAN.md#queue-callback-combinations) cover
+filtering/expansion, filtermap, fold, short-circuit predicates and first/last
+predicate deletion through three public construction histories. Callback effects,
+invalid returns, exceptions, retained queues and GC are checked against an
+independent list model. Unspecified `any`/`all` visitation order is not compared;
+raw visits are checked for exact input multiplicity and expected call counts.
+Missing functions and differing error precedence remain failures, not skips.
+For CI gating against the full corpus without hiding those differences in
+`summary.json` or `failures.json`, pass
+`--expected-failures tools/test/lynx/expected_failures.json` to run all cases
+and strictly expect failures only in the fifteen documented areas (`phash2`,
+short-float `float_text`, invalid-input `lists:reverse/1`, `1 bsl 64`
+bitstring segment size `badarg` vs `system_limit`,
+`binary:encode_unsigned/1`, `erlang:fun_info_mfa/1`,
+`base64_invalid_error_reason`, `base64_iolist_whitespace_and_byte_range`,
+`calendar_date_range_guards`, `calendar_negative_subsecond_system_time`,
+`calendar_unimplemented_functions`, `array_module_unimplemented`,
+`gb_trees_module_unimplemented`, `rand_module_unimplemented`, and
+`binary_hex_partial_bitstring`).
+OTP is the execution oracle, not the Lean model: for example, tested OTP 29
+accepts an already queued receive match before checking an invalid timeout.
+That differs from the model test named `timeout_validation_precedes_scan`.
+
+The [latest upstream refresh](PLAN.md#latest-upstream-refresh) preserves the
+6,104 previous expressions after removing three deleted Lean-site attributions,
+and adds 20 function-identity observations. Same-MFA local versus external
+functions and `make_fun/3` equivalents are compared through calls, list searches,
+map replacement/removal, and dictionary keys, across worker copying and GC.
+Nested function captures and integer/float captures distinguish loose equality
+from exact keys. Maps include 2, 31, 32, and 33 keys; no raw fun identity or
+implementation-dependent ordering is compared across VMs.
+
+The [fan-out/request batch](PLAN.md#fan-out-termination-and-ending-process-requests)
+adds 18 observations with 1/4/16 peers. Fan-out checks exact per-recipient
+message/EXIT/DOWN order for normal, compound shutdown and kill exits, without
+requiring simultaneous delivery across peers. Live/dead controls require exact
+link/monitor and query replies; racing requests normalize only accepted
+live-to-dead observations and notification pairs. Established monitors retain
+EXIT-before-normal-DOWN ordering; late `noproc` replies do not inherit that
+ordering requirement. Every peer must complete and preserve unrelated messages.
+Independent CLI oracles also exercise filtered/reindexed replay. Against OTP
+29.1.3, interpreter and AArch64 precompiled modes each match 180/180 across ten
+repetitions; on-demand JIT matches 18/18. The full harness passes 35 tests with
+3 optional skips.
+
+The [nested fallthrough batch](PLAN.md#nested-fallthrough-continuations)
+adds 32 observations: 16 annotated-Core probes and 16 ordinary-source controls.
+Check shared inner/outer fallbacks, guard false/error fallthrough, later and
+unguarded matches, pattern misses and exceptions in selected bodies and
+continuations. Independent oracles specify exact values and ordered once-only
+effects, including earlier bindings kept live across calls to a common join.
+Core uses nested nonrecursive `letrec_goto` labels; source controls need the
+same observable results, not identical instructions or preserved label names.
+All 32 match OTP 29.1.3 in interpreter, AArch64 precompiled and on-demand JIT
+modes; the full harness passes 34 tests with 3 optional skips.
+
+The [escaping recursive-closure batch](PLAN.md#escaping-recursive-closures)
+adds 24 observations combining tail/non-tail recursion, two asymmetric captures
+and returned self references. Invoke escaped closures locally, after explicit
+GC, after mailbox transfer to a monitored worker, and after the creator has
+exited. Call the returned self reference again with different arguments, and
+compare capture contents, accumulated results, within-VM function equality and
+ordered descent/unwind effects against independent expectations. No raw fun
+identities or generated names are compared across runtimes. All 24 match OTP
+29.1.3 in interpreter, AArch64 precompiled and on-demand JIT execution.
+
+The [Core try-result batch](PLAN.md#core-try-result-binding-and-exception-boundaries)
+adds 56 observations: 36 raw-Core probes and 20 ordinary-source controls. Core
+probes bind actual zero or two results, rather than one atom or tuple, and pass
+those results through `let`, normalized multi-value `case` and nested `try`.
+Asymmetric values, exact exception classes/reasons and ordered effects detect
+wrong result binding, premature/duplicate effects and exceptions caught by the
+wrong handler. Source controls exercise the corresponding exception boundaries,
+not zero/multiple Core result arity. These are compiled-BEAM execution tests,
+not tests of Lynx's translator or new Lean proof coverage. All 56 match OTP
+29.1.3 in interpreter, AArch64 precompiled and on-demand JIT execution, without
+runtime fixes or expected-failure additions.
+
+The [binary-construction ordering batch](PLAN.md#binary-construction-ordering-and-exceptions)
+adds 56 observations: 28 scenarios in Erlang source and raw Core. These compare
+exact bitstrings, exception classes/reasons and effect traces for segment values
+and sizes, competing expression/construction failures, zero-width validation,
+short binary segments, invalid UTF scalars, appending and prefix preservation,
+and binaries nested in calls, tuples and cons heads. In raw Core, a cons tail
+can run before final head construction; ordinary source binds the head first.
+All 56 match OTP 29.1.3 in interpreter, AArch64 precompiled and on-demand JIT
+execution, without runtime fixes or expected-failure additions.
+
+The [optimized Core-order batch](PLAN.md#optimized-core-evaluation-order)
+adds 34 observations: 32 Core bodies and two Erlang-source controls. Cons heads
+exercise nested calls, `let`, sequence, case, shadowing/capture, local functions,
+`try`, tuple arguments and mixed map updates, with exact effects and competing
+errors. Initial interpreter and AArch64 precompiled runs matched 33/34 against
+OTP 29.1.3, unchanged from 29.1.2 after fresh compilation and reference generation.
+The failing case exposed `put_map_exact` raising `badarg` rather than
+`{badkey,a}`; its ordering trace matched. A separate runtime correction now
+raises `{badkey, Key}`, with an Erlang regression in `test_map`. Interpreter,
+AArch64 precompiled and on-demand JIT now match 34/34. The JIT replay uses
+`--timeout 60` to allow compilation of the large support module; no
+expected-failure manifest entry was needed.
+
+The [compiler-exception batch](PLAN.md#compiler-folded-versus-runtime-exceptions)
+adds 45 observations: 15 scenarios through pure literal, effectful literal, and
+opaque runtime calls. These compare exact exception classes/reasons and effect
+traces for pattern/guard failures, matched/later clauses, badfun/badarity, and
+body `error`/`throw`/`exit`. Optimized OTP 29 Core confirms literal
+`{function_clause,b}` and `{function_clause,a,3}` failures; dynamic BEAM calls
+retain `call_fun`. All 45 match OTP 29 in interpreter and AArch64 precompiled
+execution. This adds no Lean theorem claims or expected-failure entries.
+
+The [signal-queue batch](PLAN.md#signal-queue-differential-boundaries)
+adds 24 cases for immediate post-kill process queries, trapping after normal
+`DOWN`, and unfenced unlink/relink/kill. Live, pre-trapped and final-unlinked
+controls distinguish missing behavior; 1/16/64 iterations sample schedules,
+not all interleavings. The subsequent [ordering fixes](PLAN.md#signal-queue-ordering-fixes)
+make all 24 cases match in the full interpreter corpus and a fresh sequential
+AArch64 precompiled subset. The 6,180-case interpreter run has exactly the 193
+existing manifest failures and no unexpected outcomes. The original native
+relink timeout remains unexplained. Native kill/query stress also exposes a
+timeout on the unchanged runtime control; it remains a separate unresolved
+finding, not an allowlisted match.
+
+An earlier upstream refresh added 69 cases: 25 exact list-subtraction samples,
+16 example-inspired zip/unzip observations, and 28 timer observations. Timers use
+message/monitor handshakes and validate remaining-time ranges rather than exact
+elapsed milliseconds. Invalid arguments and missing APIs remain failures, not
+skips. Zip/unzip examples are labeled separately from Lean test attribution.
+See [the earlier upstream refresh](PLAN.md#earlier-upstream-refresh) for commit selection,
+results, and model-only changes deliberately not transferred to VM requirements.
+The full expanded interpreter corpus matches 4,108 cases, with 33 failures and
+zero unverified references. The failures are four existing short-float mismatches
+plus 29 new timer/unzip differences; all 4,072 old decoded results are unchanged.
+A focused aarch64 precompiled replay flags the same 29 new cases (40 matches).
+The expanded full native corpus was not rerun. No failures are allowlisted.
+The subsequent [timer validation fix](PLAN.md#timer-argument-validation-follow-up)
+removes eight argument-validation failures in focused interpreter/native replays;
+the full-corpus figures above are the pre-fix baseline.
+[Destination-death cleanup](PLAN.md#destination-death-cleanup-follow-up) fixes
+four more observations for PID timers while retaining registered-name timers.
+That focused replay matches 52 of 69 cases in both modes; the remaining
+17 failures are missing unzip and `send_after/4` support.
+
+The subsequent [`send_after/4` coverage expansion](PLAN.md#expanded-send_after4-differential-cases)
+replaces five option probes with 52 OTP-extension cases, increasing the runtime
+corpus to **4,188**. It covers relative and absolute delivery, past/current/future
+monotonic deadlines, duplicate-option precedence, malformed options, invalid
+arguments, and cancellation. Each VM constructs its own absolute timestamps;
+past cases age a known-valid timestamp rather than preceding a fresh VM's start
+time. Delivery checks include a not-before-deadline observation, not a tight
+upper latency bound. Handwritten OTP expectations check all 52 cases independently.
+The expanded focused replay matches 52 of 116 cases in both execution modes,
+with 64 failures (52 missing `/4`, twelve missing unzip) and zero unverified
+references. This is coverage only: no runtime API implementation is included,
+and the full 4,188-case corpus has not been rerun.
+
+Subsequent runtime fixes in `dbab35d88` (`send_after/4`) and `541596657`
+(`lists:unzip/1`) resolve all 64 focused failures: both host-interpreter and
+aarch64 precompiled replays match 116 of 116 cases against OTP 29.
+
+The subsequent Batch 2 model-inspired map and list relation expansion adds 113
+net new recipes (**4,301** runtime cases total; 133 updated or added entries in
+the focused replay). Thirty-seven new `upstream_example` cases cover
+`examples/otp/lists.exs#sort_contract_holds` and `sequence_formula`, and 96
+Lean-attributed cases cover lookup/equality/merge/filter/guard relations,
+singleton map iteration, list reversal/subtraction/sorting/membership
+multiplicities, short-circuit improper-tail membership, map sizes 31/32/33,
+nested terms, large integers through `(1 bsl 255) - 1`, and invalid-operand
+error paths without fabricating proof provenance. Lean source attribution checks
+validate 193 of 426 test sites across all 26 files. Seventeen enabled CLI tests
+pass (one optional fixture test skipped), including handwritten OTP oracles for
+the new relational probes. Focused 133-case replays match 127 cases with 6
+failures and zero unverified references in both host-interpreter and aarch64
+precompiled modes: four empty-step-range `lists:seq/3` divergences
+(`seq_contract(5,4,2,[0])`, `(10,7,5,[0])`, `(4,5,-2,[0])`, `(7,10,-5,[0])`)
+where AtomVM returns `[First]` instead of `[]`, and two `lists:reverse/1`
+invalid-input exception differences (`badarg` vs OTP `function_clause`). The
+full 4,301-case corpus has not been rerun; failures remain visible and
+replayable under `.amp/in/artifacts/batch2-relations/`.
+
+A subsequent `lists:seq/3` fix in `libs/estdlib/src/lists.erl` resolves all
+four empty-step-range `seq_contract` failures: focused 133-case interpreter and
+aarch64 precompiled replays now match 131 of 133 cases against OTP 29
+(`.amp/in/artifacts/batch2-relations/seq-fix-{interpreter,native}`), retaining
+only the two documented `lists:reverse/1` invalid-input exception differences.
+
+Batch 4 adds 112 portable hashing recipes (`4,301 -> 4,413` runtime cases total)
+attributed to all seven sites in `Modules/Hashing.lean` (200 of 428 Lean test
+sites covered across all 26 files): all 78 unique vectors from
+`Modules/Hashing.lean` (signed/large integers, signed zeros, subnormal float,
+ASCII/Latin-1/Unicode atoms, byte binaries, partial bitstrings, proper/improper
+lists, nested tuples/maps, and the 40-entry map), range reductions through `2^32`,
+invalid zero/negative/oversized/non-integer ranges, normalized duplicate-binding
+map equivalences across boundaries `31/32/33` and `40`, and within-run
+closure/PID/reference properties. Both host-interpreter (`build`) and aarch64
+precompiled (`.amp/in/build-native`) focused replays verify all 112 OTP 29
+references (102 `{ok, ...}` results, 10 `error:badarg` exceptions) and retain
+all 112 `error:undef` failures on AtomVM (`0` passed, `112` failed, `0`
+unverified) because `erlang:phash2/1,2` is not yet implemented. Nineteen
+enabled CLI integration tests pass (20 total; one optional fixture test skipped),
+including independent handwritten Elixir/OTP hash and identity oracles. Evidence
+is under `.amp/in/artifacts/batch4-hashing/`.
+
+Follow-up coverage for upstream `b6ac6ea` adds 36 multi-worker mailbox-drain
+and burst-send cases (`4,413 -> 4,449` runtime cases total; `204` of `428` Lean
+test sites across all 26 files): 6 `upstream_example` scenarios for
+`examples/elixir/task.exs#await_many_drains_replies` (`both_in_order`,
+`both_reverse_order`, `both_expired_timer_race`, `first_replies_second_times_out`,
+`timeout_with_queued_and_late_replies`, `first_crashes_second_late`), 18
+`Modules/Signals` variants across `reply_demonitor`, `explicit_unalias`, and
+`demonitor` (attributing `inactive_reference_is_forced` and
+`active_reference_is_not_forced`), and 12 `many_sends/2` burst-send cases (`0`,
+`1`, and `30` sends to `dead`, `live`, `self`, and `stale_alias`, attributing
+`Modules/Process.lean#many_sends` and `Modules/Signals.lean#ended_process_is_forced`).
+All 36 cases match OTP 29 (`0` failed, `0` unverified) across host interpreter
+(`build`), `aarch64` precompiled (`.amp/in/build-native`), and `aarch64`
+on-demand JIT (`.amp/in/build-on-demand`).
+
+Follow-up `Term/Bitstring/*` expansion adds 636 bitstring construction and matching
+cases (`4,449 -> 5,085` runtime cases total; `277` of `428` Lean test sites across
+all 26 files, reaching `40/42` in `Term/Bitstring/Construction.lean` and `43/44`
+in `Term/Bitstring/Matching.lean`). Across all 862 `Term/Bitstring/*` cases on
+64-bit host interpreter (`build`) and `aarch64` precompiled JIT
+(`.amp/in/build-native`), 859 match OTP 29 and 3 reveal the
+`bitstring_size_system_limit` discrepancy tracked in `expected_failures.json`
+(`1 bsl 64` segment size raising `badarg` instead of `system_limit`); the
+earlier `float32_int_double_rounding` discrepancy is resolved by converting
+unboxed small integers directly to `float` in `bitstring_insert_float`. On
+32-bit `wasm32` (`.amp/in/build-wasm32`, `--portable-only`), the 4
+`word_size_dependent` `±288230393331580929:32/float` probes are omitted (small
+integers are 28-bit on 32-bit VMs vs 60-bit on 64-bit OTP), with 855 matching
+OTP 29 and the same 3 `bitstring_size_system_limit` discrepancies.
+
+Follow-up expansion for the remaining behavioral sites across
+`Modules/Erlang.lean` (`60/76 -> 75/76`, leaving only `private theorem
+floatOne_toRat`), `Term/ShortCircuit.lean` (`9/13 -> 13/13`), and
+`Modules/Signals.lean` (`18/20 -> 20/20`) adds 524 runtime cases (`5,085 -> 5,609`
+total; `298` of `428` Lean test sites across all 26 files): strict/short-circuit
+chain and error propagation, `demonitor/2` `[flush]` oldest-message ordering,
+linked-child crash cleanup, `erlang:is_integer/3` guard/body/dynamic paths,
+word-masking, floor right shifts, `bnot/1` involution, `node/0,1` + `is_port/1`,
+dynamic 3-arg `apply`, nonnumeric/noninteger/nonfinite arithmetic rejections,
+integer-float products within 256-bit integers, and `spawn*` valid/invalid/missing
+fun behavior. Across all 579 cases exercising those 21 origins on host interpreter
+(`build`) and `aarch64` precompiled JIT (`.amp/in/build-native`), 579/579 match
+OTP 29 (`0` failed, `0` unverified) after fixing `maybe_call_native` (`case 3:`
+dispatch for `BIFFunctionType` in `opcodesswitch.h` and `jit.c`, fixing dynamic
+`apply(erlang, is_integer, [X, Lo, Hi])`) and `erlang:spawn_link/1` /
+`erlang:spawn_monitor/1` arity-0 fun guards (`badarg` in `erlang.erl`). On
+`.amp/in/build-ci-no-stack` (`--portable-only`, Debug + ASan + no stacktraces),
+all 576 portable cases match OTP 29 (3 `stacktrace_dependent` omitted); 13
+focused JIT cases pass on `.amp/in/build-on-demand` and 17 portable cases pass
+on `.amp/in/build-wasm32`.
+
+The execution-path extension adds 466 cases for 20 arithmetic, comparison, and
+map-lookup operations. Each captures direct-body and dynamic `apply/3` outcomes
+separately, plus guard match/rejection; map lookups also observe a map pattern.
+Arithmetic guards match a zero result, comparison guards test the relation, and
+map guards match the value `wanted`. Errors in guards reject the clause rather
+than escaping as body exceptions. Floating results include their encoded bits
+so signed zero and rounding differences cannot hide behind numeric equality.
+
+OTP 29 disassembly confirms dynamic `erlang:apply/3`, comparison BIFs versus
+guard test instructions, body/guard arithmetic failure labels, float-register
+division versus guard GC-BIF division, and map-pattern `get_map_elements` versus
+lookup BIFs. Compiler rewrites mean different source operators are not necessarily
+different instructions; recheck disassembly when changing OTP versions.
+All 466 added cases match OTP in both interpreter and aarch64 precompiled modes,
+with zero failures or unverified references. Fourteen enabled CLI tests pass
+(one optional fixture test skipped). The subsequent full 4,072-case run in each
+mode matches 4,068 cases, retaining exactly the four known short-float formatting
+mismatches, with zero unverified references or target timeouts. All decoded
+results agree across modes, and the original 3,606 cases retain their saved
+interpreter results. Both full runs exit nonzero for the four mismatches; no
+failures are allowlisted. Earlier full-run results below are historical baselines.
+Evidence and execution-mode limitations are in [PLAN.md](PLAN.md).
+
+Before adding the 70 map-callback cases below, the 2026-11-10 host-interpreter
+rebaseline matched 2,942 cases and retained four `[short]` float-formatting
+mismatches, with zero unverified references. Short
+formatting remains outside the planned fixes; those cases are still failures,
+so the full runtime corpus exits nonzero. Hashing model sites do not yet have
+selected recipes; the inventory must not be read as complete coverage. The set
+extension below records option/input differences and their fixes.
+
+An additional 116 integer-text recipes extend decimal model samples to binary
+and list parsing/formatting in bases 2, 10, 16, and 36. They check signs, leading
+zeros, mixed-case digits, invalid digits/suffixes/bases, boxed and large integer
+values, and NUL bytes before or after valid digits. Both default and explicit
+base parsers must reject the entire NUL-containing input rather than accepting
+a prefix; list and binary results are checked directly, not only by round trips.
+
+Seventy-five term-order recipes compare same-code closures with runtime captures,
+including numeric types, signed zero, precision boundaries, nested containers,
+and exact map keys. Both operand orders and equal-capture controls are checked.
+Type-order samples include live references, local/external functions, and the
+current PID, plus Unicode atoms and container boundaries; only comparison
+booleans escape, never raw identities or generated function names. The source
+inventory includes public as well as private and unqualified theorem sites.
+
+Thirty map-fold callback cases extend the model's input-validation samples:
+tuple accumulators count entries and sum asymmetric values, while callbacks
+throw, error, or exit with a fixed reason. Empty maps and exhausted iterators
+must not invoke callbacks; non-functions must still be rejected. Single-entry,
+three-entry, and 40-entry maps exercise dispatch without asserting traversal
+order, alongside invalid-map controls. These are public-API extensions, not
+additional Lean proofs.
+
+Seventy map-combination callback cases extend the newer model's `combine_inputs`
+samples to `maps:merge_with/3` and `maps:filter/2`. They check empty, disjoint,
+and overlapping maps; asymmetric callback arguments; exact numeric keys and
+partial-bitstring keys; boxed values; sizes 31, 32, 33, and 40; callback
+throw/error/exit; nonboolean predicates; invalid callbacks and operands.
+Results include every callback's arguments, sorted without removing duplicates,
+so unspecified traversal order is ignored but argument order, skipped entries,
+extra calls, and effects before exceptions remain observable. Exceptional
+callbacks have at most one eligible entry, avoiding an unspecified first key.
+These are model-inspired public-API extensions, not fresh theorem checks.
+
+The initial focused interpreter run matched 51 of these 70 cases and reported 19
+mismatches: missing combiner validation in `merge_with/3` (including error
+precedence), silently accepting a nonboolean filter result, and filter callback
+validation taking lower precedence than a bad map. Importing PR #2355 resolved
+the three filter failures and supplied `intersect_with/3` and other map helpers.
+A separate combiner-validation fix rejects invalid functions before map operands,
+including when there are no overlapping keys. No failures were allowlisted.
+
+Another 261 recipes exercise the imported APIs: `intersect/2`, `intersect_with/3`,
+`filtermap/2`, `take/2`, `update_with/3,4`, `with/2`, `without/2`,
+`groups_from_list/2,3`, and exported iterator validation. They include exact keys,
+duplicate requested/grouped keys, the stored atom `error` versus a missing key,
+callback-free insertion of an initial value, callback exceptions, improper
+lists, and error precedence. Group callback effects preserve their actual order.
+Iterator observations cover default/ordered/reversed iteration, returned
+key/value triples, partially consumed ordered iterators, exhaustion, and malformed
+inputs. Results observe entries and specified order, not cross-VM iterator
+layouts. These additions bring the map-attributed selection to 512 cases; they
+remain finite public-behavior extensions, not new proved laws or exhaustive
+map/comprehension coverage.
+
+After integration and the combiner fix, all 512 map cases match OTP. The full
+3,277-case interpreter run matches 3,273 cases and retains only the four known
+`[short]` formatting failures; it checks zero fresh laws. The full fixture run
+still checks four fresh laws, matches 2,127 calls, and reports four unresolved
+OTP generator references with no differential failures. The ordinary map suite,
+483 core test modules, and nine CLI tests pass; one optional fixture integration
+test is skipped (the full fixture corpus is run separately).
+
+Another 329 set recipes cover construction/deduplication, exact membership,
+size/emptiness, add/delete, equality, binary and multi-set union/intersection,
+subtraction in both directions, subset, and disjointness. Version 2 is explicit
+in algebra operations. Inputs include integer/float and signed-zero distinctions,
+nested keys, boxed integers, bitstrings, and asymmetric overlaps at sizes
+3/4/5, 31/32/33, and 63/64/65. Public `to_list/1` elements are normalized to
+an exact-key membership map plus size, emptiness, and enumeration count; no
+set layout or unspecified traversal order is compared. Concrete outputs accompany
+bounded commutativity, absorption, partition, disjointness, and cardinality
+observations. Attribution to the model's `membership`, `size`, and `creation`
+sites does not check theorem premises or the deliberately `unmodeled` site.
+
+Before the empty-option fix below, the focused interpreter run on OTP 29
+(ERTS 17.1.1, 64-bit) matches 273 cases,
+reports 18 differences, and leaves zero unverified references. All explicit-v2
+algebra cases match. Twelve differences concern constructor options: OTP accepts
+`[]`, `[{ignored,true}]`, and `[{version,2}|bad]`, while AtomVM rejects them;
+`[version]`, `[{version,3}]`, and `[{version,bad}]` produce different exception
+reasons. Six more differences concern `subtract/2` and `is_subset/2` with an
+empty left set and an invalid right operand (`bad`, `[]`, or `{set}`): OTP
+returns an empty set or `true`, while AtomVM raises `function_clause`. These
+are diagnostics, not newly blessed target behavior; invalid-input results do
+not imply version-1 support is required. No runtime fixes or new proofs are
+part of this extension. Ten CLI tests pass, including independent concrete set
+oracles; one optional full-fixture test is skipped.
+
+Before that fix, the full 3,568-case interpreter run matches 3,546 cases, with the 18 set
+differences above and four unchanged `[short]` float-formatting mismatches.
+There are zero unverified references and zero fresh laws. It still exits
+nonzero; failures remain visible and replayable rather than being allowlisted.
+
+The empty-option follow-up makes `sets:new([])` delegate to `new/0` and
+`sets:from_list(List, [])` delegate to `from_list/1`, preserving default version 2.
+The same 291-case set replay now matches 275 cases, retains the other 16
+differences, and has zero unverified references or new differences. The ordinary
+set tests fail before the fix and pass afterward on AtomVM and OTP, including
+deduplication, exact numeric membership, empty input, and invalid-list rejection.
+Other option handling is unchanged. The full runtime corpus was not rerun after
+this localized fix.
+
+The remaining-option/invalid-operand follow-up resolves the other 16 set
+differences. Constructors use `proplists:get_value/3` for ignored options,
+first-option precedence, improper tails, and OTP-style invalid-version errors.
+Version 1 remains unsupported and still raises `function_clause`. Subtraction
+and subset retain their map fast paths and add OTP's filter/fold fallbacks:
+empty left sets do not inspect the right operand, while nonempty sets still
+reject invalid right operands. Another 38 differential controls check duplicate
+option precedence and invalid operands on both sides of empty/nonempty sets.
+All 329 set cases match OTP, with zero failures or unverified references.
+The expanded ordinary set suite passes on AtomVM and OTP; ten CLI integration
+tests pass, with one optional fixture test skipped. Formatting checks pass.
+A subsequent full 3,606-case interpreter run matches 3,602 cases, with only
+the four unchanged short-float formatting mismatches and zero unverified
+references. Evidence is under `.amp/in/artifacts/lynx-set-final-full/`.
+
+Another 44 key-search cases check interior tuple positions, skipped short tuples,
+first matches before improper tails, nested numeric equality, and exact map keys
+with loosely equal values. Scalar precision-boundary cases check an OTP
+compatibility quirk: OTP 29's integer-key fast path in `keyfind/3`
+and `keymember/3` converts small integer keys to double when testing float fields.
+On 64-bit OTP, integer key 9007199254740993 matches float 9007199254740992.0,
+although `==` rejects that pair; swapping the key/field types or nesting the key
+does not match. AtomVM mirrors that immediate-integer special case only in key
+lookup, without weakening general or nested comparison. On 32-bit targets these
+large integer keys are boxed and do not take that path; compare against an OTP
+oracle with matching word size for these representation-dependent recipes.
+
+The iodata grammar matrix has 96 cases across `iolist_to_binary/1`,
+`iolist_size/1`, `list_to_binary/1`, and `list_to_bitstring/1` (86 additions to
+the original conversion samples). It checks binary versus list roots, nested
+binary tails, partial-bitstring elements/tails that only `list_to_bitstring/1`
+accepts, and invalid nested bytes, floats, atoms, and improper integer tails.
+Two 64-level input shapes exercise deep traversal and a buried invalid tail;
+reused slices of a runtime-created large binary check exact bytes and size.
+These public-API extensions do not imply additional Lean proofs or GC-pressure
+coverage. In particular, byte-only APIs must reject partial input segments even
+when concatenating those segments would produce a complete byte.
+
+Another 88 binary search/split cases exercise overlapping patterns in both list
+orders, earliest-match precedence, longest fitting matches, scope endpoints and
+negative lengths, and first versus global splitting. Duplicate scopes must all
+be valid even though the last one determines the search range; valid improper
+option prefixes retain OTP's ignored-tail behavior. Invalid pattern lists are
+checked on empty and nonempty subjects so an early match or empty input cannot
+hide an invalid later pattern. These extend the model's binary API samples.
+
+The lifecycle/receive cases cover linked normal/abnormal exits,
+unlinking, trapped exits, untrappable `kill`, demonitor option validation and
+active/queued/consumed monitor states, standalone and monitor aliases, pending
+monitors while both the target and observer terminate, and empty-mailbox timeout
+errors at and beyond the 32-bit boundary. Positive timer waits without a possible
+sender exercise exception/cleanup scopes after suspension; no elapsed duration
+or cross-sender message ordering is compared. Linked crashes are contained in
+monitored workers. Queued-DOWN flush recipes requeue a received real DOWN so
+mailbox presence is deterministic rather than inferred from a delay.
+Thirty-six selective-receive cases check boolean, tuple, map, division, binary,
+and alternative guard sequences against mixed, entirely rejected, and empty
+mailboxes. Errors inside guards must reject rather than consume messages or
+escape the receive. A second receive checks that retained candidates are scanned
+again in order before a newly appended match, preserving all rejected messages.
+Zero-timeout controls and positive waits with no matching sender cover both
+immediate scans and timer suspension without asserting an elapsed duration.
+Another 114 local-send cases compare `!` with runtime-dispatched `erlang:send/2`
+across self/live/dead PIDs, registered and missing/unregistered names, ordinary
+references, removed aliases, and invalid destination terms. Atom, nested
+tuple/list/partial-bitstring/bignum, and map/binary payloads check exact return
+values and delivery while preserving an unrelated mailbox sentinel. Receiver
+acknowledgements and real DOWN notifications establish completion; process
+identities are not serialized. Live ports and distributed destinations are
+outside this batch.
+Monitor target-type cases compare both arities, all three alias options, and
+self/live/dead PIDs versus registered process names for process and port monitors.
+They distinguish direct wrong-type `badarg` from a registered name's `noproc` DOWN,
+including retained explicit aliases. These cases do not create live ports; the
+permanent echo-driver regression separately covers live/dead port targets.
+Thirty registered-name rebinding cases keep monitors on both the original and
+replacement processes, terminate them in both orders, and check that the original
+process's termination does not unregister its replacement. Plain monitors and all
+alias modes cover keeping, demonitoring, unaliasing, and replying to the original
+reference without changing the replacement monitor. Exit reasons distinguish
+the two processes; no cross-sender arrival order or raw identity is compared.
+Twelve self-link cases check repeated `link(self())` and `unlink(self())` with
+and without existing child links and trapped exits, including zero-iteration
+controls, explicit GC, and retained mailbox messages. A self-link must be a
+successful no-op, not an extra entry in `process_info/2`'s link list.
+Forty-eight relinking cases exercise pending unlink acknowledgements from both
+endpoints, with duplicate active links, zero/one/16 iterations, trapped and
+untrapped exits, normal and abnormal reasons, and a final linked/unlinked state.
+FIFO handshakes check both endpoints after earlier signals and acknowledgements;
+the final exit checks whether the restored link actually propagates termination.
+Nine unlink-race cases sample normal and abnormal peer termination over one/16/64
+iterations. Each checks an allowed-outcome predicate: an abnormal linked exit may
+kill the worker before unlink completes, but must not kill it after `unlink/1`
+returns. The recipes compare neither scheduling order nor outcome frequencies;
+repetition increases the chance of exposing a race, not exhaustive schedule coverage.
+Thirty-six crossed-unlink cases run unlink/relink combinations at both endpoints,
+then fence peer operations and their acknowledgements before checking agreement.
+Mixed combinations accept either settled link state, not a particular winner.
+Fresh linking from either endpoint additionally checks that an old pending unlink
+does not suppress the new link. These extend the model-inspired link samples;
+they are not an exhaustive schedule exploration or translated Lean proofs.
+Forty-eight self-exit cases distinguish catchable `exit/1` exceptions from
+`exit(self(), Reason)` signals, with both trap settings, linked/unlinked observers,
+and normal, kill, killed, and structured reasons. They check catch/cleanup effects,
+trapped self-messages, termination before return, and monitor/link exit reasons.
+The child uses a small heap; raw process identities and cross-signal arrival order
+are not compared. These extend the model-inspired exception and signal samples.
+Thirty-six explicit-exit cases test linked targets and targets just unlinked by
+the sender, with both trap settings and the same six exit reasons. Explicit
+`exit/2` signals must still arrive after unlinking, unlike linked-exit propagation.
+Fenced cases check both endpoints' link lists before sending; unfenced cases omit
+the peer handshake without assuming an unlink acknowledgement is still pending.
+Monitor and linked-exit notifications are awaited independently. The original six
+never-linked explicit-exit cases remain as controls.
+Forty-eight trap-flag transition cases change `trap_exit` before linked or explicit
+exits arrive, or after explicit/self-exit signals become queued messages. Both
+final flag settings and the same six reasons are covered, including unchanged-flag
+controls and the previous flag returned by `process_flag/2`. Same-sender markers
+fence signal reception before queued-message tests change the flag; the actual
+EXIT remains unconsumed, not reconstructed or requeued. Turning trapping off must
+not reinterpret an existing message as a fatal signal. An unfenced self-exit is
+not treated as deterministic queued-message coverage. These cases extend the
+model-inspired signal samples rather than translating a Lean proof.
+Fifty-four additional [exit-reception observations](PLAN.md#exit-reception-across-trap-flag-changes)
+combine both flag-change directions with self `exit/2`, self `exit_signal/2`, and
+async self-alias exits plus deactivation, for normal, structured and kill reasons.
+Each unfenced sample has controls that receive the signal before changing the
+flag, or send it after the change (after deactivation for aliases). Later
+same-sender markers force reception; a sentinel and real converted EXIT messages
+remain unconsumed across changes. These receives survive BEAM compilation.
+Recipes require both VMs to satisfy the allowed-outcome contract through
+`assert_true`, not to pick the same reception timing. Timeouts, missing/duplicate
+messages, unexpected exit reasons and wrong previous-flag/unalias results fail.
+Single-line `LYNX_EXIT_TRACE` ETF byte lists retain each actual observation in
+`proofs.log` (OTP) and the corresponding probe log (AtomVM). The CLI regression
+also checks these traces against independent handwritten outcome tables and
+filtered/reordered replay. Async cases require OTP 29; legacy controls do not.
+Legacy self-suicide is selected at send time: a normal self-signal sent while
+trapping can later be ignored after trapping is disabled, whereas legacy
+`exit(self(), normal)` sent while untrapped terminates before returning. An alias
+removed before reception may discard the signal, even `kill`, but removal must
+not retract an already converted EXIT message. This is finite allowed-outcome
+sampling, not a claim that all allowed outcomes or schedules were observed.
+Forty-six [query/notification observations](PLAN.md#livenessdead-target-queries-with-pending-notifications)
+add monitor-establishment/liveness races and known-dead queries while caller
+exit signals may be pending. Held-live and already-dead controls are exact;
+unfenced monitor races permit a true liveness result followed by `DOWN/noproc`.
+That outcome is also observed on OTP, not just reachable in the Lynx model.
+Query-before-signal and signal-received-before-query controls distinguish
+returning a query result from reaching a receive that must handle a fatal signal.
+Normal/structured/kill reasons, both trap settings, retained messages and monitor
+cleanup are checked. These are separate-target/self-signal probes, not a literal
+translation of the model's killer/query program. Async injection requires OTP 29.
+Both VMs must satisfy the allowed contract; `LYNX_QUERY_TRACE` observations remain
+in saved logs and are checked against independent tables and reordered replay.
+No scheduling winner, monitor-registration barrier, or all-outcome coverage is
+assumed.
+Eighteen [self-exit completion observations](PLAN.md#unfenced-self-exit-completion)
+separate a callback-return report from the worker's final DOWN. Unfenced callbacks
+and their reporting wrapper contain no receives; legacy self-exits and real
+receive-fenced async exits supply exact controls. Both trap settings and
+normal/structured/kill reasons are covered. Only three fatal unfenced recipes
+admit multiple report/DOWN combinations; all others require exact outcomes.
+Normal completion after an unfenced self-`kill` is actually observed on both VMs,
+while its fenced control must die with `killed` before reporting. Raw
+`LYNX_COMPLETION_TRACE` observations and monitor cleanup are independently checked,
+with filtered/reordered replay and an OTP-29 gate for the twelve async cases.
+A report establishes the callback returned, not that its signal remained pending
+or the worker survived afterwards. No scheduling winner is required.
+Thirty-two [lowered-receive observations](PLAN.md#lowered-receive-continuations)
+pair manually lowered Core with source controls for consecutive timeout-only
+loops, discarded clause results and rescanning previously skipped messages.
+Positive opaque timeouts retain real waits. Exact outcomes, once-only effects,
+captured values, handler/cleanup boundaries and remaining mailbox order are
+checked independently on both VMs, with filtered/reordered Core replay.
+Representative BEAM inspection confirms wait/scan/removal sites; paired inputs
+need not produce different final opcodes. This is not new Lean proof coverage or
+a claim about an optimized mailbox-skip implementation.
+Forty-two ownership cases pass standalone aliases, plain monitor references, and
+all three monitor-alias types to a third process distinct from the monitored
+target. Foreign `unalias/1` and both
+`demonitor` arities must not cancel the owner's state or the caller's independent
+monitor. Flush options are checked against distinct caller and owner mailboxes.
+OTP explicitly permits `badarg` for cheaply detected foreign monitors; those
+recipes check the documented allowed outcome and corresponding mailbox effects,
+not identical ownership-check policies. Cross-process alias messages check normal
+and one-shot delivery. The owner then removes its alias and checks whether its
+monitor remains active; the caller's independent monitor observes real termination.
+Mailbox contents are normalized without comparing cross-sender arrival order.
+Fifty-six target-caller cases pass the owner's monitor reference to the monitored
+process itself. Active incoming monitors and owner-removed controls cover all four
+monitor kinds and seven cancellation actions. Owner install/removal signals are
+fenced by a message from the same owner before the target attempts cancellation.
+These cases compare raw return/error results as well as caller/owner mailboxes,
+alias delivery, and the owner's remaining monitor state. In particular, flushing
+must still scan the caller's mailbox without removing an incoming monitor.
+Sixty paired-monitor cases give the same owner two independently created monitors
+of one target, with every pairing of plain and the three monitor-alias kinds.
+Keeping, demonitoring, unaliasing, or replying through the first reference must
+leave the second monitor intact. Reply delivery is fenced before termination;
+real DOWN notifications, post-termination alias delivery, and final reference
+states distinguish monitor cancellation from alias removal. Plain references are
+not used as reply destinations, and cross-reference DOWN order is not compared.
+Another 138 monitor-option cases cover malformed lists and alias tuples, invalid
+alias modes, invalid entries before or after valid options, and all nine ordered
+pairs of repeated alias options. Direct and registered self/live targets, dead targets, and missing
+names check that validation is not bypassed by a target shortcut. Repeated options
+check last-option-wins behavior through the remaining alias state, rather than
+only accepting a returned reference. Tagged and priority monitors are outside
+this option-validation batch.
+Thirty-six standalone-alias cases add the `alias/0` default, invalid `alias/1`
+options and improper tails, repeated `reply`/`explicit_unalias` options, and
+`unalias/1` argument validation. Repeated options check whether exactly one or
+both messages arrive, together with removal results, not just reference creation.
+These cases also distinguish non-reference errors from an ordinary non-alias
+reference returning false. Existing monitor-alias lifetime controls fence
+post-event delivery before removing a surviving explicit alias; sending alone
+does not establish delivery. Priority aliases remain outside this batch.
+
+The function/apply/spawn subset contains 209 cases: captured local closures,
+external funs and BIFs, dynamic `apply/2,3`, improper argument lists, wrong arities,
+undefined exports/modules, `make_fun/3` and `is_function/2` boundaries, and child
+success/error/throw/exit with monitors, links, and small heaps. Error payloads
+retain within-run fun/argument equality without serializing fun identities or
+compiler-generated names. Undefined-call recipes catch `undef` explicitly so
+an expected child/call failure is verified, not classified as a missing oracle.
+
+An additional 170 cases cover already-dead links with and without trapped exits,
+live/dead process and registered-name queries, invalid liveness arguments,
+`raise/3` classes and stack validation, and `keyfind/3`/`keymember/3` first-match,
+numeric-equality, tuple-position, and improper-list behavior. Actual OTP results
+remain the oracle: the model's exception for an invalid `raise/3` stack is not
+used in place of OTP's returned `badarg` atom. Malformed external stack traces
+and raw internal re-raise traces are distinct paths.
+
+Another 21 cases exercise legacy MFA/fun frame normalization and already-modern
+frames across all three exception classes, including mixed stacks and supplied
+locations. Frame normalization preserves the caller's input and adds an empty
+location to legacy frames; modern frames retain their supplied locations.
+
+An additional 141 cases extend the raise recipes to VM backtrace-depth controls
+(which the Lean model does not expose): defaults, zero depth, truncation, empty
+traces, modern and legacy frames, discarded malformed suffixes, generated
+non-tail call chains, child visibility, upper-bound clamping, and invalid flags.
+Configured recipes restore the previous VM-wide setting even on exceptions.
+
+Permanent dictionary-query and scoped-split GC-pressure regressions also live in
+the ordinary Erlang library/runtime test suites; they are not Lean proof samples.
+
+`lean-coverage.json` inventories unindented theorem/private-theorem declarations
+and `#guard ` sites in all 25 test files, recording source hashes, lines, sample
+counts, and matched/failed/unverified counts. It is a lexical inventory, not a
+Lean parser: `#check`, examples, and other macros are not counted. `lean_origins`
+links samples to their inspiration, **not exact theorem instantiations**; some
+samples extend to invalid inputs outside the theorem premises. Do not interpret
+the number of linked declarations as proof, branch, or complete API coverage.
+Unselected declarations remain `no_samples`, not implicit passes; they do not
+make the run fail. Renamed/missing attributed declarations do fail validation.
+
+Kernel audits, API snapshots, purity/fixed-point/exhaustion proofs, internal
+model representations, all-schedule claims, and deadlock diagnostics do not have
+ordinary deterministic VM-test equivalents. Their inventory notes explain those
+boundaries. Lifecycle samples are not exhaustive signal/scheduler coverage;
+distributed processes and ports are outside these recipes. Many executable
+behaviors still need more recipes. Standalone runs check **zero fresh laws**.
+
+The flag is additive with `--lynx` and generated cases. All modes use AtomVM's
+bundled standard library. A replay selects only saved cases; include
+`--lean-runtime ../lynx` to regenerate its scoped
+source inventory. Like other modes, real mismatches or incomplete references
+produce a nonzero exit and retain evidence.
+
+## Optional Lynx checks
+
+Also check laws and a boundary-driven call corpus from an existing
+[Lynx](https://github.com/josevalim/lynx) checkout:
+
+```sh
+python3 tools/test/lynx/validate.py --lynx ../lynx --build build --generated 0 \
+  --output /tmp/atomvm-lynx-fixtures
+```
+
+With `--lynx`, `mix` and `lake` must also be on PATH with the Elixir/Lean versions
+required by that checkout. Mix/Lake may build their normal caches. The fixture
+API currently targets Lynx revision `ff3aad6f39e196ce539a73e1f51f8c3a1b69f68c`,
+requiring Lean 4.36.0; see [the latest refresh](PLAN.md#latest-upstream-refresh)
+for current results.
+The current full fixture run checks nine laws and matches 2,347 calls, with no
+differential failures or uncovered exports and the same four unverified OTP
+references. All 78 protocol calls match in interpreter and aarch64 precompiled
+execution in the earlier refresh. Lynx's own updated suite reports 172 passed
+checks (two laws, 170 tests) plus its Lean test build.
+
+The following rebaseline results are historical. On OTP 29
+(ERTS 17.1.1), Elixir 1.20.5, and Lean 4.35.0, the original rebaseline checked
+four laws; its 2,131-call interpreter run matched 2,127 references, with zero
+differential failures, four unresolved OTP references, and no uncovered exports.
+Lynx's own `mix test.all` also passes. This supports the fixture integration,
+not every public API in the expanded model: see [the inventory review](PLAN.md#inventory-review)
+for confirmed API gaps and unrepresented behavior.
+
+This additional mode:
+
+1. Compiles Lynx's existing Erlang translation fixtures once, with debug info.
+2. Freshly verifies the fixtures that declare laws, rejecting proof errors or
+   cached verification results. These are proof-backed fixtures; the other
+   fixtures provide differential tests, not proofs.
+3. Runs selected calls in isolated OTP processes, then runs the same compiled
+   fixture binaries in separate AtomVM processes. Each call has a timeout.
+4. Serializes actual results and compares them on OTP, so AtomVM's own equality
+   implementation cannot mask mismatches. Exceptions compare class and reason,
+   not stack frames. Cases returning references compare observable properties,
+   not runtime-specific identities.
+
+Five existing `sum_singleton` samples additionally require the proved
+postcondition to return **true on both OTP and AtomVM**, not just equal results.
+Inputs are 0, −1, 1, 2^60, and 2^100; each first checks the law's integer
+precondition. The empty-sum postcondition and thirteen protocol postconditions
+are also asserted true, for nineteen runtime assertions total. Protocol samples
+check applicable premises before invoking their postconditions. Noninteger sum
+inputs remain differential/error-path samples outside the law's premise. These
+laws already exist in Lynx; no new theorem is added.
+
+These cases carry `"assert_true": true` in `cases.json`. False, nonboolean, or
+exception results fail even if both runtimes agree; the marker survives failure
+replay. Include `--lynx ../lynx` when replaying these fixture calls to package
+the fixtures and freshly check their laws. The assertion marker alone does not
+invoke Lean or establish a proof. This checks finite runtime instances of a
+proved model property, not correctness of the VM or the translation/compiler.
+
+The corpus contains **2,351 calls covering all 203 exports in 13 fixture modules**
+at the pinned revision. It includes:
+
+- Literal pooling, numeric/map-key boundaries, recursive base/step/error cases,
+  asymmetric nested traversals, closure captures, dynamic calls, and observable
+  process-dictionary effects.
+- Every type guard, with matching and nonmatching term types; repeated variables,
+  map-pattern fallthrough, and short-circuit success/error paths.
+- Exception scope, rethrowing, cleanup effects, success-clause failures, and
+  callback return/throw/error/exit paths. Stack contents are not compared.
+- Empty, valid, improper, mismatched-length, filtered, zipped, and strict
+  comprehensions over lists, maps, binaries, and partial bitstrings. Unspecified
+  map iteration order is normalized, not asserted as a portable guarantee.
+- Signed/endian/unit bitstring construction and matching, dynamic and invalid
+  sizes, numeric representation boundaries, float16/32 rounding boundaries,
+  float16/32/64 decoding of normal/subnormal and infinity/NaN wire patterns,
+  UTF encoding boundaries, surrogates, invalid/truncated sequences, and tails.
+- Selective receive, guards, aliases, repeated variables, nested receives, and
+  valid/invalid timeouts. Queued messages are deterministic; both the selected
+  result and remaining mailbox are checked, without asserting elapsed timing.
+- Consolidated Elixir protocols: list/map/struct dispatch, Any fallback,
+  recursive implementation calls, unsupported types, and law postconditions.
+
+The map-comprehension extension adds 142 OTP differential recipes across seven
+existing `named_locals` exports, without adding proofs or runtime assertions.
+It checks last-write-wins list collisions, skipped patterns, improper tails,
+exact numeric and boxed keys, strict generators, lazy inner-generator validation,
+and nested/filtered generators. Runtime-created maps span sizes 0, 1, 2, 31, 32,
+33, 63, 64, and 65. Unordered generator results retain exact bindings and item
+counts; colliding map-to-map results check the output key set and validity of
+chosen bindings, without assuming a winning source key or traversal order.
+
+All 142 added cases match OTP 29. That historical interpreter run matched 2,269 of
+2,273 cases, with zero mismatches and the same four unverified zero-width-generator
+references; those unresolved cases still make the full run exit nonzero.
+
+`coverage.json` inventories the **actual compiled exports**, with selected,
+matched, failed, and unverified call counts per export. A full fixture run exits
+nonzero if an export lacks a recipe, so updating Lynx cannot silently leave new
+exports untested. This is **direct-call coverage, not branch or instruction
+coverage**, and does not prove the VM correct. Some branches are unreachable or
+cannot be selected through the public fixture API. Lean's unbounded integers
+also differ from AtomVM's finite integer capacity.
+
+OTP reference timeouts and undefined calls are recorded in `unverified.json`,
+separate from AtomVM differential failures in `failures.json`. Neither counts as
+a pass, and either produces a nonzero exit. Other cases continue, and bounded
+target execution is still recorded for unverified cases. In the tested OTP 29,
+both `sized_generator(0, Bits)` and `zero_generator(Bits)` time out for empty and
+nonempty inputs: four explicit unverified cases, not four AtomVM mismatches.
+Consequently even a runtime with all known fixes does not yield an all-green
+full fixture run on that OTP. No failures are allowlisted.
+
+To rerun fixture failures, include `--lynx` so their modules are packaged:
+
+```sh
+python3 tools/test/lynx/validate.py --lynx ../lynx --build build \
+  --replay /tmp/atomvm-lynx-fixtures/failures.json
+```
+
+Partial replays still report uncovered exports, but these do not cause a failing
+exit: only the selected cases are being validated. `unverified.json` is also
+replayable. Host executable-process ports are not part of this corpus.
+
+**Lynx-mode dependencies:** fixtures use AtomVM's bundled standard library,
+including `lists:sum/1`; no OTP library modules are substituted into the target.
+The protocol fixture packages Lynx's executable `Elixir.Lynx.Support.*` modules
+(including consolidated protocols) and additionally loads AtomVM's bundled
+`exavmlib.avm`. Build that library before running `--lynx`. Its path and hash are
+recorded in `run.json`; host Elixir standard-library beams are not packaged.
+Interpreter execution uses the exact proof-input fixture binaries. For a
+precompiled build (`AVM_ENABLE_PRECOMPILED=ON`, `AVM_DISABLE_JIT=ON`), the script
+transforms those same binaries
+to native-only code using that build's JIT compiler, including the bundled
+exavmlib when protocols are selected. It selects the matching native runtime
+library and eavmlib archive automatically, loading native libraries before
+bytecode copies embedded in the aggregate archive. Build the matching eavmlib
+target too (for example, `eavmlib_aarch64`); extra library hashes are recorded.
+Emscripten/Node (`wasm32`) is supported with `--host-build`; bare-metal boards
+remain unsupported.
+
+Use `--timeout` to adjust the default five-second bound per runtime call, `--jobs`
+to run per-case `packbeam` and VM invocations across parallel worker threads
+(default `1`), and `--portable-only` to omit `word_size_dependent` or
+`stacktrace_dependent` recipes whose oracle assumptions disagree with the
+resolved target. Host compile/proof/compare commands have a ten-minute bound.
+compile/proof/compare commands have a ten-minute bound. `run.json` records the
+resolved `execution_mode` (`interpreter`, `on_demand_jit`, `precompiled`, or
+`jit+precompiled`), `target` (`platform`, `arch`, `word_size`, `float_bits`, and
+CMake feature flags), and SHA-256 hashes for the runtime, optional `.wasm`
+module, and libraries. `failures.json`, `unverified.json`, and `actuals.json`
+classify errors and timeouts by stage (`oracle`, `semantic`, or `transport`,
+separated by `LYNX_SEMANTIC_DONE\n` after `actual()` completes).
+
+Additional target and representation modes:
+
+- On-demand JIT (`AVM_DISABLE_JIT=OFF`, `AVM_ENABLE_PRECOMPILED=OFF`): keep
+  probe/helper BEAMs in bytecode form (`--timeout 120` recommended for cold JIT
+  compilation) so `code_server` compiles them on demand at runtime.
+- Emscripten / `wasm32` (`src/platforms/emscripten` with `-DAVM_EMSCRIPTEN_ENV=node`):
+  pass `--build <wasm-build> --host-build <host-build>` so `node` executes
+  `AtomVM.mjs` while `<host-build>` supplies `PackBEAM` and
+  `atomvmlib-emscripten.avm`; 64-bit-immediate `word_size_dependent` recipes
+  (`lists:keyfind/3` / `lists:keymember/3` at `±9007199254740993`) are marked
+  `unverified` (`stage: "oracle"`) against a 64-bit host OTP oracle.
+- Single-precision floats (`AVM_USE_32BIT_FLOAT=ON`): pass `--float32` to add
+  10 IEEE-754 `binary32` runtime arithmetic/rounding/overflow/underflow cases
+  with explicit `float32_expected` ETF oracles; unannotated `binary64` float
+  results are marked `unverified` (`stage: "oracle"`).
+- Stacktraces disabled (`AVM_CREATE_STACKTRACES=OFF`): `run.json` records
+  `"avm_create_stacktraces": false`, and the 172 `stacktrace_dependent`
+  recipes (`monitor_exit(raised)`, valid-stack `raise_exception/3`, valid-raise/generated
+  `trace_depth/3`, `killed_linked_root(error_reason)`, and uncaught-error
+  `function_spawn/3` / `spawn_behavior/1` cases where `catch C:R:S` / exit reasons
+  yield `undefined` instead of a stack list) are marked
+  `unverified` (`stage: "oracle"`) unless omitted upfront with `--portable-only`.
+  `.github/workflows/lynx-differential.yaml` exercises this build via
+  `linux-x86_64-no-stacktraces` (`--lean-runtime lynx --seed 20261114
+  --generated 32 --portable-only --expected-failures tools/test/lynx/expected_failures.json --jobs 4`).
+
+Scheduler interleavings, GC stress, and bare-metal embedded boards remain outside
+the CLI runner. `.github/workflows/lynx-differential.yaml` pins upstream Lynx
+`ff3aad6f39e196ce539a73e1f51f8c3a1b69f68c` in a dedicated workflow without adding
+a Lynx dependency to the normal AtomVM build/test workflows. Run `--help` for
+options.
+
+The 2026-11-11 aarch64 precompiled replay matches OTP 29 for both saved
+1,000-case seeded batches (`20261111` and `20261112`). The saved runtime corpus
+matches 3,602 of 3,606 cases, with exactly the four known short-float formatting
+mismatches and zero unverified references. All 5,606 decoded native results equal
+their interpreter baselines. Probe/helper binaries contain native code and no
+BEAM `Code` chunk; on-demand JIT is disabled. This does not imply native execution
+of every bundled library module. See [PLAN.md](PLAN.md) and
+`.amp/in/artifacts/lynx-native-validation.json` for configuration and evidence.
+
+The runner's CLI integration tests check seeded replay, independent encoding byte
+oracles, deliberately wrong/malformed target output, reduction and replay, and
+continuation after reference timeouts/undefined calls. They also check scoped Lean
+sample inventories, unverified counts, stale source attribution rejection,
+on-demand JIT compilation, `oracle`/`semantic`/`transport` stage classification,
+32-bit word-size / `--float32` / `AVM_CREATE_STACKTRACES=OFF` representation guards, and independent
+Unicode/short-circuit/process/receive/hashing/`await_many`/burst-send result
+oracles:
+
+```sh
+python3 -B -m unittest discover -s tools/test/lynx -p test_validate.py -v
+```
+
+Twenty-seven enabled CLI tests pass in default interpreter runs (`30` total;
+`3` env-gated optional `ATOMVM_JIT_BUILD`, `ATOMVM_JIT_PRECOMPILE_BUILD`, and
+`LYNX_CHECKOUT` tests skipped). Set
+`LYNX_CHECKOUT=/path/to/lynx`
+to enable the additional full-fixture/export inventory and partial-replay integration
+test. It requires Mix/Lean on PATH and takes several minutes; ordinary integration
+tests do not require Lynx.

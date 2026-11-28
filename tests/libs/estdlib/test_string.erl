@@ -26,6 +26,7 @@
 
 test() ->
     ok = test_to_upper(),
+    ok = test_to_lower(),
     ok = test_split(),
     ok = test_trim(),
     ok = test_find(),
@@ -110,6 +111,27 @@ test_to_upper() ->
     ?ASSERT_MATCH(string:to_upper("abc"), "ABC"),
     ?ASSERT_MATCH(string:to_upper("aBc"), "ABC"),
     ?ASSERT_MATCH(string:to_upper("aBc123%#$x5"), "ABC123%#$X5"),
+    ?ASSERT_MATCH(string:to_upper($a), $A),
+    ?ASSERT_MATCH(string:to_upper(233), 201),
+    ?ASSERT_MATCH(string:to_upper(-1), -1),
+    ?ASSERT_MATCH(string:to_upper([224, 233, 246, 247, 248, 254, 255]), [
+        192, 201, 214, 247, 216, 222, 255
+    ]),
+    ?ASSERT_MATCH(string:to_upper([256, 8364, 128512]), [256, 8364, 128512]),
+    ?ASSERT_MATCH(string:to_upper([$a, bad]), [$A, bad]),
+    ok.
+
+test_to_lower() ->
+    ?ASSERT_MATCH(string:to_lower(""), ""),
+    ?ASSERT_MATCH(string:to_lower("aBc123!Z"), "abc123!z"),
+    ?ASSERT_MATCH(string:to_lower($A), $a),
+    ?ASSERT_MATCH(string:to_lower(201), 233),
+    ?ASSERT_MATCH(string:to_lower(-1), -1),
+    ?ASSERT_MATCH(string:to_lower([192, 201, 214, 215, 216, 222, 223]), [
+        224, 233, 246, 215, 248, 254, 223
+    ]),
+    ?ASSERT_MATCH(string:to_lower([256, 8364, 128512]), [256, 8364, 128512]),
+    ?ASSERT_MATCH(string:to_lower([$A, bad]), [$a, bad]),
     ok.
 
 test_split() ->
@@ -124,15 +146,30 @@ test_split() ->
     ?ASSERT_MATCH(string:split("foo barXXXXXXtapas", "XXX", all), ["foo bar", [], "tapas"]),
 
     ?ASSERT_MATCH(string:split("ab..bc..cd", ".."), ["ab", "bc..cd"]),
+    ?ASSERT_MATCH(string:split("ab..bc..cd", "..", trailing), ["ab..bc", "cd"]),
     ?ASSERT_MATCH(string:split(<<"ab..bc..cd">>, ".."), [<<"ab">>, <<"bc..cd">>]),
     ?ASSERT_MATCH(string:split(<<"ab..bc..cd">>, "..", leading), [<<"ab">>, <<"bc..cd">>]),
-    %   ?ASSERT_MATCH(string:split(<<"ab..bc..cd">>, "..", trailing), [<<"ab..bc">>, <<"cd">>]),
+    ?ASSERT_MATCH(string:split(<<"ab..bc..cd">>, "..", trailing), [<<"ab..bc">>, <<"cd">>]),
     ?ASSERT_MATCH(string:split(<<"ab..bc..cd">>, "..", all), [<<"ab">>, <<"bc">>, <<"cd">>]),
 
     ?ASSERT_MATCH(string:split("ab..bc..cd", <<"..">>), ["ab", "bc..cd"]),
     ?ASSERT_MATCH(string:split(<<"ab..bc..cd">>, <<"..">>, leading), [<<"ab">>, <<"bc..cd">>]),
-    %   ?ASSERT_MATCH(string:split(<<"ab..bc..cd">>, <<"..">>, trailing), [<<"ab..bc">>, <<"cd">>]),
+    ?ASSERT_MATCH(string:split(<<"ab..bc..cd">>, <<"..">>, trailing), [<<"ab..bc">>, <<"cd">>]),
     ?ASSERT_MATCH(string:split(<<"ab..bc..cd">>, <<"..">>, all), [<<"ab">>, <<"bc">>, <<"cd">>]),
+
+    ?ASSERT_MATCH(string:split("aaa", "aa", trailing), ["a", ""]),
+    ?ASSERT_MATCH(string:split("aaaaa", "aa", trailing), ["aaa", ""]),
+    ?ASSERT_MATCH(string:split("aaaaa", "aa", all), ["", "", "a"]),
+    ?ASSERT_MATCH(string:split(<<"aaa">>, <<"aa">>, trailing), [<<"a">>, <<>>]),
+    ?ASSERT_MATCH(string:split("a", "a", trailing), ["", ""]),
+    ?ASSERT_MATCH(string:split("abc", "", leading), ["abc"]),
+    ?ASSERT_MATCH(string:split("abc", "", trailing), ["abc"]),
+    ?ASSERT_MATCH(string:split("abc", "", all), ["abc"]),
+    ?ASSERT_MATCH(string:split(<<"abc">>, <<>>, leading), [<<"abc">>]),
+    ?ASSERT_MATCH(string:split(<<"abc">>, <<>>, trailing), [<<"abc">>]),
+    ?ASSERT_MATCH(string:split(<<"abc">>, <<>>, all), [<<"abc">>]),
+    ?ASSERT_MATCH(string:split(<<"aé—bé—c"/utf8>>, "é—", trailing), [<<"aé—b"/utf8>>, <<"c">>]),
+    ?ASSERT_MATCH(string:split("aé—bé—c", <<"é—"/utf8>>, trailing), ["aé—b", "c"]),
 
     ok.
 
@@ -145,6 +182,15 @@ test_trim() ->
     ?ASSERT_MATCH(string:trim(" foo bar      ", trailing), " foo bar"),
     ?ASSERT_MATCH(string:trim(" foo bar ", both), "foo bar"),
     ?ASSERT_MATCH(string:trim("      foo bar      ", both), "foo bar"),
+    ?ASSERT_MATCH(string:trim("\t\n\r\f\v hi \r\n\t"), "hi"),
+    ?ASSERT_MATCH(string:trim([133, 8206, 8207, 8232, 8233, $a, 8233, 133]), "a"),
+    ?ASSERT_MATCH(string:trim([160, $a, 160]), [160, $a, 160]),
+    ?ASSERT_MATCH(string:trim(<<"  hi  ">>), <<"hi">>),
+    ?ASSERT_MATCH(string:trim(<<"\t hi \n">>, leading), <<"hi \n">>),
+    ?ASSERT_MATCH(string:trim(<<"\t hi \n">>, trailing), <<"\t hi">>),
+    ?ASSERT_MATCH(string:trim(<<"\t hi \n">>, both), <<"hi">>),
+    ?ASSERT_MATCH(string:trim(<<" \t\r\n ">>), <<>>),
+    ?ASSERT_MATCH(string:trim(<<" \t\r\né\n\t "/utf8>>), <<"é"/utf8>>),
     ok.
 
 test_find() ->
@@ -163,6 +209,16 @@ test_find() ->
     ?ASSERT_MATCH(string:find("foobar", <<"ba">>), "bar"),
     ?ASSERT_MATCH(string:find(<<"foobar">>, <<"ba">>), <<"bar">>),
 
+    ?ASSERT_MATCH(string:find("ab..bc..cd", "..", trailing), "..cd"),
+    ?ASSERT_MATCH(string:find(<<"ab..bc..cd">>, "..", trailing), <<"..cd">>),
+    ?ASSERT_MATCH(string:find("aaa", "aa", trailing), "aa"),
+    ?ASSERT_MATCH(string:find(<<"aaa">>, <<"aa">>, trailing), <<"aa">>),
+    ?ASSERT_MATCH(string:find("abc", "z", trailing), nomatch),
+    ?ASSERT_MATCH(string:find(<<"abc">>, <<"z">>, trailing), nomatch),
+    ?ASSERT_MATCH(string:find("abc", "", trailing), "abc"),
+    ?ASSERT_MATCH(string:find(<<"abc">>, <<>>, trailing), <<"abc">>),
+    ?ASSERT_MATCH(string:find(<<"aé—bé—c"/utf8>>, "é—", trailing), <<"é—c"/utf8>>),
+
     ok.
 
 test_length() ->
@@ -172,6 +228,8 @@ test_length() ->
     ?ASSERT_MATCH(string:length(<<"foo">>), 3),
     ?ASSERT_MATCH(string:length("アトム"), 3),
     ?ASSERT_MATCH(string:length(<<"アトム"/utf8>>), 3),
+    ?ASSERT_MATCH(string:length(["ab", <<"cd">>]), 4),
+    ?ASSERT_MATCH(string:length([$a | <<"bc">>]), 3),
 
     ok.
 

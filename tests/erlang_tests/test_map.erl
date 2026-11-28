@@ -190,12 +190,29 @@ test_exact_map() ->
     Map2 = Map#{a := id(foo)},
     #{a := A2, b := B} = Map2,
     A2 = foo,
-    %% No such c
+    %% No such c, even when an earlier update succeeds.
+    ok =
+        try
+            _ = id(Map2#{a := changed, id(c) := id(bar)}),
+            fail
+        catch
+            error:{badkey, c} ->
+                ok
+        end,
+    ok = test_exact_map_missing_key(id(#{}), id(missing)),
+    %% Map keys use exact equality, not numeric equality.
+    ok = test_exact_map_missing_key(id(#{1 => present}), id(1.0)),
+    %% The missing key must survive allocation of the exception tuple.
+    ok = test_exact_map_missing_key(id(Map2), id({missing, [id(1), 2, 3]})),
+    Map2 = #{a => foo, b => 2},
+    ok.
+
+test_exact_map_missing_key(Map, Key) ->
     try
-        _ = id(Map2#{id(c) := id(bar)}),
+        id(Map#{Key := changed}),
         fail
     catch
-        _:_E ->
+        error:{badkey, Key} ->
             ok
     end.
 

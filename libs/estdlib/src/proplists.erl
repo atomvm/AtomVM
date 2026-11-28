@@ -202,6 +202,8 @@ get_value(Key, [{Key, Value} | _T], _Default) ->
     Value;
 get_value(Key, [Key | _T], _Default) when is_atom(Key) ->
     true;
+get_value(Key, [P | _T], Default) when tuple_size(P) >= 1, element(1, P) =:= Key ->
+    Default;
 get_value(Key, [_H | T], Default) ->
     get_value(Key, T, Default).
 

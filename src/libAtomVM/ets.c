@@ -868,6 +868,10 @@ static ets_result_t lookup_or_default(
         return EtsBadAccess;
     }
 
+    if (!term_is_invalid_term(default_tuple) && (size_t) term_get_tuple_arity(default_tuple) <= table->key_index) {
+        return EtsBadEntry;
+    }
+
     term *tuple = NULL;
     size_t count;
     ets_result_t result = ets_multimap_lookup(table->multimap, key, &tuple, &count, ctx->global);
@@ -882,9 +886,6 @@ static ets_result_t lookup_or_default(
     }
 
     if (insert_default) {
-        if ((size_t) term_get_tuple_arity(default_tuple) <= table->key_index) {
-            return EtsBadEntry;
-        }
         tuple = &default_tuple;
     }
 
@@ -939,7 +940,9 @@ static ets_result_t apply_spec(term tuple, term spec, size_t key_index)
 
 static ets_result_t apply_op(term tuple, term op, avm_int_t *ret, size_t key_index)
 {
-    assert(term_is_tuple(op));
+    if (!term_is_tuple(op)) {
+        return EtsBadEntry;
+    }
 
     int arity = term_get_tuple_arity(op);
 

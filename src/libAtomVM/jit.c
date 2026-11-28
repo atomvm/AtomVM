@@ -140,6 +140,7 @@ _Static_assert(ALL_ATOM_INDEX == 15, "ALL_ATOM_INDEX is 15 in libs/jit/src/defau
 _Static_assert(LOWERCASE_EXIT_ATOM_INDEX == 16, "LOWERCASE_EXIT_ATOM_INDEX is 16 in libs/jit/src/default_atoms.hrl ");
 _Static_assert(BADRECORD_ATOM_INDEX == 17, "BADRECORD_ATOM_INDEX is 17 in libs/jit/src/default_atoms.hrl ");
 _Static_assert(SYSTEM_LIMIT_ATOM_INDEX == 18, "SYSTEM_LIMIT_ATOM_INDEX is 18 in libs/jit/src/default_atoms.hrl ");
+_Static_assert(BADKEY_ATOM_INDEX == 19, "BADKEY_ATOM_INDEX is 19 in libs/jit/src/default_atoms.hrl ");
 
 // Verify n_words constants in primitives.hrl
 _Static_assert(
@@ -300,7 +301,9 @@ static Context *jit_terminate_context(Context *ctx, JITState *jit_state)
     }
     scheduler_terminate(ctx);
     jit_state->remaining_reductions = 0;
-    return scheduler_run(global);
+    jit_state->terminated = true;
+    // Unwind native code before selecting another context: its allocation could reuse ctx.
+    return NULL;
 }
 
 static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
@@ -322,12 +325,12 @@ static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
             // catch label is in native code.
             jit_state->continuation = JIT_CONTINUATION_FOR_LABEL(jit_state->module, target_label);
         } else {
-            // Native case
-            // jit_state->continuation = jit_state->module->labels[target_label];
-
-            // JIT case
-            // (catch label necessarily is native)
+#ifndef AVM_NO_EMU
+            jit_state->continuation_pc = jit_state->module->labels[target_label];
+#else
+            // Interpreter-free builds can only catch in native code.
             assert(false);
+#endif
         }
         return ctx;
     }
@@ -895,6 +898,11 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
     bool handle_error = false;
     bool reprocess_outer = false;
     while (signal_message) {
+        if (context_get_flags(ctx, Killed)) {
+            // Teardown answers pending requests only after removing the process.
+            mailbox_requeue_outer_signals(&ctx->mailbox, signal_message);
+            break;
+        }
         switch (signal_message->type) {
             case KillSignal: {
                 struct TermSignal *kill_signal
@@ -985,7 +993,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
             case MonitorSignal: {
                 struct MonitorPointerSignal *monitor_signal
                     = CONTAINER_OF(signal_message, struct MonitorPointerSignal, base);
-                context_add_monitor(ctx, monitor_signal->monitor);
+                context_add_monitor(ctx, monitor_signal->monitor, false);
                 break;
             }
             case DemonitorSignal: {
@@ -1016,6 +1024,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
 #endif
                 break;
             }
+            case ExitSignal:
             case AliasMessageSignal:
             case NormalMessage: {
                 UNREACHABLE();
@@ -1089,13 +1098,13 @@ static Context *jit_wait_timeout(Context *ctx, JITState *jit_state, term timeout
 {
     TRACE("jit_wait_timeout: timeout=%p label=%d\n", (void *) timeout, label);
     avm_int64_t t = 0;
-    if (term_is_any_integer(timeout)) {
-        t = term_maybe_unbox_int64(timeout);
-        if (UNLIKELY(t < 0)) {
+    if (timeout != INFINITY_ATOM) {
+        if (UNLIKELY(!term_is_uint32(timeout))) {
+            mailbox_reset(&ctx->mailbox);
+            ctx->mailbox.receive_has_match_clauses = false;
             return jit_raise_error(ctx, jit_state, 0, TIMEOUT_VALUE_ATOM);
         }
-    } else if (UNLIKELY(timeout != INFINITY_ATOM)) {
-        return jit_raise_error(ctx, jit_state, 0, TIMEOUT_VALUE_ATOM);
+        t = term_to_uint32(timeout);
     }
 
     Context *r = jit_process_signal_messages(ctx, jit_state);
@@ -1183,6 +1192,10 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
                     *return_value = bif->bif2_ptr(ctx, 0, ctx->x[0], ctx->x[1]);
                     return true;
                 }
+                case 3: {
+                    *return_value = bif->bif3_ptr(ctx, 0, ctx->x[0], ctx->x[1], ctx->x[2]);
+                    return true;
+                }
             }
         }
     }
@@ -1211,6 +1224,9 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term
     if (term_is_atom(index_or_function)) {
         term module = boxed_value[1];
         fun_arity = term_to_int(boxed_value[3]);
+        if (UNLIKELY(args_count != fun_arity)) {
+            return jit_raise_error(ctx, jit_state, 0, context_make_badarity(ctx, fun, args_count));
+        }
         atom_index_t module_name = term_to_atom_index(module);
         atom_index_t function_name = term_to_atom_index(index_or_function);
         term return_value;
@@ -1245,9 +1261,9 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term
         uint32_t fun_arity_and_freeze;
         module_get_fun(fun_module, fun_index, &label, &fun_arity_and_freeze, &n_freeze);
         fun_arity = fun_arity_and_freeze - n_freeze;
-    }
-    if (UNLIKELY(args_count != fun_arity)) {
-        return jit_raise_error(ctx, jit_state, 0, BADARITY_ATOM);
+        if (UNLIKELY(args_count != fun_arity)) {
+            return jit_raise_error(ctx, jit_state, 0, context_make_badarity(ctx, fun, args_count));
+        }
     }
     uint32_t lim_freeze = MINI(fun_arity + n_freeze, MAX_REG);
     for (uint32_t i = fun_arity; i < lim_freeze; i++) {
@@ -1542,6 +1558,10 @@ static term jit_bitstring_extract_float(Context *ctx, JITState *jit_state, term 
     avm_float_t value;
     bool status;
     switch (n) {
+        case 0:
+            value = 0.0;
+            status = true;
+            break;
         case 16:
             status = bitstring_extract_f16(match_state_ptr[1], offset, n, bs_flags, &value);
             break;
@@ -1711,21 +1731,6 @@ static bool jit_bitstring_insert_integer(term bin, size_t offset, term value, si
     term_to_bigint(value, &big_src_value, &big_len, &big_sign);
 
     return bitstring_insert_bigint(bin, offset, big_src_value, big_len, big_sign, n, flags);
-}
-
-static bool jit_bitstring_insert_float(term bin, size_t offset, term value, size_t n, enum BitstringFlags flags)
-{
-    avm_float_t float_value = term_conv_to_float(value);
-    if (UNLIKELY(!isfinite(float_value))) {
-        return false;
-    }
-    if (n == 16) {
-        return bitstring_insert_f16(bin, offset, float_value, flags);
-    } else if (n == 32) {
-        return bitstring_insert_f32(bin, offset, float_value, flags);
-    } else {
-        return bitstring_insert_f64(bin, offset, float_value, flags);
-    }
 }
 
 static void jit_bitstring_copy_module_str(Context *ctx, JITState *jit_state, term bin, size_t offset, int str_id, size_t len)
@@ -2108,7 +2113,7 @@ const ModuleNativeInterface module_native_interface = {
     jit_stacktrace_build,
     jit_term_reuse_binary,
     jit_alloc_big_integer_fragment,
-    jit_bitstring_insert_float,
+    bitstring_insert_float,
     jit_raw_raise,
     jit_raise_error_mfa,
     jit_try_case,

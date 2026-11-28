@@ -23,6 +23,7 @@
 -export([start/0, fact/1]).
 
 start() ->
+    ok = test_invalid_arguments(),
     {Pid, Monitor} = spawn_opt(fun no_loop/0, [monitor]),
     A = g(is_process_alive(Pid)),
     Pid ! {self(), 5},
@@ -42,6 +43,18 @@ start() ->
         true ->
             A
     end.
+
+test_invalid_arguments() ->
+    [
+        badarg =
+            try is_process_alive(Value) of
+                _ -> unexpected
+            catch
+                error:Reason -> Reason
+            end
+     || Value <- [bad, 1, [], {}, make_ref(), fun() -> ok end]
+    ],
+    ok.
 
 no_loop() ->
     receive

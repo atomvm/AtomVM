@@ -83,6 +83,11 @@ static void scheduler_process_native_signal_messages(Context *ctx)
     MailboxMessage *signal_message = mailbox_process_outer_list_native(&ctx->mailbox);
     bool reprocess_outer = false;
     while (signal_message) {
+        if (context_get_flags(ctx, Killed)) {
+            // Teardown answers pending requests only after removing the process.
+            mailbox_requeue_outer_signals(&ctx->mailbox, signal_message);
+            break;
+        }
         switch (signal_message->type) {
             case KillSignal: {
                 struct TermSignal *kill_signal = CONTAINER_OF(signal_message, struct TermSignal, base);
@@ -98,7 +103,7 @@ static void scheduler_process_native_signal_messages(Context *ctx)
             case MonitorSignal: {
                 struct MonitorPointerSignal *monitor_signal
                     = CONTAINER_OF(signal_message, struct MonitorPointerSignal, base);
-                context_add_monitor(ctx, monitor_signal->monitor);
+                context_add_monitor(ctx, monitor_signal->monitor, false);
                 break;
             }
             case DemonitorSignal: {
@@ -137,6 +142,7 @@ static void scheduler_process_native_signal_messages(Context *ctx)
             case UnlinkRemoteIDSignal: // ports can't be part of distributed links
             case UnlinkRemoteIDAckSignal: // id.
             case CodeServerResumeSignal: // ports do not wait for code server
+            case ExitSignal: // explicit port exits are sent as KillSignal
             case AliasMessageSignal: // ports cannot own aliases
                 break;
             case NormalMessage: {

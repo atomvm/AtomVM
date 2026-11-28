@@ -25,12 +25,22 @@ include(BuildErlang)
 
 compile_erlang(export_test_module)
 jit_precompile(export_test_module)
-generate_hrl(export_test_module_data.hrl EXPORT_TEST_MODULE_DATA export_test_module.beam)
-
 pack_precompiled_archive(code_load_pack export_test_module)
+if(AVM_ENABLE_PRECOMPILED)
+    # Exercise bytecode-to-native calls in the mixed-mode runtime.
+    generate_hrl(export_test_module_data.hrl EXPORT_TEST_MODULE_DATA beams/${AVM_JIT_TARGET_ARCH}/export_test_module.beam)
+else()
+    generate_hrl(export_test_module_data.hrl EXPORT_TEST_MODULE_DATA export_test_module.beam)
+endif()
+
+# This stays bytecode in mixed-mode builds; JIT-only builds need native code.
+compile_erlang(interpreted_calls)
+generate_hrl(interpreted_calls_data.hrl INTERPRETED_CALLS_DATA interpreted_calls.beam)
+
 generate_hrl(code_load_pack_data.hrl CODE_LOAD_PACK_DATA code_load_pack.avm)
 
 set(code_load_deps
+    interpreted_calls_data.hrl
     export_test_module.beam
     export_test_module_data.hrl
     code_load_pack

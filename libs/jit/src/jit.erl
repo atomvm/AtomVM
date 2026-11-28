@@ -1288,13 +1288,16 @@ first_pass(<<?OP_IS_FUNCTION2, Rest0/binary>>, MMod, MSt0, State0) ->
             {BSt2, FunArity} = MMod:call_primitive(BSt1, ?PRIM_MODULE_GET_FUN_ARITY, [
                 ModuleReg, {free, IndexReg}
             ]),
-            cond_jump_to_label({'(int)', {free, FunArity}, '!=', Arity}, Label, MMod, BSt2)
+            % The primitive returns a C int; clear unspecified upper register bits,
+            % but compare the queried arity at full width to avoid truncation.
+            {BSt3, FunArityReg} = MMod:and_(BSt2, {free, FunArity}, 16#FFFFFFFF),
+            cond_jump_to_label({{free, FunArityReg}, '!=', Arity}, Label, MMod, BSt3)
         end,
         fun(BSt0) ->
             BSt1 = MMod:free_native_registers(BSt0, [IndexOrModuleReg]),
             {BSt2, FunArity} = MMod:get_array_element(BSt1, FuncPtr, 3),
             {BSt3, FunArityReg} = MMod:shift_right(BSt2, {free, FunArity}, 4),
-            cond_jump_to_label({'(int)', {free, FunArityReg}, '!=', Arity}, Label, MMod, BSt3)
+            cond_jump_to_label({{free, FunArityReg}, '!=', Arity}, Label, MMod, BSt3)
         end
     ),
     MSt8 = MMod:free_native_registers(MSt7, [FuncPtr, ModuleReg, Arity]),
@@ -1865,13 +1868,14 @@ first_pass(<<?OP_PUT_MAP_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
             {ASt1, Key, ARest1} = decode_compact_term(ARest0, MMod, ASt0, State0),
             ARest2 = skip_compact_term(ARest1),
             {ASt2, PosReg} = MMod:call_primitive(ASt1, ?PRIM_TERM_FIND_MAP_POS, [
-                ctx, Src, {free, Key}
+                ctx, Src, Key
             ]),
-            ASt3 = MMod:if_block(ASt2, {'(int)', PosReg, '==', ?TERM_MAP_NOT_FOUND}, fun(BSt0) ->
-                MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, offset, ?BADARG_ATOM
+            ASt2a = MMod:if_block(ASt2, {'(int)', PosReg, '==', ?TERM_MAP_NOT_FOUND}, fun(BSt0) ->
+                MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR_TUPLE, [
+                    ctx, jit_state, offset, ?BADKEY_ATOM, Key
                 ])
             end),
+            ASt3 = MMod:free_native_registers(ASt2a, [Key]),
             ASt4 = MMod:if_block(
                 ASt3, {'(int)', {free, PosReg}, '==', ?TERM_MAP_MEMORY_ALLOC_FAIL}, fun(BSt0) ->
                     MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR, [
@@ -2342,7 +2346,9 @@ first_pass(
             {SegmentUnit, AccRest3} = decode_literal(AccRest2),
             AccRest4 = skip_compact_term(AccRest3),
             {AccMSt1, Src, AccRest5} = decode_compact_term(AccRest4, MMod, AccMSt0, AccState0),
-            {AccMSt2, Size, AccRest6} = decode_compact_term(AccRest5, MMod, AccMSt1, AccState0),
+            {AccMSt2, Size, AccRest6} = decode_bs_create_bin_size(
+                AtomType, AccRest5, MMod, AccMSt1, AccState0
+            ),
             {AccMSt3, AccLiteralSize1, AccSizeReg1, AccState1} = first_pass_bs_create_bin_compute_size(
                 AtomType,
                 Src,
@@ -2449,9 +2455,13 @@ first_pass(
             AtomType = AtomResolver(AtomTypeIndex),
             {_Seg, AccRest2} = decode_literal(AccRest1),
             {SegmentUnit, AccRest3} = decode_literal(AccRest2),
-            {AccMSt1, Flags, AccRest4} = decode_compact_term(AccRest3, MMod, AccMSt0, State1),
+            {AccMSt1, Flags, AccRest4} = decode_bs_create_bin_flags(
+                AccRest3, MMod, AccMSt0, State1
+            ),
             {AccMSt2, Src, AccRest5} = decode_compact_term(AccRest4, MMod, AccMSt1, State1),
-            {AccMSt3, Size, AccRest6} = decode_compact_term(AccRest5, MMod, AccMSt2, State1),
+            {AccMSt3, Size, AccRest6} = decode_bs_create_bin_size(
+                AtomType, AccRest5, MMod, AccMSt2, State1
+            ),
             ?TRACE("{~p,~p,~p,~p,~p,~p},", [AtomType, _Seg, SegmentUnit, Flags, Src, Size]),
             {AccMSt4, AccOffset1, AccCreatedBin1} = first_pass_bs_create_bin_insert_value(
                 AtomType,
@@ -2695,15 +2705,31 @@ first_pass_bs_create_bin_compute_size(
     MSt1 = verify_is_integer(Src, Fail, MMod, MSt0),
     {MSt1, AccLiteralSize0 + 32, AccSizeReg0, State0};
 first_pass_bs_create_bin_compute_size(
-    float, Src, Size, _SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt0, State0
+    float, Src, Size, SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt0, State0
 ) ->
     MSt1 = verify_is_number(Src, Fail, MMod, MSt0),
     {MSt2, SizeValue} = term_to_int(Size, Fail, MMod, MSt1),
     if
         is_integer(SizeValue) ->
-            {MSt2, AccLiteralSize0 + SizeValue, AccSizeReg0, State0};
+            BitSize = SizeValue * SegmentUnit,
+            if
+                BitSize =:= 16; BitSize =:= 32; BitSize =:= 64 ->
+                    {MSt2, AccLiteralSize0 + BitSize, AccSizeReg0, State0};
+                Fail =:= 0 ->
+                    {
+                        MMod:call_primitive_last(MSt2, ?PRIM_RAISE_ERROR, [
+                            ctx, jit_state, offset, ?BADARG_ATOM
+                        ]),
+                        AccLiteralSize0,
+                        AccSizeReg0,
+                        State0
+                    };
+                true ->
+                    {MMod:jump_to_label(MSt2, Fail), AccLiteralSize0, AccSizeReg0, State0}
+            end;
         is_atom(SizeValue) ->
-            MSt3 = cond_raise_badarg_or_jump_to_fail_label(
+            MSt3 = scale_size_by_unit_raising(SizeValue, SegmentUnit, Fail, MMod, MSt2),
+            MSt4 = cond_raise_badarg_or_jump_to_fail_label(
                 {'and', [
                     {SizeValue, '!=', 16},
                     {SizeValue, '!=', 32},
@@ -2711,10 +2737,10 @@ first_pass_bs_create_bin_compute_size(
                 ]},
                 Fail,
                 MMod,
-                MSt2
+                MSt3
             ),
-            {MSt4, AccSizeReg1} = accumulate_segment_size(AccSizeReg0, SizeValue, MMod, MSt3),
-            {MSt4, AccLiteralSize0, AccSizeReg1, State0}
+            {MSt5, AccSizeReg1} = accumulate_segment_size(AccSizeReg0, SizeValue, MMod, MSt4),
+            {MSt5, AccLiteralSize0, AccSizeReg1, State0}
     end;
 first_pass_bs_create_bin_compute_size(
     integer, Src, Size, SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt0, State0
@@ -2819,30 +2845,36 @@ first_pass_bs_create_bin_insert_value(
 first_pass_bs_create_bin_insert_value(
     utf16, Flags, Src, _Size, _SegmentUnit, Fail, CreatedBin, Offset, MMod, MSt0
 ) ->
-    {MSt1, FlagsValue} = decode_flags_list(Flags, MMod, MSt0),
-    {MSt2, SrcValue} = term_to_int(Src, Fail, MMod, MSt1),
-    {MSt3, Size} = MMod:call_primitive(MSt2, ?PRIM_BITSTRING_INSERT_UTF16, [
+    % term_to_int can raise a badarg and use a temp register for this, start
+    % with it; free any runtime Flags register immediately after decoding it.
+    {MSt1, SrcValue} = term_to_int(Src, Fail, MMod, MSt0),
+    {MSt2, FlagsValue} = decode_flags_list(Flags, MMod, MSt1),
+    MSt3 = MMod:free_native_registers(MSt2, [Flags]),
+    {MSt4, Size} = MMod:call_primitive(MSt3, ?PRIM_BITSTRING_INSERT_UTF16, [
         CreatedBin, Offset, {free, SrcValue}, {free, FlagsValue}
     ]),
-    {MSt4, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
-        MMod, MSt3, Offset, Size, 8
+    {MSt5, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
+        MMod, MSt4, Offset, Size, 8
     ),
-    {MSt4, NewOffset, CreatedBin};
+    {MSt5, NewOffset, CreatedBin};
 first_pass_bs_create_bin_insert_value(
     utf32, Flags, Src, _Size, _SegmentUnit, Fail, CreatedBin, Offset, MMod, MSt0
 ) ->
-    {MSt1, FlagsValue} = decode_flags_list(Flags, MMod, MSt0),
-    {MSt2, SrcValue} = term_to_int(Src, Fail, MMod, MSt1),
-    {MSt3, BoolResult} = MMod:call_primitive(MSt2, ?PRIM_BITSTRING_INSERT_UTF32, [
+    % term_to_int can raise a badarg and use a temp register for this, start
+    % with it; free any runtime Flags register immediately after decoding it.
+    {MSt1, SrcValue} = term_to_int(Src, Fail, MMod, MSt0),
+    {MSt2, FlagsValue} = decode_flags_list(Flags, MMod, MSt1),
+    MSt3 = MMod:free_native_registers(MSt2, [Flags]),
+    {MSt4, BoolResult} = MMod:call_primitive(MSt3, ?PRIM_BITSTRING_INSERT_UTF32, [
         CreatedBin, Offset, {free, SrcValue}, {free, FlagsValue}
     ]),
-    MSt4 = cond_raise_badarg_or_jump_to_fail_label(
-        {'(bool)', {free, BoolResult}, '==', false}, Fail, MMod, MSt3
+    MSt5 = cond_raise_badarg_or_jump_to_fail_label(
+        {'(bool)', {free, BoolResult}, '==', false}, Fail, MMod, MSt4
     ),
-    {MSt5, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
-        MMod, MSt4, Offset, 4, 8
+    {MSt6, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
+        MMod, MSt5, Offset, 4, 8
     ),
-    {MSt5, NewOffset, CreatedBin};
+    {MSt6, NewOffset, CreatedBin};
 first_pass_bs_create_bin_insert_value(
     integer, Flags, Src, Size, SegmentUnit, Fail, CreatedBin, Offset, MMod, MSt0
 ) ->
@@ -2863,24 +2895,29 @@ first_pass_bs_create_bin_insert_value(
     ),
     {MSt7, NewOffset, CreatedBin};
 first_pass_bs_create_bin_insert_value(
-    float, Flags, Src, Size, _SegmentUnit, Fail, CreatedBin, Offset, MMod, MSt0
+    float, Flags, Src, Size, SegmentUnit, Fail, CreatedBin, Offset, MMod, MSt0
 ) ->
     % term_to_int can raise a badarg and use a temp register for this, start
     % with it.
-    {MSt1, SizeValue} = term_to_int(Size, Fail, MMod, MSt0),
-    {MSt2, SrcReg} = MMod:move_to_native_register(MSt1, Src),
-    {MSt3, FlagsValue} = decode_flags_list(Flags, MMod, MSt2),
+    {MSt1, RawSize} = term_to_int(Size, Fail, MMod, MSt0),
+    {MSt2, SizeValue} =
+        if
+            is_integer(RawSize) -> {MSt1, RawSize * SegmentUnit};
+            true -> {MMod:mul(MSt1, RawSize, SegmentUnit), RawSize}
+        end,
+    {MSt3, SrcReg} = MMod:move_to_native_register(MSt2, Src),
+    {MSt4, FlagsValue} = decode_flags_list(Flags, MMod, MSt3),
     % Call single primitive with size parameter
-    {MSt4, BoolResult} = MMod:call_primitive(MSt3, ?PRIM_BITSTRING_INSERT_FLOAT, [
+    {MSt5, BoolResult} = MMod:call_primitive(MSt4, ?PRIM_BITSTRING_INSERT_FLOAT, [
         CreatedBin, Offset, {free, SrcReg}, SizeValue, {free, FlagsValue}
     ]),
-    MSt5 = cond_raise_badarg_or_jump_to_fail_label(
-        {'(bool)', {free, BoolResult}, '==', false}, Fail, MMod, MSt4
+    MSt6 = cond_raise_badarg_or_jump_to_fail_label(
+        {'(bool)', {free, BoolResult}, '==', false}, Fail, MMod, MSt5
     ),
-    {MSt6, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
-        MMod, MSt5, Offset, SizeValue, 1
+    {MSt7, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
+        MMod, MSt6, Offset, SizeValue, 1
     ),
-    {MSt6, NewOffset, CreatedBin};
+    {MSt7, NewOffset, CreatedBin};
 first_pass_bs_create_bin_insert_value(
     string, _Flags, Src, Size, SegmentUnit, Fail, CreatedBin, Offset, MMod, MSt0
 ) ->
@@ -4749,6 +4786,37 @@ decode_compile_time_literal(<<?COMPACT_EXTENDED_LITERAL, Rest0/binary>>, #state{
     {LiteralIndex, Rest1} = decode_literal(Rest0),
     LiteralTerm = Resolver(LiteralIndex),
     {LiteralTerm, Rest1}.
+
+decode_bs_create_bin_flags(<<0:4, ?COMPACT_ATOM:4, Rest/binary>>, _MMod, MSt, _State) ->
+    {MSt, [], Rest};
+decode_bs_create_bin_flags(
+    <<?COMPACT_EXTENDED_LITERAL, Rest0/binary>> = Bin,
+    MMod,
+    MSt,
+    #state{literal_resolver = Resolver} = State
+) ->
+    {LiteralIndex, Rest1} = decode_literal(Rest0),
+    LiteralTerm = Resolver(LiteralIndex),
+    case is_valid_flags_list(LiteralTerm) of
+        true -> {MSt, LiteralTerm, Rest1};
+        false -> decode_compact_term(Bin, MMod, MSt, State)
+    end;
+decode_bs_create_bin_flags(Bin, MMod, MSt, State) ->
+    decode_compact_term(Bin, MMod, MSt, State).
+
+decode_bs_create_bin_size(AtomType, Bin, _MMod, MSt, _State) when
+    AtomType =:= utf8; AtomType =:= utf16; AtomType =:= utf32
+->
+    {MSt, 0, skip_compact_term(Bin)};
+decode_bs_create_bin_size(_AtomType, Bin, MMod, MSt, State) ->
+    decode_compact_term(Bin, MMod, MSt, State).
+
+is_valid_flags_list([]) ->
+    true;
+is_valid_flags_list([Flag | T]) when Flag =:= little; Flag =:= signed; Flag =:= native ->
+    is_valid_flags_list(T);
+is_valid_flags_list(_) ->
+    false.
 
 decode_flags_list(L, _MMod, MSt) when is_list(L) ->
     % compile time decoding

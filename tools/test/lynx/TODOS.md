@@ -1,0 +1,993 @@
+<!--
+Copyright 2026 Peter Madsen-Mygdal <petermm@gmail.com>
+SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+-->
+
+# Lynx coverage TODOs
+
+Status as of 2026-11-27, against Lynx
+`ff3aad6f39e196ce539a73e1f51f8c3a1b69f68c`. The supported-behavior priorities
+below follow an audit of the current recipes and unsampled sites. The original
+six-item shortlist from screening 195 incoming commits is retained afterwards;
+persistent terms and hashing are not the only remaining work.
+See [PLAN.md](PLAN.md) for implementation details and validation results, and
+[README.md](README.md) for runner usage. Completed items describe the targeted
+batches, not exhaustive coverage or proof of every scheduler interleaving.
+
+## Supported-behavior priorities
+
+Prefer these batches before adding APIs. Keep runtime corrections and standalone
+Erlang regressions separate from Lynx coverage.
+
+### 1. Custom map-iterator ordering and consumers
+
+- [x] Add custom deterministic total orders through `next`, `fold`, `map`,
+  `filter`, `filtermap` and `foreach`, extending the earlier predefined-order
+  recipes and basic standalone comparator regression.
+- [x] Cover partial/exhausted iterators, empty/singleton and 31/32/33-entry maps,
+  and retained iterators after updates to the original map value.
+- [x] Cover invalid ordering arguments and comparator exceptions. Compare exact
+  consumer visits, not comparator call order/count or unspecified key ties.
+- [x] Fix invalid-order exception behavior separately, with an Erlang regression.
+
+**Resolved difference:** OTP 29.1.3 raises `error:badarg`, but unchanged AtomVM
+raised `error:function_clause` for a bad atom or functions of arity 0/1/3 as the
+order, with empty/singleton/multi-entry maps. Non-map `iterator/2` inputs also
+incorrectly raised `badmap`; `iterator/1` must retain that exception. The new
+standalone regression passes OTP, fails unchanged AtomVM, and passes the fixed
+runtime in interpreter, AArch64 precompiled and on-demand JIT modes.
+
+Added 240 permanent differential recipes, with independent expected-value and
+filtered/reordered replay checks. All match OTP in interpreter, AArch64
+precompiled and on-demand JIT modes. See
+[PLAN.md](PLAN.md#custom-map-iterator-ordering-and-consumers) for scope and
+validation; no expected failures were added.
+
+### 2. Structural BIF execution paths
+
+- [x] Extend body/dynamic-call/guard comparisons to `length/1`, `hd/1`, `tl/1`,
+  `element/2`, `tuple_size/1`, `byte_size/1` and `bit_size/1`.
+- [x] Distinguish body/dynamic exceptions from guard rejection using opaque
+  arguments. Include empty/improper lists, invalid tuples and index boundaries,
+  partial bitstrings, heap/sub-binaries and live values across calls/GC.
+- [x] Inspect emitted BEAM before claiming distinct opcode paths; different
+  source forms can compile identically. Avoid duplicating existing map guards.
+
+Added 70 permanent recipes with independent expected values and mixed/reordered
+saved replay, extending the existing arithmetic/comparison/map-get observer.
+Each compares three paths before and after explicit GC. Body and guard BIF
+instructions have different failure targets; dynamic calls use `erlang:apply/3`.
+These are dispatch/failure contexts, not dedicated structural opcodes. All 70
+match OTP in interpreter, AArch64 precompiled and on-demand JIT modes, without
+runtime fixes or expected failures. See
+[PLAN.md](PLAN.md#structural-bif-execution-paths).
+
+### 3. Exit reception across trap-flag changes
+
+- [x] Combine unfenced trap-flag transitions with `exit_signal/2`, legacy
+  `exit/2` controls and alias deactivation. Existing transition cases fence
+  reception; the older asynchronous-exit batch holds the flag fixed.
+- [x] Use isolated monitored workers, exact controls and allowed outcome sets.
+  Distinguish an already converted EXIT message from a pending signal; never
+  require a particular scheduling winner or claim every allowed outcome occurred.
+
+Added 54 recipes: 36 deterministic controls and 18 unfenced samples, both flag
+transitions and normal/structured/kill reasons. Require the allowed-outcome
+predicate to be true on each VM, retain actual traces, and independently check
+those traces and filtered/reordered replay. The two exploratory legacy self-exit
+trace differences are admitted by the source-checked contract: these are **not
+confirmed bugs**. Legacy self-suicide is selected at send time; queued messages
+must survive later flag changes or alias removal. See
+[PLAN.md](PLAN.md#exit-reception-across-trap-flag-changes).
+
+The final receive deliberately establishes reception before a surviving worker
+reports. This does not cover returning before any reception (the separate
+`exit_signal_self_is_handled_later` model example), all schedules or all allowed
+outcomes. The separate unfenced-completion batch below samples the first gap.
+
+### 4. Liveness/dead-query fast paths and queued notifications
+
+- [x] Target `alive_may_leave_monitor_parked` and
+  `process_info_of_dead_does_not_flush`: local queries need not establish that
+  the caller drained its own incoming notifications.
+- [x] Add exact live/dead controls, allowed notification traces, retained mailbox
+  sentinels and monitor cleanup. Do not repeat the existing kill/query,
+  trap-after-DOWN, unlink/relink/kill or ending-process request batches.
+
+Added 46 asserted recipes: six monitor/liveness cases and 40 query/notification
+cases, with independent raw-trace tables and filtered/reordered replay. An OTP
+survey observes all four liveness/DOWN combinations, including `{true, noproc}`;
+none is required as a race winner. Known-dead queries use self-sent async signals
+and a separate prepared target, with exact query-before-signal and
+signal-received-before-query controls, plus held-live controls. This isolates
+caller reception from target-death timing rather than reproducing the model's
+killer/query program literally. A final receive still forces fatal reception;
+returning without one and all-schedule coverage remain outside this batch. See
+[PLAN.md](PLAN.md#livenessdead-target-queries-with-pending-notifications).
+
+### 5. Compiler-lowered receive continuations
+
+- [x] Sample upstream's consecutive timeout-only receive loops and receives
+  with dropped unused clause bodies, pairing valid lowered Core with source
+  controls and inspecting emitted operations.
+- [x] Preserve skipped messages across waits and check exception/after
+  continuations, exact integer-vs-float selection, mailbox-vs-clause priority,
+  captured values, once-only effects and cleanup overriding an earlier error.
+
+The batch adds 32 recipes: 16 lowered-Core cases and 16 source controls.
+Positive opaque timeouts retain actual waits. A rescan control first skips the
+whole mailbox and times out, then consumes a previously skipped match. Independent
+expected tables check each VM's results, effect trace and remaining mailbox;
+filtered/reordered replay checks Core companion reindexing. See
+[PLAN.md](PLAN.md#lowered-receive-continuations).
+
+An optimized-away `receive after 0` does not establish signal reception.
+Receive-marker instructions alone also do not establish an optimized mailbox-skip
+path: the interpreter currently treats them as no-ops apart from register clearing.
+This batch does not claim a new mailbox-skip optimization or all compiler shapes.
+
+### 6. Unfenced self-exit completion
+
+- [x] Separate a post-function-return report from the worker's final DOWN, with
+  no explicit worker-side receive, mailbox query or acknowledgement on the
+  unfenced path. Add PID self-signals only; leave aliases/flag transitions in
+  their existing batches.
+- [x] Pair async cases with legacy self-`exit/2` and real receive-fenced async
+  controls, both trap settings and normal/structured/kill reasons.
+- [x] Use exact outcomes for the 15 deterministic recipes and strict allowed
+  combinations for the three fatal unfenced async recipes; retain raw traces
+  and independently validate report content/count, exit reason and monitor cleanup.
+
+The batch adds 18 asserted recipes. An unfenced fatal signal can stop the worker
+before its report, after its report, or lose to normal process completion. A normal
+DOWN is not by itself a passing observation: it must have the exact return report,
+except for the legacy untrapped-normal control, which must never report. Both OTP
+and AtomVM actually completed normally after unfenced self-`kill` in the isolated
+sweep; receive-fenced self-`kill` terminates with `killed` and no report. The report
+proves the callback returned, not that a signal was pending at that moment or
+that the worker stayed alive afterwards. See
+[PLAN.md](PLAN.md#unfenced-self-exit-completion).
+
+### 7. Seeded queue histories (follow-up)
+
+- [x] Extend isolated queue observations into deterministic and seeded histories
+  that cross empty/singleton boundaries and exercise front/rear rebalancing.
+- [x] Mix insertion/removal at both ends, reverse, split and asymmetric joins;
+  compare exact contents and returns, not internal queue representations.
+- [x] Include first/last exact deletion, membership, invalid split recovery,
+  empty-operation exceptions and saved immutable queues across operations/GC.
+- [x] Check both VMs against an independent ordered-list oracle and exercise
+  filtered/reordered replay and setup-preserving shrinking.
+
+This is an additional supported-behavior gap found after the original audit,
+not an unsampled Lean site or an API addition. Four boundary sequences extend
+normal seeded generation; the earlier 44 fixed queue observations remain intact.
+All 148 current histories (4,498 operations) and nine-case reordered replay
+match OTP and the independent list model in interpreter, AArch64 precompiled
+and on-demand JIT modes. No runtime fix or expected-failure entry was needed.
+See [PLAN.md](PLAN.md#seeded-queue-sequences) for the observer contract and validation.
+
+### 8. Queue callbacks (follow-up)
+
+- [x] Cover `filter/2` list expansion, `filtermap/2`, noncommutative `fold/3`,
+  short-circuit `any/2` and `all/2`, and first/last predicate deletion.
+- [x] Use equivalent queues from `from_list`, repeated `in` and repeated `in_r`;
+  include empty/singleton, invalid callbacks, non-boolean results, each exception
+  class after preceding effects, retained original queues and explicit GC.
+- [x] Independently check both VMs' results and callback effects, including raw
+  unordered predicate visits and exact multiplicities, plus reordered replay.
+- [x] Keep the discovered `lists:any/all` error correction and standalone Erlang
+  regression separate from the Lynx coverage.
+
+Adds 153 permanent recipes (total 7,082) without changing attribution. The initial
+six mismatches were non-boolean predicate results: `any` raised `badarg`, while
+`all` returned `false`, instead of OTP's `{case_clause, Result}`. The separate
+library regression checks exact exceptions, effect prefixes and short circuit.
+All 153 cases and 14-case reordered replay now match OTP and the independent
+model in interpreter, AArch64 precompiled and on-demand JIT modes, without new
+expected failures. See [PLAN.md](PLAN.md#queue-callback-combinations) for scope
+and validation.
+
+**Separate compiler follow-up:** appending the observer to the large existing
+helper exposed an AArch64 out-of-range ADR in `jump_to_continuation/2`.
+The observer is instead a separate compiled/packaged module; the prior helper
+is unchanged. This keeps the coverage usable but does not fix the compiler limit.
+Retain `.amp/in/artifacts/lynx-queue-callbacks/native/precompile.log` and its
+combined helper source/BEAM as the reproducer for that separate investigation.
+
+### 9. Set callbacks (follow-up)
+
+- [x] Cover supported v2 `fold/3`, `filter/2`, `map/2` and `filtermap/2` through
+  `from_list`, repeated additions and deletion/reinsertion histories.
+- [x] Include exact numeric keys, mapping collisions, duplicates, empty/singleton
+  and 31/32/33-element sets, invalid callbacks, non-boolean predicate results,
+  each exception class after preceding effects, and original sets retained across GC.
+- [x] Independently check exact result membership, cardinality, callback counts,
+  raw visit multiplicities and fold accumulator threading. Accept unspecified
+  traversal orders and exception prefixes; include filtered/reordered replay.
+- [x] Correct `sets:filter/2`'s non-boolean predicate exception separately, with
+  an ordinary Erlang regression in `test_sets.erl`, outside the Lynx coverage.
+
+Adds 140 permanent differential recipes, preserving all 7,082 previous cases
+and metadata (total 7,222). Initial interpreter, AArch64 precompiled and on-demand
+JIT sweeps each matched 137/140, isolating one filter exception defect across
+three construction histories, not a visit-order difference. The separate library
+correction now raises OTP's `bad_filter` for non-boolean results while preserving
+predicate-thrown exceptions and `maps:filter/2`'s behavior. Interpreter and
+precompiled reruns match 140/140 with 16/16 replays; JIT reruns match 38/38 filter
+recipes and a 16/16 mixed replay. The other 102 JIT recipes passed before the
+filter-only fix and were not rerun afterward. The new CLI regression passes.
+Ordinary `test_sets`/`test_maps` pass on OTP 27.3.4.12, 28.3.1 and 29.1.3 and in
+all three AtomVM modes. No expected-failure entries were added.
+See [PLAN.md](PLAN.md#set-callback-combinations) for execution-mode results and scope.
+
+### 10. Ordered list folds and mapfolds (follow-up)
+
+- [x] Cover `foldl/3`, `foldr/3`, `mapfoldl/3` and `mapfoldr/3` with exact
+  callback order and every incoming accumulator, not just final sums.
+- [x] Check mapped output order separately from right-to-left invocation order;
+  include accumulator replacement, duplicate/exact numeric and compound elements,
+  boxed values, captured data, and original inputs retained across explicit GC.
+- [x] Include error/throw/exit on the first, second and final callback, unused
+  failing callbacks, malformed mapfold returns, invalid callbacks and improper tails.
+- [x] Check independent ordered contracts and filtered/reordered replay; reject
+  identically wrong reports with reversed visits, broken threading or reversed output.
+- [x] Correct callback validation and malformed-list exception differences
+  separately, with ordinary Erlang regressions in `test_lists.erl`, outside Lynx.
+
+Adds 128 recipes (29 per fold, 35 per mapfold), preserving all 7,222 previous
+recipes and metadata; total 7,350, attribution unchanged at 377/478 sites.
+Initial interpreter, AArch64 precompiled and on-demand JIT runs each matched
+98/128, exposing 24 callback-validation differences, five `foldr/3` malformed-input
+exceptions and one `foldl/3` non-list-entry exception. The separate library fix
+adds entry guards and proper recursive exception boundaries without changing
+`reverse/1` or translating callback exceptions. Interpreter, precompiled and
+on-demand JIT reruns each match 128/128 with 15/15 reordered replays.
+Full list/queue/set/map ordinary
+tests pass on OTP 27.3.4.12, 28.3.1 and 29.1.3 and in all three AtomVM modes.
+A 10,000-element validation of all four operations also passes in every mode.
+No expected-failure entries were added. See
+[PLAN.md](PLAN.md#ordered-list-folds-and-mapfolds) for mode/replay results and limits.
+
+### 11. Ordered unary list callbacks (follow-up)
+
+- [x] Cover `map/2`, `foreach/2`, `flatmap/2`, `filter/2`, `filtermap/2`,
+  `search/2` and `dropwhile/2` with exact output, callback visits/indices,
+  captured values and original inputs retained across explicit GC.
+- [x] Check invalid callbacks, empty/proper/improper/non-list inputs,
+  first/second/final callback exceptions and return-value validation.
+- [x] Distinguish flatmap empty/single/multiple expansion and deferred validation
+  from incorrectly preempting a later callback exception.
+- [x] Check search/dropwhile first/middle/final/absent stops, exact numeric matches,
+  and improper suffixes that must remain untouched after a short-circuit return.
+- [x] Add independent sequential contracts, positive/negative model controls
+  and filtered/reordered replay.
+- [x] Correct the observed callback-validation and map-entry exceptions, and
+  search's acceptance of non-boolean predicate results, with separate ordinary
+  Erlang regressions rather than expected-failure entries.
+
+Adds 268 recipes, preserving all 7,350 preceding cases and metadata (total 7,618;
+attribution remains 377/478). Initial interpreter, AArch64 precompiled and
+on-demand JIT runs each matched 239/268, exposing 22 callback-validation cases,
+six search predicate-result failures and one map non-list-entry failure; their
+21-case reordered replays matched 19/21. A separate library correction and
+ordinary Erlang regressions resolve those differences, preserving callback
+exceptions, short-circuiting and deferred flatmap validation. Fresh runs in all
+three modes each match 268/268 and their reordered replays match 21/21, with
+independent checks of both VMs. OTP 27.3.4.12, 28.3.1 and 29.1.3 each satisfy
+all 268 contracts and pass the ordinary regressions. The harness passes all 46
+enabled methods (three optional skips). No expected-failure entries were added. See
+[PLAN.md](PLAN.md#ordered-unary-list-callbacks) for execution-mode/replay results,
+independent checks and limits.
+
+### 12. Paired-list zipwith callbacks (follow-up)
+
+- [x] Cover `lists:zipwith/3` with asymmetric paired inputs, exact argument and
+  result order, duplicates, numeric distinctions and arbitrary returned terms.
+- [x] Check unequal lengths in both directions, non-list inputs and improper
+  tails on either/both sides, preserving effects from the matching prefix.
+- [x] Distinguish invalid functions and arities 0/1/3 on empty, matching and
+  unmatched inputs. Do not import unary APIs' entry-validation contract.
+- [x] Check first/second/final callback errors/throws/exits, unused failing
+  callbacks and exceptions that precede a later length/tail failure.
+- [x] Retain both inputs, captures and boxed results across explicit GC;
+  independently check both VMs and exercise filtered/reordered replay.
+
+Adds 95 recipes, preserving all 7,618 preceding cases and metadata (total 7,713;
+fixture calls/exports and Lean attribution unchanged). OTP 27.3.4.12, 28.3.1
+and 29.1.3 each satisfy all 95 independent contracts. A positive model control
+passes; five controls reject identically wrong reports with swapped arguments,
+reversed visits/output or eager input/callback validation. Interpreter,
+precompiled and on-demand JIT each match 95/95, with 14/14 reordered replays and
+identical complete observations. Independent checks pass for both VMs in all six
+runs. The full 50-method harness passes (47 passed, three optional skips).
+No library/runtime fix or expected-failure entry is included. See
+[PLAN.md](PLAN.md#paired-list-zipwith-callbacks) for execution-mode results,
+independent checks and limits.
+
+### Comparator-driven sort, usort and merge
+
+- [x] Add 148 recipes with non-strict ascending/descending comparators, stable
+  equal-key ordering, first usort representatives and left-before-right merge
+  ties. Preserve all 7,713 previous recipes and metadata (total 7,861).
+- [x] Cover invalid callbacks/arities, non-boolean returns, constant
+  errors/throws/exits and no-comparison controls, without asserting algorithm-
+  dependent invocation counts, pair order or argument-dependent failures.
+- [x] Retain original inputs, captures and boxed results across explicit GC;
+  check both VMs against independent ranks and exercise reordered replay.
+- [x] Check all 148 contracts on OTP 27/28/29 and reject six identically wrong
+  report pairs with a passing positive model control.
+- [x] Fix stable ties in `sort/2` and `merge/3`, with ordinary Erlang regressions
+  separate from this coverage. Initial runs exposed six sort and eight merge
+  tie mismatches. Keep natural/key sorting stable with non-strict comparators.
+- [x] Match OTP's callback-validation boundaries for `sort/2` and `merge/3`,
+  with separate ordinary Erlang regressions. Initial runs exposed six sort
+  and fifteen merge validation mismatches. Keep usort entry validation and
+  first representatives independent of the sorting correction; fix default
+  usort's integer/float representative choice too.
+
+Initial runs matched 113/148 and 22/30 reordered cases in all three modes.
+A separate library/ordinary-regression/changelog correction resolves the
+observed differences without an allowlist. Sort, merge, validation and default-
+usort regression groups each fail against the old library and pass afterward;
+existing keysort/ukeysort controls remain green. Ordinary lists/queue/sets/maps
+suites and independent 10,000-item controls pass on OTP 27/28/29 and all three
+AtomVM modes. Fresh interpreter, precompiled and JIT runs each match 148/148,
+with 30/30 reordered replays and independent checks on both VMs. The full
+51-method CLI suite passes (48 passed, three optional skips). See
+[PLAN.md](PLAN.md#comparator-driven-sort-usort-and-merge) for the complete
+validation results, independent contracts and scope.
+
+### Keyed-list equality, mutation and sorting
+
+- [x] Add 344 differential recipes for `keydelete`, `keyreplace`, `keystore`,
+  `keytake`, `keysort` and `ukeysort`, preserving all 7,861 preceding recipes
+  and metadata (total 8,205; fixture counts and Lean attribution unchanged).
+- [x] Cover first numeric-equivalent matches, lone equivalent float keys,
+  duplicate representatives, 2^53 boundaries, positions one/two, malformed
+  elements, invalid arguments and reached/unreached improper tails.
+- [x] Retain inputs/replacements/captures across GC and check both VMs against
+  independent first-match/rank contracts, including reordered replay.
+- [x] Validate all contracts on OTP 27/28/29; reject seven identically wrong
+  report pairs, with a passing positive control.
+- [x] Fix numeric equality separately in `keydelete`, `keyreplace` and
+  `keystore`, with ordinary Erlang regressions for lone equivalent floats,
+  earlier float/later integer matches, nested keys and untouched improper tails.
+- [x] Fix `ukeysort` duplicate removal separately, retaining the first
+  integer/float-equivalent key representative; add ordinary Erlang regressions,
+  including the large-number precision boundary.
+- [x] Match positive-integer index validation in the five failing APIs, with
+  ordinary Erlang regressions. `keytake` retains its existing correct guard.
+- [x] Match sort entry exception reasons for non-list and one-cell improper
+  inputs separately, with ordinary Erlang regressions and lazy singleton controls.
+
+Initial interpreter and AArch64 precompiled runs each matched 260/344 and
+exposed 84 differences: 12 each in keydelete/keyreplace/keystore, 20 in keysort
+and 28 in ukeysort. All 56 keytake observations matched. Each mode's 50-case
+reordered replay matched 39 and differed on 11, as did the on-demand JIT subset.
+
+A separate library/ordinary-regression/changelog correction resolves these
+compatibility groups without changing any recipes, independent expectations
+or allowlists. Fresh interpreter and precompiled runs match 344/344 and their
+50-case replays pass, including the matching on-demand JIT subset. Ordinary
+lists/queue/sets/maps suites and 10,000-item keyed-list controls pass on OTP
+27/28/29 and all three AtomVM modes. The full CLI suite passes (49 passed,
+three optional skips). See
+[PLAN.md](PLAN.md#keyed-list-equality-mutation-and-sorting) for final JIT subset,
+CLI results and validation scope; the full on-demand JIT matrix remains unrun.
+
+### Positional-list traversal and validation
+
+- [x] Add 284 differential recipes for `nth/2`, `nthtail/2`, `sublist/2,3` and
+  `split/2`; preserve all 8,205 preceding recipes and metadata (total 8,489).
+- [x] Cover invalid indices, truncation, empty/non-list inputs, reached and
+  unreached improper tails, boxed payloads and 33-item boundary controls.
+- [x] Keep three library corrections, ordinary Erlang regressions and changelog
+  separate from differential coverage and notes. All three regression groups
+  fail before and pass afterward; no allowlist changes are needed.
+- [x] Match 284/284 in interpreter and AArch64 precompiled modes. Pass targeted
+  CLI checks for full selection, reordered replay and 15 handwritten boundary
+  expectations, and ordinary lists/queue/sets/maps suites on all three AtomVM
+  modes plus OTP 27/28/29.
+- [x] Match the 22-case reordered on-demand JIT subset, with complete decoded
+  observations identical to the interpreter and precompiled results.
+
+See [PLAN.md](PLAN.md#positional-list-traversal-and-validation) for evidence and
+scope. The full runtime corpus, full CLI suite and full JIT matrix remain unrun
+for this batch.
+
+### Deep-list flattening and concatenation
+
+- [x] Add 185 recipes for `flatten/1`, `append/1,2`, source `++` and dynamic
+  `erlang:'++'/2`, retaining all prior recipes/metadata (total 8,674).
+- [x] Cover asymmetric nesting, empty nodes, atomic boxed leaves, arbitrary final
+  tails, malformed outer/intermediate lists and exception precedence.
+- [x] Retain copied heap inputs, captures and complete outcomes across GC;
+  exercise depth 7/8/9/17/33 and width 8/33/65 traversal boundaries.
+- [x] Check both VMs against independent recursive contracts and reordered
+  replay; match 185/185 in interpreter/precompiled modes and 27/27 in the JIT
+  subset, with identical complete decoded observations across selected modes.
+- [x] Keep native flatten exception/cleanup fixes and ordinary Erlang regressions
+  separate. Both ordinary regression groups fail before and pass after; measured
+  flatten leaks fall from 200 allocations/64,000 bytes to none. Unrelated
+  existing leaks remain; no allowlist changes are used.
+- [x] Pass both targeted CLI tests and ordinary lists/queue/sets/maps suites
+  on all three AtomVM modes and OTP 27/28/29.
+
+See [PLAN.md](PLAN.md#deep-list-flattening-and-concatenation) for evidence and
+limits. The full corpus, full CLI harness, full JIT matrix and embedded targets
+remain unrun for this batch; allocation-failure paths are not fault-injected.
+
+### List-selection identity and traversal
+
+- [x] Add 209 recipes for `lists:min/1`, `lists:max/1` and `lists:delete/2`,
+  preserving all preceding recipes and metadata (total 8,883).
+- [x] Check first ordering-equivalent extrema and first exact deletion matches,
+  signed zeros, 2^53 boundaries, nested/boxed terms and mixed term ordering.
+- [x] Distinguish improper elements from invalid outer lists and preserve
+  untouched deletion suffixes; retain copied inputs/results/captures across GC.
+- [x] Match 209/209 in interpreter/precompiled modes and the 30-case reordered
+  JIT subset, with independent contracts on both VMs and complete decoded
+  observations identical across selected modes.
+- [x] Pass both targeted CLI integration tests and all 209 observer-only host
+  controls on OTP 27/28/29. See the plan for the older-host helper limitation.
+- [x] Leave runtime/library code, ordinary Erlang tests, changelog and allowlists
+  unchanged: no defect was found in the selected cases.
+
+See [PLAN.md](PLAN.md#list-selection-identity-and-traversal) for evidence and
+limits. The full corpus, full CLI suite, full JIT matrix, fixture Lean laws and
+embedded targets remain unrun for this batch.
+
+### List construction without flattening
+
+- [x] Add 110 `lists:join/2` and 99 `lists:duplicate/2` recipes, preserving all
+  preceding recipes and metadata (total 9,092).
+- [x] Preserve whole list-valued separators/elements, exact numeric and boxed
+  terms, and copied arguments/results/captures across GC.
+- [x] Check empty/singleton and longer inputs, zero/one/larger bounded counts,
+  malformed outer lists, negative counts and non-integer count errors.
+- [x] Match 209/209 in interpreter/precompiled modes and 30/30 in reordered
+  on-demand JIT replay, with independent contracts and cross-mode comparisons.
+- [x] Pass both targeted CLI tests and reject seven local wrong-result controls.
+- [x] Leave runtime/library code, ordinary Erlang tests, changelog and allowlists
+  unchanged: no discrepancy was observed in the selected cases.
+
+See [PLAN.md](PLAN.md#list-construction-without-flattening) for evidence and
+limits. The full corpus, full CLI suite, full JIT matrix, older-OTP controls,
+fixture Lean laws, allocation-exhaustion and embedded targets remain untested
+for this batch.
+
+### Proplist lookup and precedence
+
+- [x] Add 352 recipes across eight supported `proplists` entry points,
+  preserving all preceding recipes and metadata (total 9,444).
+- [x] Cover atom shorthand, first-entry precedence, exact numeric/compound keys,
+  malformed tuples, defaults, ordered collection and all-match deletion.
+- [x] Distinguish early queries from full traversal of improper/non-list inputs;
+  retain copied keys, inputs, defaults, captures and outcomes across GC.
+- [x] Fix `get_value/2,3` skipping malformed matching tuples in a separate
+  library/ordinary-regression/changelog group: eight mismatching recipes resolve.
+- [x] Match 352/352 in interpreter/precompiled modes and 51/51 in reordered JIT
+  replay, with independent contracts and exact cross-mode observations.
+- [x] Pass both targeted CLI tests and reject ten local wrong-result controls.
+- [x] Pass complete ordinary proplists/lists/maps/sets/queue suites in all three
+  AtomVM modes and fresh host builds on OTP 27/28/29.
+
+See [PLAN.md](PLAN.md#proplist-lookup-and-precedence) for before/after evidence
+and limits. Full corpus/CLI/JIT matrices, fixture Lean laws and embedded targets
+remain unrun for this batch; older hosts ran ordinary suites, not the harness.
+
+### Proplist normalization and map conversion
+
+- [x] Add 246 recipes across the six remaining supported `proplists` entry
+  points, preserving all preceding recipes and metadata (total 9,690).
+- [x] Check shallow normalization, exact keys, malformed-entry suppression,
+  absent versus `undefined` bindings and exact exception reasons.
+- [x] Use asymmetric larger inputs and retain raw results/arguments across GC;
+  compare `from_map/1` entry counts and exact bindings without assuming order.
+- [x] Match 246/246 in interpreter/precompiled modes and 36/36 in reordered JIT
+  replay, with independent contracts, exact cross-mode observations and both
+  targeted CLI tests passing. Reject twelve local wrong-result controls.
+- [x] Match all 246 observer-only host controls on OTP 27/28/29; this is not
+  full older-OTP harness validation.
+- [x] Preserve four initial JIT compiler timeouts at 120 seconds; the final
+  replay passes with a 240-second budget. See the plan for compilation timings.
+- [x] Leave runtime/library code, ordinary Erlang tests, changelog and allowlists
+  unchanged: no semantic discrepancy was observed.
+
+See [PLAN.md](PLAN.md#proplist-normalization-and-map-conversion) for evidence
+and limits. Full corpus/CLI/JIT matrices, full older-host harnesses, fixture
+Lean laws, ordinary Erlang suites and embedded targets remain unrun this batch.
+
+### Binary replacement
+
+- [x] Add 157 recipes for the supported binary-pattern/binary-replacement
+  `binary:replace/3,4` contract, preserving all preceding recipes (total 9,847).
+- [x] Check exact first/global outputs, non-overlapping candidates, retained
+  suffixes, output containing the pattern, growing/shrinking/deleting results,
+  empty subjects and invalid operands/options.
+- [x] Exercise copied inputs, larger-parent slices and three-bit-offset extraction,
+  boundary sizes and live operands/results across GC, with an independent
+  byte-list model and filtered/reordered replay.
+- [x] Resolve ten empty-subject and two improper-option mismatches in a separate
+  runtime/ordinary-regression group; preserve the failing baseline evidence.
+- [x] Match 157/157 in interpreter and AArch64 precompiled modes, and 33/33 in
+  reversed/strided JIT replay including all previously failing cases. Independent
+  contracts, complete cross-mode observations and both targeted CLI tests pass;
+  nine local wrong-result controls are rejected.
+- [x] Run seven ordinary binary suites on OTP 27/28/29 and all three VM modes.
+  No expected failures or unsupported replacement options are added.
+
+See [PLAN.md](PLAN.md#binary-replacement) for evidence and limits. Full corpus,
+full CLI/JIT matrices, full older-host harnesses, fixture laws, the whole ordinary
+suite and embedded targets remain unrun this batch. The following batch covers
+`binary:longest_common_prefix/1`, which previously had only ordinary tests.
+
+### Longest common binary prefix
+
+- [x] Add 252 recipes for `binary:longest_common_prefix/1`, preserving all
+  preceding recipes and metadata (total 10,099).
+- [x] Check singleton/identical binaries, shorter inputs in either order,
+  later-shortening three-input controls and reordered input results.
+- [x] Check first/middle/final-byte differences, 0/1/63/64/65/257-byte lengths,
+  embedded zero/high bytes, copied values, larger-parent slices and byte-sized
+  segments extracted at a three-bit offset.
+- [x] Validate invalid roots/entries, partial bitstrings and improper tails,
+  including invalid data after an empty binary or zero-prefix mismatch.
+- [x] Retain complete operands/captures across GC and independently validate
+  both VMs with equal-byte columns rather than the NIF's pairwise algorithm.
+- [x] Match 252/252 in interpreter and AArch64 precompiled modes, and 36/36 in
+  reversed/strided JIT replay with a 240-second cold-compilation budget. Both
+  targeted CLI tests, independent contracts and cross-mode observations pass;
+  ten local wrong-result controls are rejected.
+- [x] Match all 252 observer-only host controls on OTP 27/28/29; this is not
+  full older-OTP harness validation.
+- [x] Leave runtime/library code, ordinary Erlang tests, changelog and allowlists
+  unchanged: no semantic discrepancy was observed.
+
+See [PLAN.md](PLAN.md#longest-common-binary-prefix) for validation results and
+limits. Full corpus/CLI/JIT matrices, the full older-host harness, fixture Lean
+laws, ordinary Erlang suites and embedded targets are outside this batch.
+
+### Binary access and copying
+
+- [x] Add 368 recipes for `binary:at/2`, `first/1`, `last/1` and `copy/1,2`,
+  preserving previous metadata (total 10,467).
+- [x] Check unsigned high bytes, asymmetric/empty inputs, index boundaries,
+  default/zero/repeated copies, invalid types and partial bitstrings.
+- [x] Exercise copied inputs, larger-parent slices and three-bit-offset byte
+  segments; retain complete operands, captures and results across GC.
+- [x] Check large empty-source counts and guaranteed oversized-result boundaries
+  on matching-word-size VMs; independently validate complete byte-list outcomes.
+- [x] Reproduce empty-source count loops and rejected valid boxed counts; keep
+  the runtime fix/changelog and ordinary `test_binary_copy` regression separate.
+- [x] Match 368/368 in interpreter and AArch64 precompiled modes and 45/45 in
+  reversed/strided JIT replay. Both targeted CLI tests and independent/cross-mode
+  checks pass; twelve local wrong-result controls are rejected.
+- [x] Pass ten ordinary binary suites on OTP 27/28/29 and all three AtomVM modes.
+
+See [PLAN.md](PLAN.md#binary-access-and-copying) for evidence and limits. Large
+count literals target 64-bit hosts; full corpus/CLI/JIT matrices, full older-OTP
+harness, fixture Lean laws and embedded targets remain outside this batch.
+
+### Hex conversion
+
+- [x] Add 726 recipes for supported `binary:encode_hex/1,2` and `decode_hex/1`,
+  preserving all previous recipes/metadata (total 11,193).
+- [x] Check exact uppercase/lowercase/default encoding and mixed-case decoding,
+  all byte values, leading zeroes, asymmetric contents and larger binaries.
+- [x] Reject every non-hex byte in either nibble position, odd lengths, signed
+  pairs, nonbinary/partial sources and invalid modes even for empty inputs.
+- [x] Exercise copied inputs, larger-parent slices, three-bit-offset byte
+  segments and complete live operands/results across GC, with an independent
+  digit-table/byte-list model rather than round trips.
+- [x] Fix signed-pair acceptance separately with ordinary Erlang regressions.
+- [x] Keep the deliberate partial-source `badarg` validation. Record one exact
+  expected failure against OTP 27/28/29's leaked `{badmatch, Input}` instead
+  of changing AtomVM or normalizing the difference away.
+- [x] Observe 725 matches plus one known difference in interpreter/precompiled
+  modes and 46 plus the same difference in reordered JIT replay. Independent
+  per-VM contracts, cross-mode checks and thirteen wrong-result controls pass.
+- [x] Check all 726 observer-only host controls on OTP 27/28/29; pass ordinary
+  `test_binary` plus ten runtime binary suites on those hosts and all three
+  AtomVM modes. Exercise targeted CLI checks, including strict failure handling.
+
+See [PLAN.md](PLAN.md#hex-conversion) for raw results and evidence. Full corpus,
+full CLI/JIT matrices, the complete older-OTP harness, Lean fixture laws and
+embedded targets remain outside this batch.
+
+### Binary-to-list conversion
+
+- [x] Add 680 direct recipes for supported `erlang:binary_to_list/1` and
+  `bitstring_to_list/1`, preserving all previous metadata (total 11,873).
+- [x] Check exact unsigned bytes, all byte values, empty/asymmetric inputs and
+  63/64/65/257-byte boundaries.
+- [x] Check every partial-tail width 1–7, zero/all-one/asymmetric values, final
+  bitstring element shape and `binary_to_list/1` rejection of partial sources.
+- [x] Exercise copied inputs and larger-parent extraction at bit offsets 0–7,
+  invalid roots and retained operands/captures/complete results across GC.
+- [x] Match 680/680 in interpreter and AArch64 precompiled modes, plus 54/54
+  reordered JIT recipes explicitly covering every offset and tail width.
+- [x] Check complete observations against an independent bit-by-bit model;
+  validate replay metadata, cross-mode equality and thirteen wrong-result controls.
+- [x] Match all 680 observer-only host controls on OTP 27/28/29; pass four
+  existing conversion suites on those hosts and all three AtomVM modes, alongside
+  targeted CLI checks for the new batch and existing shared-observer paths.
+- [x] Leave runtime/library code, ordinary Erlang regressions, changelog and
+  expected-failure manifest unchanged: no semantic discrepancy was found.
+
+See [PLAN.md](PLAN.md#binary-to-list-conversion) for evidence and limits. Full
+corpus/CLI/JIT matrices, the complete older-host harness, Lean fixture laws and
+embedded targets remain outside this batch; internal NIF GC is not forced.
+
+### Binary slicing and splitting
+
+- [x] Add 834 direct recipes for supported `binary:part/3`,
+  `erlang:binary_part/2,3` (body and guard paths) and `erlang:split_binary/2`,
+  preserving all previous metadata (total 12,707).
+- [x] Check positive and negative lengths across empty, 1/4/16/63/64/65/257-byte
+  inputs, crossing `SUB_BINARY_MIN` and `REFC_BINARY_MIN`, guard match/non-match/
+  reject outcomes and invalid/boxed bounds.
+- [x] Check `split_binary/2` on full binaries and partial bitstrings across
+  every trailing-bit width 1–7, verifying trailing bits remain in the second
+  half while `binary_part` rejects partial bitstrings.
+- [x] Exercise copied inputs and larger-parent extraction at bit offsets 0–7
+  without calling `part` or `split_binary` during setup, retaining operands,
+  offsets, arguments, captures and results across GC.
+- [x] Fix negative-length heap under-allocation in `nif_binary_part_3` and
+  `bif_erlang_binary_part_3` separately, with `test_negative_length_heap_binary/0`
+  in `test_binary_part.erl` and a `CHANGELOG.md` entry; preserve before-fix
+  failure evidence.
+- [x] Match 834/834 in interpreter and AArch64 precompiled modes, plus 108/108 in
+  reordered JIT replay covering all six operations, negative-length 63-byte heap
+  binaries, guards, all eight bit offsets and all seven partial widths.
+- [x] Check complete observations against an independent bit-list model,
+  validate cross-mode equality and reject thirteen wrong-result controls.
+- [x] Match all 834 observer-only host controls on OTP 27/28/29; pass eleven
+  ordinary binary suites on those hosts and all three AtomVM modes, alongside
+  targeted CLI checks for the new batch, `binary_list` and behavioral oracles.
+
+See [PLAN.md](PLAN.md#binary-slicing-and-splitting) for evidence and limits. Full
+corpus/CLI/JIT matrices, the complete older-host harness, Lean fixture laws and
+embedded/32-bit/float32 targets remain outside this batch.
+
+### Iodata and bitstring-list conversion
+
+- [x] Add 840 direct recipes for supported `binary:list_to_bin/1`,
+  `erlang:list_to_binary/1`, `erlang:iolist_to_binary/1`, `erlang:iolist_size/1`
+  and `erlang:list_to_bitstring/1`, preserving all previous metadata (total 13,547).
+- [x] Distinguish bare-binary roots accepted by `iolist_to_binary/1` and
+  `iolist_size/1` from list-only roots required by the other three APIs.
+- [x] Check proper, empty, depth-33/65 nested lists, all 256 byte values,
+  63/64/65/257-byte result boundaries, improper binary/bitstring tails,
+  cross-byte bit packing across widths 1–7 and invalid elements/roots.
+- [x] Exercise copied inputs and larger-parent binary/bitstring leaf extraction
+  at bit offsets 0–7 without calling any of the five APIs during setup,
+  retaining inputs, offsets, captures and results across GC.
+- [x] Match 840/840 in interpreter and AArch64 precompiled modes, plus 158/158 in
+  reordered JIT replay covering all five operations, bare binaries, improper
+  tails, all eight bit offsets, all seven partial widths, bit packing and deep
+  nesting.
+- [x] Check complete observations against an independent recursive bit-list
+  model, validate cross-mode equality and reject thirteen wrong-result controls.
+- [x] Match all 840 observer-only host controls on OTP 27/28/29; pass eight
+  ordinary binary/iodata suites on those hosts and all three AtomVM modes,
+  alongside targeted CLI checks for the new batch, `binary_slice` and
+  behavioral oracles.
+- [x] Leave runtime/library code, ordinary Erlang regressions, changelog and
+  expected-failure manifest unchanged: no semantic discrepancy was found.
+
+See [PLAN.md](PLAN.md#iodata-and-bitstring-list-conversion) for evidence and
+limits. Full corpus/CLI/JIT matrices, the complete older-host harness, Lean
+fixture laws and embedded/32-bit/float32 targets remain outside this batch.
+
+### CRC32 checksums and combination
+
+- [x] Add 428 direct recipes for supported `erlang:crc32/1`, `erlang:crc32/2`
+  and `erlang:crc32_combine/3`, preserving all previous metadata (total 13,975).
+- [x] Check IEEE 802.3 checksums across empty binaries/iolists, all 256 byte
+  values, standard vector `<<"123456789">>`, nested/improper-tail iolists and
+  63/64/65/257-byte lengths.
+- [x] Check incremental `crc32/2` chaining (including empty iolists),
+  `crc32_combine/3` across `0..2^32-1` lengths, split-combine algebraic
+  identities and invalid/out-of-range inputs.
+- [x] Exercise copied inputs and larger-parent binary leaves sliced at bit
+  offsets 0–7, retaining operands, offsets, arguments, captures and results
+  across GC.
+- [x] Fix `WITH_ZLIB` empty-iolist `crc32/2` reset and `crc32_combine/3`
+  `size2 >= 2^32` acceptance separately, with
+  `test_crc32_empty_iolist_and_combine_bounds/0` in `test_crc32.erl` and a
+  `CHANGELOG.md` entry; preserve before-fix failure evidence.
+- [x] Match 428/428 in interpreter and AArch64 precompiled modes, plus 109/109 in
+  reordered JIT replay covering all four operations, empty-iolist `crc32/2`,
+  32-bit combine bounds, split-combine identities and all eight bit offsets.
+- [x] Check complete observations against an independent IEEE 802.3 and GF(2)
+  model, validate cross-mode equality and reject thirteen wrong-result controls.
+- [x] Match all 428 observer-only host controls on OTP 27/28/29; pass eight
+  ordinary binary/CRC32 suites on those hosts and all three AtomVM modes,
+  alongside targeted CLI checks for the new batch, `binary_iodata` and
+  behavioral oracles.
+
+See [PLAN.md](PLAN.md#crc32-checksums-and-combination) for evidence and limits.
+Full corpus/CLI/JIT matrices, the complete older-host harness, Lean fixture
+laws, `#ifndef WITH_ZLIB` builds and embedded/32-bit/float32 targets remain
+outside this batch.
+
+### External term format (`term_to_binary` and `binary_to_term`)
+
+- [x] Add 836 direct recipes for `erlang:term_to_binary/1,2` and
+  `erlang:binary_to_term/1,2`, preserving all 13,975 preceding recipes (total
+  14,811).
+- [x] Check ETF decoding across integers (`SMALL_INTEGER_EXT`, `INTEGER_EXT`,
+  signed `SMALL_BIG_EXT`), floats (`NEW_FLOAT_EXT` finite values and `-0.0` sign
+  bits), UTF-8 atoms, lists (proper/improper/`STRING_EXT`), tuples
+  (`SMALL_TUPLE_EXT`/`LARGE_TUPLE_EXT`), `BINARY_EXT`, `BIT_BINARY_EXT` (widths
+  `1..8`, tail padding masking, embedded `[used]` progression), and `MAP_EXT`
+  (`1` vs `1.0` key distinction and duplicate-key rejection).
+- [x] Check `binary_to_term/2` options (`[]`, `[used]`, `[safe]`, combinations,
+  and strict invalid/improper option rejection), `[safe]` existing vs never-created
+  atom rejection, invalid UTF-8 atoms, malformed inputs, canonical `t2b_wire`
+  encoding and `roundtrip_2` compression/minor-version/deep-tree contracts.
+- [x] Exercise copied inputs and larger-parent leaves sliced at bit offsets 0–7
+  as well as nested `deep` compound trees, retaining operands, offsets,
+  arguments, captures and results across GC.
+- [x] Fix `nif_erlang_binary_to_term` option-list validation in
+  `src/libAtomVM/nifs.c` and non-finite `NEW_FLOAT_EXT` rejection in
+  `src/libAtomVM/external_term.c`, with `test_options_and_non_finite_floats/0`
+  in `tests/erlang_tests/test_binary_to_term.erl` and a `CHANGELOG.md` entry;
+  preserve before-fix failure logs.
+- [x] Match 836/836 in interpreter and AArch64 precompiled modes, plus 94/94 in
+  reordered JIT replay covering all five operations, options, non-finite floats,
+  `-0.0`, `[safe]`, `[used]`, bit offsets `0..7`, bitstring widths `1..7` and
+  `deep` round-trips.
+- [x] Check complete observations against pure-Elixir `BINARY_ETF_MODEL`
+  without calling `:erlang.binary_to_term`/`:erlang.term_to_binary` for
+  contracts, validate cross-mode equality and reject fifteen wrong-result
+  controls.
+- [x] Match all 836 observer-only host controls on OTP `27.3.4.12`/`28.3.1`/
+  `29.1.3`; pass nine ordinary binary/ETF suites on those hosts and all three
+  AtomVM modes plus `build/tests/test-erlang` (`Success.`), alongside targeted
+  CLI checks for the new batch, `binary_crc32` and behavioral oracles.
+
+See [PLAN.md](PLAN.md#external-term-format-term_to_binary-and-binary_to_term) for
+evidence and limits. Full runtime corpus, full CLI/JIT matrices, the complete
+older-host harness, Lean fixture laws and embedded/32-bit/float32 targets remain
+outside this batch.
+
+### ETS tables (`ets`)
+
+- [x] Add 237 direct recipes covering all 15 `ets` exports (`new/2`,
+  `insert/2`, `insert_new/2`, `lookup/2`, `lookup_element/3,4`, `member/2`,
+  `update_element/3,4`, `update_counter/3,4`, `take/2`, `delete/1,2`, and
+  `delete_object/2`) via `tools/test/lynx/ets_tables.erl`, preserving all
+  14,811 preceding recipes (total 15,048).
+- [x] Check `ets:new/2` option validation, precedence, `named_table`
+  collisions/recreation, `set`/`bag`/`duplicate_bag` semantics across `keypos`
+  `1..3`, exact/numeric/`-0.0`/bigint/bitstring/sliced keys (`0..7`),
+  `update_element/3,4`, `update_counter/3,4`, `take/2`, `delete/1,2`,
+  `delete_object/2`, cross-process `private`/`protected`/`public` access,
+  owner-exit cleanup and GC retention.
+- [x] Fix `apply_op` non-tuple crash and `lookup_or_default` eager default-arity
+  validation in `src/libAtomVM/ets.c`, plus `nif_ets_new` strict option
+  validation/precedence in `src/libAtomVM/nifs.c`, with
+  `test_option_validation_and_bad_counter_ops/0` in `tests/erlang_tests/test_ets.erl`
+  and a `CHANGELOG.md` entry; preserve before-fix crash logs.
+- [x] Match 237/237 in interpreter and AArch64 precompiled modes, plus 92/92 in
+  reordered JIT replay covering all 15 operations, table types, option
+  precedence, `named_table`, `-0.0`, bit offsets `0..7`, cross-process access
+  and owner-exit cleanup.
+- [x] Check complete observations against pure-Elixir `ETS_MODEL` without
+  calling `:ets`, validate cross-mode equality and reject sixteen wrong-result
+  controls.
+- [x] Match all 237 observer-only host controls on OTP `27.3.4.12`/`28.3.1`/
+  `29.1.3`; pass nine ordinary ETS/binary/map suites on those hosts and all
+  three AtomVM modes plus `build/tests/test-erlang` (`Success.`), alongside
+  targeted CLI checks for `ets_table`, `binary_etf` and behavioral oracles.
+
+See [PLAN.md](PLAN.md#ets-tables-ets) for evidence and limits. Default tuples
+shorter than `keypos` on existing keys stay gated in `test_ets.erl` for OTP 29+
+due to OTP 27/28 divergence (`otp/issues/10603`). Full runtime corpus, full
+CLI/JIT matrices, complete older-host harness, Lean fixture laws and
+embedded/32-bit/float32 targets remain outside this batch.
+
+### Unicode conversions (`unicode`)
+
+- [x] Add 571 direct recipes covering all 5 `unicode` exports
+  (`characters_to_list/1,2` and `characters_to_binary/1,2,3`) via
+  `tools/test/lynx/unicode_conv.erl`, preserving all 15,048 preceding recipes
+  (total 15,619).
+- [x] Check valid UTF-8/`unicode`/`latin1` conversions across multi-byte
+  boundaries, nested chardata, improper binary tails, invalid UTF-8 sequences
+  (overlongs, surrogates, `> 0x10FFFF`), `incomplete` vs `error` on truncated
+  sequences and trailing empty chardata, out-of-range integers/bigints, bad
+  encodings, bit offsets `0..7`, deep nesting and GC retention.
+- [x] Fix `latin1` `> 255` validation/heap sizing, UTF-16 surrogate rejection,
+  bigint element `{error, ...}` handling and trailing empty chardata
+  `incomplete` preservation in `src/libAtomVM/interop.c` (plus defensive
+  `term_is_binary` guard in `src/libAtomVM/otp_crypto.c`), with
+  `test_latin1_range_surrogates_bigints_and_trailing_empty/0` in
+  `tests/erlang_tests/test_unicode.erl` and a `CHANGELOG.md` entry; preserve
+  before-fix failure logs.
+- [x] Match 571/571 in interpreter and AArch64 precompiled modes, plus 94/94 in
+  reordered JIT replay covering all five functions, encodings, error/incomplete
+  cases, surrogates, bigints, bit offsets `0..7` and deep nesting.
+- [x] Check complete observations against pure-Elixir `UNICODE_MODEL` without
+  calling `:unicode`, validate cross-mode equality and reject fifteen
+  wrong-result controls.
+- [x] Match all 571 observer-only host controls on OTP `27.3.4.12`/`28.3.1`/
+  `29.1.3`; pass nine ordinary Unicode/ETS/binary suites on those hosts and
+  all three AtomVM modes plus `build/tests/test-erlang` (`Success.`), alongside
+  targeted CLI checks for `unicode_conv`, `ets_table` and behavioral oracles.
+
+See [PLAN.md](PLAN.md#unicode-conversions-unicode) for evidence and limits.
+Documented AtomVM-vs-OTP differences (`latin1, latin1` negative integers in
+`test_unicode.erl`, split multi-byte UTF-8 across separate list binaries, and
+UTF-16/UTF-32 encodings), full runtime corpus, full CLI/JIT matrices, complete
+older-host harness, Lean fixture laws and embedded/32-bit/float32 targets remain
+outside this batch.
+
+### Integer and atom conversions (`erlang`)
+
+- [x] Add 1,371 direct recipes covering all 17 `erlang` integer and atom
+  conversion exports (`integer_to_list/1,2`, `integer_to_binary/1,2`,
+  `list_to_integer/1,2`, `binary_to_integer/1,2`, `atom_to_list/1`,
+  `atom_to_binary/1,2`, `list_to_atom/1`, `list_to_existing_atom/1`,
+  `binary_to_atom/1,2`, `binary_to_existing_atom/1,2`) via
+  `tools/test/lynx/int_atom_conv.erl`, preserving all 15,619 preceding recipes
+  (total 16,990).
+- [x] Check base-`2..36` formatting/parsing, bigints up to `±(2^256 - 1)`,
+  sign-only inputs, embedded NUL, `utf8`/`unicode`/`latin1` atom encodings,
+  255/256-char length vs invalid element/improper-tail precedence, existing vs
+  never-created atoms, bit offsets `0..7`, and GC retention.
+- [x] Fix sign-only non-base-10 parsing and base-10 OOB read in
+  `src/libAtomVM/utils.c`, `list_to_atom`/`list_to_existing_atom` 255-char
+  limit and precedence in `src/libAtomVM/bif.c`, `atom_to_binary/2` Latin-1
+  heap sizing/validation in `src/libAtomVM/nifs.c`, and `intn_parse`
+  `INT64_MIN`/overflow handling in `src/libAtomVM/intn.c`, with ordinary Erlang
+  regressions across five `tests/erlang_tests/` suites and a `CHANGELOG.md`
+  entry; preserve before-fix failure logs.
+- [x] Match 1,371/1,371 in interpreter and AArch64 precompiled modes, plus
+  104/104 in reordered JIT replay covering all 17 exports, sign-only inputs,
+  `INT64_MIN` bigints, 255/256 limits, Latin-1 boundaries, and bit offsets
+  `0..7`.
+- [x] Check complete observations against pure-Elixir `INT_ATOM_MODEL` without
+  calling any tested conversion BIF/NIF or `:unicode`, validate cross-mode
+  equality and reject fifteen wrong-result controls.
+- [x] Match all 1,371 observer-only host controls on OTP `27.3.4.12`/`28.3.1`/
+  `29.1.3`; pass twelve ordinary integer/atom suites on those hosts and all
+  three AtomVM modes plus `./build/tests/test-erlang` (`Success.`), alongside
+  targeted CLI checks (`Ran 3 tests in 326.438s -> OK`).
+
+See [PLAN.md](PLAN.md#integer-and-atom-conversions-erlang) for evidence and
+limits. Integers outside AtomVM's 256-bit `intn` limit, full runtime corpus,
+full CLI/JIT matrices, complete older-host harness, Lean fixture laws and
+embedded/32-bit/float32 targets remain outside this batch.
+
+### String operations (`string`)
+
+- [x] Add 701 direct recipes covering all 10 non-stub `string` exports
+  (`to_upper/1`, `to_lower/1`, `split/2,3`, `trim/1,2`, `find/2,3`, `length/1`,
+  `to_integer/1`) via `tools/test/lynx/string_ops.erl`, preserving all 16,990
+  preceding recipes (total 17,691). Keep `jaro_similarity/2` excluded as an
+  intentional stub per `doc/src/stubbed-functions.md`.
+- [x] Check ISO-8859-1 upper/lower casing, non-integer element pass-through,
+  `split`/`find` `leading`/`trailing`/`all` and empty/overlapping patterns, all
+  11 OTP whitespace code points and binary/list trimming, chardata `length`,
+  `to_integer` signs/`no_integer`/`badarg`, bit offsets `0..7`, and GC
+  retention.
+- [x] Fix ISO-8859-1 casing, `trailing` and empty-pattern `split`/`find`,
+  Unicode/binary `trim`, and nested/improper chardata `length` in
+  `libs/estdlib/src/string.erl`, with extended regressions in
+  `tests/libs/estdlib/test_string.erl` and a `CHANGELOG.md` entry; preserve
+  before-fix failure logs.
+- [x] Match 701/701 in interpreter and AArch64 precompiled modes, plus 101/101
+  in reordered JIT replay covering all 10 tested exports, `trailing`/`all`/
+  `both`, ISO-8859-1 casing, all 11 whitespace code points, chardata `length`/
+  `to_integer`, and bit offsets `0..7`.
+- [x] Check complete observations against pure-Elixir `STRING_MODEL` without
+  calling `:string`, `String`, or `:unicode`, validate cross-mode equality and
+  reject fifteen wrong-result controls.
+- [x] Match all 701 observer-only host controls on OTP `27.3.4.12`/`28.3.1`/
+  `29.1.3`; pass `test_string` on those hosts and all three AtomVM modes (plus
+  all non-socat suites in `test_estdlib.avm` including `{test_string,ok}`),
+  alongside targeted CLI checks (`Ran 3 tests in 329.490s -> OK`).
+
+See [PLAN.md](PLAN.md#string-operations-string) for evidence and limits.
+`jaro_similarity/2`, extended grapheme clusters, integers outside AtomVM's
+256-bit `intn` limit, full runtime corpus, full CLI/JIT matrices, complete
+older-host harness, Lean fixture laws and embedded/32-bit/float32 targets
+remain outside this batch.
+
+### Audit scope and exclusions
+
+At audit time the baseline had 6,469 runtime recipes, 2,351 fixture recipes
+covering 203 exports, and attribution for 373/478 sites in 28 Lean files. The 105
+unattributed sites classify as 71 model/proof contracts, 19 blocked persistent-term
+sites, 11 represented/overlapping sites and four partially sampled signal
+behaviors. Attribution is not branch coverage: all Maps sites already had labels,
+yet custom-order differential combinations were missing. The iterator batch above
+adds 240 recipes; the structural BIF batch adds another 70 (total 6,779),
+without changing attribution or fixture counts.
+
+Tagged monitors explicitly raise `unsupported`; priority exits/monitors and
+distribution require separate support work, not an assumption that the APIs are
+already implemented. Existing expected failures are compatibility work rather
+than newly missing tests. No full corpus, fresh Lean laws, JIT or embedded-target
+validation was run for this audit.
+
+Local evidence: `.amp/in/artifacts/lynx-coverage-audit/` contains the regenerated
+inventory/classification, exploratory probes, and focused interpreter/precompiled
+map results. These are audit records, not new expected-failure entries.
+
+## 1. Function identity through real consumers
+
+- [x] Distinguish local and external functions for the same MFA, including
+  `erlang:make_fun/3`, application and function type.
+- [x] Exercise equality, map/dictionary keys and collection consumers, including
+  captured identities and copy/GC boundaries.
+
+## 2. Queued liveness and termination requests
+
+- [x] Kill then immediately query `process_info/2`, without a completion fence.
+- [x] Enable trapping after a linked child's normal `DOWN`; reject a late normal
+  `EXIT`.
+- [x] Exercise unfenced unlink/relink/kill with linked and unlinked controls.
+  Repetition creates scheduling opportunities; it does not prove an unlink
+  acknowledgment was pending.
+- [x] Fan-out termination and requests to ending processes: 18 observations with
+  1/4/16 peers, normal/shutdown/kill fan-out and live/dead/racing request controls.
+  Check eventual replies, per-recipient causal order and allowed outcomes, not
+  an arbitrary cross-sender winner or simultaneous delivery. See the
+  [batch details](PLAN.md#fan-out-termination-and-ending-process-requests).
+
+The targeted batch exposed two ordering differences, fixed separately. Native
+validation also exposed a JIT-only handoff bug, fixed with a deterministic
+Erlang regression test.
+
+## 3. Persistent terms
+
+- [ ] Add explicit differential coverage for `persistent_term:get/1`, `get/2`,
+  `put/2`, `put_new/2` and `erase/1`.
+- [ ] Cover missing keys/defaults, overwrite and repeated writes, erase results,
+  exact keys, retained values after replacement/GC, cross-process visibility and
+  persistence after the writer exits.
+
+**Blocked on runtime support:** all five probed entry points returned `undef`
+on AtomVM. Keep missing APIs visible rather than counting unsupported results
+as matches. Capability-gate newer APIs on the OTP oracle. Serialize writes for
+exact traces; use allowed outcomes for competing writers/erase.
+
+## 4. Async `erlang:exit_signal/2`
+
+- [x] Implement the new API with standalone Erlang regressions, independently
+  of helpers that call `exit/2`, and add 56 differential observations covering
+  normal/abnormal/kill signals, self-signal processing, PID/alias destinations,
+  reply-alias ordering, inactive references and invalid/dead destinations.
+
+The oracle requires OTP 29 or newer; older references are unverified, not
+matches. Fatal calls run in monitored workers. The implementation supports local
+processes, ports and aliases; distributed destinations and priority options in
+`exit_signal/3` remain outside this batch. See the
+[batch details](PLAN.md#asynchronous-exit-signals).
+
+## 5. Compiler-folded exceptions and optimized Core evaluation order
+
+- [x] Compare compiler-known and runtime-argument function-clause failures.
+- [x] Add raw-Core compilation/replay and effect/exception-order observations,
+  alongside ordinary-source controls.
+- [x] Expand into binary construction, Core try-result binding and exception
+  boundaries, escaping recursive closures and nested fallthrough continuations.
+
+These execute compiled BEAM on AtomVM, not Lynx's direct Core translator.
+Source and raw Core need not have identical evaluation order or emitted layout.
+
+## 6. Bloom-filter integration workload
+
+- [ ] Exercise real hashing through bit positions, integer bitsets, membership
+  and union; compare exact bitsets as well as absence of false negatives.
+- [ ] Cover empty inputs, duplicate insertions, asymmetric unions, zero hashes
+  and bit/word boundaries, with filter width at most 256 bits.
+
+**Blocked by missing `phash2/1,2`.** Do not substitute a stub hash and claim
+coverage of the upstream integration. Keep exhaustive query counting small;
+finite samples do not establish a statistical false-positive distribution.

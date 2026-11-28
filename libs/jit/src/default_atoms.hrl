@@ -38,6 +38,7 @@
 -define(LOWERCASE_EXIT_ATOM_INDEX, 16).
 -define(BADRECORD_ATOM_INDEX, 17).
 -define(SYSTEM_LIMIT_ATOM_INDEX, 18).
+-define(BADKEY_ATOM_INDEX, 19).
 
 -define(FALSE_ATOM, ((?FALSE_ATOM_INDEX bsl ?TERM_IMMED2_TAG_SIZE) bor ?TERM_IMMED2_ATOM)).
 -define(TRUE_ATOM, ((?TRUE_ATOM_INDEX bsl ?TERM_IMMED2_TAG_SIZE) bor ?TERM_IMMED2_ATOM)).
@@ -73,6 +74,8 @@
     ((?SYSTEM_LIMIT_ATOM_INDEX bsl ?TERM_IMMED2_TAG_SIZE) bor ?TERM_IMMED2_ATOM)
 ).
 
+-define(BADKEY_ATOM, ((?BADKEY_ATOM_INDEX bsl ?TERM_IMMED2_TAG_SIZE) bor ?TERM_IMMED2_ATOM)).
+
 -define(DEFAULT_ATOMS, #{
     false => ?FALSE_ATOM,
     true => ?TRUE_ATOM,
@@ -91,5 +94,6 @@
     unsupported => ?UNSUPPORTED_ATOM,
     all => ?ALL_ATOM,
     exit => ?LOWERCASE_EXIT_ATOM,
-    badrecord => ?BADRECORD_ATOM
+    badrecord => ?BADRECORD_ATOM,
+    badkey => ?BADKEY_ATOM
 }).

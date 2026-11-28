@@ -26,6 +26,15 @@ start() ->
     N = erlang:system_info(process_count),
     Port = do_open_port("echo", []),
     11 = length(echo(Port, "Hello World")),
+    ok = wrong_monitor_type(Port),
+    true = register(test_monitor_port_name, Port),
+    WrongRef = monitor(process, test_monitor_port_name),
+    receive
+        {'DOWN', WrongRef, process, {test_monitor_port_name, Node}, noproc} ->
+            true = Node =:= node()
+    after 5000 -> error(missing_down)
+    end,
+    NamedRef = monitor(port, test_monitor_port_name),
     MonitorRef = monitor(port, Port),
     Port ! {self(), close},
     ok =
@@ -38,9 +47,30 @@ start() ->
             {'DOWN', MonitorRef, port, Port, normal} -> ok
         after 5000 -> timeout
         end,
+    receive
+        {'DOWN', NamedRef, port, {test_monitor_port_name, Node2}, normal} ->
+            true = Node2 =:= node()
+    after 5000 -> error(missing_named_down)
+    end,
+    ok = wrong_monitor_type(Port),
     P = erlang:system_info(process_count),
     N = P,
     0.
+
+wrong_monitor_type(Port) ->
+    badarg =
+        try
+            monitor(process, Port)
+        catch
+            error:R -> R
+        end,
+    badarg =
+        try
+            monitor(process, Port, [])
+        catch
+            error:R2 -> R2
+        end,
+    ok.
 
 do_open_port(PortName, Param) ->
     open_port({spawn, PortName}, Param).

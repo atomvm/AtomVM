@@ -26,6 +26,8 @@ start() ->
     ok = replace(),
     ok = global_replace(),
     ok = invalid_args(),
+    ok = empty_subject(),
+    ok = option_validation(),
     0.
 
 replace() ->
@@ -71,6 +73,41 @@ invalid_args() ->
         binary:replace(<<"o">>, <<"o">>, <<"">>, [{insert_replaced, 1}])
     end),
     ok.
+
+empty_subject() ->
+    <<>> = binary:replace(<<>>, <<"x">>, <<"longer">>),
+    <<>> = binary:replace(<<>>, <<"x">>, <<>>),
+    foreach(
+        fun(Options) ->
+            <<>> = binary:replace(<<>>, <<"x">>, <<"longer">>, Options),
+            <<>> = binary:replace(<<>>, <<"x">>, <<>>, Options),
+            ok = raises(badarg, fun() -> binary:replace(<<>>, <<>>, <<>>, Options) end),
+            ok = raises(badarg, fun() -> binary:replace(<<>>, <<"x">>, bad, Options) end)
+        end,
+        [[], [global], [global, global]]
+    ),
+    ok.
+
+option_validation() ->
+    <<2, 9, 2>> = binary:replace(<<1, 9, 1>>, <<1>>, <<2>>, [global, global]),
+    foreach(
+        fun(Options) ->
+            foreach(
+                fun(Subject) ->
+                    ok = raises(badarg, fun() -> binary:replace(Subject, <<1>>, <<2>>, Options) end)
+                end,
+                [<<>>, <<1, 9, 1>>, <<9>>]
+            )
+        end,
+        [bad, [bad], [global, bad], [global | tail], [global, global | tail]]
+    ),
+    ok.
+
+foreach(_Fun, []) ->
+    ok;
+foreach(Fun, [H | T]) ->
+    Fun(H),
+    foreach(Fun, T).
 
 raises(Error, F) ->
     try F() of

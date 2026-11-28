@@ -175,6 +175,7 @@ start() ->
     ok = test_map_ext_duplicate_keys(),
     ok = test_invalid_bit_binary(),
     ok = test_bitstring_used_offset(),
+    ok = test_options_and_non_finite_floats(),
     0.
 
 % A bitstring embedded in a compound term: the decoder must advance past the
@@ -797,10 +798,12 @@ test_encode_reference() ->
     true = Ref9 > RefA,
     true = RefA > Ref7,
 
-    % Zero-length is tolerated
-    RefB = binary_to_term_idempotent(<<131, 90, 0, 0, 119, 4, "true", 1:32>>, "26"),
-    "#Ref<1>" = ref_to_list(RefB),
-    true = RefB < Ref1,
+    case rejects_zero_length_reference() of
+        true ->
+            ok = expect_badarg(fun() -> binary_to_term(<<131, 90, 0, 0, 119, 4, "true", 1:32>>) end);
+        false ->
+            ok
+    end,
 
     % Creation comes before first word in comparison
     % Ref1 = binary_to_term_idempotent(<<131, 90, 0, 1, 119, 4, "true", 1:32, 43:32>>, "26"),
@@ -1503,6 +1506,19 @@ erts_has_cve_2026_54890_fix(Version) ->
         (Version >= [16, 4, 0, 4] andalso Version < [17]) orelse
         Version >= [17, 0, 4].
 
+%% OTP-20530 was fixed in OTP 27.3.4.20, 28.5.0.9 and 29.1.3.
+rejects_zero_length_reference() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            case erts_version() of
+                [15 | _] = Version -> Version >= [15, 2, 7, 15];
+                [16 | _] = Version -> Version >= [16, 4, 0, 8];
+                Version -> Version >= [17, 1, 2]
+            end;
+        _ ->
+            true
+    end.
+
 erts_version() ->
     erts_version(erlang:system_info(version), 0, []).
 
@@ -1608,3 +1624,31 @@ descending(K) -> [{K, K} | descending(K - 1)].
 
 from_pairs([], Map) -> Map;
 from_pairs([{K, V} | Pairs], Map) -> from_pairs(Pairs, Map#{K => V}).
+
+test_options_and_non_finite_floats() ->
+    FortyTwo = ?MODULE:id(<<131, 97, 42>>),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(FortyTwo, ?MODULE:id([bad])) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(FortyTwo, ?MODULE:id([used | bad])) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(FortyTwo, ?MODULE:id([{used, true}])) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(FortyTwo, ?MODULE:id([{safe, true}])) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(FortyTwo, ?MODULE:id(used)) end),
+    {42, 3} = erlang:binary_to_term(FortyTwo, ?MODULE:id([used, safe, used])),
+    {42, 3} = erlang:binary_to_term(FortyTwo, ?MODULE:id([safe, used])),
+    42 = erlang:binary_to_term(FortyTwo, ?MODULE:id([safe, safe])),
+
+    PlusInf = ?MODULE:id(<<131, 70, 127, 240, 0, 0, 0, 0, 0, 0>>),
+    MinusInf = ?MODULE:id(<<131, 70, 255, 240, 0, 0, 0, 0, 0, 0>>),
+    QNaN = ?MODULE:id(<<131, 70, 127, 248, 0, 0, 0, 0, 0, 0>>),
+    SNaN = ?MODULE:id(<<131, 70, 127, 240, 0, 0, 0, 0, 0, 1>>),
+    NegNaN = ?MODULE:id(<<131, 70, 255, 255, 255, 255, 255, 255, 255, 255>>),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(PlusInf) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(MinusInf) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(QNaN) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(SNaN) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(NegNaN) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(PlusInf, ?MODULE:id([used])) end),
+    ok = expect_badarg(fun() -> erlang:binary_to_term(QNaN, ?MODULE:id([safe])) end),
+
+    NegZeroExt = ?MODULE:id(<<131, 70, 128, 0, 0, 0, 0, 0, 0, 0>>),
+    NegZeroExt = erlang:term_to_binary(erlang:binary_to_term(NegZeroExt)),
+    ok.

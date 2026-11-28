@@ -1,0 +1,5255 @@
+# Copyright 2026 Peter Madsen-Mygdal <petermm@gmail.com>
+# SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+
+"""Finite public-API samples inspired by LynxTest, not translations of proofs."""
+
+import base64
+import hashlib
+import re
+import struct
+
+from generated import erlang
+
+
+def cases():
+    selected = []
+
+    def probe(source, tests, expression, **extra):
+        if isinstance(tests, str):
+            tests = [tests]
+        selected.append({"lean_origins": [f"{source}.lean#{test}" for test in tests],
+                         "expression": expression, **extra})
+
+    def call(source, tests, function, *args, module="erlang", **extra):
+        probe(source, tests, f"differential:call({module},'{function}',[{','.join(args)}])", **extra)
+
+    e = "Modules/Erlang"
+    for value in ["0", "1", "-7", "1 bsl 100", "1.5", "-1.5", "0.0", "-0.0",
+                  "0.5", "-0.5", "5.0e-324", "-5.0e-324", "bad", "[]"]:
+        for fn in ["abs", "round", "trunc", "floor", "ceil", "float"]:
+            call(e, ["numeric_rounding", "numeric_conversion_boundaries",
+                     "numeric_guards_integer_identity", "numeric_guards_invalid"], fn, value)
+    for fn, label in [("+", "addition_numeric_types"), ("*", "multiplication_numeric_types"),
+                      ("-", "arithmetic_boundaries"), ("/", "arithmetic_boundaries")]:
+        for a, b in [("2", "3"), ("1.5", "1.0"), ("1", "1.5"), ("1.5", "-2"),
+                     ("9007199254740993", "1.0"), ("1.0", "9007199254740993"),
+                     ("5.0e-324", "0.5"), ("-1.5e-323", "0.5"),
+                     ("-0.0", "-0.0"), ("-0.0", "0.0"), ("0", "-0.0"),
+                     ("1.7976931348623157e308", "1.7976931348623157e308"),
+                     ("1", "[]"), ("bad", "1.0")]:
+            call(e, label, fn, a, b)
+    for label, fn, pairs in [
+        ("addition_rounding", "+", [("1.0", "1.1102230246251565e-16"),
+                                     ("1.0000000000000002", "1.1102230246251565e-16"),
+                                     ("1.9999999999999998", "1.1102230246251565e-16")]),
+        ("addition_subnormals_and_zero", "+", [("5.0e-324", "5.0e-324"),
+                                                ("2.225073858507201e-308", "5.0e-324")]),
+        ("addition_overflow", "+", [("1.7976931348623157e308", "8.98846567431158e307")]),
+        ("multiplication_rounding_and_underflow", "*", [("-1.5e-323", "0.5")]),
+        ("multiplication_overflow", "*", [("1.7976931348623157e308", "2")]),
+    ]:
+        for a, b in pairs:
+            call(e, label, fn, a, b)
+    for fn in ["+", "-", "bnot"]:
+        for value in ["0.0", "-0.0", "-10", "[]", "0.5"]:
+            call(e, "arithmetic_invalid" if value == "[]" else "arithmetic_boundaries", fn, value)
+    for fn, label in [("div", "div/2_signs"), ("rem", "remainder_signs_and_zero"),
+                      ("band", "bitwise_and_signs"), ("bor", "bitwise_signs"),
+                      ("bxor", "bitwise_signs"), ("bsl", "shifts_signed_values_and_counts"),
+                      ("bsr", "shifts_signed_values_and_counts")]:
+        for a, b in [("7", "3"), ("-7", "3"), ("7", "-3"), ("-7", "-3"),
+                     ("7", "0"), ("-7", "100"), ("10", "-12"),
+                     ("(1 bsl 100)+3", "-2"), ("1.0", "2"), ("2", "bad")]:
+            call(e, label, fn, a, b)
+    for fn in ["min", "max"]:
+        for a, b in [("1", "1.0"), ("1.0", "1"), ("0.0", "-0.0"),
+                     ("-0.0", "0.0"), ("a", "1"), ("1", "a")]:
+            call(e, "min_max_equal_returns_first", fn, a, b)
+
+    # New upstream exact list-subtraction model: duplicates remove only the
+    # first exact match. Invalid tails remain OTP error-path observations.
+    for left, right in [
+        ("[]", "[]"), ("[1,2,1,3]", "[1,3]"), ("[1,2]", "[3,2,2]"),
+        ("[1]", "[1.0]"), ("[1.0,1]", "[1]"), ("[1,1.0,1]", "[1.0,1]"),
+        ("[0.0,-0.0,0]", "[-0.0]"), ("[{1},#{a=>1},<<5:3>>]", "[{1.0},#{a=>1.0}]"),
+        ("[1 bsl 100,7,1 bsl 100]", "[1 bsl 100]"),
+        ("[a|tail]", "[]"), ("bad", "[]"),
+        ("[a,b|tail]", "[a]"), ("[a]", "[a|tail]"),
+    ]:
+        call(e, "list_subtraction", "--", left, right)
+        if left != right:
+            call(e, "list_subtraction", "--", right, left)
+
+    # The new upstream zip/unzip example proves list/pair premises. These
+    # finite runtime observations are example-inspired, not freshly proved laws.
+    for left, right in [("[]", "[]"), ("[a]", "[7]"),
+                        ("[1,1.0,{nested,<<5:3>>}]", "[z,-7,#{a=>9}]"),
+                        ("lists:seq(1,33)", "lists:seq(101,133)")]:
+        selected.append({"upstream_example": "examples/otp/lists.exs#unzip_zip",
+                         "expression": f"A={left},B={right},Z=lists:zip(A,B),"
+                                       "{Z,lists:unzip(Z),lists:unzip(Z)=:={A,B}}"})
+    for pairs in ["[]", "[{a,7}]", "[{1,a},{1.0,b},{#{x=>7},<<5:3>>}]",
+                  "[{a,1},{a,2},{b,3},{a,1}]"]:
+        selected.append({"upstream_example": "examples/otp/lists.exs#zip_unzip",
+                         "expression": f"P={pairs},{{A,B}}=lists:unzip(P),"
+                                       "{A,B,lists:zip(A,B),lists:zip(A,B)=:=P}"})
+    for left, right in [("[]", "[a]"), ("[a,b]", "[7]"), ("[a|tail]", "[7]"),
+                        ("bad", "[]")]:
+        selected.append({"upstream_example": "examples/otp/lists.exs#unzip_zip",
+                         "expression": f"differential:call(lists,zip,[{left},{right}])"})
+    for pairs in ["[{a,1},bad]", "[{a,1}|tail]", "[{a,1,extra}]", "bad"]:
+        selected.append({"upstream_example": "examples/otp/lists.exs#zip_unzip",
+                         "expression": f"differential:call(lists,unzip,[{pairs}])"})
+    # Upstream sort and seq example laws; finite OTP observations, not proof provenance.
+    for xs, ys, probes in [
+        ("[]", "[]", "[a,1]"),
+        ("[1]", "[]", "[1,1.0,2]"),
+        ("[3,1,2,1,1.0,-1]", "[1,4,2,2]", "[1,1.0,2,3,4,99]"),
+        ("[0.0,-0.0,1,1.0,a]", "[1.0,0.0]", "[0.0,-0.0,1,1.0,a,b]"),
+        ("[{b,[2,1]},#{k=>1},<<5:3>>,{a,[]},#{k=>1.0},[1,2]]",
+         "[#{k=>1},{b,[2,1]}]",
+         "[{b,[2,1]},#{k=>1},#{k=>1.0},<<5:3>>,missing]"),
+        ("[1 bsl 100,-(1 bsl 100),(1 bsl 255)-1,1 bsl 60,0,-(1 bsl 60),1 bsl 100]",
+         "[1 bsl 100,42,-(1 bsl 255)+1]",
+         "[1 bsl 100,-(1 bsl 100),(1 bsl 255)-1,42,99]"),
+        ("lists:reverse(lists:seq(1,33))", "[0,34]", "[1,17,33,34,99]"),
+    ]:
+        selected.append({"upstream_example": "examples/otp/lists.exs#sort_contract_holds",
+                         "expression": f"differential:list_relations({xs},{ys},[],{probes})"})
+    for bad in ["bad", "[1|2]", "[3,2,1|tail]"]:
+        selected.append({"upstream_example": "examples/otp/lists.exs#sort_contract_holds",
+                         "expression": f"differential:call(lists,sort,[{bad}])"})
+    for first, last, step, probes in [
+        ("1", "10", "1", "[0,1,4,9,10]"),
+        ("-5", "5", "3", "[0,1,2,3,4]"),
+        ("10", "1", "-2", "[0,1,2,4,5]"),
+        ("5", "-5", "-3", "[0,1,2,3,4]"),
+        ("7", "7", "1", "[0,1]"),
+        ("7", "7", "-3", "[0,1]"),
+        ("7", "7", "0", "[0,1]"),
+        ("5", "4", "1", "[0]"),
+        ("5", "3", "2", "[0]"),
+        ("5", "4", "2", "[0]"),
+        ("10", "7", "5", "[0]"),
+        ("3", "5", "-2", "[0]"),
+        ("4", "5", "-2", "[0]"),
+        ("7", "10", "-5", "[0]"),
+        ("(1 bsl 100)-3", "(1 bsl 100)+3", "2", "[0,1,2,3,4]"),
+        ("-(1 bsl 100)+4", "-(1 bsl 100)-2", "-3", "[0,1,2,3]"),
+    ]:
+        selected.append({"upstream_example": "examples/otp/lists.exs#sequence_formula",
+                         "expression": f"differential:seq_contract({first},{last},{step},{probes})"})
+    for args in [
+        ["5", "3"], ["a", "5"], ["1", "b"],
+        ["5", "2", "1"], ["5", "2", "2"],
+        ["2", "5", "-1"], ["2", "5", "-2"],
+        ["1", "5", "0"], ["a", "5", "1"],
+        ["1", "5", "a"], ["1", "5", "1.0"],
+    ]:
+        selected.append({"upstream_example": "examples/otp/lists.exs#sequence_formula",
+                         "expression": f"differential:call(lists,seq,[{','.join(args)}])"})
+
+    # Upstream stdlib example laws for modules bundled in AtomVM libs/estdlib/src:
+    # base64, binary hex, calendar, json, and queue.
+    for data in ["<<>>", "<<0>>", "<<255>>", "<<1,2>>", "<<1,2,3>>",
+                 "<<62,63,254,255>>", "<<\"hello\">>"]:
+        selected.append({
+            "upstream_example": "examples/otp/base64.exs#encoding_roundtrip",
+            "expression": f"B = {data}, E = base64:encode(B), D = base64:decode(E), "
+                          "{E, D, D =:= B, byte_size(E) =:= ((byte_size(B) + 2) div 3) * 4}",
+        })
+    for data in ["<<>>", "<<0>>", "<<1,2>>", "<<62,63,254,255>>"]:
+        selected.append({
+            "upstream_example": "examples/otp/base64.exs#encoding_roundtrip",
+            "expression": f"B = {data}, S = base64:encode_to_string(B), "
+                          "D = base64:decode_to_string(S), {S, D, list_to_binary(D) =:= B}",
+        })
+    for mode in ["standard", "urlsafe"]:
+        for pad in ["true", "false"]:
+            for data in ["<<>>", "<<251>>", "<<251,255>>", "<<251,255,191>>"]:
+                selected.append({
+                    "upstream_example": "examples/otp/base64.exs#encoding_roundtrip",
+                    "expression": f"B = {data}, Opts = #{{mode => {mode}, padding => {pad}}}, "
+                                  "E = base64:encode(B, Opts), D = base64:decode(E, Opts), {E, D, D =:= B}",
+                })
+    for expr in [
+        "{base64:encode(\"hello\"), base64:decode(\"aGVsbG8=\"), "
+        "base64:decode(<<\"SGVsbG8\">>, #{padding => false}), "
+        "base64:decode_to_string(base64:encode_to_string(<<251,255>>, #{mode => urlsafe, padding => false}), #{mode => urlsafe, padding => false})}",
+        "differential:call(base64,decode,[<<\"!!!!\">>])",
+        "differential:call(base64,decode,[<<\"AA\">>,#{padding => false}])",
+        "differential:call(base64,decode_to_string,[\"SGVsbG8=\"])",
+        # Documented OTP error-reason differences (expected_failures.json:
+        # AtomVM raises badarg uniformly per base64.erl @doc):
+        "differential:call(base64,decode,[<<\"A\">>])",
+        "differential:call(base64,decode,[<<\"AA\">>])",
+        "differential:call(base64,decode,[<<\"AA=\">>])",
+        "differential:call(base64,decode,[<<\"AA===\">>])",
+        "differential:call(base64,decode,[<<\"-===\">>])",
+        "differential:call(base64,decode,[<<1:1>>])",
+        "differential:call(base64,decode,[1])",
+        "differential:call(base64,decode_to_string,[\"!!!!\"])",
+        "differential:call(base64,encode,[<<\"a\">>,bad])",
+        "differential:call(base64,encode,[[a]])",
+        "differential:call(base64,encode,[[<<\"a\">>|tail]])",
+        "differential:call(base64,decode,[<<\"-\">>,#{mode => standard}])",
+        "differential:call(base64,decode,[<<\"+\">>,#{mode => urlsafe}])",
+        "differential:call(base64,decode,[<<\"====\">>])",
+        "differential:call(base64,decode,[<<\"A===\">>])",
+        # Documented base64.erl @doc behavioral differences vs OTP:
+        # nested iolist() acceptance, out-of-range byte lists, whitespace rejection:
+        "differential:call(base64,encode,[[<<\"hi\">>,[32,<<\"there\">>]]])",
+        "differential:call(base64,decode,[[<<\"SGVs\">>,<<\"bG8=\">>]])",
+        "differential:call(base64,encode,[[256]])",
+        "differential:call(base64,decode,[<<\"SGVs bG8=\">>])",
+    ]:
+        selected.append({"upstream_example": "examples/otp/base64.exs#encoding_roundtrip",
+                         "expression": expr})
+
+    for data in ["<<>>", "<<0>>", "<<15,16,255>>", "<<\"AtomVM\">>"]:
+        selected.append({
+            "upstream_example": "examples/otp/binary.exs#hex_roundtrip",
+            "expression": f"B = {data}, {{binary:encode_hex(B), "
+                          "binary:decode_hex(binary:encode_hex(B)) =:= B, "
+                          "binary:encode_hex(B, uppercase), "
+                          "binary:decode_hex(binary:encode_hex(B, uppercase)) =:= B, "
+                          "binary:encode_hex(B, lowercase), "
+                          "binary:decode_hex(binary:encode_hex(B, lowercase)) =:= B}",
+        })
+    for expr in [
+        "differential:call(binary,decode_hex,[<<>>])",
+        "differential:call(binary,decode_hex,[<<\"00ff\">>])",
+        "differential:call(binary,decode_hex,[<<\"00FF\">>])",
+        "differential:call(binary,decode_hex,[<<\"0aA0fF\">>])",
+        "differential:call(binary,decode_hex,[<<\"0\">>])",
+        "differential:call(binary,decode_hex,[<<\"zz\">>])",
+        "differential:call(binary,decode_hex,[<<\"0g\">>])",
+        "differential:call(binary,decode_hex,[<<1:1>>])",
+        "differential:call(binary,decode_hex,[bad])",
+        "differential:call(binary,encode_hex,[<<1:1>>])",
+        "differential:call(binary,encode_hex,[bad])",
+        "differential:call(binary,encode_hex,[<<1>>,mixed])",
+    ]:
+        selected.append({"upstream_example": "examples/otp/binary.exs#hex_roundtrip",
+                         "expression": expr})
+
+    for year in ["0", "1", "399", "400", "1970", "2000", "2024", "2400"]:
+        selected.append({
+            "upstream_example": "examples/otp/calendar.exs#date_to_gregorian_days_cycle",
+            "expression": f"Y = {year}, D1 = calendar:date_to_gregorian_days({{Y,1,1}}), "
+                          "D2 = calendar:date_to_gregorian_days({Y+400,1,1}), "
+                          "{D1, D2, D2 =:= D1 + 146097}",
+        })
+    for year, month, day in [(0, 1, 1), (1970, 1, 1), (2000, 2, 29), (2024, 2, 29), (2024, 12, 31)]:
+        selected.append({
+            "upstream_example": "examples/otp/calendar.exs#date_to_gregorian_days_cycle",
+            "expression": f"{{calendar:date_to_gregorian_days({year},{month},{day}), "
+                          f"calendar:day_of_the_week({{{year},{month},{day}}}), "
+                          f"calendar:day_of_the_week({year},{month},{day}), "
+                          f"calendar:datetime_to_gregorian_seconds({{{{{year},{month},{day}}},{{23,59,59}}}})}}",
+        })
+    for sec in ["0", "86400", "1700000000", "-86400"]:
+        selected.append({
+            "upstream_example": "examples/otp/calendar.exs#date_to_gregorian_days_cycle",
+            "expression": f"differential:call(calendar,system_time_to_universal_time,[{sec},second])",
+        })
+    selected.append({
+        "upstream_example": "examples/otp/calendar.exs#date_to_gregorian_days_cycle",
+        "expression": "differential:call(calendar,datetime_to_gregorian_seconds,[{{2024,1,1},{24,0,0}}])",
+    })
+    # Documented OTP range-guard differences (expected_failures.json: AtomVM
+    # calendar.erl enforces Year >= 0, M in 1..12, D in 1..31 per its -spec):
+    for bad_date in ["{2024,13,1}", "{-1,1,1}", "{2024,0,1}", "{2024,1,32}"]:
+        selected.append({
+            "upstream_example": "examples/otp/calendar.exs#date_to_gregorian_days_cycle",
+            "expression": f"differential:call(calendar,date_to_gregorian_days,[{bad_date}])",
+        })
+    selected.append({
+        "upstream_example": "examples/otp/calendar.exs#date_to_gregorian_days_cycle",
+        "expression": "differential:call(calendar,day_of_the_week,[{-1,1,1}])",
+    })
+    selected.append({
+        "upstream_example": "examples/otp/calendar.exs#date_to_gregorian_days_cycle",
+        "expression": "differential:call(calendar,datetime_to_gregorian_seconds,[{{-1,1,1},{0,0,0}}])",
+    })
+    # Documented negative sub-second truncation bug in calendar:system_time_to_universal_time/2:
+    for unit in ["millisecond", "microsecond", "nanosecond", "native"]:
+        selected.append({
+            "upstream_example": "examples/otp/calendar.exs#date_to_gregorian_days_cycle",
+            "expression": f"differential:call(calendar,system_time_to_universal_time,[-1,{unit}])",
+        })
+    # Unimplemented functions from the remaining laws in examples/otp/calendar.exs:
+    for law_name, expr in [
+        ("seconds_to_daystime_roundtrips", "differential:call(calendar,seconds_to_daystime,[86400])"),
+        ("seconds_to_daystime_roundtrips", "differential:call(calendar,time_to_seconds,[{1,2,3}])"),
+        ("seconds_to_time_roundtrips", "differential:call(calendar,seconds_to_time,[3723])"),
+        ("is_leap_year_cycle", "differential:call(calendar,is_leap_year,[2024])"),
+        ("is_leap_year_cycle", "differential:call(calendar,is_leap_year,[2424])"),
+        ("gregorian_days_roundtrip", "differential:call(calendar,gregorian_days_to_date,[739251])"),
+        ("gregorian_days_roundtrip", "differential:call(calendar,valid_date,[{2024,2,29}])"),
+        ("iso_week_number_valid_date", "differential:call(calendar,iso_week_number,[{2024,1,1}])"),
+    ]:
+        selected.append({
+            "upstream_example": f"examples/otp/calendar.exs#{law_name}",
+            "expression": expr,
+        })
+
+    # Unimplemented stdlib modules from examples/otp/{array,gb_trees,rand}.exs
+    # (expected_failures.json):
+    for expr in [
+        "A = array:new(), W = array:set(2, hello, A), "
+        "{array:get(2, W), array:size(W), array:set(2, world, W) =:= array:set(2, world, A)}",
+        "A = array:from_list([10,20,30]), "
+        "{array:is_array(A), array:size(A), array:get(1, A), array:to_list(A)}",
+        "differential:call(array,get,[0,array:new()])",
+    ]:
+        selected.append({
+            "upstream_example": "examples/otp/array.exs#set_obeys_update_contract",
+            "expression": expr,
+        })
+    for expr in [
+        "T = gb_trees:from_orddict([{1,a},{2,b},{3,c}]), B = gb_trees:balance(T), "
+        "{gb_trees:to_list(B) =:= gb_trees:to_list(T), "
+        "gb_trees:lookup(2, B) =:= gb_trees:lookup(2, T), "
+        "gb_trees:size(B) =:= gb_trees:size(T)}",
+        "T = gb_trees:insert(b, 2, gb_trees:insert(a, 1, gb_trees:empty())), "
+        "{gb_trees:size(T), gb_trees:to_list(T), gb_trees:lookup(a, T), gb_trees:lookup(z, T)}",
+        "differential:call(gb_trees,get,[missing,gb_trees:empty()])",
+    ]:
+        selected.append({
+            "upstream_example": "examples/otp/gb_trees.exs#balance_preserves_observations",
+            "expression": expr,
+        })
+    for law_name, expr in [
+        ("shuffle_permutes",
+         "S0 = rand:seed_s(exsss, {1,2,3}), {L, S1} = rand:shuffle_s([1,2,3,4], S0), "
+         "{lists:sort(L), element(1, S1) =:= element(1, S0)}"),
+        ("shuffle_permutes",
+         "S0 = rand:seed_s(exsss, {1,2,3}), {H, _} = S0, {L, _} = rand:shuffle_s([3,1,4,1,5], S0), "
+         "{maps:get(type, H), length(L), lists:sort(L)}"),
+        ("shuffle_short_consumes_nothing",
+         "S0 = rand:seed_s(exsss, {1,2,3}), "
+         "{rand:shuffle_s([], S0) =:= {[], S0}, rand:shuffle_s([only], S0) =:= {[only], S0}}"),
+    ]:
+        selected.append({
+            "upstream_example": f"examples/otp/rand.exs#{law_name}",
+            "expression": expr,
+        })
+
+    for term in [
+        "null", "true", "false", "0", "-7", "42", "1 bsl 100", "-(1 bsl 100)",
+        "0.0", "3.14", "-12.5", "1.0e20",
+        "<<>>", "<<\"hello\">>", "<<\"a\\nb\\tc\\rd\\\\e\\\"f\">>",
+        "<<\"\\x{00}\\x{1f}\\x{7f}\">>",
+        "<<\"cafe\\x{0301} 😀 日本語\"/utf8>>",
+        "<<\"0123456789abcdef0123456789abcdef\">>",
+        "[]", "[1,true,null,<<\"x\">>,#{}]",
+        "#{<<\"a\">> => 1, <<\"nested\">> => #{<<\"b\">> => [false, <<>>]}}",
+    ]:
+        selected.append({
+            "upstream_example": "examples/otp/json.exs#json_roundtrip",
+            "expression": f"V = {term}, E = iolist_to_binary(json:encode(V)), "
+                          "D = json:decode(E), {E, D, D =:= V}",
+        })
+    selected.append({
+        "upstream_example": "examples/otp/json.exs#json_roundtrip",
+        "expression": "V = lists:foldl(fun(I,Acc)->[I,Acc] end,null,lists:seq(1,32)), "
+                      "E = iolist_to_binary(json:encode(V)), {json:decode(E) =:= V}",
+    })
+    for raw in [
+        "<<\" -0.0 \">>",
+        "<<\"\\t\\n\\r [ 1 , -2.5 , true ]\\n\">>",
+        r'<<"\"\\\\\\/\\b\\f\\n\\r\\t\"">>',
+        r'<<"\"\\u0041\\uD83D\\uDE00\"">>',
+        "<<>>", "<<\" \">>", "<<\"{\">>", "<<\"[1,\">>", "<<\"[1,]\">>",
+        "<<\"\\\"unterminated\">>",
+        r'<<"\"\\uD800\"">>',
+        r'<<"\"\\uD800\\uD800\"">>',
+        r'<<"\"\\uDC00\"">>',
+        r'<<"\"\\uZZZZ\"">>',
+        "<<\"01\">>", "<<\"truee\">>", "<<\"1 2\">>", "<<\"1e1000\">>", "<<\"[1 2]\">>",
+    ]:
+        selected.append({
+            "upstream_example": "examples/otp/json.exs#json_roundtrip",
+            "expression": f"differential:call(json,decode,[{raw}])",
+        })
+    selected.append({
+        "upstream_example": "examples/otp/json.exs#json_roundtrip",
+        "expression": "{continue, S1} = json:decode_start(<<\"{\\\"k\\\":\">>, ok, #{}), "
+                      "{continue, S2} = json:decode_continue(<<\"[1,2\">>, S1), "
+                      "json:decode_continue(<<\"]}\">>, S2)",
+    })
+
+    for q_expr in [
+        "queue:new()",
+        "queue:from_list([1])",
+        "queue:from_list([1,2,3,4,5])",
+        "{[3,2,1],[]}",
+        "{[],[1,2,3]}",
+        "{[3,2],[1]}",
+    ]:
+        selected.append({
+            "upstream_example": "examples/otp/queue.exs#reverse_involution",
+            "expression": f"Q = {q_expr}, R1 = queue:reverse(Q), R2 = queue:reverse(R1), "
+                          "{queue:is_queue(Q), queue:to_list(R1), queue:to_list(R2) =:= queue:to_list(Q)}",
+        })
+        selected.append({
+            "upstream_example": "examples/otp/queue.exs#reverse_exchanges_ends",
+            "expression": f"Q = {q_expr}, R = queue:reverse(Q), "
+                          "{queue:peek(Q), queue:peek_r(Q), "
+                          "queue:peek(R) =:= queue:peek_r(Q), queue:peek_r(R) =:= queue:peek(Q), "
+                          "lists:reverse(queue:to_list(Q)) =:= queue:to_list(R)}",
+        })
+        selected.append({
+            "upstream_example": "examples/otp/queue.exs#front_insert_peek",
+            "expression": f"Q = {q_expr}, Q2 = queue:in_r(tag,Q), P = queue:peek(Q2), "
+                          "{{value,tag}, Q3} = queue:out(Q2), "
+                          "{P =:= {value,tag}, queue:to_list(Q3) =:= queue:to_list(Q)}",
+        })
+        for split_n in (["0"] if q_expr == "queue:new()" else ["0", "1", "queue:len(Q)"]):
+            selected.append({
+                "upstream_example": "examples/otp/queue.exs#split_preserves_ordered_partition",
+                "expression": f"Q = {q_expr}, N = {split_n}, {{Q1,Q2}} = queue:split(N,Q), "
+                              "{queue:to_list(Q1), queue:to_list(Q2), queue:len(Q1) =:= N, "
+                              "queue:to_list(Q1) ++ queue:to_list(Q2) =:= queue:to_list(Q), "
+                              "queue:to_list(queue:join(Q1,Q2)) =:= queue:to_list(Q)}",
+            })
+    selected.append({
+        "upstream_example": "examples/otp/queue.exs#split_preserves_ordered_partition",
+        "expression": "Q = queue:from_list([1,2,3,4,5]), {Q1,Q2} = queue:split(2,Q), "
+                      "{queue:to_list(Q1), queue:to_list(Q2), queue:member(3,Q), queue:member(9,Q), "
+                      "queue:to_list(queue:filter(fun(X)->X rem 2 =:= 0 end,Q)), "
+                      "queue:fold(fun(X,A)->X+A end,0,Q), "
+                      "queue:any(fun(X)->X>4 end,Q), queue:all(fun(X)->X>0 end,Q), "
+                      "queue:to_list(queue:delete(3,Q)), queue:to_list(queue:delete_r(3,Q))}",
+    })
+    for bad in [
+        "differential:call(queue,out,[queue:new()])",
+        "differential:call(queue,out_r,[queue:new()])",
+        "differential:call(queue,get,[queue:new()])",
+        "differential:call(queue,get_r,[queue:new()])",
+        "differential:call(queue,drop,[queue:new()])",
+        "differential:call(queue,drop_r,[queue:new()])",
+        "differential:call(queue,split,[2,queue:from_list([1])])",
+        "differential:call(queue,split,[-1,queue:from_list([1])])",
+        "differential:call(queue,len,[bad])",
+    ]:
+        selected.append({"upstream_example": "examples/otp/queue.exs#split_preserves_ordered_partition",
+                         "expression": bad})
+
+    t = "Modules/Timers"
+    for payload in ["tick", "{nested,#{1=>one,1.0=>float},<<5:3>>}"]:
+        for mode, label, delay in [
+            ("deliver", "timer_delivers", 0), ("deliver", "timer_delivers", 1),
+            ("cancel", "cancel_twice", 60000), ("cancel", "cancel_stops_or_message_arrives", 0),
+            ("expired", "cancel_twice", 0),
+            ("dead_before", "cancel_after_destination_exits", 60000),
+            ("dead_after", "cancel_after_destination_exits_later", 60000),
+            ("time_left", "cancel_reports_time_left", 5000),
+            ("time_left", "cancel_reports_time_left", 60000),
+            ("no_time_left", "cancel_reports_no_time_left", 0),
+            ("false_before_delivery", "cancel_false_before_delivery", 0),
+            ("false_before_delivery_waited", "cancel_false_before_delivery", 1),
+            ("false_before_delivery_target", "cancel_false_before_delivery", 1),
+        ]:
+            probe(t, label, f"differential:timer({mode},{delay},{payload})")
+    call(t, "cancel_other_reference", "cancel_timer", "make_ref()")
+    for value in ["timer", "0", "[]"]:
+        call(t, "cancel_badarg", "cancel_timer", value)
+    for time, destination in [("-1", "self()"), ("1.0", "self()"),
+                              ("bad", "self()"), ("1 bsl 63", "self()"), ("10", "make_ref()")]:
+        # Observe acceptance without comparing VM-specific references. Clean up
+        # a timer if the target incorrectly accepts the invalid arguments.
+        probe(t, "send_after_negative_time" if time == "-1" else "send_after_long_times",
+              f"R=erlang:send_after({time},{destination},tick),"
+              "{is_reference(R),erlang:cancel_timer(R)=/=false}")
+    for mode, delay, options in [("deliver", 10, "[{abs,true},{abs,false}]"),
+                                 ("deliver", 10, "[]"),
+                                 ("cancel", 60000, "[{abs,true},{abs,false}]")]:
+        probe(t, "send_after_options", f"differential:timer_options({mode},{delay},{options})")
+    for opts in ["[abs]", "[{info,true}]", "[{abs,false},abs]", "[{abs,true},{info,true}]"]:
+        probe(t, "send_after_options",
+              f"R=erlang:send_after(10,self(),tick,{opts}),"
+              "{is_reference(R),erlang:cancel_timer(R)=/=false}")
+    # OTP extensions, not instances of Lynx's symbolic timer/options proofs.
+    # Absolute inputs are offsets from each VM's own monotonic clock. Opposite
+    # duplicate orders distinguish last-option-wins from first-option-wins.
+    for options in ["[]", "[{abs,false}]", "[{abs,true},{abs,false}]",
+                    "[{abs,false},{abs,false}]"]:
+        for mode, delay in [("deliver", 0), ("deliver", 20), ("cancel", 60000)]:
+            selected.append({"otp_extension": "send_after/4",
+                             "expression": f"differential:timer_options({mode},{delay},{options})"})
+    for options in ["[{abs,true}]", "[{abs,false},{abs,true}]", "[{abs,true},{abs,true}]"]:
+        for mode, delay in [("abs_deliver", -20), ("abs_deliver", -1),
+                            ("abs_deliver", 0), ("abs_deliver", 20),
+                            ("abs_cancel", -20), ("abs_cancel", 0),
+                            ("abs_cancel", 60000)]:
+            selected.append({"otp_extension": "send_after/4",
+                             "expression": f"differential:timer_options({mode},{delay},{options})"})
+    for time, destination, options in [
+        *(("60000", "self()", opts) for opts in [
+            "bad", "[abs]", "[{info,true}]", "[{abs,0}]", "[{abs,bad}]",
+            "[{abs}]", "[{abs,true,extra}]", "[{abs,false}|tail]",
+            "[{abs,bad},{abs,false}]", "[{abs,false},{abs,bad}]",
+            "[{info,true},{abs,false}]", "[{abs,false},{info,true}]",
+        ]),
+        ("-1", "self()", "[]"), ("-1", "self()", "[{abs,false}]"),
+        ("1.0", "self()", "[]"), ("1.0", "self()", "[{abs,true}]"),
+        ("bad", "self()", "[{abs,true}]"),
+        ("60000", "make_ref()", "[]"), ("60000", "42", "[{abs,true}]"),
+    ]:
+        # An incorrectly accepted timer is canceled before returning a mismatch.
+        selected.append({"otp_extension": "send_after/4",
+                         "expression": f"R=erlang:send_after({time},{destination},tick,{options}),"
+                                       "{is_reference(R),erlang:cancel_timer(R)=/=false}"})
+
+    # Source forms are paired with dynamic apply and guard observations. Inspect
+    # compiled instructions before claiming distinct paths on a new OTP release.
+    for op in ["+", "-", "*", "/"]:
+        for a, b in [("0", "0"), ("0", "7"), ("-7", "3"), ("3", "-7"),
+                     ("-7", "-3"), ("1", "1.0"),
+                     ("9007199254740993", "1.0"), ("1.0", "9007199254740993"),
+                     ("-(1 bsl 63)", "-1"), ("(1 bsl 127)-1", "1"),
+                     ("(1 bsl 255)-1", "0"), ("-0.0", "0.0"),
+                     ("0.0", "-0.0"), ("-0.0", "-0.0"), ("5.0e-324", "0.5"),
+                     ("1.7976931348623157e308", "2.0"), ("bad", "1"), ("1", "[]")]:
+            probe(e, "arithmetic_boundaries", f"differential:execution_paths('{op}',{a},{b})")
+    for op in ["div", "rem", "band", "bor", "bxor", "bsl", "bsr"]:
+        for a, b in [("0", "0"), ("0", "7"), ("-7", "3"), ("3", "-7"),
+                     ("-7", "-3"), ("1.0", "2"), ("bad", "1"), ("1", "[]"),
+                     ("(1 bsl 100)+3", "63"), ("-(1 bsl 63)", "-1"),
+                     ("(1 bsl 255)-1", "0"), ("(1 bsl 127)+1", "127")]:
+            probe(e, "arithmetic_boundaries", f"differential:execution_paths('{op}',{a},{b})")
+    for op in ["==", "/=", "=:=", "=/=", "<", "=<", ">", ">="]:
+        for a, b in [("1", "1.0"), ("0.0", "-0.0"),
+                     ("9007199254740993", "9007199254740992.0"),
+                     ("-(1 bsl 63)-1", "-9223372036854775808.0"),
+                     ("(1 bsl 255)-1", "1.0e77"), ("5.0e-324", "0"),
+                     ("{1}", "{1.0}"), ("{z}", "{a,b}"),
+                     ("#{1=>wanted}", "#{1.0=>wanted}"),
+                     ("#{a=>1}", "#{a=>1.0}"), ("[1|a]", "[1|b]"),
+                     ("[1]", "[1.0]"), ("<<5:3>>", "<<5:4>>"),
+                     ("<<128>>", "<<1:1>>"), ("[]", "<<>>"),
+                     ("a", "1"), ("{}", "{}"), ("#{a=>1,b=>2}", "#{a=>1,b=>3}")]:
+            for left, right in ([(a, b)] if a == b else [(a, b), (b, a)]):
+                probe("Term/Compare", "numeric_and_exact_comparison",
+                      f"differential:execution_paths('{op}',{left},{right})")
+    for key, value in [
+        ("key", "#{key=>wanted}"), ("key", "#{key=>other}"), ("missing", "#{key=>wanted}"),
+        ("1", "#{1=>wanted,1.0=>other}"), ("1.0", "#{1=>wanted,1.0=>other}"),
+        ("1", "#{1.0=>wanted}"), ("1.0", "#{1=>wanted}"),
+        ("0.0", "#{-0.0=>wanted}"), ("-0.0", "#{0.0=>wanted}"),
+        ("{key,1}", "#{{key,1}=>wanted}"), ("{key,1}", "#{{key,1.0}=>wanted}"),
+        ("#{v=>1}", "#{#{v=>1}=>wanted}"), ("#{v=>1}", "#{#{v=>1.0}=>wanted}"),
+        ("<<5:3>>", "#{<<5:3>>=>wanted}"), ("<<5:4>>", "#{<<5:3>>=>wanted}"),
+        ("key", "#{key=>-0.0}"), ("key", "bad"), ("key", "[]"),
+    ]:
+        probe("Modules/Maps", "update_lookup", f"differential:execution_paths(map_get,{key},{value})")
+    for size in [0, 31, 32, 33]:
+        value = f"maps:from_list([{{I,I}} || I <- lists:seq(1,{size})])"
+        for key in ["1", "1.0", "missing"]:
+            probe("Modules/Maps", "update_lookup", f"differential:execution_paths(map_get,{key},{value})")
+    # Reuse body/dynamic/guard observations, keeping inputs and first results
+    # live across a call and explicit GC. A successful unequal guard must reject
+    # just like an invalid BIF, but body/dynamic results distinguish the two.
+    structural_inputs = {
+        "length": ("3", [
+            ("empty", "[]"), ("three", "[wanted,{nested,7},<<5:3>>]"),
+            ("two", "[a,b]"), ("improper", "[wanted|tail]"),
+            ("nested_improper", "[a,b|tail]"), ("non_list", "{a,b}"),
+            ("live", "[self(),make_ref(),fun()->alive end]"),
+            ("runtime_list", "lists:seq(1,257)"),
+        ]),
+        "hd": ("wanted", [
+            ("empty", "[]"), ("proper", "[wanted,{nested,7}]"),
+            ("improper", "[wanted|tail]"), ("other", "[other]"),
+            ("non_list", "{wanted}"),
+            ("heap_head", "lists:reverse([tail,{nested,<<5:3>>}])"),
+        ]),
+        "tl": ("[wanted]", [
+            ("empty", "[]"), ("proper", "[head,wanted]"),
+            ("improper", "[head|wanted]"), ("singleton", "[head]"),
+            ("non_list", "42"),
+            ("heap_tail", "lists:reverse(differential:exception_argument([{nested,<<5:3>>},head]),tail)"),
+        ]),
+        "tuple_size": ("3", [
+            ("empty", "{}"), ("three", "{wanted,<<5:3>>,[a|tail]}"),
+            ("two", "{a,b}"), ("non_tuple", "[a,b,c]"),
+            ("live", "list_to_tuple([self(),make_ref(),fun()->alive end])"),
+        ]),
+    }
+    binary_inputs = [(f"bits_{bits}", f"<<5:{bits}>>") for bits in [0, 1, 7, 8, 9, 23, 24, 25]] + [
+        ("heap_binary", "binary:copy(<<7>>,31)"),
+        ("refc_binary", "binary:copy(<<7>>,257)"),
+        ("aligned_slice", "binary:part(binary:copy(<<17>>,129),1,65)"),
+        ("unaligned_slice", "begin Parent=differential:exception_argument("
+         "<<7:3,(binary:copy(<<17>>,129))/binary,3:5>>),"
+         "<<_:3,Slice:65/binary,_/bitstring>>=Parent,Slice end"),
+        ("partial_slice", "begin Parent=differential:exception_argument("
+         "binary:copy(<<17>>,129)),<<_:5,Slice:515/bitstring,_/bitstring>>=Parent,Slice end"),
+        ("non_bitstring_atom", "bad"), ("non_bitstring_list", "[1,2,3]"),
+    ]
+    structural_inputs.update(byte_size=("3", binary_inputs), bit_size=("24", binary_inputs))
+    for op, (target, inputs) in structural_inputs.items():
+        origin = {"length": "length/1_two_elements", "hd": "hd/1_cons", "tl": "tl/1_cons",
+                  "tuple_size": "tuple_access"}.get(op, "bitstring_guards")
+        for label, value in inputs:
+            path = f"differential:execution_paths({op},V,{target})"
+            probe(e, origin, f"V=differential:exception_argument({value}),Before={path},"
+                  f"true=erlang:garbage_collect(),After={path},{{Before,After}}",
+                  structural_bif=op, structural_case=label)
+    tuple_value = "{wanted,other,{nested,<<5:3>>}}"
+    element_inputs = [(f"index_{index}", index, tuple_value)
+                      for index in ["-1", "0", "1", "2", "3", "4", "1.0", "bad", "1 bsl 100"]] + [
+        ("empty", "1", "{}"), ("non_tuple", "1", "[wanted,other]"),
+        ("invalid_both", "0", "bad"),
+    ] + [(f"runtime_{index}", str(index), "setelement(33,erlang:make_tuple(33,other),wanted)")
+         for index in [32, 33, 34]]
+    for label, index, value in element_inputs:
+        path = "differential:execution_paths(element,I,V)"
+        probe(e, "tuple_access", f"I=differential:exception_argument({index}),"
+              f"V=differential:exception_argument({value}),Before={path},"
+              f"true=erlang:garbage_collect(),After={path},{{Before,After}}",
+              structural_bif="element", structural_case=label)
+    for a in ["true", "false", "0"]:
+        for b in ["true", "false", "bad"]:
+            call(e, "xor/2_booleans", "xor", a, b)
+    for size in ["0", "1", "3", "-1", "1.0", "bad"]:
+        call(e, "make_tuple_replicates" if size in ["0", "1", "3"] else "make_tuple_bad_size",
+             "make_tuple", size, "{nested,7}")
+    for value in ["{}", "{a,7,{nested}}", "[]", "bad"]:
+        call(e, ["tuple_access", "tuple_access_rejects_nontuples"], "tuple_size", value)
+        for index in ["-1", "0", "1", "3", "4", "1.0"]:
+            call(e, ["tuple_access", "tuple_access_invalid_indices"], "element", index, value)
+            call(e, ["setelement_read", "setelement_bad_index"], "setelement", index, value, "new")
+    for value in ["[]", "[a]", "[a,7]", "[a|tail]", "bad"]:
+        for fn in ["hd", "tl", "length"]:
+            call(e, ["hd/1_cons", "tl/1_cons", "length/1_two_elements", "list_guards_invalid"], fn, value)
+    for width in range(18):
+        for fn in ["is_binary", "is_bitstring", "bit_size", "byte_size", "size"]:
+            call(e, ["bitstring_guards", "binary_guard_alignment", "all_partial_byte_sizes",
+                     "empty_bitstring_has_zero_lastBits", "size/1_complete_bytes"], fn, f"<<255:{width}>>")
+    for value in ["bad", "[]", "{}", "1"]:
+        for fn in ["is_binary", "is_bitstring", "bit_size", "byte_size"]:
+            call(e, "non_bitstrings_rejected", fn, value)
+    for start, length in [(0, 3), (1, 2), (3, -2), (3, 0), (2, 2), (1, -2), (-1, 1)]:
+        call(e, "binary_part/3_ranges", "binary_part", "<<1,2,3>>", str(start), str(length))
+        call(e, "binary_part/3_ranges", "binary_part", "<<1,2,3>>", f"{{{start},{length}}}")
+    call(e, "binary_part/3_ranges", "binary_part", "<<1,2,0:1>>", "0", "0")
+    for a, b in [("a", "b"), ("1", "1.0"), ("0.0", "-0.0"),
+                 ("#{key=>1}", "#{key=>1.0}")]:
+        probe(e, ["process_dictionary_empty", "process_dictionary_put_replace_erase",
+                  "process_dictionary_numeric_types_are_distinct", "process_dictionary_queries"],
+              f"differential:dictionary({a},{b})")
+
+    m = "Modules/Math"
+    for value in ["0.0", "-0.0", "0.25", "-0.25", "0.9999999999999999", "-0.9999999999999999",
+                  "5.0e-324", "-5.0e-324", "4503599627370496.0", "1.7976931348623157e308",
+                  "7", "bad"]:
+        for fn in ["floor", "ceil"]:
+            call(m, ["floor_signed_zero", "ceil_signed_zero", "floor_unit_interval",
+                     "ceil_negative_unit_interval", "large_values_are_fixed_and_integral"], fn, value, module="math")
+
+    c = "Modules/Conversions"
+    integers = ["+12", "-0", "007", "", "-", "1_000", " 1", "1 ", "1.0",
+                "123456789012345678901234567890", "--1", "+-1", "0x10"]
+    floats = ["1.0", "1e5", "1.e5", ".5", "1.0E+5", "1.0e400", "-0.0", "+1.5",
+              "1.0e-400", "1.5e", "1.5e+", "1", "0.1e1_0", "1.7976931348623157e308",
+              "1.7976931348623159e308", "2.4703282292062327e-324", "2.4703282292062328e-324", "00.10"]
+    for ordinal, fn, texts in [(1, "binary_to_integer", integers), (2, "binary_to_float", floats)]:
+        for text in texts:
+            call(c, f"guard:{ordinal}", fn, f'<<"{text}">>')
+    for base, texts in [("2", ["101101", "-101101", "+000101", "102"]),
+                        ("10", ["+00012", "-0", "123456789012345678901234567890", "1_0"]),
+                        ("16", ["fF", "-8000000000000001", "10000000000000000000000001", "0x10"]),
+                        ("36", ["Zz", "+000Z", "-zZ", "zZ!"])]:
+        for text in texts:
+            call(c, "guard:1", "binary_to_integer", f'<<"{text}">>', base)
+            call(c, "guard:1", "list_to_integer", f'"{text}"', base)
+    for bytes_ in ["49,0", "49,0,50", "0,49", "43,49,0,50"]:
+        for base in [None, "2", "10", "16", "36"]:
+            args = [] if base is None else [base]
+            call(c, "guard:1", "binary_to_integer", f"<<{bytes_}>>", *args)
+            call(c, "guard:1", "list_to_integer", f"[{bytes_}]", *args)
+    for base in ["1", "37", "-1", "1.0", "1 bsl 100"]:
+        for fn, value in [("binary_to_integer", '<<"10">>'), ("list_to_integer", '"10"'),
+                          ("integer_to_binary", "10"), ("integer_to_list", "10")]:
+            call(c, "integer_binary_round_trip", fn, value, base)
+    for base in ["2", "16", "36"]:
+        for value in ["0", "-1", "(1 bsl 63)+1", "-((1 bsl 127)+35)"]:
+            for fn in ["integer_to_binary", "integer_to_list"]:
+                call(c, "integer_binary_round_trip", fn, value, base)
+    for value in ["0.0", "-0.0", "5.0e-324", "1.7976931348623157e308", "100.0", "1000.0",
+                  "1230.0", "12300.0", "0.0012", "0.00012", "0.1", "0.3", "123456.0",
+                  "12345.678", "1.0e23", "9.999999999999999e22", "9007199254740991.0",
+                  "9007199254740992.0", "-1230.0", "2.5e-7"]:
+        probe(c, ["guard:3", "float_binary_round_trip"], f"differential:float_text({value},[short])")
+    for ordinal, atom, encoding in [(4, "'héllo'", "utf8"), (5, "'café'", "latin1"), (6, "'π'", "latin1")]:
+        call(c, f"guard:{ordinal}", "atom_to_binary", atom, encoding)
+    for binary_expr in [
+        "<<>>", "<<104,105>>", "<<192,128>>", "<<194,128>>", "<<224,159,128>>",
+        "<<224,160,128>>", "<<237,160,128>>", "<<237,159,191>>",
+        "<<240,143,128,128>>", "<<240,144,128,128>>", "<<244,143,191,191>>",
+        "<<244,144,128,128>>", "<<245,128,128,128>>", "<<128>>", "<<195>>",
+        "binary:copy(<<97>>,256)", "<<(binary:copy(<<97>>,255))/binary,255>>",
+        "<<(binary:copy(<<97>>,254))/binary,255>>", "binary:copy(<<97>>,1021)",
+        "binary:copy(<<195,169>>,255)", "binary:copy(<<240,159,152,128>>,255)",
+        "binary:copy(<<195,169>>,300)",
+    ]:
+        for encoding in ["utf8", "unicode", "latin1"]:
+            call(c, "guard:7", "binary_to_atom", binary_expr, encoding)
+    for encoding in ["utf8", "unicode", "latin1"]:
+        call(c, "guard:8", "binary_to_atom", "binary:copy(<<97>>,255)", encoding)
+    for binary_expr in [
+        "<<>>", "<<104,105>>", "<<194,128>>", "<<192,128>>", "<<255>>",
+        "binary:copy(<<97>>,255)", "binary:copy(<<97>>,256)",
+        "<<(binary:copy(<<97>>,255))/binary,255>>",
+        "<<(binary:copy(<<97>>,254))/binary,255>>", "a", "<<128:7>>",
+    ]:
+        call(c, "guard:9", "binary_to_atom", binary_expr)
+    for binary_expr in ["<<104>>", "<<>>", "a"]:
+        call(c, "guard:10", "binary_to_atom", binary_expr, "ascii")
+    for non_binary in ["a", "[104]", "1"]:
+        for encoding in ["utf8", "latin1"]:
+            call(c, "guard:11", "binary_to_atom", non_binary, encoding)
+    for encoding in ["utf8", "unicode", "latin1"]:
+        call(c, "guard:12", "binary_to_atom", "<<128:7>>", encoding)
+    for value in ["{a,1}", "{}", "{1,1.0,<<5:3>>,[a|b],#{k=>1}}", "[]", "a", "1", "<<1,2>>", "#{a=>1}"]:
+        call(c, "tuple_to_list_elements", "tuple_to_list", value)
+    for value in ["0", "-7", "1 bsl 100", "-(1 bsl 255)"]:
+        call(c, "integer_binary_round_trip", "integer_to_binary", value)
+        probe(c, "integer_binary_round_trip",
+              f"differential:call(erlang,binary_to_integer,[differential:call(erlang,integer_to_binary,[{value}])])")
+    for value in ["[]", "<<>>", "[0,255,[1,<<2,3>>]|<<4,5>>]", "[[[]],<<7>>]",
+                  "[1|2]", "[-1]", "[256]", "[<<1:1>>]", "<<1:1>>", "bad",
+                  "0", "[<<>>,[],[[]]]", "[[1|<<2,3>>],[4,[]]|<<5,6>>]",
+                  "[<<5:3>>,17,<<3:2>>]", "[[1|<<2,5:3>>],7]",
+                  "[<<5:3>>,<<17:5>>]", "[1|<<5:3>>]", "[[[]]|1]",
+                  "[1,[2,bad],3]", "[1,[2.0],3]", "[1,[1 bsl 100],3]",
+                  "lists:foldl(fun(_,A)->[A,23] end,[17|<<19>>],lists:seq(1,64))",
+                  "lists:foldl(fun(_,A)->[A,23] end,[17|19],lists:seq(1,64))",
+                  "begin B=binary:copy(<<0,17,255>>,40),S=binary:part(B,1,65),[S,[S]|<<7>>] end"]:
+        # The other APIs extend the model's iodata grammar samples: list-only
+        # roots differ from iodata roots, and only list_to_bitstring accepts bits.
+        for fn in ["iolist_to_binary", "iolist_size", "list_to_binary", "list_to_bitstring"]:
+            call(c, "iodata_total_and_exact", fn, value)
+    call(c, "binary_part_of_whole", "binary_part", "<<1,2>>", "0", "2")
+
+    b = "Modules/Binary"
+    for subject, pattern, options in [
+        ('<<"a&b&c">>', '<<"&">>', "[]"), ('<<"a&b&c">>', '<<"&">>', "[global]"),
+        ('<<"&a&&b&">>', '<<"&">>', "[global]"), ('<<"&a&&b&">>', '<<"&">>', "[global,trim]"),
+        ('<<"&a&&b&">>', '<<"&">>', "[global,trim_all]"), ('<<"abc">>', '<<"&">>', "[global]"),
+        ('<<>>', '<<"&">>', "[global]"), ('<<>>', '<<"&">>', "[global,trim]"),
+        ('<<"a,b,c">>', '<<",">>', "[{scope,{2,3}}]"),
+        ('<<"a,b,c">>', '<<",">>', "[{scope,{2,3}},global]"),
+        ('<<"a,b,c">>', '<<",">>', "[{scope,{4,-3}},global]"),
+        ('<<"abcab">>', '[<<"a">>,<<"ab">>]', "[global]"),
+        ('<<"abc">>', '<<>>', "[]"), ('<<"abc">>', '[]', "[]"),
+        ('<<"abc">>', '<<"b">>', "[{scope,{2,5}}]"), ('<<"abc">>', '<<"b">>', "[bad]"),
+    ]:
+        call(b, "guard:1", "split", subject, pattern, options, module="binary")
+    call(b, "guard:2", "split", '<<"k=v=w">>', '<<"=">>', module="binary")
+    for subject, pattern, options in [
+        ('<<"a[b]">>', '<<"[">>', "[]"), ('<<"ab">>', '<<"[">>', "[]"),
+        ('<<"abcab">>', '[<<"a">>,<<"ab">>]', "[]"),
+        ('<<"abcab">>', '<<"ab">>', "[{scope,{1,4}}]"),
+        ('<<"abcab">>', '<<"ab">>', "[{scope,{1,3}}]"),
+    ]:
+        call(b, "guard:5", "match", subject, pattern, options, module="binary")
+    # Earlier matches beat longer later ones; at the same position the longest
+    # fitting pattern wins, independent of pattern-list order and scope sign.
+    for pattern in ['[<<"ab">>,<<"abc">>]', '[<<"abc">>,<<"ab">>]']:
+        for options in ["[]", "[{scope,{3,3}}]", "[{scope,{6,-3}}]",
+                        "[{scope,{3,2}}]", "[{scope,{3,0}}]", "[{scope,{8,0}}]"]:
+            call(b, "guard:5", "match", '<<"zababcab">>', pattern, options, module="binary")
+            call(b, "guard:1", "split", '<<"zababcab">>', pattern, options, module="binary")
+            call(b, "guard:1", "split", '<<"zababcab">>', pattern, f"[global|{options}]", module="binary")
+    for options in ["[{scope,{0,3}},{scope,{3,3}}]", "[{scope,{3,3}},{scope,{0,3}}]",
+                    "[{scope,invalid},{scope,{3,3}}]", "[{scope,{0,99}},{scope,{3,3}}]",
+                    "[{scope,{3,3}},{scope,invalid}]", "[{scope,{3,3}}|ignored]",
+                    "[{scope,{3,3}},bad]", "[{scope,{3,3,0}}]", "[{scope,{3,1.0}}]",
+                    "bad", "[bad]", "[{scope,{1 bsl 100,0}}]"]:
+        for fn, label in [("match", "guard:5"), ("split", "guard:1")]:
+            call(b, label, fn, '<<"zababcab">>', '<<"ab">>', options, module="binary")
+    for pattern in ['[]', '[<<>>]', '[<<"ab">>,<<>>]', '[<<"ab">>,bad]',
+                    '[<<"ab">>|tail]', '[<<1:1>>]', '[[<<"ab">>]]']:
+        for subject in ['<<>>', '<<"zababcab">>']:
+            for fn, label in [("match", "guard:5"), ("split", "guard:1")]:
+                call(b, label, fn, subject, pattern, "[]", module="binary")
+    call(b, "guard:6", "last", '<<"ab]">>', module="binary")
+    call(b, "guard:7", "last", "<<>>", module="binary")
+    for value in ["0", "1", "255", "256", "(1 bsl 64)+5", "1 bsl 255", "-1", "-(1 bsl 100)"]:
+        call(b, "guard:3", "encode_unsigned", value, module="binary")
+    for value in ["a", "0.0", "1.0", "[]", "<<1>>"]:
+        call(b, "guard:4", "encode_unsigned", value, module="binary")
+
+    l = "Modules/Lists"
+    for value in ["[]", "[a,b]", "[a|improper]", "1"]:
+        for tail in ["[]", "[c]", "tail"]:
+            call(l, ["reverse_empty", "reverse_onto_tail", "reverse_improper", "reverse_non_list"],
+                 "reverse", value, tail, module="lists")
+    for value, items in [("b", "[a,b|improper]"), ("1", "[1.0]"), ("0.0", "[-0.0]"),
+                         ("c", "[a|b]"), ("a", "foo"), ("b", "[a,b]"), ("b", "[]")]:
+        call(l, ["member_found", "member_exact", "member_improper", "member_non_list"],
+             "member", value, items, module="lists")
+    for value in ["[]", "[a,b]", "[a|improper]", "[a,b|improper]", "bad"]:
+        call(l, ["reverse_improper", "reverse_non_list"], "reverse", value, module="lists")
+    for left, right in [
+        ("[]", "tail"), ("[a,b]", "tail"), ("[1,1 bsl 100]", "[2,#{k=>v}]"),
+        ("[a|improper]", "[]"), ("bad", "[1]"),
+    ]:
+        call(e, "append_reduces", "++", left, right)
+    for value, items in [("a", "[a|improper]"), ("1", "[1.0,2]"), ("1", "[1,2|improper]")]:
+        selected.append({"lean_origins": ["Modules/Lists.lean#member_found",
+                                          "Modules/Lists.lean#member_improper",
+                                          "Term/ShortCircuit.lean#isMember_exact",
+                                          "Term/ShortCircuit.lean#isMember_agrees_with_chain"],
+                         "expression": f"differential:call(lists,member,[{value},{items}])"})
+    list_relation_origins = [
+        "Modules/Lists.lean#reverse_empty",
+        "Modules/Lists.lean#reverse_onto_tail",
+        "Modules/Lists.lean#member_found",
+        "Modules/Lists.lean#member_exact",
+        "Modules/Erlang.lean#append_reduces",
+        "Modules/Erlang.lean#list_subtraction",
+        "Term/ShortCircuit.lean#isMember_exact",
+        "Term/ShortCircuit.lean#isMember_agrees_with_chain",
+        "Term/Compare.lean#exact_comparison_heads_first",
+    ]
+    for xs, ys, tail, probes in [
+        ("[]", "[]", "[]", "[a,1]"),
+        ("[]", "[1,2]", "[tail]", "[1,2,3]"),
+        ("[1]", "[]", "improper_tail", "[1,1.0,2]"),
+        ("[3,1,2,1,1.0,-1]", "[1,4,2,2]", "[9,8]", "[1,1.0,2,3,4,99]"),
+        ("[0.0,-0.0,1,1.0,a]", "[1.0,0.0]", "[]", "[0.0,-0.0,1,1.0,a,b]"),
+        ("[{b,[2,1]},#{k=>1},<<5:3>>,{a,[]},#{k=>1.0},[1,2]]",
+         "[#{k=>1},{b,[2,1]}]",
+         "{improper,tail}",
+         "[{b,[2,1]},#{k=>1},#{k=>1.0},<<5:3>>,missing]"),
+        ("[1 bsl 100,-(1 bsl 100),(1 bsl 255)-1,1 bsl 60,0,-(1 bsl 60),1 bsl 100]",
+         "[1 bsl 100,42,-(1 bsl 255)+1]",
+         "[0]",
+         "[1 bsl 100,-(1 bsl 100),(1 bsl 255)-1,42,99]"),
+    ]:
+        selected.append({"lean_origins": list_relation_origins,
+                         "expression": f"differential:list_relations({xs},{ys},{tail},{probes})"})
+
+    s = "Modules/Sets"
+    # Model-inspired public v2 behavior, not the model's version-1 coercion or
+    # exhaustion. Normalize to_list results with exact keys, never lists:sort/1.
+    for constructor in ["sets:new()", "sets:new([{version,2}])"]:
+        probe(s, "creation", f"differential:set_elements({constructor})")
+    for items in ["[]", "[a,a,b]", "[1]", "[1.0]", "[0.0]", "[-0.0]",
+                  "[1,1.0,1,0.0,-0.0,0]",
+                  "[{1},{1.0},[1],[1.0],#{1=>a},#{1.0=>a},<<5:3>>,1 bsl 100]"]:
+        for options in ["", ",[{version,2}]"]:
+            probe(s, ["creation", "size"],
+                  f"differential:set_elements(sets:from_list({items}{options}))")
+        for key in ["a", "1", "1.0", "-0.0", "0.0", "0", "{1.0}",
+                    "[1.0]", "#{1.0=>a}", "1 bsl 100", "missing"]:
+            probe(s, "membership",
+                  f"sets:is_element({key},sets:from_list({items},[{{version,2}}]))")
+    pairs = [
+        ("[]", "[]"), ("[]", "[a,b]"), ("[a]", "[b,c]"),
+        ("[a,b]", "[b,c,d]"), ("[a,b,a]", "[b,a]"), ("[a]", "[a,b,c]"),
+        ("[1,0.0,{1},[1],#{1=>a}]", "[1.0,-0.0,{1.0},[1.0],#{1.0=>a}]"),
+        ("[1 bsl 100,<<5:3>>,<<1,2>>]", "[1 bsl 100,<<1:1>>,a]")
+    ]
+    # Small heuristic boundaries and map sizes either side of 32/64. Overlaps
+    # straddle subtraction's quarter-size shortcut and the 75% keep threshold.
+    for size in [3, 4, 5, 31, 32, 33, 63, 64, 65]:
+        left = f"lists:seq(1,{size})"
+        for overlap in sorted({0, size // 4, size // 4 + 1, (size * 3) // 4, size}):
+            right = f"lists:seq({size - overlap + 1},{size + 3})"
+            pairs.append((left, right))
+    for left, right in pairs:
+        for a, b in ([(left, right)] if left == right else [(left, right), (right, left)]):
+            probe(s, ["membership", "size"], f"differential:set_algebra({a},{b})")
+    for items in ["[]", "[a]", "[1,1.0]", "[1 bsl 100,<<5:3>>]"]:
+        for key in ["a", "1.0", "{nested,[1]}"]:
+            probe(s, ["membership", "size"],
+                  f"begin S=sets:from_list({items},[{{version,2}}]),"
+                  f"Added=sets:add_element({key},S),"
+                  f"{{differential:set_elements(Added),"
+                  f"differential:set_elements(sets:add_element({key},Added)),"
+                  f"differential:set_elements(sets:del_element({key},S)),"
+                  f"differential:set_elements(sets:del_element({key},Added))}} end")
+    for lists in ["[]", "[[]]", "[[a,b]]", "[[a,b],[b,c],[b,d]]",
+                  "[[a,b],[],[a]]", "[[1,1.0],[1.0],[1.0,2]]"]:
+        for operation in ["union", "intersection"]:
+            probe(s, "membership",
+                  f"differential:set_elements(sets:{operation}("
+                  f"[sets:from_list(L,[{{version,2}}]) || L <- {lists}]))")
+    # OTP decides input/option outcomes, including differences. No version-1
+    # representation is compared and no model exhaustion is an expected error.
+    for items in ["bad", "{}", "[a|bad]"]:
+        for options in ["", ",[{version,2}]"]:
+            call(s, "creation", "from_list", items + options, module="sets")
+    for options in ["[]", "[{ignored,true}]", "[version]", "bad", "{}",
+                    "[{version,3}]", "[{version,bad}]", "[{version,2}|bad]",
+                    "[{version,2},{version,bad}]", "[{version,3},{version,2}]",
+                    "[{ignored,true},{version,2}]", "[version,{version,2}]"]:
+        for constructor in [f"sets:new({options})", f"sets:from_list([a,a,b],{options})"]:
+            probe(s, "creation", f"differential:set_elements({constructor})")
+    for invalid in ["bad", "[]", "{set}"]:
+        call(s, "membership", "is_element", "a", invalid, module="sets")
+        call(s, "size", "size", invalid, module="sets")
+        for operation in ["union", "intersection", "subtract", "is_subset", "is_disjoint"]:
+            for valid in ["sets:new([{version,2}])", "sets:from_list([a],[{version,2}])"]:
+                for left, right in [(invalid, valid), (valid, invalid)]:
+                    expression = f"differential:call(sets,{operation},[{left},{right}])"
+                    if operation in ["union", "intersection", "subtract"]:
+                        expression = f"differential:set_elements({expression})"
+                    probe(s, "membership", expression)
+
+    m = "Modules/Maps"
+    for value in ["#{}", "#{a=>1,b=>2}", "#{1=>one,1.0=>float,0.0=>pos,-0.0=>neg}", "1", "[]", "{}"]:
+        for key in ["a", "missing", "1", "1.0", "-0.0"]:
+            call(m, ["new_and_get", "missing_key", "numeric_key_types_are_distinct", "bad_maps"],
+                 "get", key, value, module="maps")
+            call(m, ["put_overwrites", "get_after_put", "bad_maps"], "put", key, "new", value, module="maps")
+            call(m, ["update_existing", "update_missing", "update_numeric_keys", "update_badmap"],
+                 "update", key, "new", value, module="maps")
+        probe(m, ["to_list_pairs", "enumeration_lookup"], f"differential:map_entries({value})")
+        for mode in ["valid", "wrong_arity"]:
+            probe(m, "fold_inputs", f"differential:map_fold({value},{mode})")
+    call(m, "new_and_get", "new", module="maps")
+    for a, b in [("#{a=>1}", "#{b=>2}"), ("#{a=>1}", "#{a=>2}"),
+                 ("#{a=>2}", "#{a=>1}"), ("1", "#{}"), ("#{}", "1")]:
+        call(m, ["merge_bindings", "bad_maps"], "merge", a, b, module="maps")
+    for value in ["[]", "[{a,1},{a,2}]", "[{1,a},{1.0,b}]", "[{a,1}|1]", "[{a}]", "1"]:
+        call(m, "from_list_pairs", "from_list", value, module="maps")
+    for keys, val in [
+        ("[]", "v"), ("[]", "0"), ("[a]", "{boxed,<<5:3>>,[1|2]}"),
+        ("[b,a,b,c,a]", "1 bsl 100"), ("[1,1.0]", "tag"), ("[0,0.0,-0.0]", "zero"),
+        ("[1,1.0,0,0.0,-0.0,1 bsl 100,-(1 bsl 100),1 bsl 100]", "mix"),
+        ("[#{1=>a},#{1.0=>b},{1},{1.0},[1],[1.0],<<5:3>>,<<5:3>>,a]", "deep"),
+        ("lists:seq(1,31)", "ok"), ("lists:seq(1,32)", "ok"),
+        ("lists:seq(1,33)", "ok"), ("lists:seq(1,40)", "#{nested=>1}"),
+        ("lists:seq(1,20)++lists:seq(10,35)", "overlap"),
+        ("[a|b]", "v"), ("[a,b|1]", "v"), ("bad", "v"), ("0", "v"),
+        ("{a,b}", "v"), ("#{a=>1}", "v"), ("<<1,2>>", "v"),
+    ]:
+        call(m, ["from_list_pairs", "numeric_key_types_are_distinct", "enumeration_lookup"],
+             "from_keys", keys, val, module="maps")
+    for value in ["none", "[0|#{}]"]:
+        probe(m, "fold_inputs", f"differential:map_fold({value},valid)")
+    # Extend fold_inputs with callback dispatch/exception behavior. Count and sum
+    # are traversal-order independent, including beyond OTP's small-map limit.
+    for value in ["#{}", "#{a=>7}", "#{a=>3,b=> -7,c=>11}",
+                  "maps:from_list([{I,I*3-7} || I <- lists:seq(1,40)])", "none", "1"]:
+        for mode in ["counted", "throw", "error", "exit", "non_function"]:
+            probe(m, "fold_inputs", f"differential:map_fold({value},{mode})")
+    # Public extensions of combine_inputs, not theorem instantiations. Record
+    # callback arguments/multiplicity without asserting map traversal order.
+    for left, right in [("#{}", "#{}"), ("#{a=>3}", "#{}"), ("#{}", "#{a=>11}"),
+                        ("#{a=>3}", "#{b=>11}"), ("#{a=>3}", "#{a=>11,b=>7}"),
+                        ("#{a=>11,b=>7}", "#{a=>3}"),
+                        ("#{1=>integer,1.0=>float}", "#{1.0=>right,2=>only}"),
+                        ("#{1=>left}", "#{1.0=>right}"),
+                        ("#{<<5:3>>=>{boxed,[1,2]}}", "#{<<5:3>>=>{other,<<7:3>>}}")]:
+        probe(m, "combine_inputs", f"differential:map_callback(merge_with,[{left},{right}],valid)")
+    for size in [31, 32, 33, 40]:
+        left = f"maps:from_list([{{I,{{left,I,list_to_binary([I,17])}}}} || I <- lists:seq(1,{size})])"
+        right = f"maps:from_list([{{I,{{right,I,list_to_binary([I,29])}}}} || I <- lists:seq(2,{size+1})])"
+        probe(m, "combine_inputs", f"differential:map_callback(merge_with,[{left},{right}],valid)")
+        probe(m, "combine_inputs", f"differential:map_callback(filter,[{left}],valid)")
+    for mode in ["throw", "error", "exit", "non_function", "wrong_arity"]:
+        for left, right in [("#{}", "#{}"), ("#{a=>3}", "#{}"),
+                            ("#{}", "#{a=>11}"), ("#{a=>3}", "#{b=>11}"),
+                            ("#{a=>3}", "#{a=>11,b=>7}")]:
+            probe(m, "combine_inputs", f"differential:map_callback(merge_with,[{left},{right}],{mode})")
+    for left, right in [("bad_left", "#{}"), ("#{}", "bad_right"), ("bad_left", "bad_right")]:
+        for mode in ["valid", "non_function", "wrong_arity"]:
+            probe(m, "combine_inputs", f"differential:map_callback(merge_with,[{left},{right}],{mode})")
+    for value in ["#{}", "#{keep=>ordinary,drop=>selected,skip=>ordinary}",
+                  "#{1=>selected,1.0=>ordinary}", "#{keep=>{boxed,<<5:3>>}}"]:
+        probe(m, "combine_inputs", f"differential:map_callback(filter,[{value}],valid)")
+    for mode in ["throw", "error", "exit", "nonboolean", "non_function", "wrong_arity"]:
+        for value in ["#{}", "#{keep=>selected}"]:
+            probe(m, "combine_inputs", f"differential:map_callback(filter,[{value}],{mode})")
+    for mode in ["valid", "non_function", "wrong_arity"]:
+        probe(m, "combine_inputs", f"differential:map_callback(filter,[bad_map],{mode})")
+    # PR #2355 adds intersection and filtermap. Reuse the same boundary/control
+    # inputs, including both map-size branches, rather than just successful calls.
+    for entry in list(selected):
+        expression = entry["expression"]
+        for old, new in [("merge_with", "intersect_with"), ("filter", "filtermap")]:
+            prefix = f"differential:map_callback({old},"
+            if expression.startswith(prefix):
+                probe(m, "combine_inputs", expression.replace(prefix, f"differential:map_callback({new},", 1))
+    for value in ["#{}", "#{keep=>7,drop=>11,change=>{boxed,<<5:3>>}}",
+                  "#{1=>integer,1.0=>float}"]:
+        probe(m, "combine_inputs", f"differential:map_callback(filtermap,[{value}],transform)")
+    for left, right in [("#{}", "#{a=>11}"), ("#{a=>3}", "#{}"),
+                        ("#{a=>3}", "#{a=>11,b=>7}"), ("#{a=>11,b=>7}", "#{a=>3}"),
+                        ("#{1=>left}", "#{1.0=>right}"), ("bad_left", "bad_right")]:
+        call(m, "combine_inputs", "intersect", left, right, module="maps")
+    for value in ["#{}", "#{a=>error,1=>integer,1.0=>{boxed,<<5:3>>}}", "bad_map"]:
+        for key in ["a", "missing", "1", "1.0"]:
+            call(m, "new_and_get", "take", key, value, module="maps")
+    for size in [31, 32, 33, 40]:
+        value = f"maps:from_list([{{I,{{I,list_to_binary([I,17])}}}} || I <- lists:seq(1,{size})])"
+        for key in ["1", str(size // 2), str(size), str(size + 1)]:
+            call(m, "new_and_get", "take", key, value, module="maps")
+    for keys in ["[]", "[a,a,missing]", "[1]", "[1.0,1]", "bad", "[a|bad]"]:
+        for value in ["#{a=>error,1=>integer,1.0=>float}", "bad_map"]:
+            for operation in ["with", "without"]:
+                call(m, "enumeration_lookup", operation, keys, value, module="maps")
+    for args in ["[a,#{a=>3}]", "[missing,#{a=>3}]", "[1,#{1.0=>float}]",
+                 "[a,{initial,<<5:3>>},#{a=>3}]", "[missing,{initial,<<5:3>>},#{a=>3}]",
+                 "[a,bad_map]", "[a,initial,bad_map]"]:
+        for mode in ["valid", "throw", "error", "exit", "non_function", "wrong_arity"]:
+            probe(m, "get_after_put", f"differential:map_callback(update_with,{args},{mode})")
+    key_fun = "fun({K,_V})->K end"
+    value_fun = "fun({_K,V})->{mapped,V} end"
+    for values in ["[]", "[{b,3},{a,7},{b,11}]", "[{1,a},{1.0,b},{1,c}]", "bad", "[{a,3}|bad]"]:
+        call(m, "from_list_pairs", "groups_from_list", key_fun, values, module="maps")
+        call(m, "from_list_pairs", "groups_from_list", key_fun, value_fun, values, module="maps")
+    for callback in ["bad", "fun()->wrong end", "fun(_)->throw(callback_failed) end",
+                     "fun(_)->error(callback_failed) end", "fun(_)->exit(callback_failed) end"]:
+        for values in ["[]", "[{a,3}]"]:
+            call(m, "from_list_pairs", "groups_from_list", callback, values, module="maps")
+            call(m, "from_list_pairs", "groups_from_list", key_fun, callback, values, module="maps")
+    # Group callbacks have specified order; retain it rather than sorting effects.
+    for operation in ["key_only", "key_and_value"]:
+        args = "KeyFun,Values" if operation == "key_only" else "KeyFun,ValueFun,Values"
+        probe(m, "from_list_pairs", "put(group_calls,[]), Values=[{b,3},{a,7},{b,11}], "
+              "KeyFun=fun({K,_}=E)->put(group_calls,[{key,E}|get(group_calls)]),K end, "
+              "ValueFun=fun({_,V}=E)->put(group_calls,[{value,E}|get(group_calls)]),{mapped,V} end, "
+              f"Result=maps:groups_from_list({args}), {{Result,lists:reverse(erase(group_calls))}}")
+    for order in ["undefined", "ordered", "reversed"]:
+        for value in ["#{}", "#{a=>3,b=>7,c=>11}"]:
+            iterator = f"maps:iterator({value},{order})"
+            states = [iterator, f"maps:next({iterator})"]
+            # Only ordered iteration has a portable next key after consumption.
+            if value != "#{}" and order != "undefined":
+                states.append(f"element(3,maps:next({iterator}))")
+            for state in states:
+                probe(m, "iterator_steps", f"differential:map_entries({state})")
+                call(m, "iterator_steps", "is_iterator_valid", state, module="maps")
+            if order != "undefined":
+                probe(m, "iterator_steps", "maps:fold(fun(K,V,A)->[{K,V}|A] end,[]," + iterator + ")")
+    # Custom total orders have no numeric-key ties. Observe consumer visits,
+    # not comparator calls, whose order/count depends on the sorting algorithm.
+    iterator_orders = [
+        ("residue", "fun(A,B)->{A rem 3,A}=<{B rem 3,B} end"),
+        ("descending", "fun(A,B)->{A rem 3,A}>={B rem 3,B} end"),
+    ]
+    for size in [0, 1, 31, 32, 33]:
+        value = f"maps:from_list([{{K,7*K+3}} || K<-lists:seq(1,{size})])"
+        for order_name, order in iterator_orders:
+            for skip in sorted({0, 1, size, size + 1}):
+                for consumer in ["next", "fold", "map", "filter", "filtermap", "foreach"]:
+                    probe(m, "iterator_steps",
+                          f"differential:map_iterator({value},{order},{skip},{consumer})",
+                          iterator_scenario="consumer", iterator_size=size,
+                          iterator_order=order_name, iterator_skip=skip,
+                          iterator_consumer=consumer)
+            probe(m, "iterator_steps",
+                  f"M={value}, I=maps:iterator(M,{order}), "
+                  f"Updated=maps:put(1,changed,maps:remove({size},M)), "
+                  f"{{maps:to_list(I),maps:to_list(maps:iterator(Updated,{order}))}}",
+                  iterator_scenario="snapshot", iterator_size=size, iterator_order=order_name)
+    for size, value in [(0, "#{}"), (1, "#{a=>1}"), (3, "#{a=>1,b=>2,c=>3}")]:
+        for order in ["bad", "fun()->true end", "fun(_)->true end", "fun(_,_,_)->true end"]:
+            probe(m, "iterator_steps", f"maps:iterator({value},{order})",
+                  iterator_scenario="invalid_order", iterator_size=size)
+    for order in ["undefined", "ordered", "reversed", iterator_orders[0][1], "bad"]:
+        probe(m, "iterator_steps", f"maps:iterator(bad_map,{order})",
+              iterator_scenario="invalid_map")
+    for size in [0, 1, 5]:
+        value = f"maps:from_list([{{K,7*K+3}} || K<-lists:seq(1,{size})])"
+        for mode in ["throw", "error", "exit"]:
+            order = f"fun(_,_)->{mode}(comparator_failed) end"
+            probe(m, "iterator_steps", f"differential:map_iterator({value},{order},0,next)",
+                  iterator_scenario="comparator_exception", iterator_size=size,
+                  iterator_exception=mode)
+    for value in ["none", "bad", "[]", "#{a=>1}", "{a,3,none}", "{a,3,bad}"]:
+        call(m, "iterator_steps", "is_iterator_valid", value, module="maps")
+        probe(m, "iterator_steps", f"differential:map_entries({value})")
+        for mode in ["valid", "wrong_arity"]:
+            probe(m, "iterator_steps", f"differential:map_callback(filter,[{value}],{mode})")
+    for value in ["#{}", "#{a=>1,b=>2}", "#{1=>one,1.0=>float}"]:
+        for key in ["a", "1", "1.0"]:
+            put = f"differential:call(maps,put,[{key},new,{value}])"
+            update = f"differential:call(maps,update,[{key},new,{value}])"
+            probe(m, "get_after_put", f"differential:call(maps,get,[{key},{put}])")
+            probe(m, "update_lookup", f"differential:call(maps,get,[{key},{update}])")
+            probe(m, "update_other_lookup", f"differential:call(maps,get,[b,{update}])")
+    for a, b, c in [("#{a=>1}", "#{a=>2,b=>3}", "#{a=>4,c=>5}"), ("#{}", "#{1=>a}", "#{1.0=>b}")]:
+        left = f"differential:call(maps,merge,[differential:call(maps,merge,[{a},{b}]),{c}])"
+        right = f"differential:call(maps,merge,[{a},differential:call(maps,merge,[{b},{c}])])"
+        probe(m, "merge_associative", f"{{{left},{right}}}")
+    map_relation_origins = [
+        "Modules/Maps.lean#mixed_same_key",
+        "Modules/Maps.lean#enumeration_shadowed",
+        "Modules/Maps.lean#from_literal_pairs",
+        "Modules/Maps.lean#nonempty_map_equality",
+        "Modules/Maps.lean#get_after_put",
+        "Modules/Maps.lean#update_lookup",
+        "Modules/Maps.lean#update_other_lookup",
+        "Modules/Maps.lean#merge_bindings",
+        "Modules/Erlang.lean#map_get/2_after_put",
+        "Modules/Erlang.lean#map_size/1_shadowed_and_exact_keys",
+        "Modules/Erlang.lean#semantic_comparison_operators",
+        "Term/Compare.lean#association_list_order",
+        "Term/Compare.lean#exact_map_equality_by_lookup",
+        "Term/Compare.lean#exact_map_equality_lookup",
+        "Term/Compare.lean#map_equality_lookup",
+    ]
+    for left_pairs, right_pairs, queries in [
+        ("[]", "[]", "[a,1,1.0]"),
+        ("[{a,1}]", "[]", "[a,b,1]"),
+        ("[]", "[{a,1}]", "[a,b,1]"),
+        ("[{a,1},{b,2},{a,3},{1,int},{1.0,float},{1,int_override}]",
+         "[{b,2},{a,3},{1.0,float},{1,int_override}]",
+         "[a,b,c,1,1.0]"),
+        ("[{b,[]},{a,1},{a,99}]", "[{a,99},{b,[]}]", "[a,b,c]"),
+        ("[{1,10},{2,20.0}]", "[{1,10.0},{2,20}]", "[1,1.0,2,2.0,3]"),
+        ("[{1,a}]", "[{1.0,a}]", "[1,1.0,a]"),
+        ("[{0.0,pos_zero}]", "[{-0.0,neg_zero}]", "[0.0,-0.0,0]"),
+        ("[{a,0.0},{b,1}]", "[{a,-0.0},{b,1.0}]", "[a,b,c]"),
+        ("[{a,1},{b,2},{c,3}]", "[{b,20},{d,4},{e,5}]", "[a,b,c,d,e,missing]"),
+        ("[{b,0},{a,99}]", "[{c,0},{a,0}]", "[a,b,c]"),
+        ("[{{k,[1,<<5:3>>]},#{inner=>[a,b]}},{[1,2],{tuple,1 bsl 60}}]",
+         "[{{k,[1,<<5:3>>]},#{inner=>[a,b]}},{[1,2.0],{tuple,1 bsl 60}}]",
+         "[{k,[1,<<5:3>>]},[1,2],[1,2.0],missing]"),
+        ("[{1 bsl 60,-(1 bsl 60)},{1 bsl 100,(1 bsl 255)-1},{-(1 bsl 100),0}]",
+         "[{1 bsl 60,-(1 bsl 60)},{1 bsl 100,(1 bsl 255)-2},{42,1 bsl 100}]",
+         "[1 bsl 60,1 bsl 100,-(1 bsl 100),42,0]"),
+    ]:
+        selected.append({"lean_origins": map_relation_origins,
+                         "expression": f"differential:map_relations({left_pairs},{right_pairs},{queries})"})
+    for size in [31, 32, 33]:
+        left_pairs = f"[{{I,I*2}} || I <- lists:seq(1,{size})]"
+        right_same = f"[{{I,I*2}} || I <- lists:seq({size},1,-1)]"
+        right_float = f"[{{I,case I of 17 -> 34.0; _ -> I*2 end}} || I <- lists:seq({size},1,-1)]"
+        queries = f"[1,17,17.0,{size},{size + 1}]"
+        selected.append({"lean_origins": map_relation_origins,
+                         "expression": f"differential:map_relations({left_pairs},{right_same},{queries})"})
+        selected.append({"lean_origins": map_relation_origins,
+                         "expression": f"differential:map_relations({left_pairs},{right_float},{queries})"})
+    for key, value in [
+        ("k", "42"),
+        ("{nested,[1,<<3:2>>]}", "#{inner=>1 bsl 100}"),
+        ("1 bsl 100", "-(1 bsl 100)"),
+    ]:
+        probe(m, ["singleton_iteration", "from_literal_pairs"],
+              f"differential:map_singleton_iteration({key},{value})")
+    map_guard_origins = [
+        "Modules/Maps.lean#is_map_guard",
+        "Modules/Erlang.lean#map_guards_errors",
+        "Modules/Erlang.lean#map_size/1_shadowed_and_exact_keys",
+    ]
+    for key in ["a", "1", "1.0", "1 bsl 100"]:
+        for value in ["#{}", "#{a=>wanted,b=>2}", "#{1=>wanted,1.0=>other}",
+                      "#{(1 bsl 100)=>wanted}", "[]", "1", "{a,wanted}"]:
+            selected.append({"lean_origins": map_guard_origins,
+                             "expression": f"differential:map_guards({key},{value})"})
+
+    for source, names, pairs in [
+        ("Term/Compare", ["numeric_and_exact_comparison", "signed_zero_comparison"],
+         [("1", "1.0"), ("0.0", "-0.0"), ("-0.0", "0.0"), ("9007199254740993", "9007199254740992.0")]),
+        ("Term/Compare", ["comparison_short_circuit", "comparison_keys_before_values", "nested_map_order"],
+         [("{a,b}", "{z}"), ("#{a=>99,b=>0}", "#{a=>0,c=>0}"),
+          ("#{1=>[]}", "#{1.0=>[]}"), ("[0|a]", "[0]"),
+          ("#{#{a=>1}=>2}", "#{#{a=>2}=>1}")]),
+        ("Term/Compare", ["binary_exact_kinds", "list_exact_kinds", "binary_exact_bytes",
+                          "exact_comparison_heads_first"],
+         [("<<>>", "[]"), ("<<128>>", "<<1:1>>"), ("[1|a]", "[1|b]"), ("<<1,2>>", "<<1,3>>"),
+          ("[1,a]", "[2,b]")]),
+        (e, ["tuple_equality", "map_equality", "float_equality_guards", "reflexive_operators",
+             "bitstring_comparison", "ordered_operators"],
+         [("{}", "{}"), ("{1}", "{1,[]}"), ("{1,a}", "{a,1}"),
+          ("#{a=>1,b=>2}", "#{b=>2,a=>1}"), ("#{a=>1}", "#{a=>2}"), ("1.0", "1.0"),
+          ("<<1,2>>", "<<1,3>>"), ("<<1:1>>", "<<1:2>>")]),
+    ]:
+        for a, b in pairs:
+            probe(source, names, f"differential:compare({a},{b})")
+            probe(source, names, f"differential:compare({b},{a})")
+
+    # Same factory/code, different runtime captures: no generated fun names or
+    # raw identities escape. Include numeric equality through nested captures.
+    for a, b in [("10", "20"), ("1", "1.0"), ("0.0", "-0.0"),
+                 ("9007199254740993", "9007199254740992.0"),
+                 ("{1,a}", "{1.0,a}"), ("[1|a]", "[1.0|a]"),
+                 ("#{a=>1}", "#{a=>1.0}"), ("#{1=>a}", "#{1.0=>a}"),
+                 ("#{a=>99,b=>0}", "#{a=>0,c=>0}"),
+                 ("<<128>>", "<<1:1>>"), ("[0|a]", "[0]"), ("{a,b}", "{z}")]:
+        for left, right in [(a, b), (b, a), (a, a)]:
+            probe("Term/Compare", "closure_captures_comparison",
+                  f"differential:function_compare({left},{right})")
+    # Same MFA does not mean the same identity: local and external captures
+    # stay distinct as exact keys, including when another closure captures them.
+    # Numeric captures additionally distinguish loose equality from key equality.
+    for kind in ["named_zero", "named_one", "named_two", "captured_named", "numeric_capture"]:
+        for padding in [0, 29, 30, 31]:  # Resulting maps have 2, 31, 32 and 33 keys.
+            probe("Term/Compare", "captures_compare_as_outer" if kind == "numeric_capture"
+                  else "local_and_external_functions_differ",
+                  f"differential:function_identity({kind},{padding})")
+    # Combine recursion, captures and escaping self references rather than
+    # repeating capture-free recursion or nonrecursive function-key comparisons.
+    for kind in ["tail", "non_tail"]:
+        for lifetime in ["local", "gc", "message_gc", "creator_exit"]:
+            for profile, captured, items in [
+                ("empty", "{a,b}", "[]"),
+                ("numeric", "{1,1.0}", "[4]"),
+                ("compound", "{#{k=>[1,<<5:3>>]},{right,[-7|tail]}}", "[2,5,9]"),
+            ]:
+                selected.append({
+                    "upstream_test": "test/lynx/core_to_leanj_test.exs#escaping local functions preserve captures, generated arguments, and self identity",
+                    "recursive_closure_kind": kind,
+                    "recursive_closure_lifetime": lifetime,
+                    "recursive_closure_profile": profile,
+                    "expression": f"differential:recursive_closure({kind},{lifetime},{captured},{items})",
+                })
+    for a, b in [("1", "make_ref()"), ("a", "make_ref()"),
+                 ("make_ref()", "fun erlang:abs/1"), ("make_ref()", "fun()->ok end"),
+                 ("fun erlang:abs/1", "self()"), ("fun()->ok end", "self()"),
+                 ("self()", "{}"), ("{}", "#{}"), ("#{}", "[]"),
+                 ("[]", "[0]"), ("[0]", "<<>>"),
+                 ("''", "a"), ("a", "aa"), ("aa", "b"),
+                 ("b", "'é'"), ("'é'", "'λ'"), ("'λ'", "'😀'")]:
+        probe("Term/Compare", "ordered_terms", f"differential:compare({a},{b})")
+        probe("Term/Compare", "ordered_terms", f"differential:compare({b},{a})")
+    for value in ["make_ref()", "fun erlang:abs/1", "fun()->ok end", "self()", "'😀'"]:
+        probe("Term/Compare", "ordered_terms",
+              f"begin V={value},differential:compare(V,V) end")
+
+    s = "Term/ShortCircuit"
+    for op, names in [("or_else", ["orElse_short_circuits", "orElse_returns_right", "orElse_rejects_non_boolean",
+                                    "orElse_keeps_left_requests"]),
+                      ("and_also", ["andAlso_short_circuits", "andAlso_returns_right", "andAlso_rejects_non_boolean"])]:
+        for left in ["true", "false", "1", "bad"]:
+            for right in ["value", "throw"]:
+                probe(s, names, f"differential:short_circuit({op},{left},{right})")
+    for op in ["or_else", "and_also"]:
+        for left in ["lhs_throw", "lhs_error"]:
+            for right in ["value", "throw"]:
+                probe(s, "orElse_propagates_left_error", f"differential:short_circuit({op},{left},{right})")
+    for op in ["strict_and", "strict_or"]:
+        for left in ["true", "false", "1", "bad"]:
+            for right in ["value", "throw"]:
+                probe(s, "and_rejects_non_boolean", f"differential:short_circuit({op},{left},{right})")
+    for x in ["-1", "0", "5", "6", "10", "11", "0.0", "5.0", "bad"]:
+        probe(s, "andAlso_chain_conjunction", f"differential:short_circuit_chain(right_body,{x})")
+        probe(s, "andAlso_chain_conjunction", f"differential:short_circuit_chain(right_guard,{x})")
+        probe(s, "andAlso_left_chain_conjunction", f"differential:short_circuit_chain(left_body,{x})")
+        probe(s, "andAlso_left_chain_conjunction", f"differential:short_circuit_chain(left_guard,{x})")
+    for triple in ["{false,bad,true}", "{false,throw,throw}", "{true,bad,throw}",
+                   "{bad,false,throw}", "{true,true,throw}"]:
+        probe(s, "andAlso_chain_conjunction", f"differential:short_circuit_chain(right_mixed,{triple})")
+        probe(s, "andAlso_left_chain_conjunction", f"differential:short_circuit_chain(left_mixed,{triple})")
+
+    p = "Modules/Process"
+    for timeout in ["-1", "1.0", "bad", "4294967295", "4294967296",
+                    "4294967297", "1 bsl 64", "1 bsl 100", "-(1 bsl 100)", "0", "1", "infinity"]:
+        for messages in ["[before,wanted,after_message]", "[before]", "[]"]:
+            if timeout in ["4294967295", "infinity"] and messages != "[before,wanted,after_message]":
+                continue  # No deliberate long/infinite wait without a matching message.
+            probe(p, ["timeout_validation_precedes_scan", "zero_timeout_scans_mailbox",
+                      "zero_timeout_preserves_unmatched", "queued_match_precedes_timeout_choice"],
+                  f"differential:receive_timeout({timeout},{messages})")
+    for kind, mixed, rejected in [
+        ("boolean", "[7,true,false,tail,false]", "[7,true,tail]"),
+        ("tuple", "[bad,{},{tag,wrong},{tag,wanted},{last,wanted}]", "[bad,{},{tag,wrong}]"),
+        ("map", "[bad,#{},#{key=>wrong},#{key=>wanted},#{key=>wanted,other=>last}]",
+         "[bad,#{},#{key=>wrong}]"),
+        ("division", "[0,bad,-4,5,4,3]", "[0,bad,-4,5]"),
+        ("binary", "[bad,<<>>,<<1>>,<<2>>,<<2,3>>]", "[bad,<<>>,<<1>>]"),
+        ("alternatives", "[{},bad,{tag,wrong},fallback,{tag,wanted}]", "[{},bad,{tag,wrong}]"),
+    ]:
+        for messages in [mixed, rejected, "[]"]:
+            for timeout in ["0", "1"]:
+                probe(p, ["guard_errors_and_false_preserve_messages", "zero_timeout_preserves_unmatched"],
+                      f"differential:receive_guards({kind},{timeout},{messages})")
+    for operation in ["operator", "function"]:
+        for destination in ["self", "live", "dead", "named_self", "named_live", "missing",
+                            "unregistered", "reference", "stale_alias", "{invalid,0}",
+                            "{invalid,1 bsl 100}", "{invalid,1.5}", "{invalid,[]}",
+                            "{invalid,[a]}", "{invalid,<<>>}", "{invalid,<<5:3>>}",
+                            "{invalid,fun()->ok end}", "{invalid,{}}", "{invalid,{bad}}"]:
+            for payload in ["ok", "{nested,[1,<<5:3>>],1 bsl 100}", "#{value=>[1,2,3],bytes=><<1,2,3>>}"]:
+                probe(p, ["send_to_self", "send_to_missing_pid", "send_rejects_non_pid"],
+                      f"differential:send_destination({operation},{destination},{payload})")
+    for mode, origins in [
+        ("dead", ["Modules/Process.lean#many_sends", "Modules/Process.lean#send_to_missing_pid"]),
+        ("live", ["Modules/Process.lean#many_sends", "Modules/Process.lean#send_to_self"]),
+        ("self", ["Modules/Process.lean#many_sends", "Modules/Process.lean#send_to_self"]),
+        ("stale_alias", ["Modules/Process.lean#many_sends"]),
+    ]:
+        for count in [0, 1, 30]:
+            selected.append({"lean_origins": origins,
+                             "expression": f"differential:many_sends({mode},{count})"})
+    for value in ["child", "#{a=>1}", "-0.0"]:
+        probe(p, ["successive_references_are_distinct", "references_are_unique_across_processes",
+                  "dictionary_preserves_reference_counter", "dictionary_preserves_mailbox",
+                  "suspended_processes_keep_their_dictionaries"], f"differential:process_exchange({value})")
+    for reason, args in [("boom", "[]"), ("custom_reason", '[1,<<"a">>]'),
+                         ("{complex,1 bsl 100}", "none"), ("my_err", "not_a_list")]:
+        probe(p, ["error_reason", "error_caught"], f"differential:error_pair({reason},{args})")
+    for term in ["live_ref", "live_pid", "0", "1 bsl 100", "0.0", "true", "a",
+                 "[]", "{}", "#{}", "<<>>", "fun erlang:abs/1", "fun()->ok end"]:
+        probe(p, "reference_type_guard", f"differential:is_reference_paths({term})")
+    probe(p, ["make_ref_preserves_process_state", "make_ref_is_effectful"],
+          "differential:process_probe({refs,state_and_effect})")
+    for n in [32, 64]:
+        probe(p, "make_ref_fresh", f"differential:process_probe({{refs_fresh,{n}}})")
+    for mode in ["preserve_unmatched", "exact_numeric"]:
+        probe(p, "selective_receive_preserves_unmatched", f"differential:receive_selective({mode})")
+    for mode in ["clause_priority_mailbox", "clause_priority_order"]:
+        probe(p, "receive_bindings_and_clause_priority", f"differential:receive_selective({mode})")
+    probe(p, "receive_body_exception_is_caught", "differential:receive_selective(receive_body_exception)")
+    for messages in ["[]", "[before]"]:
+        probe(p, "finite_timeout_progress", f"differential:receive_timeout(5,{messages})")
+    for delay in [2, 5]:
+        probe(p, ["timeout_can_expire_child", "finite_timeout_progress"],
+              f"differential:process_probe({{child_timeout,{delay}}})")
+    probe(p, "infinity_never_expires", "differential:process_probe(infinity_alive)")
+    probe(p, "guard_reads_waiting_child_identity", "differential:process_probe(guard_child_self)")
+    for mode in ["success_body", "success_body_after"]:
+        probe(p, "try_success_body_is_outside_handler", f"differential:try_boundaries({mode})")
+    for mode in ["handler_propagates", "handler_propagates_wildcard"]:
+        probe(p, "try_handler_exception_propagates", f"differential:try_boundaries({mode})")
+    probe(p, "blocking_is_not_an_exception", "differential:process_probe(blocking_not_exception)")
+    for delay_mode in ["immediate", "delay_parent", "delay_child"]:
+        probe(p, ["blocked_processes_resume", "handshake_every_run"],
+              f"differential:process_probe({{handshake,{delay_mode}}})")
+    probe(p, "two_senders_every_run", "differential:process_probe(two_senders)")
+    probe(p, "terminated_child_is_not_revived", "differential:process_probe(terminated_child)")
+    probe(p, "terminated_root_discards_late_messages", "differential:process_probe(terminated_root)")
+    for kind in ["error", "throw", "exit"]:
+        probe(p, "child_exception_is_isolated", f"differential:process_probe({{child_isolated,{kind}}})")
+    for mode, name in [("normal", "monitor_reports_normal_exit"), ("raised", "monitor_reports_raised_reason"),
+                       ("noproc", "monitor_missing_process"), ("flush", "demonitor_flushes_down")]:
+        extra = {"stacktrace_dependent": True} if mode == "raised" else {}
+        probe("Modules/Signals", name, f"differential:monitor_exit({mode})", **extra)
+    for kind in ["process", "port"]:
+        for state in ["self", "live", "dead", "named_self", "named_live", "missing"]:
+            for options in ["two", "[]", "[{alias,demonitor}]", "[{alias,explicit_unalias}]",
+                            "[{alias,reply_demonitor}]"]:
+                probe("Modules/Signals", ["monitor_missing_process", "alias_ends_with_demonitor"],
+                      f"differential:monitor_target({kind},{state},{options})")
+    for state in ["self", "live", "dead", "named_self", "named_live", "missing"]:
+        for options in ["bad", "0", "#{}", "[bad]", "[alias]", "[{alias}]",
+                        "[{alias,bad}]", "[{alias,reply}]", "[{alias,demonitor,extra}]",
+                        "[{alias,1}]", "[{alias,demonitor}|bad]", "[{alias,demonitor},bad]",
+                        "[bad,{alias,explicit_unalias}]", "[{alias,bad},{alias,demonitor}]"]:
+            probe("Modules/Signals", ["monitor_missing_process", "alias_ends_with_demonitor"],
+                  f"differential:monitor_target(process,{state},{options})")
+        for first in ["demonitor", "explicit_unalias", "reply_demonitor"]:
+            for last in ["demonitor", "explicit_unalias", "reply_demonitor"]:
+                probe("Modules/Signals", "alias_ends_with_demonitor",
+                      f"differential:monitor_target(process,{state},[{{alias,{first}}},{{alias,{last}}}])")
+    for mode in ["self", "pid", "alias", "reply_alias", "inactive_alias", "plain_ref",
+                 "reply_then_exit", "exit_then_reply", "dead"]:
+        for trap in (["false"] if mode == "dead" else ["false", "true"]):
+            for reason in ["normal", "{shutdown,<<5:3>>}", "kill"]:
+                entry = {
+                    "expression": f"differential:async_exit({mode},{trap},{reason})",
+                    "minimum_otp": 29, "async_exit_mode": mode,
+                    "async_exit_trap": trap == "true", "async_exit_reason": reason,
+                    "otp_api": "erlang:exit_signal/2",
+                }
+                if mode in ("self", "pid", "dead"):
+                    site = "exit_signal_self_ends_before_timeout" if mode == "self" else "exit_signal_to_others"
+                    entry["lean_origins"] = [f"Modules/Signals.lean#{site}"]
+                # Alias semantics are OTP extensions: Lynx explicitly does not model them.
+                selected.append(entry)
+    for value in ["bad", "7", "[]", "{}", "fun()->ok end"]:
+        selected.append({
+            "expression": f"differential:call(erlang,exit_signal,[{value},reason])",
+            "minimum_otp": 29, "async_exit_mode": "invalid", "otp_api": "erlang:exit_signal/2",
+        })
+    for mode in ["trapped", "untrapped", "unlinked"]:
+        for reason in ["normal", "boom", "kill"]:
+            probe("Modules/Signals", ["linked_crash_kills_parent", "linked_normal_exit_is_ignored",
+                                      "trapped_exit_is_a_message"],
+                  f"differential:linked_exit({mode},{reason})")
+    for trap in ["true", "false"]:
+        for linked in ["true", "false"]:
+            for count in [0, 1, 16]:
+                probe("Modules/Signals", ["linked_normal_exit_is_ignored", "trapped_exit_is_a_message"],
+                      f"differential:self_link({trap},{linked},{count})")
+    for owner in ["parent", "child"]:
+        for trap in ["true", "false"]:
+            for final in ["linked", "unlinked"]:
+                for reason in ["normal", "boom"]:
+                    for count in [0, 1, 16]:
+                        probe("Modules/Signals", ["linked_crash_kills_parent", "linked_normal_exit_is_ignored",
+                                                  "trapped_exit_is_a_message"],
+                              f"differential:relink({owner},{trap},{final},{reason},{count})")
+    # Extend linked-exit samples to unlink races; compare legal outcomes, not schedules.
+    for reason in ["normal", "boom", "killed"]:
+        for count in [1, 16, 64]:
+            probe("Modules/Signals", ["linked_crash_kills_parent", "linked_normal_exit_is_ignored"],
+                  f"differential:unlink_exit_race({reason},{count})")
+    for a in ["false", "true"]:
+        for b in ["false", "true"]:
+            for final in ["keep", "local", "peer"]:
+                for count in [1, 16, 64]:
+                    probe("Modules/Signals", "linked_crash_kills_parent",
+                          f"differential:crossed_unlink({a},{b},{final},{count})")
+    for trap in ["true", "false"]:
+        for reason in ["normal", "boom", "kill"]:
+            probe("Modules/Signals", ["trapped_exit_is_a_message", "kill_cannot_be_trapped",
+                                      "normal_exit_signal_is_ignored"],
+                  f"differential:exit_signal({trap},{reason})")
+    for mode in ["linked", "unlink_unfenced", "unlink_settled"]:
+        for trap in ["true", "false"]:
+            for reason in ["normal", "boom", "kill", "killed", "{shutdown,[1,<<5:3>>]}",
+                           "#{reason=>{nested,1 bsl 100}}"]:
+                probe("Modules/Signals", ["trapped_exit_is_a_message", "kill_cannot_be_trapped",
+                                          "normal_exit_signal_is_ignored"],
+                      f"differential:exit_signal({trap},{reason},{mode})")
+    for arity in ["one", "two"]:
+        for trap in ["true", "false"]:
+            for linked in ["true", "false"]:
+                for reason in ["normal", "boom", "kill", "killed", "{shutdown,[1,<<5:3>>]}",
+                               "#{reason=>{nested,1 bsl 100}}"]:
+                    probe("Modules/Signals", ["raise_classes", "trapped_exit_is_a_message",
+                                              "kill_cannot_be_trapped"],
+                          f"differential:self_exit({arity},{trap},{linked},{reason})")
+    # Extend fixed trap settings to causally ordered flag changes, not reception races.
+    for mode in ["before_linked", "before_explicit", "queued_explicit", "queued_self"]:
+        for final in ["true", "false"]:
+            for reason in ["normal", "boom", "kill", "killed", "{shutdown,[1,<<5:3>>]}",
+                           "#{reason=>{nested,1 bsl 100}}"]:
+                probe("Modules/Signals", ["trapped_exit_is_a_message", "kill_cannot_be_trapped",
+                                          "normal_exit_signal_is_ignored"],
+                      f"differential:trap_transition({mode},{final},{reason})")
+    # Pending self-signals may be received on either side of the flag change.
+    # Alias deactivation can instead discard an unreceived signal; never compare
+    # the scheduling winner. The helper logs traces and checks allowed outcomes.
+    for api, destination in [("exit", "pid"), ("exit_signal", "pid"), ("exit_signal", "alias")]:
+        for timing in ["before", "received", "pending"]:
+            for final in ["false", "true"]:
+                for reason in ["normal", "{shutdown,<<5:3>>}", "kill"]:
+                    entry = {
+                        "expression": f"differential:exit_reception({api},{destination},{timing},{final},{reason}) =:= {{ok,allowed}}",
+                        "assert_true": True,
+                        "exit_reception_api": api, "exit_reception_destination": destination,
+                        "exit_reception_timing": timing, "exit_reception_final": final == "true",
+                        "exit_reception_reason": reason,
+                    }
+                    if api == "exit_signal":
+                        entry["minimum_otp"] = 29
+                    if destination == "pid":
+                        # The final receive fences reception: this does NOT
+                        # sample returning before an async self-signal arrives.
+                        site = ("exit_self_trapped_is_handled_later" if api == "exit"
+                                else "exit_signal_self_ends_before_timeout")
+                        entry["lean_origins"] = [f"Modules/Signals.lean#{site}"]
+                    selected.append(entry)
+    # Observe a real function return without a worker-side receive. A later
+    # normal DOWN alone cannot show whether the post-call continuation ran.
+    for mode in ["legacy", "unfenced", "fenced"]:
+        for trap in ["false", "true"]:
+            for reason in ["normal", "{shutdown,<<5:3>>}", "kill"]:
+                entry = {
+                    "expression": f"differential:self_exit_completion({mode},{trap},{reason}) =:= {{ok,allowed}}",
+                    "assert_true": True,
+                    "self_exit_completion_mode": mode,
+                    "self_exit_completion_trap": trap == "true",
+                    "self_exit_completion_reason": reason,
+                }
+                if mode != "legacy":
+                    entry["minimum_otp"] = 29
+                    site = ("exit_signal_self_is_handled_later" if mode == "unfenced"
+                            else "exit_signal_self_ends_before_timeout")
+                    entry["lean_origins"] = [f"Modules/Signals.lean#{site}"]
+                selected.append(entry)
+    for state in ["active", "active_message", "queued", "queued_twice", "queued_other", "consumed", "unknown"]:
+        for options in ["[]", "[flush]", "[info]", "[flush,info]", "[info,flush]",
+                        "[bad]", "[info|bad]", "[{flush,true}]"]:
+            probe("Modules/Signals", ["demonitor_flushes_down", "demonitor_active_does_not_flush"],
+                  f"differential:monitor_options({state},{options})")
+    for options in ["[]", "[explicit_unalias]", "[reply]"]:
+        probe("Modules/Signals", "alias_ends_with_demonitor",
+              f"differential:alias_lifetime(standalone,{options})")
+    for options in ["default", "bad", "0", "#{}", "{}", "[bad]", "[demonitor]",
+                    "[reply_demonitor]", "[{alias,reply}]", "[reply|bad]",
+                    "[explicit_unalias|bad]", "[reply|1]", "[reply,bad]", "[bad,reply]",
+                    "[reply,bad,explicit_unalias]", "[explicit_unalias,bad,reply]",
+                    "[explicit_unalias,explicit_unalias]", "[reply,reply]",
+                    "[explicit_unalias,reply]", "[reply,explicit_unalias]",
+                    "[reply,explicit_unalias,reply]", "[explicit_unalias,reply,explicit_unalias]",
+                    "[reply,reply,explicit_unalias]"]:
+        probe("Modules/Signals", "alias_ends_with_demonitor",
+              f"differential:alias_lifetime(standalone,{options})")
+    for value in ["bad", "0", "1 bsl 100", "1.0", "[]", "[a]", "{}", "#{}",
+                  "<<>>", "<<5:3>>", "self()", "fun()->ok end", "make_ref()"]:
+        call("Modules/Signals", "alias_ends_with_demonitor", "unalias", value)
+    for mode in ["demonitor", "explicit_unalias", "reply_demonitor"]:
+        for event in ["demonitor", "down", "unalias"]:
+            probe("Modules/Signals", "alias_ends_with_demonitor",
+                  f"differential:alias_lifetime({mode},{event})")
+    for mode in ["plain", "demonitor", "explicit_unalias", "reply_demonitor"]:
+        for action in ["keep", "demonitor", "unalias", "reply"]:
+            if mode == "plain" and action == "reply":
+                continue  # Only aliases are message destinations.
+            for order in ["original_first", "replacement_first"]:
+                probe("Modules/Signals", ["monitor_reports_normal_exit", "alias_ends_with_demonitor"],
+                      f"differential:monitor_rebind({mode},{action},{order})")
+    for mode in ["{standalone,explicit_unalias}", "{standalone,reply}", "{monitor,plain}",
+                 "{monitor,demonitor}", "{monitor,explicit_unalias}", "{monitor,reply_demonitor}"]:
+        for action in ["unalias", "demonitor", "{demonitor,[]}", "{demonitor,[flush]}",
+                       "{demonitor,[info]}", "{demonitor,[flush,info]}", "{demonitor,[info,flush]}"]:
+            probe("Modules/Signals", ["alias_ends_with_demonitor", "demonitor_flushes_down",
+                                      "monitor_reports_normal_exit"],
+                  f"differential:alias_owner({mode},{action})")
+    for mode in ["plain", "demonitor", "explicit_unalias", "reply_demonitor"]:
+        for state in ["active", "removed"]:
+            for action in ["unalias", "demonitor", "{demonitor,[]}", "{demonitor,[flush]}",
+                           "{demonitor,[info]}", "{demonitor,[flush,info]}", "{demonitor,[info,flush]}"]:
+                probe("Modules/Signals", ["alias_ends_with_demonitor", "demonitor_flushes_down",
+                                          "monitor_reports_normal_exit"],
+                      f"differential:target_cancel({mode},{state},{action})")
+    for first in ["plain", "demonitor", "explicit_unalias", "reply_demonitor"]:
+        for second in ["plain", "demonitor", "explicit_unalias", "reply_demonitor"]:
+            for action in ["keep", "demonitor", "unalias", "reply"]:
+                if first == "plain" and action == "reply":
+                    continue  # Plain monitor references are not message destinations.
+                probe("Modules/Signals", ["monitor_reports_normal_exit", "alias_ends_with_demonitor"],
+                      f"differential:monitor_pair({first},{second},{action})")
+    for count in ["1", "8", "64"]:
+        probe("Modules/Signals", ["monitor_reports_normal_exit", "kill_cannot_be_trapped"],
+              f"differential:termination_queue({count})")
+        for order in ["target_first", "observer_first"]:
+            probe("Modules/Signals", "kill_cannot_be_trapped",
+                  f"differential:termination_cascade({count},{order})")
+    await_many_scenarios = [
+        "both_in_order",
+        "both_reverse_order",
+        "both_expired_timer_race",
+        "first_replies_second_times_out",
+        "timeout_with_queued_and_late_replies",
+        "first_crashes_second_late",
+    ]
+    for scenario in await_many_scenarios:
+        selected.append({
+            "upstream_example": "examples/elixir/task.exs#await_many_drains_replies",
+            "expression": f"differential:await_many_drain({scenario})",
+        })
+        for alias_mode in ["reply_demonitor", "explicit_unalias", "demonitor"]:
+            probe(
+                "Modules/Signals",
+                [
+                    "alias_ends_with_demonitor",
+                    "demonitor_flushes_down",
+                ],
+                f"differential:await_many_drain({scenario},{alias_mode})",
+            )
+    for mode in ["timeout", "message", "nested"]:
+        probe(p, "timeout_handler_scope", f"differential:suspended_receive({mode})")
+
+    for trap in ["true", "false"]:
+        probe("Modules/Signals", "link_to_missing_process",
+              f"differential:missing_link({trap})")
+    probe("Modules/Signals", "liveness", "differential:process_liveness()")
+    for state in ["live", "dead", "racing"]:
+        for reason in ["normal", "{shutdown,<<5:3>>}"]:
+            probe("Modules/Signals", "alive_may_leave_monitor_parked",
+                  f"differential:liveness_monitor({state},{reason}) =:= {{ok,allowed}}",
+                  assert_true=True, query_notification_family="monitor",
+                  query_notification_state=state, query_notification_reason=reason)
+    for query in ["alive", "info"]:
+        for state, timings in [("dead", ["before", "received", "pending"]),
+                               ("live", ["before", "received"])]:
+            for timing in timings:
+                for trap in (["false", "true"] if state == "dead" else ["true"]):
+                    for reason in (["normal", "{shutdown,<<5:3>>}", "kill"]
+                                   if state == "dead" else ["{shutdown,<<5:3>>}"]):
+                        entry = {
+                            "expression": f"differential:query_notifications({query},{state},{timing},{trap},{reason}) =:= {{ok,allowed}}",
+                            "assert_true": True, "minimum_otp": 29,
+                            "query_notification_family": "query", "query_notification_query": query,
+                            "query_notification_state": state, "query_notification_timing": timing,
+                            "query_notification_trap": trap == "true", "query_notification_reason": reason,
+                        }
+                        if query == "info" and state == "dead":
+                            entry["lean_origins"] = ["Modules/Signals.lean#process_info_of_dead_does_not_flush"]
+                        selected.append(entry)
+    # Keep these sequences unfenced until the observation under test. Include
+    # live/trapped/unlinked controls so constant answers cannot satisfy the batch.
+    for site, scenarios in [
+        ("process_info_after_kill_is_undefined",
+         [f"{{kill_query,{named},{kill}}}" for named in ["false", "true"]
+          for kill in ["false", "true"]]),
+        ("trap_exit_after_normal_down", ["{normal_down,false}", "{normal_down,true}"]),
+        ("stale_unlink_ack_keeps_new_link", ["{relink_kill,linked}", "{relink_kill,unlinked}"]),
+    ]:
+        for scenario in scenarios:
+            for count in [1, 16, 64]:
+                probe("Modules/Signals", site,
+                      f"differential:signal_queue({scenario},{count})")
+    for count in [1, 4, 16]:
+        for mode in ["normal", "shutdown", "kill"]:
+            probe("Modules/Signals", "link_exits_in_any_order",
+                  f"differential:termination_fanout({mode},{count})",
+                  termination_scenario="fanout", termination_mode=mode, peers=count)
+        for state in ["live", "dead", "racing"]:
+            probe("Modules/Signals", "queued_requests_answered_one_at_a_time",
+                  f"differential:ending_requests({state},{count})",
+                  termination_scenario="requests", termination_mode=state, peers=count)
+    for value in ["bad", "1", "[]", "{}", "make_ref()", "fun()->ok end"]:
+        call("Modules/Signals", "liveness", "is_process_alive", value)
+        call("Modules/Signals", "liveness", "process_info", value, "registered_name")
+    for cls in ["error", "exit", "throw", "bad", "1"]:
+        for stack in ["[]", "[{differential,call,3,[]}]", "[{differential,call,[a,b,c],[]}]",
+                      "bad", "[bad]", "[{differential,call,3,[]}|bad]", "[{1,call,3,[]}]"]:
+            extra = (
+                {"stacktrace_dependent": True}
+                if cls in ("error", "exit", "throw")
+                and stack in ("[]", "[{differential,call,3,[]}]", "[{differential,call,[a,b,c],[]}]")
+                else {}
+            )
+            probe("Modules/Signals", "raise_classes",
+                  f"differential:raise_exception({cls},#{{reason=>[1,2,3]}},{stack})",
+                  **extra)
+    for cls in ["error", "exit", "throw"]:
+        for stack in ["[{differential,call,3}]", "[{differential,call,[a,b,c]}]",
+                      "[{differential,call,bad}]", "[{fun erlang:abs/1,[-7]}]",
+                      "[{fun erlang:abs/1,[-7],[]}]",
+                      "[{differential,call,3},{fun erlang:abs/1,[-7]},"
+                      "{differential,call,3,[{line,17}]}]",
+                      "[{fun erlang:abs/1,[-7],[{line,17}|tail]}]"]:
+            extra = {"stacktrace_dependent": True} if stack != "[{differential,call,bad}]" else {}
+            probe("Modules/Signals", "raise_classes",
+                  f"differential:raise_exception({cls},#{{reason=>[1,2,3]}},{stack})",
+                  **extra)
+    # Extend raise recipes to VM depth controls, which the model does not expose.
+    for depth in ["default", "0", "1", "3", "8", "64", "65", "1 bsl 40"]:
+        for count in [0, 1, 7, 8, 9, 65]:
+            for style in ["{modern,error}", "{legacy,throw}"]:
+                probe("Modules/Signals", "raise_classes",
+                      f"differential:trace_depth({depth},{count},{style})",
+                      stacktrace_dependent=True)
+        for style in ["generated", "{modern,exit}", "{invalid_suffix,error}",
+                      "{improper,throw}", "{child,{legacy,exit}}"]:
+            extra = (
+                {"stacktrace_dependent": True}
+                if style not in ("{invalid_suffix,error}", "{improper,throw}")
+                else {}
+            )
+            probe("Modules/Signals", "raise_classes",
+                  f"differential:trace_depth({depth},80,{style})", **extra)
+    for depth in ["-1", "1.0", "bad", "[]", "1 bsl 100"]:
+        probe("Modules/Signals", "raise_classes",
+              f"differential:trace_depth({depth},9,{{modern,error}})")
+    for key, items in [("b", "[skipped,{}, {a,1},{b,first},{b,second}]"),
+                       ("c", "[{a}]"),
+                       ("missing", "[skipped,{a,1}]"), ("1", "[{1.0,float},{1,integer}]"),
+                       ("1.0", "[{1,integer},{1.0,float}]"), ("0.0", "[{-0.0,negative}]"),
+                       ("{1}", "[{{1.0},nested}]"), ("b", "[{b,first}|improper]"),
+                       ("missing", "[{a,1}|improper]"), ("b", "[]"), ("b", "bad")]:
+        for position in ["1", "2", "0", "-1", "1.0", "1 bsl 100"]:
+            for fn in ["keyfind", "keymember"]:
+                origins = ["Modules/Signals.lean#keyfind_finds_first_match"]
+                if fn == "keymember":
+                    origins.append("Modules/Lists.lean#keymember_finds_tuples")
+                selected.append({"lean_origins": origins,
+                                 "expression": f"differential:call(lists,'{fn}',[{key},{position},{items}])"})
+
+    # Interior fields skip short tuples; map keys remain exact. The scalar
+    # precision controls also expose OTP's lossy integer-key fast path, which
+    # can select a candidate that ordinary == would reject.
+    for key, decoy, stored in [
+        ("9007199254740993", "9007199254740992.0", "9007199254740993"),
+        ("9007199254740992.0", "9007199254740993", "9007199254740992"),
+        ("-9007199254740993", "-9007199254740992.0", "-9007199254740993"),
+        ("{[1],2}", "{[1],3}", "{[1.0],2.0}"),
+        ("[1|2]", "[1|3]", "[1.0|2.0]"),
+        ("#{1=>value}", "#{1.0=>value}", "#{1=>value}"),
+        ("#{key=>1}", "#{key=>2}", "#{key=>1.0}"),
+        ("#{key=>0.0}", "#{key=>1.0}", "#{key=> -0.0}"),
+        ("#{#{1=>a}=>[2]}", "#{#{1.0=>a}=>[2]}", "#{#{1=>a}=>[2.0]}"),
+    ]:
+        extra = {"word_size_dependent": True} if "900719925474099" in key else {}
+        for tail in ["[]", "improper"]:
+            items = (f"[skipped,{{}},{{prefix}},{{prefix,{decoy},decoy}},"
+                     f"{{prefix,{stored},first}},{{prefix,{key},second}}|{tail}]")
+            for fn in ["keyfind", "keymember"]:
+                call("Modules/Signals", "keyfind_finds_first_match", fn, key, "2", items, module="lists", **extra)
+    # Without an exact fallback, keymember must expose the same disagreement.
+    for key, stored in [("9007199254740993", "9007199254740992.0"),
+                        ("9007199254740992.0", "9007199254740993"),
+                        ("-9007199254740993", "-9007199254740992.0"),
+                        ("-9007199254740992.0", "-9007199254740993")]:
+        for fn in ["keyfind", "keymember"]:
+            call("Modules/Signals", "keyfind_finds_first_match", fn, key, "2",
+                 f"[skipped,{{}},{{prefix}},{{prefix,{stored},only}}]", module="lists",
+                 word_size_dependent=True)
+
+    # Raw Core, not source Erlang: computations nested in cons heads have
+    # distinct hoisting rules. Keep provenance separate from Lean theorem sites.
+    def core_step(tag, value, fail=False):
+        action = "error" if fail else "return"
+        return f"call 'differential':'core_step'('{tag}','{action}',{value})"
+
+    def core_probe(scenario, body):
+        selected.append({
+            "upstream_test": "test/lynx/core_to_leanj_test.exs#a cons head runs what it computes first before the tail, and its last operation after",
+            "core_order_scenario": scenario,
+            "core_body": body,
+            "expression": "differential:core_order(fun ?CORE_MODULE:entry/0)",
+        })
+
+    for shape, modes in [
+        ("direct", ["success", "head_error", "tail_error", "both_error"]),
+        ("nested_call", ["success", "head_error", "tail_error", "both_error", "prefix_error"]),
+        ("let", ["success", "both_error", "prefix_error"]),
+        ("sequence", ["success", "both_error"]),
+        ("case", ["success", "both_error"]),
+        ("shadowed_let", ["success", "both_error", "prefix_error"]),
+        ("local_function", ["success", "both_error"]),
+        ("try_head", ["success", "both_error"]),
+    ]:
+        for mode in modes:
+            head_error = mode in ["head_error", "both_error"]
+            g = core_step("g", "'seed'", mode == "prefix_error")
+            f = core_step("f", "X", head_error)
+            f_seed = core_step("f", "'seed'", head_error)
+            f_nested = core_step("f", g, head_error)
+            f_local = core_step("f", "apply 'local'/0()", head_error)
+            h = core_step("h", "['tail']", mode in ["tail_error", "both_error"])
+            head = {
+                "direct": f_seed,
+                "nested_call": f_nested,
+                "let": f"let <X> = {g} in {f}",
+                "sequence": f"do {g} {f_seed}",
+                "case": f"case {g} of <X> when 'true' -> {f} end",
+                "shadowed_let": f"let <X> = {g} in let <X> = {f} in X",
+                "local_function": f"letrec 'local'/0 = fun () -> {g} in {f_local}",
+                "try_head": f"try {g} of <X> -> {f} catch <C,R,S> -> primop 'raise'(S,R)"
+            }[shape]
+            core_probe(f"{shape}_{mode}", f"[{head}|{h}]")
+
+    g = core_step("g", "'seed'")
+    f = core_step("f", "X")
+    h = core_step("h", "['tail']")
+    case_miss = (f"case {g} of <'other'> when 'true' -> 'wrong' "
+                 "<X> when 'true' -> primop 'match_fail'({'case_clause',X}) end")
+    for scenario, body in [
+        ("case_miss", f"[{case_miss}|{h}]"),
+        ("case_miss_tail_error", f"[{case_miss}|{core_step('h', '[]', True)}]"),
+        ("let_capture", "let <X> = 'outside' in "
+                        f"[let <X> = {g} in {f}|{core_step('h', '[X]')}]"),
+    ]:
+        core_probe(scenario, body)
+    for fail in [False, True]:
+        values = "{" + core_step("g1", "7") + "," + core_step("g2", "9", fail) + "}"
+        core_probe("tuple_argument_error" if fail else "tuple_arguments",
+                   f"[{core_step('f', values)}|{h}]")
+    for scenario, base, tail_error in [
+        ("map_update", "~{'a'=>0}~", False),
+        ("map_missing_key", "~{}~", False),
+        ("map_missing_key_tail_error", "~{}~", True),
+        ("map_bad_base", "'bad'", False),
+    ]:
+        tail = core_step("h", "['tail']", tail_error)
+        # Core map updates require the base type check that source lowering
+        # normally supplies; without it OTP rejects the generated BEAM.
+        head = (f"let <V> = {core_step('v', '2')} in let <B> = "
+                "case M of <~{}~> when 'true' -> M "
+                "<Bad> when 'true' -> call 'erlang':'error'({'badmap',Bad}) end "
+                "in ~{'a':=1,'b'=>V|B}~")
+        core_probe(scenario, f"let <M> = call 'differential':'exception_argument'({base}) in "
+                             f"[{head}|{tail}]")
+
+    # Source Erlang binds the head first: a control against imposing the raw
+    # Core cons ordering on ordinary source expressions.
+    for mode in ["success", "both_error"]:
+        action = "error" if mode == "both_error" else "return"
+        selected.append({
+            "upstream_test": "test/lynx/core_to_leanj_test.exs#calls nested in a cons head run after its tail, but their arguments before it",
+            "core_order_scenario": f"source_{mode}",
+            "expression": "differential:core_order(fun()->"
+                          f"[differential:core_step(f,{action},differential:core_step(g,return,seed))"
+                          f"|differential:core_step(h,{action},[tail])] end)",
+        })
+
+    # Annotated nonrecursive letrec labels share fallthrough continuations.
+    # Values from before the match must survive calls on every path to the join.
+    for path in ["core", "source"]:
+        for scenario, value, failure in [
+            ("first_match", "{'group',{'tag',{'probe','yes'}},41}", None),
+            ("guard_false", "{'group',{'tag',{'probe','no'}},43}", None),
+            ("guard_error", "{'group',{'tag',{'short'}},47}", None),
+            ("later_match", "{'group',{'tag',7},53}", None),
+            ("inner_pattern_miss", "{'group',{'other',99},59}", None),
+            ("direct_match", "{'group','direct',61}", None),
+            ("outer_pattern_miss", "'not_group'", None),
+            ("first_body_error", "{'group',{'tag',{'probe','yes'}},41}", "body_first"),
+            ("later_body_error", "{'group',{'tag',7},53}", "body_second"),
+            ("direct_body_error", "{'group','direct',61}", "body_direct"),
+            ("inner_error", "{'group',{'tag',{'probe','no'}},43}", "inner"),
+            ("outer_error", "{'group',{'tag',{'short'}},47}", "outer"),
+            ("outer_direct_error", "'not_group'", "outer"),
+            ("input_error", "{'group','direct',61}", "input"),
+            ("saved_error", "{'group','direct',61}", "saved"),
+            ("join_error", "{'group',{'tag',7},53}", "join"),
+        ]:
+            def fallthrough_step(tag, result):
+                if path == "core":
+                    return core_step(tag, result, tag == failure)
+                action = "error" if tag == failure else "return"
+                return f"differential:core_step({tag},{action},{result})"
+
+            capture = fallthrough_step("capture", "{'anchor',13}")
+            input_ = fallthrough_step("input", value)
+            saved = fallthrough_step("saved", "{Keep,97}")
+            first = fallthrough_step("body_first", "{'first',V,Second}")
+            later = fallthrough_step("body_second", "{'second',V2,Second}")
+            direct = fallthrough_step("body_direct", "{'direct',Second}")
+            inner = fallthrough_step("inner", "'seed'")
+            outer = fallthrough_step("outer", "{'fallback',Input}")
+            join = fallthrough_step("join", "'seed'")
+            if path == "core":
+                body = (
+                    f"let <Keep> = {capture} in let <Input> = {input_} in let <Saved> = {saved} in "
+                    f"let <Result> = (letrec 'outer'/0 = fun () -> {outer} in "
+                    f"(letrec 'inner'/0 = fun () -> do {inner} apply 'outer'/0() in "
+                    "case Input of <{'group',First,Second}> when 'true' -> case First of "
+                    "<{'tag',V}> when call 'erlang':'=:='(call 'erlang':'element'(2,V),'yes') -> "
+                    f"{first} <{{'tag',V2}}> when call 'erlang':'is_integer'(V2) -> {later} "
+                    f"<'direct'> when 'true' -> {direct} "
+                    "<Miss> when 'true' -> apply 'inner'/0() end "
+                    "<Other> when 'true' -> apply 'outer'/0() end -| ['letrec_goto']) "
+                    f"-| ['letrec_goto']) in do {join} {{Keep,Saved,Result}}"
+                )
+            else:
+                body = (
+                    f"Keep={capture},Input={input_},Saved={saved},Result=case Input of "
+                    "{group,First,Second}->case First of "
+                    f"{{tag,V}} when element(2,V)=:=yes->{first};"
+                    f"{{tag,V2}} when is_integer(V2)->{later};direct->{direct};"
+                    f"_->{inner},{outer} end;_->{outer} end,{join},{{Keep,Saved,Result}}"
+                )
+            entry = {
+                "upstream_test": "test/lynx/core_to_leanj_test.exs#preserves nested compiler labels with immediate jumps",
+                "fallthrough_scenario": scenario,
+                "fallthrough_path": path,
+                "expression": "differential:core_order(fun ?CORE_MODULE:entry/0)" if path == "core"
+                              else f"differential:core_order(fun()->{body} end)",
+            }
+            if path == "core":
+                entry["core_body"] = body
+            selected.append(entry)
+
+    # Observe construction itself, not already-evaluated segment arguments.
+    # Source and raw Core may hoist a failing constructor differently.
+    for path in ["source", "core"]:
+        def step(tag, value, fail=False):
+            if path == "core":
+                return core_step(tag, value, fail)
+            action = "error" if fail else "return"
+            return f"differential:core_step({tag},{action},{value})"
+
+        def segment(value, size="8", kind="integer", unit=1):
+            if path == "core":
+                width = "'undefined'" if kind == "utf8" else "'all'" if size is None else size
+                scale = "'undefined'" if kind == "utf8" else str(unit)
+                return f"#<{value}>({width},{scale},'{kind}',['unsigned','big'])"
+            width = "" if size is None or kind == "utf8" else f":({size})"
+            spec = kind if kind == "utf8" else f"{kind}-unit:{unit}"
+            return f"({value}){width}/{spec}"
+
+        def binary(*segments):
+            contents = ",".join(segments)
+            return f"#{{{contents}}}#" if path == "core" else f"<<{contents}>>"
+
+        bodies = {}
+        for scenario, value, size, failure in [
+            ("segments_success", "5", "3", None),
+            ("value_error", "5", "3", "v1"),
+            ("size_error", "5", "3", "s1"),
+            ("later_value_error", "5", "3", "v2"),
+            ("later_size_error", "5", "3", "s2"),
+            ("bad_value", "'bad'", "3", None),
+            ("bad_size", "5", "-1", None),
+            ("bad_value_later_error", "'bad'", "3", "v2"),
+            ("bad_size_later_error", "5", "-1", "s2"),
+            ("zero_bad_value", "'bad'", "0", None),
+            ("zero_width", "5", "0", None),
+        ]:
+            bodies[scenario] = binary(
+                segment(step("v1", value, failure == "v1"), step("s1", size, failure == "s1")),
+                segment(step("v2", "19", failure == "v2"), step("s2", "5", failure == "s2")))
+
+        for kind in ["binary", "utf8"]:
+            value = "#{#<18>(8,1,'integer',['unsigned','big'])}#" if path == "core" else "<<18>>"
+            first = (segment(step("v1", value), step("s1", "2"), "binary", 8)
+                     if kind == "binary" else segment(step("v1", "16#D800"), kind="utf8"))
+            for fail in [False, True]:
+                name = "binary_short" if kind == "binary" else "utf_bad"
+                bodies[name + ("_later_error" if fail else "")] = binary(
+                    first, segment(step("v2", "19", fail), "5"))
+
+        for scenario, prefix, kind, fail in [
+            ("append_success", "bytes", "binary", False),
+            ("append_bad_prefix", "'bad'", "binary", False),
+            ("append_bad_prefix_later_error", "'bad'", "binary", True),
+            ("append_unaligned_binary", "bits", "binary", False),
+            ("append_unaligned_bitstring", "bits", "binary", False),
+            ("append_shared_prefix", "bytes", "binary", False),
+        ]:
+            if prefix in ["bytes", "bits"]:
+                prefix = binary(segment("5", "3")) if prefix == "bits" else binary(segment("18"), segment("52"))
+            unit = 1 if scenario == "append_unaligned_bitstring" else 8
+            suffix_size = "5" if scenario == "append_unaligned_bitstring" else "8"
+            built = binary(segment("P", None, kind, unit), segment(step("v", "19", fail), suffix_size))
+            result = "{P,B}" if scenario == "append_shared_prefix" else "B"
+            bodies[scenario] = (
+                f"let <P> = {step('p', prefix)} in let <B> = {built} in {result}"
+                if path == "core" else f"P = {step('p', prefix)},B = {built},{result}")
+
+        for scenario, wrapper, bad, tail_error in [
+            ("nested_call_success", "call", False, False),
+            ("nested_call_bad_value", "call", True, False),
+            ("tuple_success", "tuple", False, False),
+            ("tuple_bad_value", "tuple", True, False),
+            ("cons_success", "cons", False, False),
+            ("cons_bad_value", "cons", True, False),
+            ("cons_bad_value_tail_error", "cons", True, True),
+        ]:
+            built = binary(segment(step("v", "'bad'" if bad else "5"), step("s", "8")))
+            if wrapper == "call":
+                bodies[scenario] = step("call", built)
+            else:
+                tail = step("tail", "['tail']" if path == "core" else "[tail]", tail_error)
+                bodies[scenario] = f"[{built}|{tail}]" if wrapper == "cons" else f"{{{built},{tail}}}"
+
+        for scenario, body in bodies.items():
+            entry = {
+                "upstream_test": "test/lynx/core_to_leanj_test.exs#binaries nested in arguments are constructed before the call",
+                "binary_order_scenario": scenario,
+                "binary_order_path": path,
+                "expression": "differential:core_order(fun ?CORE_MODULE:entry/0)" if path == "core"
+                              else f"differential:core_order(fun()->{body} end)",
+            }
+            if path == "core":
+                entry["core_body"] = body
+            selected.append(entry)
+
+    # Real Core <> and <A,B> results, not one atom or tuple result. Source
+    # controls cover the same exception boundaries without claiming Core arity.
+    for path in ["core", "source"]:
+        def try_step(tag, value):
+            return core_step(tag, value) if path == "core" else f"differential:core_step({tag},return,{value})"
+
+        for arity in [0, 2]:
+            for mode in ["success", "protected_error", "protected_throw", "protected_exit",
+                         "body_error", "body_throw", "body_exit",
+                         "handler_error", "handler_throw", "handler_exit"]:
+                stage, _, exception = mode.partition("_")
+                protected = try_step("protected", "'seed'")
+                if arity == 2:
+                    left, right = try_step("left", "'left'"), try_step("right", "17")
+                    protected = (f"do {protected} let <L> = {left} in let <R> = {right} in "
+                                 if path == "core" else f"{protected},L={left},R={right},")
+                else:
+                    protected = f"do {protected} " if path == "core" else f"{protected},"
+                result = "<L,R>" if arity else "<>"
+                if path == "source":
+                    result = "{L,R}" if arity else "ok"
+                if stage in ["protected", "handler"]:
+                    # Enter the handler first; its own exception must escape.
+                    raised = exception if stage == "protected" else "throw"
+                    protected += (f"call 'erlang':'{raised}'({{'protected',23}})" if path == "core"
+                                  else f"erlang:{raised}({{protected,23}})")
+                else:
+                    protected += result
+                body = try_step("body", "{B,A}" if arity else "'empty'")
+                if stage == "body":
+                    body = (f"do {body} call 'erlang':'{exception}'({{'body',31}})" if path == "core"
+                            else f"{body},erlang:{exception}({{body,31}})")
+                handler = try_step("handler", "{'caught',C,Reason}")
+                if stage == "handler":
+                    handler = (f"do {handler} call 'erlang':'{exception}'({{'handler',41}})" if path == "core"
+                               else f"{handler},erlang:{exception}({{handler,41}})")
+                body = (f"try {protected} of <{('A,B' if arity else '')}> -> {body} "
+                        f"catch <C,Reason,S> -> {handler}" if path == "core" else
+                        f"try begin {protected} end of {('{A,B}' if arity else 'ok')} -> {body} "
+                        f"catch C:Reason -> {handler} end")
+                entry = {
+                    "upstream_test": "test/lynx/core_to_leanj_test.exs#translates zero and multiple Core try values",
+                    "try_result_arity": arity,
+                    "try_result_scenario": mode,
+                    "try_result_path": path,
+                    "expression": "differential:core_order(fun ?CORE_MODULE:entry/0)" if path == "core"
+                                  else f"differential:core_order(fun()->{body} end)",
+                }
+                if path == "core":
+                    entry["core_body"] = body
+                selected.append(entry)
+
+    # Transport actual zero/two results out of the try through enclosing Core
+    # binds, matches and handlers. Bind before case: OTP's normal Core optimizer
+    # assumes a non-values case scrutinee produces exactly one value.
+    for arity in [0, 2]:
+        for shape in ["let", "case", "nested"]:
+            modes = ["success", "protected_throw"]
+            if shape == "nested":
+                modes += ["body_error", "handler_exit"]
+            for mode in modes:
+                result = "<B,A>" if arity else "<>"
+                caught = "<'caught',Reason>" if arity else "<>"
+                protected_step = core_step("protected", "'seed'")
+                left_step, right_step = core_step("left", "'left'"), core_step("right", "17")
+                protected = f"do {protected_step} "
+                if arity:
+                    protected += f"let <L> = {left_step} in let <R> = {right_step} in "
+                protected += ("call 'erlang':'throw'({'protected',23})" if mode in
+                              ["protected_throw", "handler_exit"] else "<L,R>" if arity else "<>")
+                body_step, handler_step = core_step("body", "'seed'"), core_step("handler", "'seed'")
+                body = f"do {body_step} " + (
+                    "call 'erlang':'error'({'body',31})" if mode == "body_error" else result)
+                handler = f"do {handler_step} " + (
+                    "call 'erlang':'exit'({'handler',41})" if mode == "handler_exit" else caught)
+                inner = (f"try {protected} of <{('A,B' if arity else '')}> -> {body} "
+                         f"catch <C,Reason,S> -> {handler}")
+                variables = "X,Y" if arity else ""
+                value = "{X,Y}" if arity else "'empty'"
+                if shape == "nested":
+                    outer_handler = core_step("outer_handler", "{'escaped',OC,OR}")
+                    body = (f"try {inner} of <{variables}> -> {core_step('outer', value)} "
+                            f"catch <OC,OR,OS> -> {outer_handler}")
+                else:
+                    continuation = core_step("after", value)
+                    if shape == "case":
+                        matched = core_step("match", "'true'")
+                        patterns = ("<17,'left'> when Flag -> " + continuation +
+                                    " <'caught',OtherReason> when Flag -> " +
+                                    core_step("after", "{'caught',OtherReason}") if arity else
+                                    "<> when Flag -> " + continuation)
+                        continuation = (f"let <Flag> = {matched} in case <{variables}> of {patterns} "
+                                        f"<{variables}> when 'true' -> "
+                                        "call 'erlang':'error'('bad_binding') end")
+                    body = f"let <{variables}> = {inner} in {continuation}"
+                selected.append({
+                    "upstream_test": "test/lynx/core_to_leanj_test.exs#translates zero and multiple Core try values",
+                    "try_result_arity": arity,
+                    "try_result_scenario": f"{shape}_{mode}",
+                    "try_result_path": "core",
+                    "core_body": body,
+                    "expression": "differential:core_order(fun ?CORE_MODULE:entry/0)",
+                })
+
+    # Reproduce lowered receive shapes, not just source-level nested receives.
+    # Positive opaque timeouts retain real waits; dropped bodies end at removal.
+    for path in ["core", "source"]:
+        def receive_step(tag, value, fail=False):
+            if path == "core":
+                return core_step(tag, value, fail)
+            action = "error" if fail else "return"
+            return f"differential:core_step({tag},{action},{value})"
+
+        def lowered_receive(name, action, patterns=()):
+            wait = (
+                "let <Expired> = primop 'recv_wait_timeout'(T) in case Expired of "
+                f"<'true'> when 'true' -> {action} "
+                f"<'false'> when 'true' -> apply '{name}'/0() end"
+            )
+            if patterns:
+                clauses = " ".join(f"<{pattern}> when 'true' -> primop 'remove_message'()"
+                                   for pattern in patterns)
+                wait = (
+                    "let <Available,Message> = primop 'recv_peek_message'() in "
+                    f"case Available of <'true'> when 'true' -> case Message of {clauses} "
+                    f"<Other> when 'true' -> do primop 'recv_next'() apply '{name}'/0() end "
+                    f"<'false'> when 'true' -> {wait} end"
+                )
+            return (f"(letrec '{name}'/0 = fun () -> {wait} in apply '{name}'/0() "
+                    "-| ['letrec_goto','no_inline'])")
+
+        for family, modes in [
+            ("sequence", ["success", "first_error", "second_error", "join_error",
+                          "handler_error", "cleanup_error", "cleanup_overrides_error"]),
+            ("discarded", ["first", "second", "timeout", "join_error", "timeout_error",
+                           "timeout_join_error", "handler_error", "cleanup_error"]),
+            ("rescan", ["success"]),
+        ]:
+            for mode in modes:
+                capture = receive_step("capture", "{'anchor',13}")
+                first = receive_step("first", "'one'", mode in ["first_error", "handler_error"])
+                second = receive_step("second", "'two'", mode == "second_error")
+                timeout = receive_step("timeout", "'ignored'", mode in ["timeout_error", "handler_error"])
+                resumed = receive_step("resumed", "'selected'")
+                join = receive_step("join", "{Keep,B}", mode in
+                                    ["join_error", "timeout_join_error", "cleanup_overrides_error"])
+                handler = receive_step("handler", "{'caught',C,R}", mode == "handler_error")
+                cleanup = receive_step("cleanup", "'ok'", mode in
+                                       ["cleanup_error", "cleanup_overrides_error"])
+                # The float decoy must survive exact integer patterns. Two
+                # matches in opposite orders expose mailbox-vs-clause priority.
+                messages = "[sentinel,{take,7.0},{take,7},{take,9},tail]"
+                if mode == "second":
+                    messages = "[sentinel,{take,7.0},{take,9},{take,7},tail]"
+                if family == "discarded" and mode in [
+                    "timeout", "timeout_error", "timeout_join_error", "handler_error"
+                ]:
+                    messages = "[sentinel,{take,7.0},tail]"
+                if path == "core":
+                    if family == "sequence":
+                        protected = (f"do {lowered_receive('first_wait', first)} "
+                                     f"{lowered_receive('second_wait', second)}")
+                    else:
+                        scan = lowered_receive("scan", timeout, ["{'take',7}", "{'take',9}"])
+                        protected = f"do {scan} {resumed}"
+                        if family == "rescan":
+                            skip = lowered_receive("skip_scan", first, ["'absent'"])
+                            protected = f"do {skip} {protected}"
+                    inner = f"try {protected} of <B> -> {join} catch <C,R,S> -> {handler}"
+                    # Core has no source `after`: preserve both success and
+                    # exceptional continuations explicitly, including reraising.
+                    body = (f"let <T> = call 'differential':'exception_argument'(1) in "
+                            f"let <Keep> = {capture} in try {inner} of <V> -> do {cleanup} V "
+                            f"catch <AC,AR,AS> -> do {cleanup} primop 'raise'(AS,AR)")
+                else:
+                    if family == "sequence":
+                        protected = f"receive after T -> {first} end,receive after T -> {second} end"
+                    else:
+                        protected = ("receive {take,7}->discarded_first;{take,9}->discarded_second "
+                                     f"after T->{timeout} end,{resumed}")
+                        if family == "rescan":
+                            protected = f"receive absent->discarded after T->{first} end,{protected}"
+                    body = (f"T=differential:exception_argument(1),Keep={capture},"
+                            f"try (try begin {protected} end of B->{join} catch C:R->{handler} end) "
+                            f"after {cleanup} end")
+                entry = {
+                    "upstream_test": "test/lynx/core_to_leanj_test.exs#" + (
+                        "allocates distinct generated message binders for timeout-only receives"
+                        if family == "sequence" else
+                        "translates receive clauses whose unused bodies the compiler dropped"),
+                    "receive_continuation_family": family,
+                    "receive_continuation_scenario": mode,
+                    "receive_continuation_path": path,
+                    "expression": "differential:receive_continuation(" + (
+                        "fun ?CORE_MODULE:entry/0" if path == "core" else f"fun()->{body} end") +
+                        f",{messages})",
+                }
+                if path == "core":
+                    entry["core_body"] = body
+                selected.append(entry)
+
+    # Upstream compiler regression, not a Lean theorem attribution. Keep the
+    # same source call with either compiler-known or remotely returned operands.
+    # Folded failures must retain preceding effects, but never run the body.
+    effect_key = "'$lynx_exception_effects'"
+    body = f"put({effect_key},[body|get({effect_key})]),matched"
+    for scenario, fun, args in [
+        ("atom_match", f"fun(a)->{body} end", ["a"]),
+        ("atom_miss", f"fun(a)->{body} end", ["b"]),
+        ("numeric_miss", f"fun(1)->{body} end", ["1.0"]),
+        ("two_arg_miss", f"fun(a,2)->{body} end", ["a", "3"]),
+        ("map_match", f"fun(#{{key:=7}})->{body} end", ["#{key=>7,extra=>9}"]),
+        ("map_miss", f"fun(#{{key:=7}})->{body} end", ["#{other=>7}"]),
+        ("guard_match", f"fun(X) when is_integer(X),X>0->{body} end", ["7"]),
+        ("guard_false", f"fun(X) when is_integer(X),X>0->{body} end", ["-3"]),
+        ("guard_error", f"fun(X) when element(2,X)=:=accepted->{body} end", ["{accepted}"]),
+        ("later_clause", f"fun(a)->wrong_clause;(b)->{body} end", ["b"]),
+        ("badfun", "not_fun", ["7"]),
+        ("badarity", f"fun(_)->{body} end", ["7", "9"]),
+        ("body_error", f"fun(a)->{body},error(body_failed) end", ["a"]),
+        ("body_throw", f"fun(a)->{body},throw(body_failed) end", ["a"]),
+        ("body_exit", f"fun(a)->{body},exit(body_failed) end", ["a"]),
+    ]:
+        for path in ["literal", "effectful_literal", "runtime"]:
+            operands = [fun, *args]
+            if path == "runtime":
+                operands = [f"differential:exception_argument({value})" for value in operands]
+            arguments = [f"begin put({effect_key},[arg{index}|get({effect_key})]),"
+                         f"{value} end" for index, value in enumerate(operands[1:], 1)]
+            setup = ""
+            callee = f"({operands[0]})"
+            handler = ""
+            if scenario in ["badfun", "badarity"]:
+                # An atom in direct callee position denotes a local function.
+                setup = f"F={operands[0]},"
+                callee = "F"
+            if scenario == "badarity":
+                # Only this case needs a fun-identity check. Keeping a reference
+                # in other handlers can prevent the compiler folding the call.
+                handler = ("error:{badarity,{BadFun,BadArgs}}->"
+                           "{exception,error,{badarity,BadFun=:=F,BadArgs}};")
+            if path == "literal":
+                # Effects inside arguments inhibit Core folding on OTP 29.
+                # Separate preceding effects from the pure literal call, and
+                # retain effectful_literal as a third, distinct path control.
+                setup += "".join(f"put({effect_key},[arg{index}|get({effect_key})]),"
+                                 for index in range(1, len(args) + 1))
+                arguments = args
+            selected.append({
+                "upstream_test": "test/lynx/core_to_leanj_test.exs#function clause failures raise function_clause alone",
+                "exception_scenario": scenario,
+                "exception_path": path,
+                "expression": f"put({effect_key},[before]),{setup}"
+                              f"Outcome=try {callee}({','.join(arguments)}) of V->{{ok,V}} catch "
+                              f"{handler}ExcClass:ExcReason->{{exception,ExcClass,ExcReason}} end,"
+                              f"{{Outcome,lists:reverse(erase({effect_key}))}}",
+            })
+
+    for kind in ["local_zero", "local_one", "local_two", "external_zero", "external_one",
+                 "external_two", "bif_zero", "bif_one", "missing_export", "missing_module", "not_fun"]:
+        for args in ["[]", "[7]", "[left,right]", "[a,b,c]", "[7|improper]", "bad"]:
+            probe(e, ["dynamic_apply_2", "dynamic_apply_array", "dynamic_apply_captures",
+                      "dynamic_apply_2_errors"],
+                  f"differential:function_apply({kind},#{{capture=><<1,2,3>>}},{args})")
+    for module, name in [("differential", "function_zero"), ("differential", "function_one"),
+                         ("differential", "missing"), ("lynx_missing_functions", "missing"),
+                         ("erlang", "abs"), ("1", "function_one"), ("differential", "1")]:
+        for arity in ["0", "1", "255", "-1", "256", "1 bsl 100", "1.0", "bad"]:
+            probe("Term/Dispatch", ["make_fun_resolves_by_name", "apply_calls_by_name"],
+                  f"differential:function_make({module},{name},{arity},[7])")
+        for args in ["[]", "[7]", "[left,right]", "[7|improper]", "bad"]:
+            probe("Term/Dispatch", "apply_calls_by_name",
+                  f"differential:function_named({module},{name},{args})")
+    for target in ["local_zero", "local_capture", "make_fun_external",
+                   "fun lists:reverse/1", "fun erlang:abs/1",
+                   "fun differential:function_zero/0", "fun differential:function_two/2",
+                   "not_a_fun", "0", "1.0", "[]", "{lists,reverse,1}", "#{}"]:
+        probe("Term/Dispatch", "fun_info_mfa_reports_compiled_name",
+              f"differential:fun_info_mfa({target})")
+    for fun in ["fun differential:function_one/1", "fun(X)->X end", "not_fun"]:
+        for arity in ["0", "1", "2", "255", "256", "-1", "1 bsl 100", "1.0"]:
+            call(e, ["is_function/2_arity", "is_function/2_invalid_arity", "is_function/2_mismatch"],
+                 "is_function", fun, arity)
+    for kind in ["local", "external", "external_error", "external_throw", "external_exit",
+                 "local_zero", "local_one", "external_one", "bif_zero", "bif_one",
+                 "missing_export", "missing_module", "not_fun"]:
+        extra = (
+            {"stacktrace_dependent": True}
+            if kind in ("external_error", "external_throw", "local_one",
+                        "external_one", "bif_one", "missing_export",
+                        "missing_module")
+            else {}
+        )
+        for mode in ["monitored", "linked", "small_heap"]:
+            probe("Term/Dispatch", ["spawned_dispatch", "spawn_exception_boundaries"],
+                  f"differential:function_spawn({kind},{mode},#{{capture=>[1,2,3]}})",
+                  **extra)
+
+    construction = "Term/Bitstring/Construction"
+    matching = "Term/Bitstring/Matching"
+    for encoding, bits in [
+        ("utf8", ["<<>>", "<<128>>", "<<192,128>>", "<<16#C1,16#BF>>",
+                  "<<16#E0,16#80,16#80>>", "<<16#E0,16#9F,16#BF>>",
+                  "<<237,160,128>>", "<<16#F0,16#80,16#80,16#80>>",
+                  "<<16#F0,16#8F,16#BF,16#BF>>", "<<244,144,128,128>>",
+                  "<<194,64:7>>", "<<97,255>>", "<<226,130,172>>",
+                  "<<240,159,152,128>>", "<<239,187,191>>"]),
+        ("utf16", ["<<>>", "<<0>>", "<<16#DC00:16>>", "<<16#D800:16>>", "<<16#D800:16,65:16>>",
+                   "<<16#DC00:16,16#D800:16>>", "<<0,32:7>>", "<<16#D800:16,16#6E00:15>>",
+                   "<<97:16,16#DC00:16>>", "<<16#D83D:16,16#DE00:16>>", "<<16#FEFF:16>>"]),
+        ("utf16le", ["<<>>", "<<0>>", "<<16#DC00:16/little>>", "<<16#D800:16/little>>",
+                     "<<16#D800:16/little,65:16/little>>", "<<16#DC00:16/little,16#D800:16/little>>",
+                     "<<32,0:7>>", "<<0,216,0,110:7>>", "<<97:16/little,16#DC00:16/little>>",
+                     "<<16#D83D:16/little,16#DE00:16/little>>", "<<16#FEFF:16/little>>"]),
+        ("utf32", ["<<>>", "<<0,0,0>>", "<<16#D800:32>>", "<<16#110000:32>>", "<<64:31>>",
+                   "<<97:32,255>>", "<<16#1F600:32>>", "<<16#FEFF:32>>"]),
+        ("utf32le", ["<<>>", "<<0,0,0>>", "<<16#D800:32/little>>", "<<16#110000:32/little>>",
+                     "<<64,0,0,0:7>>", "<<97:32/little,255>>", "<<16#1F600:32/little>>", "<<16#FEFF:32/little>>"]),
+    ]:
+        for offset in [0, 3]:
+            for value in bits:
+                malformed = ("utf16_rejects_malformed" if encoding.startswith("utf16") else
+                             "utf32_rejects_malformed" if encoding.startswith("utf32") else
+                             ["utf8_rejects_malformed", "match_utf8_rejects_overlong"])
+                origins = ([malformed] if isinstance(malformed, str) else malformed) + [
+                    "utf_rejects_incomplete_final_code_unit",
+                    "utf_preserves_invalid_suffix",
+                    "utf_unaligned_with_partial_suffix",
+                ]
+                probe(matching, origins,
+                      f"differential:utf({encoding},<<5:{offset},({value})/bitstring>>,{offset})")
+            for codepoint in [0, 127, 128, 0x7FF, 0x800, 0xD7FF, 0xD800, 0xDFFF,
+                              0xE000, 0xFEFF, 0xFFFF, 0x10000, 0x20AC, 0x1F600,
+                              0x10FFFF, 0x110000, -1]:
+                probe(construction, ["utf_boundaries", "utf_characters", "utf_invalid_scalars",
+                                     "utf_unaligned_concatenation"],
+                      f"differential:utf_construct({encoding},{codepoint},{offset})")
+
+    for encoding in ["utf8", "utf16", "utf16le", "utf32", "utf32le"]:
+        for codepoint in [0, 0x7F, 0x80, 0x7FF, 0x800, 0xD7FF, 0xE000, 0xFEFF,
+                          0xFFFF, 0x10000, 0x20AC, 0x1F600, 0x10FFFF]:
+            c_origins = ["utf_boundaries", "utf_characters", "utf16_size", "utf32_preserves_scalar"]
+            m_origins = ["utf_scalar_boundaries", "utf32_big_roundtrip",
+                         "utf8_returns_scalar", "utf16_returns_scalar", "utf32_returns_scalar"]
+            probe(construction, c_origins, f"differential:utf_roundtrip({encoding},{codepoint})")
+            probe(matching, m_origins, f"differential:utf_roundtrip({encoding},{codepoint})")
+        for nonint in ["a", "1.0", "<<65>>", "[65]", "{}"]:
+            probe(construction, "utf_noninteger",
+                  f"differential:utf_construct({encoding},{nonint},0)")
+        for nonbits in ["a", "65", "[65]", "{<<65>>}"]:
+            probe(matching, "utf_nonbitstring_inputs",
+                  f"differential:utf_match_term({encoding},{nonbits})")
+
+    # Whole, sized, unit-checked, and associative bitstring construction.
+    for kind, val, size, origins in [
+        ("whole_bitstring", "<<>>", "0", ["whole_bitstring_preserves_encoding"]),
+        ("whole_bitstring", "<<5:3>>", "0", ["whole_bitstring_preserves_encoding"]),
+        ("whole_bitstring", "<<16#AA,5:3>>", "0", ["whole_bitstring_preserves_encoding"]),
+        ("whole_bitstring", "bad", "0", ["invalid_operands"]),
+        ("whole_binary", "<<1,2,3>>", "0", ["whole_segment_checks_unit"]),
+        ("whole_binary", "<<5:3>>", "0", ["whole_segment_checks_unit"]),
+        ("whole_binary", "<<1,5:3>>", "0", ["whole_segment_checks_unit"]),
+        ("whole_binary", "123", "0", ["invalid_operands"]),
+        ("whole_binary_unit16", "<<1,2,3,4>>", "0", ["whole_segment_checks_unit"]),
+        ("whole_binary_unit16", "<<1,2,3>>", "0", ["whole_segment_checks_unit"]),
+        ("whole_binary_unit16", "<<5:3>>", "0", ["whole_segment_checks_unit"]),
+        ("whole_bitstring_unit3", "<<5:3>>", "0", ["whole_segment_checks_unit"]),
+        ("whole_bitstring_unit3", "<<63:6>>", "0", ["whole_segment_checks_unit"]),
+        ("whole_bitstring_unit3", "<<1>>", "0", ["whole_segment_checks_unit"]),
+        ("whole_bitstring_unit256", "<<0:256>>", "0", ["whole_segment_checks_unit", "maximum_unit"]),
+        ("whole_bitstring_unit256", "<<0:512>>", "0", ["whole_segment_checks_unit", "maximum_unit"]),
+        ("whole_bitstring_unit256", "<<0:248>>", "0", ["whole_segment_checks_unit", "maximum_unit"]),
+        ("whole_bitstring_unit256", "<<5:3>>", "0", ["whole_segment_checks_unit", "maximum_unit"]),
+        ("sized_binary", "<<1,2,3>>", "2", ["sized_segment_preserves_prefix"]),
+        ("sized_binary", "<<16#AA,5:3>>", "1", ["sized_segment_preserves_prefix"]),
+        ("sized_binary", "<<1,2>>", "0", ["sized_segment_preserves_prefix", "zero_width"]),
+        ("sized_binary", "<<5:3>>", "1", ["sized_segment_preserves_prefix"]),
+        ("sized_binary", "<<1>>", "2", ["sized_segment_preserves_prefix"]),
+        ("sized_binary", "<<1,2>>", "-1", ["negative_size"]),
+        ("sized_binary", "bad", "0", ["zero_width", "invalid_operands"]),
+        ("sized_binary_unit16", "<<1,2,3,4,5>>", "2", ["sized_segment_preserves_prefix"]),
+        ("sized_binary_unit16", "<<1,2,3>>", "2", ["sized_segment_preserves_prefix"]),
+        ("sized_bitstring", "<<16#AB,5:3>>", "5", ["sized_segment_preserves_prefix"]),
+        ("sized_bitstring", "<<16#AB,5:3>>", "11", ["sized_segment_preserves_prefix"]),
+        ("sized_bitstring", "<<16#AB,5:3>>", "12", ["sized_segment_preserves_prefix"]),
+        ("sized_bitstring", "<<1,2>>", "0", ["zero_width"]),
+        ("sized_bitstring", "<<1,2>>", "-1", ["negative_size"]),
+        ("sized_bitstring", "<<1,2>>", "bad", ["invalid_operands"]),
+        ("sized_bitstring", "<<1,2>>", "1 bsl 64", ["invalid_operands"]),
+        ("sized_bitstring_unit3", "<<16#AB,5:3>>", "3", ["sized_segment_preserves_prefix"]),
+        ("sized_bitstring_unit3", "<<16#AB,5:3>>", "4", ["sized_segment_preserves_prefix"]),
+        ("concat_empty", "<<>>", "0", ["concatenation_empty"]),
+        ("concat_empty", "<<5:3>>", "0", ["concatenation_empty"]),
+        ("concat_empty", "<<1,2,3:5>>", "0", ["concatenation_empty"]),
+        ("concat_assoc", "{<<5:3>>,<<16#AB:8>>,<<3:2>>}", "0",
+         ["concatenation_preserves_bits", "concatenation_associative"]),
+        ("concat_assoc", "{<<1:1>>,<<0:7>>,<<16#FF>>}", "0",
+         ["concatenation_preserves_bits", "concatenation_associative"]),
+        ("cross_byte_concat_unit3", "{<<5:3>>,16#1234,<<3:2>>}", "5",
+         ["units_and_cross_byte_concatenation", "scaled_unit_truncation"]),
+        ("cross_byte_concat_little_unit5", "{<<2:2>>,-17,<<1:3>>}", "3",
+         ["units_and_cross_byte_concatenation", "scaled_unit_truncation"]),
+    ]:
+        probe(construction, origins, f"differential:bit_construct_binary({kind},{val},{size})")
+
+    probe(matching, "build_from_bytes", "differential:bit_construct_binary(build_from_bytes,0,0)")
+
+    # Integer bitstring construction across widths, signedness, endianness, units, and errors.
+    for spec, val, size, origins in [
+        ("unsigned_big", "0", "8", ["unsigned_byte_boundaries", "integer_segment_size"]),
+        ("unsigned_big", "255", "8", ["unsigned_byte_boundaries", "integer_segment_preserves_bits"]),
+        ("unsigned_big", "256", "8", ["unsigned_byte_boundaries"]),
+        ("unsigned_big", "-1", "8", ["unsigned_byte_boundaries", "negative_values_and_truncation"]),
+        ("unsigned_big", "-256", "8", ["unsigned_byte_boundaries", "negative_values_and_truncation"]),
+        ("signed_big", "-128", "8", ["signed_byte_boundaries"]),
+        ("signed_big", "127", "8", ["signed_byte_boundaries"]),
+        ("signed_big", "128", "8", ["signed_byte_boundaries"]),
+        ("signed_big", "-129", "8", ["signed_byte_boundaries"]),
+        ("unsigned_big", "16#1234", "16", ["byte_aligned_endianness"]),
+        ("unsigned_little", "16#1234", "16", ["byte_aligned_endianness"]),
+        ("signed_big", "-32768", "16", ["multibyte_overflow_and_underflow"]),
+        ("signed_little", "32768", "16", ["multibyte_overflow_and_underflow"]),
+        ("signed_big", "-32769", "16", ["multibyte_overflow_and_underflow"]),
+        ("unsigned_big", "65536", "16", ["multibyte_overflow_and_underflow"]),
+        ("unsigned_big", "16#5A", "7", ["subbyte_endianness"]),
+        ("unsigned_little", "16#5A", "7", ["subbyte_endianness"]),
+        ("signed_big", "-5", "4", ["subbyte_endianness"]),
+        ("signed_little", "-5", "4", ["subbyte_endianness"]),
+        ("unsigned_big", "16#ABC", "12", ["big_and_little_partial_bytes"]),
+        ("unsigned_little", "16#ABC", "12", ["big_and_little_partial_bytes"]),
+        ("signed_big", "-2049", "12", ["big_and_little_partial_bytes", "partial_byte_overflow_and_underflow"]),
+        ("signed_little", "2048", "12", ["big_and_little_partial_bytes", "partial_byte_overflow_and_underflow"]),
+        ("unsigned_big", "8", "3", ["partial_byte_overflow_and_underflow"]),
+        ("signed_big", "-5", "3", ["partial_byte_overflow_and_underflow"]),
+        ("unsigned_little", "16#1FFF", "13", ["partial_byte_overflow_and_underflow"]),
+        ("unsigned_big", "(1 bsl 100) + 16#ABCD", "13", ["large_integer_truncation"]),
+        ("unsigned_little", "-(1 bsl 100) - 1", "13", ["large_integer_truncation", "negative_values_and_truncation"]),
+        ("signed_big", "(1 bsl 128) - 1", "64", ["large_integer_truncation", "multibyte_overflow_and_underflow"]),
+        ("unsigned_little", "1 bsl 200", "128", ["large_integer_truncation"]),
+        ("unit3_unsigned_big", "16#DEAD", "5", ["scaled_unit_truncation", "units_and_cross_byte_concatenation"]),
+        ("unit5_signed_little", "-(1 bsl 40) - 3", "3", ["scaled_unit_truncation", "units_and_cross_byte_concatenation"]),
+        ("unit256_big", "(1 bsl 255) + 16#1234", "1", ["maximum_unit"]),
+        ("unit256_little", "16#123456", "2", ["maximum_unit"]),
+        ("unsigned_big", "123", "0", ["zero_width"]),
+        ("signed_little", "1 bsl 100", "0", ["zero_width"]),
+        ("unsigned_big", "bad", "0", ["zero_width", "invalid_operands"]),
+        ("unsigned_big", "1", "-1", ["negative_size"]),
+        ("unsigned_big", "bad", "-1", ["negative_size", "invalid_operands"]),
+        ("unsigned_big", "1.5", "8", ["invalid_operands"]),
+        ("unsigned_big", "bad", "8", ["invalid_operands"]),
+        ("unsigned_big", "1", "bad", ["invalid_operands"]),
+        ("unsigned_big", "1", "1 bsl 64", ["invalid_operands"]),
+    ]:
+        for offset in [0, 3]:
+            probe(construction, origins,
+                  f"differential:bit_construct_int({spec},{val},{size},{offset})")
+
+    # Float16, float32, float64 construction and error paths.
+    float_construct_cases = [
+        # Float64 signed zeros, normals, extremes, integer conversions.
+        ("big", "0.0", "64", ["float64_signed_zeros", "float64_size"]),
+        ("big", "-0.0", "64", ["float64_signed_zeros", "float64_size"]),
+        ("little", "{ieee64,1,0,0}", "64", ["float64_signed_zeros", "float64_unaligned_concatenation"]),
+        ("little", "{ieee64,0,1023,0}", "64", ["float64_normal_values", "float64_unaligned_concatenation"]),
+        ("big", "{ieee64,1,1024,1}", "64", ["float64_normal_values"]),
+        ("big", "{ieee64,0,0,1}", "64", ["float64_extremes"]),
+        ("little", "{ieee64,1,0,1}", "64", ["float64_extremes"]),
+        ("big", "{ieee64,0,1,0}", "64", ["float64_extremes"]),
+        ("big", "{ieee64,0,2046,(1 bsl 52)-1}", "64", ["float64_extremes"]),
+        ("little", "{ieee64,1,2046,(1 bsl 52)-1}", "64", ["float64_extremes"]),
+        ("big", "0", "64", ["float64_integer_conversion"]),
+        ("big", "(1 bsl 53) + 1", "64", ["float64_integer_conversion"]),
+        ("big", "-((1 bsl 53) + 1)", "64", ["float64_integer_conversion"]),
+        ("big", "(1 bsl 255) - 1", "64", ["float64_integer_conversion"]),
+        ("big", "-(1 bsl 255)", "64", ["float64_integer_conversion"]),
+        # Runtime float widths (including unit:2).
+        ("unit2_big", "{ieee64,0,1023,0}", "32", ["runtime_float_widths", "float64_size"]),
+        ("unit2_little", "{ieee64,1,1020,0}", "16", ["runtime_float_widths", "float32_construction"]),
+        ("unit2_big", "{ieee64,0,1023,0}", "8", ["runtime_float_widths", "float16_construction"]),
+        ("big", "1.0", "-1", ["runtime_float_widths"]),
+        ("big", "1.0", "size", ["runtime_float_widths"]),
+        # Float16 OTP bs_construct_SUITE fp16/1 vectors.
+        ("big", "{ieee64,0,999,16971005}", "16", ["float16_construction"]),
+        ("little", "{ieee64,1,999,16971005}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1008,4494803592606853}", "16", ["float16_construction"]),
+        ("little", "{ieee64,1,1008,4494803592606853}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1009,0}", "16", ["float16_construction"]),
+        ("little", "{ieee64,1,1009,0}", "16", ["float16_construction"]),
+        ("big", "65504", "16", ["float16_construction"]),
+        ("little", "-65504", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1038,4499201580859392}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1022,4499201592118391}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,0,0}", "16", ["float16_construction"]),
+        ("little", "{ieee64,1,0,0}", "16", ["float16_construction"]),
+        ("big", "1", "16", ["float16_construction"]),
+        ("little", "-1", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1023,4398035252105}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1021,1499733803991469}", "16", ["float16_construction"]),
+        ("big", "1000000000", "16", ["float16_construction"]),
+        ("little", "-1000000000", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1004,2674012278751232}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1001,1125899906842624}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1007,1741626418397184}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1023,2199560126464}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1023,2199023255552}", "16", ["float16_construction"]),
+        ("big", "{ieee64,0,1023,2199027449856}", "16", ["float16_construction"]),
+        # Float32 vectors.
+        ("big", "{ieee64,0,0,0}", "32", ["float32_construction"]),
+        ("big", "{ieee64,0,1020,0}", "32", ["float32_construction"]),
+        ("little", "{ieee64,0,1020,0}", "32", ["float32_construction"]),
+        ("big", "{ieee64,1,0,0}", "32", ["float32_construction"]),
+        ("big", "{ieee64,0,2019,2221273467876764}", "32", ["float32_construction"]),
+        ("little", "{ieee64,1,2019,2221273467876764}", "32", ["float32_construction"]),
+        ("big", "{ieee64,0,856,3921383706114079}", "32", ["float32_construction"]),
+        ("big", "{ieee64,0,1019,2702159776422298}", "32", ["float32_construction"]),
+        ("big", "288230393331580929", "32", ["float32_construction"]),
+        ("big", "-288230393331580929", "32", ["float32_construction"]),
+        ("big", "576460786663161857", "32", ["float32_construction"]),
+        ("big", "-576460786663161857", "32", ["float32_construction"]),
+        ("big", "576460752303423487", "32", ["float32_construction"]),
+        ("big", "1 bsl 200", "32", ["float32_construction"]),
+        ("little", "-(1 bsl 200)", "32", ["float32_construction"]),
+        # Narrow float & width errors (keep integers within AtomVM 256-bit limit).
+        ("big", "one", "16", ["narrow_float_errors"]),
+        ("little", "one", "64", ["narrow_float_errors"]),
+        ("big", "1.0", "0", ["narrow_float_errors", "zero_width"]),
+        ("big", "1.0", "8", ["narrow_float_errors"]),
+        ("big", "1.0", "24", ["narrow_float_errors"]),
+        ("big", "1.0", "128", ["narrow_float_errors"]),
+    ]
+    for spec, val, size, origins in float_construct_cases:
+        extra = (
+            {"word_size_dependent": True}
+            if size == "32" and val in {"288230393331580929", "-288230393331580929"}
+            else {}
+        )
+        for offset in [0, 3]:
+            probe(construction, origins,
+                  f"differential:float_construct({spec},{val},{size},{offset})", **extra)
+
+    # Bitstring binary, tail, alignment, and literal matching.
+    for spec, bits, size, origins in [
+        ("binary_sized_rest", "<<1,2,3>>", "2", ["binary_consumes_exact_width"]),
+        ("binary_sized_rest", "<<1,2,3:5>>", "2", ["binary_consumes_exact_width"]),
+        ("binary_sized_rest", "<<1,2:7>>", "2", ["short_binary_input"]),
+        ("binary_sized_rest", "<<>>", "1", ["short_binary_input"]),
+        ("binary_sized_rest", "not_bits", "0", ["short_binary_input"]),
+        ("binary_unit16_rest", "<<1,2,3,4,5>>", "2", ["binary_consumes_exact_width"]),
+        ("binary_unit16_rest", "<<1,2,3>>", "2", ["short_binary_input"]),
+        ("bitstring_sized_rest", "<<16#AB,5:3>>", "5", ["binary_consumes_exact_width"]),
+        ("bitstring_sized_rest", "<<16#AB,5:3>>", "11", ["binary_consumes_exact_width"]),
+        ("bitstring_sized_rest", "<<16#AB,5:3>>", "12", ["short_binary_input"]),
+        ("bitstring_unit3_rest", "<<16#AB,5:3>>", "3", ["binary_consumes_exact_width"]),
+        ("bitstring_unit3_rest", "<<16#AB,5:3>>", "4", ["short_binary_input"]),
+        ("tail_binary_after3", "<<5:3,1,2>>", "0", ["tail_alignment"]),
+        ("tail_binary_after3", "<<5:3>>", "0", ["tail_alignment"]),
+        ("tail_binary_after3", "<<5:3,1:1>>", "0", ["tail_alignment"]),
+        ("tail_bitstring_after3", "<<5:3,1:1>>", "0", ["tail_alignment"]),
+        ("tail_binary_unit16_after4", "<<9:4,1,2,3,4>>", "0", ["tail_alignment"]),
+        ("tail_binary_unit16_after4", "<<9:4,1,2,3>>", "0", ["tail_alignment"]),
+        ("fixed_tail_bitstring16", "<<5:3,16#1234:16>>", "0", ["fixed_tail_sizes"]),
+        ("fixed_tail_bitstring16", "<<5:3,16#123:15>>", "0", ["fixed_tail_sizes"]),
+        ("fixed_tail_bitstring16", "<<5:3,16#12345:17>>", "0", ["fixed_tail_sizes"]),
+        ("fixed_tail_binary2", "<<5:3,16#AB,16#CD>>", "0", ["fixed_tail_sizes"]),
+        ("fixed_tail_binary2", "<<5:3,16#AB,7:7>>", "0", ["fixed_tail_sizes"]),
+        ("finish_byte", "<<42>>", "0", ["finish_requires_no_remaining_bits"]),
+        ("finish_byte", "<<42,0>>", "0", ["finish_requires_no_remaining_bits"]),
+        ("finish_byte", "<<42,1:1>>", "0", ["finish_requires_no_remaining_bits"]),
+        ("finish_byte", "<<>>", "0", ["finish_requires_no_remaining_bits"]),
+        ("unaligned_binary2_rest", "<<5:3,16#AB,16#CD,3:2>>", "0", ["unaligned_binary_capture"]),
+        ("unaligned_binary2_rest", "<<5:3,16#AB,16#CD>>", "0", ["unaligned_binary_capture"]),
+        ("unaligned_binary2_rest", "<<5:3,16#AB,7:7>>", "0", ["short_binary_input", "unaligned_binary_capture"]),
+        ("unaligned_bitstring16_rest", "<<5:3,16#12,16#34,1:1>>", "0", ["unaligned_binary_capture"]),
+        ("unaligned_tail_binary", "<<5:3,16#AB,16#CD>>", "0", ["unaligned_capture_requires_binary_length"]),
+        ("unaligned_tail_binary", "<<5:3>>", "0", ["unaligned_capture_requires_binary_length"]),
+        ("unaligned_tail_binary", "<<5:3,16#AB,1:1>>", "0", ["unaligned_capture_requires_binary_length"]),
+    ]:
+        probe(matching, origins, f"differential:bit_match_binary({spec},{bits},{size})")
+
+    # Integer matching: exact width, short, zero-width, signed, partial little-endian, dynamic size.
+    for spec, bits, size, origins in [
+        ("unsigned_big_rest", "<<110,117>>", "8", ["match_leading_byte", "integer_consumes_exact_width"]),
+        ("unsigned_big_rest", "<<1,2,3>>", "16", ["match_leading_bytes", "integer_consumes_exact_width"]),
+        ("unsigned_big_rest", "<<>>", "8", ["match_byte_empty", "short_integer_input"]),
+        ("unsigned_big_rest", "<<255:7>>", "8", ["short_integer_input"]),
+        ("unsigned_big_rest", "<<16#AB,5:3>>", "11", ["integer_consumes_exact_width"]),
+        ("unsigned_big_rest", "<<16#AB,5:3>>", "12", ["short_integer_input"]),
+        ("zero_width_tail", "<<>>", "0", ["integer_zero_width"]),
+        ("zero_width_tail", "<<1,2>>", "0", ["integer_zero_width"]),
+        ("zero_width_tail", "<<5:3>>", "0", ["integer_zero_width"]),
+        ("zero_width_tail", "not_bits", "0", ["integer_zero_width", "integer_pattern_failures"]),
+        ("signed_big_rest", "<<128>>", "8", ["integer_signed_boundaries"]),
+        ("signed_big_rest", "<<127>>", "8", ["integer_signed_boundaries"]),
+        ("signed_big_rest", "<<255>>", "8", ["integer_signed_boundaries"]),
+        ("signed_little_rest", "<<0,128>>", "16", ["integer_signed_boundaries"]),
+        ("signed_little_rest", "<<255,127>>", "16", ["integer_signed_boundaries"]),
+        ("signed_big_rest", "<<4:3,1:1>>", "3", ["integer_signed_boundaries"]),
+        ("signed_big_rest", "<<3:3,1:1>>", "3", ["integer_signed_boundaries"]),
+        ("signed_big_rest", "<<16#8000000000000000:64>>", "64", ["integer_signed_boundaries"]),
+        ("unsigned_little_rest", "<<16#BC,16#A:4,1:1>>", "12", ["integer_partial_little_endian"]),
+        ("signed_little_rest", "<<16#BC,16#F:4>>", "12", ["integer_partial_little_endian"]),
+        ("unaligned_unsigned_little_rest", "<<5:3,16#1234:13/little,3:2>>", "13", ["integer_partial_little_endian"]),
+        ("unaligned_signed_little_rest", "<<5:3,(-7):11/signed-little,1:1>>", "11", ["integer_partial_little_endian"]),
+        ("unsigned_big_exact", "<<1>>", "8", ["finish_requires_no_remaining_bits"]),
+        ("unsigned_big_exact", "<<1,2>>", "8", ["finish_requires_no_remaining_bits", "integer_pattern_failures"]),
+        ("unsigned_big_rest", "bad_input", "8", ["integer_pattern_failures"]),
+        ("unsigned_big_rest", "<<1,2>>", "-1", ["integer_pattern_failures"]),
+        ("unsigned_big_rest", "<<1,2>>", "bad", ["integer_pattern_failures"]),
+        ("size_from_prev_binary", "<<2,16#AA,16#BB,5:3>>", "0", ["size_from_previous_segment"]),
+        ("size_from_prev_binary", "<<0,5:3>>", "0", ["size_from_previous_segment"]),
+        ("size_from_prev_binary", "<<3,1,2>>", "0", ["size_from_previous_segment"]),
+        ("size_from_prev_unit2", "<<5:4,16#2AA:10,1:2>>", "0", ["size_from_previous_segment"]),
+        ("size_from_prev_signed", "<<15:4,1,2>>", "0", ["size_from_previous_segment"]),
+        ("consecutive_segments", "<<5:3,29:5,16#5A3:11/little,19:5,3:2>>", "0", ["consecutive_integer_segments"]),
+    ]:
+        probe(matching, origins, f"differential:bit_match_int({spec},{bits},{size})")
+
+    # Float16, float32, float64 matching (finite values, signed zero, subnormals, nonfinite & invalid widths).
+    for spec, bits, size, origins in [
+        ("big", "<<60,0>>", "16", ["float_extraction_returns_float", "float16_matching"]),
+        ("big", "<<0,0>>", "16", ["float16_matching"]),
+        ("big", "<<128,0>>", "16", ["float16_matching"]),
+        ("big", "<<0,1>>", "16", ["float16_matching"]),
+        ("big", "<<128,1>>", "16", ["float16_matching"]),
+        ("big", "<<3,255>>", "16", ["float16_matching"]),
+        ("big", "<<4,0>>", "16", ["float16_matching"]),
+        ("big", "<<123,255>>", "16", ["float16_matching"]),
+        ("little", "<<255,251,7:3>>", "16", ["float16_matching"]),
+        ("unaligned_big", "<<5:3,123,255,3:2>>", "16", ["float16_matching"]),
+        ("big", "<<124,0>>", "16", ["float16_matching"]),
+        ("big", "<<252,0>>", "16", ["float16_matching"]),
+        ("big", "<<124,1>>", "16", ["float16_matching"]),
+        ("big", "<<126,0>>", "16", ["float16_matching"]),
+        ("big", "<<123,255:7>>", "16", ["float16_matching"]),
+        ("big", "<<0,0,0,0>>", "32", ["float32_matching"]),
+        ("big", "<<128,0,0,0>>", "32", ["float32_matching"]),
+        ("big", "<<0,0,0,1>>", "32", ["float32_matching"]),
+        ("big", "<<128,0,0,1>>", "32", ["float32_matching"]),
+        ("big", "<<62,0,0,0>>", "32", ["float32_matching"]),
+        ("big", "<<127,127,255,255>>", "32", ["float32_matching"]),
+        ("little", "<<0,0,0,192,1:1>>", "32", ["float32_matching"]),
+        ("unaligned_little", "<<5:3,0,0,128,63,3:2>>", "32", ["float32_matching"]),
+        ("big", "<<127,128,0,0>>", "32", ["float32_matching"]),
+        ("big", "<<255,128,0,0>>", "32", ["float32_matching"]),
+        ("big", "<<127,192,0,0>>", "32", ["float32_matching"]),
+        ("big", "<<127,128,0,1>>", "32", ["float32_matching"]),
+        ("big", "<<62,0,0,0:7>>", "32", ["float32_matching"]),
+        ("big", "<<0:64>>", "64", ["float64_signed_zero_and_subnormal"]),
+        ("big", "<<1:1,0:63>>", "64", ["float64_signed_zero_and_subnormal"]),
+        ("big", "<<0,0,0,0,0,0,0,1>>", "64", ["float64_signed_zero_and_subnormal"]),
+        ("big", "<<128,0,0,0,0,0,0,1>>", "64", ["float64_signed_zero_and_subnormal"]),
+        ("big", "<<0,15,255,255,255,255,255,255>>", "64", ["float64_signed_zero_and_subnormal"]),
+        ("unaligned_little", "<<5:3,1,0,0,0,0,0,0,128,3:5>>", "64", ["float64_signed_zero_and_subnormal"]),
+        ("big", "<<0,16,0,0,0,0,0,0>>", "64", ["float64_normal_and_extreme"]),
+        ("big", "<<63,240,0,0,0,0,0,0,9>>", "64", ["float64_normal_and_extreme"]),
+        ("big", "<<127,239,255,255,255,255,255,255>>", "64", ["float64_normal_and_extreme"]),
+        ("little", "<<255,255,255,255,255,255,239,255>>", "64", ["float64_normal_and_extreme"]),
+        ("exact64", "<<63,240,0,0,0,0,0,0>>", "64", ["float64_normal_and_extreme", "finish_requires_no_remaining_bits"]),
+        ("exact64", "<<63,240,0,0,0,0,0,0,1>>", "64", ["finish_requires_no_remaining_bits", "float64_rejects_nonfinite_and_short_inputs"]),
+        ("big", "<<127,240,0,0,0,0,0,0>>", "64", ["float64_rejects_nonfinite_and_short_inputs"]),
+        ("big", "<<255,240,0,0,0,0,0,0>>", "64", ["float64_rejects_nonfinite_and_short_inputs"]),
+        ("big", "<<127,248,0,0,0,0,0,0>>", "64", ["float64_rejects_nonfinite_and_short_inputs"]),
+        ("big", "<<127,240,0,0,0,0,0,1>>", "64", ["float64_rejects_nonfinite_and_short_inputs"]),
+        ("big", "<<63,240,0,0,0,0,0,0:7>>", "64", ["float64_rejects_nonfinite_and_short_inputs"]),
+        ("big", "not_bits", "64", ["float64_rejects_nonfinite_and_short_inputs"]),
+        ("unit2_big", "<<60,0,9>>", "8", ["runtime_float_widths", "float16_matching"]),
+        ("unit2_big", "<<62,0,0,0>>", "16", ["runtime_float_widths", "float32_matching"]),
+        ("unit2_big", "<<63,240,0,0,0,0,0,0>>", "32", ["runtime_float_widths", "float64_normal_and_extreme"]),
+        ("unit4_little", "<<0,60>>", "4", ["runtime_float_widths"]),
+        ("unit4_little", "<<0,0,0,62>>", "8", ["runtime_float_widths"]),
+        ("unit4_little", "<<0,0,0,0,0,0,240,63>>", "16", ["runtime_float_widths"]),
+        ("big", "<<0:128>>", "0", ["float_zero_and_invalid_widths"]),
+        ("big", "<<0:128>>", "8", ["float_zero_and_invalid_widths"]),
+        ("big", "<<0:128>>", "24", ["float_zero_and_invalid_widths"]),
+        ("big", "<<0:128>>", "48", ["float_zero_and_invalid_widths"]),
+        ("big", "<<0:128>>", "128", ["float_zero_and_invalid_widths"]),
+        ("big", "<<0:128>>", "-1", ["float_zero_and_invalid_widths", "runtime_float_widths"]),
+        ("big", "<<0:128>>", "bad", ["float_zero_and_invalid_widths", "runtime_float_widths"]),
+    ]:
+        probe(matching, origins, f"differential:bit_match_float({spec},{bits},{size})")
+
+    # Literal bitstring matching: prefix, exact byte/bit, and sub-byte patterns.
+    for kind, bits, origins in [
+        ("prefix_binary", "<<\"abc\">>", ["literal_prefix_tail"]),
+        ("prefix_binary", "<<\"abcdef\">>", ["literal_prefix_tail"]),
+        ("prefix_binary", "<<\"abcd\",1:1>>", ["literal_prefix_tail", "tail_alignment"]),
+        ("prefix_binary", "<<\"ab\">>", ["literal_prefix_tail"]),
+        ("prefix_bitstring", "<<\"abcd\",1:1>>", ["literal_prefix_tail"]),
+        ("prefix_partial", "<<16#A0>>", ["literal_prefix_tail", "partial_literal_pattern"]),
+        ("prefix_partial", "<<5:3>>", ["literal_prefix_tail", "partial_literal_pattern"]),
+        ("prefix_partial", "<<4:3,1>>", ["literal_prefix_tail", "partial_literal_pattern"]),
+        ("prefix_partial", "<<>>", ["literal_prefix_tail"]),
+        ("full_abc", "<<\"abc\">>", ["full_literal_pattern_requires_exact_bytes_and_length"]),
+        ("full_abc", "<<\"abcd\">>", ["full_literal_pattern_requires_exact_bytes_and_length"]),
+        ("full_abc", "<<\"abc\",0:1>>", ["full_literal_pattern_requires_exact_bytes_and_length"]),
+        ("full_abc", "<<\"ab\">>", ["full_literal_pattern_requires_exact_bytes_and_length"]),
+        ("full_abc", "<<\"abd\">>", ["full_literal_pattern_requires_exact_bytes_and_length"]),
+        ("full_abc", "abc", ["full_literal_pattern_requires_exact_bytes_and_length"]),
+        ("full_partial_5_3", "<<5:3>>", ["partial_literal_pattern"]),
+        ("full_partial_5_3", "<<16#A0:3>>", ["partial_literal_pattern"]),
+        ("full_partial_5_3", "<<16#80:3>>", ["partial_literal_pattern"]),
+        ("full_partial_5_3", "<<16#A0:4>>", ["partial_literal_pattern"]),
+        ("full_partial_5_3", "<<16#A0:0>>", ["partial_literal_pattern"]),
+        ("full_partial_5_3", "<<16#A0,0:3>>", ["partial_literal_pattern"]),
+        ("full_partial_5_3", "<<>>", ["partial_literal_pattern"]),
+        ("unaligned_partial_5_3", "<<5:3,5:3>>", ["partial_literal_pattern"]),
+        ("unaligned_partial_5_3", "<<5:3,4:3>>", ["partial_literal_pattern"]),
+        ("unaligned_partial_5_3", "<<5:3,5:4>>", ["partial_literal_pattern"]),
+    ]:
+        probe(matching, origins, f"differential:bit_match_literal({kind},{bits})")
+
+    hashing = "Modules/Hashing"
+    hashing_vectors = [
+        "0", "1", "-1", "255", "256", "1000", "-1000", "134217727", "134217728",
+        "-134217728", "-134217729", "4294967296", "576460752303423487",
+        "-576460752303423488", "576460752303423488", "18446744073709551616",
+        "-18446744073709551616", "18446744073709551615",
+        "1267650600228229401496703205376", "-1267650600228229401496703205369",
+        "123456789012345678901234567890",
+        "{float_bits,0,0,0}", "{float_bits,1,0,0}", "{float_bits,0,1023,0}",
+        "{float_bits,1,1023,2251799813685248}",
+        "{float_bits,0,1024,2570632149304942}",
+        "{float_bits,0,2019,2221273467876764}", "{float_bits,0,0,1}",
+        "a", "open", "closed", "term", "bdd_bot", "bdd_top", "'hello world'",
+        "{utf8_atom,<<99,97,102,195,169>>}", "{utf8_atom,<<207,128>>}",
+        "'Elixir.Module.Types.Descr'",
+        "'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'",
+        "{utf8_atom,<<195,131,194,169>>}",
+        "{utf8_atom,<<230,151,165,230,156,172,232,170,158>>}",
+        "<<>>", "<<1>>", "<<97,98,99>>",
+        "<<104,101,108,108,111,32,119,111,114,108,100,33>>",
+        "<<104,101,108,108,111,32,119,111,114,108,100,33,33>>",
+        "<<48,49,50,51,52,53,54,55,56,57,48,49,50,51,52,53,54,55,56,57,48,49,50,51,52>>",
+        "<<1:1>>", "<<5:3>>", "<<1,2,3:4>>",
+        "<<116,119,101,108,118,101,32,98,121,116,101,115,1:1>>",
+        "[]", "[1]", "[1,2,3]", "[1,2,3,4]", "[1,2,3,4,5]",
+        "[104,101,108,108,111]", "[a|b]", "[1|2]", "[1,2|3]", "[256,1,2]",
+        "[1,a,2,3]", "[[1],[2]]", "[open]", "[term|term]",
+        "[[]]", "[1,-1]", "[300,1,2,3,4,5]",
+        "{}", "{a}", "{1,2}", "{a,{b,c},[1,2]}",
+        "#{}", "#{a=>1}", "#{b=>2,a=>1}", "#{1=>a,[x]=>{y}}", "#{#{}=>#{a=>[]}}",
+        "{map_seq_40}",
+    ]
+    for spec in hashing_vectors:
+        probe(hashing, "guard:1", f"differential:phash2_probe({spec})")
+    for size in ["1", "2", "7", "13", "97", "98", "1 bsl 27", "(1 bsl 32)-1", "1 bsl 32"]:
+        probe(hashing, ["guard:1", "guard:3"], f"differential:phash2_range(a,{size})")
+    for spec in ["0", "-1", "{float_bits,0,1024,2570632149304942}", "<<1,2,3:4>>", "{map_seq_40}"]:
+        probe(hashing, ["guard:1", "guard:3"], f"differential:phash2_ranges({spec})")
+    for spec, bad_range in [("a", "0"), ("a", "-1"), ("a", "-(1 bsl 32)"), ("{map_seq_40}", "0")]:
+        probe(hashing, "guard:4", f"differential:phash2_range({spec},{bad_range})")
+    for bad_range in ["(1 bsl 32)+1", "1 bsl 64", "1 bsl 100", "1.0", "bad", "[]"]:
+        probe(hashing, "guard:5", f"differential:phash2_range(a,{bad_range})")
+    for variant in ["shadowed_single", "insertion_order", "numeric_exact_keys",
+                    "boundary_31_32_33", "large_40_history", "nested_maps_and_bitstrings"]:
+        probe(hashing, ["guard:2", "shadowed_bindings_hash"],
+              f"differential:phash2_map_relations({variant})")
+    for variant in ["closures_shadowed_map", "closures_signed_zero_and_external",
+                    "pids_and_refs", "composite_live_identities"]:
+        probe(hashing, "capture_hash", f"differential:phash2_live_identities({variant})")
+
+    # Remaining behavioral probes across Modules/Signals.lean, Term/Try.lean, and Modules/Erlang.lean.
+    for expr_origin, expr in [
+        ("success_binds_multiple_values", "try {7, 9} of {A, B} -> A + B catch _:_ -> caught end"),
+        ("success_binds_no_values", "try ok of ok -> success catch _:_ -> caught end"),
+        ("exception_bindings", "try erlang:throw(t) catch C:R -> {C, R} end"),
+        ("exception_bindings", "try erlang:error(e) catch C:R -> {C, R} end"),
+        ("exception_bindings", "try erlang:exit(x) catch C:R -> {C, R} end"),
+        ("success_body_is_outside_handler", "try 7 of V -> throw(V) catch _:_ -> caught end"),
+        ("handler_exception_propagates", "try error(protected) catch _:_ -> exit(handler) end"),
+        ("outer_handler_catches_success_body",
+         "try try 7 of V -> throw(V) catch _:_ -> inner end catch _:R -> R end"),
+        ("unmatched_handler_reraises", "try throw(fail) catch error:R -> {caught, R} end"),
+        ("unmatched_handler_reraises", "try error(fail) catch throw:R -> {caught, R} end"),
+        ("unmatched_handler_reraises", "try exit(fail) catch error:R -> {caught, R} end"),
+        ("reraise_preserves_class",
+         "try throw(orig) catch C:_R:Stk -> try erlang:raise(C, replaced, Stk) catch C2:R2 -> {C2, R2} end end"),
+        ("reraise_preserves_class",
+         "try error(orig) catch C:_R:Stk -> try erlang:raise(C, replaced, Stk) catch C2:R2 -> {C2, R2} end end"),
+        ("reraise_preserves_class",
+         "try exit(orig) catch C:_R:Stk -> try erlang:raise(C, replaced, Stk) catch C2:R2 -> {C2, R2} end end"),
+        ("protected_effects_survive_failure",
+         "erase(try_key), try put(try_key, protected), throw(failure) "
+         "catch C:R -> {C, R, get(try_key), erase(try_key)} end"),
+        ("cleanup_runs_on_success_and_failure",
+         "erase(try_cleanup), R = try 7 after put(try_cleanup, done) end, {R, erase(try_cleanup)}"),
+        ("cleanup_runs_on_success_and_failure",
+         "erase(try_cleanup), Res = (try try throw(failure) after put(try_cleanup, done) end "
+         "catch C:R -> {C, R} end), {Res, erase(try_cleanup)}"),
+        ("cleanup_failure_overrides_previous_outcome", "try 7 after exit(cleanup) end"),
+        ("cleanup_failure_overrides_previous_outcome", "try throw(failure) after exit(cleanup) end"),
+        ("dispatched_exception_is_caught",
+         "F = fun() -> throw(dispatched) end, try F() catch C:R -> {C, R} end"),
+        ("dispatched_success_body_exception_escapes",
+         "F = fun() -> throw(dispatched) end, try ok of _ -> F() catch _:_ -> caught end"),
+        ("resumed_receive_exception_is_caught",
+         "self() ! 7, try receive V -> throw(V) after 1000 -> timeout end catch _:R -> R end"),
+    ]:
+        probe("Term/Try", expr_origin, expr)
+    for expr_origin, expr in [
+        ("iterator_shapes", "differential:call(erts_internal,mc_iterator,[#{}])"),
+        ("iterator_shapes", "differential:call(erts_internal,mc_iterator,[[a]])"),
+        ("iterator_shapes", "differential:call(erts_internal,mc_iterator,[a])"),
+        ("iterator_entries", "#{{k, K} => V * 10 || K := V <- #{a => 1, b => 2}}"),
+        ("refill_raises", "differential:call(erts_internal,mc_refill,[a])"),
+        ("refill_raises", "differential:call(erts_internal,mc_refill,[[]])"),
+        ("refill_raises", "differential:call(erts_internal,mc_refill,[none])"),
+    ]:
+        probe("Modules/ErtsInternal", expr_origin, expr)
+    for expr_origin, expr in [
+        ("entries_in_requested_order", "#{b := X, a := Y, b := Z} = #{a => 1, b => 2}, {X, Y, Z}"),
+        ("entries_shadowed_key", "M = maps:from_list([{a, 1}, {a, 2}]), #{a := X} = M, X"),
+        ("entries_missing_key", "try #{a := _, b := _} = #{} of _ -> matched catch error:{badmatch, _} -> badmatch end"),
+        ("entries_missing_later", "try #{a := _, b := _} = #{a => 1} of _ -> matched catch error:{badmatch, _} -> badmatch end"),
+        ("entries_empty", "#{} = #{a => 1}, ok"),
+        ("entries_empty_nonmap", "try (fun(M) -> #{} = M end)(1) of _ -> matched catch error:{badmatch, 1} -> badmatch end"),
+        ("entries_numeric_keys", "try #{1 := _} = #{1.0 => 1} of _ -> matched catch error:{badmatch, _} -> badmatch end"),
+        ("entries_arity", "M = #{a => 1, b => 2, c => 3}, #{a := A, c := C} = M, length([A, C])"),
+    ]:
+        probe("Term/Maps", expr_origin, expr)
+    for expr_origin, expr in [
+        ("recursive_dispatch", "F = fun Self(0) -> 0; Self(N) -> Self(N - 1) end, F(3)"),
+        ("pure_calls",
+         "Add = fun(C) -> fun(X) -> C + X end end, F = Add(10), Bad = not_a_fun, "
+         "{F(7), (try F() catch error:{badarity, {G, []}} -> {badarity, is_function(G, 1)} end), "
+         "(try Bad() catch error:{badfun, not_a_fun} -> badfun end)}"),
+        ("effectful_call", "is_pid((fun() -> self() end)())"),
+        ("apply_call", "Inc = fun(X) -> X + 1 end, Forward = fun(X) -> Inc(X) end, Forward(1)"),
+        ("sequential_dispatch", "F = fun() -> 7 end, {F(), F()}"),
+        ("catch_dispatched_exception", "F = fun() -> throw(9) end, try F() catch throw:9 -> 42 end"),
+        ("dispatched_state",
+         "erase(dispatch_k), F = fun() -> put(dispatch_k, 1), 7 end, R = F(), {R, erase(dispatch_k)}"),
+    ]:
+        probe("Term/Dispatch", expr_origin, expr)
+    for kind in ["tag_mismatch", "forged_then_real_down", "real_then_forged_down", "noproc_with_forged"]:
+        probe("Modules/Signals", "demonitor_flushes_oldest_monitor_message",
+              f"differential:demonitor_oldest_message({kind})")
+    probe("Modules/Signals", "killed_root_keeps_environment", "differential:killed_linked_root(exit_atom)")
+    probe("Modules/Signals", "killed_root_keeps_environment", "differential:killed_linked_root(error_reason)",
+          stacktrace_dependent=True)
+
+    for op, a, b in [("/", "0.0", "0.0"), ("/", "1.0", "0.0"), ("/", "-1.0", "0.0"),
+                     ("+", "-1.7976931348623157e308", "-1.7976931348623157e308"),
+                     ("-", "-1.7976931348623157e308", "1.7976931348623157e308"),
+                     ("*", "1.7976931348623157e308", "-2.0"),
+                     ("*", "1 bsl 255", "1.0e240"),
+                     ("*", "-(1 bsl 255)", "1.0e240")]:
+        probe(e, "nonfinite_float_results_rejected", f"differential:execution_paths('{op}',{a},{b})")
+
+    non_numeric_terms = ["bad", "[]", "[1]", "{}", "#{}", "<<1>>", "fun erlang:abs/1"]
+    for op, origin in [("+", "addition_rejects_nonnumeric"), ("*", "multiplication_rejects_nonnumeric")]:
+        for num in ["0", "1", "1.5"]:
+            for other in non_numeric_terms:
+                probe(e, origin, f"differential:execution_paths('{op}',{num},{other})")
+                probe(e, origin, f"differential:execution_paths('{op}',{other},{num})")
+        probe(e, origin, f"differential:execution_paths('{op}',bad,[])")
+        probe(e, origin, f"differential:execution_paths('{op}',[],bad)")
+
+    for op in ["div", "rem", "band", "bor", "bxor", "bsl", "bsr"]:
+        for n in ["0", "2"]:
+            for non_int in ["0.0", "1.0", "bad", "[]", "<<1>>"]:
+                probe(e, "integer_operations_reject_nonintegers", f"differential:execution_paths('{op}',{n},{non_int})")
+                probe(e, "integer_operations_reject_nonintegers", f"differential:execution_paths('{op}',{non_int},{n})")
+
+    for bits in [0, 1, 8, 28, 32, 59, 60, 64, 100]:
+        for n in ["0", "1", f"(1 bsl {bits})-1", f"1 bsl {bits}", f"(1 bsl {bits})+7", "(1 bsl 130)+12345"]:
+            probe(e, "word_mask", f"differential:word_mask_check({n},{bits})")
+    for val in ["-1", "-7", "-8", "-9", "7", "-(1 bsl 100)", "-(1 bsl 100)-1", "(1 bsl 100)-1"]:
+        for bits in ["0", "1", "2", "100", "200"]:
+            probe(e, "right_shift_is_floor_division", f"differential:execution_paths('bsr',{val},{bits})")
+    for n in ["0", "-1", "1", "-2", "(1 bsl 27)-1", "1 bsl 27", "-(1 bsl 27)",
+              "(1 bsl 59)-1", "1 bsl 59", "-(1 bsl 59)", "(1 bsl 63)-1", "-(1 bsl 63)",
+              "1 bsl 64", "(1 bsl 100)+7", "-(1 bsl 100)-7", "0.0", "bad"]:
+        probe(e, "bnot/1_involution", f"differential:bnot_involution({n})")
+
+    for n in ["-1", "0", "5", "10", "11", "0.0", "5.0", "bad"]:
+        probe(e, "integer_range_guard", f"differential:integer_range_check({n},0,10)")
+    for n, lo, hi in [("5", "10", "0"), ("bad", "10", "0"), ("5", "0.0", "10"),
+                      ("5", "0", "10.0"), ("bad", "bad", "10"), ("bad", "0", "bad"),
+                      ("-(1 bsl 100)-1", "-(1 bsl 100)", "1 bsl 100"),
+                      ("-(1 bsl 100)", "-(1 bsl 100)", "1 bsl 100"),
+                      ("1 bsl 59", "-(1 bsl 100)", "1 bsl 100"),
+                      ("(1 bsl 63)-1", "-(1 bsl 100)", "1 bsl 100"),
+                      ("1 bsl 100", "-(1 bsl 100)", "1 bsl 100"),
+                      ("(1 bsl 100)+1", "-(1 bsl 100)", "1 bsl 100")]:
+        probe(e, "integer_range_guard", f"differential:integer_range_check({n},{lo},{hi})")
+
+    for extra in ["0", "a", "[]", "{}", "#{}", "<<>>", "fun()->ok end"]:
+        probe(e, "local_node", f"differential:local_node_check(local,{extra})")
+    for invalid in ["[]", "1", "a", "{}", "#{}", "<<>>", "fun()->ok end"]:
+        probe(e, "local_node", f"differential:local_node_check(invalid,{invalid})")
+
+    for n in ["0", "3", "-3", "100", "(1 bsl 53)+1", "1 bsl 60", "1 bsl 255", "-(1 bsl 255)"]:
+        for flt in ["0.75", "0.5", "1.25"]:
+            probe(e, "integer_float_product", f"differential:execution_paths('*',{n},{flt})")
+            probe(e, "integer_float_product", f"differential:execution_paths('*',{flt},{n})")
+
+    for kind in ["parent_child_sync", "child_immediate"]:
+        probe(e, "spawn_schedules_child_or_parent_first", f"differential:spawn_behavior({kind})")
+    probe(e, "completed_nested_processes_are_removed", "differential:nested_spawn_cleanup()")
+    for kind in ["invalid_not_fun", "invalid_arity1", "invalid_arity2"]:
+        probe(e, "spawn_rejects_invalid_fun", f"differential:spawn_behavior({kind})")
+    for kind in ["unknown_export", "unknown_module"]:
+        probe(e, "spawn_unknown_fun_fails_in_child", f"differential:spawn_behavior({kind})",
+              stacktrace_dependent=True)
+    for term in ["0", "1", "-1", "(1 bsl 27)-1", "1 bsl 27", "-(1 bsl 27)-1",
+                 "(1 bsl 59)-1", "1 bsl 59", "(1 bsl 63)-1", "-(1 bsl 63)",
+                 "1 bsl 64", "1 bsl 100", "-(1 bsl 255)",
+                 "0.0", "-0.0", "1.5", "-1.5", "5.0e-324", "1.7976931348623157e308",
+                 "true", "false", "a", "[]", "[1]", "{}", "#{1=>1}", "<<>>", "<<1:1>>",
+                 "fun erlang:abs/1", "fun()->1 end", "live_pid", "live_ref"]:
+        probe(e, ["numeric_guards_integer_identity", "numeric_guards_invalid"],
+              f"differential:is_number_paths({term})")
+    # Supported queue callback combinations, not new instances of upstream laws.
+    queue_items = [1.0, {"tuple": ["keep", 1]}, {"tuple": ["drop", 1.0]},
+                   {"tuple": ["one", {"tuple": ["tag", 1]}]},
+                   {"tuple": ["many", {"bits": [5, 3]}]},
+                   {"tuple": ["nil", {"map": [["key", 1]]}]},
+                   1, {"tuple": ["keep", 1]}, 1]
+
+    def queue_probe(operation, layout, items, mode):
+        args = [operation, layout, items, mode]
+        selected.append({"otp_extension": "queue_callbacks", "queue_callback": args,
+                         "expression": "queue_callbacks:observe(" +
+                                       ",".join(map(erlang, args)) + ")"})
+
+    for operation in ["filter", "filtermap", "fold", "any", "all", "delete_with", "delete_with_r"]:
+        mode = ("transform" if operation in ["filter", "filtermap"] else
+                "all_false" if operation in ["any", "all"] else "normal")
+        for layout in ["balanced", "rear", "front"]:
+            queue_probe(operation, layout, queue_items, mode)
+            if operation in ["filter", "filtermap", "any", "all"]:
+                for extra in (["all_true", "all_false"] if operation in ["filter", "filtermap"]
+                              else ["all_true", "short"]):
+                    queue_probe(operation, layout, queue_items, extra)
+            if operation != "fold":
+                queue_probe(operation, layout, queue_items, "invalid_return")
+            if operation in ["delete_with", "delete_with_r"]:
+                queue_probe(operation, layout, [1.0, {"tuple": ["tag", 1]}, 1.0], "normal")
+        for items in [[], [1.0]]:
+            queue_probe(operation, "balanced", items, mode)
+            for bad_callback in ["non_function", "wrong_arity"]:
+                queue_probe(operation, "balanced", items, bad_callback)
+        # A valid callback that would fail if called must be ignored on empty.
+        queue_probe(operation, "balanced", [], {"tuple": ["fail", "error", 1]})
+        # Each exception class has preceding observable work. The rear-built
+        # queue crosses from its front singleton into its stored rear list.
+        for exception, layout in zip(["throw", "error", "exit"], ["balanced", "rear", "front"]):
+            queue_probe(operation, layout, queue_items, {"tuple": ["fail", exception, 2]})
+        for bad_callback in ["non_function", "wrong_arity"]:
+            queue_probe(operation, "balanced", queue_items, bad_callback)
+    # Unordered set callbacks: normalize results, retain raw visits for checking.
+    set_items = [1, 1.0, 1, {"tuple": ["keep", {"bits": [5, 3]}]},
+                 {"tuple": ["drop", {"map": [["key", 1]]}]},
+                 {"tuple": ["merge", "a"]}, {"tuple": ["merge", "b"]},
+                 {"map": [[1, "integer"]]}, {"map": [[1.0, "float"]]},
+                 {"bits": [5, 3]}, 2**100]
+
+    def set_probe(operation, history, items, mode):
+        args = [operation, history, items, mode]
+        selected.append({"otp_extension": "set_callbacks", "set_callback": args,
+                         "expression": "set_callbacks:observe(" +
+                                       ",".join(map(erlang, args)) + ")"})
+
+    for operation in ["fold", "filter", "map", "filtermap"]:
+        mode = "normal" if operation == "fold" else "transform"
+        for history in ["from_list", "added", "reinserted"]:
+            for items in [[], [1.0], set_items]:
+                set_probe(operation, history, items, mode)
+            for size in [31, 32, 33]:
+                items = list(range(size - 2)) + [1.0, {"bits": [5, 3]}]
+                set_probe(operation, history, items, mode)
+            extras = (["identity", "constant"] if operation == "map" else
+                      ["all_true", "all_false"] if operation != "fold" else [])
+            for extra in extras:
+                set_probe(operation, history, set_items, extra)
+            if operation in ["filter", "filtermap"]:
+                set_probe(operation, history, set_items, "invalid_return")
+        for items in [[], [1.0], set_items]:
+            for bad in ["non_function", "wrong_arity"]:
+                set_probe(operation, "from_list", items, bad)
+        for exception, history in zip(["error", "throw", "exit"],
+                                      ["from_list", "added", "reinserted"]):
+            set_probe(operation, history, set_items, {"tuple": ["fail", exception, 2]})
+        for items in [[], [1.0]]:
+            set_probe(operation, "from_list", items, {"tuple": ["fail", "error", 1]})
+    # Ordered list folds: exact callback/accumulator traces, not just final sums.
+    fold_items = [1, 1.0, {"tuple": ["tag", {"bits": [5, 3]}]}, 1,
+                  {"map": [["payload", [9, 2]]]}, 2**100]
+
+    def list_fold_probe(operation, shape, items, mode):
+        args = [operation, shape, items, mode]
+        selected.append({"otp_extension": "list_folds", "list_fold": args,
+                         "expression": "list_folds:observe(" +
+                                       ",".join(map(erlang, args)) + ")"})
+
+    for operation in ["foldl", "foldr", "mapfoldl", "mapfoldr"]:
+        for items in [[], [1.0], fold_items, list(range(17))]:
+            list_fold_probe(operation, "proper", items, "normal")
+        list_fold_probe(operation, "proper", fold_items, "replace_acc")
+        for exception in ["error", "throw", "exit"]:
+            for index in [1, 2, len(fold_items)]:
+                list_fold_probe(operation, "proper", fold_items,
+                                {"tuple": ["fail", exception, index]})
+        for items in [[], [1.0]]:
+            list_fold_probe(operation, "proper", items, {"tuple": ["fail", "error", 2]})
+        for mode in ["non_function", "wrong_arity"]:
+            for shape, items in [("proper", []), ("proper", [1.0]),
+                                 ("improper", [3, 7]), ("non_list", [])]:
+                list_fold_probe(operation, shape, items, mode)
+        for shape, items in [("improper", [3]), ("improper", [3, 7]), ("non_list", [])]:
+            list_fold_probe(operation, shape, items, "normal")
+        for exception, index in [("error", 1), ("throw", 2)]:
+            list_fold_probe(operation, "improper", [3, 7, 2],
+                            {"tuple": ["fail", exception, index]})
+        if operation in ["mapfoldl", "mapfoldr"]:
+            for bad in ["not_pair", [], {"tuple": ["too", "many", "fields"]}]:
+                for index in [1, 2]:
+                    list_fold_probe(operation, "proper", fold_items,
+                                    {"tuple": ["bad_return", bad, index]})
+    # Unary list consumers: ordered effects, early returns and deferred validation.
+    unary_items = [1.0, {"tuple": ["tag", {"bits": [5, 3]}]}, 1, 1,
+                   {"map": [["payload", [9, 2]]]}, 2**100]
+
+    def list_callback_probe(operation, shape, items, mode):
+        args = [operation, shape, items, mode]
+        selected.append({"otp_extension": "list_callbacks", "list_callback": args,
+                         "expression": "list_callbacks:observe(" +
+                                       ",".join(map(erlang, args)) + ")"})
+
+    for operation in ["map", "foreach", "flatmap", "filter", "filtermap", "search", "dropwhile"]:
+        for items in [[], [1.0], unary_items, list(range(17))]:
+            list_callback_probe(operation, "proper", items, "normal")
+        for exception in ["error", "throw", "exit"]:
+            for index in [1, 2, len(unary_items)]:
+                list_callback_probe(operation, "proper", unary_items,
+                                    {"tuple": ["fail", exception, index]})
+        for items in [[], [1.0]]:
+            list_callback_probe(operation, "proper", items, {"tuple": ["fail", "error", 2]})
+        for mode in ["non_function", "wrong_arity"]:
+            for shape, items in [("proper", []), ("proper", [1.0]),
+                                 ("improper", [3, 7]), ("non_list", [])]:
+                list_callback_probe(operation, shape, items, mode)
+        for shape, items in [("improper", [3]), ("improper", [3, 7]), ("non_list", [])]:
+            list_callback_probe(operation, shape, items, "normal")
+        for exception, index in [("error", 1), ("throw", 2)]:
+            list_callback_probe(operation, "improper", [3, 7, 2],
+                                {"tuple": ["fail", exception, index]})
+        if operation in ["filter", "filtermap", "search", "dropwhile"]:
+            for mode in ["all_true", "all_false", "exact"]:
+                list_callback_probe(operation, "proper", unary_items, mode)
+            for bad in ["not_boolean", [], {"tuple": ["true", "changed"]}]:
+                for index in [1, 2]:
+                    list_callback_probe(operation, "proper", unary_items,
+                                        {"tuple": ["return", bad, index]})
+        if operation in ["search", "dropwhile"]:
+            for shape in ["proper", "improper"]:
+                for index in [1, 3, len(unary_items), len(unary_items) + 1]:
+                    list_callback_probe(operation, shape, unary_items, {"tuple": ["stop", index]})
+        if operation in ["map", "foreach", "flatmap"]:
+            for value in ["not_list", {"bits": [5, 3]}, {"tuple": ["true", "changed"]}]:
+                for index in ([1, len(unary_items)] if operation == "flatmap" else [2]):
+                    list_callback_probe(operation, "proper", unary_items,
+                                        {"tuple": ["return", value, index]})
+        if operation == "flatmap":
+            for index in [1, len(unary_items)]:
+                list_callback_probe(operation, "proper", unary_items,
+                                    {"tuple": ["improper_return", index]})
+            for exception in ["error", "throw", "exit"]:
+                for value in ["not_list", {"tuple": ["true", "changed"]}]:
+                    list_callback_probe(operation, "proper", unary_items,
+                                        {"tuple": ["return_then_fail", value, 1, exception, 3]})
+    # Paired-list callbacks: matching prefixes precede later shape failures.
+    zip_left = [1.0, {"tuple": ["left", {"bits": [5, 3]}]}, 1, 1,
+                {"map": [["payload", [9, 2]]]}, 2**100]
+    zip_right = [7, 2**90, {"map": [["right", [4, 8]]]}, 1.0,
+                 {"bits": [3, 2]}, {"tuple": ["last", 9]}]
+
+    def zipwith_probe(left_shape, left, right_shape, right, mode="normal"):
+        args = [left_shape, left, right_shape, right, mode]
+        selected.append({"otp_extension": "list_zipwith", "list_zipwith": args,
+                         "expression": "list_zipwith:observe(" +
+                                       ",".join(map(erlang, args)) + ")"})
+
+    for left, right in [([], []), ([1.0], [7]), (zip_left, zip_right),
+                        (list(range(17)), list(range(100, 117)))]:
+        zipwith_probe("proper", left, "proper", right)
+    zipwith_probe("proper", zip_right, "proper", zip_left)
+    zipwith_probe("proper", zip_left, "proper", zip_right, "pair")
+    for exception in ["error", "throw", "exit"]:
+        for index in [1, 2, len(zip_left)]:
+            zipwith_probe("proper", zip_left, "proper", zip_right,
+                          {"tuple": ["fail", exception, index]})
+    for left, right in [([], []), ([1], [2])]:
+        zipwith_probe("proper", left, "proper", right, {"tuple": ["fail", "error", 2]})
+    for value in ["not_list", {"bits": [5, 3]}, {"tuple": ["true", "changed"]},
+                  {"map": [["result", [7, 3]]]}]:
+        zipwith_probe("proper", zip_left, "proper", zip_right,
+                      {"tuple": ["return", value, 2]})
+    for index in [1, len(zip_left)]:
+        zipwith_probe("proper", zip_left, "proper", zip_right,
+                      {"tuple": ["improper_return", index]})
+    for exception in ["error", "throw", "exit"]:
+        zipwith_probe("proper", zip_left, "proper", zip_right,
+                      {"tuple": ["return_then_fail", "not_list", 1, exception, 3]})
+    for left, right in [([], [7]), ([3], []), ([3, 7, 2], [9, 4]),
+                        ([3, 7], [9, 4, 8]), (zip_left, zip_right[:-1]),
+                        (zip_left[:-1], zip_right)]:
+        zipwith_probe("proper", left, "proper", right)
+    malformed_pairs = [
+        ("non_list", [], "proper", []), ("proper", [], "non_list", []),
+        ("non_list", [], "proper", [9]), ("proper", [3], "non_list", []),
+        ("non_list", [], "non_list", []),
+        ("improper", [3], "proper", []), ("proper", [], "improper", [9]),
+        ("improper", [3, 7], "proper", [9, 4]),
+        ("proper", [3, 7], "improper", [9, 4]),
+        ("improper", [3, 7], "proper", [9, 4, 8]),
+        ("proper", [3, 7, 2], "improper", [9, 4]),
+        ("improper", [3, 7], "improper", [9, 4]),
+        ("improper", [3, 7, 2], "improper", [9, 4]),
+    ]
+    for args in malformed_pairs:
+        zipwith_probe(*args)
+    for mode in ["non_function", "arity_zero", "arity_one", "arity_three"]:
+        for args in [("proper", [], "proper", []),
+                     ("proper", [3], "proper", [9]),
+                     ("proper", zip_left, "proper", zip_right),
+                     ("proper", [], "proper", [9]),
+                     ("proper", [3], "proper", []),
+                     ("non_list", [], "proper", [9]),
+                     ("proper", [3], "non_list", []),
+                     ("improper", [3, 7], "proper", [9, 4])]:
+            zipwith_probe(*args, mode)
+    for args in [("proper", [3, 7], "proper", [9, 4, 8]),
+                 ("improper", [3, 7], "proper", [9, 4, 8]),
+                 ("proper", [3, 7, 2], "improper", [9, 4])]:
+        for exception in ["error", "throw", "exit"]:
+            for index in [2, 3]:
+                zipwith_probe(*args, {"tuple": ["fail", exception, index]})
+    # Comparator algorithms may visit different pairs; compare stable results,
+    # constant exception reasons and retained terms, not invocation sequences.
+    def ordering_items(keys, side):
+        return [{"tuple": [key, {"tuple": [side, index]},
+                           {"map": [["payload", [index, 2**100, {"bits": [5, 3]}]]]}]}
+                for index, key in enumerate(keys)]
+
+    def ordering_probe(operation, direction, left, right=None, mode="normal"):
+        args = [operation, direction, left, right or [], mode]
+        selected.append({"otp_extension": "list_ordering", "list_ordering": args,
+                         "expression": "list_ordering:observe(" +
+                                       ",".join(map(erlang, args)) + ")"})
+
+    for direction in ["ascending", "descending"]:
+        for operation in ["sort", "usort"]:
+            for keys in [[], [2], [1, 1.0, 1, 1.0], [1, 2, 3, 4], [4, 3, 2, 1],
+                         [3, 1.0, 2, 1, 3, -2, 2, 1.0],
+                         [7, 0, 4, 7, -2, 1, 4, 0, 9, 3, 7, 1, -2, 5, 3, 4, 9]]:
+                ordering_probe(operation, direction, ordering_items(keys, "left"))
+        for left, right in [([], []), ([2], []), ([], [2]), ([1], [1.0]),
+                            ([1, 1, 3], [1.0, 2, 3, 3]),
+                            ([-3, 1, 4, 7], [-2, 0, 4, 4, 9]),
+                            ([1, 1, 1], [1.0, 1, 1.0]),
+                            ([1, 3, 5, 7, 9], [2, 4, 6, 8])]:
+            if direction == "descending":
+                left, right = left[::-1], right[::-1]
+            ordering_probe("merge", direction, ordering_items(left, "left"),
+                           ordering_items(right, "right"))
+    for operation in ["sort", "usort", "merge"]:
+        shapes = [([], []), ([2], []), ([2, 1], []), ([1, 1.0], [])]
+        if operation == "merge":
+            shapes = [([], []), ([2], []), ([], [3]), ([1], [2]), ([1], [1.0])]
+        for left, right in shapes:
+            for mode in ["non_function", "arity_one", "arity_three",
+                         {"tuple": ["fail", "error"]}, {"tuple": ["fail", "throw"]},
+                         {"tuple": ["fail", "exit"]}, {"tuple": ["return", "not_boolean"]},
+                         {"tuple": ["return", {"tuple": ["true", "changed"]}]}]:
+                ordering_probe(operation, "ascending", ordering_items(left, "left"),
+                               ordering_items(right, "right"), mode)
+    # Key mutation uses numeric equality, unlike the keyfind precision probes.
+    # Distinct payloads expose which equal-key representative survives.
+    def keyed_probe(operation, key, position, items, shape="proper", replacement=None):
+        if replacement is None:
+            replacement = {"tuple": ["replacement", {"map": [["retained", [2**100, 7]]]}]}
+        args = [operation, key, position, shape, items, replacement]
+        selected.append({"otp_extension": "list_keys", "list_keys": args,
+                         "expression": "list_keys:observe(" +
+                                       ",".join(map(erlang, args)) + ")"})
+
+    keyed_operations = ["keydelete", "keyreplace", "keystore", "keytake", "keysort", "ukeysort"]
+    for position in [1, 2]:
+        def keyed_items(keys):
+            return [{"tuple": ([key, {"tuple": ["payload", i]}] if position == 1 else
+                               [{"tuple": ["payload", i]}, key])}
+                    for i, key in enumerate(keys)]
+
+        for operation in keyed_operations:
+            for keys in [[], [3], [1.0, 1, 2], [1, 1.0, 2], [3, -2, 3, 1, -2],
+                         [2**53, 2**53 + 1, float(2**53)],
+                         [2**53 + 1, float(2**53), 2**53],
+                         ["z", {"tuple": [1]}, -3, "a", {"tuple": [0]}]]:
+                keyed_probe(operation, 1, position, keyed_items(keys))
+            for key in [3, "absent", float(2**53), 2**53 + 1]:
+                keyed_probe(operation, key, position,
+                            keyed_items([3, float(2**53), 2**53 + 1, 3]))
+            for shape in ["improper", "non_list"]:
+                for keys in [[], [1], [2, 1], [2, 3]]:
+                    keyed_probe(operation, 1, position, keyed_items(keys), shape)
+            for items in [["not_tuple"], [{"tuple": []}],
+                          ["skip", {"tuple": []}] + keyed_items([1, 2])]:
+                keyed_probe(operation, 1, position, items)
+
+    # With no later exact key, a wrong exact-equality search silently appends
+    # in keystore rather than replacing. Keep take/delete/replace controls.
+    for operation in ["keydelete", "keyreplace", "keystore", "keytake"]:
+        keyed_probe(operation, 1, 1, [{"tuple": [1.0, "only"]}])
+        keyed_probe(operation, 1, 2, [{"tuple": ["only", 1.0]}])
+    for operation in keyed_operations:
+        for position in [0, -1, 1.0, "bad_position"]:
+            for items in [[], [{"tuple": [1, "payload"]}]]:
+                keyed_probe(operation, 1, position, items)
+    for operation in ["keyreplace", "keystore"]:
+        for replacement in ["not_tuple", [], {"tuple": []}]:
+            for items in [[], [{"tuple": [1, "first"]}, {"tuple": [1.0, "later"]}]]:
+                keyed_probe(operation, 1, 1, items, replacement=replacement)
+    # Positional APIs disagree deliberately on origins, truncation and invalid
+    # inputs. Stop before, at and after an improper tail instead of prevalidating
+    # the complete list; direct calls leave OTP's exception reason observable.
+    positional_inputs = ["[]", "[a]", "[a,b,c]", "[a,b|tail]", "tail", "#{a=>1}"]
+    positions = ["-1", "0", "1", "2", "3", "4", "1.0", "bad", "1 bsl 100"]
+
+    def positional_probe(function, *args):
+        selected.append({"otp_extension": "list_positions",
+                         "list_positions": [function, list(args)],
+                         "expression": f"differential:call(lists,'{function}',[{','.join(args)}])"})
+
+    for items in positional_inputs:
+        for position in positions:
+            for function in ["nth", "nthtail", "split"]:
+                positional_probe(function, position, items)
+            positional_probe("sublist", items, position)
+        for start, length in [("1", "0"), ("1", "2"), ("2", "0"), ("2", "2"),
+                              ("3", "1"), ("4", "2"), ("0", "1"), ("1.0", "1"),
+                              ("2", "bad"), ("4", "-1")]:
+            positional_probe("sublist", items, start, length)
+    # Boxed values must be preserved, not coerced or flattened. A longer list
+    # crosses the small-list samples' boundaries without adding a huge matrix.
+    boxed = "[#{1=>integer,1.0=>float},<<5:3>>,1 bsl 100,{nested,[x]}]"
+    for function, args in [("nth", ["2", boxed]), ("nthtail", ["2", boxed]),
+                           ("sublist", [boxed, "2", "2"]), ("split", ["2", boxed]),
+                           ("nth", ["33", "lists:seq(1,33)"]),
+                           ("nthtail", ["33", "lists:seq(1,33)"]),
+                           ("sublist", ["lists:seq(1,33)", "32", "4"]),
+                           ("split", ["33", "lists:seq(1,33)"])]:
+        positional_probe(function, *args)
+    # Deep-list operations have different contracts: flatten descends into list
+    # heads, append/1 removes just one level, and concatenation accepts any tail.
+    def deep_probe(operation, items, tail="[]"):
+        selected.append({"otp_extension": "deep_lists",
+                         "deep_lists": [operation, items, tail],
+                         "expression": f"differential:deep_list({operation},{items},{tail})"})
+
+    boxed_leaf = "{boxed,#{1=>integer,1.0=>float},<<5:3>>,1267650600228229401496703205376}"
+    for items in ["[]", "[[]]", "[[],[],[]]", "[a]", "[a,b,c]", "[[a,b],c]",
+                  "[a,[b,c]]", "[[a],[b,[c]],d]", "[[],[a],[],[b,[]],[]]",
+                  f"[{boxed_leaf}]", f"[[{boxed_leaf}],[],[z]]",
+                  "[<<>>,<<1,2>>,<<5:3>>]", "[1,1.0,0.0,-0.0]",
+                  "tail", "42", "#{a=>1}", "<<1>>", "[a|tail]", "[[]|tail]",
+                  "[[a|tail]]", "[a,[b|tail],c]", "[[a],b|tail]",
+                  "[[a|<<1>>],b]", "[[a|#{bad=>tail}],b]"]:
+        deep_probe("flatten", items)
+    for depth in [7, 8, 9, 17, 33]:
+        for leaf in [f"[{boxed_leaf}]", "[a|bad_tail]"]:
+            nested = leaf
+            for level in range(depth):
+                nested = f"[{nested},{{level,{level}}}]"
+            deep_probe("flatten", nested)
+    for count in [8, 33, 65]:
+        deep_probe("flatten", "[" + ",".join(f"[{n},[],[{n + 100}]]" for n in range(count)) + "]")
+    for items in ["[]", "[[]]", "[[],[]]", "[[a,b]]", "[[[a]],[[b,c]]]",
+                  "[[a,b],[c,d],[e]]", "[[],[a],[],[b],[]]", "[tail]",
+                  "[#{a=>1}]", "[<<5:3>>]", "[[a],tail]", "[[],tail]",
+                  "[[a],[b|tail]]", "[[a|tail],[b]]", "[tail,[]]",
+                  "[tail,not_an_outer_list|bad_outer]", "[[a]|bad_outer]",
+                  "[[]|bad_outer]", "tail", "#{a=>1}",
+                  f"[[{boxed_leaf}],[z]]", f"[[a],{boxed_leaf}]"]:
+        deep_probe("append_list", items)
+    for items in ["[]", "[a]", "[a,b,c]", f"[{boxed_leaf},[nested],z]",
+                  "[a|bad_tail]", "bad_prefix", "#{a=>1}"]:
+        for tail in ["[]", "[x,y]", "tail", "[x|tail]", "#{a=>1}", "<<5:3>>"]:
+            for operation in ["append_pair", "concat", "concat_apply"]:
+                deep_probe(operation, items, tail)
+    # Extrema keep the first ordering-equivalent term; deletion instead uses
+    # exact equality and can stop before an invalid suffix is inspected.
+    def selection_probe(operation, items, key="unused"):
+        selected.append({"otp_extension": "list_selection",
+                         "list_selection": [operation, key, items],
+                         "expression": f"differential:list_selection({operation},{key},{items})"})
+
+    for left, right in [("1", "1.0"), ("0.0", "-0.0"),
+                        ("9007199254740993", "9007199254740992.0"),
+                        ("9007199254740992", "9007199254740992.0"),
+                        ("-9007199254740993", "-9007199254740992.0"),
+                        ("{1}", "{1.0}"), ("[1]", "[1.0]"),
+                        ("#{a=>1}", "#{a=>1.0}"), ("#{1=>a}", "#{1.0=>a}"),
+                        ("{a,9}", "{b,-7}"), ("[1,9]", "[2,-7]"),
+                        ("<<1:1>>", "<<0,255>>")]:
+        for items in [f"[{left},{right}]", f"[{right},{left}]",
+                      f"[{left},{right},{left}]", f"[{right},{left},{right}]"]:
+            for operation in ["min", "max"]:
+                selection_probe(operation, items)
+    for items in ["[1]", "[1.0]", "[a]", "[#{a=>[boxed]}]", "[<<5:3>>]",
+                  "[[a|tail]]", "[#{},[z],{},[],<<5:3>>,a,-7]",
+                  "[-7,a,<<5:3>>,[],{},[z],#{}]", "[3,-7,2,-7,9,9]",
+                  "[]", "tail", "42", "#{a=>1}", "<<5:3>>", "[a|tail]",
+                  "[0,a|tail]", "[a|#{bad=>tail}]"]:
+        for operation in ["min", "max"]:
+            selection_probe(operation, items)
+    for key, near in [("1", "1.0"), ("1.0", "1"), ("0.0", "-0.0"),
+                      ("-0.0", "0.0"), ("{1}", "{1.0}"), ("[1]", "[1.0]"),
+                      ("#{a=>1}", "#{a=>1.0}"),
+                      ("9007199254740993", "9007199254740992.0"),
+                      ("<<5:3>>", "<<5:8>>")]:
+        for items in ["[]", f"[{near}]", f"[{near},{key},{key},{near}]",
+                      f"[{key},{near}|tail]", f"[skip,{key},{near}|tail]",
+                      f"[skip,{near}|tail]"]:
+            selection_probe("delete", items, key)
+    for tail in ["[]", "tail", "42", "#{a=>1}", "<<5:3>>"]:
+        for prefix in ["a", "b,a", "b,c"]:
+            selection_probe("delete", f"[{prefix}|{tail}]", "a")
+    for items in ["tail", "42", "#{a=>1}", "<<5:3>>"]:
+        selection_probe("delete", items, "a")
+    long_items = "[" + ",".join(str(n) for n in range(1, 66)) + "]"
+    for operation in ["min", "max"]:
+        selection_probe(operation, long_items)
+    for key in ["1", "33", "65", "99"]:
+        selection_probe("delete", long_items, key)
+    # Construction preserves separators/elements as whole terms, not lists to
+    # splice or flatten. Bound all successful repetition counts to avoid OOM.
+    def construction_probe(operation, left, right):
+        selected.append({"otp_extension": "list_construction",
+                         "list_construction": [operation, left, right],
+                         "expression": f"differential:list_construction({operation},{left},{right})"})
+
+    construction_values = ["a", "1", "1.0", "0.0", "-0.0", "[]", "[x,y]", "[x|tail]",
+                           "{boxed,[x],1267650600228229401496703205376}",
+                           "#{1=>integer,1.0=>float}", "<<5:3>>"]
+    for separator in construction_values:
+        for items in ["[]", "[a]", "[a,b,c]", "[[],[a,b],[]]", "[1,1.0,0.0,-0.0]",
+                      "[#{k=>[boxed]},<<5:3>>]", "[[a|tail],{nested,[x]}]"]:
+            construction_probe("join", separator, items)
+    for separator in ["[]", "[x,y]", "#{1=>integer,1.0=>float}"]:
+        for items in ["tail", "42", "#{a=>1}", "<<5:3>>", "[a|tail]", "[a,b|tail]",
+                      "[a|#{bad=>tail}]", "[a|<<5:3>>]"]:
+            construction_probe("join", separator, items)
+        for length in [17, 33, 65]:
+            items = "[" + ",".join(str(n) for n in range(length)) + "]"
+            construction_probe("join", separator, items)
+    for value in construction_values:
+        for count in [0, 1, 2, 17, 33, 65]:
+            construction_probe("duplicate", str(count), value)
+    for count in ["-1", "-33", "1.0", "0.0", "-0.0", "bad", "[]", "[1]",
+                  "#{n=>1}", "<<1>>", "-1267650600228229401496703205376"]:
+        for value in ["a", "[x|tail]", "#{1=>integer,1.0=>float}"]:
+            construction_probe("duplicate", count, value)
+    # Property lookup is exact-key, first-entry precedence, not tuple-list
+    # numeric equality or map last-write precedence. Collectors traverse all.
+    def proplist_probe(operation, key, items):
+        default = "{default,#{retained=>[1,1.0]},<<5:3>>}"
+        args = [operation, key, items, default]
+        selected.append({"otp_extension": "proplist_lookup", "proplist_lookup": args,
+                         "expression": "differential:proplist_lookup(" + ",".join(args) + ")"})
+
+    for operation in ["get_value", "get_value_default", "get_bool", "is_defined", "lookup",
+                      "get_all_values", "lookup_all", "delete"]:
+        for items in ["[]", "[k]", "[{k,true}]", "[{k,false},k]", "[k,{k,false}]",
+                      "[{k,first},{k,second}]", "[{k},{k,later}]",
+                      "[{k,ignored,extra},{k,later}]",
+                      "[{},42,[],{other,x},{k,#{1=>integer,1.0=>float}}]", "[{other,x}]",
+                      "[k,{k,v},{k},{k,x,y},other]", "[{k,false},{k,true}]"]:
+            proplist_probe(operation, "k", items)
+        for key, near in [("1", "1.0"), ("1.0", "1"), ("0.0", "-0.0"),
+                          ("-0.0", "0.0"), ("{1}", "{1.0}"), ("[1]", "[1.0]"),
+                          ("#{a=>1}", "#{a=>1.0}"), ("<<5:3>>", "<<5>>"),
+                          ("1267650600228229401496703205376", "1267650600228229401496703205377")]:
+            for items in [f"[{{{near},near}},{{{key},first}},{{{key},later}}]",
+                          f"[{near},{{{near},only}}]"]:
+                proplist_probe(operation, key, items)
+        for items in ["[k|tail]", "[{k}|tail]", "[{k,v,x}|tail]", "[{other,v}|tail]",
+                      "[skip,{k,v}|#{bad=>tail}]", "[skip|<<1>>]",
+                      "tail", "42", "#{}", "<<5:3>>"]:
+            proplist_probe(operation, "k", items)
+        values = [f"{{skip,{n}}}" for n in range(33)]
+        payload = "{boxed,[1,1.0,0.0,-0.0],#{1=>integer,1.0=>float},<<5:3>>}"
+        for index in [0, 16, 33, None]:
+            items = values[:]
+            if index is not None:
+                items.insert(index, "{k," + payload + "}")
+            proplist_probe(operation, "k", "[" + ",".join(items) + "]")
+    # Normalization is shallow, and map conversion keeps the first defining
+    # entry, including malformed tuples that suppress a later binding.
+    def proplist_transform_probe(operation, items, value="unused"):
+        args = [operation, items, value]
+        selected.append({"otp_extension": "proplist_transform", "proplist_transform": args,
+                         "expression": "differential:proplist_transform(" + ",".join(args) + ")"})
+
+    boxed_property = "{boxed,[1,1.0,0.0,-0.0],<<5:3>>,1267650600228229401496703205376}"
+    for value in ["a", "true", "false", "undefined", "1", "1.0", "0.0", "-0.0", "[]",
+                  "[a|tail]", "{}", "{a}", "{a,true}", "{a,false}", "{a,1}",
+                  "{a,true,extra}", "{1,true}", "{1.0,true}", "{[],true}", "#{a=>1}",
+                  "<<5:3>>", boxed_property]:
+        proplist_transform_probe("property", value)
+    for key in ["a", "true", "false", "1", "1.0", "0.0", "-0.0", "[]", "{key,1}",
+                "#{1=>integer,1.0=>float}", "<<5:3>>"]:
+        for value in ["true", "false", "1", "undefined", "[]", boxed_property, "[x|tail]"]:
+            proplist_transform_probe("property_pair", key, value)
+    for operation in ["compact", "unfold", "to_map"]:
+        for items in ["[]", "[a]", "[a,b,a]", "[{a,true}]", "[{a,false},a]", "[a,{a,false}]",
+                      "[{a,first},{a,last}]", "[{a},{a,later}]", "[{a,undefined},{a}]",
+                      "[{a},{a,undefined}]", "[{a,x,y},a]", "[a,{a,x,y}]",
+                      "[{},42,[],[x|tail],<<5:3>>]", f"[{{a,{boxed_property}}},{{b,[]}}]",
+                      "[true,false,undefined,{true,false}]",
+                      "[{1,true},{1.0,false},{0.0,a},{-0.0,b}]",
+                      "[{{key,1},true},{#{a=>1},[x,y]}]",
+                      "tail", "42", "#{}", "<<5:3>>", "[a|tail]", "[{a,true}|tail]",
+                      "[a,b|42]", "[a|#{bad=>tail}]", "[a|<<1>>]"]:
+            proplist_transform_probe(operation, items)
+        for size in [31, 32, 33, 65]:
+            items = [f"{{{n},{{{n},{boxed_property}}}}}" for n in range(size)]
+            items = ["flag", "{shadow}"] + items + ["{flag,false}", "{shadow,later}"]
+            proplist_transform_probe(operation, "[" + ",".join(items) + "]")
+    for key, near in [("1", "1.0"), ("1.0", "1"), ("0.0", "-0.0"), ("-0.0", "0.0"),
+                      ("{1}", "{1.0}"), ("[1]", "[1.0]"), ("#{a=>1}", "#{a=>1.0}"),
+                      ("<<5:3>>", "<<5>>"), ("1267650600228229401496703205376",
+                                             "1267650600228229401496703205377")]:
+        for items in [f"[{{{key},first}},{{{near},near}},{{{key},last}}]",
+                      f"[{{{key}}},{{{near},keep}},{{{key},last}}]",
+                      f"[{{{key},undefined}},{{{key}}},{{{near},keep}}]",
+                      f"[{{{key},x,y}},{{{key},undefined}},{{{near},keep}}]"]:
+            proplist_transform_probe("to_map", items)
+    for value in ["#{}", "#{a=>true}", "#{a=>false}", "#{a=>undefined}",
+                  "#{1=>integer,1.0=>float,0.0=>positive,-0.0=>negative}",
+                  "#{[]=>[],[a|tail]=>{nested,<<5:3>>}}", f"#{{<<5:3>>=>{boxed_property}}}",
+                  "#{#{a=>1}=>integer,#{a=>1.0}=>float}",
+                  "tail", "42", "[]", "[a]", "[{a,1}]", "{a,1}", "<<5:3>>", "1.0", "[a|tail]"]:
+        proplist_transform_probe("from_map", value)
+    for size in [31, 32, 33, 65]:
+        value = "#{" + ",".join(f"{n}=>{{{n},{boxed_property}}}" for n in range(size)) + "}"
+        proplist_transform_probe("from_map", value)
+
+    # Single binary patterns and binary replacements are the supported contract;
+    # pattern lists, compiled patterns and extra OTP options are separate APIs.
+    def binary_replace_probe(subject, pattern, replacement, arity=4, options="[]", storage="copy"):
+        args = [str(arity), storage, subject, pattern, replacement, options]
+        selected.append({"otp_extension": "binary_replace", "binary_replace": args,
+                         "expression": "differential:binary_replace(" + ",".join(args) + ")"})
+
+    def binary_literal(data):
+        return "<<" + ",".join(map(str, data)) + ">>"
+
+    for subject, pattern, replacement in [
+        (b"", b"a", b"z"), (b"abc", b"x", b"z"), (b"ab", b"abc", b"z"),
+        (b"abc", b"abc", b""), (b"abc", b"a", b"XYZ"), (b"abc", b"c", b"Z"),
+        (b"ababa", b"aba", b"X"), (b"aaaaa", b"aa", b"X"),
+        (b"aaaa", b"aa", b""), (b"ababxabab", b"ab", b"Q"),
+        (b"abxab", b"ab", b"abab"), (b"abxab", b"ab", b"cab"),
+        (b"abxab", b"ab", b"ab"), (b"aababa", b"aba", b"WXYZ"),
+        (b"\x00\xff\x00\xff\x00", b"\x00\xff", b"\xff\x00\x01"),
+        (b"abcabc", b"bc", b""), (b"a", b"a", b""),
+        (b"abcab", b"abc", b"Z"), (b"abccabc", b"abc", b"\x00"),
+        (b"xyzxyz", b"yz", bytes(range(70))),
+    ]:
+        for arity, options in [(3, "[]"), (4, "[]"), (4, "[global]")]:
+            binary_replace_probe(binary_literal(subject), binary_literal(pattern),
+                                 binary_literal(replacement), arity, options)
+    for size in [0, 1, 63, 64, 65, 257]:
+        subject = bytes((17 * n + 3) % 256 for n in range(size))
+        for storage in ["copy", "slice", "unaligned"]:
+            for options in ["[]", "[global]"]:
+                binary_replace_probe(binary_literal(subject), "<<3>>", "<<0,255,3>>",
+                                     options=options, storage=storage)
+    for subject in ["<<>>", "<<1,2,1>>"]:
+        for index in range(3):
+            if index == 0 and subject == "<<>>":
+                continue  # Invalid subjects do not depend on the replaced subject.
+            for invalid in ["bad", "[]", "[1]", "<<1:1>>"]:
+                args = [subject, "<<1>>", "<<2>>"]
+                args[index] = invalid
+                for arity, options in [(3, "[]"), (4, "[global]")]:
+                    binary_replace_probe(*args, arity=arity, options=options)
+        for options in ["bad", "[bad]", "[global,bad]", "[global|tail]",
+                        "[global,global]", "[global,global|tail]"]:
+            binary_replace_probe(subject, "<<1>>", "<<2>>", options=options)
+    for subject in ["<<>>", "<<1>>", "<<1,2,1>>"]:
+        for arity, options in [(3, "[]"), (4, "[]"), (4, "[global]")]:
+            binary_replace_probe(subject, "<<>>", "<<2>>", arity, options)
+
+    def binary_prefix_probe(items, storage):
+        args = [storage, items]
+        selected.append({"otp_extension": "binary_prefix", "binary_prefix": args,
+                         "expression": "differential:binary_prefix(" + ",".join(args) + ")"})
+
+    for size in [0, 1, 63, 64, 65, 257]:
+        base = bytes((17 * n) % 256 for n in range(size))
+        groups = [[base], [base, base], [base + b"\xff", base], [base, base + b"\xff"],
+                  [base + b"\x11", base + b"\x22", base[:size // 2]],
+                  [base + b"\x11", base[:size // 2], base + b"\x22"],
+                  [base, b"\x81" + base, b""]]
+        if size:
+            for position in sorted({0, size // 2, size - 1}):
+                changed = base[:position] + bytes([base[position] ^ 128]) + base[position + 1:]
+                groups.extend([[base, changed], [changed, base]])
+        for group in groups:
+            items = "[" + ",".join(map(binary_literal, group)) + "]"
+            for storage in ["copy", "slice", "unaligned"]:
+                binary_prefix_probe(items, storage)
+    invalid_inputs = ["[]", "bad", "42", "<<>>", "<<1>>", "[a|tail]"]
+    for invalid in ["bad", "42", "[]", "[1]", "<<5:3>>", "{}"]:
+        invalid_inputs.extend([
+            f"[{invalid}]", f"[<<>>,{invalid}]", f"[<<0>>,<<1>>,{invalid}]",
+            f"[<<0,1>>,<<0,2>>,{invalid}]", f"[<<0>>,{invalid},<<1>>]",
+        ])
+    for tail in ["tail", "42", "<<>>", "<<5:3>>"]:
+        for prefix in ["<<0>>", "<<>>", "<<0>>,<<1>>"]:
+            invalid_inputs.append(f"[{prefix}|{tail}]")
+    for index, items in enumerate(invalid_inputs):
+        binary_prefix_probe(items, ["copy", "slice", "unaligned"][index % 3])
+
+    def binary_access_probe(operation, subject, arg="unused", storage="copy"):
+        args = [operation, storage, subject, arg]
+        selected.append({"otp_extension": "binary_access", "binary_access": args,
+                         "expression": "differential:binary_access(" + ",".join(args) + ")"})
+
+    subjects = [b"", b"\x00", b"\x80", b"\xff", b"\x00\xff\x80\x11"]
+    subjects += [bytes((17 * n + 128) % 256 for n in range(size))
+                 for size in [63, 64, 65, 257]]
+    for data in subjects:
+        subject = binary_literal(data)
+        for storage in ["copy", "slice", "unaligned"]:
+            for operation in ["first", "last", "copy_default"]:
+                binary_access_probe(operation, subject, storage=storage)
+            for index in sorted({-1, 0, len(data) // 2, len(data) - 1, len(data)}):
+                binary_access_probe("at", subject, str(index), storage)
+            for count in [0, 1, 2, 3]:
+                binary_access_probe("copy", subject, str(count), storage)
+    for index, invalid in enumerate(["bad", "[]", "[1]", "{}", "<<5:3>>", "<<0,5:3>>"]):
+        for operation in ["at", "first", "last", "copy", "copy_default"]:
+            binary_access_probe(operation, invalid, "0", ["copy", "slice", "unaligned"][index % 3])
+    for subject in ["<<>>", "<<0,255,128>>"]:
+        for arg in ["bad", "[]", "0.0", "1.0", str(-(1 << 100)), str(1 << 100)]:
+            binary_access_probe("at", subject, arg)
+        for arg in ["bad", "[]", "0.0", "1.0", "-1", str(-(1 << 100)),
+                    str(1 << 64), str(1 << 100)]:
+            binary_access_probe("copy", subject, arg)
+    # These count boundaries need an OTP oracle with the same word size.
+    # Empty sources never request huge allocations, even with large counts.
+    for count in [1 << 28, 1 << 40, (1 << 60) - 1, 1 << 60,
+                  (1 << 63) - 1, 1 << 63, (1 << 64) - 1]:
+        binary_access_probe("copy", "<<>>", str(count))
+    for data in [b"\x01", bytes(range(8))]:
+        limit = ((1 << 64) - 1) // (8 * len(data))
+        for count in [limit, limit + 1, (1 << 64) - 1]:
+            binary_access_probe("copy", binary_literal(data), str(count))
+
+    def binary_hex_probe(operation, subject, arg="unused", storage="copy"):
+        args = [operation, storage, subject, arg]
+        selected.append({"otp_extension": "binary_hex", "binary_hex": args,
+                         "expression": "differential:binary_access(" + ",".join(args) + ")"})
+
+    subjects = [b"", b"\x00", b"\x0f", b"\x10", b"\xff", b"\x00\xff\x80\x11",
+                bytes(range(256))]
+    subjects += [bytes((17 * n + 128) % 256 for n in range(size))
+                 for size in [63, 64, 65, 257]]
+    for data in subjects:
+        lower = data.hex().encode("ascii")
+        upper = lower.upper()
+        mixed = bytes(upper[n] if n % 2 else lower[n] for n in range(len(lower)))
+        for storage in ["copy", "slice", "unaligned"]:
+            for operation, mode in [("encode_hex_default", "unused"),
+                                    ("encode_hex", "uppercase"), ("encode_hex", "lowercase")]:
+                binary_hex_probe(operation, binary_literal(data), mode, storage)
+            for text in dict.fromkeys([lower, upper, mixed]):
+                binary_hex_probe("decode_hex", binary_literal(text), storage=storage)
+    # Reject every non-hex byte in each nibble position. Move the bad pair
+    # before, between and after valid pairs instead of testing round trips only.
+    for byte in range(256):
+        if byte in b"0123456789abcdefABCDEF":
+            continue
+        for nibble in [0, 1]:
+            pair = bytes([byte, ord("1")]) if nibble == 0 else bytes([ord("a"), byte])
+            text = [pair + b"00aF", b"00" + pair + b"aF", b"00aF" + pair][byte % 3]
+            binary_hex_probe("decode_hex", binary_literal(text),
+                             storage=["copy", "slice", "unaligned"][(byte + nibble) % 3])
+    for text in [b"+0", b"+1", b"+F", b"-0", b"-1", b"-F",
+                 b"0", b"abc", b"00aF0", b"F" * 63, b"0" * 65, b"0" * 129]:
+        for storage in ["copy", "slice", "unaligned"]:
+            binary_hex_probe("decode_hex", binary_literal(text), storage=storage)
+    for index, invalid in enumerate(["bad", "[]", "[48,49]", "{}", "<<5:3>>", "<<48,5:3>>"]):
+        for operation, mode in [("decode_hex", "unused"), ("encode_hex_default", "unused"),
+                                ("encode_hex", "uppercase"), ("encode_hex", "lowercase")]:
+            binary_hex_probe(operation, invalid, mode, ["copy", "slice", "unaligned"][index % 3])
+    for mode in ["bad", "[]", "{}", "1", "1.0", "<<117,112,112,101,114,99,97,115,101>>", "true"]:
+        for subject in ["<<>>", "<<0,255,128>>", "<<5:3>>"]:
+            binary_hex_probe("encode_hex", subject, mode)
+
+    def binary_list_probe(subject, offset=None):
+        storage = "copy" if offset is None else "bit_slice"
+        for operation in ["binary_to_list", "bitstring_to_list"]:
+            args = [operation, storage, subject, str(0 if offset is None else offset)]
+            selected.append({"otp_extension": "binary_list", "binary_list": args,
+                             "expression": "differential:binary_access(" + ",".join(args) + ")"})
+
+    subjects = [b"", b"\x00", b"\x80", b"\xff", b"\x00\xff\x80\x11", bytes(range(256))]
+    subjects += [bytes((17 * n + 128) % 256 for n in range(size))
+                 for size in [63, 64, 65, 257]]
+    for data in subjects:
+        for offset in [None] + list(range(8)):
+            binary_list_probe(binary_literal(data), offset)
+    for data in [b"", b"\x00\xff\x80\x11"]:
+        for width in range(1, 8):
+            mask = (1 << width) - 1
+            for tail in dict.fromkeys([0, mask, mask // 3]):
+                fields = [str(byte) for byte in data] + [f"{tail}:{width}"]
+                subject = "<<" + ",".join(fields) + ">>"
+                offsets = list(range(8)) if tail == mask // 3 else [(width + tail) % 8]
+                for offset in [None] + offsets:
+                    binary_list_probe(subject, offset)
+    for size in [63, 64, 65, 257]:
+        data = bytes((17 * n + 128) % 256 for n in range(size))
+        for width in range(1, 8):
+            fields = [str(byte) for byte in data] + [f"{((1 << width) - 1) // 3}:{width}"]
+            for offset in [None, width]:
+                binary_list_probe("<<" + ",".join(fields) + ">>", offset)
+    for invalid in ["bad", "[]", "[1]", "[1|bad]", "{}", "1", "-1", "1.0"]:
+        for offset in [None, 3]:
+            binary_list_probe(invalid, offset)
+
+    seen_slice = set()
+
+    def binary_slice_probe(operation, subject, arg, offset=None):
+        storage = "copy" if offset is None else "bit_slice"
+        off_str = str(0 if offset is None else offset)
+        args = [operation, storage, off_str, subject, arg]
+        expr = "differential:binary_slice(" + ",".join(args) + ")"
+        if expr in seen_slice:
+            return
+        seen_slice.add(expr)
+        selected.append({"otp_extension": "binary_slice", "binary_slice": args,
+                         "expression": expr})
+
+    slice_subjects = [
+        (b"", [(0, 0)]),
+        (b"\xff", [(0, 1), (1, -1), (0, 0), (1, 0)]),
+        (b"\x00\xff\x80\x11", [(0, 4), (4, -4), (1, 2), (3, -2), (0, 0), (4, 0)]),
+        (bytes((17 * n + 128) % 256 for n in range(16)),
+         [(0, 16), (16, -16), (0, 15), (15, -15), (1, 15), (16, -15), (8, 0)]),
+        (bytes((17 * n + 128) % 256 for n in range(63)),
+         [(0, 63), (63, -63), (62, -60), (63, -49), (30, -15), (30, -16),
+          (1, 15), (1, 16), (63, 0)]),
+        (bytes((17 * n + 128) % 256 for n in range(64)),
+         [(0, 64), (64, -64), (64, -16), (64, -15), (1, 63), (63, -63), (0, 0)]),
+        (bytes((17 * n + 128) % 256 for n in range(65)),
+         [(0, 65), (65, -65), (65, -16), (65, -15), (1, 63), (64, -63), (32, 0)]),
+        (bytes((17 * n + 128) % 256 for n in range(257)),
+         [(0, 257), (257, -257), (128, -64), (128, 16), (257, -15)]),
+    ]
+    for data, ranges in slice_subjects:
+        subj = binary_literal(data)
+        for index, (pos, length) in enumerate(ranges):
+            arg = f"{{{pos},{length}}}"
+            offsets = [None, 0, 3] if len(data) in (0, 4, 63, 64, 65) and index < 2 else [None, (index % 7) + 1]
+            if len(data) == 63 and (pos, length) in [(63, -63), (63, -49), (30, -16)]:
+                offsets = [None, 0, 3, 7]
+            for offset in dict.fromkeys(offsets):
+                for op in ["part3", "bif_part3", "bif_part2"]:
+                    binary_slice_probe(op, subj, arg, offset)
+    # Exercise all 8 bit offsets on a 4-byte subject across all three part APIs.
+    four = binary_literal(b"\x00\xff\x80\x11")
+    for offset in range(8):
+        for op in ["part3", "bif_part3", "bif_part2"]:
+            binary_slice_probe(op, four, "{3,-2}", offset)
+    # Guard paths: matched, other_binary, and guard_failed across both arities.
+    b63 = bytes((17 * n + 128) % 256 for n in range(63))
+    b65 = bytes((17 * n + 128) % 256 for n in range(65))
+    guard_cases = [
+        (four, 3, -2, binary_literal(b"\x80\x11"), None),
+        (four, 3, -2, binary_literal(b"\x00\xff"), 3),
+        (binary_literal(b""), 0, 0, binary_literal(b"\x01"), None),
+        (binary_literal(b63), 63, -63, binary_literal(b63), None),
+        (binary_literal(b63), 63, -63, binary_literal(b63), 0),
+        (binary_literal(b63), 63, -63, binary_literal(b63), 3),
+        (binary_literal(b63), 63, -49, binary_literal(b63[14:]), 5),
+        (binary_literal(b63), 63, -63, binary_literal(b"\x00"), None),
+        (binary_literal(b65), 65, -65, binary_literal(b65), 3),
+        (binary_literal(b63), 63, -64, binary_literal(b63), None),
+        (binary_literal(b63), 64, -63, binary_literal(b63), None),
+        (four, 0, 5, four, None),
+        (four, -1, 2, four, None),
+        (four, 1 << 64, 0, four, None),
+        ("<<1,2,5:3>>", 0, 1, "<<1>>", None),
+        ("<<5:3>>", 0, 0, "<<>>", 3),
+        ("bad", 0, 0, "<<>>", None),
+        ("[]", 0, 0, "<<>>", None),
+        ("1", 0, 0, "<<>>", None),
+    ]
+    for subj, pos, length, target, offset in guard_cases:
+        binary_slice_probe("guard_part3", subj, f"{{{pos},{length},{target}}}", offset)
+        binary_slice_probe("guard_part2", subj, f"{{{{{pos},{length}}},{target}}}", offset)
+    for bad_range in ["bad", "[]", "{}", "{0}", "{0,0,0}", "[0|0]"]:
+        binary_slice_probe("guard_part2", four, f"{{{bad_range},<<>>}}")
+        binary_slice_probe("bif_part2", four, bad_range)
+    # Invalid part3 / bif_part3 / bif_part2 ranges, non-integers, partial tails, non-bitstrings.
+    invalid_part_ranges = [
+        (four, -1, 0), (four, 0, -1), (four, 0, 5), (four, 5, 0),
+        (four, 5, -1), (four, 5, -5), (four, 1, -2), (four, 4, -5),
+        (four, -1, 2), (four, 1 << 64, 0), (four, 0, 1 << 64),
+        (four, 0, -(1 << 64)), (four, 1 << 60, -(1 << 60)),
+        (binary_literal(b""), 0, 1), (binary_literal(b""), 1, -1),
+        (binary_literal(b63), 64, 0), (binary_literal(b63), 63, -64),
+        (four, "bad", 0), (four, 0, "bad"), (four, "1.0", 0),
+        (four, 0, "1.0"), (four, "[]", 0), (four, 0, "<<>>"),
+    ]
+    for subj, pos, length in invalid_part_ranges:
+        arg = f"{{{pos},{length}}}"
+        for op in ["part3", "bif_part3", "bif_part2"]:
+            binary_slice_probe(op, subj, arg)
+    for width in range(1, 8):
+        tail = ((1 << width) - 1) // 3
+        for subj in [f"<<{tail}:{width}>>", f"<<0,255,128,17,{tail}:{width}>>"]:
+            for op in ["part3", "bif_part3", "bif_part2"]:
+                binary_slice_probe(op, subj, "{0,0}", None if width % 2 else width)
+    for invalid in ["bad", "[]", "[1,2]", "{}", "1", "1.0"]:
+        for op in ["part3", "bif_part3", "bif_part2"]:
+            binary_slice_probe(op, invalid, "{0,0}")
+    # split_binary/2 on full binaries, partial bitstrings, bit offsets, and invalid inputs.
+    split_full = [
+        (b"", [0]),
+        (b"\x00", [0, 1]),
+        (b"\xff", [0, 1]),
+        (b"\x00\xff\x80\x11", [0, 1, 2, 3, 4]),
+        (bytes((17 * n + 128) % 256 for n in range(16)), [0, 1, 15, 16]),
+        (b63, [0, 1, 15, 16, 31, 62, 63]),
+        (bytes((17 * n + 128) % 256 for n in range(64)), [0, 15, 16, 32, 63, 64]),
+        (b65, [0, 15, 16, 32, 64, 65]),
+        (bytes((17 * n + 128) % 256 for n in range(257)), [0, 16, 128, 256, 257]),
+    ]
+    for data, positions in split_full:
+        subj = binary_literal(data)
+        for pos in positions:
+            offsets = [None, 0] + ([3] if len(data) in (4, 63, 64, 65) else [])
+            for offset in offsets:
+                binary_slice_probe("split_binary", subj, str(pos), offset)
+    for offset in range(8):
+        binary_slice_probe("split_binary", four, "2", offset)
+    for width in range(1, 8):
+        mask = (1 << width) - 1
+        for tail in dict.fromkeys([0, mask, mask // 3]):
+            binary_slice_probe("split_binary", f"<<{tail}:{width}>>", "0")
+            binary_slice_probe("split_binary", f"<<{tail}:{width}>>", "0", (width + tail) % 8)
+            subj4 = f"<<0,255,128,17,{tail}:{width}>>"
+            if tail == mask // 3:
+                for pos in [0, 1, 2, 4]:
+                    binary_slice_probe("split_binary", subj4, str(pos))
+                    binary_slice_probe("split_binary", subj4, str(pos), (pos + width) % 8)
+            else:
+                binary_slice_probe("split_binary", subj4, "2")
+                binary_slice_probe("split_binary", subj4, "2", width)
+    for size in [63, 64, 65, 257]:
+        data = bytes((17 * n + 128) % 256 for n in range(size))
+        for width in [1, 3, 7]:
+            fields = [str(b) for b in data] + [f"{((1 << width) - 1) // 3}:{width}"]
+            subj = "<<" + ",".join(fields) + ">>"
+            for pos in [0, 15, 16, size // 2, size]:
+                binary_slice_probe("split_binary", subj, str(pos), None if pos != 16 else width)
+    for subj, bad_pos in [
+        (binary_literal(b""), -1), (binary_literal(b""), 1),
+        (four, -1), (four, 5), (binary_literal(b63), 64),
+        (binary_literal(b65), 66), ("<<5:3>>", -1), ("<<5:3>>", 1),
+        ("<<0,255,128,17,5:3>>", 5), (four, 1 << 64), (four, -(1 << 64)),
+        (four, "bad"), (four, "1.0"), (four, "[]"),
+    ]:
+        binary_slice_probe("split_binary", subj, str(bad_pos))
+    for invalid in ["bad", "[]", "[1]", "[1|bad]", "{}", "1", "1.0"]:
+        for offset in [None, 3]:
+            binary_slice_probe("split_binary", invalid, "0", offset)
+
+    seen_iodata = set()
+    iodata_ops = ["list_to_bin", "list_to_binary", "iolist_to_binary", "iolist_size", "list_to_bitstring"]
+
+    def binary_iodata_probe(operation, spec, mode="copy", offset=0):
+        args = [operation, mode, str(offset), spec]
+        expr = "differential:iodata_convert(" + ",".join(args) + ")"
+        if expr in seen_iodata:
+            return
+        seen_iodata.add(expr)
+        selected.append({"otp_extension": "binary_iodata", "binary_iodata": args,
+                         "expression": expr})
+
+    b62 = binary_literal(bytes((17 * n + 128) % 256 for n in range(62)))
+    b64 = binary_literal(bytes((17 * n + 128) % 256 for n in range(64)))
+    b130 = binary_literal(bytes((17 * n + 128) % 256 for n in range(130)))
+    bare_bins = [binary_literal(b""), binary_literal(b"\x00"), binary_literal(b"\xff"),
+                 four, binary_literal(b63), b64, binary_literal(b65),
+                 binary_literal(bytes((17 * n + 128) % 256 for n in range(257)))]
+    for spec in bare_bins:
+        for op in iodata_ops:
+            binary_iodata_probe(op, spec)
+            binary_iodata_probe(op, spec, "bit_slice", 0 if spec != four else 3)
+    for offset in range(8):
+        for op in iodata_ops:
+            binary_iodata_probe(op, four, "bit_slice", offset)
+
+    all_bytes = "[" + ",".join(str(b) for b in range(256)) + "]"
+    proper_iolists = [
+        "[]", "[[]]", "[[],<<>>,[[]]]", "[0,255,128,17]", all_bytes,
+        "[<<0,255>>,128,[17,<<1,2>>]]", "[<<>>,0,<<>>,255,<<>>]",
+        f"[{four},{four}]", f"[{b62},255]", f"[{binary_literal(b63)},255]",
+        f"[{b64},255]", f"[{binary_literal(b63)},<<>>,{b64},{b130}]",
+    ]
+    for index, spec in enumerate(proper_iolists):
+        for op in iodata_ops:
+            binary_iodata_probe(op, spec)
+            binary_iodata_probe(op, spec, "bit_slice", index % 8)
+    for offset in range(8):
+        binary_iodata_probe("list_to_bin", f"[{four},17]", "bit_slice", offset)
+        binary_iodata_probe("list_to_bitstring", f"[{four},17]", "bit_slice", offset)
+
+    byte_tails = [
+        "[1|<<2>>]", "[0,255|<<128,17>>]", "[[]|<<>>]", "[[]|<<255>>]",
+        "[[1|<<2>>],[3|<<4,5>>]|<<6>>]", f"[{binary_literal(b63)}|{b64}]",
+    ]
+    for spec in byte_tails:
+        for op in iodata_ops:
+            binary_iodata_probe(op, spec)
+            binary_iodata_probe(op, spec, "bit_slice", 3)
+
+    bit_tails = [
+        "[<<1:1>>|<<0:1>>]", "[[]|<<5:3>>]", "[1|<<5:3>>]",
+        "[[1|<<2>>]|<<7:3>>]", "[[1|<<5:3>>],<<2:5>>|<<7:3>>]",
+        f"[{binary_literal(b63)}|<<5:3>>]", f"[{b64}|<<127:7>>]",
+    ]
+    for spec in bit_tails:
+        for op in iodata_ops:
+            binary_iodata_probe(op, spec)
+            binary_iodata_probe(op, spec, "bit_slice", 5)
+
+    bad_tails = [
+        "[1|2]", "[1,2|3]", "[<<1>>|2]", "[[1|2]]", "[[[]]|1]",
+        "[[]|bad]", "[1|bad]", "[<<1:1>>|2]", "[<<1:1>>|bad]",
+    ]
+    for spec in bad_tails:
+        for op in iodata_ops:
+            binary_iodata_probe(op, spec)
+
+    for width in range(1, 8):
+        mask = (1 << width) - 1
+        comp_w = 8 - width
+        for tail in dict.fromkeys([0, mask, mask // 3]):
+            comp = ((1 << comp_w) - 1) // 3
+            s_single = f"[<<{tail}:{width}>>]"
+            s_pair = f"[<<{tail}:{width}>>,<<{comp}:{comp_w}>>]"
+            if tail == mask // 3:
+                for op in iodata_ops:
+                    binary_iodata_probe(op, s_single)
+                    binary_iodata_probe(op, s_pair)
+                    binary_iodata_probe(op, s_single, "bit_slice", width)
+                    binary_iodata_probe(op, s_pair, "bit_slice", (width + 3) % 8)
+            else:
+                for op in ["list_to_bitstring", "list_to_bin"]:
+                    binary_iodata_probe(op, s_single)
+                    binary_iodata_probe(op, s_single, "bit_slice", width)
+                for op in ["list_to_bitstring", "iolist_to_binary"]:
+                    binary_iodata_probe(op, s_pair)
+
+    bit_packs = [
+        "[<<5:3>>,17,<<3:2>>]",
+        "[65,<<1:1>>,66,<<3:7>>,67]",
+        "[<<1:1>>,<<0,255,128,17>>,<<5:3>>]",
+        "[<<7:3>>,<<255,0,128>>,<<1:1>>,<<17>>,<<3:4>>]",
+        f"[<<5:3>>,{binary_literal(b63)}]",
+        f"[{binary_literal(b63)},<<5:3>>,{b64},<<2:5>>]",
+        f"[{b64},<<127:7>>]",
+    ]
+    for spec in bit_packs:
+        for op in iodata_ops:
+            binary_iodata_probe(op, spec)
+    for offset in range(8):
+        binary_iodata_probe("list_to_bitstring", "[<<5:3>>,17,<<3:2>>]", "bit_slice", offset)
+        binary_iodata_probe("list_to_bitstring", f"[<<5:3>>,{binary_literal(b63)}]", "bit_slice", offset)
+
+    deep_specs = [
+        "{33,<<17,42>>,<<99>>}", "{65,<<17,42>>,<<99>>}",
+        "{33,<<5:3>>,<<7:3>>}", "{65,<<5:3>>,<<7:3>>}",
+        "{33,<<17>>,19}", "{33,<<17>>,bad}",
+    ]
+    for spec in deep_specs:
+        for op in iodata_ops:
+            binary_iodata_probe(op, spec, "deep", 0)
+
+    invalid_elements = [
+        "[-1]", "[256]", "[1,256,3]", "[0,-1]",
+        f"[{1 << 64}]", f"[{-(1 << 64)}]", "[1,[2,256],3]", "[<<1,2>>,256]",
+        "[bad]", "[1.0]", "[{}]", "[1,[2,bad],3]", "[<<1:1>>,3.14]", "[<<>>,[bad]]",
+    ]
+    for spec in invalid_elements:
+        for op in iodata_ops:
+            binary_iodata_probe(op, spec)
+
+    invalid_roots = ["bad", "0", "-1", "255", "1.0", "{}", "{1,2}", "<<5:3>>", "<<0,255,5:3>>"]
+    for spec in invalid_roots:
+        for op in iodata_ops:
+            binary_iodata_probe(op, spec)
+
+    seen_crc32 = set()
+
+    def binary_crc32_probe(operation, input_spec, arg="unused", mode="copy", offset=0):
+        args = [operation, mode, str(offset), input_spec, arg]
+        expr = "differential:binary_crc32(" + ",".join(args) + ")"
+        if expr in seen_crc32:
+            return
+        seen_crc32.add(expr)
+        selected.append({"otp_extension": "binary_crc32", "binary_crc32": args,
+                         "expression": expr})
+
+    crc_binaries = [
+        binary_literal(b""), binary_literal(b"\x00"), binary_literal(b"\x01"),
+        binary_literal(b"\x80"), binary_literal(b"\xff"),
+        binary_literal(b"123456789"), four,
+        binary_literal(bytes(range(256))),
+        binary_literal(b63), b64, binary_literal(b65),
+        binary_literal(bytes((17 * n + 128) % 256 for n in range(257))),
+    ]
+    crc_iolists = [
+        "[]", "[[]]", "[<<>>]", "[[]|<<>>]", all_bytes,
+        "[<<0,255>>,128,[17|<<1,2>>]]", "[1|<<2>>]",
+        f"[{binary_literal(b63)}|{b64}]",
+    ]
+    for index, spec in enumerate(crc_binaries + crc_iolists):
+        binary_crc32_probe("crc32_1", spec)
+        binary_crc32_probe("crc32_1", spec, mode="bit_slice", offset=index % 8)
+    for offset in range(8):
+        binary_crc32_probe("crc32_1", four, mode="bit_slice", offset=offset)
+        binary_crc32_probe("crc32_1", "[<<0,255>>,128,[17|<<1,2>>]]", mode="bit_slice", offset=offset)
+
+    crc_seeds = ["0", "1", "12345", str(1 << 31), str((1 << 32) - 1)]
+    crc2_subjects = [
+        binary_literal(b""), "[]", "[[]]", "[<<>>]", "[[]|<<>>]",
+        four, "[<<0,255>>,128,[17|<<1,2>>]]",
+        binary_literal(b63), b64, binary_literal(b65),
+        binary_literal(bytes((17 * n + 128) % 256 for n in range(257))),
+    ]
+    for old_crc in crc_seeds:
+        for index, spec in enumerate(crc2_subjects):
+            binary_crc32_probe("crc32_2", spec, old_crc)
+            if spec in (binary_literal(b""), "[]", four, binary_literal(b63)):
+                binary_crc32_probe("crc32_2", spec, old_crc, "bit_slice", index % 8)
+    for offset in range(8):
+        binary_crc32_probe("crc32_2", four, "12345", "bit_slice", offset)
+        binary_crc32_probe("crc32_2", "[<<0,255>>,128,[17|<<1,2>>]]", str((1 << 32) - 1), "bit_slice", offset)
+
+    crc_vals = [0, 1, 12345, 67890, 1 << 31, (1 << 32) - 1]
+    combine_sizes = [0, 1, 2, 3, 7, 8, 15, 16, 63, 64, 65, 257, 1024, 65535, 65536,
+                     (1 << 31) - 1, 1 << 31, (1 << 32) - 1]
+    for idx, (c1, c2) in enumerate([(0, 0), (0, (1 << 32) - 1), ((1 << 32) - 1, 0),
+                                    ((1 << 32) - 1, (1 << 32) - 1), (12345, 67890),
+                                    (1 << 31, 12345)]):
+        for sz in combine_sizes:
+            binary_crc32_probe("crc32_combine", f"{{{c1},{c2}}}", str(sz))
+    for c1 in crc_vals:
+        for c2 in [0, 12345, (1 << 32) - 1]:
+            for sz in [0, 5, 64, (1 << 32) - 1]:
+                binary_crc32_probe("crc32_combine", f"{{{c1},{c2}}}", str(sz))
+
+    split_pairs = [
+        (binary_literal(b""), binary_literal(b"")),
+        (binary_literal(b""), four),
+        (four, binary_literal(b"")),
+        ("[]", four),
+        (four, "[[]|<<>>]"),
+        (binary_literal(b"\x00"), binary_literal(b"\xff")),
+        (four, binary_literal(b63)),
+        (binary_literal(b63), b64),
+        (binary_literal(b65), binary_literal(bytes((17 * n + 128) % 256 for n in range(257)))),
+        ("[<<0,255>>,128,[17|<<1,2>>]]", "[1|<<2,3>>]"),
+    ]
+    for index, (a_spec, b_spec) in enumerate(split_pairs):
+        binary_crc32_probe("crc32_split_combine", f"{{{a_spec},{b_spec}}}")
+        binary_crc32_probe("crc32_split_combine", f"{{{a_spec},{b_spec}}}", mode="bit_slice", offset=index % 8)
+    for offset in range(8):
+        binary_crc32_probe("crc32_split_combine", f"{{{four},{binary_literal(b63)}}}", mode="bit_slice", offset=offset)
+
+    bad_iodata = [
+        "<<5:3>>", "[<<5:3>>]", "[1|<<5:3>>]", "[-1]", "[256]", f"[{1 << 64}]",
+        "[1|2]", "[<<1>>|2]", "[1|bad]", "bad", "0", "1.0", "{}",
+    ]
+    for spec in bad_iodata:
+        binary_crc32_probe("crc32_1", spec)
+        binary_crc32_probe("crc32_2", spec, "12345")
+
+    bad_u32 = [
+        "-1", str(1 << 32), str((1 << 32) + 7), str((1 << 63) - 1),
+        str(1 << 63), str(1 << 64), str(-(1 << 64)), "bad", "1.0", "[]", "{}",
+    ]
+    for bad in bad_u32:
+        for spec in [binary_literal(b""), "[]", four]:
+            binary_crc32_probe("crc32_2", spec, bad)
+        binary_crc32_probe("crc32_combine", f"{{{bad},0}}", "0")
+        binary_crc32_probe("crc32_combine", f"{{0,{bad}}}", "0")
+        binary_crc32_probe("crc32_combine", "{12345,67890}", bad)
+
+    seen_etf = set()
+
+    def binary_etf_probe(operation, input_spec, arg="none", mode="copy", offset=0):
+        args = [operation, mode, str(offset), input_spec, arg]
+        expr = "differential:binary_etf(" + ",".join(args) + ")"
+        if expr in seen_etf:
+            return
+        seen_etf.add(expr)
+        selected.append({"otp_extension": "binary_etf", "binary_etf": args,
+                         "expression": expr})
+
+    def etf_atom(tag, name):
+        raw = name.encode("utf-8")
+        if tag == 119:
+            return bytes([119, len(raw)]) + raw
+        return bytes([118]) + struct.pack(">H", len(raw)) + raw
+
+    def etf_float_raw(raw8):
+        return bytes([131, 70]) + raw8
+
+    etf_valid_decode = [
+        binary_literal(bytes([131, 97, 0])),
+        binary_literal(bytes([131, 97, 42])),
+        binary_literal(bytes([131, 97, 255])),
+        binary_literal(bytes([131, 98]) + struct.pack(">i", -1)),
+        binary_literal(bytes([131, 98]) + struct.pack(">i", -32768)),
+        binary_literal(bytes([131, 98]) + struct.pack(">i", 256)),
+        binary_literal(bytes([131, 98]) + struct.pack(">i", 2147483647)),
+        binary_literal(bytes([131, 98]) + struct.pack(">i", -2147483648)),
+        binary_literal(bytes([131, 110, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])),
+        binary_literal(bytes([131, 110, 9, 1, 5, 0, 0, 0, 0, 0, 0, 0, 1])),
+        binary_literal(etf_float_raw(struct.pack(">d", 0.0))),
+        binary_literal(etf_float_raw(struct.pack(">d", 1.5))),
+        binary_literal(etf_float_raw(struct.pack(">d", -3.25))),
+        binary_literal(etf_float_raw(b"\x80\x00\x00\x00\x00\x00\x00\x00")),
+        binary_literal(etf_float_raw(b"\x00\x00\x00\x00\x00\x00\x00\x01")),
+        binary_literal(bytes([131]) + etf_atom(119, "ok")),
+        binary_literal(bytes([131]) + etf_atom(119, "true")),
+        binary_literal(bytes([131]) + etf_atom(118, "error")),
+        binary_literal(bytes([131, 106])),
+        binary_literal(bytes([131, 107, 0, 0])),
+        binary_literal(bytes([131, 107, 0, 3, 65, 66, 67])),
+        binary_literal(bytes([131, 108, 0, 0, 0, 2, 97, 1, 97, 2, 106])),
+        binary_literal(bytes([131, 108, 0, 0, 0, 1, 97, 7, 119, 2, 111, 107])),
+        binary_literal(bytes([131, 104, 0])),
+        binary_literal(bytes([131, 104, 2]) + etf_atom(119, "ok") + bytes([97, 9])),
+        binary_literal(bytes([131, 105, 0, 0, 0, 2, 97, 10, 97, 20])),
+        binary_literal(bytes([131, 109, 0, 0, 0, 0])),
+        binary_literal(bytes([131, 109, 0, 0, 0, 3, 97, 98, 99])),
+        binary_literal(bytes([131, 116, 0, 0, 0, 0])),
+        binary_literal(bytes([131, 116, 0, 0, 0, 2, 97, 1]) + etf_atom(119, "ok") +
+                       bytes([70]) + struct.pack(">d", 1.0) + etf_atom(119, "error")),
+        binary_literal(bytes([131, 104, 2, 77, 0, 0, 0, 1, 3, 160]) + etf_atom(119, "ok") + bytes([99])),
+        binary_literal(bytes([131, 97, 42, 99, 100])),
+    ]
+    for bits in range(1, 9):
+        etf_valid_decode.append(binary_literal(bytes([131, 77, 0, 0, 0, 1, bits, 0xFF])))
+        etf_valid_decode.append(binary_literal(bytes([131, 77, 0, 0, 0, 2, bits, 0xAA, 0x55])))
+
+    valid_b2t_opts = ["[]", "[used]", "[safe]", "[used,safe]", "[safe,used]", "[used,safe,used]", "[safe,safe]"]
+    for idx, spec in enumerate(etf_valid_decode):
+        binary_etf_probe("b2t_1", spec)
+        binary_etf_probe("b2t_1", spec, mode="bit_slice", offset=idx % 8)
+        for opts in ["[]", "[used]", "[safe]", "[used,safe]", "[used,safe,used]"]:
+            binary_etf_probe("b2t_2", spec, opts)
+    for offset in range(8):
+        binary_etf_probe("b2t_1", binary_literal(bytes([131, 97, 42])), mode="bit_slice", offset=offset)
+        binary_etf_probe("b2t_2", binary_literal(bytes([131, 77, 0, 0, 0, 1, 3, 255])), "[used]", "bit_slice", offset)
+        binary_etf_probe("b2t_2", binary_literal(bytes([131, 104, 2, 77, 0, 0, 0, 1, 3, 160]) + etf_atom(119, "ok") + bytes([99])), "[used,safe]", "bit_slice", offset)
+    for opts in valid_b2t_opts:
+        binary_etf_probe("b2t_2", binary_literal(bytes([131, 97, 42])), opts)
+        binary_etf_probe("b2t_2", binary_literal(bytes([131, 97, 42, 99, 100])), opts)
+    binary_etf_probe("b2t_1", binary_literal(bytes([131]) + etf_atom(119, "lynx_etf_fresh_utf8_αβγ")))
+    binary_etf_probe("b2t_2", binary_literal(bytes([131]) + etf_atom(119, "lynx_etf_fresh_utf8_αβγ")), "[used]")
+
+    for raw8 in [
+        struct.pack(">d", 0.0),
+        b"\x80\x00\x00\x00\x00\x00\x00\x00",
+        struct.pack(">d", 1.5),
+        struct.pack(">d", -3.25),
+        b"\x00\x00\x00\x00\x00\x00\x00\x01",
+        b"\x7f\xef\xff\xff\xff\xff\xff\xff",
+    ]:
+        f_spec = binary_literal(etf_float_raw(raw8))
+        binary_etf_probe("b2t_float_bits", f_spec)
+        binary_etf_probe("b2t_float_bits", f_spec, "[used]")
+        binary_etf_probe("b2t_float_bits", f_spec, "[used,safe]", "bit_slice", 3)
+
+    non_finite_raws = [
+        b"\x7f\xf0\x00\x00\x00\x00\x00\x00",
+        b"\xff\xf0\x00\x00\x00\x00\x00\x00",
+        b"\x7f\xf8\x00\x00\x00\x00\x00\x00",
+        b"\x7f\xf0\x00\x00\x00\x00\x00\x01",
+        b"\xff\xff\xff\xff\xff\xff\xff\xff",
+    ]
+    for raw8 in non_finite_raws:
+        nf_spec = binary_literal(etf_float_raw(raw8))
+        binary_etf_probe("b2t_1", nf_spec)
+        binary_etf_probe("b2t_float_bits", nf_spec)
+        for opts in ["[]", "[used]", "[safe]", "[used,safe]"]:
+            binary_etf_probe("b2t_2", nf_spec, opts)
+        wrapped = binary_literal(bytes([131, 104, 2]) + etf_atom(119, "ok") + bytes([70]) + raw8)
+        binary_etf_probe("b2t_1", wrapped)
+        binary_etf_probe("b2t_2", wrapped, "[safe]")
+        listed = binary_literal(bytes([131, 108, 0, 0, 0, 2, 97, 1, 70]) + raw8 + bytes([106]))
+        binary_etf_probe("b2t_1", listed)
+
+    for bad_opts in ["[bad]", "[used|bad]", "[safe|bad]", "[{used,true}]", "[{safe,true}]",
+                     "used", "safe", "0", "{}", "[used,{safe,false}]", "[{used,false}]"]:
+        binary_etf_probe("b2t_2", binary_literal(bytes([131, 97, 42])), bad_opts)
+        binary_etf_probe("b2t_2", binary_literal(bytes([131, 97, 42])), bad_opts, "bit_slice", 5)
+
+    for never_tag in [119, 118]:
+        for idx, never_name in enumerate(["lynx_etf_never_atom_1", "lynx_etf_never_atom_2"]):
+            never_spec = binary_literal(bytes([131]) + etf_atom(never_tag, never_name))
+            never_tuple = binary_literal(bytes([131, 104, 2, 97, 1]) + etf_atom(never_tag, never_name))
+            for opts in ["[safe]", "[used,safe]", "[safe,used]"]:
+                binary_etf_probe("b2t_2", never_spec, opts)
+                binary_etf_probe("b2t_2", never_tuple, opts)
+            binary_etf_probe("b2t_2", never_spec, "[safe]", "bit_slice", (idx + 1) % 8)
+
+    malformed_etf = [
+        binary_literal(b""),
+        binary_literal(bytes([130, 97, 42])),
+        binary_literal(bytes([132, 97, 42])),
+        binary_literal(bytes([131])),
+        binary_literal(bytes([131, 97])),
+        binary_literal(bytes([131, 98, 0, 0])),
+        binary_literal(bytes([131, 70, 63, 240, 0])),
+        binary_literal(bytes([131, 109, 0, 0, 0, 5, 1, 2])),
+        binary_literal(bytes([131, 104, 2, 97, 1])),
+        binary_literal(bytes([131, 108, 0, 0, 0, 1, 97, 1])),
+        binary_literal(bytes([131, 107, 0, 3, 65, 66])),
+        binary_literal(bytes([131, 119, 2, 255, 254])),
+        binary_literal(bytes([131, 118, 0, 2, 195, 40])),
+        binary_literal(bytes([131, 77, 0, 0, 0, 1, 0, 42])),
+        binary_literal(bytes([131, 77, 0, 0, 0, 1, 9, 42])),
+        binary_literal(bytes([131, 77, 0, 0, 0, 0, 5])),
+        binary_literal(bytes([131, 77, 0, 0, 0, 5, 3, 1, 2])),
+        binary_literal(bytes([131, 116, 0, 0, 0, 2, 97, 1, 119, 1, 97, 97, 1, 119, 1, 98])),
+        binary_literal(bytes([131, 255])),
+        "<<131,97,42,1:1>>",
+        "<<131,5:3>>",
+        "bad",
+        "0",
+        "[]",
+        "{}",
+    ]
+    for idx, spec in enumerate(malformed_etf):
+        binary_etf_probe("b2t_1", spec)
+        binary_etf_probe("b2t_2", spec, "[used]")
+        binary_etf_probe("b2t_2", spec, "[safe]")
+        if spec.startswith("<<"):
+            binary_etf_probe("b2t_1", spec, mode="bit_slice", offset=(idx + 1) % 8)
+
+    t2b_wire_terms = [
+        "0", "42", "255", "-1", "-32768", "256", "2147483647", "-2147483648",
+        str((1 << 64) + 7), str(-((1 << 64) + 7)),
+        "0.0", "1.5", "-3.25", "ok", "true", "[]",
+        "[65,66,67]", "[256,257]", "[1|2]", "{}", "{ok,1,<<2,3>>}",
+        "<<>>", "<<1,2,3>>", "<<5:3>>", "<<255,5:7>>", "<<1:1>>",
+        "#{}", "#{ok => 1}",
+    ]
+    for idx, spec in enumerate(t2b_wire_terms):
+        binary_etf_probe("t2b_wire", spec)
+        binary_etf_probe("t2b_wire", spec, "[deterministic]")
+        if idx % 2 == 0:
+            binary_etf_probe("t2b_wire", spec, "[{minor_version,2}]")
+            binary_etf_probe("t2b_wire", spec, "[{compressed,0}]")
+    for offset in range(8):
+        binary_etf_probe("t2b_wire", "<<5:3>>", "none", "bit_slice", offset)
+        binary_etf_probe("t2b_wire", "<<1,2,3>>", "[deterministic]", "bit_slice", offset)
+        binary_etf_probe("roundtrip_2", "<<255,5:7>>", "[compressed]", "bit_slice", offset)
+
+    for bad_t2b_opt in [
+        "[bad]", "[deterministic|bad]", "[{minor_version,-1}]", "[{minor_version,3}]",
+        "[{compressed,-1}]", "[{compressed,10}]", "compressed", "0", "{}", "[used]"
+    ]:
+        binary_etf_probe("t2b_wire", "{ok,42}", bad_t2b_opt)
+        binary_etf_probe("roundtrip_2", "{ok,42}", bad_t2b_opt)
+
+    roundtrip_terms = [
+        "{foo,[1,2,3],#{1 => a,1.0 => b},<<5:3>>,3.14}",
+        "#{1 => one,1.0 => float_one,ok => <<255,3:2>>}",
+        "[1,256,<<1,2,3>>,<<5:3>>|tail]",
+        f"{{0,-{(1 << 64) + 9}}}",
+    ]
+    for wbits in range(1, 8):
+        roundtrip_terms.append(f"<<255,{wbits}:{wbits}>>")
+    for spec in roundtrip_terms:
+        for opts in ["none", "[]", "[deterministic]", "[compressed]", "[{compressed,6}]",
+                     "[{compressed,9}]", "[{minor_version,0}]", "[{minor_version,1}]",
+                     "[{minor_version,2}]", "[compressed,deterministic]"]:
+            binary_etf_probe("roundtrip_2", spec, opts)
+
+    for depth in [1, 2, 3, 4, 5, 6, 8, 12]:
+        for opts in ["none", "[compressed]", "[{minor_version,1}]"]:
+            binary_etf_probe("roundtrip_2", "{1,1.0,<<255,5:3>>}", opts, "deep", depth)
+
+    seen_ets = set()
+
+    def ets_probe(name, options, access_mode, steps):
+        args = [name, options, access_mode, steps]
+        expr = "ets_tables:ets_table(" + ",".join(args) + ")"
+        if expr in seen_ets:
+            return
+        seen_ets.add(expr)
+        selected.append({"otp_extension": "ets_table", "ets_table": args, "expression": expr})
+
+    # 1. Invalid names and new/2 option validation
+    for bad_name in ["0", "<<\"bad\">>", "[not_atom]", "{bad}", "1.5"]:
+        ets_probe(bad_name, "[]", "owner", "[{lookup,k}]")
+
+    for bad_opt in [
+        "bad_options",
+        "[bad_opt]",
+        "[set|bad]",
+        "[{named_table,true}]",
+        "[{named_table,false}]",
+        "[{keypos,0}]",
+        "[{keypos,-1}]",
+        f"[{{keypos,{1 << 64}}}]",
+        "[{keypos,bad}]",
+        "[{read_concurrency,bad}]",
+        "[{write_concurrency,bad}]",
+        "[{decentralized_counters,bad}]",
+        "[{heir,bad}]",
+        "[{heir,not_pid,data}]",
+        "[{ordered_set,true}]",
+    ]:
+        ets_probe("lynx_ets_bad", bad_opt, "owner", "[]")
+
+    # 2. Compatible and conflicting option precedence across OTP 27/28/29
+    for opt in [
+        "[]",
+        "[set]",
+        "[bag]",
+        "[duplicate_bag]",
+        "[ordered_set]",
+        "[compressed]",
+        "[protected]",
+        "[private]",
+        "[public]",
+        "[{keypos,1}]",
+        "[{keypos,2}]",
+        "[{heir,none}]",
+        "[{write_concurrency,true}]",
+        "[{write_concurrency,auto}]",
+        "[{read_concurrency,false}]",
+        "[{decentralized_counters,true}]",
+        "[public,private]",
+        "[private,public]",
+        "[private,protected]",
+        "[public,protected]",
+        "[set,bag]",
+        "[bag,set]",
+        "[set,duplicate_bag]",
+        "[duplicate_bag,set]",
+        "[bag,duplicate_bag]",
+        "[duplicate_bag,bag]",
+        "[{keypos,1},{keypos,2}]",
+    ]:
+        ets_probe(
+            "lynx_ets_opts",
+            opt,
+            "owner",
+            "[{insert,[{k,1},{k,1},{k,2}]},{lookup,k},{member,k},{insert,{a,b}},{lookup,b}]",
+        )
+        ets_probe(
+            "lynx_ets_opts",
+            opt,
+            "{other_process,[{k,1},{k,2}]}",
+            "[{lookup,k},{member,k},{insert,{k2,3}},{lookup,k2}]",
+        )
+
+    # 3. Named table collisions, delete/1, recreate, and owner-exit cleanup
+    for extra_opt in ["", ",public", ",private", ",bag", ",duplicate_bag"]:
+        ets_probe(
+            "lynx_ets_named",
+            f"[named_table{extra_opt}]",
+            "owner",
+            "[{insert,{k,1}},{lookup,k},dup_named,delete_table,{lookup,k},dup_named]",
+        )
+        ets_probe(
+            "lynx_ets_named_exit",
+            f"[named_table{extra_opt}]",
+            "{owner_exited,[{k,1}]}",
+            "[{lookup,k},{insert,{k,2}},dup_named]",
+        )
+    for acc_opt in ["[]", "[private]", "[protected]", "[public]", "[bag]", "[duplicate_bag]"]:
+        ets_probe(
+            "lynx_ets_exit",
+            acc_opt,
+            "{owner_exited,[{k,1}]}",
+            "[{lookup,k},{member,k},{insert,{k,2}},delete_table]",
+        )
+
+    # 4. Cross-process access matrix across all read/write/delete ops
+    cross_ops = [
+        "[{lookup,k},{lookup,missing},{member,k},{member,missing}]",
+        "[{lookup_element,k,2},{lookup_element,missing,2},{lookup_element4,missing,2,def}]",
+        "[{lookup_element,k,0},{lookup_element,k,9},{lookup_element4,k,9,def}]",
+        "[{insert,{k2,9}},{lookup,k2},{insert_new,{k,99}},{insert_new,{k3,7}}]",
+        "[{update_element,k,{2,99}},{update_element4,k2,{2,88},{k2,0}},{lookup,k}]",
+        "[{update_counter,k,5},{update_counter4,k2,{2,3},{k2,10}},{lookup,k}]",
+        "[{take,k},{lookup,k},{delete_key,k},{delete_object,{k,10}}]",
+        "[delete_table,{lookup,k}]",
+    ]
+    for acc_opt in ["[private]", "[protected]", "[public]"]:
+        for step_list in cross_ops:
+            ets_probe("lynx_ets_cross", acc_opt, "{other_process,[{k,10}]}", step_list)
+            ets_probe("lynx_ets_cross_named", f"[named_table,{acc_opt[1:]}", "{other_process,[{k,10}]}", step_list)
+
+    # 5. set / bag / duplicate_bag CRUD across keypos 1, 2, 3
+    for ttype in ["set", "bag", "duplicate_bag"]:
+        ets_probe(
+            "lynx_ets_crud",
+            f"[{ttype}]",
+            "owner",
+            "[{insert,[]},{insert,{k,1}},{insert,{k,1}},{insert,{k,2}},{lookup,k},"
+            "{insert,[{k2,10},{k2,10},{k2,20}]},{lookup,k2},{member,k2},{member,miss}]",
+        )
+        ets_probe(
+            "lynx_ets_inew",
+            f"[{ttype}]",
+            "owner",
+            "[{insert_new,[]},{insert_new,{k,1}},{insert_new,{k,2}},{lookup,k},"
+            "{insert_new,[{k2,10},{k3,20}]},{insert_new,[{k3,99},{k4,40}]},{lookup,k4},"
+            "{insert_new,[{k5,1},{k6,2},{k5,3}]},{lookup,k5}]",
+        )
+        ets_probe(
+            "lynx_ets_del",
+            f"[{ttype}]",
+            "owner",
+            "[{insert,[{k,1},{k,1},{k,2},{k2,9}]},{take,k},{take,miss},{lookup,k},"
+            "{insert,[{k,1},{k,1},{k,2}]},{delete_object,{k,1}},{lookup,k},"
+            "{delete_object,{k,miss}},{delete_key,k},{lookup,k},{delete_key,k2},{lookup,k2}]",
+        )
+        ets_probe(
+            "lynx_ets_kp2",
+            f"[{ttype},{{keypos,2}}]",
+            "owner",
+            "[{insert,{v1,k,v3}},{insert,{v1b,k,v3b}},{lookup,k},{lookup_element,k,1},"
+            "{lookup_element,k,3},{lookup_element4,miss,1,def},{delete_object,{v1,k,v3}},"
+            "{lookup,k},{take,k},{lookup,k}]",
+        )
+        ets_probe(
+            "lynx_ets_kp3",
+            f"[{ttype},{{keypos,3}}]",
+            "owner",
+            "[{insert,{a,b,k}},{lookup,k},{lookup_element,k,2},{member,k},{insert,{}}]",
+        )
+        for bad_entry in ["{}", "[{}]", "not_tuple", "[{k,1},bad]", "[{k,1}|{k,2}]"]:
+            ets_probe("lynx_ets_badi", f"[{ttype}]", "owner", f"[{{insert,{bad_entry}}}]")
+            ets_probe(
+                "lynx_ets_badin",
+                f"[{ttype}]",
+                "owner",
+                f"[{{insert,{{k,0}}}},{{insert_new,{bad_entry}}},{{lookup,k}}]",
+            )
+        ets_probe(
+            "lynx_ets_bad_bag",
+            f"[{ttype}]",
+            "owner",
+            "[{insert,[{k,1,2},{k,3}]},{lookup_element,k,3},{lookup_element4,k,3,def},"
+            "{delete_object,{}},{delete_object,not_tuple}]",
+        )
+
+    # 6. lookup_element / update_element / update_counter detailed edges
+    for kp in [1, 2]:
+        ets_probe(
+            "lynx_ets_le",
+            f"[{{keypos,{kp}}}]",
+            "owner",
+            "[{insert,{10,20,30}},{lookup_element,10,1},{lookup_element,20,3},"
+            "{lookup_element,miss,1},{lookup_element4,miss,1,fallback},"
+            "{lookup_element,10,0},{lookup_element,10,-1},{lookup_element,10,4},"
+            "{lookup_element4,10,4,fallback},{lookup_element4,miss,0,fallback}]",
+        )
+
+    ue_steps = [
+        "[{insert,{k,10,20}},{update_element,k,{2,99}},{update_element,k,[{3,77},{2,55},{3,66}]},{update_element,k,[]},{lookup,k}]",
+        "[{insert,{k,10,20}},{update_element,miss,{2,99}},{update_element,miss,[]},{update_element,miss,bad},{update_element,miss,[{1,x}|bad]},{lookup,miss}]",
+        "[{update_element4,k,{2,99},{k,1,2}},{update_element4,k2,[{2,5},{3,6},{2,7}],{other,0,0}},{lookup,k},{lookup,k2},{lookup,other}]",
+        "[{insert,{k,10,20}},{update_element,k,{1,new_k}},{update_element,k,{4,past}},{update_element,k,{0,zero}},{update_element,k,{-1,neg}},{update_element,k,[-1,neg]},{update_element,k,[{2,88},bad]},{update_element,k,bad},{update_element,k,[{2,88}|bad]},{lookup,k}]",
+        "[{insert,{k,10,20}},{update_element4,k,[{2,88},{1,new_k}],{k,0,0}},{update_element4,miss,[{2,88},{4,past}],{miss,0,0}},{lookup,k},{lookup,miss}]",
+    ]
+    for step_list in ue_steps:
+        ets_probe("lynx_ets_ue", "[set]", "owner", step_list)
+    ets_probe(
+        "lynx_ets_ue_kp2",
+        "[{keypos,2}]",
+        "owner",
+        "[{insert,{10,k,20}},{update_element,k,{1,99}},{update_element,k,{2,bad_kp}},"
+        "{update_element4,k2,[{1,5},{3,6}],{0,other,0}},{lookup,k},{lookup,k2}]",
+    )
+    for ttype in ["bag", "duplicate_bag"]:
+        ets_probe(
+            "lynx_ets_ue_nonset",
+            f"[{ttype}]",
+            "owner",
+            "[{insert,{k,10}},{update_element,k,{2,20}},{update_element4,miss,{2,20},{miss,0}}]",
+        )
+
+    uc_steps = [
+        "[{insert,{k,10,not_num,30}},{update_counter,k,5},{update_counter,k,-2},{update_counter,k,0},{lookup,k}]",
+        "[{insert,{k,10,20,30}},{update_counter,k,{3,5}},{update_counter,k,[]},{update_counter,k,[{2,-5},{2,3},{3,10}]},{lookup,k}]",
+        "[{insert,{k,10,20}},{update_counter,k,{2,0,10,99}},{update_counter,k,{2,0,9,99}},{update_counter,k,{2,-1,98,50}},{update_counter,k,{2,-1,98,50}},{update_counter,k,{2,5,25,100}},{update_counter,k,{2,5,104,7}},{lookup,k}]",
+        "[{update_counter4,k,5,{k,10}},{update_counter4,k2,[{2,3},{3,4}],{other,1,2}},{update_counter4,k3,[],{k3,7}},{lookup,k},{lookup,k2},{lookup,k3}]",
+        "[{insert,{k,10,a}},{update_counter,k,bad},{update_counter,k,[bad]},{update_counter,k,[{2,1},bad]},{update_counter,k,[{2,1}|bad]},{update_counter,k,{2,1,20}},{update_counter,k,{1,1}},{update_counter,k,{3,1}},{update_counter,k,{4,1}},{update_counter,k,[{2,1},{99,1}]},{update_counter4,k,[bad],{k,0,0}},{update_counter,miss,1},{update_counter,miss,bad},{lookup,k}]",
+    ]
+    for step_list in uc_steps:
+        ets_probe("lynx_ets_uc", "[set]", "owner", step_list)
+    ets_probe(
+        "lynx_ets_uc_kp2",
+        "[{keypos,2}]",
+        "owner",
+        "[{insert,{10,k,20}},{update_counter,k,5},{update_counter,k,{1,-3}},{update_counter,k,{2,1}},{lookup,k}]",
+    )
+    for ttype in ["bag", "duplicate_bag"]:
+        ets_probe(
+            "lynx_ets_uc_nonset",
+            f"[{ttype}]",
+            "owner",
+            "[{insert,{k,10}},{update_counter,k,1},{update_counter4,miss,1,{miss,0}}]",
+        )
+
+    # 7. Rich keys: 1 vs 1.0, 0.0 vs -0.0, bigints, tuples/lists/maps, bitstrings & slice offsets 0..7
+    big_a = str(1 << 80)
+    big_b = str((1 << 80) + 1)
+    neg_big = str(-(1 << 80))
+    for ttype in ["set", "bag"]:
+        ets_probe(
+            "lynx_ets_keys",
+            f"[{ttype}]",
+            "owner",
+            f"[{{insert,{{1,int_one}}}},{{insert,{{1.0,float_one}}}},{{insert,{{0.0,pos_zero}}}},"
+            f"{{insert_neg0,neg_zero}},{{insert,{{{big_a},ba}}}},{{insert,{{{big_b},bb}}}},"
+            f"{{insert,{{{neg_big},negb}}}},{{insert,{{[1|2],imp}}}},{{insert,{{#{{1=>a,1.0=>b}},mp}}}},"
+            f"{{lookup,1}},{{lookup,1.0}},{{lookup,0.0}},lookup_neg0,"
+            f"{{lookup,{big_a}}},{{lookup,{big_b}}},{{lookup,{neg_big}}},{{lookup,[1|2]}},"
+            f"{{lookup,#{{1=>a,1.0=>b}}}}]",
+        )
+
+    bit_keys = ["<<>>", "<<0:1>>", "<<1:1>>", "<<0:2>>", "<<0:3>>", "<<1:3>>", "<<1,2,5:3>>", "<<171,205>>"]
+    for ttype in ["set", "bag"]:
+        ets_probe(
+            "lynx_ets_bits",
+            f"[{ttype}]",
+            "owner",
+            "".join([
+                "[",
+                ",".join([f"{{insert,{{{k},{idx}}}}}" for idx, k in enumerate(bit_keys)]),
+                ",",
+                ",".join([f"{{lookup,{k}}}" for k in bit_keys]),
+                "]",
+            ]),
+        )
+    for off in range(8):
+        for bkey in ["<<171,205>>", "<<171,205,3:2>>", "<<5:3>>"]:
+            ets_probe(
+                "lynx_ets_slice",
+                "[set]",
+                "owner",
+                f"[{{insert,{{{bkey},plain}}}},{{slice_lookup,{off},{bkey}}},"
+                f"{{slice_insert,{off},<<1,2,3,4>>,sliced}},{{lookup,<<1,2,3,4>>}}]",
+            )
+
+    # 8. Post-delete operations and invalid table handles
+    ets_probe(
+        "lynx_ets_postdel",
+        "[named_table]",
+        "owner",
+        "[{insert,{k,1}},delete_table,{lookup,k},{member,k},{insert,{k,2}},{insert_new,{k,2}},"
+        "{lookup_element,k,2},{lookup_element4,k,2,def},{update_element,k,{2,3}},"
+        "{update_counter,k,1},{take,k},{delete_key,k},{delete_object,{k,1}},delete_table]",
+    )
+    bad_tab_calls = [
+        ("lookup", "k"),
+        ("member", "k"),
+        ("insert", "{k,1}"),
+        ("insert_new", "{k,1}"),
+        ("lookup_element", "{k,2}"),
+        ("lookup_element4", "{k,2,def}"),
+        ("update_element", "{k,{2,1}}"),
+        ("update_element4", "{k,{2,1},{k,0}}"),
+        ("update_counter", "{k,1}"),
+        ("update_counter4", "{k,1,{k,0}}"),
+        ("take", "k"),
+        ("delete1", "none"),
+        ("delete2", "k"),
+        ("delete_object", "{k,1}"),
+    ]
+    for bad_tab in ["bad_ets_name", "0", "[]", "{}"]:
+        step_items = ",".join([f"{{bad_tab_op,{op},{bad_tab},{arg}}}" for op, arg in bad_tab_calls])
+        ets_probe("lynx_ets_badhandle", "[]", "owner", f"[{step_items}]")
+
+    seen_unicode = set()
+
+    def unicode_probe(op, input_spec, enc="none", mode="copy", offset=0):
+        args = [op, mode, str(offset), input_spec, enc]
+        expr = "unicode_conv:observe(" + ",".join(args) + ")"
+        if expr in seen_unicode:
+            return
+        seen_unicode.add(expr)
+        selected.append({"otp_extension": "unicode_conv", "unicode_conv": args, "expression": expr})
+
+    uni_encs = ["utf8", "unicode", "latin1"]
+    valid_utf8_bins = [
+        binary_literal(b""),
+        binary_literal(b"hello"),
+        binary_literal(b"\x00\x7f"),
+        binary_literal("\u0080".encode("utf-8")),
+        binary_literal("\u00e9".encode("utf-8")),
+        binary_literal("\u07ff".encode("utf-8")),
+        binary_literal("\u0800".encode("utf-8")),
+        binary_literal("\ud7ff".encode("utf-8")),
+        binary_literal("\ue000".encode("utf-8")),
+        binary_literal("\uffff".encode("utf-8")),
+        binary_literal("\U00010000".encode("utf-8")),
+        binary_literal("\U0010ffff".encode("utf-8")),
+        binary_literal("h\u00e9-\u20ac-\U0001f600".encode("utf-8")),
+    ]
+    valid_latin1_bins = [
+        binary_literal(b""),
+        binary_literal(b"abc"),
+        binary_literal(bytes([0, 127, 128, 160, 233, 255])),
+    ]
+    valid_lists = [
+        "[]",
+        "[[]]",
+        "[<<>>]",
+        "[[]|<<>>]",
+        "\"hello\"",
+        "[$a,233,8364,128512]",
+        "[0,127,128,2047,2048,55295,57344,65535,65536,1114111]",
+        "[$a|<<\"b\">>]",
+        "[[\"foo\",[104,233|<<\"!\"/utf8>>]],<<>>]",
+    ]
+    latin1_only_lists = [
+        "[]",
+        "[[]|<<>>]",
+        "[0,127,128,233,255]",
+        f"[{binary_literal(bytes([104, 233]))},[255]|{binary_literal(bytes([33]))}]",
+    ]
+
+    for idx, spec in enumerate(valid_utf8_bins + valid_lists):
+        unicode_probe("to_list_1", spec)
+        unicode_probe("to_binary_1", spec)
+        unicode_probe("to_list_1", spec, mode="bit_slice", offset=idx % 8)
+        unicode_probe("to_binary_1", spec, mode="bit_slice", offset=(idx + 3) % 8)
+        for enc in ["utf8", "unicode"]:
+            unicode_probe("to_list_2", spec, enc)
+            unicode_probe("to_binary_2", spec, enc)
+        unicode_probe("to_binary_3", spec, "{utf8,latin1}")
+        unicode_probe("to_binary_3", spec, "{unicode,latin1}")
+
+    for idx, spec in enumerate(valid_latin1_bins + latin1_only_lists):
+        unicode_probe("to_list_2", spec, "latin1")
+        unicode_probe("to_list_2", spec, "latin1", "bit_slice", idx % 8)
+        unicode_probe("to_binary_2", spec, "latin1")
+        for out_enc in uni_encs:
+            unicode_probe("to_binary_3", spec, f"{{latin1,{out_enc}}}")
+            unicode_probe("to_binary_3", spec, f"{{latin1,{out_enc}}}", "bit_slice", idx % 8)
+
+    for off in range(8):
+        b_utf8 = binary_literal("h\u00e9\U0001f600".encode("utf-8"))
+        unicode_probe("to_list_1", b_utf8, mode="bit_slice", offset=off)
+        unicode_probe("to_binary_1", b_utf8, mode="bit_slice", offset=off)
+        unicode_probe("to_list_2", "[<<\"h\">>,195,<<169>>]", "latin1", "bit_slice", off)
+        unicode_probe("to_binary_3", "[<<\"h\">>,233]", "{latin1,utf8}", "bit_slice", off)
+
+    for depth in [1, 2, 3, 5, 8]:
+        unicode_probe("to_list_1", "[104,233|<<\"!\"/utf8>>]", mode="deep", offset=depth)
+        unicode_probe("to_binary_1", "[104,233|<<\"!\"/utf8>>]", mode="deep", offset=depth)
+        unicode_probe("to_binary_3", "[104,233]", "{latin1,utf8}", "deep", depth)
+        unicode_probe("to_binary_3", binary_literal("h\u00e9!".encode("utf-8")), "{utf8,latin1}", "deep", depth)
+
+    invalid_utf8_bins = [
+        binary_literal(bytes([0x80])),
+        binary_literal(bytes([0xA0, 0xA1])),
+        binary_literal(bytes([192, 175])),
+        binary_literal(bytes([224, 128, 175])),
+        binary_literal(bytes([240, 128, 128, 175])),
+        binary_literal(bytes([237, 160, 128])),
+        binary_literal(bytes([237, 191, 191])),
+        binary_literal(bytes([244, 144, 128, 128])),
+        binary_literal(bytes([245, 128, 128, 128])),
+        binary_literal(bytes([255])),
+        binary_literal(b"hi" + bytes([255]) + b"z"),
+        binary_literal(b"h" + bytes([237, 160, 128])),
+    ]
+    for idx, spec in enumerate(invalid_utf8_bins):
+        unicode_probe("to_list_1", spec)
+        unicode_probe("to_binary_1", spec)
+        unicode_probe("to_list_2", spec, "utf8", "bit_slice", idx % 8)
+        unicode_probe("to_binary_3", spec, "{utf8,latin1}")
+        unicode_probe("to_binary_3", spec, "{unicode,utf8}", "bit_slice", idx % 8)
+
+    incomplete_utf8_bins = [
+        binary_literal(bytes([195])),
+        binary_literal(bytes([226])),
+        binary_literal(bytes([226, 130])),
+        binary_literal(bytes([240])),
+        binary_literal(bytes([240, 159])),
+        binary_literal(bytes([240, 159, 152])),
+        binary_literal(b"h" + bytes([195])),
+        binary_literal(b"h" + bytes([240, 159])),
+    ]
+    for idx, spec in enumerate(incomplete_utf8_bins):
+        unicode_probe("to_list_1", spec)
+        unicode_probe("to_binary_1", spec)
+        unicode_probe("to_binary_3", spec, "{utf8,latin1}")
+        unicode_probe("to_list_1", spec, mode="bit_slice", offset=idx % 8)
+        unicode_probe("to_binary_1", spec, mode="bit_slice", offset=idx % 8)
+
+    # Incomplete vs error across nested trailing chardata
+    inc_pfx = binary_literal(b"h" + bytes([195]))
+    for nested_inc in [
+        f"[{inc_pfx}]",
+        f"[{inc_pfx},[]]",
+        f"[{inc_pfx},<<>>]",
+        f"[{inc_pfx},[[],<<>>]]",
+        f"[\"foo\",[{inc_pfx},[[]|<<>>]]]",
+        f"[{inc_pfx},<<\"a\">>]",
+        f"[{inc_pfx},$a]",
+    ]:
+        unicode_probe("to_list_1", nested_inc)
+        unicode_probe("to_binary_1", nested_inc)
+        unicode_probe("to_binary_3", nested_inc, "{utf8,latin1}")
+
+    # Integer / code point error cases
+    for bad_cp in ["55296", "57343", "1114112", str(1 << 64)]:
+        spec = f"[$h,{bad_cp},$i]"
+        unicode_probe("to_list_1", spec)
+        unicode_probe("to_binary_1", spec)
+        unicode_probe("to_list_2", spec, "latin1")
+        unicode_probe("to_binary_2", spec, "latin1")
+        unicode_probe("to_binary_3", spec, "{latin1,latin1}")
+        unicode_probe("to_binary_3", spec, "{utf8,latin1}")
+    for bad_neg in ["-1", str(-(1 << 64))]:
+        spec = f"[$h,{bad_neg}|<<\"ok\">>]"
+        unicode_probe("to_list_1", spec)
+        unicode_probe("to_binary_1", spec)
+        unicode_probe("to_list_2", spec, "latin1")
+        unicode_probe("to_binary_2", spec, "latin1")
+    for lat_over in ["256", "2000", "1114111"]:
+        spec = f"[\"ok\",[$h,{lat_over}]]"
+        unicode_probe("to_list_2", spec, "latin1")
+        unicode_probe("to_binary_2", spec, "latin1")
+        unicode_probe("to_binary_3", spec, "{latin1,latin1}")
+        unicode_probe("to_binary_3", spec, "{utf8,latin1}")
+        unicode_probe("to_binary_3", f"[$h,{lat_over},$i]", "{latin1,utf8}")
+
+    # badarg inputs and encodings
+    for bad_root in ["foo", "42", "1.5", "{1,2}", "<<1:1>>", "<<\"a\",1:1>>"]:
+        unicode_probe("to_list_1", bad_root)
+        unicode_probe("to_list_2", bad_root, "latin1")
+        unicode_probe("to_binary_1", bad_root)
+        unicode_probe("to_binary_3", bad_root, "{latin1,latin1}")
+    for bad_elem in ["[$a|$b]", "[$a|bad]", "[[$a|$b]]", "[$a|<<1:1>>]", "[$a,foo]", "[$a,<<1:1>>]", "[$a,{}]"]:
+        unicode_probe("to_list_1", bad_elem)
+        unicode_probe("to_list_2", bad_elem, "latin1")
+        unicode_probe("to_binary_1", bad_elem)
+        unicode_probe("to_binary_3", bad_elem, "{latin1,latin1}")
+    for bad_enc in ["bad_enc", "ascii", "0", "[]"]:
+        unicode_probe("to_list_2", "<<\"a\">>", bad_enc)
+        unicode_probe("to_binary_2", "<<\"a\">>", bad_enc)
+        unicode_probe("to_binary_3", "<<\"a\">>", f"{{{bad_enc},utf8}}")
+        unicode_probe("to_binary_3", "<<\"a\">>", f"{{utf8,{bad_enc}}}")
+
+    seen_int_atom = set()
+
+    def int_atom_probe(op, input_spec, extra_spec="none", mode="copy", offset=0):
+        args = [op, mode, str(offset), input_spec, extra_spec]
+        expr = "int_atom_conv:observe(" + ",".join(args) + ")"
+        if expr in seen_int_atom:
+            return
+        seen_int_atom.add(expr)
+        selected.append({"otp_extension": "int_atom_conv", "int_atom_conv": args, "expression": expr})
+
+    # 1. Integer formatting: integer_to_list/1,2 & integer_to_binary/1,2
+    sample_ints = [
+        0, 1, -1, 9, -9, 10, -10, 35, -35, 36, -36, 255, -256,
+        (1 << 27) - 1, -(1 << 27), (1 << 31) - 1, -(1 << 31),
+        (1 << 59) - 1, -(1 << 59), (1 << 63) - 1, -(1 << 63),
+        1 << 63, -(1 << 63) - 1, -(1 << 63) * 10,
+        (1 << 128) + 12345, -((1 << 190) + 12345678901234567890123456789),
+        (1 << 255) - 1, -(1 << 255), (1 << 256) - 1, -((1 << 256) - 1),
+    ]
+    fmt_core_bases = [2, 8, 10, 16, 36]
+    fmt_extra_bases = [3, 7, 11, 17, 32, 35]
+    extra_base_ints = {0, 1, -1, 35, -(1 << 63), (1 << 128) + 12345, (1 << 255) - 1, -((1 << 256) - 1)}
+    for n in sample_ints:
+        s = str(n)
+        int_atom_probe("i2l_1", s)
+        int_atom_probe("i2b_1", s)
+        bases = fmt_core_bases + (fmt_extra_bases if n in extra_base_ints else [])
+        for b in bases:
+            int_atom_probe("i2l_2", s, str(b))
+            int_atom_probe("i2b_2", s, str(b))
+    for b in range(2, 37):
+        pos_b = str((1 << 190) + 9876543210987654321)
+        neg_b = str(-((1 << 200) + 77777777777777777777))
+        int_atom_probe("i2l_2", pos_b, str(b))
+        int_atom_probe("i2b_2", neg_b, str(b))
+    for bad_int in ["1.0", "foo", "<<\"1\">>", "\"1\"", "{1}"]:
+        int_atom_probe("i2l_1", bad_int)
+        int_atom_probe("i2b_1", bad_int)
+        int_atom_probe("i2l_2", bad_int, "10")
+        int_atom_probe("i2b_2", bad_int, "16")
+    for bad_base in ["-10", "0", "1", "37", "256", str(1 << 64), "10.0", "bad"]:
+        int_atom_probe("i2l_2", "1", bad_base)
+        int_atom_probe("i2b_2", "0", bad_base)
+
+    # 2. Integer parsing: list_to_integer/1,2 & binary_to_integer/1,2
+    valid_base10_strs = [
+        "0", "-0", "+0", "0000", "-0000", "+0000",
+        "1", "+1", "-1", "42", "+42", "-42",
+        "9223372036854775807", "-9223372036854775808",
+        "9223372036854775808", "-9223372036854775809",
+        "-92233720368547758080", "-92233720368547758081", "+92233720368547758080",
+        "-000092233720368547758080", "+0000092233720368547758080",
+        "99999999999999999991", "-99999999999999999991",
+        str((1 << 255) - 1), str(-(1 << 255)),
+        str((1 << 256) - 1), str(-((1 << 256) - 1)),
+    ]
+    for s in valid_base10_strs:
+        lspec = f"\"{s}\""
+        bspec = binary_literal(s.encode("ascii"))
+        int_atom_probe("l2i_1", lspec)
+        int_atom_probe("l2i_2", lspec, "10")
+        int_atom_probe("b2i_1", bspec)
+        int_atom_probe("b2i_2", bspec, "10")
+
+    base_samples = [
+        ("0", 2), ("-0", 2), ("+0", 36),
+        ("1010", 2), ("-1010", 2), ("+00101", 2),
+        ("1000000000000000000000000000000000000000000000000000000000000000", 2),
+        ("-1000000000000000000000000000000000000000000000000000000000000000", 2),
+        ("-10000000000000000000000000000000000000000000000000000000000000000", 2),
+        ("777", 8), ("-0777", 8), ("+AAA", 11), ("-0000AAA", 11),
+        ("0a", 16), ("-0A", 16), ("+0000deadBEEF0123456789abcdefABCDEF", 16),
+        ("-8000000000000000", 16), ("-8000000000000001", 16), ("-80000000000000000", 16),
+        ("zZz0123456789aBc", 36), ("-zzzzzzzzzzzzzzzzzzzzzzzz", 36),
+    ]
+    for s, b in base_samples:
+        int_atom_probe("l2i_2", f"\"{s}\"", str(b))
+        int_atom_probe("b2i_2", binary_literal(s.encode("ascii")), str(b))
+
+    # Multi-chunk and long-zero integer strings/binaries (base 2/10/16/36)
+    int_atom_probe("b2i_2", "{<<>> ,255, <<\"1\">>, <<>>}", "2", mode="rep_bin")
+    int_atom_probe("b2i_2", "{<<\"-\">>, 256, <<\"1\">>, <<>>}", "2", mode="rep_bin")
+    int_atom_probe("b2i_2", "{<<>>, 300, <<\"0\">>, <<\"101\">>}", "2", mode="rep_bin")
+    int_atom_probe("b2i_2", "{<<\"-\">>, 300, <<\"0\">>, <<\"101\">>}", "2", mode="rep_bin")
+    int_atom_probe("b2i_2", "{<<\"-\">>, 40, <<\"0\">>, <<\"0\">>}", "16", mode="rep_bin")
+    int_atom_probe("b2i_1", "{<<>>, 57, <<\"9\">>, <<>>}", mode="rep_bin")
+    int_atom_probe("b2i_1", "{<<\"-\">>, 57, <<\"9\">>, <<>>}", mode="rep_bin")
+    int_atom_probe("b2i_1", "{<<\"-1\">>, 60, <<\"0\">>, <<>>}", mode="rep_bin")
+    int_atom_probe("l2i_1", "{\"-\", 57, 57, []}", mode="rep_list")
+    int_atom_probe("l2i_2", "{\"-\", 300, 48, \"101\"}", "2", mode="rep_list")
+
+    # Full base 2..36 sweep for a big negative binary/list integer
+    def py_int_to_base(val, b):
+        digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        neg = val < 0
+        v = -val if neg else val
+        out = []
+        while v:
+            out.append(digits[v % b])
+            v //= b
+        if not out:
+            out.append("0")
+        if neg:
+            out.append("-")
+        return "".join(reversed(out))
+
+    sweep_neg = -((1 << 190) + 12345678901234567890123456789)
+    for b in range(2, 37):
+        enc_s = py_int_to_base(sweep_neg, b)
+        int_atom_probe("b2i_2", binary_literal(enc_s.encode("ascii")), str(b))
+        int_atom_probe("l2i_2", f"\"{enc_s}\"", str(b))
+
+    # Bit-sliced binary_to_integer across all 8 offsets
+    for off in range(8):
+        int_atom_probe("b2i_1", binary_literal(b"-12345678901234567890123456789"), mode="bit_slice", offset=off)
+        int_atom_probe("b2i_2", binary_literal(b"-zZz0123456789aBc"), "36", mode="bit_slice", offset=off)
+
+    # Sign-only, invalid syntax, embedded NUL, invalid elements/roots/bases
+    for b in [2, 8, 10, 16, 36]:
+        for sign_s in ["+", "-"]:
+            if b == 10:
+                int_atom_probe("l2i_1", f"\"{sign_s}\"")
+                int_atom_probe("b2i_1", binary_literal(sign_s.encode("ascii")))
+            int_atom_probe("l2i_2", f"\"{sign_s}\"", str(b))
+            int_atom_probe("b2i_2", binary_literal(sign_s.encode("ascii")), str(b))
+
+    bad_parse_strs = [
+        ("", 10), (" ", 10), (" 1", 10), ("1 ", 10),
+        ("++1", 10), ("--1", 10), ("+-1", 10), ("-+1", 10), ("1+2", 10),
+        ("12345678901234567890-1", 10), ("92233720368547758080x", 10),
+        ("123456789012345678x0", 10), ("1234567890123456789x", 10),
+        ("0x10", 16), ("-0xAB", 16), ("123g", 16), ("1234567890abcdef1234g", 16),
+        ("102", 2), ("8", 8), ("a", 10),
+    ]
+    for s, b in bad_parse_strs:
+        if b == 10:
+            int_atom_probe("l2i_1", f"\"{s}\"")
+            int_atom_probe("b2i_1", binary_literal(s.encode("ascii")))
+        int_atom_probe("l2i_2", f"\"{s}\"", str(b))
+        int_atom_probe("b2i_2", binary_literal(s.encode("ascii")), str(b))
+
+    for byte_val in [0, 32, 47, 58, 64, 91, 96, 123, 127, 128, 193, 255]:
+        int_atom_probe("b2i_2", binary_literal(bytes([byte_val])), "36")
+        int_atom_probe("l2i_2", f"[{byte_val}]", "36")
+    for nul_spec, bnul_spec in [
+        ("[49,0]", "<<49,0>>"),
+        ("[49,0,50]", "<<49,0,50>>"),
+        ("[0,49]", "<<0,49>>"),
+        ("[43,49,0,50]", "<<43,49,0,50>>"),
+    ]:
+        int_atom_probe("l2i_1", nul_spec)
+        int_atom_probe("l2i_2", nul_spec, "16")
+        int_atom_probe("b2i_1", bnul_spec)
+        int_atom_probe("b2i_2", bnul_spec, "16")
+
+    for bad_list in ["[$1|$2]", "[49,256]", "[49,-1]", f"[49,{1 << 64}]", "42", "<<\"1\">>", "{1}"]:
+        int_atom_probe("l2i_1", bad_list)
+        int_atom_probe("l2i_2", bad_list, "10")
+    for bad_bin in ["\"1\"", "42", "[]", "<<49,1:3>>", "<<1:1>>"]:
+        int_atom_probe("b2i_1", bad_bin)
+        int_atom_probe("b2i_2", bad_bin, "10")
+    for bad_base in ["-10", "0", "1", "37", "256", str(1 << 64), "10.0", "bad"]:
+        int_atom_probe("l2i_2", "\"1\"", bad_base)
+        int_atom_probe("b2i_2", "<<\"1\">>", bad_base)
+
+    # 3. Atom formatting: atom_to_list/1 & atom_to_binary/1,2
+    literal_atoms = [
+        "''", "ok", "true", "false", "'0'", "lynx_ia_ex_ascii", "'lynx_ia_ex_0'",
+        "'lynx_ia_ex_255_" + ("z" * 240) + "'",
+    ]
+    for a in literal_atoms:
+        int_atom_probe("a2l_1", a)
+        int_atom_probe("a2b_1", a)
+        for enc in ["utf8", "unicode", "latin1"]:
+            int_atom_probe("a2b_2", a, enc)
+
+    # Dynamic atoms built via rep_atom (latin1 high bytes, embedded NUL, mixed UTF-8, 255-char boundaries)
+    rep_atom_specs = [
+        ("{1,0,[65]}", True),
+        ("{1,233,[255]}", True),
+        ("{32,233,[]}", True),
+        ("{40,233,[]}", True),
+        ("{63,233,[]}", True),
+        ("{64,233,[]}", True),
+        ("{255,233,[]}", True),
+        ("{1,233,[256]}", False),
+        ("{1,8364,[]}", False),
+        ("{1,128512,[]}", False),
+        ("{63,233,[256]}", False),
+        ("{1,0,[65,127,128,255,256,55295,57344,65535,65536,1114111]}", False),
+        ("{255,8364,[]}", False),
+        ("{255,128512,[]}", False),
+    ]
+    for spec, is_latin1_ok in rep_atom_specs:
+        int_atom_probe("a2l_1", spec, mode="rep_atom")
+        int_atom_probe("a2b_1", spec, mode="rep_atom")
+        for enc in ["utf8", "unicode", "latin1"]:
+            int_atom_probe("a2b_2", spec, enc, mode="rep_atom")
+        _ = is_latin1_ok
+
+    for bad_atom in ["42", "\"ok\"", "<<\"ok\">>", "{ok}"]:
+        int_atom_probe("a2l_1", bad_atom)
+        int_atom_probe("a2b_1", bad_atom)
+        int_atom_probe("a2b_2", bad_atom, "utf8")
+    for bad_enc in ["ascii", "bad_enc", "0", "[]"]:
+        int_atom_probe("a2b_2", "ok", bad_enc)
+        int_atom_probe("a2b_2", "42", bad_enc)
+
+    # 4. List/Binary -> Atom & Existing Atom
+    # Positive existing-atom lookups (ONLY literals from int_atom_conv:existing_atoms/0)
+    existing_atom_inputs = [
+        ("\"\"", binary_literal(b""), True),
+        ("\"ok\"", binary_literal(b"ok"), True),
+        ("\"0\"", binary_literal(b"0"), True),
+        ("\"lynx_ia_ex_ascii\"", binary_literal(b"lynx_ia_ex_ascii"), True),
+        ("\"lynx_ia_ex_0\"", binary_literal(b"lynx_ia_ex_0"), True),
+        ("\"lynx_ia_ex_255_" + ("z" * 240) + "\"", binary_literal(b"lynx_ia_ex_255_" + (b"z" * 240)), True),
+        ("[233,255]", binary_literal(bytes([233, 255])), "latin1_only"),
+        ("[233,255]", binary_literal("\u00e9\u00ff".encode("utf-8")), "utf8_existing"),
+        ("[12450,12488,12512]", binary_literal("\u30a2\u30c8\u30e0".encode("utf-8")), "utf8_only"),
+        ("[8364]", binary_literal("\u20ac".encode("utf-8")), "utf8_only"),
+        ("[127761]", binary_literal("\U0001f311".encode("utf-8")), "utf8_only"),
+    ]
+    for idx, (lspec, bspec, kind) in enumerate(existing_atom_inputs):
+        int_atom_probe("l2ea_1", lspec)
+        if kind == "latin1_only":
+            int_atom_probe("b2ea_2", bspec, "latin1")
+            int_atom_probe("b2ea_2", bspec, "latin1", mode="bit_slice", offset=idx % 8)
+        else:
+            int_atom_probe("b2ea_1", bspec)
+            int_atom_probe("b2ea_2", bspec, "utf8")
+            int_atom_probe("b2ea_2", bspec, "unicode")
+            if kind is True:
+                int_atom_probe("b2ea_2", bspec, "latin1")
+            int_atom_probe("b2ea_1", bspec, mode="bit_slice", offset=idx % 8)
+
+    # Disjoint missing atoms for *_to_existing_atom (prefix lynx_ia_never_ NEVER created anywhere)
+    never_inputs = [
+        ("\"lynx_ia_never_1\"", binary_literal(b"lynx_ia_never_1")),
+        ("\"lynx_ia_never_utf8_2\"", binary_literal("lynx_ia_never_\u00e9\u20ac".encode("utf-8"))),
+    ]
+    for lspec, bspec in never_inputs:
+        int_atom_probe("l2ea_1", lspec)
+        int_atom_probe("b2ea_1", bspec)
+        int_atom_probe("b2ea_2", bspec, "utf8")
+        int_atom_probe("b2ea_2", bspec, "unicode")
+        int_atom_probe("b2ea_2", binary_literal(b"lynx_ia_never_" + bytes([233, 255])), "latin1")
+
+    # Disjoint creation atoms for *_to_atom (prefix lynx_ia_mk_ NEVER passed to *_to_existing_atom)
+    mk_list_inputs = [
+        "[0,65]",
+        "[127,128,255,256,55295,57344,65535,65536,1114111]",
+        "\"lynx_ia_mk_ascii\"",
+        "{\"lynx_ia_mk_\",243,97,[]}",
+    ]
+    for spec in mk_list_inputs:
+        mode = "rep_list" if spec.startswith("{") else "copy"
+        int_atom_probe("l2a_1", spec, mode=mode)
+    int_atom_probe("l2a_1", "{[],255,128512,[]}", mode="rep_list")
+
+    mk_bin_inputs = [
+        binary_literal(b""),
+        binary_literal(b"lynx_ia_mk_bin"),
+        binary_literal(bytes([0, 65])),
+        binary_literal("lynx_ia_mk_\u00e9\u20ac\U0001f600".encode("utf-8")),
+    ]
+    for off in range(8):
+        int_atom_probe("b2a_1", binary_literal(b"lynx_ia_mk_slice"), mode="bit_slice", offset=off)
+        int_atom_probe("b2a_2", binary_literal(b"lynx_ia_mk_slice"), "utf8", mode="bit_slice", offset=off)
+        int_atom_probe("b2a_2", binary_literal(b"lynx_ia_mk_" + bytes([233, 255])), "latin1", mode="bit_slice", offset=off)
+        int_atom_probe("b2ea_1", binary_literal(b"lynx_ia_ex_ascii"), mode="bit_slice", offset=off)
+        int_atom_probe("b2ea_2", binary_literal(bytes([233, 255])), "latin1", mode="bit_slice", offset=off)
+    for bspec in mk_bin_inputs:
+        int_atom_probe("b2a_1", bspec)
+        int_atom_probe("b2a_2", bspec, "utf8")
+        int_atom_probe("b2a_2", bspec, "unicode")
+    int_atom_probe("b2a_2", binary_literal(b"lynx_ia_mk_" + bytes([233, 255])), "latin1")
+    int_atom_probe("b2a_2", "{<<>>,255,<<233>> ,<<>>}".replace(" ,", ","), "latin1", mode="rep_bin")
+    int_atom_probe("b2a_2", "{<<>>,255,<<226,130,172>>,<<>>}", "utf8", mode="rep_bin")
+
+    # 255/256 length, invalid element, surrogate, negative, bigint, and improper tail precedence
+    limit_rep_lists = [
+        "{[],255,97,[]}",
+        "{[],256,97,[]}",
+        "{[bad],255,97,[]}",
+        "{[],254,97,[bad,97]}",
+        "{[],254,97,[-1,97]}",
+        "{[],254,97,[55296,97]}",
+        "{[],255,97,[bad]}",
+        "{[],255,97,[-1]}",
+        "{[],255,97,[55296]}",
+        "{[],254,97,[],bad}",
+        "{[],255,97,[],bad}",
+        "{[],256,97,[],bad}",
+    ]
+    for spec in limit_rep_lists:
+        int_atom_probe("l2a_1", spec, mode="rep_list")
+        if spec != "{[],255,97,[]}":
+            int_atom_probe("l2ea_1", spec, mode="rep_list")
+    int_atom_probe("l2ea_1", "{[],255,98,[]}", mode="rep_list")
+
+    for bad_elem in ["[-1]", "[55296]", "[57343]", "[1114112]", f"[{1 << 64}]", "[bad]", "[97|bad]", "42", "<<\"ok\">>"]:
+        int_atom_probe("l2a_1", bad_elem)
+        int_atom_probe("l2ea_1", bad_elem)
+
+    limit_rep_bins = [
+        "{<<>>,256,<<97>>,<<>>}",
+        "{<<>>,255,<<233>>,<<97>>}",
+        "{<<255>>,255,<<97>>,<<>>}",
+        "{<<>>,254,<<97>>,<<255,97>>}",
+        "{<<>>,255,<<97>>,<<255>>}",
+        "{<<>>,256,<<226,130,172>>,<<>>}",
+    ]
+    for spec in limit_rep_bins:
+        int_atom_probe("b2a_1", spec, mode="rep_bin")
+        int_atom_probe("b2a_2", spec, "utf8", mode="rep_bin")
+        int_atom_probe("b2a_2", spec, "unicode", mode="rep_bin")
+        int_atom_probe("b2a_2", spec, "latin1", mode="rep_bin")
+        int_atom_probe("b2ea_1", spec, mode="rep_bin")
+        int_atom_probe("b2ea_2", spec, "utf8", mode="rep_bin")
+        int_atom_probe("b2ea_2", spec, "latin1", mode="rep_bin")
+
+    invalid_utf8_atom_bins = [
+        binary_literal(bytes([0x80])),
+        binary_literal(bytes([0xC0, 0xAF])),
+        binary_literal(bytes([0xED, 0xA0, 0x80])),
+        binary_literal(bytes([0xF4, 0x90, 0x80, 0x80])),
+        binary_literal(bytes([0xC3])),
+        binary_literal(bytes([0xFF])),
+    ]
+    for bspec in invalid_utf8_atom_bins:
+        int_atom_probe("b2a_1", bspec)
+        int_atom_probe("b2a_2", bspec, "utf8")
+        int_atom_probe("b2ea_1", bspec)
+        int_atom_probe("b2ea_2", bspec, "utf8")
+
+    for bad_root in ["\"ok\"", "42", "<<97,1:3>>", "<<1:1>>"]:
+        int_atom_probe("b2a_1", bad_root)
+        int_atom_probe("b2a_2", bad_root, "utf8")
+        int_atom_probe("b2a_2", bad_root, "bad_enc")
+        int_atom_probe("b2ea_1", bad_root)
+        int_atom_probe("b2ea_2", bad_root, "utf8")
+    for bad_enc in ["ascii", "bad_enc", "0", "[]"]:
+        int_atom_probe("b2a_2", "<<\"ok\">>", bad_enc)
+        int_atom_probe("b2ea_2", "<<\"ok\">>", bad_enc)
+
+    seen_string_ops = set()
+
+    def string_probe(op, input_spec, extra_spec="none", mode="copy", offset=0):
+        args = [op, mode, str(offset), input_spec, extra_spec]
+        expr = "string_ops:observe(" + ",".join(args) + ")"
+        if expr in seen_string_ops:
+            return
+        seen_string_ops.add(expr)
+        selected.append({"otp_extension": "string_ops", "string_ops": args, "expression": expr})
+
+    # 1. to_upper/1 & to_lower/1
+    case_boundary_cps = [
+        -1, 0, 64, 65, 90, 91, 96, 97, 122, 123,
+        191, 192, 214, 215, 216, 222, 223, 224, 246, 247, 248, 254, 255,
+        256, 8364, 128512,
+    ]
+    for cp in case_boundary_cps:
+        string_probe("to_upper_1", str(cp))
+        string_probe("to_lower_1", str(cp))
+    for s in [
+        "\"\"", "\"abc\"", "\"aBc123!Z\"",
+        "[192,201,214,215,216,222,223,224,233,246,247,248,254,255]",
+        "[256,8364,128512]",
+        "[$a,bad]", "[$A,bad]",
+    ]:
+        string_probe("to_upper_1", s)
+        string_probe("to_lower_1", s)
+    for bad_case in ["<<\"abc\">>", "abc", "1.5", "[$a|$b]"]:
+        string_probe("to_upper_1", bad_case)
+        string_probe("to_lower_1", bad_case)
+
+    # 2. split/2 & split/3
+    def erl_cp_list(txt):
+        if all(32 <= ord(c) < 127 and c not in {'"', '\\'} for c in txt):
+            return f"\"{txt}\""
+        return "[" + ",".join(str(ord(c)) for c in txt) + "]"
+
+    split_pairs = [
+        ("", ""),
+        ("", " "),
+        ("a", ""),
+        ("a", "a"),
+        ("foo bar", " "),
+        ("foo bar", "XXX"),
+        ("ab..bc..cd", ".."),
+        ("aaa", "aa"),
+        ("aaaa", "aa"),
+        ("aaaaa", "aa"),
+        ("fooXXXXXXbar", "XXX"),
+        ("a\u00e9\u2014b\u00e9\u2014c", "\u00e9\u2014"),
+        ("a\u00e9\u2014b\u00e9\u2014c", "z"),
+    ]
+    for s_txt, p_txt in split_pairs:
+        ls, bs = erl_cp_list(s_txt), binary_literal(s_txt.encode("utf-8"))
+        lp, bp = erl_cp_list(p_txt), binary_literal(p_txt.encode("utf-8"))
+        for si in [ls, bs]:
+            for pi in [lp, bp]:
+                string_probe("split_2", si, pi)
+                for w in ["leading", "trailing", "all"]:
+                    string_probe("split_3", si, f"{{{pi},{w}}}")
+    for off in range(8):
+        bsub = binary_literal("a\u00e9\u2014b\u00e9\u2014c".encode("utf-8"))
+        bpat = binary_literal("\u00e9\u2014".encode("utf-8"))
+        string_probe("split_2", bsub, bpat, mode="bit_slice", offset=off)
+        for w in ["leading", "trailing", "all"]:
+            string_probe("split_3", bsub, f"{{{bpat},{w}}}", mode="bit_slice", offset=off)
+
+    # 3. trim/1 & trim/2
+    ws_cps = [9, 10, 11, 12, 13, 32, 133, 8206, 8207, 8232, 8233]
+    for cp in ws_cps:
+        string_probe("trim_1", f"[{cp},$a,{cp}]")
+        b = chr(cp).encode("utf-8")
+        bspec = binary_literal(b + b"a" + b)
+        string_probe("trim_1", bspec)
+        for d in ["leading", "trailing", "both"]:
+            string_probe("trim_2", f"[{cp},$a,{cp}]", d)
+            string_probe("trim_2", bspec, d)
+    for non_ws in [0, 8, 160, 12288]:
+        string_probe("trim_1", f"[{non_ws},$a,{non_ws}]")
+        nb = chr(non_ws).encode("utf-8")
+        string_probe("trim_1", binary_literal(nb + b"a" + nb))
+    trim_extra = [
+        ("[]", binary_literal(b"")),
+        ("[13,10,97,13,10]", binary_literal(b"\r\na\r\n")),
+        ("[9,10,13,32,32,10,9]", binary_literal(b"\t\n\r  \n\t")),
+        ("[32,9,104,105,32,233,8212,128512,32,10]", binary_literal(" \thi \u00e9\u2014\U0001f600 \n".encode("utf-8"))),
+    ]
+    for idx, (ls, bs) in enumerate(trim_extra):
+        string_probe("trim_1", ls)
+        string_probe("trim_1", bs)
+        string_probe("trim_1", bs, mode="bit_slice", offset=idx % 8)
+        for d in ["leading", "trailing", "both"]:
+            string_probe("trim_2", ls, d)
+            string_probe("trim_2", bs, d)
+            string_probe("trim_2", bs, d, mode="bit_slice", offset=(idx + 3) % 8)
+    for off in range(8):
+        bs = binary_literal("\t \r\n\u00e9\u2014 \n\t".encode("utf-8"))
+        string_probe("trim_2", bs, "both", mode="bit_slice", offset=off)
+        string_probe("trim_2", bs, "trailing", mode="bit_slice", offset=off)
+    string_probe("trim_2", "\"hi\"", "bogus")
+    string_probe("trim_2", "<<\"hi\">>", "bogus")
+
+    # 4. find/2 & find/3
+    find_pairs = [
+        ("", ""),
+        ("", "z"),
+        ("foo", ""),
+        ("foo", "oo"),
+        ("foo", "z"),
+        ("ab..bc..cd", ".."),
+        ("aaa", "aa"),
+        ("a\u00e9\u2014b\u00e9\u2014c", "\u00e9\u2014"),
+        ("a\u00e9\u2014b\u00e9\u2014c", "z"),
+    ]
+    for s_txt, p_txt in find_pairs:
+        ls, bs = erl_cp_list(s_txt), binary_literal(s_txt.encode("utf-8"))
+        lp, bp = erl_cp_list(p_txt), binary_literal(p_txt.encode("utf-8"))
+        for si in [ls, bs]:
+            for pi in [lp, bp]:
+                string_probe("find_2", si, pi)
+                for d in ["leading", "trailing"]:
+                    string_probe("find_3", si, f"{{{pi},{d}}}")
+    for off in range(8):
+        bs = binary_literal("a\u00e9\u2014b\u00e9\u2014c".encode("utf-8"))
+        bp = binary_literal("\u00e9\u2014".encode("utf-8"))
+        string_probe("find_3", bs, f"{{{bp},leading}}", mode="bit_slice", offset=off)
+        string_probe("find_3", bs, f"{{{bp},trailing}}", mode="bit_slice", offset=off)
+    string_probe("find_3", "\"abc\"", "{\"\",bogus}")
+    string_probe("find_3", "\"abc\"", "{\"b\",bogus}")
+    string_probe("find_3", "<<\"abc\">>", "{<<\"b\">>,bogus}")
+
+    # 5. length/1
+    len_inputs = [
+        "\"\"",
+        binary_literal(b""),
+        "[[]]",
+        "[<<>>]",
+        "\"hello\"",
+        binary_literal(b"hello"),
+        binary_literal("\u007f\u0080\u00e9\u07ff\u0800\u20ac\ud7ff\ue000\uffff\U00010000\U0001f600\U0010ffff".encode("utf-8")),
+        "[127,128,233,2047,2048,8364,55295,57344,65535,65536,128512,1114111]",
+        f"[\"ab\",{binary_literal('é'.encode('utf-8'))},[99|{binary_literal('🌑'.encode('utf-8'))}]]",
+        binary_literal(bytes([255])),
+        f"[<<\"a\">>,{binary_literal(bytes([255]))}]",
+    ]
+    for spec in len_inputs:
+        string_probe("length_1", spec)
+    for off in range(8):
+        string_probe("length_1", binary_literal("h\u00e9\U0001f600".encode("utf-8")), mode="bit_slice", offset=off)
+    for depth in [1, 2, 3, 5, 8]:
+        string_probe("length_1", f"[97|{binary_literal('é🌑'.encode('utf-8'))}]", mode="deep", offset=depth)
+
+    # 6. to_integer/1
+    ti_specs = [
+        "\"0\"", "\"-0\"", "\"+0\"", "\"00042\"", "\"27\"", "\"12abc\"", "\"-5x\"", "\"+42\"",
+        "\"0001+2\"", "\"+" + ("9" * 77) + "\"", "\"-" + ("9" * 77) + "\"",
+        binary_literal(b"0"), binary_literal(b"-0"), binary_literal(b"+0"),
+        binary_literal(b"123x"), binary_literal(b"-5x"), binary_literal(b"1+2"),
+        binary_literal(("12\u00e9").encode("utf-8")),
+        binary_literal(b"9" * 77), binary_literal(b"-" + b"9" * 77),
+        "[$1|<<\"2x\">>]", "[[<<\"12\">>],\"3x\"]", "[[],<<\"12x\">>]", "[<<\"12\">>,[],[]]",
+        "\"abc\"", "\"\"", binary_literal(b"+"), "\"+\"", "\"--1\"", "\"++1\"",
+        "[<<\"abc\">>,1048575]", "[[],[<<>>],[]]", "[[$-],[],<<>>]",
+        binary_literal(b"a" + bytes([255])),
+        f"[<<\"abc\">>,{binary_literal(bytes([255]))}]",
+        binary_literal(b"1x" + bytes([255])),
+        f"[<<\"1x\">>,{binary_literal(bytes([255]))}]",
+        "foo", "[$3,hello]", "[49,50|bad]",
+        binary_literal(bytes([51, 255])),
+        f"[<<\"12\">>,{binary_literal(bytes([255]))}]",
+        binary_literal(bytes([255])),
+        binary_literal(bytes([194])),
+        binary_literal(bytes([43, 255])),
+        binary_literal(bytes([49, 237, 160, 128])),
+        "[1114112]", "[$1,1114112]", "[55296]", "[$1,55296]", "[$1,43,55296]",
+        f"[$1,{1 << 64}]", "[$1,-1]",
+        binary_literal(bytes([49, 43, 255])),
+        f"[$1,$+,{binary_literal(bytes([255]))}]",
+        binary_literal(bytes([45, 45, 255])),
+        f"[<<\"1+\">>,{binary_literal(bytes([255]))}]",
+        "[$a|foo]", "[$1,$x|foo]", "[<<\"1x\">>|foo]", "[$1|foo]",
+        "<<49,1:3>>", "<<1:1>>",
+    ]
+    for spec in ti_specs:
+        string_probe("to_integer_1", spec)
+    for off in range(8):
+        string_probe("to_integer_1", binary_literal("-12345é".encode("utf-8")), mode="bit_slice", offset=off)
+    string_probe("to_integer_1", "\"-99\"", mode="deep", offset=1)
+    string_probe("to_integer_1", "[[\"-99\"],[]]")
+    string_probe("to_integer_1", "[<<>>,[[\"-99\"],[]]]")
+
+    return selected
+
+
+def _encode_atom(name):
+    raw = name.encode("utf-8")
+    return bytes([119, len(raw)]) + raw
+
+
+def _encode_float32_ok(value):
+    f32 = struct.unpack(">f", struct.pack(">f", value))[0]
+    etf = bytes([131, 104, 2]) + _encode_atom("ok") + bytes([70]) + struct.pack(">d", f32)
+    return base64.b64encode(etf).decode("ascii")
+
+
+def _encode_exception(exc_class, reason):
+    etf = (bytes([131, 104, 3])
+           + _encode_atom("exception")
+           + _encode_atom(exc_class)
+           + _encode_atom(reason))
+    return base64.b64encode(etf).decode("ascii")
+
+
+def float32_cases():
+    """Representation-aware IEEE-754 binary32 cases for AVM_USE_32BIT_FLOAT=ON builds."""
+    return [
+        {"expression": "differential:call(erlang,'+',[16777216.0,1.0])",
+         "float32_expected": _encode_float32_ok(16777216.0)},
+        {"expression": "differential:arithmetic(add,16777216.0,1.0)",
+         "float32_expected": _encode_float32_ok(16777216.0)},
+        {"expression": "differential:call(erlang,'+',[16777216.0,2.0])",
+         "float32_expected": _encode_float32_ok(16777218.0)},
+        {"expression": "differential:call(erlang,'+',[1.0,1.0e-8])",
+         "float32_expected": _encode_float32_ok(1.0)},
+        {"expression": "differential:call(erlang,'*',[1.5,-2])",
+         "float32_expected": _encode_float32_ok(-3.0)},
+        {"expression": "differential:call(erlang,'/',[1,2])",
+         "float32_expected": _encode_float32_ok(0.5)},
+        {"expression": "differential:call(erlang,abs,[-1.5])",
+         "float32_expected": _encode_float32_ok(1.5)},
+        {"expression": "differential:call(erlang,'*',[3.4e38,2.0])",
+         "float32_expected": _encode_exception("error", "badarith")},
+        {"expression": "differential:arithmetic(mul,3.4e38,2.0)",
+         "float32_expected": _encode_exception("error", "badarith")},
+        {"expression": "differential:call(erlang,'*',[1.0e-45,0.5])",
+         "float32_expected": _encode_float32_ok(0.0)},
+    ]
+
+
+def inventory(checkout, selected, failures=None, unverified=()):
+    """Inventory theorem/guard sites, never infer branch or proof coverage."""
+    root = checkout / "Lean/LynxTest"
+    if not root.is_dir():
+        raise ValueError(f"Missing Lynx runtime tests: {root}")
+    failed = {entry["case"]["module"] for entry in failures or ()}
+    unknown = {entry["case"]["module"] for entry in unverified}
+    rows = []
+    known = set()
+    for path in sorted(root.rglob("*.lean")):
+        source = path.relative_to(root).as_posix()
+        raw = path.read_bytes()
+        guard = 0
+        tests = []
+        for line, text in enumerate(raw.decode().splitlines(), 1):
+            match = re.match(r"^(?:(?:private|public)\s+)?theorem\s+(«[^»]+»|[\w'.]+)", text)
+            if match:
+                name = match[1].strip("«»")
+            elif text.startswith("#guard "):
+                guard += 1
+                name = f"guard:{guard}"
+            else:
+                continue
+            identifier = f"{source}#{name}"
+            known.add(identifier)
+            calls = [entry for entry in selected if identifier in entry.get("lean_origins", [])]
+            tests.append({"test": name, "line": line, "status": "has_samples" if calls else "no_samples",
+                          "cases": len(calls),
+                          "passed": None if failures is None else sum(entry["module"] not in failed | unknown for entry in calls),
+                          "failed": sum(entry["module"] in failed for entry in calls),
+                          "unverified": sum(entry["module"] in unknown for entry in calls)})
+        notes = {
+            "ProofAudit.lean": "Lean kernel axiom/dependency audits; no Erlang execution equivalent.",
+            "PublicApi.lean": "Lean API snapshots, #check and rewrite interfaces; not VM API coverage.",
+            "Counterexample.lean": "Model schedule exploration and diagnostics; no fixed runtime race outcome is asserted.",
+            "Purity.lean": "Symbolic purity, termination and execution-budget properties are not runtime tests.",
+            "Modules/ErtsInternal.lean": "Public mc_iterator/1 non-map shapes, map comprehensions, and mc_refill/1 error paths cover 3/3 theorems without comparing VM-internal iterator structures.",
+            "Modules/Process.lean": "Samples observe public process behavior, not all schedules, model PID paths, deadlock or exhaustion.",
+            "Modules/Timers.lean": "Delivery/cancellation handshakes and OTP error paths; elapsed milliseconds and all-run model proofs are not cross-VM expectations.",
+            "Modules/Signals.lean": "Samples normalize identities and error stack contents; signal/link/alias combinations remain incomplete.",
+            "Term/Dispatch.lean": "Public recursive, captured, effectful, sequential, exception, and stateful dispatch samples cover 12/17 theorems; remaining 5 test synthetic depth-0/exhaustion and table-resolve internals.",
+            "Term/Order.lean": "Fixed-point/admissibility proofs and divergence are not sampled as bounded successes.",
+            "Term/Try.lean": "Public try/catch/after behavior samples cover 14/17 theorems; stacktrace_is_empty, exhaustion_is_not_caught, and blocking_is_not_caught are model-only expectations.",
+            "Term/Maps.lean": "Public Erlang map pattern-matching samples cover 8/8 theorems; shadowed association-list internals are model representations.",
+            "Term/Bitstring.lean": "Internal padding validity and proof objects are not observable VM heap contracts.",
+            "Term/Bitstring/Construction.lean": "Public bitstring construction samples within AtomVM's 256-bit integer limit; ofBits representation lemmas are internal to Lean.",
+            "Term/Bitstring/Matching.lean": "Public bitstring matching samples; extract_rewrites is a Lean simp lemma.",
+        }
+        rows.append({"source": source, "sha256": hashlib.sha256(raw).hexdigest(), "tests": tests,
+                     "note": notes.get(source, "Finite public-behavior samples and invalid-input extensions, not universal theorem instances.")})
+    attributed = {test for entry in selected for test in entry.get("lean_origins", [])}
+    if attributed - known:
+        raise ValueError(f"Lynx test attribution no longer exists: {sorted(attributed - known)}")
+    return rows

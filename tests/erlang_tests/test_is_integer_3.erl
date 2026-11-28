@@ -44,6 +44,7 @@ start() ->
     ok = test_known_bounds(),
     ok = test_bigint(),
     ok = test_errors(),
+    ok = test_dynamic(),
     0.
 
 test_small_int_interval() ->
@@ -324,6 +325,21 @@ test_errors() ->
     exp_err =
         try
             is_integer(<<"foo">>, ?MODULE:id(foo), 100)
+        catch
+            error:badarg -> exp_err
+        end,
+    ok.
+
+test_dynamic() ->
+    Mod = ?MODULE:id(erlang),
+    Fun = ?MODULE:id(is_integer),
+    true = erlang:apply(Mod, Fun, [5, 0, 10]),
+    false = erlang:apply(Mod, Fun, [-1, 0, 10]),
+    false = erlang:apply(Mod, Fun, [<<"not_int">>, 0, 10]),
+    true = Mod:Fun(16#FFFFFFFFFFFFFFFF, 0, 16#FFFFFFFFFFFFFFFFFFFFFFFF),
+    exp_err =
+        try
+            erlang:apply(Mod, Fun, [5, bad, 10])
         catch
             error:badarg -> exp_err
         end,

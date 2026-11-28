@@ -40,6 +40,7 @@ X(ALL_ATOM, "\x3", "all")
 X(LOWERCASE_EXIT_ATOM, "\x4", "exit")
 X(BADRECORD_ATOM, "\x9", "badrecord")
 X(SYSTEM_LIMIT_ATOM, "\xC", "system_limit")
+X(BADKEY_ATOM, "\x6", "badkey")
 // End of atoms used in jit compiler
 
 X(UNDEFINED_ATOM, "\x9", "undefined")
@@ -89,7 +90,6 @@ X(TRAP_EXIT_ATOM, "\x9", "trap_exit")
 X(EXIT_ATOM, "\x4", "EXIT")
 
 X(BADMAP_ATOM, "\x6", "badmap")
-X(BADKEY_ATOM, "\x6", "badkey")
 X(NONE_ATOM, "\x4", "none")
 
 X(IO_REQUEST_ATOM, "\xA", "io_request")
@@ -232,3 +232,5 @@ X(TAG_ATOM, "\x3", "tag")
 X(PRIORITY_ATOM, "\x8", "priority")
 
 X(INVALID_AVM_ATOM, "\xB", "invalid_avm")
+
+X(BACKTRACE_DEPTH_ATOM, "\xF", "backtrace_depth")

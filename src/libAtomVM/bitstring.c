@@ -20,8 +20,10 @@
  */
 
 #include "bitstring.h"
+#include "utils.h"
 
 #include <assert.h>
+#include <limits.h>
 #include <math.h>
 
 bool bitstring_extract_any_integer(const uint8_t *src, size_t offset, avm_int_t n,
@@ -844,6 +846,14 @@ intn_from_integer_options_t bitstring_flags_to_intn_opts(enum BitstringFlags bf)
     return converted;
 }
 
+// Shift a 53-bit significand right, rounding to nearest with ties to even.
+// shift must be between 1 and 53.
+static uint64_t bitstring_round_shift_right(uint64_t value, int shift)
+{
+    uint64_t half = UINT64_C(1) << (shift - 1);
+    return (value + half - 1 + ((value >> shift) & 1)) >> shift;
+}
+
 bool bitstring_insert_f16(
     term dst_bin, size_t offset, avm_float_t value, enum BitstringFlags bs_flags)
 {
@@ -851,22 +861,22 @@ bool bitstring_insert_f16(
         return false;
     }
 
-    _Static_assert(sizeof(float) == 4, "Unsupported float size");
+    _Static_assert(sizeof(double) == 8, "Unsupported double size");
 
-    // Convert double to float first
+    // Round directly from double to avoid double rounding through float32.
     union
     {
-        uint32_t bits;
-        float fvalue;
-    } f32;
+        uint64_t bits;
+        double fvalue;
+    } f64;
 
-    f32.fvalue = (float) value;
-    uint32_t f32_bits = f32.bits;
+    f64.fvalue = value;
+    uint64_t f64_bits = f64.bits;
 
-    // Extract components from float (32-bit)
-    uint32_t sign = (f32_bits >> 31) & 0x1;
-    int32_t exp = ((f32_bits >> 23) & 0xFF) - 127; // Remove float bias
-    uint32_t mantissa = f32_bits & 0x7FFFFF;
+    // Extract components from double (64-bit)
+    uint32_t sign = (f64_bits >> 63) & 0x1;
+    int32_t exp = (int32_t) ((f64_bits >> 52) & 0x7FF) - 1023; // Remove double bias
+    uint64_t significand = (f64_bits & UINT64_C(0xFFFFFFFFFFFFF)) | UINT64_C(0x10000000000000);
 
     uint16_t f16_bits;
 
@@ -876,22 +886,24 @@ bool bitstring_insert_f16(
         f16_bits = (sign << 15) | 0x7C00;
     } else if (exp < -14) {
         // Underflow to zero or denormal
-        if (exp < -24) {
+        if (exp < -25) {
             // Too small, round to zero
             f16_bits = sign << 15;
         } else {
-            // Denormal number
-            uint32_t denorm_mantissa = (mantissa | 0x800000) >> (-14 - exp);
-            f16_bits = (sign << 15) | (denorm_mantissa >> 13);
+            // Denormal number: shift the significand down to the subnormal
+            // scale. Rounding may carry into the exponent field, which gives
+            // the smallest normal number, or to zero at the bottom of the
+            // range when a tie is rounded to even.
+            uint32_t denorm_mantissa = bitstring_round_shift_right(significand, 28 - exp);
+            f16_bits = (sign << 15) | denorm_mantissa;
         }
     } else {
         // Normal number
         uint32_t f16_exp = exp + 15; // Add half-precision bias
-        // Round to nearest even (bit 12 is the rounding bit)
-        uint32_t f16_mantissa = (mantissa + 0x1000) >> 13; // Round and keep top 10 bits
+        uint32_t rounded = bitstring_round_shift_right(significand, 42);
+        uint32_t f16_mantissa = rounded & 0x3FF;
         // Handle mantissa overflow
-        if (f16_mantissa > 0x3FF) {
-            f16_mantissa = 0;
+        if (rounded > 0x7FF) {
             f16_exp++;
         }
         if (f16_exp > 30) {
@@ -905,13 +917,9 @@ bool bitstring_insert_f16(
     return bitstring_write_float_bits(dst_bin, offset, f16_bits, 16, bs_flags);
 }
 
-bool bitstring_insert_f32(
-    term dst_bin, size_t offset, avm_float_t value, enum BitstringFlags bs_flags)
+static inline bool bitstring_write_f32(
+    term dst_bin, size_t offset, float fvalue, enum BitstringFlags bs_flags)
 {
-    if (!isfinite(value)) {
-        return false;
-    }
-
     _Static_assert(sizeof(float) == 4, "Unsupported float size");
 
     union
@@ -920,8 +928,60 @@ bool bitstring_insert_f32(
         float fvalue;
     } f32;
 
-    f32.fvalue = (float) value;
+    f32.fvalue = fvalue;
     return bitstring_write_float_bits(dst_bin, offset, f32.bits, 32, bs_flags);
+}
+
+static inline bool bitstring_insert_sint_f32(
+    term dst_bin, size_t offset, avm_int64_t value, enum BitstringFlags bs_flags)
+{
+#if !INT64_IS_ALWAYS_BOXED || defined(AVM_USE_SINGLE_PRECISION)
+    // Integers with |value| <= 2^53 are exact in binary64, so they convert to
+    // float32 cleanly even if an emulator routes 64-bit casts through double.
+    if (UNLIKELY(value < -(INT64_C(1) << 53) || value > (INT64_C(1) << 53))) {
+        uint32_t sign = value < 0 ? 1U : 0U;
+        uint64_t mag = value < 0 ? (uint64_t) 0 - (uint64_t) value : (uint64_t) value;
+
+        int msbit;
+#ifdef __has_builtin
+#define BS_HAS_BUILTIN(x) __has_builtin(x)
+#else
+#define BS_HAS_BUILTIN(x) 0
+#endif
+#if defined(__GNUC__) || BS_HAS_BUILTIN(__builtin_clzll)
+        msbit = (int) (sizeof(unsigned long long) * CHAR_BIT - 1)
+            - __builtin_clzll((unsigned long long) mag);
+#else
+        msbit = 53;
+        for (uint64_t tmp = mag >> 53; tmp > 1; tmp >>= 1) {
+            msbit++;
+        }
+#endif
+#undef BS_HAS_BUILTIN
+
+        // |value| > 2^53 guarantees msbit >= 53, so msbit - 23 >= 30.
+        uint32_t f32_exp = (uint32_t) msbit + 127;
+        uint64_t rounded = bitstring_round_shift_right(mag, msbit - 23);
+        if (rounded > 0xFFFFFF) {
+            f32_exp++;
+        }
+        uint32_t f32_mantissa = (uint32_t) rounded & 0x7FFFFF;
+        uint32_t f32_bits = (sign << 31) | (f32_exp << 23) | f32_mantissa;
+        return bitstring_write_float_bits(dst_bin, offset, f32_bits, 32, bs_flags);
+    }
+#endif
+
+    return bitstring_write_f32(dst_bin, offset, (float) value, bs_flags);
+}
+
+bool bitstring_insert_f32(
+    term dst_bin, size_t offset, avm_float_t value, enum BitstringFlags bs_flags)
+{
+    if (!isfinite(value)) {
+        return false;
+    }
+
+    return bitstring_write_f32(dst_bin, offset, (float) value, bs_flags);
 }
 
 bool bitstring_insert_f64(
@@ -941,4 +1001,46 @@ bool bitstring_insert_f64(
 
     f64.fvalue = value;
     return bitstring_write_float_bits(dst_bin, offset, f64.bits, 64, bs_flags);
+}
+
+bool bitstring_insert_float(
+    term dst_bin, size_t offset, term value, size_t size_bits, enum BitstringFlags bs_flags)
+{
+    if (size_bits == 32) {
+        if (term_is_int(value)) {
+            // Match OTP's single conversion from small integer to float so values in
+            // [-2^59, 2^59) do not double-round through an intermediate double.
+            return bitstring_insert_sint_f32(dst_bin, offset, term_to_int(value), bs_flags);
+        }
+#ifdef AVM_USE_SINGLE_PRECISION
+        if (term_is_boxed_integer(value) && (term_boxed_size(value) <= BOXED_TERMS_REQUIRED_FOR_INT64)) {
+            // When avm_float_t is float32, convert 64-bit boxed integers directly too
+            // so emulators that route cvtsi2ssq through double do not double-round.
+            return bitstring_insert_sint_f32(dst_bin, offset, term_maybe_unbox_int64(value), bs_flags);
+        }
+#endif
+    }
+
+    avm_float_t float_value = 0;
+    if (term_is_float(value)) {
+        float_value = term_to_float(value);
+    } else if (term_is_any_integer(value)) {
+        float_value = term_conv_to_float(value);
+        if (!isfinite(float_value)) {
+            return false;
+        }
+    } else {
+        return false;
+    }
+
+    switch (size_bits) {
+        case 16:
+            return bitstring_insert_f16(dst_bin, offset, float_value, bs_flags);
+        case 32:
+            return bitstring_insert_f32(dst_bin, offset, float_value, bs_flags);
+        case 64:
+            return bitstring_insert_f64(dst_bin, offset, float_value, bs_flags);
+        default:
+            return false;
+    }
 }

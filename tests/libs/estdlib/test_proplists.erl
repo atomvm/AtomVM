@@ -24,6 +24,7 @@
 
 test() ->
     ok = test_get_value(),
+    ok = test_get_value_precedence(),
     ok.
 
 test_get_value() ->
@@ -35,4 +36,20 @@ test_get_value() ->
     ok = etest:assert_match(proplists:get_value(a, [a], gnu), true),
     ok = etest:assert_match(proplists:get_value(a, [{a, foo}], gnu), foo),
     ok = etest:assert_match(proplists:get_value(b, [{a, foo}], gnu), gnu),
+    ok.
+
+test_get_value_precedence() ->
+    Default = {default, #{retained => [1, 1.0]}, <<5:3>>},
+    lists:foreach(
+        fun(Entry) ->
+            undefined = proplists:get_value(k, [Entry, {k, later}]),
+            Default = proplists:get_value(k, [Entry, k], Default),
+            undefined = proplists:get_value(k, [Entry | tail]),
+            Default = proplists:get_value(k, [Entry | tail], Default)
+        end,
+        [{k}, {k, ignored, extra}]
+    ),
+    first = proplists:get_value(k, [{k, first}, {k}]),
+    integer = proplists:get_value(1, [{1.0}, {1, integer}], Default),
+    found = proplists:get_value(k, [{}, {other}, {k, found}], Default),
     ok.

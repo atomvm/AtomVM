@@ -20,9 +20,25 @@
 
 -module(export_test_module).
 
--export([exported_func/1]).
+-export([exported_func/1, raise_exception/2, catch_exception/2]).
 
 exported_func(0) ->
     1;
 exported_func(N) ->
     ?MODULE:exported_func(N - 1) * N.
+
+raise_exception(arithmetic, Value) ->
+    Value + 1;
+raise_exception(error, Reason) ->
+    erlang:error(Reason);
+raise_exception(throw, Reason) ->
+    erlang:throw(Reason);
+raise_exception(exit, Reason) ->
+    erlang:exit(Reason).
+
+catch_exception(Kind, Value) ->
+    try raise_exception(Kind, Value) of
+        Result -> {unexpected, Result}
+    catch
+        Class:Reason -> {Class, Reason}
+    end.

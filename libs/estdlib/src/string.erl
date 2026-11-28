@@ -53,9 +53,13 @@ to_upper(S) when is_list(S) ->
 to_upper(C) when is_integer(C) ->
     upper_char(C).
 
-upper_char(C) when is_integer(C) andalso C >= $a andalso C =< $z ->
+upper_char(C) when
+    is_integer(C) andalso
+        ((C >= $a andalso C =< $z) orelse (C >= 224 andalso C =< 246) orelse
+            (C >= 248 andalso C =< 254))
+->
     C - 32;
-upper_char(C) when is_integer(C) ->
+upper_char(C) ->
     C.
 
 %%-----------------------------------------------------------------------------
@@ -318,9 +322,13 @@ to_lower(S) when is_list(S) ->
 to_lower(C) when is_integer(C) ->
     lower_char(C).
 
-lower_char(C) when is_integer(C) andalso C >= $A andalso C =< $Z ->
+lower_char(C) when
+    is_integer(C) andalso
+        ((C >= $A andalso C =< $Z) orelse (C >= 192 andalso C =< 214) orelse
+            (C >= 216 andalso C =< 222))
+->
     C + 32;
-lower_char(C) when is_integer(C) ->
+lower_char(C) ->
     C.
 
 %%-----------------------------------------------------------------------------
@@ -355,6 +363,10 @@ split(String, Pattern) ->
 -spec split(
     String :: unicode:chardata(), Pattern :: unicode:chardata(), Where :: leading | trailing | all
 ) -> [unicode:chardata()].
+split(String, "", _Where) when is_list(String) orelse is_binary(String) ->
+    [String];
+split(String, <<>>, _Where) when is_list(String) orelse is_binary(String) ->
+    [String];
 split(String, Pattern, Where) when is_binary(String) andalso is_list(Pattern) ->
     split_binary(String, unicode:characters_to_binary(Pattern), Where);
 split(String, Pattern, Where) when is_binary(String) andalso is_binary(Pattern) ->
@@ -365,6 +377,8 @@ split(String, Pattern, Where) when is_list(String) andalso is_list(Pattern) ->
     split_list(String, Pattern, Where).
 
 %% @private
+split_binary(String, <<>>, _Where) ->
+    [String];
 split_binary(String, Pattern, leading) ->
     binary:split(String, Pattern);
 split_binary(String, Pattern, all) ->
@@ -374,10 +388,17 @@ split_binary(String, Pattern, trailing) ->
         nomatch ->
             [String];
         Rest ->
-            [binary:part(String, 0, byte_size(String) - byte_size(Rest) - byte_size(Pattern)), Rest]
+            PrefixLen = byte_size(String) - byte_size(Rest),
+            PatLen = byte_size(Pattern),
+            Suffix = binary:part(Rest, PatLen, byte_size(Rest) - PatLen),
+            [binary:part(String, 0, PrefixLen), Suffix]
     end.
 
 %% @private
+split_list(String, [], _Where) ->
+    [String];
+split_list(String, Pattern, trailing) ->
+    split_list_trailing(String, Pattern, [], nomatch);
 split_list(String, Pattern, Where) ->
     split_list(String, Pattern, Where, [], []).
 
@@ -397,6 +418,21 @@ split_list(String, Pattern, Where, Token, Accum) ->
             [Char | Rest] = String,
             split_list(Rest, Pattern, Where, [Char | Token], Accum)
     end.
+
+%% @private
+split_list_trailing([], _Pattern, Token, nomatch) ->
+    [lists:reverse(Token)];
+split_list_trailing([], _Pattern, _Token, {ok, MatchTokenRev, AfterPat}) ->
+    [lists:reverse(MatchTokenRev), AfterPat];
+split_list_trailing([Char | Rest] = String, Pattern, Token, LastMatch) ->
+    NextMatch =
+        case prefix_match(String, Pattern) of
+            {ok, AfterPat} ->
+                {ok, Token, AfterPat};
+            no ->
+                LastMatch
+        end,
+    split_list_trailing(Rest, Pattern, [Char | Token], NextMatch).
 
 %% @private
 prefix_match(Rest, []) ->
@@ -433,19 +469,61 @@ trim(String) ->
 %% <<".Hello">>'''
 %% @end
 %%-----------------------------------------------------------------------------
--spec trim(String :: string(), Direction :: atom()) -> string() | char().
-trim(String, leading) ->
-    triml(String);
-trim(String, trailing) ->
-    lists:reverse(triml(lists:reverse(String)));
-trim(String, both) ->
-    lists:reverse(triml(lists:reverse(triml(String)))).
+-spec trim(String :: unicode:chardata(), Direction :: leading | trailing | both) ->
+    unicode:chardata().
+trim(String, leading) when is_list(String) ->
+    triml_list(String);
+trim(String, leading) when is_binary(String) ->
+    triml_bin(String);
+trim(String, trailing) when is_list(String) ->
+    lists:reverse(triml_list(lists:reverse(String)));
+trim(String, trailing) when is_binary(String) ->
+    trimr_bin(String);
+trim(String, both) when is_list(String) ->
+    lists:reverse(triml_list(lists:reverse(triml_list(String))));
+trim(String, both) when is_binary(String) ->
+    trimr_bin(triml_bin(String)).
 
 %% @private
-triml([$\s | R]) ->
-    triml(R);
-triml(R) ->
+is_ws(C) ->
+    (C >= 9 andalso C =< 13) orelse C =:= 32 orelse C =:= 133 orelse
+        C =:= 8206 orelse C =:= 8207 orelse C =:= 8232 orelse C =:= 8233.
+
+%% @private
+triml_list([C | R] = S) when is_integer(C) ->
+    case is_ws(C) of
+        true -> triml_list(R);
+        false -> S
+    end;
+triml_list(R) ->
     R.
+
+%% @private
+triml_bin(<<C/utf8, Rest/binary>> = Bin) ->
+    case is_ws(C) of
+        true -> triml_bin(Rest);
+        false -> Bin
+    end;
+triml_bin(<<>>) ->
+    <<>>.
+
+%% @private
+trimr_bin(Bin) ->
+    EndPos = trimr_bin_scan(Bin, 0, 0),
+    binary:part(Bin, 0, EndPos).
+
+%% @private
+trimr_bin_scan(<<>>, _Pos, LastNonWsEnd) ->
+    LastNonWsEnd;
+trimr_bin_scan(Bin, Pos, LastNonWsEnd) ->
+    <<C/utf8, Rest/binary>> = Bin,
+    NextPos = Pos + (byte_size(Bin) - byte_size(Rest)),
+    case is_ws(C) of
+        true ->
+            trimr_bin_scan(Rest, NextPos, LastNonWsEnd);
+        false ->
+            trimr_bin_scan(Rest, NextPos, NextPos)
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @equiv find(String, SearchPattern, leading)
@@ -487,24 +565,63 @@ find(String, SearchPattern, Direction) when is_list(String) andalso is_list(Sear
     find_list(String, SearchPattern, Direction).
 
 %% @private
-find_binary(<<_C, Rest/binary>> = String, SearchPattern, leading) when
+find_binary(String, SearchPattern, leading) ->
+    find_binary_leading(String, SearchPattern);
+find_binary(String, SearchPattern, trailing) ->
+    PatLen = byte_size(SearchPattern),
+    StrLen = byte_size(String),
+    if
+        StrLen < PatLen ->
+            nomatch;
+        true ->
+            find_binary_trailing(String, SearchPattern, StrLen - PatLen, PatLen, StrLen)
+    end.
+
+%% @private
+find_binary_leading(<<_C, Rest/binary>> = String, SearchPattern) when
     byte_size(String) >= byte_size(SearchPattern)
 ->
     case binary:part(String, 0, byte_size(SearchPattern)) =:= SearchPattern of
         true -> String;
-        false -> find_binary(Rest, SearchPattern, leading)
+        false -> find_binary_leading(Rest, SearchPattern)
     end;
-find_binary(_Sring, _SearchPattern, leading) ->
+find_binary_leading(_String, _SearchPattern) ->
     nomatch.
 
 %% @private
-find_list([_C | Rest] = String, SearchPattern, leading) ->
+find_binary_trailing(_String, _SearchPattern, Pos, _PatLen, _StrLen) when Pos < 0 ->
+    nomatch;
+find_binary_trailing(String, SearchPattern, Pos, PatLen, StrLen) ->
+    case binary:part(String, Pos, PatLen) =:= SearchPattern of
+        true -> binary:part(String, Pos, StrLen - Pos);
+        false -> find_binary_trailing(String, SearchPattern, Pos - 1, PatLen, StrLen)
+    end.
+
+%% @private
+find_list(String, SearchPattern, leading) ->
+    find_list_leading(String, SearchPattern);
+find_list(String, SearchPattern, trailing) ->
+    find_list_trailing(String, SearchPattern, nomatch).
+
+%% @private
+find_list_leading([_C | Rest] = String, SearchPattern) ->
     case prefix_match(String, SearchPattern) of
         {ok, _Rest} -> String;
-        no -> find_list(Rest, SearchPattern, leading)
+        no -> find_list_leading(Rest, SearchPattern)
     end;
-find_list([], _SearchPattern, leading) ->
+find_list_leading([], _SearchPattern) ->
     nomatch.
+
+%% @private
+find_list_trailing([_C | Rest] = String, SearchPattern, LastMatch) ->
+    NextMatch =
+        case prefix_match(String, SearchPattern) of
+            {ok, _Rest} -> String;
+            no -> LastMatch
+        end,
+    find_list_trailing(Rest, SearchPattern, NextMatch);
+find_list_trailing([], _SearchPattern, LastMatch) ->
+    LastMatch.
 
 %%-----------------------------------------------------------------------------
 %% @param String string to compute the length of
@@ -512,10 +629,24 @@ find_list([], _SearchPattern, leading) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec length(String :: unicode:chardata()) -> non_neg_integer().
-length(String) when is_list(String) ->
-    erlang:length(String);
-length(String) when is_binary(String) ->
-    erlang:length(unicode:characters_to_list(String)).
+length(String) ->
+    length_cd(String, 0).
+
+%% @private
+length_cd([], Acc) ->
+    Acc;
+length_cd(<<>>, Acc) ->
+    Acc;
+length_cd([H | T], Acc) when is_integer(H) andalso H >= 0 andalso H =< 16#10FFFF ->
+    length_cd(T, Acc + 1);
+length_cd([H | T], Acc) when is_binary(H) orelse is_list(H) ->
+    length_cd(T, length_cd(H, Acc));
+length_cd(<<_C/utf8, Rest/binary>>, Acc) ->
+    length_cd(Rest, Acc + 1);
+length_cd(Bin, _Acc) when is_binary(Bin) ->
+    erlang:error({badarg, Bin});
+length_cd(Other, _Acc) ->
+    erlang:error({badarg, Other}).
 
 %%-----------------------------------------------------------------------------
 %% @param String1 first string to compare

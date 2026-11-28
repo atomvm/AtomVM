@@ -76,7 +76,38 @@ test_more_than_255_bytes() ->
             should_have_raised
         catch
             error:system_limit -> ok
-        end.
+        end,
+    A254 = duplicate("a", 254, ""),
+    A255 = [$a | A254],
+    A256 = [$a | A255],
+    ok = assert_badarg(fun() -> list_to_atom(id([bad | A255])) end),
+    ok = assert_badarg(fun() -> list_to_atom(id(A254 ++ [bad, $a])) end),
+    ok = assert_badarg(fun() -> list_to_atom(id(A254 ++ [-1, $a])) end),
+    ok = assert_badarg(fun() -> list_to_atom(id(A254 ++ [16#D800, $a])) end),
+    ok = assert_system_limit(fun() -> list_to_atom(id(A255 ++ [bad])) end),
+    ok = assert_badarg(fun() -> list_to_atom(id(A254 ++ bad)) end),
+    ok = assert_badarg(fun() -> list_to_atom(id(A255 ++ bad)) end),
+    ok = assert_system_limit(fun() -> list_to_atom(id(A256 ++ bad)) end),
+    ok = assert_badarg(fun() -> list_to_atom(id([16#D800])) end),
+    ok = assert_badarg(fun() -> list_to_atom(id([16#DFFF])) end),
+    ok = assert_badarg(fun() -> list_to_atom(id([16#110000])) end),
+    ok = assert_badarg(fun() -> list_to_atom(id([-1])) end).
+
+assert_badarg(F) ->
+    try
+        R = F(),
+        {should_have_raised, R}
+    catch
+        error:badarg -> ok
+    end.
+
+assert_system_limit(F) ->
+    try
+        R = F(),
+        {should_have_raised, R}
+    catch
+        error:system_limit -> ok
+    end.
 
 id(X) ->
     X.

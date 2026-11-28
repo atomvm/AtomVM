@@ -183,7 +183,12 @@ check_lines_table(<<LinesCount:16, _Lines:(LinesCount * 6)/binary>>) -> ok.
 
 backend_to_arch(jit_x86_64) -> ?JIT_ARCH_X86_64;
 backend_to_arch(jit_aarch64) -> ?JIT_ARCH_AARCH64;
-backend_to_arch(jit_armv6m) -> ?JIT_ARCH_ARMV6M.
+backend_to_arch(jit_armv6m) -> ?JIT_ARCH_ARMV6M;
+backend_to_arch(jit_riscv32) -> ?JIT_ARCH_RISCV32;
+backend_to_arch(jit_riscv64) -> ?JIT_ARCH_RISCV64;
+backend_to_arch(jit_arm32) -> ?JIT_ARCH_ARM32;
+backend_to_arch(jit_wasm32) -> ?JIT_ARCH_WASM32;
+backend_to_arch(jit_xtensa) -> ?JIT_ARCH_XTENSA.
 
 compile_stream_for_backend(Backend, CodeChunk, AtomChunk, TypeChunk) ->
     compile_stream_for_backend(Backend, CodeChunk, AtomChunk, TypeChunk, fun(_) ->
@@ -191,10 +196,21 @@ compile_stream_for_backend(Backend, CodeChunk, AtomChunk, TypeChunk) ->
     end).
 
 compile_stream_for_backend(Backend, CodeChunk, AtomChunk, TypeChunk, ImportResolver) ->
+    compile_stream_for_backend(
+        Backend,
+        CodeChunk,
+        AtomChunk,
+        TypeChunk,
+        fun(_) -> test_literal end,
+        ImportResolver
+    ).
+
+compile_stream_for_backend(
+    Backend, CodeChunk, AtomChunk, TypeChunk, LiteralResolver, ImportResolver
+) ->
     {LabelsCount, Stream2} = compile_stream_setup_for_backend(Backend, CodeChunk),
 
     AtomResolver = jit_precompile:atom_resolver(AtomChunk),
-    LiteralResolver = fun(_) -> test_literal end,
     TypeResolver = jit_precompile:type_resolver(TypeChunk),
     DebugResolver = fun(_) -> false end,
 
@@ -718,3 +734,65 @@ if_block_unsigned_less_than_test_() ->
         end}
      || Backend <- Backends
     ].
+
+%% Generated from:
+%% -module(bs_flag_probe).
+%% -export([f/4]).
+%% f(C, Off, Sz, F) ->
+%%     <<5:Off, C/utf32-little, C/utf16-little, C:Sz/little-signed-integer, F:32/little-float,
+%%       C:8/big-unsigned-integer>>.
+%% Dynamic offset plus literal flags ({literal, [little]}) and atom size ({atom, undefined})
+%% previously exhausted the 6 native scratch registers on x86_64 and armv6m during term_to_int.
+-define(BS_CREATE_BIN_CODE,
+    <<0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 181, 0, 0, 0, 7, 0, 0, 0, 3, 1, 16, 153, 16, 2, 18, 34, 64,
+        1, 32, 177, 5, 0, 64, 16, 3, 23, 8, 36, 50, 16, 16, 2, 81, 19, 66, 32, 0, 71, 0, 3, 82, 98,
+        48, 0, 71, 0, 3, 82, 50, 64, 16, 71, 0, 3, 35, 114, 80, 16, 71, 0, 51, 9, 32, 50, 96, 16, 2,
+        3, 129, 19, 1, 48, 153, 0, 2, 18, 130, 0, 1, 64, 64, 18, 3, 78, 16, 0, 1, 80, 153, 0, 2, 18,
+        130, 16, 1, 96, 64, 3, 19, 64, 18, 3, 78, 32, 16, 3>>
+).
+-define(BS_CREATE_BIN_ATU8,
+    <<255, 255, 255, 246, 208, 98, 115, 95, 102, 108, 97, 103, 95, 112, 114, 111, 98, 101, 16, 102,
+        112, 105, 110, 116, 101, 103, 101, 114, 80, 117, 116, 102, 51, 50, 144, 117, 110, 100, 101,
+        102, 105, 110, 101, 100, 80, 117, 116, 102, 49, 54, 80, 102, 108, 111, 97, 116, 176, 109,
+        111, 100, 117, 108, 101, 95, 105, 110, 102, 111, 96, 101, 114, 108, 97, 110, 103, 240, 103,
+        101, 116, 95, 109, 111, 100, 117, 108, 101, 95, 105, 110, 102, 111>>
+).
+
+bs_create_bin_reg_pressure_test_() ->
+    Backends = [
+        jit_aarch64,
+        jit_x86_64,
+        jit_riscv32,
+        jit_riscv64,
+        jit_arm32,
+        jit_armv6m,
+        jit_xtensa,
+        jit_wasm32
+    ],
+    [
+        {atom_to_list(Backend), fun() ->
+            CompiledCode = compile_stream_for_backend(
+                Backend,
+                ?BS_CREATE_BIN_CODE,
+                ?BS_CREATE_BIN_ATU8,
+                <<>>,
+                fun(0) -> [little] end,
+                fun(_) -> {erlang, get_module_info, 1} end
+            ),
+            ?assert(is_binary(CompiledCode) andalso byte_size(CompiledCode) > 0)
+        end}
+     || Backend <- Backends
+    ].
+
+bs_create_bin_runtime_flags_reg_pressure_x86_64_test() ->
+    %% Even when literal flags fall back to runtime decoding (e.g. non-list literal),
+    %% utf32/utf16/integer/float must not exhaust x86_64 scratch registers.
+    CompiledCode = compile_stream_for_backend(
+        jit_x86_64,
+        ?BS_CREATE_BIN_CODE,
+        ?BS_CREATE_BIN_ATU8,
+        <<>>,
+        fun(0) -> test_literal end,
+        fun(_) -> {erlang, get_module_info, 1} end
+    ),
+    ?assert(is_binary(CompiledCode) andalso byte_size(CompiledCode) > 0).

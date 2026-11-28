@@ -5,6 +5,7 @@
 % split/2 function Copyright Ericsson AB 1996-2023.
 % keytake/3 function Copyright Ericsson AB 1996-2024.
 % append/1, append/2 functions Copyright Ericsson AB 1996-2025.
+% sum/1 function Copyright Ericsson AB 1996-2026.
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -73,9 +74,11 @@
     append/1,
     append/2,
     zip/2,
+    unzip/1,
     zipwith/3,
     min/1,
-    max/1
+    max/1,
+    sum/1
 ]).
 
 %%-----------------------------------------------------------------------------
@@ -86,9 +89,15 @@
 %% @end
 %%-----------------------------------------------------------------------------
 -spec map(Fun :: fun((Elem :: term()) -> Out :: term()), List :: list()) -> OutList :: term().
-map(F, [H | T]) ->
-    [F(H) | map(F, T)];
-map(F, []) when is_function(F, 1) ->
+map(F, List) when is_function(F, 1) ->
+    case List of
+        [] -> [];
+        [H | T] -> [F(H) | map0(F, T)]
+    end.
+
+map0(F, [H | T]) ->
+    [F(H) | map0(F, T)];
+map0(_F, []) ->
     [].
 
 %%-----------------------------------------------------------------------------
@@ -105,7 +114,7 @@ map(F, []) when is_function(F, 1) ->
 -spec nth(N :: non_neg_integer(), L :: list()) -> term().
 nth(1, [H | _T]) ->
     H;
-nth(Index, [_H | T]) when Index > 1 ->
+nth(Index, [_H | T]) when is_integer(Index), Index > 1 ->
     nth(Index - 1, T).
 
 %%-----------------------------------------------------------------------------
@@ -121,6 +130,8 @@ nth(Index, [_H | T]) when Index > 1 ->
 -spec nthtail(N :: non_neg_integer(), L :: list()) -> list().
 nthtail(0, L) when is_list(L) ->
     L;
+nthtail(1, [_H | T]) ->
+    T;
 nthtail(N, [_H | T]) when is_integer(N) andalso N > 0 ->
     nthtail(N - 1, T).
 
@@ -224,11 +235,14 @@ reverse(_L, _T) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec foreach(Fun :: fun((Elem :: term()) -> term()), List :: list()) -> ok.
-foreach(_Fun, []) ->
+foreach(Fun, List) when is_function(Fun, 1) ->
+    foreach0(Fun, List).
+
+foreach0(_Fun, []) ->
     ok;
-foreach(Fun, [H | T]) ->
+foreach0(Fun, [H | T]) ->
     Fun(H),
-    foreach(Fun, T).
+    foreach0(Fun, T).
 
 %%-----------------------------------------------------------------------------
 %% @param   K the key to match
@@ -239,24 +253,14 @@ foreach(Fun, [H | T]) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec keydelete(K :: term(), I :: pos_integer(), L :: list()) -> list().
-keydelete(K, I, L) ->
+keydelete(K, I, L) when is_integer(I), I > 0 ->
     keydelete(K, I, L, []).
 
 %% @private
 keydelete(_K, _I, [], L) ->
     ?MODULE:reverse(L);
-keydelete(K, I, [H | T], L2) when is_tuple(H) ->
-    case I =< tuple_size(H) of
-        true ->
-            case element(I, H) of
-                K ->
-                    ?MODULE:reverse(L2, T);
-                _ ->
-                    keydelete(K, I, T, [H | L2])
-            end;
-        false ->
-            keydelete(K, I, T, [H | L2])
-    end;
+keydelete(K, I, [H | T], L2) when element(I, H) == K ->
+    ?MODULE:reverse(L2, T);
 keydelete(K, I, [H | T], L2) ->
     keydelete(K, I, T, [H | L2]).
 
@@ -299,7 +303,7 @@ keymember(_K, _I, []) ->
     TupleList :: [tuple()],
     NewTuple :: tuple()
 ) -> [tuple()].
-keyreplace(Key, N, TupleList, NewTuple) when is_tuple(NewTuple) ->
+keyreplace(Key, N, TupleList, NewTuple) when is_integer(N), N > 0, is_tuple(NewTuple) ->
     case keyreplace(Key, N, TupleList, TupleList, NewTuple, []) of
         {false, _Reversed} -> TupleList;
         {value, Updated} -> Updated
@@ -308,7 +312,7 @@ keyreplace(Key, N, TupleList, NewTuple) when is_tuple(NewTuple) ->
 %% @private
 keyreplace(_Key, _N, [], _OrigL, _NewTuple, Acc) ->
     {false, Acc};
-keyreplace(Key, N, [H | Tail], _OrigL, NewTuple, Acc) when element(N, H) =:= Key ->
+keyreplace(Key, N, [H | Tail], _OrigL, NewTuple, Acc) when element(N, H) == Key ->
     {value, ?MODULE:reverse(Acc, [NewTuple | Tail])};
 keyreplace(Key, N, [H | Tail], OrigL, NewTuple, Acc) ->
     keyreplace(Key, N, Tail, OrigL, NewTuple, [H | Acc]).
@@ -321,8 +325,12 @@ keyreplace(Key, N, [H | Tail], OrigL, NewTuple, Acc) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec keysort(N :: pos_integer(), L :: [tuple()]) -> [tuple()].
-keysort(N, TupleList) ->
-    sort(fun(E1, E2) -> element(N, E1) < element(N, E2) end, TupleList).
+keysort(N, TupleList) when is_integer(N), N > 0 ->
+    case TupleList of
+        [] -> TupleList;
+        [_] -> TupleList;
+        [_, _ | _] -> sort(fun(E1, E2) -> element(N, E1) =< element(N, E2) end, TupleList)
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   Key         the key to match
@@ -342,7 +350,7 @@ keysort(N, TupleList) ->
     TupleList :: [tuple()],
     NewTuple :: tuple()
 ) -> [tuple()].
-keystore(Key, N, TupleList, NewTuple) when is_tuple(NewTuple) ->
+keystore(Key, N, TupleList, NewTuple) when is_integer(N), N > 0, is_tuple(NewTuple) ->
     case keyreplace(Key, N, TupleList, TupleList, NewTuple, []) of
         {false, Reversed} -> ?MODULE:reverse(Reversed, [NewTuple]);
         {value, Updated} -> Updated
@@ -389,11 +397,17 @@ keytake(_K, _N, [], _L) ->
     Acc0 :: term(),
     List :: list()
 ) -> Acc1 :: term().
-foldl(_Fun, Acc0, []) ->
+foldl(Fun, Acc0, List) when is_function(Fun, 2) ->
+    case List of
+        [] -> Acc0;
+        [H | T] -> foldl0(Fun, Fun(H, Acc0), T)
+    end.
+
+foldl0(_Fun, Acc0, []) ->
     Acc0;
-foldl(Fun, Acc0, [H | T]) ->
+foldl0(Fun, Acc0, [H | T]) ->
     Acc1 = Fun(H, Acc0),
-    foldl(Fun, Acc1, T).
+    foldl0(Fun, Acc1, T).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun the function to apply
@@ -404,7 +418,7 @@ foldl(Fun, Acc0, [H | T]) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec mapfoldl(fun((A, Acc) -> {B, Acc}), Acc, [A]) -> {[B], Acc}.
-mapfoldl(Fun, Acc0, List1) ->
+mapfoldl(Fun, Acc0, List1) when is_function(Fun, 2) ->
     mapfoldl0(Fun, {[], Acc0}, List1).
 
 mapfoldl0(_Fun, {List1, Acc0}, []) ->
@@ -422,10 +436,13 @@ mapfoldl0(Fun, {List1, Acc0}, [H | T]) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec mapfoldr(fun((A, Acc) -> {B, Acc}), Acc, [A]) -> {[B], Acc}.
-mapfoldr(_Fun, Acc0, []) ->
+mapfoldr(Fun, Acc0, List) when is_function(Fun, 2) ->
+    mapfoldr0(Fun, Acc0, List).
+
+mapfoldr0(_Fun, Acc0, []) ->
     {[], Acc0};
-mapfoldr(Fun, Acc0, [H | T]) ->
-    {Bs, Acc1} = mapfoldr(Fun, Acc0, T),
+mapfoldr0(Fun, Acc0, [H | T]) ->
+    {Bs, Acc1} = mapfoldr0(Fun, Acc0, T),
     {B, Acc2} = Fun(H, Acc1),
     {[B | Bs], Acc2}.
 
@@ -440,8 +457,13 @@ mapfoldr(Fun, Acc0, [H | T]) ->
     Acc0 :: term(),
     List :: list()
 ) -> Acc1 :: term().
-foldr(Fun, Acc0, List) ->
-    foldl(Fun, Acc0, ?MODULE:reverse(List)).
+foldr(Fun, Acc0, List) when is_function(Fun, 2) ->
+    foldr0(Fun, Acc0, List).
+
+foldr0(_Fun, Acc0, []) ->
+    Acc0;
+foldr0(Fun, Acc0, [H | T]) ->
+    Fun(H, foldr0(Fun, Acc0, T)).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun the predicate to evaluate
@@ -457,7 +479,7 @@ all(Fun, [H | T]) ->
     case Fun(H) of
         true ->
             all(Fun, T);
-        _ ->
+        false ->
             false
     end.
 
@@ -469,8 +491,15 @@ all(Fun, [H | T]) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec any(Fun :: fun((Elem :: term()) -> boolean()), List :: list()) -> boolean().
-any(Fun, L) ->
-    not all(fun(E) -> not Fun(E) end, L).
+any(_Fun, []) ->
+    false;
+any(Fun, [H | T]) ->
+    case Fun(H) of
+        true ->
+            true;
+        false ->
+            any(Fun, T)
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   L the list to flatten
@@ -491,7 +520,7 @@ flatten(_L) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec flatmap(F :: fun((Elem :: term()) -> [term()]), List :: [term()]) -> [term()].
-flatmap(F, L) when is_list(L) ->
+flatmap(F, L) when is_function(F, 1) ->
     flatmap_1(F, L).
 
 flatmap_1(_F, []) ->
@@ -509,14 +538,17 @@ flatmap_1(F, [H | T]) ->
 %%-----------------------------------------------------------------------------
 -spec search(Pred :: fun((Elem :: term()) -> boolean()), List :: list()) ->
     {value, Value :: term()} | false.
-search(_Pred, []) ->
+search(Pred, List) when is_function(Pred, 1) ->
+    search0(Pred, List).
+
+search0(_Pred, []) ->
     false;
-search(Pred, [H | T]) ->
+search0(Pred, [H | T]) ->
     case Pred(H) of
         true ->
             {value, H};
-        _ ->
-            search(Pred, T)
+        false ->
+            search0(Pred, T)
     end.
 
 %%-----------------------------------------------------------------------------
@@ -626,7 +658,7 @@ seq(From, To, Incr) when
     error(badarg);
 seq(To, To, 0) ->
     [To];
-seq(From, To, Incr) when From =:= To + Incr ->
+seq(From, To, Incr) when (Incr > 0 andalso To < From) orelse (Incr < 0 andalso To > From) ->
     [];
 seq(From, To, Incr) ->
     Last = From + ((To - From) div Incr) * Incr,
@@ -645,18 +677,22 @@ seq_r(From, To, Incr, Acc) -> seq_r(From, To - Incr, Incr, [To | Acc]).
 %%-----------------------------------------------------------------------------
 -spec sort(List :: [T]) -> [T].
 sort(List) when is_list(List) ->
-    sort(fun lt/2, List).
+    sort(fun leq/2, List).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun sort function
 %% @param   List a list
-%% @returns Sorted list, ordered by Fun(A, B) : boolean() such that A "less than" B.
+%% @returns Sorted list, ordered by Fun(A, B) : boolean() such that A "less than or equal to" B.
 %% @doc     Returns a sorted list, using Fun(A, B) to determine sort order.
 %%
 %% @end
 %%-----------------------------------------------------------------------------
 -spec sort(Fun :: fun((T, T) -> boolean()), List :: [T]) -> [T].
-sort(Fun, List) when is_function(Fun, 2), is_list(List) ->
+sort(Fun, []) when is_function(Fun, 2) ->
+    [];
+sort(Fun, [_] = List) when is_function(Fun, 2) ->
+    List;
+sort(Fun, [_, _ | _] = List) ->
     merge_sort(Fun, List).
 
 merge_sort(_Fun, []) ->
@@ -716,7 +752,7 @@ split(_, [], _) ->
 %% @end
 %%-----------------------------------------------------------------------------
 merge(List1, List2) ->
-    merge(fun lt/2, List1, List2, []).
+    merge(fun leq/2, List1, List2, []).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun ordering function
@@ -727,7 +763,7 @@ merge(List1, List2) ->
 %%          order. If elements compare equal, element from List1 is picked first
 %% @end
 %%-----------------------------------------------------------------------------
-merge(Fun, List1, List2) ->
+merge(Fun, List1, List2) when is_function(Fun, 2) ->
     merge(Fun, List1, List2, []).
 
 merge(_Fun, [], Right, Acc) ->
@@ -735,14 +771,14 @@ merge(_Fun, [], Right, Acc) ->
 merge(_Fun, Left, [], Acc) ->
     lists:reverse(Acc, Left);
 merge(Fun, [A | As], [B | Bs], Acc) ->
-    % keep sort stable, if B < A, put it first, otherwise keep A first
-    case Fun(B, A) of
-        true -> merge(Fun, [A | As], Bs, [B | Acc]);
-        false -> merge(Fun, As, [B | Bs], [A | Acc])
+    % A non-strict comparator keeps the left item first on equal keys.
+    case Fun(A, B) of
+        true -> merge(Fun, As, [B | Bs], [A | Acc]);
+        false -> merge(Fun, [A | As], Bs, [B | Acc])
     end.
 
 %% @private
-lt(A, B) -> A < B.
+leq(A, B) -> A =< B.
 
 %%-----------------------------------------------------------------------------
 %% @param   List a list
@@ -765,7 +801,7 @@ usort(List) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec usort(Fun :: fun((T, T) -> boolean()), List :: [T]) -> [T].
-usort(Fun, List) ->
+usort(Fun, List) when is_function(Fun, 2) ->
     Sorted = sort(Fun, List),
     unique(Sorted, Fun).
 
@@ -781,7 +817,7 @@ unique([X], _Fun) ->
 unique([X, Y | Tail], Fun) ->
     case Fun(X, Y) andalso Fun(Y, X) of
         true ->
-            unique([Y | Tail], Fun);
+            unique([X | Tail], Fun);
         false ->
             [X | unique([Y | Tail], Fun)]
     end.
@@ -795,7 +831,7 @@ unique([X, Y | Tail], Fun) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec ukeysort(N :: pos_integer(), L :: [tuple()]) -> [tuple()].
-ukeysort(N, TupleList) ->
+ukeysort(N, TupleList) when is_integer(N), N > 0 ->
     Sorted = keysort(N, TupleList),
     unique_key(Sorted, N).
 
@@ -804,7 +840,7 @@ unique_key([], _N) ->
     [];
 unique_key([X], _N) ->
     [X];
-unique_key([X, Y | Tail], N) when element(N, X) =:= element(N, Y) ->
+unique_key([X, Y | Tail], N) when element(N, X) == element(N, Y) ->
     unique_key([X | Tail], N);
 unique_key([X, Y | Tail], N) ->
     [X | unique_key([Y | Tail], N)].
@@ -858,7 +894,7 @@ duplicate(Count, Elem, Acc) -> duplicate(Count - 1, Elem, [Elem | Acc]).
 %% @end
 %%-----------------------------------------------------------------------------
 -spec sublist([Elem], integer()) -> [Elem].
-sublist(List, Len) when is_integer(Len) andalso Len >= 0 ->
+sublist(List, Len) when is_list(List), is_integer(Len), Len >= 0 ->
     sublist0(List, Len).
 
 %% @private
@@ -945,6 +981,28 @@ zip([A | As], [B | Bs]) -> [{A, B} | zip(As, Bs)];
 zip([], []) -> [].
 
 %%-----------------------------------------------------------------------------
+%% @param   Pairs a proper list of two-tuples
+%% @returns two lists containing the first and second elements of each tuple
+%% @doc     Split a list of two-tuples into two lists, preserving their order.
+%%          Invalid elements or an improper outer list raise function_clause.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec unzip(Pairs) -> {List1, List2} when
+    Pairs :: [{A, B}],
+    List1 :: [A],
+    List2 :: [B],
+    A :: term(),
+    B :: term().
+
+unzip(Pairs) ->
+    unzip(Pairs, [], []).
+
+unzip([{A, B} | Rest], As, Bs) ->
+    unzip(Rest, [A | As], [B | Bs]);
+unzip([], As, Bs) ->
+    {?MODULE:reverse(As), ?MODULE:reverse(Bs)}.
+
+%%-----------------------------------------------------------------------------
 %% @param   Combine a function that takes elements from each list
 %% @param   List1 a list
 %% @param   List2 a list
@@ -1009,4 +1067,21 @@ max_r([H | T], Acc) when H > Acc ->
 max_r([_ | T], Acc) ->
     max_r(T, Acc);
 max_r([], Acc) ->
+    Acc.
+
+%%-----------------------------------------------------------------------------
+%% @param   List a list of numbers
+%% @returns the sum of the elements, or integer zero for an empty list
+%% @doc     Sum the elements of `List' from left to right.
+%% @end
+%%-----------------------------------------------------------------------------
+%% Attribution: https://github.com/erlang/otp/blob/e14591f196d4eacc1946e7073e0ec27f72df2a12/lib/stdlib/src/lists.erl#L570-L573
+-spec sum(List :: [number()]) -> number().
+sum(List) ->
+    sum(List, 0).
+
+%% @private
+sum([H | T], Acc) ->
+    sum(T, Acc + H);
+sum([], Acc) ->
     Acc.

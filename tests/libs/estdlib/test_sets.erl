@@ -25,7 +25,9 @@
 -include("etest.hrl").
 
 test() ->
+    ok = test_new(),
     ok = test_from_list(),
+    ok = test_constructor_options(),
     ok = test_is_set(),
     ok = test_size(),
     ok = test_is_equal(),
@@ -38,12 +40,51 @@ test() ->
     ok = test_is_disjoint(),
     ok = test_is_subset(),
     ok = test_filter(),
+    ok = test_filter_predicate_results(),
     ok = test_map(),
     ok = test_filtermap(),
     ok.
 
+test_new() ->
+    ?ASSERT_MATCH(sets:is_empty(sets:new()), true),
+    ?ASSERT_MATCH(sets:is_empty(sets:new([])), true),
+    ?ASSERT_MATCH(sets:is_empty(sets:new([{version, 2}])), true),
+    ok.
+
 test_from_list() ->
     ?ASSERT_MATCH(sets:from_list([ok, <<"hello">>], [{version, 2}]), #{ok => [], <<"hello">> => []}),
+    ?ASSERT_MATCH(sets:is_empty(sets:from_list([], [])), true),
+    Set = sets:from_list([1, 1.0, 1, <<"hello">>], []),
+    ?ASSERT_MATCH(sets:size(Set), 3),
+    ?ASSERT_MATCH(sets:is_element(1, Set), true),
+    ?ASSERT_MATCH(sets:is_element(1.0, Set), true),
+    ?ASSERT_MATCH(sets:is_element(<<"hello">>, Set), true),
+    % OTP 27 defaults to v1, which raises function_clause instead of badarg.
+    ?ASSERT_ERROR(sets:from_list([a | bad], [])),
+    ?ASSERT_ERROR(sets:from_list([a | bad], [{version, 2}]), badarg),
+    ok.
+
+test_constructor_options() ->
+    lists:foreach(
+        fun(Options) ->
+            ?ASSERT_MATCH(sets:is_empty(sets:new(Options)), true),
+            Set = sets:from_list([a, a, b], Options),
+            ?ASSERT_MATCH(sets:is_equal(Set, sets:from_list([a, b])), true)
+        end,
+        [[{ignored, true}], [{version, 2} | bad], [{version, 2}, {version, bad}]]
+    ),
+    lists:foreach(
+        fun({Options, Reason}) ->
+            ?ASSERT_ERROR(sets:new(Options), Reason),
+            ?ASSERT_ERROR(sets:from_list([a], Options), Reason)
+        end,
+        [
+            {[version], {case_clause, true}},
+            {[{version, 3}], {case_clause, 3}},
+            {[{version, bad}], {case_clause, bad}},
+            {[{version, 3}, {version, 2}], {case_clause, 3}}
+        ]
+    ),
     ok.
 
 test_is_set() ->
@@ -133,6 +174,13 @@ test_subtract() ->
         ),
         true
     ),
+    lists:foreach(
+        fun(Invalid) ->
+            ?ASSERT_MATCH(sets:is_empty(sets:subtract(sets:new(), Invalid)), true),
+            ?ASSERT_ERROR(sets:subtract(sets:from_list([a]), Invalid), function_clause)
+        end,
+        [bad, [], {set}]
+    ),
     ok.
 
 test_is_disjoint() ->
@@ -145,6 +193,13 @@ test_is_subset() ->
     ?ASSERT_MATCH(sets:is_subset(sets:from_list([2, 3]), sets:from_list([1, 2, 3, 4])), true),
     ?ASSERT_MATCH(sets:is_subset(sets:from_list([2.0, 3]), sets:from_list([1, 2, 3, 4])), false),
     ?ASSERT_MATCH(sets:is_subset(sets:from_list([-1]), sets:from_list([1, 2, 3, 4])), false),
+    lists:foreach(
+        fun(Invalid) ->
+            ?ASSERT_MATCH(sets:is_subset(sets:new(), Invalid), true),
+            ?ASSERT_ERROR(sets:is_subset(sets:from_list([a]), Invalid), function_clause)
+        end,
+        [bad, [], {set}]
+    ),
     ok.
 
 test_filter() ->
@@ -155,6 +210,63 @@ test_filter() ->
         ),
         true
     ),
+    ok.
+
+test_filter_predicate_results() ->
+    Items = [1, 1.0, {tag, <<5:3>>}],
+    Set = sets:from_list(Items, [{version, 2}]),
+    Failures = [
+        {fun() -> Bad end, {error, {bad_filter, Bad}}}
+     || Bad <- [not_boolean, [], {true, mapped}]
+    ],
+    lists:foreach(
+        fun({Action, Expected}) ->
+            put(set_filter_calls, []),
+            Predicate = fun(Item) ->
+                Calls = [Item | get(set_filter_calls)],
+                put(set_filter_calls, Calls),
+                case length(Calls) of
+                    1 -> true;
+                    2 -> Action();
+                    _ -> error(unexpected_callback)
+                end
+            end,
+            Outcome =
+                try sets:filter(Predicate, Set) of
+                    _ -> unexpected_success
+                catch
+                    Class:Reason -> {Class, Reason}
+                end,
+            ?ASSERT_MATCH(Outcome, Expected),
+            % Traversal order is unspecified, but no call may follow the failure.
+            [First, Second] = erase(set_filter_calls),
+            ?ASSERT_TRUE(First =/= Second),
+            ?ASSERT_TRUE(sets:is_element(First, Set)),
+            ?ASSERT_TRUE(sets:is_element(Second, Set)),
+            ?ASSERT_TRUE(sets:is_equal(Set, sets:from_list(Items, [{version, 2}])))
+        end,
+        Failures ++
+            [
+                {
+                    fun() -> error({case_clause, from_callback}) end,
+                    {error, {case_clause, from_callback}}
+                },
+                {
+                    fun() -> throw({callback_failed, <<5:3>>}) end,
+                    {throw, {callback_failed, <<5:3>>}}
+                },
+                {fun() -> exit({callback_failed, <<5:3>>}) end, {exit, {callback_failed, <<5:3>>}}}
+            ]
+    ),
+    ?ASSERT_TRUE(
+        sets:is_empty(
+            sets:filter(fun(_) -> error(unexpected_callback) end, sets:new([{version, 2}]))
+        )
+    ),
+    Filtered = sets:filter(fun(Item) -> Item =:= 1 end, Set),
+    ?ASSERT_MATCH(sets:size(Filtered), 1),
+    ?ASSERT_TRUE(sets:is_element(1, Filtered)),
+    ?ASSERT_MATCH(sets:is_element(1.0, Filtered), false),
     ok.
 
 test_map() ->

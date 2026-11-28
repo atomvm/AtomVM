@@ -122,6 +122,7 @@ struct GlobalContext
     struct Ets ets;
 
     int32_t last_process_id;
+    int ATOMIC backtrace_depth;
 
     struct AtomTable *atom_table;
     struct ValuesHashTable *modules_table;

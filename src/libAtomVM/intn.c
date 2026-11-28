@@ -21,6 +21,7 @@
 #include "intn.h"
 
 #include <assert.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -915,11 +916,36 @@ double intn_to_double(const intn_digit_t *num, size_t num_len, intn_integer_sign
 {
     size_t len = intn_count_digits(num, num_len);
 
-    double acc = 0.0;
-    double base = ((double) (UINT32_MAX)) + 1;
+    double acc;
+    if (len <= INTN_UINT64_LEN) {
+        uint64_t value = len ? num[0] : 0;
+        if (len == INTN_UINT64_LEN) {
+            value |= (uint64_t) num[1] << INTN_DIGIT_BITS;
+        }
+        acc = (double) value;
+    } else {
+        // Accumulating floating-point digits can round more than once. Take
+        // 53 significant bits plus the halfway bit, then round only once.
+        size_t bits = (len - 1) * INTN_DIGIT_BITS + INTN_DIGIT_BITS - uint32_nlz(num[len - 1]);
+        size_t guard = bits - 54;
+        size_t digit = guard / INTN_DIGIT_BITS;
+        size_t offset = guard % INTN_DIGIT_BITS;
+        uint64_t mantissa = num[digit] >> offset;
+        for (size_t i = digit + 1; i < len; i++) {
+            mantissa |= (uint64_t) num[i] << ((i - digit) * INTN_DIGIT_BITS - offset);
+        }
 
-    for (int i = len - 1; i >= 0; i--) {
-        acc = acc * base + ((double) num[i]);
+        bool half = mantissa & 1;
+        mantissa >>= 1;
+        bool lesser_bits = num[digit] & ((UINT32_C(1) << offset) - 1);
+        for (size_t i = 0; i < digit && !lesser_bits; i++) {
+            lesser_bits = num[i] != 0;
+        }
+        // Round to nearest, ties to even, including a possible carry.
+        if (half && (lesser_bits || (mantissa & 1))) {
+            mantissa++;
+        }
+        acc = ldexp((double) mantissa, guard + 1);
     }
 
     return (sign == IntNNegativeInteger) ? -acc : acc;
@@ -1108,7 +1134,6 @@ int intn_parse(
         int parsed_digits = int64_parse_ascii_buf(
             buf + pos, MIN(buf_len - pos, max_digits), base, buf_to_int64_opts, &parsed_chunk);
         if (parsed_chunk < 0) {
-            parsed_chunk = -parsed_chunk;
             *out_sign = IntNNegativeInteger;
         }
 
@@ -1129,8 +1154,8 @@ int intn_parse(
             // TODO: check overflows
             intn_mulu(out, out_len, mult, 2, new_out);
             new_out_len = MAX(2, intn_count_digits(new_out, INTN_MUL_OUT_LEN(out_len, 2)));
-            if (UNLIKELY(out_len > INTN_MAX_IN_LEN)) {
-                assert(out_len <= INTN_MAX_RES_LEN);
+            if (UNLIKELY(new_out_len > INTN_MAX_IN_LEN)) {
+                assert(new_out_len <= INTN_MAX_RES_LEN);
                 // we are above the allowed 256 bits, so it is going to be overflow
                 // if still have some room in our buffer, so we are safe
                 return -1;
